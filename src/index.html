@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html class="dark" lang="en" data-mode="dark">
+<head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>aih Policy - Workbench</title>
+<!-- Presentation only, carried over from prototype/screens/admin-sources.html. Network required for
+     Tailwind, Inter, JetBrains Mono and Material Symbols, exactly as the prototype requires them. -->
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<script src="mode.js"></script>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script src="tw-config.js"></script>
+<link rel="stylesheet" href="wb.css">
+</head>
+<body class="bg-background font-body text-on-surface text-[13px] leading-normal antialiased select-none">
+<!-- TOP HEADER (Compact, fixed 44px) -->
+<header class="h-11 w-full bg-surface-container-lowest border-b border-surface-container-high/60 px-3 flex items-center justify-between z-50 shrink-0">
+<div class="flex items-center gap-2.5 shrink-0">
+<!-- App Identity -->
+<div class="flex items-center gap-2 pr-1">
+<div class="w-5 h-5 rounded bg-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-white text-[14px]">shield_with_house</span>
+</div>
+<span class="font-semibold text-[13px] tracking-tight text-on-surface">aih Policy</span>
+<span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-medium">Admin</span>
+</div>
+<div class="h-3.5 w-px bg-surface-container-high mx-0.5"></div>
+<!-- Scope Switcher: the organization is an input, never a catalog value -->
+<button class="flex items-center gap-1 px-2 py-1 rounded bg-surface-container-low text-on-surface text-[12px] font-medium opacity-50 cursor-not-allowed" type="button" id="org-modal-trigger" disabled aria-disabled="true" title="Not published: no organization input contract in this browsing milestone">
+<span class="">Not published</span>
+<span class="material-symbols-outlined text-[13px] text-outline">expand_more</span>
+</button>
+<!-- Mode Toggle: presentation mode; the tool inventory behind it is not published -->
+<div class="flex items-center bg-surface-container-lowest p-0.5 rounded border border-surface-container-high/40">
+<button class="px-2 py-0.5 rounded text-[11px] text-on-surface-variant opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not published: tool inventory needs a Core/host contract">Vibe</button>
+<button class="px-2 py-0.5 rounded bg-surface-container text-[11px] text-on-surface-variant opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not published: tool inventory needs a Core/host contract">Enterprise</button>
+</div>
+<div class="h-3.5 w-px bg-surface-container-high mx-0.5"></div>
+<!-- AI Tools Counter Pill -->
+<button class="flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container-low text-on-surface-variant text-[11px] opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not published: no measured AI tool inventory in the index">
+<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+<span class="font-mono text-on-surface">Not published</span>
+<span class="text-outline">AI tools</span>
+<span class="material-symbols-outlined text-[13px] text-outline">arrow_drop_down</span>
+</button>
+</div>
+<!-- Header Action CTAs -->
+<div class="flex items-center gap-2 shrink-0">
+<button class="flex items-center gap-1.5 px-2 py-1 rounded bg-surface-container-low text-on-surface-variant text-[12px] opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not published: needs organization resolution and review state from Core">
+<span class="">Review Changes</span>
+<span class="text-[10px] font-mono px-1 py-0.2 rounded bg-surface-container-high text-outline font-bold">Not published</span>
+</button>
+<button class="px-2.5 py-1 rounded bg-surface-container text-on-surface-variant text-[12px] font-medium opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not published: needs a Core check-policy contract">
+        Check Policy
+      </button>
+<button class="flex items-center gap-1 px-3 py-1 rounded bg-surface-container text-on-surface-variant text-[12px] font-medium opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not published: needs organization resolution and a Core publish contract">
+<span class="">Publish</span>
+<span class="material-symbols-outlined text-[13px]">arrow_forward</span>
+</button>
+<div class="h-3.5 w-px bg-surface-container-high mx-0.5"></div>
+<!-- Theme Toggle Button -->
+<button aria-label="Toggle theme" class="p-1 rounded bg-surface-container-low hover:bg-surface-container border border-surface-container-high/60 text-on-surface-variant hover:text-on-surface transition-colors flex items-center justify-center cursor-pointer shadow-xs mr-0.5" id="theme-toggle-btn" title="Switch to light mode" type="button" data-mode-toggle>
+<span class="material-symbols-outlined text-[15px] text-[#ffb95f]" id="theme-icon-light">light_mode</span>
+<span class="material-symbols-outlined text-[15px] icon-dark-mode text-primary hidden" id="theme-icon-dark">dark_mode</span>
+</button>
+<div class="w-6 h-6 rounded-full bg-surface-container-highest border border-surface-container-high flex items-center justify-center text-on-surface-variant cursor-pointer hover:text-on-surface">
+<span class="material-symbols-outlined text-[15px]">person</span>
+</div>
+</div>
+</header>
+<!-- WORKBENCH SUB-HEADER (Provenance & Panel Sliders) -->
+<div class="h-8 bg-surface-container-lowest/90 border-b border-surface-container-high/40 px-3 flex items-center justify-between text-[11px] shrink-0">
+<div class="flex items-center gap-2 min-w-0">
+<div class="flex items-center gap-2 font-mono text-[11px] text-on-surface-variant truncate" id="provenance-strip">
+<span class="material-symbols-outlined text-[14px] text-primary shrink-0">inventory_2</span>
+<span class="text-on-surface font-medium">Connecting to the installed @aihq/catalog package...</span>
+</div>
+</div>
+<div class="flex items-center gap-2.5 shrink-0">
+<!-- Dock / Panel Controls -->
+<div class="flex items-center rounded bg-surface-container-low border border-surface-container-high/60 p-0.5 gap-0.5">
+<button class="p-1 rounded hover:bg-surface-container transition-colors flex items-center justify-center cursor-pointer text-primary" id="toggle-nav-btn" title="Toggle Sidebar Nav (Left)" type="button"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><rect height="18" rx="2" width="18" x="3" y="3"></rect><line x1="9" x2="9" y1="3" y2="21"></line><polyline points="13 9 16 12 13 15"></polyline></svg></button>
+<button class="p-1 rounded hover:bg-surface-container hover:text-white transition-colors flex items-center justify-center cursor-pointer text-primary" id="toggle-inspector-btn" title="Toggle right inspector panel (hide/expand)" aria-label="Toggle right panel" type="button"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><rect height="18" rx="2" width="18" x="3" y="3"></rect><line x1="15" x2="15" y1="3" y2="21"></line><polyline points="11 9 8 12 11 15"></polyline></svg></button>
+</div>
+</div>
+</div>
+<!-- MAIN 3-PANEL RESPONSIVE CONTAINER (100vh - 76px) -->
+<div class="flex w-full h-[calc(100vh-4.75rem)] overflow-hidden relative">
+<!-- LEFT COLUMN 1: Main Nav Rail (Collapsible) -->
+<aside class="rail-transition shrink-0 bg-[#0a0e15] border-r border-surface-container-high/60 flex flex-col justify-between overflow-hidden w-60" id="nav-rail">
+<div class="flex flex-col h-full justify-between overflow-y-auto">
+<div class="p-2 space-y-3">
+<!-- WORKBENCH / VIEW SELECTOR (Compact) -->
+<div class="space-y-1">
+<div class="px-2 py-0.5 text-[10px] font-mono tracking-wider text-outline uppercase font-semibold flex items-center justify-between">
+<span class="">WORKBENCH</span>
+<span class="material-symbols-outlined text-[12px] text-outline">tune</span>
+</div>
+<nav class="space-y-0.5 text-[11px]">
+<a class="flex items-center justify-between px-2 py-1 rounded bg-surface-container text-primary font-medium" href="#" id="nav-sources">
+<span class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[14px]">inventory_2</span>
+<span class="">Sources &amp; Catalogs</span>
+</span>
+<span class="font-mono text-[10px] px-1 rounded bg-surface-container-highest text-on-surface-variant font-semibold" id="nav-sources-count">-</span>
+</a>
+<a class="flex items-center justify-between px-2 py-1 rounded text-on-surface-variant opacity-50 cursor-not-allowed" href="#" aria-disabled="true" title="Not published: no scan backlog in the index">
+<span class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[14px] text-outline">security_update_good</span>
+<span class="">Scan Review</span>
+</span>
+<span class="font-mono text-[10px] text-outline">Not published</span>
+</a>
+<a class="flex items-center justify-between px-2 py-1 rounded text-on-surface-variant opacity-50 cursor-not-allowed" href="#" aria-disabled="true" title="Not published: needs resolved organization state from Core">
+<span class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[14px] text-outline">policy</span>
+<span class="">Policies &amp; Publish</span>
+</span>
+<span class="font-mono text-[10px] text-outline">Not published</span>
+</a>
+</nav>
+</div>
+<!-- CATALOG SCOPES: published package, sources and kinds -->
+<div class="space-y-1 pt-1 border-t border-surface-container-high/40">
+<div class="px-2 py-0.5 text-[10px] font-mono tracking-wider text-outline uppercase font-semibold flex items-center justify-between">
+<span class="">CATALOG SCOPES</span>
+<span class="material-symbols-outlined text-[12px] text-outline">account_tree</span>
+</div>
+<div class="space-y-0.5 text-[11px]">
+<div class="rounded bg-surface-container-low/80 p-1 border border-surface-container-high/40 space-y-0.5">
+<div class="flex items-center justify-between px-1.5 py-1 text-on-surface font-medium">
+<div class="flex items-center gap-1.5 min-w-0 flex-1 mr-1">
+<span class="material-symbols-outlined text-[14px] text-primary shrink-0">folder_open</span>
+<span class="text-primary truncate font-semibold text-[11.5px]">@aihq/catalog</span>
+<span class="px-1 py-0.2 rounded bg-surface-container-highest text-[#ffb95f] font-mono text-[9px] shrink-0 font-normal" id="rail-package-version" title="Installed package version">-</span>
+</div>
+<span class="font-mono text-[10px] px-1 rounded bg-surface-container-highest text-secondary font-bold shrink-0" id="rail-package-count">-</span>
+</div>
+<div class="pl-2 space-y-0.5 text-[10.5px]" id="rail-kind-list"></div>
+</div>
+</div>
+</div>
+<!-- SOURCE SCOPES: derived from the published source identity -->
+<div class="space-y-1 pt-1 border-t border-surface-container-high/40">
+<div class="px-2 py-0.5 text-[10px] font-mono tracking-wider text-outline uppercase font-semibold flex items-center justify-between">
+<span class="">SOURCE TYPES</span>
+<span class="material-symbols-outlined text-[12px] text-outline">source</span>
+</div>
+<div class="space-y-0.5 text-[11px]" id="rail-source-list"></div>
+</div>
+<!-- GOVERNANCE & TELEMETRY -->
+<div class="space-y-1 pt-1 border-t border-surface-container-high/40">
+<div class="px-2 py-0.5 text-[10px] font-mono tracking-wider text-outline uppercase font-semibold">
+<span class="">TELEMETRY</span>
+</div>
+<nav class="space-y-0.5 text-[11px]">
+<a class="flex items-center justify-between px-2 py-0.5 rounded text-on-surface-variant opacity-50 cursor-not-allowed" href="#" aria-disabled="true" title="Not published: no audit read contract">
+<span class="truncate">Audit Feed</span>
+<span class="font-mono text-[10px] text-outline">Not published</span>
+</a>
+<a class="flex items-center justify-between px-2 py-0.5 rounded text-on-surface-variant opacity-50 cursor-not-allowed" href="#" aria-disabled="true" title="Not published: no compliance aggregate in the index">
+<span class="truncate">Compliance Matrix</span>
+<span class="font-mono text-[10px] text-outline">Not published</span>
+</a>
+</nav>
+</div>
+</div>
+<!-- Bottom Status & Guard widget -->
+<div class="p-2 m-2 rounded bg-surface-container-low border border-surface-container-high/40 text-[10px] space-y-1.5 shrink-0 opacity-60">
+<div class="flex items-center justify-between">
+<span class="flex items-center gap-1.5 text-on-surface-variant font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>Egress Guard</span>
+<span class="font-mono text-outline font-bold">Not published</span>
+</div>
+<div class="w-full bg-surface-container-highest rounded h-1 overflow-hidden"></div>
+<div class="flex items-center justify-between text-outline font-mono">
+<span class="">Quota: Not published</span>
+<span class="">Leaks: Not published</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- CENTER WORKSPACE: Six-kind ledger + Control Strip + Fluid Grid -->
+<div class="flex-1 flex flex-col min-w-0 overflow-hidden" id="workbench-body-wrapper">
+<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 divide-x divide-surface-container-high/40 border-b border-surface-container-high/50 bg-[#121622] shrink-0 select-none w-full" id="framework-matrix-tabs"></div>
+<div class="flex-1 flex w-full overflow-hidden relative" id="workspace-split-row">
+<main class="flex-1 flex flex-col min-w-0 bg-[#0f131b] overflow-hidden" id="main-content">
+<div class="flex-1 flex flex-col overflow-y-auto min-w-0 bg-[#0c1017]">
+<div class="px-5 pt-4 pb-3 border-b border-surface-container-high/40 bg-[#0e131d]/90 flex flex-col gap-2 shrink-0">
+<div class="flex items-center justify-between flex-wrap gap-2">
+<div>
+<div class="text-[10px] font-mono tracking-wider uppercase text-outline/80 font-semibold mb-0.5">CATALOG INDEX · READ-ONLY MIRROR</div>
+<h1 class="text-[22px] font-bold text-white tracking-tight flex items-center gap-2 font-mono">
+<span class="">@aihq/catalog</span>
+<span class="text-outline/60 font-light">—</span>
+<span class="text-[#ffb95f]" id="masthead-version">-</span>
+</h1>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-[10.5px] font-mono text-outline uppercase tracking-wider hidden sm:inline-block">Source Policy:</span>
+<div class="flex items-center bg-surface-container-lowest p-0.5 rounded border border-surface-container-high/60 text-[11px]" title="Not published: needs a Core source-policy resolution contract">
+<button class="px-2.5 py-1 rounded text-on-surface-variant opacity-50 cursor-not-allowed" id="source-btn-allow-all" type="button" disabled aria-disabled="true">Allow all</button>
+<button class="px-2.5 py-1 rounded text-on-surface-variant opacity-50 cursor-not-allowed" id="source-btn-allow-exceptions" type="button" disabled aria-disabled="true">Allow with exceptions</button>
+<button class="px-2.5 py-1 rounded text-on-surface-variant opacity-50 cursor-not-allowed" id="source-btn-hold-back" type="button" disabled aria-disabled="true">Hold back</button>
+</div>
+</div>
+</div>
+<div class="flex flex-wrap items-center gap-2 text-[11px] font-mono text-outline/90 pt-0.5" id="masthead-facts">
+<span class="px-2 py-0.5 rounded bg-surface-container border border-surface-container-high/40 text-on-surface-variant flex items-center gap-1.5 text-[10.5px]">
+<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>ORGANIZATION NOT PUBLISHED</span>
+</div>
+</div>
+<div class="px-5 py-2 border-b border-surface-container-high/40 bg-[#0e131d] flex flex-wrap items-center justify-between gap-2 shrink-0 text-[11.5px]">
+<div class="flex items-center gap-2 flex-1 min-w-0">
+<label class="w-8 h-8 rounded border border-surface-container-high/60 bg-[#141822] hover:bg-surface-container text-outline hover:text-on-surface flex items-center justify-center shrink-0 transition-colors cursor-pointer" for="catalog-search" title="Search published identities">
+<span class="material-symbols-outlined text-[15px]">search</span>
+</label>
+<input class="w-full min-w-0 max-w-md px-2 py-1 rounded bg-[#141822] border border-surface-container-high/60 text-on-surface text-[11.5px] font-mono placeholder:text-outline/70 focus:border-primary focus:outline-none" id="catalog-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search entryId, subject id or source revision" aria-label="Search published identities">
+<div class="flex items-center gap-2 overflow-x-auto" id="kind-filters" role="group" aria-label="Filter by kind"></div>
+</div>
+<div class="flex items-center gap-2 font-mono text-[10.5px] shrink-0">
+<label class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-container border border-surface-container-high/40 text-on-surface-variant" title="Filter by published source type">
+<span class="material-symbols-outlined text-[12px] text-outline">source</span>
+<select class="bg-transparent text-on-surface text-[10.5px] font-mono focus:outline-none cursor-pointer" id="source-filter" aria-label="Filter by published source type"></select>
+</label>
+<label class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-container border border-surface-container-high/40 text-on-surface-variant" title="Sort by a published identity">
+<span class="material-symbols-outlined text-[12px] text-outline">sort</span>
+<select class="bg-transparent text-on-surface text-[10.5px] font-mono focus:outline-none cursor-pointer" id="sort-select" aria-label="Sort by a published identity">
+<option value="entryId">ENTRY ID (A-Z)</option>
+<option value="entryId-desc">ENTRY ID (Z-A)</option>
+<option value="kind">KIND (A-Z)</option>
+<option value="sourceType">SOURCE TYPE (A-Z)</option>
+<option value="release">SOURCE RELEASE (A-Z)</option>
+</select>
+</label>
+<span class="px-2.5 py-1 rounded bg-surface-container border border-surface-container-high/40 text-on-surface-variant flex items-center gap-1.5 shrink-0" title="Not published: no normalized egress classification in the index">
+<span class="material-symbols-outlined text-[12px] text-outline">arrow_outward</span>
+<span class="font-medium">Egress out: Not published</span>
+</span>
+</div>
+</div>
+<div class="flex-1 flex overflow-hidden">
+<div class="flex-1 overflow-y-auto p-4 bg-[#0d111a] flex flex-col gap-3">
+<div class="flex items-center justify-between text-[11px] font-mono text-outline pb-1">
+<div class="">
+<strong class="text-white font-bold" id="visible-count">0</strong> <span id="visible-caption">of 0 catalog entries</span></div>
+<div class="flex items-center gap-2">
+<span class="text-[10px]">INVENTORY COUNT · NOT AN APPROVAL</span>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3" id="cards-grid"></div>
+</div>
+<!-- RIGHT COLUMN: Interactive Multi-Inspector (Collapsible Drawer) -->
+<aside class="inspector-transition shrink-0 bg-[#12161f] border-l border-surface-container-high/60 flex flex-col overflow-hidden w-[390px]" id="inspector-rail">
+<div class="p-3 border-b border-surface-container-high/60 space-y-2 shrink-0">
+<div class="flex items-start justify-between gap-2">
+<div class="min-w-0">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-[#ffb95f] primitive-skill" id="inspector-icon">extension</span>
+<span class="font-mono font-bold text-white text-[13px] tracking-tight truncate" id="inspector-name">No entry selected</span>
+</div>
+<div class="flex items-center gap-2 mt-1">
+<span class="text-[10px] font-mono px-1 rounded bg-surface-container-highest text-on-surface-variant" id="inspector-kind">-</span>
+<span class="text-[10px] font-mono px-1 rounded bg-surface-container-highest text-on-surface-variant" id="inspector-version">-</span>
+</div>
+</div>
+<button class="p-1 rounded hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors" id="close-inspector-btn" title="Collapse Inspector Panel" type="button">
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+</button>
+</div>
+<div class="flex items-center justify-between text-[11px]">
+<span class="text-outline" id="inspector-subtitle">Select a card to read its published identities and evidence</span>
+<span class="font-mono text-on-surface-variant font-semibold" id="inspector-flags">Not published</span>
+</div>
+<div class="flex items-center p-0.5 rounded bg-surface-container-low border border-surface-container-high/40 text-[11px] gap-0.5" role="tablist">
+<button class="flex-1 py-1 px-1 rounded text-center transition-colors inspector-tab-btn bg-surface-container text-primary font-semibold shadow-xs" data-tab="details" type="button" role="tab" aria-selected="true">Details</button>
+<button class="flex-1 py-1 px-1 rounded text-center transition-colors inspector-tab-btn text-on-surface-variant hover:text-on-surface" data-tab="security" type="button" role="tab" aria-selected="false">Security Scan</button>
+<button class="flex-1 py-1 px-1 rounded text-center transition-colors flex items-center justify-center gap-1 inspector-tab-btn text-on-surface-variant hover:text-on-surface" data-tab="json" type="button" role="tab" aria-selected="false">
+<span class="">Policy JSON</span>
+<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+</button>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto p-3 text-[12px]">
+<div class="space-y-3" id="pane-details">
+<div class="space-y-1">
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline">Identity</span>
+<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="details-identity"></div>
+</div>
+<div class="space-y-1">
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline">Published Summary</span>
+<p class="text-on-surface leading-relaxed text-[11px]" id="details-desc">Not published</p>
+</div>
+<div class="space-y-1.5">
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline">Declared Capabilities</span>
+<div class="space-y-1 text-[11px]" id="details-capabilities"></div>
+</div>
+<div class="space-y-1.5 pt-1">
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline">Artifact References</span>
+<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="details-artifacts"></div>
+</div>
+</div>
+<div class="space-y-3 hidden" id="pane-security">
+<div class="space-y-1.5">
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline font-semibold">Scanner Telemetry</span>
+<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/40 flex items-center justify-between text-[11px]">
+<span class="text-on-surface-variant">Detector identities and per-engine run state</span>
+<span class="font-mono text-outline text-[10px] font-semibold">Not published</span>
+</div>
+<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/40 text-[10.5px] text-outline" id="scanner-report-statement">Not published</div>
+</div>
+<div class="space-y-1.5">
+<div class="flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-outline font-semibold">
+<span class="">Evidence Statements</span>
+<span class="text-on-surface-variant font-mono text-[10px]" id="statement-count">0 statements</span>
+</div>
+<div class="space-y-1 text-[11px]" id="security-statements"></div>
+</div>
+<div class="space-y-1.5 pt-1">
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline font-semibold">Policy Determination</span>
+<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/40 text-[10.5px] text-outline">Not published: needs a Core determination contract. This page reads evidence and never records a decision.</div>
+<div class="space-y-1 text-[11px] opacity-50">
+<label class="flex items-start gap-2 p-2 rounded bg-surface-container-low border border-surface-container-high/40 cursor-not-allowed">
+<input class="mt-0.5 accent-primary" name="policy-choice" type="radio" value="hold" disabled>
+<div>
+<span class="text-on-surface-variant font-medium block leading-none mb-1">Keep held back (Recommended)</span>
+<span class="text-outline text-[10px] leading-tight block">Not published</span>
+</div>
+</label>
+<label class="flex items-start gap-2 p-2 rounded bg-surface-container-low border border-surface-container-high/40 cursor-not-allowed">
+<input class="mt-0.5 accent-primary" name="policy-choice" type="radio" value="false_alarm" disabled>
+<div>
+<span class="text-on-surface-variant font-medium block leading-none mb-1">Not a real problem (False alarm)</span>
+<span class="text-outline text-[10px] leading-tight block">Not published</span>
+</div>
+</label>
+<label class="flex items-start gap-2 p-2 rounded bg-surface-container-low border border-surface-container-high/40 cursor-not-allowed">
+<input class="mt-0.5 accent-primary" name="policy-choice" type="radio" value="allow_risk" disabled>
+<div>
+<span class="text-on-surface-variant font-medium block leading-none mb-1">Accept the risk and allow</span>
+<span class="text-outline text-[10px] leading-tight block">Not published</span>
+</div>
+</label>
+</div>
+</div>
+</div>
+<div class="space-y-2.5 hidden" id="pane-json">
+<div class="flex items-center justify-between">
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline">Staged Policy Delta</span>
+<div class="flex items-center gap-1.5">
+<button class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-container text-outline cursor-not-allowed" id="copy-json-btn" type="button" disabled aria-disabled="true">Copy JSON</button>
+<button class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-container text-outline cursor-not-allowed" id="download-json-btn" type="button" disabled aria-disabled="true">Download</button>
+</div>
+</div>
+<div class="p-2.5 rounded bg-surface-container-lowest border border-surface-container-high/60 font-mono text-[10.5px] leading-snug space-y-0.5 text-outline overflow-x-auto" id="live-json-viewer">Not published: no policy compiler or template contract. This page does not export a policy.</div>
+<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 text-[10px] text-outline flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[13px] text-primary">sync</span>
+<span class="">Policy JSON stays unavailable until Core publishes the contract.</span>
+</div>
+</div>
+</div>
+<div class="p-2 bg-surface-container-lowest border-t border-surface-container-high/60 flex items-center justify-between gap-2 shrink-0">
+<button class="px-2.5 py-1.5 rounded text-on-surface-variant text-[11px] opacity-50 cursor-not-allowed" id="reset-item-btn" type="button" disabled aria-disabled="true" title="Not published: needs a Core template contract">Reset Item</button>
+<button class="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-surface-container text-on-surface-variant text-[12px] font-medium opacity-50 cursor-not-allowed" id="apply-staging-btn" type="button" disabled aria-disabled="true" title="Not published: needs a Core compile/apply contract">
+<span class="material-symbols-outlined text-[14px]">done_all</span>
+<span class="">Apply</span>
+</button>
+</div>
+</aside>
+</div>
+</div>
+</div>
+</div>
+<div id="catalog-error" class="fixed bottom-3 left-3 z-50 max-w-xl p-3 rounded bg-error-container text-on-error-container text-[11.5px] font-mono hidden" role="alert"></div>
+<script type="module" src="catalog.js"></script>
+</body>
+</html>
