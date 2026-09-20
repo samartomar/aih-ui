@@ -23,12 +23,11 @@ import { copyFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { EXPECTED_FORMAT, EXPECTED_VERSION, contractViolations } from "./catalog-index-contract.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, ".."); // the aih-ui checkout this tool belongs to
 
-const EXPECTED_FORMAT = "aih-catalog-index";
-const EXPECTED_VERSION = 1;
 const CATALOG_INDEX_EXPORT = "@aihq/catalog/catalog-index.json";
 const CATALOG_PACKAGE = "@aihq/catalog";
 
@@ -286,13 +285,8 @@ async function main() {
 
   const indexPath = await resolveIndexThroughExportMap(consumerDir);
   const index = readJson(indexPath);
-  if (index?.format !== EXPECTED_FORMAT) {
-    fatal(`index format is ${JSON.stringify(index?.format)}, expected ${JSON.stringify(EXPECTED_FORMAT)}`);
-  }
-  if (index?.version !== EXPECTED_VERSION) {
-    fatal(`index version is ${JSON.stringify(index?.version)}, expected ${EXPECTED_VERSION}`);
-  }
-  if (!Array.isArray(index.entries)) fatal("index has no entries array");
+  const violations = contractViolations(index);
+  if (violations.length) fatal(violations.join("; "));
   log(
     `index: ${CATALOG_INDEX_EXPORT} -> ${indexPath} (format ${index.format}, version ${index.version}, ${index.entries.length} entries)`,
   );
