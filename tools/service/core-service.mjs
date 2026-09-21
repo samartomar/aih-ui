@@ -22,14 +22,28 @@
  *   validation-fixture.mjs VALIDATION ONLY: the one module that manufactures
  *                          anything, and it labels everything it makes
  */
-import { catalogEntry, entryContentDir } from "./catalog-access.mjs";
+import { catalogEntry, catalogIntegrity, entryContentDir } from "./catalog-access.mjs";
 import { consume, parseEvidence, prepare, subject } from "./core-adapter.mjs";
 import { buildValidationFixture } from "./validation-fixture.mjs";
 
 const OPS = {
+  /** Identity only. Structure is validated; artifact bytes are not read. */
   subject({ entryId }) {
     const { entry, root } = catalogEntry(entryId);
     return subject({ entryId, entry, contentDir: entryContentDir(entry, root) });
+  },
+
+  /**
+   * Catalog's own integrity result, as its own operation.
+   *
+   * verifyArtifacts makes Catalog read and hash every declared artifact in the
+   * index against its published sha256 - about 1800 files, so this is a second
+   * or so and deliberately not on the selection path. It is Catalog's answer
+   * about Catalog's bytes and is reported separately from everything else.
+   */
+  catalogIntegrity({ entryId }) {
+    const { entry, content } = catalogEntry(entryId, { verifyArtifacts: true });
+    return catalogIntegrity(content, entry);
   },
   parseEvidence,
   prepare,

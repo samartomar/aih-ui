@@ -258,11 +258,60 @@ read through git. Tarballs are cached by commit, and each run prints the commit
 and sha256 of what it actually installed. `CORE_TGZ` / `SCAN_TGZ` / `CATALOG_TGZ`
 supply a tarball directly, and then no checkout is read at all.
 
-`@aihq/catalog` exports `./catalog-index.json` and nothing for entry content. The
-index publishes every artifact's package-root-relative path, so the package root
-is derived from where the export map placed the index, and that relationship is
-checked rather than assumed. A failure there is reported; no internal directory is
-ever guessed. **Gap for @aihq/catalog: no export covers entry content.**
+### Reading the packages through what they publish
+
+`@aihq/catalog` publishes its own reader, and the backend uses it rather than
+restating any of it: `CATALOG_CONTENT_INDEX_ROOT_URL` and
+`CATALOG_CONTENT_INDEX_SUBPATH_V1` locate the index, `readCatalogContentV1`
+validates the bytes and returns the entries, and `resolveCatalogContentPathV1`
+joins every descriptor path and refuses one that escapes the package root. The
+relationship between the subpath export and the root-relative location is
+checked, not assumed; a failure is reported and no internal directory is guessed.
+
+**Remaining gap for @aihq/catalog:** it publishes artifact paths but not the
+directory that contains them, so the one place that still reads a layout off a
+path is `entryContentDir` in `tools/service/catalog-access.mjs`. It works from a
+path `resolveCatalogContentPathV1` has already validated, and it is the single
+place to change when Catalog publishes an accessor for it.
+
+`@aihq/scan` publishes `readScanResultRecordV1` and
+`readScanResultSubjectBindingV1`. Both accept only a value
+`verifyScanAttestationV2` produced, so a cloned or hand-written object is
+refused. They provide **presentation facts, not proof of execution**:
+
+- a finding record is an occurrence fingerprint and a multiplicity. Message,
+  location and severity are not in the attestation, and the record's own `gaps`
+  say so. The pane shows those gaps verbatim rather than filling anything in.
+- `run.state` and `signer.class` are values the attestation declares. The pane
+  labels them "(declared)". An ephemeral test key reports
+  `signer.class: "organization"` too.
+- `readScanResultSubjectBindingV1` returns the digest of the **source tree that
+  was scanned**. It does not establish that the selected catalog item was in
+  that scan. Core's source-seal check, selected-file binding, configured-trust
+  check and evidence reprojection remain the only things that do, and they are
+  unchanged.
+
+**Installing @aihq/catalog@0.2.0 or @aihq/scan@0.4.0 from npm does not provide
+these APIs.** They come from the reproducible test checkpoints
+`88d7e652` (Catalog) and `4d1ebb9d` (Scan), which are not version pins.
+
+### Six results, six owners
+
+The Governance pane never merges answers that belong to different owners:
+
+| Result | Owner | Where it comes from |
+| --- | --- | --- |
+| Catalog artifact integrity | Catalog | `readCatalogContentV1` with `verifyArtifacts`, via `/api/catalog-integrity` |
+| Published evidence | Catalog | the index's qualification records — **declared, and not byte-checked by that reader** |
+| Scanner attestation | Scan, under operator trust | `verifyScanAttestationV2` inside Core's consumption |
+| Scanner result facts | Scan | `readScanResultRecordV1`, read after verification |
+| Binding | Core | the six status axes |
+| Authority | Core | the six status axes |
+
+"artifacts: verified" covers the four declared artifacts of an entry — closure,
+profile, prose and recipe. It does not cover the qualification evidence files,
+which are separate paths in the same index, so the pane shows the record count
+beside `Bytes checked here: 0` rather than letting one read as the other.
 
 Malformed requests are the client's problem, not the server's: a request URL or percent
 escape that does not parse is answered with `400` and the preview keeps serving. The

@@ -22,6 +22,15 @@ export function fetchSubject(entryId) {
   return api("/api/subject", { entryId });
 }
 
+/**
+ * Catalog's own integrity result for one entry. Its own call because it is its
+ * own answer, from a different owner, on a different timescale: it reads and
+ * hashes every declared artifact in the installed index.
+ */
+export function fetchCatalogIntegrity(entryId) {
+  return api("/api/catalog-integrity", { entryId });
+}
+
 /** Operator-imported evidence bytes, parsed by Core's own public parser. */
 export function parseEvidence(evidenceBase64) {
   return api("/api/evidence", { evidenceBase64 });

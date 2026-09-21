@@ -23,13 +23,16 @@ import { createPrepared } from "./prepared.js";
 import { createStatuses } from "./statuses.js";
 import { createVerdict } from "./verdict.js";
 import { bytesToBase64, downloadBase64 } from "./bytes.js";
-import { consume, fetchSaved, fetchSubject, loadValidationFixture, parseEvidence, prepare } from "./transport.js";
+import { consume, fetchCatalogIntegrity, fetchSaved, fetchSubject, loadValidationFixture, parseEvidence, prepare } from "./transport.js";
 
 export function createGovernance() {
   const elements = governanceElements();
   const state = {
     entry: null,
     subject: null,
+    // Catalog's own answer about Catalog's own bytes. It arrives separately
+    // from the Core-derived identity and is never folded into it.
+    catalog: null,
     evidenceBase64: null,
     evidenceFacts: null,
     sessionId: null,
@@ -150,7 +153,7 @@ export function createGovernance() {
   return {
     /** Renders the pane's resting state. Called once, at mount. */
     mount() {
-      inputs.renderSubject(null);
+      inputs.renderSubject(null, null);
       inputs.renderEvidence(null);
       clearResults();
       refreshEnabled();
@@ -158,8 +161,10 @@ export function createGovernance() {
 
     /** Called whenever the catalog selection changes. Every step resets with it. */
     async select(entry) {
-      state.entry = entry ?? null;
+      const selected = entry ?? null;
+      state.entry = selected;
       state.subject = null;
+      state.catalog = null;
       state.evidenceBase64 = null;
       state.evidenceFacts = null;
       state.sessionId = null;
@@ -170,17 +175,33 @@ export function createGovernance() {
       inputs.renderEvidence(null);
       clearResults();
 
-      if (state.entry !== null) {
-        const subject = await fetchSubject(state.entry.entryId);
-        state.subject = subject.ok === false ? null : subject;
-        if (subject.ok === false) {
-          inputs.renderSubjectError(subject.error);
-          refreshEnabled();
-          return;
-        }
+      if (selected === null) {
+        inputs.renderSubject(null, null);
+        refreshEnabled();
+        return;
       }
-      inputs.renderSubject(state.subject);
+
+      // Two answers from two owners, asked for at the same time. Catalog reads
+      // and hashes every declared artifact in the index, so it takes about a
+      // second; the identity is not made to wait for it.
+      state.catalog = "pending";
+      const integrity = fetchCatalogIntegrity(selected.entryId);
+      const subject = await fetchSubject(selected.entryId);
+      // A selection that changed while this was in flight is not this one.
+      if (state.entry !== selected) return;
+      state.subject = subject.ok === false ? null : subject;
+      if (subject.ok === false) {
+        inputs.renderSubjectError(subject.error);
+        refreshEnabled();
+        return;
+      }
+      inputs.renderSubject(state.subject, state.catalog);
       refreshEnabled();
+
+      const catalog = await integrity;
+      if (state.entry !== selected) return;
+      state.catalog = catalog;
+      inputs.renderSubject(state.subject, state.catalog);
     },
   };
 }

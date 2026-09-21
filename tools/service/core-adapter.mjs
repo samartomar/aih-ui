@@ -45,7 +45,13 @@ export function deriveSubject(entry) {
   };
 }
 
-/** Catalog-provided identity plus the digests Core derives from it. */
+/**
+ * Catalog-provided identity plus the digests Core derives from it.
+ *
+ * Catalog's integrity result is a DIFFERENT answer from a different owner and
+ * is not folded in here: it has its own operation, so nothing can read one as
+ * though it covered the other.
+ */
 export function subject({ entryId, contentDir, entry }) {
   const derived = deriveSubject(entry);
   return {
@@ -220,5 +226,12 @@ export async function consume({ sessionDir, authorityBundlePath, scanMaterialPat
     trustSource: verification.trustSource,
     signerKeyId: verification.signerKeyId ?? null,
     scanMaterialSupplied: scanMaterialPath !== undefined && scanMaterialPath !== null,
+    // Scan's own reading of what Scan verified, available only once Core has
+    // actually called the verifier. It is presentation detail beside the six
+    // axes above, never a substitute for any of them.
+    scanResult: verification.facts(),
+    // The operator's declaration about their own signer: the only statement
+    // that can speak to a real detector run.
+    operatorProvenance: verification.operatorProvenance ?? null,
   };
 }

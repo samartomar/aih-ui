@@ -54,6 +54,15 @@ export function createApi({ consumerDir, runDir, summary }) {
     /** Catalog-provided identity plus the digests Core derives from it. */
     "POST /api/subject": (body) => callService(consumerDir, { op: "subject", entryId: body.entryId }),
 
+    /**
+     * Catalog's own integrity result for one entry: the index digest, its
+     * structure, whether the declared artifacts hash to their published sha256,
+     * and which qualification evidence files are declared but NOT byte-checked
+     * by that reader. A separate call because it is a separate answer.
+     */
+    "POST /api/catalog-integrity": (body) =>
+      callService(consumerDir, { op: "catalogIntegrity", entryId: body.entryId }),
+
     /** Operator-imported evidence, parsed by Core's public parser. */
     "POST /api/evidence": (body) =>
       callService(consumerDir, { op: "parseEvidence", evidenceBase64: body.evidenceBase64 }),

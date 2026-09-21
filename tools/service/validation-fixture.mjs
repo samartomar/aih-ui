@@ -34,7 +34,7 @@ import {
 } from "@aihq/scan";
 
 import { b64, writeJsonFile } from "./artifacts.mjs";
-import { catalogEntry, entryContentDir } from "./catalog-access.mjs";
+import { artifactPath, catalogEntry, entryContentDir } from "./catalog-access.mjs";
 import { deriveSubject } from "./core-adapter.mjs";
 import { buildSignedFixture } from "./fixture-candidate.mjs";
 
@@ -52,6 +52,25 @@ function closurePaths(contentDir) {
   })(contentDir, "");
   relative.sort();
   return relative;
+}
+
+/**
+ * The selected artifact, relative to the directory the seal was taken over.
+ *
+ * Derived from the absolute path Catalog validated, so the UI never re-splits a
+ * published path string on its own assumptions about the layout.
+ */
+function matchedPathOf(root, entry, contentDir) {
+  const resolved = artifactPath(root, entry.artifacts?.profile);
+  if (resolved === undefined) {
+    throw new Error(`@aihq/catalog publishes no profile artifact path for ${entry.entryId}`);
+  }
+  const posix = resolved.replaceAll("\\", "/");
+  const prefix = `${contentDir.replaceAll("\\", "/")}/`;
+  if (!posix.startsWith(prefix)) {
+    throw new Error(`the profile artifact ${posix} is not inside the sealed directory ${prefix}`);
+  }
+  return posix.slice(prefix.length);
 }
 
 /** The example authority an operator would otherwise supply themselves. */
@@ -84,6 +103,8 @@ function exampleAuthority({ decision, target, issuedAt, expiresAt }) {
 }
 
 export function buildValidationFixture({ entryId, sessionDir, target, effect }) {
+  // The entry comes from Catalog's own reader, so its identity, artifact paths
+  // and evidence records are the ones Catalog published and validated.
   const { entry, root } = catalogEntry(entryId);
   const contentDir = entryContentDir(entry, root);
   if (contentDir === undefined) {
@@ -219,7 +240,10 @@ export function buildValidationFixture({ entryId, sessionDir, target, effect }) 
     sealedFileCount: relative.length,
     sealedFrom: contentDir,
     bindingClaim: {
-      matchedPath: entry.artifacts.profile.path.split("/").slice(-2).join("/"),
+      // The seal was taken over the entry's content directory, so the matched
+      // path is this artifact relative to that directory. Both come from the
+      // path Catalog published and resolveCatalogContentPathV1 validated.
+      matchedPath: matchedPathOf(root, entry, contentDir),
       selectedClosureSha256: seal.selectedClosureSha256,
       sourceTreeSha256: seal.sourceTreeSha256,
     },

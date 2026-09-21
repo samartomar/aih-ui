@@ -15,6 +15,58 @@ import { el } from "../app/dom.js";
 import { NOT_PUBLISHED, NOT_SUPPLIED } from "../app/absence.js";
 import { row } from "./rows.js";
 
+function section(box, label) {
+  box.appendChild(
+    el("div", "pt-1 mt-1 border-t border-surface-container-high/40 text-[9px] font-mono uppercase tracking-wider text-outline", label),
+  );
+}
+
+/*
+ * Catalog's own result about Catalog's own bytes, kept apart from everything
+ * Core decides.
+ *
+ * "artifacts: verified" means the four declared artifacts of each entry -
+ * closure, profile, prose and recipe - hash to their declared sha256. It does
+ * NOT cover the qualification evidence files, which are separate paths in the
+ * same index and are not byte-checked by that reader. The two are therefore two
+ * rows, and the evidence row says plainly that it is declared, not checked.
+ */
+function renderCatalog(box, catalog) {
+  section(box, "Catalog artifact integrity");
+  if (catalog === "pending") {
+    row(box, "Catalog", "reading and hashing the declared artifacts...", NOT_PUBLISHED, "text-outline");
+    return;
+  }
+  if (catalog === null || catalog === undefined) {
+    row(box, "Catalog", null, NOT_PUBLISHED);
+    return;
+  }
+  if (catalog.ok === false) {
+    box.appendChild(el("div", "text-error leading-snug", catalog.error));
+    return;
+  }
+  row(box, "Index digest", catalog.indexDigest, NOT_PUBLISHED);
+  row(box, "Index structure", catalog.indexStructure, NOT_PUBLISHED, catalog.indexStructure === "valid" ? "text-primary" : "text-error");
+  row(
+    box,
+    "Declared artifacts",
+    catalog.indexArtifacts,
+    NOT_PUBLISHED,
+    catalog.indexArtifacts === "verified" ? "text-primary" : catalog.indexArtifacts === "unverified" ? "text-error" : "text-outline",
+  );
+  const states = (catalog.artifacts ?? []).map((artifact) => `${artifact.name}=${artifact.state}`).join(" ");
+  row(box, "This entry", states || null, NOT_PUBLISHED);
+
+  section(box, "Published evidence (Catalog)");
+  const evidence = catalog.publishedEvidence ?? { declared: 0, byteChecked: 0 };
+  row(box, "Records declared", String(evidence.declared));
+  row(box, "Bytes checked here", String(evidence.byteChecked), NOT_SUPPLIED, "text-tertiary");
+  for (const record of evidence.records ?? []) {
+    row(box, record.kind, `${record.id} · ${record.attestor}`);
+  }
+  if (evidence.note) box.appendChild(el("div", "text-outline leading-snug", evidence.note));
+}
+
 /**
  * @param elements  { govSubject, govEvidence, govEvidenceFile, govDecisionId,
  *                    govDecisionDigest, govTarget, govEffect, govRoute }
@@ -61,7 +113,12 @@ export function createInputs({ elements, onEvidenceFile, onInput }) {
       elements.govDecisionDigest.value = "";
     },
 
-    renderSubject(subject) {
+    /**
+     * @param subject the Core-derived identity, or null
+     * @param catalog Catalog's own integrity result, "pending" while it is
+     *                still being read, or null when nothing is selected
+     */
+    renderSubject(subject, catalog = null) {
       const box = elements.govSubject;
       box.replaceChildren();
       if (subject === null) {
@@ -89,6 +146,7 @@ export function createInputs({ elements, onEvidenceFile, onInput }) {
         NOT_PUBLISHED,
         subject.contentAvailable ? "text-on-surface" : "text-outline",
       );
+      renderCatalog(box, catalog);
     },
 
     renderSubjectError(message) {
