@@ -32,8 +32,8 @@
 </div>
 <div class="h-3.5 w-px bg-surface-container-high mx-0.5"></div>
 <!-- Scope Switcher: the organization is an input supplied by organizations, never a catalog value -->
-<button class="flex items-center gap-1 px-2 py-1 rounded bg-surface-container-low text-on-surface text-[12px] font-medium opacity-50 cursor-not-allowed" type="button" id="org-modal-trigger" disabled aria-disabled="true" title="Not supplied: the organization is an input. Organizations supply it through a Core contract this page has not been wired to.">
-<span class="">Not supplied</span>
+<button class="flex items-center gap-1 px-2 py-1 rounded bg-surface-container-low hover:bg-surface-container text-on-surface text-[12px] font-medium transition-colors cursor-pointer" type="button" id="org-modal-trigger" aria-haspopup="dialog" aria-controls="org-modal-overlay" title="Your organization: entered by you, kept in this browser">
+<span class="" id="org-trigger-label">Not supplied</span>
 <span class="material-symbols-outlined text-[13px] text-outline">expand_more</span>
 </button>
 <!-- Mode Toggle: presentation mode; the tool inventory behind it is not published -->
@@ -126,33 +126,13 @@
 </a>
 </nav>
 </div>
-<!-- CATALOG SCOPES: published package, sources and kinds -->
+<!-- CATALOG SCOPES: one row per published source identity -->
 <div class="space-y-1 pt-1 border-t border-surface-container-high/40">
 <div class="px-2 py-0.5 text-[10px] font-mono tracking-wider text-outline uppercase font-semibold flex items-center justify-between">
 <span class="">CATALOG SCOPES</span>
 <span class="material-symbols-outlined text-[12px] text-outline">account_tree</span>
 </div>
-<div class="space-y-0.5 text-[11px]">
-<div class="rounded bg-surface-container-low/80 p-1 border border-surface-container-high/40 space-y-0.5">
-<div class="flex items-center justify-between px-1.5 py-1 text-on-surface font-medium">
-<div class="flex items-center gap-1.5 min-w-0 flex-1 mr-1">
-<span class="material-symbols-outlined text-[14px] text-primary shrink-0">folder_open</span>
-<span class="text-primary truncate font-semibold text-[11.5px]">@aihq/catalog</span>
-<span class="px-1 py-0.2 rounded bg-surface-container-highest text-[#ffb95f] font-mono text-[9px] shrink-0 font-normal" id="rail-package-version" title="Installed package version">-</span>
-</div>
-<span class="font-mono text-[10px] px-1 rounded bg-surface-container-highest text-secondary font-bold shrink-0" id="rail-package-count">-</span>
-</div>
-<div class="pl-2 space-y-0.5 text-[10.5px]" id="rail-kind-list"></div>
-</div>
-</div>
-</div>
-<!-- SOURCE SCOPES: derived from the published source identity -->
-<div class="space-y-1 pt-1 border-t border-surface-container-high/40">
-<div class="px-2 py-0.5 text-[10px] font-mono tracking-wider text-outline uppercase font-semibold flex items-center justify-between">
-<span class="">SOURCE TYPES</span>
-<span class="material-symbols-outlined text-[12px] text-outline">source</span>
-</div>
-<div class="space-y-0.5 text-[11px]" id="rail-source-list"></div>
+<div class="space-y-0.5 text-[11px]" id="rail-scope-list"></div>
 </div>
 <!-- GOVERNANCE & TELEMETRY -->
 <div class="space-y-1 pt-1 border-t border-surface-container-high/40">
@@ -196,8 +176,8 @@
 <div class="flex items-center justify-between flex-wrap gap-2">
 <div>
 <div class="text-[10px] font-mono tracking-wider uppercase text-outline/80 font-semibold mb-0.5">CATALOG INDEX · READ-ONLY MIRROR</div>
-<h1 class="text-[22px] font-bold text-white tracking-tight flex items-center gap-2 font-mono">
-<span class="">@aihq/catalog</span>
+<h1 class="text-[22px] font-bold text-white tracking-tight flex items-center gap-2 font-mono min-w-0">
+<span class="truncate" id="masthead-name">-</span>
 <span class="text-outline/60 font-light">—</span>
 <span class="text-[#ffb95f]" id="masthead-version">-</span>
 </h1>
@@ -218,37 +198,30 @@
 <label class="w-8 h-8 rounded border border-surface-container-high/60 bg-[#141822] hover:bg-surface-container text-outline hover:text-on-surface flex items-center justify-center shrink-0 transition-colors cursor-pointer" for="catalog-search" title="Search published identities">
 <span class="material-symbols-outlined text-[15px]">search</span>
 </label>
-<input class="w-full min-w-0 max-w-[260px] h-8 px-2 py-1 rounded bg-[#141822] border border-surface-container-high/60 text-on-surface text-[11.5px] font-mono placeholder:text-outline/70 focus:border-primary focus:outline-none" id="catalog-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search entryId, subject id, repository, package, path, commit or revision" aria-label="Search published entry and source identities">
-<div class="flex flex-nowrap items-center gap-2 overflow-x-auto no-scrollbar min-w-0" id="kind-filters" role="group" aria-label="Filter by kind"></div>
+<input class="flex-1 min-w-[96px] max-w-[260px] h-8 px-2 py-1 rounded bg-[#141822] border border-surface-container-high/60 text-on-surface text-[11.5px] font-mono placeholder:text-outline/70 focus:border-primary focus:outline-none" id="catalog-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search" title="Search entry id, subject id, repository, package, path, commit or revision" aria-label="Search published entry and source identities">
+<div class="flex items-center gap-2 shrink-0" id="review-filters" role="group" aria-label="Filter by review state"></div>
 </div>
-<div class="flex flex-nowrap items-center gap-2 font-mono text-[10.5px] shrink-0">
-<label class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-container border border-surface-container-high/40 text-on-surface-variant" title="Filter by published source type">
-<span class="material-symbols-outlined text-[12px] text-outline">source</span>
-<select class="w-[104px] p-0 border-0 bg-transparent bg-none leading-none text-on-surface text-[10.5px] font-mono focus:outline-none focus:ring-0 cursor-pointer" id="source-filter" aria-label="Filter by published source type"></select>
-</label>
-<label class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-container border border-surface-container-high/40 text-on-surface-variant" title="Sort by a published identity">
-<span class="material-symbols-outlined text-[12px] text-outline">sort</span>
-<select class="w-[136px] p-0 border-0 bg-transparent bg-none leading-none text-on-surface text-[10.5px] font-mono focus:outline-none focus:ring-0 cursor-pointer" id="sort-select" aria-label="Sort by a published identity">
-<option value="entryId">ENTRY ID (A-Z)</option>
-<option value="entryId-desc">ENTRY ID (Z-A)</option>
-<option value="kind">KIND (A-Z)</option>
-<option value="sourceType">SOURCE TYPE (A-Z)</option>
-<option value="sourceLabel">SOURCE REPOSITORY / PACKAGE (A-Z)</option>
-</select>
-</label>
-<span class="px-2.5 py-1 rounded bg-surface-container border border-surface-container-high/40 text-on-surface-variant flex items-center gap-1.5 shrink-0" title="Not published: no normalized egress classification in the index">
-<span class="material-symbols-outlined text-[12px] text-outline">arrow_outward</span>
-<span class="font-medium">Egress: Not published</span>
-</span>
-</div>
+<div class="flex items-center gap-2 font-mono text-[10.5px] shrink-0" id="review-summary"></div>
 </div>
 <div class="flex-1 flex overflow-hidden">
 <div class="flex-1 overflow-y-auto p-4 bg-[#0d111a] flex flex-col gap-3">
-<div class="flex items-center justify-between text-[11px] font-mono text-outline pb-1">
-<div class="">
-<strong class="text-white font-bold" id="visible-count">0</strong> <span id="visible-caption">of 0 catalog entries</span></div>
-<div class="flex items-center gap-2">
-<span class="text-[10px]">INVENTORY COUNT · NOT AN APPROVAL</span>
+<div class="flex items-center justify-between gap-4 text-[11px] font-mono text-outline pb-1">
+<div class="shrink-0 whitespace-nowrap">
+<strong class="text-white font-bold" id="visible-count" title="Inventory count. Not an approval.">0</strong> <span id="visible-caption">of 0 catalog entries</span></div>
+<div class="flex items-center gap-2 min-w-0">
+<div class="flex flex-nowrap items-center gap-1.5 overflow-x-auto no-scrollbar min-w-0" id="kind-filters" role="group" aria-label="Filter by kind"></div>
+<label class="flex items-center gap-1 shrink-0" title="Filter by published source type">
+<span class="material-symbols-outlined text-[12px] text-outline">source</span>
+<select class="w-[104px] p-0 border-0 bg-transparent bg-none leading-none text-on-surface text-[10.5px] font-mono focus:outline-none focus:ring-0 cursor-pointer" id="source-filter" aria-label="Filter by published source type"></select>
+</label>
+<span class="text-[10px] shrink-0">SORT:</span>
+<select class="w-[112px] p-0 border-0 bg-transparent bg-none leading-none text-on-surface font-semibold text-[10.5px] font-mono focus:outline-none focus:ring-0 cursor-pointer shrink-0" id="sort-select" aria-label="Sort">
+<option value="name">NAME (A-Z)</option>
+<option value="name-desc">NAME (Z-A)</option>
+<option value="entryId">ENTRY ID (A-Z)</option>
+<option value="kind">KIND (A-Z)</option>
+<option value="sourceLabel">SOURCE (A-Z)</option>
+</select>
 </div>
 </div>
 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3" id="cards-grid"></div>
@@ -291,15 +264,7 @@
 <div class="flex-1 overflow-y-auto p-3 text-[12px]">
 <div class="space-y-3" id="pane-details">
 <div class="space-y-1">
-<span class="text-[10px] font-mono uppercase tracking-wider text-outline">Identity</span>
-<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="details-identity"></div>
-</div>
-<div class="space-y-1">
-<span class="text-[10px] font-mono uppercase tracking-wider text-outline">Source Identity</span>
-<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="details-source"></div>
-</div>
-<div class="space-y-1">
-<span class="text-[10px] font-mono uppercase tracking-wider text-outline">Published Summary</span>
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline">Publisher Overview</span>
 <p class="text-on-surface leading-relaxed text-[11px]" id="details-desc">Not published</p>
 </div>
 <div class="space-y-1.5">
@@ -307,9 +272,19 @@
 <div class="space-y-1 text-[11px]" id="details-capabilities"></div>
 </div>
 <div class="space-y-1.5 pt-1">
-<span class="text-[10px] font-mono uppercase tracking-wider text-outline">Artifact References</span>
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline">Upstream Provenance</span>
+<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="details-source"></div>
+</div>
+<details class="group/ids pt-1" id="details-disclosure">
+<summary class="cursor-pointer list-none flex items-center gap-1 text-[10px] font-mono uppercase tracking-wider text-outline hover:text-on-surface select-none">
+<span class="material-symbols-outlined text-[13px] transition-transform group-open/ids:rotate-90">chevron_right</span>
+<span>Identity and artifact references</span>
+</summary>
+<div class="space-y-2 pt-1.5">
+<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="details-identity"></div>
 <div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="details-artifacts"></div>
 </div>
+</details>
 </div>
 <div class="space-y-3 hidden" id="pane-security">
 <div class="space-y-1.5">
@@ -529,6 +504,79 @@ authenticates a statement; it never establishes that the claimed measurements oc
 </button>
 </div>
 </aside>
+</div>
+</div>
+<div id="org-modal-overlay" class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs transition-opacity duration-200 hidden" role="dialog" aria-modal="true" aria-labelledby="org-modal-title">
+<div class="relative w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col rounded bg-surface-container-lowest border border-surface-container-high/60 shadow-2xl overflow-hidden" id="org-modal-card">
+<div class="flex items-start justify-between p-4 border-b border-surface-container-high/40 bg-surface-container-low/50">
+<div class="space-y-1">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">domain</span>
+<h2 class="text-[16px] font-semibold text-white tracking-tight" id="org-modal-title">Your organization</h2>
+<span class="px-1.5 py-0.5 rounded bg-surface-container-highest font-mono text-[10px] text-secondary font-medium">enterprise policy</span>
+</div>
+<p class="text-[11.5px] text-on-surface-variant leading-relaxed max-w-xl">Entered by you and kept in this browser as a draft. Nothing here is read from git, and saving it does not create policy authority.</p>
+</div>
+<button type="button" id="close-org-modal-btn" class="p-1 rounded hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer" title="Close without saving" aria-label="Close without saving">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<form class="p-5 overflow-y-auto space-y-4 text-[12px]" id="org-form" novalidate>
+<div class="space-y-1">
+<label class="block font-mono text-[10.5px] uppercase tracking-wider text-outline font-semibold" for="org-input-name">NAME</label>
+<input type="text" id="org-input-name" autocomplete="organization" maxlength="120" class="w-full px-3 py-1.5 rounded bg-[#141822] border border-surface-container-high/60 text-on-surface text-[12px] font-medium focus:border-primary focus:outline-none">
+<p class="text-[10.5px] text-outline/80 leading-normal">Shown at the top of the page, and as the name of your own source.</p>
+<p class="text-[10.5px] text-error leading-normal hidden" id="org-error-name" role="alert"></p>
+</div>
+<div class="space-y-1">
+<div class="flex items-center gap-1.5">
+<label class="block font-mono text-[10.5px] uppercase tracking-wider text-outline font-semibold" for="org-input-id">SHORT ID</label>
+</div>
+<input type="text" id="org-input-id" autocomplete="off" spellcheck="false" maxlength="40" class="w-60 font-mono px-3 py-1.5 rounded bg-[#141822] border border-surface-container-high/60 text-on-surface text-[12px] font-medium focus:border-primary focus:outline-none">
+<p class="text-[10.5px] text-outline/80 leading-normal">Lower case, no spaces. Used in file names and as the issuer of every policy. Hard to change later.</p>
+<p class="text-[10.5px] text-error leading-normal hidden" id="org-error-id" role="alert"></p>
+</div>
+<div class="space-y-1">
+<div class="flex items-center gap-1.5">
+<label class="block font-mono text-[10.5px] uppercase tracking-wider text-outline font-semibold" for="org-input-repo">POLICY REPO</label>
+</div>
+<input type="text" id="org-input-repo" autocomplete="off" spellcheck="false" maxlength="200" placeholder="github.com/your-org/ai-policies" class="w-full font-mono text-primary px-3 py-1.5 rounded bg-[#141822] border border-surface-container-high/60 text-on-surface text-[12px] font-medium focus:border-primary focus:outline-none">
+<p class="text-[10.5px] text-outline/80 leading-normal">Where your policy file lives. Everyone gets read access; who can write is decided in GitHub, not here. One organization per repo. This page does not read or write that repository.</p>
+<p class="text-[10.5px] text-error leading-normal hidden" id="org-error-repo" role="alert"></p>
+</div>
+<div class="space-y-1.5">
+<div class="flex items-center gap-1.5">
+<label class="block font-mono text-[10.5px] uppercase tracking-wider text-outline font-semibold" for="org-input-email">PEOPLE WHO ANSWER FOR IT</label>
+</div>
+<div class="flex flex-wrap items-center gap-2" id="org-email-list"></div>
+<div class="flex items-center gap-2">
+<input type="email" id="org-input-email" autocomplete="email" spellcheck="false" maxlength="254" placeholder="name@your-org.example" class="w-64 font-mono px-3 py-1.5 rounded bg-[#141822] border border-surface-container-high/60 text-on-surface text-[12px] font-medium focus:border-primary focus:outline-none">
+<button type="button" id="org-add-email-btn" class="flex items-center gap-1 px-2.5 py-1 rounded border border-dashed border-surface-container-high hover:border-primary text-primary text-[11px] font-medium transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-[13px]">add</span>
+<span class="">Add email</span>
+</button>
+</div>
+<p class="text-[10.5px] text-outline/80 leading-normal">Work emails, recorded as attribution on decisions you make. They are not logins.</p>
+<p class="text-[10.5px] text-error leading-normal hidden" id="org-error-email" role="alert"></p>
+</div>
+<div class="space-y-1.5 pt-1 border-t border-surface-container-high/30">
+<div class="flex items-center gap-1.5">
+<span class="block font-mono text-[10.5px] uppercase tracking-wider text-outline font-semibold">HOW USERS KNOW A POLICY IS REALLY YOURS</span>
+<span class="px-1 py-0.2 rounded bg-surface-container text-outline font-mono text-[9px]">later</span>
+</div>
+<div class="grid grid-cols-2 gap-2 max-w-md" role="radiogroup" aria-label="Posture preference" id="org-posture"></div>
+<p class="text-[10.5px] text-outline/80 leading-normal">A preference only. Signing and verifying policies is not implemented in this page, and choosing one does not enable it.</p>
+</div>
+</form>
+<div class="p-3 px-5 border-t border-surface-container-high/40 bg-surface-container-lowest flex items-center justify-between gap-2 shrink-0">
+<button type="button" id="cancel-org-modal-btn" class="px-3 py-1.5 rounded hover:bg-surface-container text-on-surface-variant hover:text-on-surface text-[12px] font-medium transition-colors cursor-pointer">Cancel</button>
+<div class="flex items-center gap-2">
+<button type="submit" form="org-form" id="save-org-modal-btn" class="flex items-center gap-1.5 px-4 py-1.5 rounded bg-primary hover:bg-primary-bright text-white text-[12px] font-medium transition-colors shadow-xs cursor-pointer">
+<span class="material-symbols-outlined text-[14px]">check</span>
+<span class="">Save changes</span>
+</button>
+</div>
+</div>
 </div>
 </div>
 <div id="catalog-error" class="fixed bottom-3 left-3 z-50 max-w-xl p-3 rounded bg-error-container text-on-error-container text-[11.5px] font-mono hidden" role="alert"></div>

@@ -15,7 +15,7 @@ import { createNavigation } from "./navigation.js";
 import { createProvenance } from "./provenance.js";
 import { createToolbar } from "./toolbar.js";
 import { loadCatalog } from "./index-source.js";
-import { inventoryCounts, visibleEntries } from "./selectors.js";
+import { inventoryCounts, scopeTotal, selectedScope, visibleEntries } from "./selectors.js";
 import { emptyView, restoreView, saveView } from "./view-state.js";
 import { text } from "../app/dom.js";
 
@@ -31,6 +31,9 @@ export function createCatalog({ onSelectEntry }) {
     counts: inventoryCounts([]),
     view: emptyView(),
     selectedId: null,
+    // The organization's own name, when the user has saved one. It labels the
+    // organization's additions row; nothing here reads or invents it.
+    organizationName: null,
   };
 
   const changeView = (patch) => {
@@ -46,11 +49,6 @@ export function createCatalog({ onSelectEntry }) {
   });
   const navigation = createNavigation({
     elements: elements.navigation,
-    onToggleProvider: (provider) => changeView({ provider: state.view.provider === provider ? null : provider }),
-    onToggleSourceType: (sourceType) => changeView({
-      sourceType: state.view.sourceType === sourceType ? null : sourceType,
-      source: null,
-    }),
     onSelectSource: (source) => changeView({ source, sourceType: null }),
   });
   const toolbar = createToolbar({
@@ -67,36 +65,44 @@ export function createCatalog({ onSelectEntry }) {
     return state.entries.find((candidate) => text(candidate?.entryId) === state.selectedId) ?? null;
   }
 
+  function cardsModel() {
+    const scope = selectedScope(state.counts, state.view);
+    return {
+      entries: visibleEntries(state.entries, state.view),
+      total: scopeTotal(state.entries, state.view),
+      noun: scope === null ? "catalog entries" : "entries from this source",
+      selectedId: state.selectedId,
+    };
+  }
+
   function render() {
     state.counts = inventoryCounts(state.entries);
     const total = state.entries.length;
+    const scope = selectedScope(state.counts, state.view);
+    const inScope = scopeTotal(state.entries, state.view);
+    provenance.render({ summary: state.summary, total, scopeTotal: inScope, scope, counts: state.counts });
     metrics.render({ kindCounts: state.counts.kindCounts, total, activeKind: state.view.kind });
     navigation.render({
       view: state.view,
       total,
-      packageVersion: text(state.summary?.package?.version),
-      providerCounts: state.counts.providerCounts,
-      sourceTypeCounts: state.counts.sourceTypeCounts,
-      sourceIdentities: state.counts.sourceIdentities,
+      counts: state.counts,
+      organizationName: state.organizationName,
     });
     toolbar.render({
       kindCounts: state.counts.kindCounts,
       sourceTypeCounts: state.counts.sourceTypeCounts,
       total,
+      scopeTotal: inScope,
       view: state.view,
     });
-    cards.render({ entries: visibleEntries(state.entries, state.view), total, selectedId: state.selectedId });
+    cards.render(cardsModel());
     details.render({ entry: selectedEntry(), sourceIdentities: state.counts.sourceIdentities });
   }
 
   function select(entryId) {
     state.selectedId = entryId;
     const entry = selectedEntry();
-    cards.render({
-      entries: visibleEntries(state.entries, state.view),
-      total: state.entries.length,
-      selectedId: state.selectedId,
-    });
+    cards.render(cardsModel());
     details.render({ entry, sourceIdentities: state.counts.sourceIdentities });
     onSelectEntry(entry);
   }
@@ -111,8 +117,20 @@ export function createCatalog({ onSelectEntry }) {
       state.counts = inventoryCounts(state.entries);
       restoreView(state.view, state.counts);
       toolbar.setQuery(state.view.query);
-      provenance.render({ summary: state.summary, total: state.entries.length, counts: state.counts });
       render();
+    },
+
+    /** The organization name the user saved, or null. Re-renders the rail. */
+    setOrganizationName(name) {
+      state.organizationName = name;
+      if (state.entries.length > 0) {
+        navigation.render({
+          view: state.view,
+          total: state.entries.length,
+          counts: state.counts,
+          organizationName: state.organizationName,
+        });
+      }
     },
   };
 }

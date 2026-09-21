@@ -11,6 +11,7 @@
 
 import { el, text } from "../app/dom.js";
 import { NOT_CONNECTED, NOT_PUBLISHED, NOT_SUPPLIED } from "../app/absence.js";
+import { describeScope, sourceScopes } from "./selectors.js";
 
 function chip(label, value, tone) {
   const node = el("span", "px-2 py-0.5 rounded bg-surface-container border border-surface-container-high/40 text-on-surface-variant flex items-center gap-1.5 text-[10.5px]");
@@ -19,7 +20,14 @@ function chip(label, value, tone) {
   return node;
 }
 
-/** @param elements { provenanceStrip, mastheadFacts, mastheadVersion } */
+/**
+ * @param elements { provenanceStrip, mastheadFacts, mastheadName, mastheadVersion }
+ *
+ * The masthead names the SELECTED SOURCE and its revision, as the design
+ * source's masthead names its framework. With no source selected it says it is
+ * showing every published source. The package that transports them is named in
+ * the provenance strip above, not here.
+ */
 export function createProvenance({ elements }) {
   function renderStrip(model) {
     const strip = elements.provenanceStrip;
@@ -74,16 +82,38 @@ export function createProvenance({ elements }) {
     strip.appendChild(details);
   }
 
+  function renderMasthead(model) {
+    const scope = model.scope === null ? null : describeScope(model.scope);
+    const sources = sourceScopes(model.counts).length;
+    elements.mastheadName.textContent = scope === null ? "All published sources" : scope.name;
+    elements.mastheadName.title = scope === null
+      ? `Every source the installed index publishes (${sources})`
+      : `Source identity published by the index: ${scope.name}`;
+    // The version slot holds a revision, a version or a release - whichever the
+    // selected source actually publishes - and never a stand-in for one.
+    elements.mastheadVersion.textContent = scope === null ? `${sources} sources` : scope.badge ?? NOT_PUBLISHED;
+    elements.mastheadVersion.title = scope === null ? "Number of published source identities" : scope.badgeTitle ?? NOT_PUBLISHED;
+  }
+
   function renderFacts(model) {
     const facts = elements.mastheadFacts;
     facts.replaceChildren();
     const summary = model.summary ?? {};
     // One line, as the design source has it. Hashes and commits are diagnostic
     // and live in the provenance disclosure; repeating one here only cost a row.
-    facts.appendChild(chip("entries", String(model.total)));
+    facts.appendChild(chip("items", String(model.scopeTotal)));
+    if (model.scope !== null) {
+      const scope = describeScope(model.scope);
+      const label = model.scope.type === "github" ? "commit" : model.scope.type === "npm" ? "version" : "release";
+      // The short form, as the design source's masthead shows it. The full
+      // published value is on the tooltip and in the inspector's provenance.
+      const revision = chip(label, scope.badge ?? NOT_PUBLISHED);
+      revision.title = scope.revision === null ? NOT_PUBLISHED : `${label} ${scope.revision}`;
+      facts.appendChild(revision);
+    } else {
+      facts.appendChild(chip("sources", String(sourceScopes(model.counts).length)));
+    }
     facts.appendChild(chip("kinds", String(model.counts.kindCounts.size)));
-    facts.appendChild(chip("frameworks", String(model.counts.providerCounts.size)));
-    facts.appendChild(chip("sources", String(model.counts.sourceTypeCounts.size)));
     const admission = el("span", "px-2 py-0.5 rounded bg-surface-container border border-surface-container-high/40 text-on-surface-variant flex items-center gap-1.5 text-[10.5px]", undefined);
     admission.appendChild(el("span", "text-outline uppercase", "admission"));
     admission.appendChild(el("span", `font-semibold ${summary.organizationAdmission === "not-authoritative" ? "text-tertiary" : "text-on-surface"}`, text(summary.organizationAdmission) ?? NOT_PUBLISHED));
@@ -93,11 +123,11 @@ export function createProvenance({ elements }) {
   }
 
   return {
-    /** @param model { summary, total, counts } */
+    /** @param model { summary, total, scopeTotal, scope, counts } */
     render(model) {
+      renderMasthead(model);
       renderFacts(model);
       renderStrip(model);
-      elements.mastheadVersion.textContent = text(model.summary?.package?.version) ?? NOT_PUBLISHED;
     },
   };
 }

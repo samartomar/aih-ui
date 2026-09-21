@@ -15,13 +15,24 @@
 import { text } from "../app/dom.js";
 import { NOT_PUBLISHED } from "../app/absence.js";
 
+/*
+ * Icon and colour per kind, as the design source renders them at run time: a
+ * skill card shows `bolt` in the skill primitive's colour. Kinds the design
+ * tokens give no primitive colour to keep the neutral card accent.
+ */
 export const KIND_ICON = {
-  skill: "extension",
+  skill: "bolt",
   agent: "smart_toy",
   mcp: "dns",
   package: "deployed_code",
   profile: "badge",
   tool: "handyman",
+};
+
+export const KIND_PRIMITIVE = {
+  skill: "primitive-skill",
+  agent: "primitive-agent",
+  mcp: "primitive-mcp",
 };
 
 /* A published revision, shortened for display. Raw revision digests keep their "sha256:"
@@ -103,8 +114,12 @@ export function sourceDetailRows(source) {
 export function identity(entry) {
   const source = sourceIdentity(entry);
   const sourceLabel = sourceLabelOf(source);
+  const entryId = text(entry?.entryId) ?? "(entryId not published)";
   return {
-    entryId: text(entry?.entryId) ?? "(entryId not published)",
+    entryId,
+    // The item's own published name, which is what the prototype titles a
+    // card with. The entry id stays available as the exact identifier.
+    name: text(entry?.subject?.id) ?? entryId,
     subjectId: text(entry?.subject?.id) ?? NOT_PUBLISHED,
     kind: text(entry?.subject?.kind) ?? "unknown",
     sourceType: source.type,
@@ -172,46 +187,4 @@ export function searchText(entry) {
     source.integrity,
     source.release,
   ].filter((part) => part !== null).join(" ");
-}
-
-/*
- * The framework an entry is published under, read from the entry id.
- *
- * The index publishes ids shaped `<kind>.<provider>.<name>`, and the first
- * segment is the same value as `subject.kind` - so the shape is verifiable
- * rather than assumed. When an id does NOT start with its own kind, the
- * provider is not determinable from what is published and the entry is grouped
- * as unattributed instead of being forced into a guess.
- *
- * The index carries no category, tag or collection field. Thematic categories
- * are therefore Not published, and are shown as such rather than invented.
- */
-export function providerOf(entry) {
-  const entryId = text(entry?.entryId);
-  const kind = text(entry?.subject?.kind);
-  if (!entryId || !kind) return null;
-  if (!entryId.startsWith(`${kind}.`)) return null;
-  const rest = entryId.slice(kind.length + 1);
-  const provider = rest.split(".")[0];
-  return provider.length > 0 ? provider : null;
-}
-
-/*
- * The part of the entry id that actually distinguishes one card from another.
- *
- * `subject.id` alone is NOT distinguishing: 36 entries share one with another
- * entry (`governance-quality` is used by three). Dropping only the
- * `<kind>.<provider>.` prefix keeps every remainder unique once the provider
- * badge beside it is taken into account - verified against the published index,
- * where that pair has no collisions. The full entry id stays on the tooltip and
- * in the inspector.
- */
-export function cardTitleOf(entry) {
-  const entryId = text(entry?.entryId);
-  const kind = text(entry?.subject?.kind);
-  if (!entryId) return null;
-  if (!kind || !entryId.startsWith(`${kind}.`)) return entryId;
-  const rest = entryId.slice(kind.length + 1);
-  const withoutProvider = rest.split(".").slice(1).join(".");
-  return withoutProvider.length > 0 ? withoutProvider : rest;
 }

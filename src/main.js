@@ -4,7 +4,8 @@
  * This module composes the three parts and connects their callbacks. It holds
  * no state and renders nothing itself:
  *
- *   app/        the shell - rails, inspector tabs, the error banner
+ *   app/        the shell - rails, inspector tabs, the error banner, the theme
+ *               settling and the organization setup popup
  *   catalog/    Sources & Catalogs: it presents published catalog data only
  *   governance/ the Governance pane: one vertical slice through @aihq/core
  *
@@ -13,7 +14,8 @@
  */
 
 import { createShell } from "./app/shell.js";
-import { shellElements } from "./app/elements.js";
+import { organizationElements, shellElements } from "./app/elements.js";
+import { createOrganization } from "./app/organization.js";
 import { createTheme } from "./app/theme.js";
 import { createCatalog } from "./catalog/controller.js";
 import { createGovernance } from "./governance/controller.js";
@@ -33,6 +35,15 @@ async function main() {
         void governance.select(entry);
       },
     });
+
+    // The organization is the user's own input. Its saved name labels the
+    // organization's additions in the rail; nothing else reads it.
+    const organization = createOrganization({
+      elements: organizationElements(),
+      onChange: (draft) => catalog.setOrganizationName(draft?.name ?? null),
+    });
+    catalog.setOrganizationName(organization.current()?.name ?? null);
+
     await catalog.start();
   } catch (error) {
     shell.showError(error?.message ?? String(error));

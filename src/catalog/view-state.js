@@ -11,7 +11,7 @@ import { FILTER_SEPARATOR, SORT_KEYS } from "./selectors.js";
 const SAVED_KEY = "aih-ui-sources-view";
 
 export function emptyView() {
-  return { query: "", kind: null, sourceType: null, sort: "entryId", source: null, provider: null };
+  return { query: "", kind: null, sourceType: null, sort: "name", source: null };
 }
 
 export function saveView(view) {
@@ -38,9 +38,6 @@ export function restoreView(view, counts) {
   if (!saved || typeof saved !== "object") return view;
   if (typeof saved.query === "string") view.query = saved.query;
   if (typeof saved.kind === "string" && counts.kindCounts.has(saved.kind)) view.kind = saved.kind;
-  if (typeof saved.provider === "string" && counts.providerCounts.has(saved.provider)) {
-    view.provider = saved.provider;
-  }
   if (typeof saved.sourceType === "string" && counts.sourceTypeCounts.has(saved.sourceType)) {
     view.sourceType = saved.sourceType;
   }

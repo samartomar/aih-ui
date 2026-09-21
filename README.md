@@ -127,21 +127,90 @@ the source policy controls, the filters and the cards. Nesting it inside the car
 row instead puts it 179px too low and stretches the main column by 390px; that is
 what a parity check catches and a screenshot comparison of colours does not.
 
-### Reading the rail from what the Catalog publishes
+### The rail lists published sources, not a parsed framework
 
-The index publishes no category, tag or collection field, so the thematic
-categories the design source lists are **Not published** -- the row keeps its place
-and its size and says so. What the index does publish is the entry id, shaped
-`<kind>.<provider>.<name>` with the first segment equal to `subject.kind`, so the
-shape is verifiable rather than assumed. Those provider segments are the frameworks
-in the rail, with counts taken from the index. An id that does not begin with its
-own kind is grouped as **Not attributable** rather than forced into a guess.
+Catalog Scopes has one row per **published source identity** -- a repository for
+github, a package for npm, a release for aih -- largest first, with the item count
+the index publishes for it. Nothing is read out of an entry id. `@aihq/catalog` is
+not a row: it is the package that transports these sources, and it is named in the
+provenance strip above the page.
 
-Card titles are the entry id minus its `<kind>.<provider>.` prefix, with the
-provider beside it as a label. `subject.id` alone is not distinguishing -- 36
-entries share one with another entry, and three are all called
-`governance-quality`. The remainder plus the provider label has no collisions in
-the published index; the full entry id stays on the tooltip and in the inspector.
+Each row shows a revision only as what it is. A github repository shows its commit
+(`affaan-m/ECC 5064474`), linked to that commit. An npm package shows its version,
+because an integrity value is not a commit. An aih release shows the release,
+because each of its items carries its own content revision and there is no single
+framework commit to show.
+
+Selecting a row scopes the grid, the "All Items" count and the masthead to that
+source; selecting it again shows every source. The masthead then names the source
+and its short revision, with the full value on the tooltip and in the inspector.
+The selected row opens to where the design source lists categories. The index
+publishes none, so that row says **Not published** rather than inventing one.
+The organization's own additions come last and read **Not supplied** until
+something is actually imported.
+
+### Cards keep each slot's meaning
+
+A card's slots mean what the design source says they mean: the category badge,
+the publisher's description, the scan status and the token estimate. The index
+publishes none of them for any item, so each slot keeps its place, its look and its
+size and reads **Not published**. The description slot keeps its three lines, so
+the grid keeps the design source's card proportions.
+
+Nothing is borrowed into an empty slot. The Catalog's own evidence statements are on
+the inspector's Security tab, labelled as statements; the source identity is in
+Upstream Provenance; exact ids and digests are behind one disclosure.
+
+The card is titled with the item's published name, `subject.id`, as the design
+source titles it. With every source shown at once, the same name can appear more
+than once -- the same agent ships in several aih releases -- and the full entry id
+is on the tooltip and in the inspector. Scoping the grid to one source removes the
+repetition.
+
+The skill icon is `bolt` in the skill primitive's colour, as the design source
+renders it; agents and MCP servers use their own primitive colours.
+
+### The toolbar keeps the design source's task
+
+The primary toolbar is **All Items**, **Needs Review**, **Egress Out**, with the
+"need review" and "send data out" summaries on the right, in their original
+places. Only "All Items" can be derived, so it is the selected state and counts the
+items in scope. The other two keep their purpose but are unavailable, with no count:
+
+- no scan result or Core disposition is published per item, so no review state can
+  be derived;
+- no item declares egress, and an empty declaration is not a measurement of none.
+
+The technical filters that ARE available -- kind, source type and sort -- are in the
+grid header, where the design source puts its sort control.
+
+### Four words for four kinds of absence
+
+- **Not published** -- a field the index does not carry.
+- **Not declared** -- a field the index carries as an empty list. Every item's
+  capability lists are empty; that is a declaration, not a measurement, so it is
+  never shown as "none".
+- **Not supplied** -- the user's own input, such as the organization.
+- **Not connected** -- an action with no Core contract wired yet.
+
+### Your organization
+
+The header's organization control is always enabled: organization details are the
+user's input, not missing Catalog data. It opens the design source's setup popup
+-- name, short id, policy repository, the people who answer for it, and the
+Vibe / Enterprise preference -- with the same layout and labels, and none of its
+sample values.
+
+- It starts empty, or with what the user saved. Nothing is read from git, and no
+  field claims to have been.
+- Save validates the fields and keeps the draft in this browser, so it survives a
+  reload; the header then shows the name. Cancel, the close button, a click outside
+  and Escape all leave the saved draft exactly as it was.
+- Emails can be added and removed; a malformed or duplicate one is refused.
+- The Vibe / Enterprise choice is recorded as a preference. Signing and verifying
+  policies is not implemented here, and the popup says so.
+- None of it is policy authority. A name, an id, a repository reference, an email
+  or a preference establishes no decision; policy artifacts still go through Core.
 
 ### Unavailable states keep their component's size
 

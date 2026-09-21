@@ -45,3 +45,6 @@ html.theme-switching *::before,
 html.theme-switching *::after {
   transition: none !important;
 }
+
+/* The inspector's identity disclosure uses its own chevron, not the marker. */
+#details-disclosure > summary::-webkit-details-marker { display: none; }

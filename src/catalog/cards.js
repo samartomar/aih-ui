@@ -1,87 +1,85 @@
 /*
  * The catalog grid: one card per visible entry, plus the count above it.
  *
- * A card shows only what the index publishes about that entry. Where the design
- * source shows a product description there is an evidence statement or
- * "Not published" - the card never writes prose about an entry, and the toggle
- * the design source draws stays disabled because no source-posture contract
- * exists to drive it.
+ * Each slot keeps the meaning the design source gives it:
+ *
+ *   header   kind icon, the item's name, its CATEGORY badge
+ *   body     the publisher's PRODUCT DESCRIPTION
+ *   footer   the SCAN STATUS pill, the TOKEN ESTIMATE chip, the allow toggle
+ *
+ * The installed index publishes none of category, description, scan status or
+ * token estimate for any entry. Each slot therefore keeps its place and its
+ * look and says "Not published" - it is not borrowed for something else. The
+ * evidence statements that used to fill the description slot, the provider and
+ * kind that used to fill the category slot and the repository that used to fill
+ * the token slot all live in the inspector now, where they are labelled as what
+ * they are.
+ *
+ * The toggle stays disabled: there is no source-posture contract to drive it.
  */
 
 import { el } from "../app/dom.js";
 import { NOT_PUBLISHED } from "../app/absence.js";
-import { KIND_ICON, cardTitleOf, firstSummary, identity, providerOf, sourceIdentity, sourceLabelTitle } from "./entry.js";
+import { KIND_ICON, KIND_PRIMITIVE, identity } from "./entry.js";
 
 function card(entry, selectedId, onSelect) {
   const id = identity(entry);
-  const source = sourceIdentity(entry);
-  const qual = entry.qualification ?? {};
-  const findings = Array.isArray(qual.findings) ? qual.findings.length : null;
-  const gaps = Array.isArray(qual.gaps) ? qual.gaps.length : null;
   const isSelected = selectedId === id.entryId;
 
-  const node = el("div", `group rounded border p-3 flex flex-col justify-between hover:border-primary transition-all cursor-pointer ${isSelected ? "border-primary" : "border-surface-container-high/60"}`);
+  const node = el("div", `group rounded border p-3 flex flex-col justify-between hover:border-primary transition-all cursor-pointer shadow-xs ${isSelected ? "border-primary" : "border-surface-container-high/60"}`);
   node.dataset.cardId = id.entryId;
   node.tabIndex = 0;
   node.setAttribute("role", "button");
   node.setAttribute("aria-pressed", String(isSelected));
+  // The exact identifier is always one hover away; the inspector shows it too.
+  node.title = id.entryId;
 
   const top = el("div");
   const head = el("div", "flex items-start justify-between gap-2");
   const name = el("div", "flex items-center gap-1.5 min-w-0");
-  name.appendChild(el("span", "material-symbols-outlined text-[15px] text-[#ffb95f] shrink-0", KIND_ICON[id.kind] ?? "extension"));
-  const title = el("span", "font-mono font-bold text-white text-[13px] tracking-tight truncate", cardTitleOf(entry) ?? id.entryId);
-  title.title = id.entryId;
-  name.appendChild(title);
+  const primitive = KIND_PRIMITIVE[id.kind];
+  name.appendChild(
+    el(
+      "span",
+      `material-symbols-outlined text-[15px] shrink-0 ${primitive ?? "text-[#ffb95f]"}`,
+      KIND_ICON[id.kind] ?? "extension",
+    ),
+  );
+  name.appendChild(el("span", "font-mono font-bold text-white text-[13px] tracking-tight truncate", id.name));
   head.appendChild(name);
-  const badge = el("div", "flex items-center gap-1 shrink-0");
-  // The framework the index publishes this under, in the slot the design
-  // source gives a grouping label. Absent only when the id does not carry one.
-  const provider = providerOf(entry);
-  if (provider) {
-    badge.appendChild(el("span", "px-1.5 py-0.5 rounded bg-surface-container-low border border-surface-container-high/40 text-[8.5px] font-mono text-outline/90 uppercase", provider));
-  }
-  badge.appendChild(el("span", "px-1.5 py-0.5 rounded bg-surface-container-low border border-surface-container-high/40 text-[8.5px] font-mono text-outline/90", id.kind.toUpperCase()));
-  head.appendChild(badge);
+  const badges = el("div", "flex items-center gap-1 shrink-0");
+  const category = el(
+    "span",
+    "px-1.5 py-0.5 rounded bg-surface-container-low border border-surface-container-high/40 text-[8.5px] font-mono text-outline/90",
+    NOT_PUBLISHED,
+  );
+  category.title = `Category: ${NOT_PUBLISHED}. The index carries no category for this item.`;
+  badges.appendChild(category);
+  head.appendChild(badges);
   top.appendChild(head);
-  node.title = id.entryId;
 
-  const summary = firstSummary(entry, ["gap", "finding"]);
-  const body = el("p", `text-[11px] mt-2 leading-relaxed line-clamp-3 ${summary ? "text-on-surface-variant" : "text-outline/70"}`);
-  if (summary) {
-    body.appendChild(el("span", "text-outline", "Evidence: "));
-    body.appendChild(document.createTextNode(summary));
-    body.title = "Published evidence statement, not a product description";
-  } else {
-    body.textContent = NOT_PUBLISHED;
-    body.title = "Not published: the index carries no description and this entry has no evidence statement";
-  }
+  // The description slot keeps its three lines even when it has one word to
+  // show: an unavailable state holds the component's dimensions, so the grid
+  // keeps the design source's card proportions instead of closing up.
+  const body = el("p", "text-[11px] text-outline/70 mt-2 leading-relaxed line-clamp-3 min-h-[4.875em]", NOT_PUBLISHED);
+  body.title = "Description: not published. The index carries no publisher description for this item.";
   top.appendChild(body);
   node.appendChild(top);
 
   const foot = el("div", "pt-2.5 mt-2.5 border-t border-surface-container-high/40 flex items-center justify-between text-[10px]");
   const left = el("div", "flex items-center gap-2 min-w-0");
-  const statements = (gaps ?? 0) + (findings ?? 0);
-  if (statements > 0) {
-    const pill = el("span", "px-1.5 py-0.5 rounded bg-tertiary-container/20 text-tertiary font-mono font-medium flex items-center gap-1 shrink-0");
-    pill.appendChild(el("span", "w-1 h-1 rounded-full bg-tertiary"));
-    pill.appendChild(el("span", "", `${statements} evidence statement${statements === 1 ? "" : "s"}`));
-    pill.title = `${gaps ?? 0} gap statement(s), ${findings ?? 0} finding statement(s)`;
-    left.appendChild(pill);
-  } else {
-    left.appendChild(el("span", "px-1.5 py-0.5 rounded bg-surface-container-low border border-surface-container-high/40 text-outline/70 font-mono shrink-0", "no evidence statements"));
-  }
-  const sourcePill = el("span", "px-1.5 py-0.5 rounded bg-surface-container-low border border-surface-container-high/40 text-outline/70 font-mono hidden sm:inline-flex items-center gap-1 shrink-0");
-  sourcePill.appendChild(el("span", "material-symbols-outlined text-[12px]", "bolt"));
-  if (id.sourceLabel === null) {
-    sourcePill.appendChild(el("span", "", NOT_PUBLISHED));
-    sourcePill.appendChild(el("span", "uppercase", `${id.sourceType} source identity`));
-    sourcePill.title = `Not published: this ${id.sourceType} source carries no identity field`;
-  } else {
-    sourcePill.appendChild(el("span", "", id.sourceLabel));
-    sourcePill.title = sourceLabelTitle(source, id.sourceLabel);
-  }
-  left.appendChild(sourcePill);
+
+  const status = el("span", "px-1.5 py-0.5 rounded bg-surface-container-low border border-surface-container-high/40 text-outline font-mono font-medium flex items-center gap-1 shrink-0");
+  status.appendChild(el("span", "w-1 h-1 rounded-full bg-outline"));
+  status.appendChild(el("span", "", NOT_PUBLISHED));
+  status.title = "Scan status: not published. The index carries no scan result for this item.";
+  left.appendChild(status);
+
+  const tokens = el("span", "px-1.5 py-0.5 rounded bg-surface-container-low border border-surface-container-high/40 text-outline font-mono hidden sm:inline-flex items-center gap-1 shrink-0");
+  tokens.appendChild(el("span", "material-symbols-outlined text-[13px] primitive-token", "toll"));
+  tokens.appendChild(el("span", "", NOT_PUBLISHED));
+  tokens.title = "Token estimate: not published.";
+  left.appendChild(tokens);
   foot.appendChild(left);
 
   const toggle = el("div", "flex items-center gap-1.5");
@@ -116,7 +114,7 @@ function card(entry, selectedId, onSelect) {
  */
 export function createCards({ elements, onSelect }) {
   return {
-    /** @param model { entries, total, selectedId } */
+    /** @param model { entries, total, noun, selectedId } */
     render(model) {
       elements.cardsGrid.replaceChildren();
       if (!model.entries.length) {
@@ -127,7 +125,7 @@ export function createCards({ elements, onSelect }) {
         elements.cardsGrid.append(...model.entries.map((entry) => card(entry, model.selectedId, onSelect)));
       }
       elements.visibleCount.textContent = String(model.entries.length);
-      elements.visibleCaption.textContent = `of ${model.total} catalog entries`;
+      elements.visibleCaption.textContent = `of ${model.total} ${model.noun ?? "catalog entries"}`;
     },
   };
 }

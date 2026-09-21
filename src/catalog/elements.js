@@ -8,9 +8,9 @@ import { collectIds } from "../app/dom.js";
 
 export function catalogElements() {
   const ids = [
-    "provenance-strip", "masthead-version", "masthead-facts",
-    "nav-sources-count", "rail-package-version", "rail-package-count",
-    "rail-kind-list", "rail-source-list", "framework-matrix-tabs",
+    "provenance-strip", "masthead-name", "masthead-version", "masthead-facts",
+    "nav-sources-count", "rail-scope-list", "framework-matrix-tabs",
+    "review-filters", "review-summary",
     "kind-filters", "catalog-search", "source-filter", "sort-select",
     "visible-count", "visible-caption", "cards-grid",
     "inspector-name", "inspector-kind", "inspector-version", "inspector-subtitle",
@@ -23,17 +23,17 @@ export function catalogElements() {
     provenance: {
       provenanceStrip: found.provenanceStrip,
       mastheadFacts: found.mastheadFacts,
+      mastheadName: found.mastheadName,
       mastheadVersion: found.mastheadVersion,
     },
     navigation: {
       navSourcesCount: found.navSourcesCount,
-      railPackageVersion: found.railPackageVersion,
-      railPackageCount: found.railPackageCount,
-      scopeList: found.railKindList,
-      sourceList: found.railSourceList,
+      scopeList: found.railScopeList,
     },
     metrics: { container: found.frameworkMatrixTabs },
     toolbar: {
+      reviewFilters: found.reviewFilters,
+      reviewSummary: found.reviewSummary,
       kindFilters: found.kindFilters,
       search: found.catalogSearch,
       sourceFilter: found.sourceFilter,

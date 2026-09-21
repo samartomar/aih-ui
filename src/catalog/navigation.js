@@ -1,118 +1,124 @@
 /*
- * Source navigation: the left rail.
+ * Source navigation: the left rail's Catalog Scopes.
  *
- * Two lists, both built from what the installed index publishes:
+ * One row per PUBLISHED SOURCE IDENTITY - a repository for github, a package
+ * for npm, a release for aih - with the item count the index publishes for it,
+ * largest first. Nothing is read out of an entry id, and @aihq/catalog is not a
+ * row: it is the package that transports these sources, which belongs in the
+ * provenance strip, not among the things being configured.
  *
- *   - the frameworks, read from the entry ids (see providerOf), nested under
- *     the installed catalog exactly where the design source puts a catalog's
- *     own scopes. The index carries no category, tag or collection field, so
- *     the thematic-categories row keeps its place and its size and says
- *     "Not published" rather than inventing one;
- *   - the source types, each expanding to its published source identities and,
- *     where an identity publishes more than one revision, to those revisions.
+ * A revision is shown only as what it is:
+ *   - github: the commit, when every item of that repository shares one;
+ *   - npm:    the version - an integrity value is not a commit;
+ *   - aih:    the release - each item carries its own content revision, which
+ *             is not one framework commit and is never shown as one.
+ *
+ * The selected source opens to show its categories. Catalog publishes none, so
+ * that row holds its place and says so. The organization's own additions come
+ * last and are empty until something is actually imported.
  */
 
 import { el } from "../app/dom.js";
-import { NOT_PUBLISHED } from "../app/absence.js";
-import { shortDigest } from "./entry.js";
-import { FILTER_SEPARATOR, UNATTRIBUTED, sortedCounts, sourceFilterValue } from "./selectors.js";
+import { NOT_PUBLISHED, NOT_SUPPLIED } from "../app/absence.js";
+import { describeScope, sourceScopes } from "./selectors.js";
 
-/* A row with a count. Without an onClick it is a disabled row that still holds
-   its place: an unavailable state keeps its component's dimensions. */
-function railRow(label, count, options = {}) {
-  const rowNode = el("button", `w-full flex items-center justify-between px-1.5 py-0.5 rounded text-left transition-colors ${options.active ? "bg-surface-container-high text-primary font-medium" : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface cursor-pointer"}`, undefined);
-  rowNode.type = "button";
-  rowNode.setAttribute("aria-pressed", String(Boolean(options.active)));
-  rowNode.appendChild(el("span", "truncate", label));
-  rowNode.appendChild(el("span", `font-mono text-[10px] ${options.active ? "px-1 rounded bg-tertiary-container text-on-tertiary font-bold" : "text-outline"}`, count === null ? NOT_PUBLISHED : String(count)));
-  if (options.title) rowNode.title = options.title;
-  if (options.onClick) {
-    rowNode.addEventListener("click", options.onClick);
-  } else {
-    rowNode.disabled = true;
-    rowNode.setAttribute("aria-disabled", "true");
-    rowNode.classList.add("opacity-50", "cursor-not-allowed");
-    rowNode.title = options.title ?? `${NOT_PUBLISHED}: not carried by the installed index`;
+function badgeNode(scope, selected) {
+  if (scope.badge === null) return null;
+  const tone = selected
+    ? "px-1 py-0.2 rounded bg-surface-container-highest text-[#ffb95f] font-mono text-[9px] shrink-0 font-normal"
+    : "px-1.5 py-0.2 rounded bg-surface-container-high/80 text-secondary font-mono text-[10px] shrink-0";
+  const node = scope.href === null ? el("span", tone, scope.badge) : el("a", `${tone} hover:underline`, scope.badge);
+  if (scope.href !== null) {
+    node.href = scope.href;
+    node.target = "_blank";
+    node.rel = "noopener noreferrer";
+    // Opening the commit is not a selection.
+    node.addEventListener("click", (event) => event.stopPropagation());
   }
-  return rowNode;
+  if (scope.badgeTitle) node.title = scope.badgeTitle;
+  return node;
+}
+
+function scopeRow(row, selected, onSelect) {
+  const scope = describeScope(row);
+  const panel = el(
+    "div",
+    selected
+      ? "rounded bg-surface-container-low/80 p-1 border border-surface-container-high/40 space-y-0.5"
+      : "rounded bg-surface-container-low/40 hover:bg-surface-container-low/80 p-1 border border-surface-container-high/40 transition-colors cursor-pointer",
+  );
+  const head = el("button", `w-full flex items-center justify-between px-1.5 py-1 text-on-surface font-medium text-left cursor-pointer`);
+  head.type = "button";
+  head.setAttribute("aria-pressed", String(selected));
+  head.title = selected
+    ? `${scope.name}: selected. Select again to show every published source.`
+    : `Show the ${row.total} items published from ${scope.name}`;
+  const left = el("div", `flex items-center ${selected ? "gap-1.5" : "gap-2"} min-w-0 flex-1 mr-1`);
+  left.appendChild(
+    el("span", `material-symbols-outlined ${selected ? "text-[14px] text-primary" : "text-[15px] text-outline"} shrink-0`, selected ? "folder_open" : "folder"),
+  );
+  left.appendChild(
+    el("span", `${selected ? "text-primary" : "text-on-surface"} truncate font-semibold text-[11.5px]`, scope.name),
+  );
+  const badge = badgeNode(scope, selected);
+  if (badge) left.appendChild(badge);
+  head.appendChild(left);
+  head.appendChild(
+    el(
+      "span",
+      selected
+        ? "font-mono text-[10px] px-1 rounded bg-surface-container-highest text-secondary font-bold shrink-0"
+        : "font-mono text-[10.5px] px-1 text-outline shrink-0",
+      String(row.total),
+    ),
+  );
+  head.addEventListener("click", () => onSelect(selected ? null : row.filterValue));
+  panel.appendChild(head);
+
+  if (selected) {
+    // Where the design source lists this source's categories. Catalog
+    // publishes no category, so the row keeps its place and says so.
+    const categories = el("div", "pl-2 space-y-0.5 text-[10.5px]");
+    const missing = el("div", "flex items-center justify-between px-1.5 py-0.5 rounded text-on-surface-variant opacity-60 cursor-not-allowed");
+    missing.title = `${NOT_PUBLISHED}: the index carries no category for these items`;
+    missing.appendChild(el("span", "truncate", "Categories"));
+    missing.appendChild(el("span", "font-mono text-outline text-[10px]", NOT_PUBLISHED));
+    categories.appendChild(missing);
+    panel.appendChild(categories);
+  }
+  return panel;
+}
+
+/** The organization's own additions: nothing is imported yet, and it says so. */
+function additionsRow(organizationName) {
+  const panel = el("div", "rounded bg-surface-container-low/40 p-1 border border-surface-container-high/40 opacity-80");
+  panel.title = "Items your organization adds. None have been imported.";
+  const head = el("div", "flex items-center justify-between px-1.5 py-1 text-on-surface font-medium");
+  const left = el("div", "flex items-center gap-2 min-w-0 flex-1 mr-1");
+  left.appendChild(el("span", "material-symbols-outlined text-[15px] text-outline shrink-0", "extension"));
+  left.appendChild(
+    el("span", "text-on-surface truncate font-semibold text-[11.5px]", organizationName ? `${organizationName} Additions` : "Your Additions"),
+  );
+  head.appendChild(left);
+  head.appendChild(el("span", "font-mono text-[10.5px] px-1 text-outline shrink-0", NOT_SUPPLIED));
+  panel.appendChild(head);
+  return panel;
 }
 
 /**
- * @param elements  { packageVersion, packageCount, sourcesCount, scopeList, sourceList }
- * @param onToggleProvider / onToggleSourceType / onSelectSource  the rail's callbacks
+ * @param elements  { navSourcesCount, scopeList }
+ * @param onSelectSource  called with a scope's filter value, or null for all
  */
-export function createNavigation({ elements, onToggleProvider, onToggleSourceType, onSelectSource }) {
-  function renderScopes(model) {
-    elements.scopeList.replaceChildren();
-    for (const [provider, count] of sortedCounts(model.providerCounts)) {
-      const unattributed = provider === UNATTRIBUTED;
-      elements.scopeList.appendChild(railRow(provider, count, {
-        active: model.view.provider === provider,
-        title: unattributed
-          ? "The entry id does not begin with its own kind, so no framework can be read from it"
-          : `Framework published in the index as ${provider}`,
-        onClick: unattributed ? undefined : () => onToggleProvider(provider),
-      }));
-    }
-    elements.scopeList.appendChild(railRow("Thematic categories", null, {
-      title: `${NOT_PUBLISHED}: the index carries no category, tag or collection field`,
-    }));
-  }
-
-  function renderSources(model) {
-    elements.sourceList.replaceChildren();
-    for (const [sourceType, count] of sortedCounts(model.sourceTypeCounts)) {
-      const identities = model.sourceIdentities.get(sourceType) ?? new Map();
-      const activeInType =
-        model.view.sourceType === sourceType ||
-        (model.view.source?.startsWith(`${sourceType}${FILTER_SEPARATOR}`) ?? false);
-      const panel = el("div", "rounded bg-surface-container-low/60 border border-surface-container-high/40 p-1 space-y-0.5");
-      panel.appendChild(railRow(sourceType, count, {
-        active: model.view.sourceType === sourceType,
-        onClick: () => onToggleSourceType(sourceType),
-      }));
-
-      if (activeInType) {
-        const nested = el("div", "pl-2 space-y-0.5");
-        const singleIdentity = identities.size === 1;
-        for (const [identityKey, group] of sortedCounts(identities)) {
-          const label = identityKey === NOT_PUBLISHED && singleIdentity ? `${sourceType} sources` : identityKey;
-          const revisions = sortedCounts(group.revisions);
-          const sharedRevision = revisions.length === 1 ? (revisions[0][0] === NOT_PUBLISHED ? "" : revisions[0][0]) : "";
-          nested.appendChild(railRow(label, group.total, {
-            active: model.view.source === sourceFilterValue(sourceType, identityKey, sharedRevision),
-            title: `${sourceType} source identity: ${identityKey}`,
-            onClick: () => onSelectSource(sourceFilterValue(sourceType, identityKey, sharedRevision)),
-          }));
-          if (revisions.length > 1) {
-            const revisionRows = el("div", "pl-2 space-y-0.5");
-            for (const [revision, revisionCount] of revisions) {
-              revisionRows.appendChild(railRow(shortDigest(revision) ?? revision, revisionCount, {
-                active: model.view.source === sourceFilterValue(sourceType, identityKey, revision),
-                title: `${sourceType} source revision: ${revision}`,
-                onClick: () => onSelectSource(sourceFilterValue(sourceType, identityKey, revision)),
-              }));
-            }
-            nested.appendChild(revisionRows);
-          }
-        }
-        panel.appendChild(nested);
-      } else {
-        const noun = identities.size === 1 ? "source identity" : "source identities";
-        panel.appendChild(el("div", "pl-2 px-1.5 py-0.5 font-mono text-[10px] text-outline", `${identities.size} ${noun}`));
-      }
-      elements.sourceList.appendChild(panel);
-    }
-  }
-
+export function createNavigation({ elements, onSelectSource }) {
   return {
-    /** @param model { view, total, packageVersion, providerCounts, sourceTypeCounts, sourceIdentities } */
+    /** @param model { view, total, counts, organizationName } */
     render(model) {
-      elements.railPackageVersion.textContent = model.packageVersion ?? NOT_PUBLISHED;
-      elements.railPackageCount.textContent = String(model.total);
       elements.navSourcesCount.textContent = String(model.total);
-      renderScopes(model);
-      renderSources(model);
+      elements.scopeList.replaceChildren();
+      for (const row of sourceScopes(model.counts)) {
+        elements.scopeList.appendChild(scopeRow(row, model.view.source === row.filterValue, onSelectSource));
+      }
+      elements.scopeList.appendChild(additionsRow(model.organizationName ?? null));
     },
   };
 }
