@@ -41,6 +41,19 @@ export function prepare(request) {
   return api("/api/prepare", request);
 }
 
+/**
+ * One operator-supplied configuration file, by kind: "authority", "trust" or
+ * "material". The page sends a kind, never a path.
+ */
+export function storeOperatorFile({ sessionId, kind, base64 }) {
+  return api("/api/operator-file", { sessionId, kind, base64 });
+}
+
+/** A fresh session holding exactly the bytes the operator handed back. */
+export function reopenFromFiles({ inputBase64, evidenceBase64 }) {
+  return api("/api/reopen", { inputBase64, evidenceBase64 });
+}
+
 /** Reopen the saved bytes and consume them independently. */
 export function consume(sessionId) {
   return api("/api/consume", { sessionId });

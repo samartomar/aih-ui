@@ -55,6 +55,8 @@ src/
     bytes.js            base64 <-> bytes, and exact-byte downloads
     vocabulary.js       the six axes, their tones, and every typed refusal
     inputs.js           subject readout, evidence import, operator fields
+    operator-files.js   the operator's own authority, trust and material
+    reopen.js           reopening downloaded bytes in a fresh session
     prepared.js         prepare, the prepared artifacts, the downloads
     statuses.js         the six verification statuses
     verdict.js          consume, and the consumption verdict
@@ -151,10 +153,46 @@ source-policy segment, the egress readout and the policy determination choices.
 
 The inspector's **Governance** tab runs the whole contract end to end:
 
-catalog selection -> inspect published information -> import evidence -> select an
-operator-supplied decision, target and effect -> prepare through `@aihq/core` ->
-save the exact bytes Core returned -> reopen them -> consume them independently ->
-display the result.
+catalog selection -> inspect published information -> import evidence -> supply
+the operator's own authority, verifier trust and attestation material -> select
+an operator-supplied decision, target and effect -> prepare through
+`@aihq/core` -> save the exact bytes Core returned -> reopen them, in this
+session or a fresh one -> consume them independently -> display the result.
+
+### Operator-supplied inputs
+
+Everything the operator owns is supplied by the operator, as three separate
+files, because they are three separate things and one of them is a trust
+decision:
+
+| Input | Where it goes | Why separate |
+| --- | --- | --- |
+| Authority bundle | `operator/authority-bundle.json` | Outside the consumption root, as the contract requires |
+| Verifier trust | `operator/operator-trust.json` | `roots` and `expected` must be yours, never the evidence's |
+| Attestation material | `attestation-material.json` | Canonical envelope and candidate text, plus annex bytes |
+
+The page sends a **kind** and the bytes; the server decides the path, and what
+comes back describes the bytes - name, length, sha256 - never their contents.
+Nothing is generated: a file nobody supplied reads **Not supplied**, and
+consumption refuses on that basis with the reason named.
+
+The refusals that matter are all reachable from these inputs and were exercised
+through them: material carrying its own `roots` is refused before verification;
+scan material with no trust file is refused; a trust file declaring no roots is
+refused.
+
+### Reopening downloaded files in a fresh session
+
+Step 6 takes the exact two files the operator downloaded and opens a session
+that knows nothing about the one that produced them - no digests, no status, no
+binding claim, not even which catalog entry it was. It holds only those bytes,
+and consumption re-derives the whole verdict from them plus the operator
+configuration supplied to that session.
+
+That is what makes it independent rather than a replay. A pretty-printed copy of
+a valid document is refused: Core's parser requires the exact canonical bytes,
+and the pane reports `reopened=false` with the reason. Reopening the unaltered
+bytes reproduces the original verdict exactly, from a different session.
 
 `src/governance/` collects input and renders answers. It holds no policy, digest
 or compile logic: every derivation happens in `@aihq/core` behind `/api/*`. The
@@ -312,6 +350,12 @@ The Governance pane never merges answers that belong to different owners:
 profile, prose and recipe. It does not cover the qualification evidence files,
 which are separate paths in the same index, so the pane shows the record count
 beside `Bytes checked here: 0` rather than letting one read as the other.
+
+The page's own calls are `/api/subject`, `/api/catalog-integrity`,
+`/api/evidence`, `/api/operator-file`, `/api/validation-fixture`,
+`/api/prepare`, `/api/reopen`, `/api/consume` and `/api/saved`. The page never
+names a filesystem path in any of them: it holds an opaque session id, and every
+location is derived from that id inside the run directory.
 
 Malformed requests are the client's problem, not the server's: a request URL or percent
 escape that does not parse is answered with `400` and the preview keeps serving. The

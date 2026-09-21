@@ -417,6 +417,33 @@ is reported as <span class="font-mono text-outline">Not supplied</span> and refu
 </div>
 
 <div class="space-y-1">
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline">3b &middot; Operator configuration</span>
+<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/40 text-[10.5px] text-on-surface-variant leading-snug">
+Your authority and your verifier trust, supplied separately from the evidence. They are held
+beside the session, never inside the imported material: material that carries its own
+<span class="font-mono text-outline">roots</span> or keys is refused.
+</div>
+<div class="space-y-1">
+<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-surface-container-high/40 cursor-pointer hover:border-primary/40 transition-colors">
+<span class="material-symbols-outlined text-[14px] text-secondary">gavel</span>
+<span class="text-[10.5px] text-on-surface-variant">Authority bundle (policy bundle JSON)</span>
+<input class="hidden" id="gov-authority-file" type="file" accept=".json,application/json">
+</label>
+<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-surface-container-high/40 cursor-pointer hover:border-primary/40 transition-colors">
+<span class="material-symbols-outlined text-[14px] text-secondary">key</span>
+<span class="text-[10.5px] text-on-surface-variant">Verifier trust (roots and expected)</span>
+<input class="hidden" id="gov-trust-file" type="file" accept=".json,application/json">
+</label>
+<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-surface-container-high/40 cursor-pointer hover:border-primary/40 transition-colors">
+<span class="material-symbols-outlined text-[14px] text-secondary">inventory_2</span>
+<span class="text-[10.5px] text-on-surface-variant">Scan attestation material</span>
+<input class="hidden" id="gov-material-file" type="file" accept=".json,application/json">
+</label>
+</div>
+<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-operator-files"></div>
+</div>
+
+<div class="space-y-1">
 <span class="text-[10px] font-mono uppercase tracking-wider text-outline">4 &middot; Prepare and save</span>
 <button class="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-primary/15 border border-primary/40 text-primary text-[11.5px] font-medium hover:bg-primary/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed" id="gov-prepare-btn" type="button" disabled>
 <span class="material-symbols-outlined text-[14px]">build</span>
@@ -437,6 +464,31 @@ is reported as <span class="font-mono text-outline">Not supplied</span> and refu
 </button>
 <div class="grid grid-cols-2 gap-1" id="gov-statuses"></div>
 <div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 text-[10.5px] space-y-1 text-on-surface-variant" id="gov-verdict"></div>
+</div>
+
+<div class="space-y-1">
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline">6 &middot; Reopen downloaded files in a fresh session</span>
+<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/40 text-[10.5px] text-on-surface-variant leading-snug">
+Load the exact bytes you downloaded back into a new session that knows nothing about the one
+that produced them. Consumption then re-derives the whole verdict from those bytes alone.
+</div>
+<div class="space-y-1">
+<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-surface-container-high/40 cursor-pointer hover:border-primary/40 transition-colors">
+<span class="material-symbols-outlined text-[14px] text-primary">description</span>
+<span class="text-[10.5px] text-on-surface-variant">governance-input.json</span>
+<input class="hidden" id="gov-reopen-input-file" type="file" accept=".json,application/json">
+</label>
+<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-surface-container-high/40 cursor-pointer hover:border-primary/40 transition-colors">
+<span class="material-symbols-outlined text-[14px] text-primary">description</span>
+<span class="text-[10.5px] text-on-surface-variant">organization-evidence.json</span>
+<input class="hidden" id="gov-reopen-evidence-file" type="file" accept=".json,application/json">
+</label>
+</div>
+<button class="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-surface-container border border-primary/40 text-primary text-[11px] font-medium hover:bg-surface-container-high transition-colors disabled:opacity-40 disabled:cursor-not-allowed" id="gov-reopen-btn" type="button" disabled>
+<span class="material-symbols-outlined text-[14px]">restore_page</span>
+<span class="">Open these bytes in a fresh session</span>
+</button>
+<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-reopen"></div>
 </div>
 
 <div class="space-y-1 pt-1 border-t border-surface-container-high/40">

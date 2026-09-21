@@ -93,6 +93,41 @@ export function createApi({ consumerDir, runDir, summary }) {
       return { ...built, sessionId };
     },
 
+    /**
+     * Operator-supplied configuration: the authority bundle, the verifier trust
+     * and the scan attestation material, each as its own kind.
+     *
+     * They are stored separately from the imported evidence and from each
+     * other. The page sends a kind and bytes; the server decides where they go
+     * and answers with a description of the bytes, never their contents.
+     */
+    "POST /api/operator-file": (body) => {
+      const { sessionId } = sessions.open(body.sessionId);
+      if (typeof body.base64 !== "string" || body.base64.length === 0) {
+        return { ok: false, error: "no file contents were supplied" };
+      }
+      const stored = sessions.storeOperatorFile(sessionId, body.kind, Buffer.from(body.base64, "base64"));
+      return stored.ok === false ? stored : { ...stored, sessionId };
+    },
+
+    /**
+     * A fresh session holding exactly the bytes an operator downloaded earlier.
+     *
+     * It carries nothing from the session that produced them. Consumption then
+     * re-derives the whole verdict from these bytes - and refuses them if they
+     * were altered, re-serialized or truncated in between.
+     */
+    "POST /api/reopen": (body) => {
+      if (typeof body.inputBase64 !== "string" || typeof body.evidenceBase64 !== "string") {
+        return { ok: false, error: "both governance-input.json and the evidence envelope are needed" };
+      }
+      const opened = sessions.openFromBytes({
+        inputBytes: Buffer.from(body.inputBase64, "base64"),
+        evidenceBytes: Buffer.from(body.evidenceBase64, "base64"),
+      });
+      return { ok: true, ...opened };
+    },
+
     /** Compile and save. Core's bytes are written unchanged. */
     "POST /api/prepare": (body) => {
       // A fixture session already exists; a normal preparation opens a new one.

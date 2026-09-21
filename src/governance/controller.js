@@ -19,11 +19,23 @@
 import { governanceElements } from "./elements.js";
 import { createDetector } from "./detector.js";
 import { createInputs } from "./inputs.js";
+import { createOperatorFiles } from "./operator-files.js";
 import { createPrepared } from "./prepared.js";
+import { createReopen } from "./reopen.js";
 import { createStatuses } from "./statuses.js";
 import { createVerdict } from "./verdict.js";
 import { bytesToBase64, downloadBase64 } from "./bytes.js";
-import { consume, fetchCatalogIntegrity, fetchSaved, fetchSubject, loadValidationFixture, parseEvidence, prepare } from "./transport.js";
+import {
+  consume,
+  fetchCatalogIntegrity,
+  fetchSaved,
+  fetchSubject,
+  loadValidationFixture,
+  parseEvidence,
+  prepare,
+  reopenFromFiles,
+  storeOperatorFile,
+} from "./transport.js";
 
 export function createGovernance() {
   const elements = governanceElements();
@@ -39,6 +51,9 @@ export function createGovernance() {
     prepared: null,
     fixture: null,
     bindingClaim: null,
+    // What the operator supplied themselves, by kind. Never generated.
+    operatorFiles: {},
+    reopened: null,
   };
 
   const inputs = createInputs({
@@ -51,7 +66,18 @@ export function createGovernance() {
     onPrepare: () => void onPrepare(),
     onDownload: (which) => void onDownload(which),
   });
+  const operatorFiles = createOperatorFiles({
+    elements: elements.operatorFiles,
+    onFile: ({ kind, file }) => void onOperatorFile(kind, file),
+  });
   const statuses = createStatuses({ elements: elements.statuses });
+  const reopen = createReopen({
+    elements: elements.reopen,
+    onFiles: (files) => {
+      state.reopenFiles = files;
+    },
+    onReopen: () => void onReopen(),
+  });
   const verdict = createVerdict({ elements: elements.verdict, onConsume: () => void onConsume() });
   const detector = createDetector({ elements: elements.detector, onFixture: () => void onFixture() });
 
@@ -62,7 +88,9 @@ export function createGovernance() {
     detector.setAvailable(state.subject !== null && state.subject.contentAvailable === true);
     const saved = state.prepared?.prepared === true;
     preparedView.setSaved(saved);
-    verdict.setSaved(saved);
+    // Consumption reads bytes off disk, so it is available either because this
+    // session just prepared them or because the operator reopened them here.
+    verdict.setSaved(saved || state.reopened !== null);
   }
 
   /** Everything downstream of the evidence, cleared together. */
@@ -71,6 +99,60 @@ export function createGovernance() {
     statuses.render(null);
     verdict.render(null);
     detector.render(null, state.fixture);
+  }
+
+  /** One operator-supplied configuration file, stored server-side by kind. */
+  async function onOperatorFile(kind, file) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const stored = await storeOperatorFile({
+      sessionId: state.sessionId,
+      kind,
+      base64: bytesToBase64(bytes),
+    });
+    state.operatorFiles = { ...state.operatorFiles, [kind]: stored };
+    // The first operator file opens the session these inputs belong to, so
+    // everything that follows lands in the same one.
+    if (stored.sessionId !== undefined) state.sessionId = stored.sessionId;
+    operatorFiles.render(state.operatorFiles);
+    refreshEnabled();
+  }
+
+  /**
+   * A fresh session holding exactly the bytes the operator handed back.
+   *
+   * Everything this pane believed is dropped: the verdict that follows comes
+   * from those bytes and the operator configuration alone.
+   */
+  async function onReopen() {
+    const files = state.reopenFiles;
+    if (files === undefined || files.input === null || files.evidence === null) return;
+    const [inputBytes, evidenceBytes] = await Promise.all([
+      files.input.arrayBuffer(),
+      files.evidence.arrayBuffer(),
+    ]);
+    const opened = await reopenFromFiles({
+      inputBase64: bytesToBase64(new Uint8Array(inputBytes)),
+      evidenceBase64: bytesToBase64(new Uint8Array(evidenceBytes)),
+    });
+    if (opened.ok === false) {
+      reopen.renderError(opened.error);
+      return;
+    }
+    state.reopened = opened;
+    state.sessionId = opened.sessionId;
+    // The new session has no operator configuration of its own yet. Say so
+    // rather than letting the previous session's files appear to carry over.
+    state.operatorFiles = {};
+    state.prepared = null;
+    operatorFiles.reset();
+    operatorFiles.render(state.operatorFiles);
+    reopen.render(opened);
+    statuses.render(null);
+    verdict.render(null);
+    detector.render(null, state.fixture);
+    // Consumption is what reads these bytes, so it is available immediately.
+    verdict.setSaved(true);
+    preparedView.setSaved(false);
   }
 
   async function onEvidenceFile(file) {
@@ -115,7 +197,13 @@ export function createGovernance() {
       verdict.renderError(view.error);
       return;
     }
-    statuses.render(view.reopened === false ? null : view);
+    // Six fields, or none. A refusal that happened BEFORE Core evaluated
+    // anything - the document did not reopen, the material carried its own
+    // trust, no verifier trust was supplied - has no axis values at all, and
+    // six empty cells would read as six axes that were evaluated and came back
+    // blank. The verdict below says what was refused and why.
+    const evaluated = typeof view.structure === "string";
+    statuses.render(evaluated ? view : null);
     verdict.render(view);
     detector.render(view, state.fixture);
   }
@@ -133,6 +221,15 @@ export function createGovernance() {
     }
     state.fixture = built;
     state.sessionId = built.sessionId;
+    // The fixture writes its own operator files into its own session. Show what
+    // it wrote, labelled as the fixture's, rather than leaving the rows empty.
+    const generated = "generated by validation mode, not supplied by you";
+    state.operatorFiles = {
+      authority: { ok: true, storedAs: "operator/authority-bundle.json", note: generated },
+      trust: { ok: true, storedAs: "operator/operator-trust.json", note: generated },
+      material: { ok: true, storedAs: "attestation-material.json", note: generated },
+    };
+    operatorFiles.render(state.operatorFiles);
     state.evidenceBase64 = built.evidenceBase64;
     state.bindingClaim = built.bindingClaim;
     inputs.setDecision({ decisionId: built.decisionId, decisionDigest: built.decisionDigest });
@@ -155,6 +252,8 @@ export function createGovernance() {
     mount() {
       inputs.renderSubject(null, null);
       inputs.renderEvidence(null);
+      operatorFiles.render(state.operatorFiles);
+      reopen.render(null);
       clearResults();
       refreshEnabled();
     },
@@ -171,8 +270,14 @@ export function createGovernance() {
       state.prepared = null;
       state.fixture = null;
       state.bindingClaim = null;
+      state.operatorFiles = {};
+      state.reopened = null;
+      state.reopenFiles = undefined;
       inputs.clearDecision();
       inputs.renderEvidence(null);
+      operatorFiles.reset();
+      operatorFiles.render(state.operatorFiles);
+      reopen.render(null);
       clearResults();
 
       if (selected === null) {

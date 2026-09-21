@@ -10,6 +10,8 @@ export function governanceElements() {
     "gov-decision-id", "gov-decision-digest", "gov-target", "gov-effect", "gov-route",
     "gov-prepare-btn", "gov-prepared", "gov-download-input", "gov-download-evidence",
     "gov-consume-btn", "gov-statuses", "gov-verdict", "gov-fixture-btn", "gov-detector",
+    "gov-authority-file", "gov-trust-file", "gov-material-file", "gov-operator-files",
+    "gov-reopen-input-file", "gov-reopen-evidence-file", "gov-reopen-btn", "gov-reopen",
   ];
   const found = collectIds(ids);
   return {
@@ -29,7 +31,19 @@ export function governanceElements() {
       govDownloadInput: found.govDownloadInput,
       govDownloadEvidence: found.govDownloadEvidence,
     },
+    operatorFiles: {
+      govAuthorityFile: found.govAuthorityFile,
+      govTrustFile: found.govTrustFile,
+      govMaterialFile: found.govMaterialFile,
+      govOperatorFiles: found.govOperatorFiles,
+    },
     statuses: { govStatuses: found.govStatuses },
+    reopen: {
+      govReopenInputFile: found.govReopenInputFile,
+      govReopenEvidenceFile: found.govReopenEvidenceFile,
+      govReopenBtn: found.govReopenBtn,
+      govReopen: found.govReopen,
+    },
     verdict: { govConsumeBtn: found.govConsumeBtn, govVerdict: found.govVerdict },
     detector: { govFixtureBtn: found.govFixtureBtn, govDetector: found.govDetector },
   };
