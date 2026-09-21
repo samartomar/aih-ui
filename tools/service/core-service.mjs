@@ -20,6 +20,7 @@
  *   scan-verifier.mjs      the Scan verifier wiring and its trust boundary
  *   artifacts.mjs          exact-byte artifact I/O
  *   catalog-collections.mjs Catalog's current collection view
+ *   catalog-publisher.mjs   Catalog's publisher titles and descriptions
  *   core-targets.mjs       Core's supported AI CLI targets
  *   validation-fixture.mjs VALIDATION ONLY: the one module that manufactures
  *                          anything, and it labels everything it makes
@@ -64,6 +65,10 @@ const OPS = {
   async coreTargets() {
     const { coreTargets } = await import("./core-targets.mjs");
     return coreTargets();
+  },
+  async publisher() {
+    const { catalogPublisher } = await import("./catalog-publisher.mjs");
+    return catalogPublisher();
   },
 };
 

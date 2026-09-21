@@ -7,9 +7,11 @@
  *   body     the publisher's PRODUCT DESCRIPTION
  *   footer   the SCAN STATUS pill, the TOKEN ESTIMATE chip, the allow toggle
  *
- * The installed index publishes none of category, description, scan status or
- * token estimate for any entry. Each slot therefore keeps its place and its
- * look and says "Not published" - it is not borrowed for something else. The
+ * The title, category and description come from Catalog's publisher metadata:
+ * the upstream publisher's own text, verbatim, where Catalog publishes it. Where
+ * it does not - and for scan status and token estimate, which nothing publishes -
+ * each slot keeps its place and its look and says "Not published"; it is not
+ * borrowed for something else. The
  * evidence statements that used to fill the description slot, the provider and
  * kind that used to fill the category slot and the repository that used to fill
  * the token slot all live in the inspector now, where they are labelled as what
@@ -21,9 +23,14 @@
 import { el } from "../app/dom.js";
 import { NOT_PUBLISHED } from "../app/absence.js";
 import { KIND_ICON, KIND_PRIMITIVE, identity } from "./entry.js";
+import { provenanceNote, publishedText, publisherOf } from "./publisher.js";
 
-function card(entry, selectedId, onSelect) {
+function card(entry, selectedId, onSelect, publisher) {
   const id = identity(entry);
+  const record = publisherOf(publisher, entry);
+  const title = publishedText(record, "title");
+  const description = publishedText(record, "description");
+  const categoryText = publishedText(record, "category");
   const isSelected = selectedId === id.entryId;
 
   const node = el("div", `group rounded border p-3 flex flex-col justify-between hover:border-primary transition-all cursor-pointer shadow-xs ${isSelected ? "border-primary" : "border-surface-container-high/60"}`);
@@ -45,15 +52,16 @@ function card(entry, selectedId, onSelect) {
       KIND_ICON[id.kind] ?? "extension",
     ),
   );
-  name.appendChild(el("span", "font-mono font-bold text-white text-[13px] tracking-tight truncate", id.name));
+  // The publisher's own name when Catalog publishes one; otherwise the item's id.
+  name.appendChild(el("span", "font-mono font-bold text-white text-[13px] tracking-tight truncate", title ?? id.name));
   head.appendChild(name);
   const badges = el("div", "flex items-center gap-1 shrink-0");
   const category = el(
     "span",
-    "px-1.5 py-0.5 rounded bg-surface-container-low border border-surface-container-high/40 text-[8.5px] font-mono text-outline/90",
-    NOT_PUBLISHED,
+    `px-1.5 py-0.5 rounded bg-surface-container-low border border-surface-container-high/40 text-[8.5px] font-mono text-outline/90${categoryText === null ? "" : " uppercase"}`,
+    categoryText ?? NOT_PUBLISHED,
   );
-  category.title = `Category: ${NOT_PUBLISHED}. The index carries no category for this item.`;
+  category.title = provenanceNote(record, "category", "Category");
   badges.appendChild(category);
   head.appendChild(badges);
   top.appendChild(head);
@@ -61,8 +69,8 @@ function card(entry, selectedId, onSelect) {
   // The description slot keeps its three lines even when it has one word to
   // show: an unavailable state holds the component's dimensions, so the grid
   // keeps the design source's card proportions instead of closing up.
-  const body = el("p", "text-[11px] text-outline/70 mt-2 leading-relaxed line-clamp-3 min-h-[4.875em]", NOT_PUBLISHED);
-  body.title = "Description: not published. The index carries no publisher description for this item.";
+  const body = el("p", "text-[11px] text-outline/70 mt-2 leading-relaxed line-clamp-3 min-h-[4.875em] break-words", description ?? NOT_PUBLISHED);
+  body.title = provenanceNote(record, "description", "Description");
   top.appendChild(body);
   node.appendChild(top);
 
@@ -114,7 +122,7 @@ function card(entry, selectedId, onSelect) {
  */
 export function createCards({ elements, onSelect }) {
   return {
-    /** @param model { entries, total, noun, selectedId } */
+    /** @param model { entries, total, noun, selectedId, publisher } */
     render(model) {
       elements.cardsGrid.replaceChildren();
       if (!model.entries.length) {
@@ -122,7 +130,7 @@ export function createCards({ elements, onSelect }) {
         empty.appendChild(el("span", "font-mono text-on-surface", String(model.total)));
         elements.cardsGrid.appendChild(empty);
       } else {
-        elements.cardsGrid.append(...model.entries.map((entry) => card(entry, model.selectedId, onSelect)));
+        elements.cardsGrid.append(...model.entries.map((entry) => card(entry, model.selectedId, onSelect, model.publisher)));
       }
       elements.visibleCount.textContent = String(model.entries.length);
       elements.visibleCaption.textContent = `of ${model.total} ${model.noun ?? "catalog entries"}`;

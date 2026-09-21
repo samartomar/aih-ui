@@ -34,6 +34,8 @@ export function createCatalog({ onSelectEntry, onSummary }) {
     // Catalog's collection view as applied to the index: current members,
     // and how many entries it holds only for reference.
     inventory: null,
+    // Catalog's publisher titles and descriptions, bound to the served index.
+    publisher: null,
     context: { membership: new Map(), installed: new Map() },
     view: emptyView(),
     selectedId: null,
@@ -74,10 +76,11 @@ export function createCatalog({ onSelectEntry, onSummary }) {
   function cardsModel() {
     const scope = selectedScope(state.counts, state.view);
     return {
-      entries: visibleEntries(state.entries, state.view, state.context.membership),
+      entries: visibleEntries(state.entries, state.view, state.context.membership, state.publisher),
       total: scopeTotal(state.entries, state.view, state.context.membership),
       noun: scope === null ? "catalog entries" : "entries from this source",
       selectedId: state.selectedId,
+      publisher: state.publisher,
     };
   }
 
@@ -109,21 +112,22 @@ export function createCatalog({ onSelectEntry, onSummary }) {
       view: state.view,
     });
     cards.render(cardsModel());
-    details.render({ entry: selectedEntry(), counts: state.counts });
+    details.render({ entry: selectedEntry(), counts: state.counts, publisher: state.publisher });
   }
 
   function select(entryId) {
     state.selectedId = entryId;
     const entry = selectedEntry();
     cards.render(cardsModel());
-    details.render({ entry, counts: state.counts });
+    details.render({ entry, counts: state.counts, publisher: state.publisher });
     onSelectEntry(entry);
   }
 
   return {
     async start() {
-      const { entries, inventory, summary } = await loadCatalog();
+      const { entries, inventory, summary, publisher } = await loadCatalog();
       state.entries = entries;
+      state.publisher = publisher;
       state.inventory = inventory;
       state.summary = summary;
       onSummary?.(summary);

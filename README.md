@@ -235,10 +235,35 @@ label or enabled state is invented.
 ### Cards keep each slot's meaning
 
 A card's slots mean what the design source says they mean: the category badge,
-the publisher's description, the scan status and the token estimate. The index
-publishes none of them for any item, so each slot keeps its place, its look and its
-size and reads **Not published**. The description slot keeps its three lines, so
-the grid keeps the design source's card proportions.
+the publisher's description, the scan status and the token estimate. Where a slot
+has no published value it keeps its place, its look and its size and reads
+**Not published**. The description slot keeps its three lines, so the grid keeps
+the design source's card proportions.
+
+### Publisher titles and descriptions come from Catalog
+
+Catalog publishes the upstream publisher's own title, description and category
+for the sources it covers (`@aihq/catalog/catalog-presentation.json`, read in the
+backend with Catalog's `readCatalogPresentationV1`). Today that is
+`affaan-m/ECC` at `5064474`. The backend serves Catalog's validated records as
+`publisher-metadata.json`, and the page rebinds each one to the served index
+entry by entry id and subject digest. The page carries no dataset and extracts
+nothing.
+
+- A published title names the card and the inspector. Otherwise the card keeps
+  `subject.id`.
+- A published description fills the card body and Publisher Overview, set as
+  text, never markup. Its tooltip names the upstream field and file. The file
+  path and sha256 are in the identity disclosure.
+- A category appears only where the upstream file declares one. No taxonomy is
+  inferred.
+- An unavailable value reads **Not published**, and its tooltip gives Catalog's
+  reason: not declared upstream, not in the source file, and so on.
+- Search matches published titles, descriptions and categories too.
+
+Publisher text is not a scan result or a policy decision. Scan status, the allow
+toggle and the policy slots are unchanged. Updating only `@aihq/catalog` changes
+this text with no UI or Core edit.
 
 Nothing is borrowed into an empty slot. The Catalog's own evidence statements are on
 the inspector's Security tab, labelled as statements; the source identity is in
@@ -425,6 +450,7 @@ tools/
     artifacts.mjs       exact-byte artifact I/O
     catalog-collections.mjs  Catalog's current collection view, via its reader
     core-targets.mjs    Core's supported AI CLI targets, via its public export
+    catalog-publisher.mjs  Catalog's publisher titles and descriptions, via its reader
     validation-fixture.mjs  VALIDATION ONLY: the one module that manufactures
                             anything, and it labels everything it makes
 ```

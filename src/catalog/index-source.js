@@ -10,6 +10,7 @@
  */
 
 import { applyCollections } from "./collections.js";
+import { applyPublisher } from "./publisher.js";
 
 const INDEX_URL = "./catalog-index.json";
 const SUMMARY_URL = "./summary.json";
@@ -54,5 +55,11 @@ export async function loadCatalog() {
   assertIndexContract(index);
   const summary = await loadJson(SUMMARY_URL, "the preview summary");
   const inventory = applyCollections(summary?.collections ?? null, index.entries);
-  return { entries: inventory.current, inventory, summary };
+  // Publisher text is display-only: without it the slots keep saying Not published.
+  const facts = summary?.publisher ?? null;
+  const data = facts?.state === "published"
+    ? await loadJson(facts.url, "Catalog's publisher metadata")
+    : null;
+  const publisher = applyPublisher(facts, data, index.entries);
+  return { entries: inventory.current, inventory, summary, publisher };
 }

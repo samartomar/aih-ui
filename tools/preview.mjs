@@ -253,11 +253,24 @@ async function main() {
       : `core targets: unavailable (${coreTargets.reason})`,
   );
 
+  // Catalog's publisher titles and descriptions. Display-only: a Catalog
+  // without them leaves those slots reading Not published.
+  const publisher = startupFact(consumerDir, "publisher");
+  log(
+    publisher.state === "published"
+      ? `publisher: ${publisher.publisher.coverage.entries} entries; description ${publisher.publisher.coverage.description.published} published, title ${publisher.publisher.coverage.title.published}, category ${publisher.publisher.coverage.category.published}`
+      : `publisher: unavailable (${publisher.reason})`,
+  );
+
   // --- 4. page files into the run directory ---------------------------------
   for (const asset of [...page, ...presentation]) {
     const target = join(runDir, asset.to);
     mkdirSync(dirname(target), { recursive: true });
     await copyFile(join(REPO_ROOT, asset.from), target);
+  }
+  if (publisher.state === "published") {
+    writeFileSync(join(runDir, "publisher-metadata.json"), `${JSON.stringify(publisher.publisher)}
+`);
   }
   const indexTarget = join(runDir, "catalog-index.json");
   await copyFile(indexPath, indexTarget);
@@ -292,6 +305,18 @@ async function main() {
     indexPackage: index.package ?? null,
     // Catalog's collection view, exactly as its reader returned it.
     collections: collections.collections,
+    // Catalog's publisher metadata: where it is served and what it covers, or why it is unavailable.
+    publisher:
+      publisher.state === "published"
+        ? {
+            state: "published",
+            url: "./publisher-metadata.json",
+            specifier: publisher.publisher.specifier,
+            digest: publisher.publisher.digest,
+            sources: publisher.publisher.sources,
+            coverage: publisher.publisher.coverage,
+          }
+        : { state: "unavailable", reason: publisher.reason },
     // Core's supported targets, or why they are unavailable.
     coreTargets:
       coreTargets.state === "published"

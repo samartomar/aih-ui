@@ -168,10 +168,15 @@ export function firstSummary(entry, kinds) {
 
 /* Everything the search box matches: the published ids and every published identity field of
    the source, so a repository, package, path or commit is findable without a lookup table. */
-export function searchText(entry) {
+export function searchText(entry, publisherRecord = null) {
   const id = identity(entry);
   const source = sourceIdentity(entry);
+  const published = (field) =>
+    publisherRecord?.[field]?.state === "published" ? text(publisherRecord[field].value) : null;
   return [
+    published("title"),
+    published("description"),
+    published("category"),
     id.entryId,
     id.subjectId,
     id.kind,

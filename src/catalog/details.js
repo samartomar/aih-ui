@@ -11,7 +11,9 @@
  * references - available, but not leading the pane.
  *
  * What the index does not carry says so in its own slot:
- *   - no publisher description, sandbox, secrets or license: "Not published";
+ *   - the publisher description is Catalog's publisher metadata, verbatim;
+ *     where Catalog publishes none, and for sandbox, secrets and license:
+ *     "Not published";
  *   - capabilities it DOES carry, as empty lists: "Not declared". An empty
  *     declaration is not a measurement, so it is never shown as "none".
  *
@@ -25,6 +27,7 @@ import { el, text } from "../app/dom.js";
 import { NOT_PUBLISHED } from "../app/absence.js";
 import { KIND_ICON, identity, shortDigest, sourceDetailRows, sourceIdentity, sourceLabelOf, statementsOf } from "./entry.js";
 import { collectionOf, scopeCountOf } from "./selectors.js";
+import { provenanceNote, publishedText, publisherOf } from "./publisher.js";
 
 const NOT_DECLARED = "Not declared";
 
@@ -137,8 +140,8 @@ export function createDetails({ elements }) {
   }
 
   return {
-    /** @param model { entry, counts } */
-    render({ entry, counts }) {
+    /** @param model { entry, counts, publisher } */
+    render({ entry, counts, publisher }) {
       reset();
       if (!entry) {
         renderEmpty();
@@ -149,8 +152,11 @@ export function createDetails({ elements }) {
       const subject = entry.subject ?? {};
       const source = sourceIdentity(entry);
 
+      const record = publisherOf(publisher, entry);
+      const description = publishedText(record, "description");
+
       // ------------------------------------------------------------ header
-      elements.inspectorName.textContent = id.name;
+      elements.inspectorName.textContent = publishedText(record, "title") ?? id.name;
       elements.inspectorName.title = id.entryId;
       elements.inspectorKind.textContent = id.kind;
       const version = versionOf(source);
@@ -165,9 +171,12 @@ export function createDetails({ elements }) {
       elements.inspectorFlags.title = "Scan flags: not published. No scan result is published for this item.";
 
       // --------------------------------------------- Publisher Overview
-      elements.detailsDesc.textContent = NOT_PUBLISHED;
-      elements.detailsDesc.className = "text-outline/70 leading-relaxed text-[11px]";
-      elements.detailsDesc.title = "The index carries no publisher description for this item.";
+      // Upstream text, set as text: never markup, never an instruction.
+      elements.detailsDesc.textContent = description ?? NOT_PUBLISHED;
+      elements.detailsDesc.className = description === null
+        ? "text-outline/70 leading-relaxed text-[11px]"
+        : "text-on-surface-variant leading-relaxed text-[11px] whitespace-pre-line break-words";
+      elements.detailsDesc.title = provenanceNote(record, "description", "Publisher description");
 
       // ---------------------------------------------- Declared Capabilities
       const capabilities = entry.capabilities ?? {};
@@ -230,6 +239,13 @@ export function createDetails({ elements }) {
         ? entry.platforms.map((platform) => `${text(platform?.os) ?? "?"}/${text(platform?.architecture) ?? "?"}`).join(", ")
         : null);
 
+      // Where the publisher text came from, so every value can be traced.
+      if (record?.source) {
+        row(elements.detailsArtifacts, "Publisher text file", record.source.path);
+        row(elements.detailsArtifacts, "Publisher text sha256", record.source.sha256);
+      } else {
+        row(elements.detailsArtifacts, "Publisher text file", null, provenanceNote(record, "description", "Publisher text"));
+      }
       row(elements.detailsArtifacts, "Seed path", entry.seed?.path);
       row(elements.detailsArtifacts, "Seed sha256", entry.seed?.sha256);
       for (const [name, artifact] of Object.entries(entry.artifacts ?? {})) {
