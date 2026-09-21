@@ -24,6 +24,7 @@
 import { el, text } from "../app/dom.js";
 import { NOT_PUBLISHED } from "../app/absence.js";
 import { KIND_ICON, identity, shortDigest, sourceDetailRows, sourceIdentity, sourceLabelOf, statementsOf } from "./entry.js";
+import { collectionOf, scopeCountOf } from "./selectors.js";
 
 const NOT_DECLARED = "Not declared";
 
@@ -136,8 +137,8 @@ export function createDetails({ elements }) {
   }
 
   return {
-    /** @param model { entry, sourceIdentities } */
-    render({ entry, sourceIdentities }) {
+    /** @param model { entry, counts } */
+    render({ entry, counts }) {
       reset();
       if (!entry) {
         renderEmpty();
@@ -199,10 +200,21 @@ export function createDetails({ elements }) {
         row(elements.detailsSource, "Content revision", shortDigest(source.revision), source.revision ?? undefined);
       }
       row(elements.detailsSource, "License", null, "The index carries no license field.");
+      const collection = collectionOf(entry, counts);
+      if (collection !== null) {
+        // Catalog's statement that this entry is current content of a
+        // collection - not an installation, and not the running version.
+        row(
+          elements.detailsSource,
+          "Collection",
+          `${collection.owner.package} ${collection.current.release}`,
+          `Catalog collection ${collection.id}: current content release ${collection.current.release}, owned by ${collection.owner.package}`,
+        );
+      }
       countRow(
         elements.detailsSource,
-        "Items from this source",
-        sourceIdentities.get(source.type)?.get(sourceLabelOf(source) ?? NOT_PUBLISHED)?.total ?? 0,
+        collection === null ? "Items from this source" : "Items in this collection",
+        scopeCountOf(entry, counts),
       );
 
       // --------------------------- identity and artifacts, behind disclosure

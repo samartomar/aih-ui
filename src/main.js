@@ -5,7 +5,7 @@
  * no state and renders nothing itself:
  *
  *   app/        the shell - rails, inspector tabs, the error banner, the theme
- *               settling and the organization setup popup
+ *               settling, the organization setup popup and the AI tools control
  *   catalog/    Sources & Catalogs: it presents published catalog data only
  *   governance/ the Governance pane: one vertical slice through @aihq/core
  *
@@ -14,7 +14,8 @@
  */
 
 import { createShell } from "./app/shell.js";
-import { organizationElements, shellElements } from "./app/elements.js";
+import { aiToolsElements, organizationElements, shellElements } from "./app/elements.js";
+import { createAiTools } from "./app/ai-tools.js";
 import { createOrganization } from "./app/organization.js";
 import { createTheme } from "./app/theme.js";
 import { createCatalog } from "./catalog/controller.js";
@@ -29,11 +30,16 @@ async function main() {
     const governance = createGovernance();
     governance.mount();
 
+    // Core's supported targets arrive with the preview summary the catalog
+    // loads; the AI tools control only receives them.
+    const aiTools = createAiTools({ elements: aiToolsElements() });
+
     const catalog = createCatalog({
       onSelectEntry: (entry) => {
         shell.openInspector();
         void governance.select(entry);
       },
+      onSummary: (summary) => aiTools.setTargets(summary?.coreTargets ?? null),
     });
 
     // The organization is the user's own input. Its saved name labels the

@@ -22,13 +22,19 @@ import { text } from "../app/dom.js";
 /**
  * @param onSelectEntry  called with the selected entry (or null), so the shell
  *                       and the Governance feature can follow the selection
+ * @param onSummary      called once with the preview summary it loaded, for the
+ *                       header controls that report installed package facts
  */
-export function createCatalog({ onSelectEntry }) {
+export function createCatalog({ onSelectEntry, onSummary }) {
   const elements = catalogElements();
   const state = {
     entries: [],
     summary: null,
     counts: inventoryCounts([]),
+    // Catalog's collection view as applied to the index: current members,
+    // and how many entries it holds only for reference.
+    inventory: null,
+    context: { membership: new Map(), installed: new Map() },
     view: emptyView(),
     selectedId: null,
     // The organization's own name, when the user has saved one. It labels the
@@ -68,19 +74,26 @@ export function createCatalog({ onSelectEntry }) {
   function cardsModel() {
     const scope = selectedScope(state.counts, state.view);
     return {
-      entries: visibleEntries(state.entries, state.view),
-      total: scopeTotal(state.entries, state.view),
+      entries: visibleEntries(state.entries, state.view, state.context.membership),
+      total: scopeTotal(state.entries, state.view, state.context.membership),
       noun: scope === null ? "catalog entries" : "entries from this source",
       selectedId: state.selectedId,
     };
   }
 
   function render() {
-    state.counts = inventoryCounts(state.entries);
+    state.counts = inventoryCounts(state.entries, state.context);
     const total = state.entries.length;
     const scope = selectedScope(state.counts, state.view);
-    const inScope = scopeTotal(state.entries, state.view);
-    provenance.render({ summary: state.summary, total, scopeTotal: inScope, scope, counts: state.counts });
+    const inScope = scopeTotal(state.entries, state.view, state.context.membership);
+    provenance.render({
+      summary: state.summary,
+      total,
+      scopeTotal: inScope,
+      scope,
+      counts: state.counts,
+      inventory: state.inventory,
+    });
     metrics.render({ kindCounts: state.counts.kindCounts, total, activeKind: state.view.kind });
     navigation.render({
       view: state.view,
@@ -96,25 +109,36 @@ export function createCatalog({ onSelectEntry }) {
       view: state.view,
     });
     cards.render(cardsModel());
-    details.render({ entry: selectedEntry(), sourceIdentities: state.counts.sourceIdentities });
+    details.render({ entry: selectedEntry(), counts: state.counts });
   }
 
   function select(entryId) {
     state.selectedId = entryId;
     const entry = selectedEntry();
     cards.render(cardsModel());
-    details.render({ entry, sourceIdentities: state.counts.sourceIdentities });
+    details.render({ entry, counts: state.counts });
     onSelectEntry(entry);
   }
 
   return {
     async start() {
-      const { entries, summary } = await loadCatalog();
+      const { entries, inventory, summary } = await loadCatalog();
       state.entries = entries;
+      state.inventory = inventory;
       state.summary = summary;
+      onSummary?.(summary);
+      state.context = {
+        membership: inventory.membership,
+        // Installed versions from the backend's installation record, by name.
+        installed: new Map(
+          (summary?.packages ?? [])
+            .filter((pkg) => typeof pkg?.packageName === "string" && typeof pkg?.version === "string")
+            .map((pkg) => [pkg.packageName, pkg.version]),
+        ),
+      };
       // Counts first: restoreView validates every saved filter against them, so
       // restoring before they exist silently discards the saved kind and source.
-      state.counts = inventoryCounts(state.entries);
+      state.counts = inventoryCounts(state.entries, state.context);
       restoreView(state.view, state.counts);
       toolbar.setQuery(state.view.query);
       render();

@@ -42,13 +42,22 @@
 <button class="px-2 py-0.5 rounded bg-surface-container text-[11px] text-on-surface-variant opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not published: tool inventory needs a Core/host contract">Enterprise</button>
 </div>
 <div class="h-3.5 w-px bg-surface-container-high mx-0.5"></div>
-<!-- AI Tools Counter Pill -->
-<button class="flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container-low text-on-surface-variant text-[11px] opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not connected: no measured AI tool inventory is wired to this page">
+<!-- AI Tools: the AI CLIs @aihq/core supports as targets, and the user's
+     selection as a draft. Supported, selected and connected are kept apart:
+     nothing here checks that a tool is installed or connected. -->
+<div class="relative">
+<button class="flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container-low hover:bg-surface-container text-on-surface-variant hover:text-on-surface text-[11px] transition-colors cursor-pointer" type="button" id="ai-tools-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="ai-tools-pop">
 <span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
-<span class="font-mono text-on-surface">Not connected</span>
+<span class="font-mono text-on-surface" id="ai-tools-count">Not published</span>
 <span class="text-outline">AI tools</span>
 <span class="material-symbols-outlined text-[13px] text-outline">arrow_drop_down</span>
 </button>
+<div class="hidden absolute left-0 top-7 w-64 p-2 rounded bg-surface-container-lowest border border-surface-container-high/60 shadow-2xl space-y-1 text-[11.5px] z-50" id="ai-tools-pop" role="group" aria-label="AI tools">
+<div class="px-1 pb-1 text-[10px] font-mono uppercase tracking-wider text-outline font-semibold">Set up for</div>
+<div class="space-y-0.5 max-h-[360px] overflow-y-auto" id="ai-tools-list"></div>
+<div class="px-1 pt-1 space-y-0.5 text-[10px] text-outline leading-snug border-t border-surface-container-high/40" id="ai-tools-note"></div>
+</div>
+</div>
 </div>
 <!-- Header Action CTAs -->
 <div class="flex items-center gap-2 shrink-0">
@@ -64,10 +73,11 @@
 <span class="material-symbols-outlined text-[13px]">arrow_forward</span>
 </button>
 <div class="h-3.5 w-px bg-surface-container-high mx-0.5"></div>
-<!-- Theme Toggle Button -->
-<button aria-label="Toggle theme" class="p-1 rounded bg-surface-container-low hover:bg-surface-container border border-surface-container-high/60 text-on-surface-variant hover:text-on-surface transition-colors flex items-center justify-center cursor-pointer shadow-xs mr-0.5" id="theme-toggle-btn" title="Switch to light mode" type="button" data-mode-toggle>
-<span class="material-symbols-outlined text-[15px] text-[#ffb95f]" id="theme-icon-light">light_mode</span>
-<span class="material-symbols-outlined text-[15px] icon-dark-mode text-primary hidden" id="theme-icon-dark">dark_mode</span>
+<!-- Theme Toggle Button: ONE icon naming the destination theme. mode.js owns
+     the theme state and sets this icon's text and the button's label; the
+     colour follows the same html.dark class, so nothing else can disagree. -->
+<button aria-label="Switch to light mode" class="p-1 rounded bg-surface-container-low hover:bg-surface-container border border-surface-container-high/60 text-on-surface-variant hover:text-on-surface transition-colors flex items-center justify-center cursor-pointer shadow-xs mr-0.5" id="theme-toggle-btn" type="button" data-mode-toggle>
+<span class="material-symbols-outlined text-[15px] text-primary dark:text-[#ffb95f]" id="theme-icon">light_mode</span>
 </button>
 <div class="w-6 h-6 rounded-full bg-surface-container-highest border border-surface-container-high flex items-center justify-center text-on-surface-variant cursor-pointer hover:text-on-surface">
 <span class="material-symbols-outlined text-[15px]">person</span>
@@ -191,7 +201,7 @@
 </div>
 </div>
 </div>
-<div class="flex flex-wrap items-center gap-2 text-[11px] font-mono text-outline/90 pt-0.5" id="masthead-facts"></div>
+<div class="flex flex-wrap items-center gap-2 text-[11px] font-mono text-outline/90 pt-0.5" id="masthead-status"></div>
 </div>
 <div class="px-5 py-2 border-b border-surface-container-high/40 bg-[#0e131d] flex flex-nowrap items-center justify-between gap-2 shrink-0 text-[11.5px]">
 <div class="flex items-center gap-2 flex-1 min-w-0">

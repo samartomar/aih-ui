@@ -19,6 +19,8 @@
  *   core-adapter.mjs       calls to @aihq/core's public API
  *   scan-verifier.mjs      the Scan verifier wiring and its trust boundary
  *   artifacts.mjs          exact-byte artifact I/O
+ *   catalog-collections.mjs Catalog's current collection view
+ *   core-targets.mjs       Core's supported AI CLI targets
  *   validation-fixture.mjs VALIDATION ONLY: the one module that manufactures
  *                          anything, and it labels everything it makes
  */
@@ -49,6 +51,20 @@ const OPS = {
   prepare,
   consume,
   fixture: buildValidationFixture,
+
+  /**
+   * Catalog's current collection view and Core's supported target list. Each
+   * is loaded only when asked for, so a package that predates the export fails
+   * that one operation and says so, instead of every operation failing to load.
+   */
+  async collections() {
+    const { catalogCollections } = await import("./catalog-collections.mjs");
+    return catalogCollections();
+  },
+  async coreTargets() {
+    const { coreTargets } = await import("./core-targets.mjs");
+    return coreTargets();
+  },
 };
 
 async function main() {

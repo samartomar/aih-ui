@@ -1,12 +1,15 @@
 /*
  * Where the page gets its data: the installed @aihq/catalog index and the
- * preview's provenance summary, both served by tools/preview.mjs out of the
+ * preview's summary - installed package versions, Catalog's collection view
+ * and Core's supported targets - both served by tools/preview.mjs out of the
  * throwaway consumer.
  *
  * Every render starts from the contract, not from whatever the file happens to
  * hold: a document that does not declare the expected format and version is a
  * reported failure, never a partially rendered page.
  */
+
+import { applyCollections } from "./collections.js";
 
 const INDEX_URL = "./catalog-index.json";
 const SUMMARY_URL = "./summary.json";
@@ -39,14 +42,17 @@ function assertIndexContract(index) {
 }
 
 /**
- * The published entries, plus the provenance of what was actually installed.
+ * The current inventory, plus the provenance of what was actually installed.
  *
- * The summary is provenance detail, so a preview that did not write one is
- * still a usable page: the index is required, the summary is not.
+ * Which entries are current is Catalog's statement, carried in the summary as
+ * its validated collection view. Without it the page cannot tell a current
+ * entry from older content kept for reference, so it is required: a missing
+ * view is a reported failure, not a page that quietly shows every release.
  */
 export async function loadCatalog() {
   const index = await loadJson(INDEX_URL, "the @aihq/catalog index");
   assertIndexContract(index);
-  const summary = await loadJson(SUMMARY_URL, "the preview summary").catch(() => null);
-  return { entries: index.entries, summary };
+  const summary = await loadJson(SUMMARY_URL, "the preview summary");
+  const inventory = applyCollections(summary?.collections ?? null, index.entries);
+  return { entries: inventory.current, inventory, summary };
 }

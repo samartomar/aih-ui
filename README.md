@@ -85,7 +85,9 @@ field happens to be present:
 - `npm`: registry, package, version, integrity. The version is the locator; no commit
   is invented for a tarball, and the commit row stays **Not published**.
 - `aih`: the release and revision the index actually carries. The revision is the
-  content digest, so it is shown in full rather than as a shortened hash.
+  content digest, so it is shown in full rather than as a shortened hash. Which
+  `aih` entries are CURRENT is Catalog's statement, not the page's: see "One current
+  collection per owner" below.
 
 Search matches the published ids and every published identity field: entryId, subject
 id, kind, source type, repository, package, registry, version, path, commit and
@@ -100,7 +102,7 @@ Absence is worded by what is actually absent:
   never will. The header scope is one of these.
 - **Not connected** — a page action or telemetry feed with no Core contract wired yet
   (Review Changes, Check Policy, Publish, Scan Review, Policies & Publish, Audit Feed,
-  Compliance Matrix, the AI tools counter, Egress Guard).
+  Compliance Matrix, whether an AI tool is installed or connected, Egress Guard).
 
 No entry, count or label comes from a hardcoded total: every number on the page is
 counted from the installed index at run time. Absence markers are never counted as
@@ -127,27 +129,108 @@ the source policy controls, the filters and the cards. Nesting it inside the car
 row instead puts it 179px too low and stretches the main column by 390px; that is
 what a parity check catches and a screenshot comparison of colours does not.
 
-### The rail lists published sources, not a parsed framework
+### The rail lists published sources and current collections
 
 Catalog Scopes has one row per **published source identity** -- a repository for
-github, a package for npm, a release for aih -- largest first, with the item count
-the index publishes for it. Nothing is read out of an entry id. `@aihq/catalog` is
-not a row: it is the package that transports these sources, and it is named in the
-provenance strip above the page.
+github, a package for npm -- and one row per **Catalog collection** for the source
+types Catalog governs by collection, largest first, with the current item count.
+Nothing is read out of an entry id. `@aihq/catalog` is not a row: it is the package
+that transports these sources, and it is named in the package strip.
 
 Each row shows a revision only as what it is. A github repository shows its commit
 (`affaan-m/ECC 5064474`), linked to that commit. An npm package shows its version,
-because an integrity value is not a commit. An aih release shows the release,
-because each of its items carries its own content revision and there is no single
-framework commit to show.
+because an integrity value is not a commit. A collection shows its current content
+release.
 
 Selecting a row scopes the grid, the "All Items" count and the masthead to that
-source; selecting it again shows every source. The masthead then names the source
-and its short revision, with the full value on the tooltip and in the inspector.
-The selected row opens to where the design source lists categories. The index
-publishes none, so that row says **Not published** rather than inventing one.
-The organization's own additions come last and read **Not supplied** until
-something is actually imported.
+source; selecting it again shows every source. The selected row opens to where the
+design source lists categories. The index publishes none, so that row says **Not
+published** rather than inventing one. The organization's own additions come last
+and read **Not supplied** until something is actually imported.
+
+### One current collection per owner
+
+The index keeps every entry Catalog ships, including older content kept for
+evidence and reference: Core-derived entries for Core 0.6.0, 0.6.1 and 0.6.2 in
+this checkpoint, plus the default profile, whose `1.0.0` is the profile's own
+version and not a Core release. Which of them is current cannot be worked out from
+the entries -- not from ids, and not by taking the highest release -- and the page
+does not try.
+
+Catalog publishes it: `@aihq/catalog/catalog-collections.json`, read in the backend
+with Catalog's `readCatalogCollectionsV1` and bound to the exact index bytes. It
+names the source types it governs, and each collection's owner package, current
+content release and exact members (entry id and subject digest). The page applies
+it as given:
+
+- an entry of a collected source type is current only if a collection names it;
+- Core-derived content is ONE `@aihq/core` row holding exactly those members;
+- older releases stay addressable in the index but are neither rows nor counted --
+  the provenance disclosure reports how many entries are kept for reference only;
+- the default profile is its own collection row, named by its collection id,
+  because the package that owns it is the one transporting the index.
+
+A collection's release is compared with an installed package only when Catalog
+identified it as that package's version. When the installed `@aihq/core` differs
+from the Core content Catalog indexes, the strip shows `content <release>` beside
+the running version and the row carries a marker. Older content is never relabelled
+as the installed release. Selected entry ids and digests are never changed or
+rebound.
+
+Without the collection view the page cannot tell current from reference-only
+content, so the preview does not start: it says which Catalog it needs.
+
+### The package strip and the AI tools control
+
+The strip under the header is the design source's compact line:
+`@aihq/core <version> • @aihq/scan <version> • @aihq/catalog <version>`. Each
+version is the one npm recorded installing in the throwaway consumer
+(`node_modules/.package-lock.json`), cross-checked against the installed manifest
+and the exact tarball -- never parsed from a filename and never taken from the
+index's own package block. These are local packages that can share a released
+version number, so each also shows its short checkpoint. Hashes, full commits, raw
+entry counts, the collection view and index admission are behind "provenance".
+
+The AI tools control lists the AI CLIs `@aihq/core` supports as targets, from its
+public `SUPPORTED_CLIS` export, read by the backend from the installed package. The
+page keeps no list of its own, so reinstalling a different Core changes the list and
+the version with no UI edit. It reads `<selected> of <supported>`. Supported,
+selected and connected are kept apart:
+
+- supported is Core's list;
+- selected is the user's draft, kept in this browser -- not a policy;
+- installed or connected is **Not connected**: nothing here checks a tool.
+
+The design source's `3 of 11` was sample data and is not restored as state.
+
+### One theme icon
+
+The theme button holds ONE icon naming the destination: a sun on a dark page
+("Switch to light mode"), a moon on a light page ("Switch to dark mode"), in the
+design source's size and colours. `mode.js` owns the theme state and sets the icon
+and the label; the colour follows the same `html.dark` class, so nothing can
+disagree with it. Repaint settling (`app/theme.js`) and the saved preference are
+unchanged.
+
+### The source header keeps its composition
+
+The source header is the design source's: the context line and the source title;
+the Source Policy label with its three controls (Allow all / Allow with exceptions /
+Hold back) in the same row, right-aligned; then ONE source status line, then the
+filter row. At 1600x1000, fonts loaded, the selected ECC header matches the design
+source's positions in dark and light.
+
+The status line holds the design source's slots, filled only from real state:
+
+- `ENABLED` -- organization and Core state: **Not connected**;
+- `recorded <commit>` -- the commit Catalog recorded. It is not this
+  organization's pin, and is never labelled as one;
+- the source identity Catalog published (`affaan-m/ECC`, linked);
+- `scope` -- the organization's input: **Not supplied**;
+- `pinned` -- an installation pin is Core state: **Not connected**.
+
+The three policy controls stay, disabled, and none is shown as chosen. No release
+label or enabled state is invented.
 
 ### Cards keep each slot's meaning
 
@@ -340,6 +423,8 @@ tools/
     core-adapter.mjs    calls to @aihq/core's public API; never a reimplementation
     scan-verifier.mjs   the Scan verifier wiring and its trust boundary
     artifacts.mjs       exact-byte artifact I/O
+    catalog-collections.mjs  Catalog's current collection view, via its reader
+    core-targets.mjs    Core's supported AI CLI targets, via its public export
     validation-fixture.mjs  VALIDATION ONLY: the one module that manufactures
                             anything, and it labels everything it makes
 ```
@@ -357,6 +442,17 @@ maps — no `npm link`, no `dist/` deep import, no sibling source, no fallback.
 **Installing @aihq/core@0.6.2, @aihq/scan@0.4.0 or @aihq/catalog@0.2.0 from npm
 does not provide these APIs.** The published versions predate them; only the local
 tarballs carry the governance-input contract.
+
+The page also needs Catalog's collection view (`readCatalogCollectionsV1`) and
+Core's public `SUPPORTED_CLIS`. Until those reach the checkouts the preview reads
+by default, point it at checkouts that have them:
+
+```
+CORE_REPO=<core checkout> CATALOG_REPO=<catalog checkout> node tools/preview.mjs
+```
+
+A Core without `SUPPORTED_CLIS` leaves the AI tools control reading **Not
+published**; a Catalog without the collection view stops the preview.
 
 A checkout another worker is mid-change is never built and never packed. Its
 committed checkpoint is extracted with `git archive` into a workspace outside

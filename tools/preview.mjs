@@ -35,6 +35,7 @@ import { fileURLToPath } from "node:url";
 import { EXPECTED_FORMAT, EXPECTED_VERSION, contractViolations } from "./catalog-index-contract.mjs";
 import { installConsumer, resolvePackage } from "./packages.mjs";
 import { createApi } from "./server/api.mjs";
+import { callService } from "./server/service-client.mjs";
 import { assertReadable, pageAssets, presentationAssets, serviceAssets } from "./server/assets.mjs";
 import { createStaticServer, listen } from "./server/static.mjs";
 
@@ -105,11 +106,50 @@ async function resolveIndexThroughExportMap(consumerDir) {
   return path;
 }
 
-function readInstalledPackageJson(consumerDir) {
-  const path = join(consumerDir, "node_modules", ...CATALOG_PACKAGE.split("/"), "package.json");
-  const pkg = readJson(path);
-  if (typeof pkg.version !== "string") fatal(`${path} has no version string`);
-  return { path, name: pkg.name, version: pkg.version };
+const VERSION = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?$/;
+
+/**
+ * The name and version of each package actually installed in the consumer.
+ *
+ * Read from npm's own installation record (node_modules/.package-lock.json),
+ * which ties each installed name to the version and the exact tarball npm
+ * installed it from, and cross-checked against that installed package's
+ * manifest. Never parsed out of a tarball filename, and never taken from the
+ * index's own package block.
+ */
+function readInstalledPackages(consumerDir, packages) {
+  const lockPath = join(consumerDir, "node_modules", ".package-lock.json");
+  const lock = readJson(lockPath);
+  return packages.map((pkg) => {
+    const name = `@aihq/${pkg.name}`;
+    const record = lock?.packages?.[`node_modules/${name}`];
+    if (record === undefined) fatal(`${lockPath} records no installation of ${name}`);
+    if (typeof record.version !== "string" || !VERSION.test(record.version)) {
+      fatal(`${lockPath} records ${name} with no valid version (${JSON.stringify(record.version)})`);
+    }
+    const resolved = typeof record.resolved === "string" && record.resolved.startsWith("file:")
+      ? resolve(consumerDir, record.resolved.slice("file:".length))
+      : null;
+    if (resolved === null || resolved.toLowerCase() !== resolve(pkg.tarball).toLowerCase()) {
+      fatal(`${name} was installed from ${JSON.stringify(record.resolved)}, not from ${pkg.tarball}`);
+    }
+    const manifestPath = join(consumerDir, "node_modules", ...name.split("/"), "package.json");
+    const manifest = readJson(manifestPath);
+    if (manifest.name !== name || manifest.version !== record.version) {
+      fatal(`${manifestPath} says ${manifest.name}@${manifest.version}; npm recorded ${name}@${record.version}`);
+    }
+    return { name, version: record.version };
+  });
+}
+
+/** One service operation at startup; a failure is returned, never replaced. */
+function startupFact(consumerDir, op) {
+  const answer = callService(consumerDir, { op });
+  if (answer.ok) {
+    const { ok, ...value } = answer;
+    return { state: "published", ...value };
+  }
+  return { state: "unavailable", reason: answer.error };
 }
 
 /* ----------------------------------------------------------------------- main */
@@ -184,8 +224,34 @@ async function main() {
   log(
     `index: ${CATALOG_INDEX_EXPORT} -> ${indexPath} (format ${index.format}, version ${index.version}, ${index.entries.length} entries)`,
   );
-  const installed = readInstalledPackageJson(consumerDir);
+  const installedPackages = readInstalledPackages(consumerDir, packages);
+  const installed = installedPackages.find((pkg) => pkg.name === CATALOG_PACKAGE);
   const catalogPkg = packages.find((pkg) => pkg.name === "catalog");
+  for (const pkg of installedPackages) log(`installed: ${pkg.name} ${pkg.version}`);
+
+  // Catalog's current collection view decides which entries of a collected
+  // source type are current inventory. Without it the page cannot tell a
+  // current Core entry from an older one, so the preview does not start.
+  const collections = startupFact(consumerDir, "collections");
+  if (collections.state !== "published") {
+    fatal(
+      `the installed ${CATALOG_PACKAGE} publishes no readable collection view: ${collections.reason}
+` +
+        "This UI needs a Catalog with the collection contract (readCatalogCollectionsV1). " +
+        "Point CATALOG_REPO at a checkout that has it, or CATALOG_TGZ at such a package.",
+    );
+  }
+  for (const collection of collections.collections.collections) {
+    log(`collection: ${collection.id} (${collection.owner.package}) release ${collection.current.release}, ${collection.members.length} current members`);
+  }
+  // Core's supported AI CLI targets. A Core that does not export them leaves
+  // the AI tools control saying so; the rest of the page does not depend on it.
+  const coreTargets = startupFact(consumerDir, "coreTargets");
+  log(
+    coreTargets.state === "published"
+      ? `core targets: ${coreTargets.targets.length} supported AI CLIs from @aihq/core SUPPORTED_CLIS`
+      : `core targets: unavailable (${coreTargets.reason})`,
+  );
 
   // --- 4. page files into the run directory ---------------------------------
   for (const asset of [...page, ...presentation]) {
@@ -215,12 +281,22 @@ async function main() {
     },
     packages: packages.map((pkg) => ({
       name: pkg.name,
+      packageName: `@aihq/${pkg.name}`,
+      // From npm's installation record, cross-checked with the installed manifest.
+      version: installedPackages.find((item) => item.name === `@aihq/${pkg.name}`).version,
       tarball: basename(pkg.tarball),
       sha256: pkg.sha256,
       commit: pkg.commit,
       source: pkg.source,
     })),
     indexPackage: index.package ?? null,
+    // Catalog's collection view, exactly as its reader returned it.
+    collections: collections.collections,
+    // Core's supported targets, or why they are unavailable.
+    coreTargets:
+      coreTargets.state === "published"
+        ? { state: "published", source: "@aihq/core SUPPORTED_CLIS", targets: coreTargets.targets }
+        : { state: "unavailable", reason: coreTargets.reason },
   };
   writeFileSync(join(runDir, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
 

@@ -8,7 +8,7 @@ import { collectIds } from "../app/dom.js";
 
 export function catalogElements() {
   const ids = [
-    "provenance-strip", "masthead-name", "masthead-version", "masthead-facts",
+    "provenance-strip", "masthead-name", "masthead-version", "masthead-status",
     "nav-sources-count", "rail-scope-list", "framework-matrix-tabs",
     "review-filters", "review-summary",
     "kind-filters", "catalog-search", "source-filter", "sort-select",
@@ -22,7 +22,7 @@ export function catalogElements() {
   return {
     provenance: {
       provenanceStrip: found.provenanceStrip,
-      mastheadFacts: found.mastheadFacts,
+      mastheadStatus: found.mastheadStatus,
       mastheadName: found.mastheadName,
       mastheadVersion: found.mastheadVersion,
     },
