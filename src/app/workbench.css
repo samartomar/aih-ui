@@ -30,3 +30,18 @@ html.light .icon-dark-mode { display: none; }
 
 /* The provenance disclosure's marker would sit inside the compact strip. */
 #provenance-strip summary::-webkit-details-marker { display: none; }
+
+/* The frame in which the theme changes.
+ *
+ * Both themes are CSS custom properties, so flipping the class on <html>
+ * changes every colour at once. An element with a colour transition does not
+ * repaint when the variable behind its colour changes - it holds the value
+ * from before the flip, which left cards white on a dark page. Turning
+ * transitions off for that one frame makes every element recompute against the
+ * new variables; app/theme.js adds and removes this class. */
+html.theme-switching,
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition: none !important;
+}

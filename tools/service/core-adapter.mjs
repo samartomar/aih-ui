@@ -224,14 +224,17 @@ export async function consume({ sessionDir, authorityBundlePath, scanMaterialPat
     // Provenance of the inputs, so the page can label honestly.
     authoritySource: authorityBundlePath ?? "Not supplied",
     trustSource: verification.trustSource,
-    signerKeyId: verification.signerKeyId ?? null,
+    // Read after the verification Core performed, so it names the key that
+    // actually signed rather than a configured root.
+    signerKeyId: verification.signerKeyId(),
     scanMaterialSupplied: scanMaterialPath !== undefined && scanMaterialPath !== null,
     // Scan's own reading of what Scan verified, available only once Core has
     // actually called the verifier. It is presentation detail beside the six
     // axes above, never a substitute for any of them.
     scanResult: verification.facts(),
     // The operator's declaration about their own signer: the only statement
-    // that can speak to a real detector run.
-    operatorProvenance: verification.operatorProvenance ?? null,
+    // that can speak to a real detector run, attributed to the trust entry
+    // belonging to the signer that actually signed.
+    operatorProvenance: verification.operatorProvenance(),
   };
 }

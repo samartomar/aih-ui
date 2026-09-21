@@ -14,10 +14,14 @@
 
 import { createShell } from "./app/shell.js";
 import { shellElements } from "./app/elements.js";
+import { createTheme } from "./app/theme.js";
 import { createCatalog } from "./catalog/controller.js";
 import { createGovernance } from "./governance/controller.js";
 
 async function main() {
+  // Before anything renders: a theme change has to reach elements that are
+  // already on screen, not only ones built after it.
+  createTheme();
   const shell = createShell(shellElements());
   try {
     const governance = createGovernance();

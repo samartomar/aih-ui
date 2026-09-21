@@ -151,9 +151,19 @@ export function createDetector({ elements, onFixture }) {
         return;
       }
       if (declared !== null) {
-        row(box, "Declared provenance", declared.evidenceProvenance, NOT_SUPPLIED, "text-tertiary");
-        row(box, "Declared label", declared.provenanceLabel, NOT_SUPPLIED, "text-tertiary");
-        row(box, "Declared by", declared.declaredBy);
+        // The declaration belongs to the trust entry of the signer that
+        // actually signed. When that entry cannot be identified there is no
+        // declaration to show, only the reason - never the first root.
+        if (declared.attributed === true) {
+          row(box, "Verified signer", declared.signerKeyId);
+          row(box, "Declared provenance", declared.evidenceProvenance, NOT_SUPPLIED, "text-tertiary");
+          row(box, "Declared label", declared.provenanceLabel, NOT_SUPPLIED, "text-tertiary");
+          row(box, "Declared by", declared.declaredBy);
+        } else {
+          row(box, "Declared provenance", null, NOT_SUPPLIED);
+          row(box, "Verified signer", declared.signerKeyId, NOT_SUPPLIED, "text-outline");
+          box.appendChild(el("div", "text-tertiary leading-snug", declared.reason));
+        }
       }
       if (fixture !== null) {
         row(box, "Detector execution", fixture.label, NOT_SUPPLIED, "text-tertiary");
