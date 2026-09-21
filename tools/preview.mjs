@@ -24,6 +24,7 @@ import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { EXPECTED_FORMAT, EXPECTED_VERSION, contractViolations } from "./catalog-index-contract.mjs";
+import { classifyRequestPath } from "./preview-request.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, ".."); // the aih-ui checkout this tool belongs to
@@ -222,14 +223,17 @@ function readInstalledPackageJson(consumerDir) {
 
 function createStaticServer(root) {
   return createServer((request, response) => {
-    const requested = new URL(request.url ?? "/", "http://127.0.0.1");
-    // "/" is the page. Everything else is a file the page files reference by name.
-    const relative = requested.pathname === "/" ? "/src/index.html" : requested.pathname;
-    const file = resolve(root, `.${decodeURIComponent(relative)}`);
-    if (!file.startsWith(`${root}${sep}`)) {
-      response.writeHead(403).end("forbidden");
+    // request.url is attacker-controlled; preview-request.mjs classifies it, and nothing from
+    // it is used before it parses. A malformed URL or bad percent escape answers 400 and the
+    // server keeps serving.
+    const classified = classifyRequestPath(request.url, root);
+    if (classified.status !== 200) {
+      response
+        .writeHead(classified.status, { "content-type": "text/plain; charset=utf-8" })
+        .end(classified.status === 400 ? "bad request" : "forbidden");
       return;
     }
+    const { file } = classified;
     let body;
     try {
       body = readFileSync(file);

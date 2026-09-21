@@ -29,9 +29,9 @@
 <span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-medium">Admin</span>
 </div>
 <div class="h-3.5 w-px bg-surface-container-high mx-0.5"></div>
-<!-- Scope Switcher: the organization is an input, never a catalog value -->
-<button class="flex items-center gap-1 px-2 py-1 rounded bg-surface-container-low text-on-surface text-[12px] font-medium opacity-50 cursor-not-allowed" type="button" id="org-modal-trigger" disabled aria-disabled="true" title="Not published: no organization input contract in this browsing milestone">
-<span class="">Not published</span>
+<!-- Scope Switcher: the organization is an input supplied by organizations, never a catalog value -->
+<button class="flex items-center gap-1 px-2 py-1 rounded bg-surface-container-low text-on-surface text-[12px] font-medium opacity-50 cursor-not-allowed" type="button" id="org-modal-trigger" disabled aria-disabled="true" title="Not supplied: the organization is an input. Organizations supply it through a Core contract this page has not been wired to.">
+<span class="">Not supplied</span>
 <span class="material-symbols-outlined text-[13px] text-outline">expand_more</span>
 </button>
 <!-- Mode Toggle: presentation mode; the tool inventory behind it is not published -->
@@ -41,23 +41,23 @@
 </div>
 <div class="h-3.5 w-px bg-surface-container-high mx-0.5"></div>
 <!-- AI Tools Counter Pill -->
-<button class="flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container-low text-on-surface-variant text-[11px] opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not published: no measured AI tool inventory in the index">
+<button class="flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-container-low text-on-surface-variant text-[11px] opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not connected: no measured AI tool inventory is wired to this page">
 <span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
-<span class="font-mono text-on-surface">Not published</span>
+<span class="font-mono text-on-surface">Not connected</span>
 <span class="text-outline">AI tools</span>
 <span class="material-symbols-outlined text-[13px] text-outline">arrow_drop_down</span>
 </button>
 </div>
 <!-- Header Action CTAs -->
 <div class="flex items-center gap-2 shrink-0">
-<button class="flex items-center gap-1.5 px-2 py-1 rounded bg-surface-container-low text-on-surface-variant text-[12px] opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not published: needs organization resolution and review state from Core">
+<button class="flex items-center gap-1.5 px-2 py-1 rounded bg-surface-container-low text-on-surface-variant text-[12px] opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not connected: needs organization review state from Core, and organizations supply the workflow">
 <span class="">Review Changes</span>
-<span class="text-[10px] font-mono px-1 py-0.2 rounded bg-surface-container-high text-outline font-bold">Not published</span>
+<span class="text-[10px] font-mono px-1 py-0.2 rounded bg-surface-container-high text-outline font-bold">Not connected</span>
 </button>
-<button class="px-2.5 py-1 rounded bg-surface-container text-on-surface-variant text-[12px] font-medium opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not published: needs a Core check-policy contract">
+<button class="px-2.5 py-1 rounded bg-surface-container text-on-surface-variant text-[12px] font-medium opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not connected: needs a Core check-policy contract">
         Check Policy
       </button>
-<button class="flex items-center gap-1 px-3 py-1 rounded bg-surface-container text-on-surface-variant text-[12px] font-medium opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not published: needs organization resolution and a Core publish contract">
+<button class="flex items-center gap-1 px-3 py-1 rounded bg-surface-container text-on-surface-variant text-[12px] font-medium opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not connected: needs organization resolution and a Core publish contract">
 <span class="">Publish</span>
 <span class="material-symbols-outlined text-[13px]">arrow_forward</span>
 </button>
@@ -108,19 +108,19 @@
 </span>
 <span class="font-mono text-[10px] px-1 rounded bg-surface-container-highest text-on-surface-variant font-semibold" id="nav-sources-count">-</span>
 </a>
-<a class="flex items-center justify-between px-2 py-1 rounded text-on-surface-variant opacity-50 cursor-not-allowed" href="#" aria-disabled="true" title="Not published: no scan backlog in the index">
+<a class="flex items-center justify-between px-2 py-1 rounded text-on-surface-variant opacity-50 cursor-not-allowed" href="#" aria-disabled="true" title="Not connected: no organization workflow read contract">
 <span class="flex items-center gap-1.5">
 <span class="material-symbols-outlined text-[14px] text-outline">security_update_good</span>
 <span class="">Scan Review</span>
 </span>
-<span class="font-mono text-[10px] text-outline">Not published</span>
+<span class="font-mono text-[10px] text-outline">Not connected</span>
 </a>
-<a class="flex items-center justify-between px-2 py-1 rounded text-on-surface-variant opacity-50 cursor-not-allowed" href="#" aria-disabled="true" title="Not published: needs resolved organization state from Core">
+<a class="flex items-center justify-between px-2 py-1 rounded text-on-surface-variant opacity-50 cursor-not-allowed" href="#" aria-disabled="true" title="Not connected: needs resolved organization state from Core, which organizations supply">
 <span class="flex items-center gap-1.5">
 <span class="material-symbols-outlined text-[14px] text-outline">policy</span>
 <span class="">Policies &amp; Publish</span>
 </span>
-<span class="font-mono text-[10px] text-outline">Not published</span>
+<span class="font-mono text-[10px] text-outline">Not connected</span>
 </a>
 </nav>
 </div>
@@ -158,13 +158,13 @@
 <span class="">TELEMETRY</span>
 </div>
 <nav class="space-y-0.5 text-[11px]">
-<a class="flex items-center justify-between px-2 py-0.5 rounded text-on-surface-variant opacity-50 cursor-not-allowed" href="#" aria-disabled="true" title="Not published: no audit read contract">
+<a class="flex items-center justify-between px-2 py-0.5 rounded text-on-surface-variant opacity-50 cursor-not-allowed" href="#" aria-disabled="true" title="Not connected: no audit read contract">
 <span class="truncate">Audit Feed</span>
-<span class="font-mono text-[10px] text-outline">Not published</span>
+<span class="font-mono text-[10px] text-outline">Not connected</span>
 </a>
-<a class="flex items-center justify-between px-2 py-0.5 rounded text-on-surface-variant opacity-50 cursor-not-allowed" href="#" aria-disabled="true" title="Not published: no compliance aggregate in the index">
+<a class="flex items-center justify-between px-2 py-0.5 rounded text-on-surface-variant opacity-50 cursor-not-allowed" href="#" aria-disabled="true" title="Not connected: no compliance aggregate is wired to this page">
 <span class="truncate">Compliance Matrix</span>
-<span class="font-mono text-[10px] text-outline">Not published</span>
+<span class="font-mono text-[10px] text-outline">Not connected</span>
 </a>
 </nav>
 </div>
@@ -174,12 +174,12 @@
 <div class="flex items-center justify-between">
 <span class="flex items-center gap-1.5 text-on-surface-variant font-medium">
 <span class="w-1.5 h-1.5 rounded-full bg-outline"></span>Egress Guard</span>
-<span class="font-mono text-outline font-bold">Not published</span>
+<span class="font-mono text-outline font-bold">Not connected</span>
 </div>
 <div class="w-full bg-surface-container-highest rounded h-1 overflow-hidden"></div>
 <div class="flex items-center justify-between text-outline font-mono">
-<span class="">Quota: Not published</span>
-<span class="">Leaks: Not published</span>
+<span class="">Quota: Not connected</span>
+<span class="">Leaks: Not connected</span>
 </div>
 </div>
 </div>
@@ -209,17 +209,14 @@
 </div>
 </div>
 </div>
-<div class="flex flex-wrap items-center gap-2 text-[11px] font-mono text-outline/90 pt-0.5" id="masthead-facts">
-<span class="px-2 py-0.5 rounded bg-surface-container border border-surface-container-high/40 text-on-surface-variant flex items-center gap-1.5 text-[10.5px]">
-<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>ORGANIZATION NOT PUBLISHED</span>
-</div>
+<div class="flex flex-wrap items-center gap-2 text-[11px] font-mono text-outline/90 pt-0.5" id="masthead-facts"></div>
 </div>
 <div class="px-5 py-2 border-b border-surface-container-high/40 bg-[#0e131d] flex flex-wrap items-center justify-between gap-2 shrink-0 text-[11.5px]">
 <div class="flex items-center gap-2 flex-1 min-w-0">
 <label class="w-8 h-8 rounded border border-surface-container-high/60 bg-[#141822] hover:bg-surface-container text-outline hover:text-on-surface flex items-center justify-center shrink-0 transition-colors cursor-pointer" for="catalog-search" title="Search published identities">
 <span class="material-symbols-outlined text-[15px]">search</span>
 </label>
-<input class="w-full min-w-0 max-w-md px-2 py-1 rounded bg-[#141822] border border-surface-container-high/60 text-on-surface text-[11.5px] font-mono placeholder:text-outline/70 focus:border-primary focus:outline-none" id="catalog-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search entryId, subject id or source revision" aria-label="Search published identities">
+<input class="w-full min-w-0 max-w-md px-2 py-1 rounded bg-[#141822] border border-surface-container-high/60 text-on-surface text-[11.5px] font-mono placeholder:text-outline/70 focus:border-primary focus:outline-none" id="catalog-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search entryId, subject id, repository, package, path, commit or revision" aria-label="Search published entry and source identities">
 <div class="flex items-center gap-2 overflow-x-auto" id="kind-filters" role="group" aria-label="Filter by kind"></div>
 </div>
 <div class="flex items-center gap-2 font-mono text-[10.5px] shrink-0">
@@ -234,7 +231,7 @@
 <option value="entryId-desc">ENTRY ID (Z-A)</option>
 <option value="kind">KIND (A-Z)</option>
 <option value="sourceType">SOURCE TYPE (A-Z)</option>
-<option value="release">SOURCE RELEASE (A-Z)</option>
+<option value="sourceLabel">SOURCE REPOSITORY / PACKAGE (A-Z)</option>
 </select>
 </label>
 <span class="px-2.5 py-1 rounded bg-surface-container border border-surface-container-high/40 text-on-surface-variant flex items-center gap-1.5 shrink-0" title="Not published: no normalized egress classification in the index">
@@ -290,6 +287,10 @@
 <div class="space-y-1">
 <span class="text-[10px] font-mono uppercase tracking-wider text-outline">Identity</span>
 <div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="details-identity"></div>
+</div>
+<div class="space-y-1">
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline">Source Identity</span>
+<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="details-source"></div>
 </div>
 <div class="space-y-1">
 <span class="text-[10px] font-mono uppercase tracking-wider text-outline">Published Summary</span>

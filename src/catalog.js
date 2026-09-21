@@ -6,16 +6,32 @@
  * package. Catalog strings are inserted with textContent; nothing from the catalog is parsed
  * as HTML. Where the prototype showed a field the index does not publish, the layout is kept,
  * the page says "Not published", and the control is disabled.
+ *
+ * Source identity is read from the source.type discriminator, never from what happens to be
+ * present: a github source is a repository + commit + path, an npm source is a registry +
+ * package + version + integrity, and an aih source is its published release + revision. A
+ * commit is never rendered as a version, and a version is never invented for a field the
+ * index does not carry.
  */
 
 const NOT_PUBLISHED = "Not published";
+/* Three different absences, kept apart on purpose:
+   - NOT_PUBLISHED: a package field the index genuinely does not carry.
+   - NOT_SUPPLIED: organization information. Organizations supply it; the catalog never will.
+   - NOT_CONNECTED: an action or telemetry feed with no Core contract wired yet. */
+const NOT_SUPPLIED = "Not supplied";
+const NOT_CONNECTED = "Not connected";
 const INDEX_URL = "./catalog-index.json";
 const SUMMARY_URL = "./summary.json";
 const EXPECTED_FORMAT = "aih-catalog-index";
 const EXPECTED_VERSION = 1;
-const DISTINCT_REVISIONS = "__distinct__";
+/* Nested source row that filters by source identity without naming one, used when a source
+   type publishes its entries under a single identity (the npm package, for example). */
+const DISTINCT_SOURCES = "__distinct__";
+/* Separates the parts of a nested source filter: type, source identity, revision. */
+const FILTER_SEPARATOR = "\u0000";
 
-const IDENTITY_KEYS = ["entryId", "subjectId", "kind", "sourceType", "release", "revision"];
+const IDENTITY_KEYS = ["entryId", "subjectId", "kind", "sourceType", "sourceLabel", "revision"];
 
 /* Prototype order of the six-kind ledger. Kinds the index carries are counted; the rest keep
    the layout and say Not published. */
@@ -28,7 +44,7 @@ const LEDGER = [
   { key: null, label: "Token Budget", icon: "toll", color: "#f97316" },
 ];
 
-const KIND_ICON = { skill: "extension", agent: "smart_toy", mcp: "dns", package: "deployed_code", profile: "badge" };
+const KIND_ICON = { skill: "extension", agent: "smart_toy", mcp: "dns", package: "deployed_code", profile: "badge", tool: "handyman" };
 
 const state = {
   entries: [],
@@ -62,6 +78,16 @@ function row(parent, label, value) {
   return line;
 }
 
+/* A row whose value is a count of entries rather than a package field: the page computed it,
+   so an empty list reads as zero and never borrows the "Not published" wording. */
+function countRow(parent, label, value, suffix = "") {
+  const line = el("div", "flex justify-between gap-2");
+  line.appendChild(el("span", "shrink-0", label));
+  line.appendChild(el("span", "text-on-surface text-right break-all", `${value}${suffix}`));
+  parent.appendChild(line);
+  return line;
+}
+
 function field(container, label, value, icon, tone) {
   const line = el("div", "p-2 rounded bg-surface-container-low border border-surface-container-high/30 flex items-center justify-between gap-2");
   const left = el("div", "flex items-center gap-1.5 text-on-surface");
@@ -81,31 +107,100 @@ function chip(label, value, tone) {
   return node;
 }
 
-function revisionOf(entry) {
-  return text(entry?.subject?.source?.revision);
+/* -------------------------------------------------------------- source identity */
+
+/* A published revision, shortened for display. Raw revision digests keep their "sha256:"
+   prefix in the index; the inspector shows one of the two consistently, and says the digest
+   is abbreviated instead of passing a short hash off as the whole value. */
+function shortDigest(value) {
+  const digest = text(value);
+  if (digest === null) return null;
+  const hex = digest.replace(/^sha256:/, "");
+  return hex.slice(0, 12);
 }
 
-function sourceTypeOf(entry) {
-  return text(entry?.subject?.source?.type) ?? "unknown";
+/* Identity fields per source.type. `revision` is the only value the page calls a revision:
+   a git commit for github, the published revision for aih, the SRI integrity for npm (an npm
+   tarball has no commit, so the commit row stays Not published). */
+function sourceIdentity(entry) {
+  const source = entry?.subject?.source;
+  if (source === null || typeof source !== "object") {
+    return { type: "unknown", repository: null, commit: null, path: null, packageName: null, registry: null, version: null, integrity: null, release: null, revision: null };
+  }
+  const type = text(source.type) ?? "unknown";
+  const repository = text(source.repository);
+  const commit = text(source.commit);
+  const sourcePath = text(source.path);
+  const packageName = text(source.package);
+  const registry = text(source.registry);
+  const version = text(source.version);
+  const integrity = text(source.integrity);
+  const release = text(source.release);
+  const revision = type === "github" ? commit : type === "npm" ? integrity : text(source.revision) ?? commit;
+  return { type, repository, commit, path: sourcePath, packageName, registry, version, integrity, release, revision };
 }
 
-/* A published release string may carry the pack name after '@'. Split only on what is there. */
-function releaseLabelOf(entry) {
-  const release = text(entry?.subject?.source?.release);
-  if (release === null) return NOT_PUBLISHED;
-  const at = release.lastIndexOf("@");
-  return at > 0 && at < release.length - 1 ? release.slice(at + 1) : release;
+/* The one line that names the source identity this entry came from. */
+function sourceLabelOf(source) {
+  if (source.type === "github") return source.repository ?? source.commit;
+  if (source.type === "npm") return source.packageName === null ? null : source.version === null ? source.packageName : `${source.packageName}@${source.version}`;
+  if (source.type === "aih") return source.release ?? null;
+  return source.release ?? source.repository ?? source.packageName ?? source.commit;
+}
+
+function sourceLabelTitle(source, label) {
+  if (source.type === "github") return `GitHub source: revision ${source.commit ?? "not published"}`;
+  if (source.type === "npm") return `npm source: ${source.packageName ?? "package not published"} ${source.version ?? "version not published"}`.trim();
+  if (source.type === "aih") return `AIH source: release ${source.release ?? "not published"}`;
+  return `Source identity: ${label}`;
+}
+
+/* The rows the inspector shows for a source, in the order that source type publishes them. */
+function sourceDetailRows(source) {
+  if (source.type === "github") {
+    return [
+      ["Repository", source.repository],
+      ["Commit", source.commit],
+      ["Path", source.path],
+    ];
+  }
+  if (source.type === "npm") {
+    return [
+      ["Registry", source.registry],
+      ["Package", source.packageName],
+      ["Version", source.version],
+      ["Integrity", source.integrity],
+    ];
+  }
+  if (source.type === "aih") {
+    return [
+      ["Release", source.release],
+      ["Revision", source.revision],
+    ];
+  }
+  return [
+    ["Revision", source.revision],
+    ["Repository", source.repository],
+    ["Package", source.packageName],
+  ];
 }
 
 function identity(entry) {
+  const source = sourceIdentity(entry);
+  const sourceLabel = sourceLabelOf(source);
   return {
     entryId: text(entry?.entryId) ?? "(entryId not published)",
     subjectId: text(entry?.subject?.id) ?? NOT_PUBLISHED,
     kind: text(entry?.subject?.kind) ?? "unknown",
-    sourceType: sourceTypeOf(entry),
-    release: releaseLabelOf(entry),
-    revision: revisionOf(entry) ?? NOT_PUBLISHED,
+    sourceType: source.type,
+    sourceLabel,
+    release: sourceLabel,
+    revision: source.revision,
   };
+}
+
+function entrySource(entry) {
+  return sourceIdentity(entry);
 }
 
 function statementsOf(entry) {
@@ -145,25 +240,59 @@ function firstSummary(entry, kinds) {
   return found ? found.summary : null;
 }
 
-function identityText(entry) {
+/* Everything the search box matches: the published ids and every published identity field of
+   the source, so a repository, package, path or commit is findable without a lookup table. */
+function searchText(entry) {
   const id = identity(entry);
-  return [id.entryId, id.subjectId, id.kind, id.sourceType, id.release, id.revision].join(" ");
+  const source = entrySource(entry);
+  return [
+    id.entryId,
+    id.subjectId,
+    id.kind,
+    id.sourceType,
+    id.sourceLabel,
+    id.revision,
+    source.repository,
+    source.commit,
+    source.path,
+    source.packageName,
+    source.registry,
+    source.version,
+    source.integrity,
+    source.release,
+  ].filter((part) => part !== null).join(" ");
 }
 
 /* ---------------------------------------------------------------------- view */
 
+function sourceFilterValue(type, label, revision) {
+  return `${type}${FILTER_SEPARATOR}${label}${FILTER_SEPARATOR}${revision}`;
+}
+
+function matchesSourceFilter(entry, value) {
+  const [type, label, revision] = value.split(FILTER_SEPARATOR);
+  const source = entrySource(entry);
+  if (source.type !== type) return false;
+  const sourceLabel = sourceLabelOf(source);
+  if (label === DISTINCT_SOURCES) return true;
+  const matchesLabel = label === (sourceLabel ?? NOT_PUBLISHED);
+  if (revision) return matchesLabel && revision === (source.revision ?? NOT_PUBLISHED);
+  return matchesLabel || revisionOf(entry) === label || source.repository === label || source.packageName === label;
+}
+
+/* Kept for callers that read a single revision string off an entry. */
+function revisionOf(entry) {
+  return entrySource(entry).revision;
+}
+
 function visibleEntries() {
   const query = state.view.query.trim().toLocaleLowerCase();
   let rows = state.entries.filter((entry) => {
-    const id = identity(entry);
-    if (state.view.kind && id.kind !== state.view.kind) return false;
-    if (state.view.sourceType && id.sourceType !== state.view.sourceType) return false;
-    if (state.view.source) {
-      const [type, release] = state.view.source.split("\u0000");
-      if (id.sourceType !== type) return false;
-      if (release !== DISTINCT_REVISIONS && id.release !== release) return false;
-    }
-    if (query && !identityText(entry).toLocaleLowerCase().includes(query)) return false;
+    const source = entrySource(entry);
+    if (state.view.kind && text(entry?.subject?.kind) !== state.view.kind) return false;
+    if (state.view.sourceType && source.type !== state.view.sourceType) return false;
+    if (state.view.source && !matchesSourceFilter(entry, state.view.source)) return false;
+    if (query && !searchText(entry).toLocaleLowerCase().includes(query)) return false;
     return true;
   });
   const direction = state.view.sort.endsWith("-desc") ? -1 : 1;
@@ -211,6 +340,9 @@ function renderProvenance() {
   add("@aihq/catalog", text(pkg.version) ?? NOT_PUBLISHED);
   add("index", `${text(summary.format) ?? NOT_PUBLISHED} v${text(summary.version) ?? NOT_PUBLISHED}`);
   add("entries", String(state.entries.length));
+  // The provenance of this page is a package someone packed on this machine, not a registry
+  // release: say which one it is instead of implying a published download.
+  add("provenance", "locally packed package", "text-secondary");
   add("tarball", text(pkg.tarball) ?? NOT_PUBLISHED, "text-secondary");
   if (indexPkg?.version && pkg?.version && indexPkg.version !== pkg.version) {
     add("index package version", indexPkg.version, "text-tertiary");
@@ -237,7 +369,7 @@ function tile(kind) {
   name.appendChild(el("span", `material-symbols-outlined text-[14px]`, kind.icon)).style.color = kind.color;
   name.appendChild(el("span", `text-[10px] uppercase font-semibold tracking-[0.08em] truncate ${active ? "text-white" : "text-outline"}`, kind.label));
   head.appendChild(name);
-  head.appendChild(el("span", "text-[10px] font-mono tabular-nums shrink-0 text-outline", count === null ? "Not published" : `${count}`));
+  head.appendChild(el("span", "text-[10px] font-mono tabular-nums shrink-0 text-outline", count === null ? NOT_PUBLISHED : `${count}`));
   button.appendChild(head);
 
   const metrics = el("div", "flex items-baseline justify-between gap-2");
@@ -279,6 +411,7 @@ function railRow(label, count, options = {}) {
   rowNode.setAttribute("aria-pressed", String(Boolean(options.active)));
   rowNode.appendChild(el("span", "truncate", label));
   rowNode.appendChild(el("span", `font-mono text-[10px] ${options.active ? "px-1 rounded bg-tertiary-container text-on-tertiary font-bold" : "text-outline"}`, count === null ? NOT_PUBLISHED : String(count)));
+  if (options.title) rowNode.title = options.title;
   if (options.onClick) {
     rowNode.addEventListener("click", options.onClick);
   } else {
@@ -313,8 +446,8 @@ function renderRails() {
   const sourceList = dom.railSourceList;
   sourceList.replaceChildren();
   for (const [sourceType, count] of sortedCounts(state.sourceTypeCounts)) {
-    const releases = dom.sourceReleases.get(sourceType) ?? new Map();
-    const expanded = state.view.sourceType === sourceType || (state.view.source?.startsWith(`${sourceType}\u0000`) ?? false);
+    const identities = dom.sourceIdentities.get(sourceType) ?? new Map();
+    const activeInType = state.view.sourceType === sourceType || (state.view.source?.startsWith(`${sourceType}${FILTER_SEPARATOR}`) ?? false);
     const panel = el("div", "rounded bg-surface-container-low/60 border border-surface-container-high/40 p-1 space-y-0.5");
     panel.appendChild(railRow(sourceType, count, {
       active: state.view.sourceType === sourceType,
@@ -324,24 +457,46 @@ function renderRails() {
         renderView();
       },
     }));
-    // Publications appear only for the expanded source type: the index carries one row per
-    // published identity, so a flat list here would just repeat the card grid.
-    if (expanded) {
+    // One nested row per published source identity: the repository for github, the package for
+    // npm, the release for aih. A github repository carries many revisions, so when a source
+    // type publishes more than one revision under the same identity, that identity also gets
+    // one row per revision, and those rows are what make revisions distinguishable.
+    if (activeInType) {
       const nested = el("div", "pl-2 space-y-0.5");
-      for (const [release, releaseCount] of sortedCounts(releases)) {
-        const value = `${sourceType}\u0000${release}`;
-        nested.appendChild(railRow(release, releaseCount, {
-          active: state.view.source === value,
+      const singleIdentity = identities.size === 1;
+      for (const [identityKey, group] of sortedCounts(identities)) {
+        const label = identityKey === NOT_PUBLISHED && singleIdentity ? `${sourceType} sources` : identityKey;
+        const revisions = sortedCounts(group.revisions);
+        const sharedRevision = revisions.length === 1 ? (revisions[0][0] === NOT_PUBLISHED ? "" : revisions[0][0]) : "";
+        nested.appendChild(railRow(label, group.total, {
+          active: state.view.source === sourceFilterValue(sourceType, identityKey, sharedRevision),
+          title: `${sourceType} source identity: ${identityKey}`,
           onClick: () => {
-            state.view.source = state.view.source === value ? null : value;
+            state.view.source = sourceFilterValue(sourceType, identityKey, sharedRevision);
             state.view.sourceType = null;
             renderView();
           },
         }));
+        if (revisions.length > 1) {
+          const revisionRows = el("div", "pl-2 space-y-0.5");
+          for (const [revision, revisionCount] of revisions) {
+            revisionRows.appendChild(railRow(shortDigest(revision) ?? revision, revisionCount, {
+              active: state.view.source === sourceFilterValue(sourceType, identityKey, revision),
+              title: `${sourceType} source revision: ${revision}`,
+              onClick: () => {
+                state.view.source = sourceFilterValue(sourceType, identityKey, revision);
+                state.view.sourceType = null;
+                renderView();
+              },
+            }));
+          }
+          nested.appendChild(revisionRows);
+        }
       }
       panel.appendChild(nested);
     } else {
-      panel.appendChild(el("div", "pl-2 px-1.5 py-0.5 font-mono text-[10px] text-outline", `${releases.size} release labels present`));
+      const noun = identities.size === 1 ? "source identity" : "source identities";
+      panel.appendChild(el("div", "pl-2 px-1.5 py-0.5 font-mono text-[10px] text-outline", `${identities.size} ${noun}`));
     }
     sourceList.appendChild(panel);
   }
@@ -389,6 +544,7 @@ function kindPill(label, count, active, onClick) {
 
 function card(entry) {
   const id = identity(entry);
+  const source = entrySource(entry);
   const qual = entry.qualification ?? {};
   const findings = Array.isArray(qual.findings) ? qual.findings.length : null;
   const gaps = Array.isArray(qual.gaps) ? qual.gaps.length : null;
@@ -436,11 +592,17 @@ function card(entry) {
   } else {
     left.appendChild(el("span", "px-1.5 py-0.5 rounded bg-surface-container-low border border-surface-container-high/40 text-outline/70 font-mono shrink-0", "no evidence statements"));
   }
-  const egress = el("span", "px-1.5 py-0.5 rounded bg-surface-container-low border border-surface-container-high/40 text-outline/70 font-mono hidden sm:inline-flex items-center gap-1 shrink-0");
-  egress.appendChild(el("span", "material-symbols-outlined text-[12px]", "bolt"));
-  egress.appendChild(el("span", "", id.release));
-  egress.title = `Source release: ${id.release}`;
-  left.appendChild(egress);
+  const sourcePill = el("span", "px-1.5 py-0.5 rounded bg-surface-container-low border border-surface-container-high/40 text-outline/70 font-mono hidden sm:inline-flex items-center gap-1 shrink-0");
+  sourcePill.appendChild(el("span", "material-symbols-outlined text-[12px]", "bolt"));
+  if (id.sourceLabel === null) {
+    sourcePill.appendChild(el("span", "", NOT_PUBLISHED));
+    sourcePill.appendChild(el("span", "uppercase", `${id.sourceType} source identity`));
+    sourcePill.title = `Not published: this ${id.sourceType} source carries no identity field`;
+  } else {
+    sourcePill.appendChild(el("span", "", id.sourceLabel));
+    sourcePill.title = sourceLabelTitle(source, id.sourceLabel);
+  }
+  left.appendChild(sourcePill);
   foot.appendChild(left);
 
   const toggle = el("div", "flex items-center gap-1.5");
@@ -484,14 +646,19 @@ function renderCards() {
 }
 
 function computeCounts() {
-  state.kindCounts = countBy((entry) => identity(entry).kind);
-  state.sourceTypeCounts = countBy((entry) => identity(entry).sourceType);
-  dom.sourceReleases = new Map();
+  state.kindCounts = countBy((entry) => text(entry?.subject?.kind) ?? "unknown");
+  state.sourceTypeCounts = countBy((entry) => entrySource(entry).type);
+  dom.sourceIdentities = new Map();
   for (const entry of state.entries) {
-    const id = identity(entry);
-    if (!dom.sourceReleases.has(id.sourceType)) dom.sourceReleases.set(id.sourceType, new Map());
-    const releases = dom.sourceReleases.get(id.sourceType);
-    releases.set(id.release, (releases.get(id.release) ?? 0) + 1);
+    const source = entrySource(entry);
+    if (!dom.sourceIdentities.has(source.type)) dom.sourceIdentities.set(source.type, new Map());
+    const identities = dom.sourceIdentities.get(source.type);
+    const label = sourceLabelOf(source) ?? NOT_PUBLISHED;
+    if (!identities.has(label)) identities.set(label, { total: 0, revisions: new Map() });
+    const group = identities.get(label);
+    group.total += 1;
+    const revision = source.revision ?? NOT_PUBLISHED;
+    group.revisions.set(revision, (group.revisions.get(revision) ?? 0) + 1);
   }
 }
 
@@ -508,13 +675,14 @@ function renderView() {
 
 function paneReset() {
   dom.detailsIdentity.replaceChildren();
+  dom.detailsSource.replaceChildren();
   dom.detailsCapabilities.replaceChildren();
   dom.detailsArtifacts.replaceChildren();
   dom.securityStatements.replaceChildren();
 }
 
 function renderInspector() {
-  const entry = state.entries.find((candidate) => identity(candidate).entryId === state.selectedId) ?? null;
+  const entry = state.entries.find((candidate) => text(candidate?.entryId) === state.selectedId) ?? null;
   paneReset();
   if (!entry) {
     dom.inspectorName.textContent = "No entry selected";
@@ -535,10 +703,20 @@ function renderInspector() {
 
   const id = identity(entry);
   const subject = entry.subject ?? {};
-  const source = subject.source ?? {};
+  const source = entrySource(entry);
   dom.inspectorName.textContent = id.entryId;
   dom.inspectorKind.textContent = id.kind;
-  dom.inspectorVersion.textContent = id.release;
+  // The chip carries the locator of the source identity: repository+revision for github,
+  // package version for npm, release for aih. It never shows an abbreviated digest as if it
+  // were the whole revision, and it never turns a commit into a version.
+  let locator = null;
+  if (source.type === "github") locator = source.repository ?? source.commit;
+  else if (source.type === "npm") locator = source.version;
+  else if (source.type === "aih") locator = source.release;
+  dom.inspectorVersion.textContent = locator ?? NOT_PUBLISHED;
+  dom.inspectorVersion.title = locator === null
+    ? `Not published: this ${source.type} source carries no locator field`
+    : sourceLabelTitle(source, locator);
   dom.inspectorSubtitle.textContent = `${id.kind} · source ${id.sourceType}`;
   dom.inspectorIcon.textContent = KIND_ICON[id.kind] ?? "extension";
 
@@ -556,14 +734,22 @@ function renderInspector() {
   row(dom.detailsIdentity, "Entry id", id.entryId);
   row(dom.detailsIdentity, "Subject id", subject.id);
   row(dom.detailsIdentity, "Subject kind", id.kind);
-  row(dom.detailsIdentity, "Source type", id.sourceType);
-  row(dom.detailsIdentity, "Source release", id.release);
-  row(dom.detailsIdentity, "Source revision", revisionOf(entry));
   row(dom.detailsIdentity, "Subject digest", subject.subjectDigest);
   row(dom.detailsIdentity, "Source digest", subject.sourceDigest);
   row(dom.detailsIdentity, "Platforms", Array.isArray(entry.platforms) && entry.platforms.length
     ? entry.platforms.map((platform) => `${text(platform?.os) ?? "?"}/${text(platform?.architecture) ?? "?"}`).join(", ")
     : null);
+
+  // Source identity, in the shape that source type actually publishes.
+  row(dom.detailsSource, "Source type", source.type);
+  countRow(dom.detailsSource, "Entries from this source", dom.sourceIdentities.get(source.type)?.get(sourceLabelOf(source) ?? NOT_PUBLISHED)?.total ?? 0);
+  for (const [label, value] of sourceDetailRows(source)) row(dom.detailsSource, label, value);
+  // github and aih publish the whole revision in their own row above; npm publishes no commit,
+  // so its integrity is the only revision there is, shortened and labelled as shortened.
+  if (source.type === "npm" && source.revision !== null) {
+    row(dom.detailsSource, "Revision", shortDigest(source.revision));
+    row(dom.detailsSource, "Revision digest", "shortened for display; the integrity row above is the full value");
+  }
 
   const summary = firstSummary(entry, ["gap", "finding", "right", "report"]);
   dom.detailsDesc.textContent = summary ?? NOT_PUBLISHED;
@@ -667,7 +853,7 @@ function collectDom() {
     "visible-count", "visible-caption", "cards-grid", "inspector-rail",
     "inspector-name", "inspector-kind", "inspector-version", "inspector-subtitle", "inspector-flags",
     "inspector-icon", "close-inspector-btn", "pane-details", "pane-security", "pane-json",
-    "details-identity", "details-desc", "details-capabilities", "details-artifacts",
+    "details-identity", "details-source", "details-desc", "details-capabilities", "details-artifacts",
     "scanner-report-statement", "statement-count", "security-statements", "catalog-error",
   ];
   for (const id of ids) {
@@ -695,8 +881,8 @@ function mastheadFacts() {
   admission.appendChild(el("span", "text-outline uppercase", "organization admission"));
   admission.appendChild(el("span", `font-semibold ${summary.organizationAdmission === "not-authoritative" ? "text-tertiary" : "text-on-surface"}`, text(summary.organizationAdmission) ?? NOT_PUBLISHED));
   facts.appendChild(admission);
-  facts.appendChild(chip("scope", NOT_PUBLISHED));
-  facts.appendChild(chip("pinned", NOT_PUBLISHED));
+  facts.appendChild(chip("scope", NOT_SUPPLIED));
+  facts.appendChild(chip("pinned", NOT_CONNECTED));
 }
 
 /* Local presentation tweaks kept out of the shared prototype stylesheets: the header swap for the
@@ -713,6 +899,7 @@ function presentationCss() {
 /* ------------------------------------------------ published view state (session) */
 
 const SAVED_KEY = "aih-ui-sources-view";
+const SORT_KEYS = ["entryId", "entryId-desc", "kind", "sourceType", "sourceLabel", "release"];
 
 function saveView() {
   try {
@@ -731,10 +918,15 @@ function restoreView() {
   }
   if (!saved || typeof saved !== "object") return;
   if (typeof saved.query === "string") state.view.query = saved.query;
-  if (typeof saved.kind === "string" || saved.kind === null) state.view.kind = saved.kind;
-  if (typeof saved.sourceType === "string" || saved.sourceType === null) state.view.sourceType = saved.sourceType;
-  if (typeof saved.source === "string" || saved.source === null) state.view.source = saved.source;
-  if (["entryId", "entryId-desc", "kind", "sourceType", "release"].includes(saved.sort)) state.view.sort = saved.sort;
+  // A view saved by an earlier build can name a sort key or a source this build does not
+  // publish. Drop those instead of leaving a control and the grid disagreeing.
+  if (typeof saved.kind === "string" && state.kindCounts.has(saved.kind)) state.view.kind = saved.kind;
+  if (typeof saved.sourceType === "string" && state.sourceTypeCounts.has(saved.sourceType)) state.view.sourceType = saved.sourceType;
+  if (typeof saved.source === "string") {
+    const sourceType = saved.source.split(FILTER_SEPARATOR)[0];
+    if (state.sourceTypeCounts.has(sourceType)) state.view.source = saved.source;
+  }
+  if (SORT_KEYS.includes(saved.sort)) state.view.sort = saved.sort;
 }
 
 async function loadJson(url, what) {
@@ -817,4 +1009,3 @@ async function main() {
 }
 
 main().catch((error) => fail(error?.stack ?? String(error)));
-
