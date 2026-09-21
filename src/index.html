@@ -75,7 +75,7 @@
 <!-- WORKBENCH SUB-HEADER (Provenance & Panel Sliders) -->
 <div class="h-8 bg-surface-container-lowest/90 border-b border-surface-container-high/40 px-3 flex items-center justify-between text-[11px] shrink-0">
 <div class="flex items-center gap-2 min-w-0">
-<div class="flex items-center gap-2 font-mono text-[11px] text-on-surface-variant truncate" id="provenance-strip">
+<div class="flex items-center gap-2 font-mono text-[11px] text-on-surface-variant min-w-0" id="provenance-strip">
 <span class="material-symbols-outlined text-[14px] text-primary shrink-0">inventory_2</span>
 <span class="text-on-surface font-medium">Connecting to the installed @aihq/catalog package...</span>
 </div>
@@ -211,22 +211,22 @@
 </div>
 <div class="flex flex-wrap items-center gap-2 text-[11px] font-mono text-outline/90 pt-0.5" id="masthead-facts"></div>
 </div>
-<div class="px-5 py-2 border-b border-surface-container-high/40 bg-[#0e131d] flex flex-wrap items-center justify-between gap-2 shrink-0 text-[11.5px]">
+<div class="px-5 py-2 border-b border-surface-container-high/40 bg-[#0e131d] flex flex-nowrap items-center justify-between gap-2 shrink-0 text-[11.5px]">
 <div class="flex items-center gap-2 flex-1 min-w-0">
 <label class="w-8 h-8 rounded border border-surface-container-high/60 bg-[#141822] hover:bg-surface-container text-outline hover:text-on-surface flex items-center justify-center shrink-0 transition-colors cursor-pointer" for="catalog-search" title="Search published identities">
 <span class="material-symbols-outlined text-[15px]">search</span>
 </label>
-<input class="w-full min-w-0 max-w-md px-2 py-1 rounded bg-[#141822] border border-surface-container-high/60 text-on-surface text-[11.5px] font-mono placeholder:text-outline/70 focus:border-primary focus:outline-none" id="catalog-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search entryId, subject id, repository, package, path, commit or revision" aria-label="Search published entry and source identities">
-<div class="flex items-center gap-2 overflow-x-auto" id="kind-filters" role="group" aria-label="Filter by kind"></div>
+<input class="w-full min-w-0 max-w-[260px] h-8 px-2 py-1 rounded bg-[#141822] border border-surface-container-high/60 text-on-surface text-[11.5px] font-mono placeholder:text-outline/70 focus:border-primary focus:outline-none" id="catalog-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search entryId, subject id, repository, package, path, commit or revision" aria-label="Search published entry and source identities">
+<div class="flex flex-nowrap items-center gap-2 overflow-x-auto no-scrollbar min-w-0" id="kind-filters" role="group" aria-label="Filter by kind"></div>
 </div>
-<div class="flex items-center gap-2 font-mono text-[10.5px] shrink-0">
+<div class="flex flex-nowrap items-center gap-2 font-mono text-[10.5px] shrink-0">
 <label class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-container border border-surface-container-high/40 text-on-surface-variant" title="Filter by published source type">
 <span class="material-symbols-outlined text-[12px] text-outline">source</span>
-<select class="bg-transparent text-on-surface text-[10.5px] font-mono focus:outline-none cursor-pointer" id="source-filter" aria-label="Filter by published source type"></select>
+<select class="w-[104px] p-0 border-0 bg-transparent bg-none leading-none text-on-surface text-[10.5px] font-mono focus:outline-none focus:ring-0 cursor-pointer" id="source-filter" aria-label="Filter by published source type"></select>
 </label>
 <label class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-container border border-surface-container-high/40 text-on-surface-variant" title="Sort by a published identity">
 <span class="material-symbols-outlined text-[12px] text-outline">sort</span>
-<select class="bg-transparent text-on-surface text-[10.5px] font-mono focus:outline-none cursor-pointer" id="sort-select" aria-label="Sort by a published identity">
+<select class="w-[136px] p-0 border-0 bg-transparent bg-none leading-none text-on-surface text-[10.5px] font-mono focus:outline-none focus:ring-0 cursor-pointer" id="sort-select" aria-label="Sort by a published identity">
 <option value="entryId">ENTRY ID (A-Z)</option>
 <option value="entryId-desc">ENTRY ID (Z-A)</option>
 <option value="kind">KIND (A-Z)</option>
@@ -236,7 +236,7 @@
 </label>
 <span class="px-2.5 py-1 rounded bg-surface-container border border-surface-container-high/40 text-on-surface-variant flex items-center gap-1.5 shrink-0" title="Not published: no normalized egress classification in the index">
 <span class="material-symbols-outlined text-[12px] text-outline">arrow_outward</span>
-<span class="font-medium">Egress out: Not published</span>
+<span class="font-medium">Egress: Not published</span>
 </span>
 </div>
 </div>
@@ -251,8 +251,11 @@
 </div>
 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3" id="cards-grid"></div>
 </div>
+</div>
+</div>
+</main>
 <!-- RIGHT COLUMN: Interactive Multi-Inspector (Collapsible Drawer) -->
-<aside class="inspector-transition shrink-0 bg-[#12161f] border-l border-surface-container-high/60 flex flex-col overflow-hidden w-[390px]" id="inspector-rail">
+<aside class="inspector-transition shrink-0 bg-[#12161f] border-l border-surface-container-high/60 flex flex-col justify-between overflow-hidden shadow-2xl z-20 w-[390px]" id="inspector-rail">
 <div class="p-3 border-b border-surface-container-high/60 space-y-2 shrink-0">
 <div class="flex items-start justify-between gap-2">
 <div class="min-w-0">
@@ -472,8 +475,6 @@ authenticates a statement; it never establishes that the claimed measurements oc
 </button>
 </div>
 </aside>
-</div>
-</div>
 </div>
 </div>
 <div id="catalog-error" class="fixed bottom-3 left-3 z-50 max-w-xl p-3 rounded bg-error-container text-on-error-container text-[11.5px] font-mono hidden" role="alert"></div>

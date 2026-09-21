@@ -50,6 +50,12 @@ const PAGE_FILES = ["src/index.html", "src/catalog.js", "src/governance.js"];
 const SERVICE_FILES = ["tools/core-service.mjs", "tools/fixture-candidate.mjs"];
 // Presentation-only assets carried over from the design source (prototype/), unmodified.
 const PRESENTATION_FILES = [
+  // The design authority, served from the SAME origin so it can be compared at
+  // identical viewport, fonts and zoom. Screenshots taken at different origins
+  // or zoom levels are not a comparison.
+  "prototype/screens/admin-sources.html",
+  // The side-by-side / difference comparison page, at /compare.html.
+  "tools/compare.html",
   "prototype/screens/tokens.css",
   "prototype/screens/fonts.css",
   "prototype/screens/wb.css",

@@ -23,6 +23,8 @@ const NOT_PUBLISHED = "Not published";
    - NOT_CONNECTED: an action or telemetry feed with no Core contract wired yet. */
 const NOT_SUPPLIED = "Not supplied";
 const NOT_CONNECTED = "Not connected";
+/* An entry whose id does not begin with its own kind: no framework is readable from it. */
+const UNATTRIBUTED = "Not attributable";
 const INDEX_URL = "./catalog-index.json";
 const SUMMARY_URL = "./summary.json";
 const EXPECTED_FORMAT = "aih-catalog-index";
@@ -51,7 +53,7 @@ const KIND_ICON = { skill: "extension", agent: "smart_toy", mcp: "dns", package:
 const state = {
   entries: [],
   summary: null,
-  view: { query: "", kind: null, sourceType: null, sort: "entryId", source: null },
+  view: { query: "", kind: null, sourceType: null, sort: "entryId", source: null, provider: null },
   selectedId: null,
 };
 
@@ -292,6 +294,7 @@ function visibleEntries() {
   let rows = state.entries.filter((entry) => {
     const source = entrySource(entry);
     if (state.view.kind && text(entry?.subject?.kind) !== state.view.kind) return false;
+    if (state.view.provider && providerOf(entry) !== state.view.provider) return false;
     if (state.view.sourceType && source.type !== state.view.sourceType) return false;
     if (state.view.source && !matchesSourceFilter(entry, state.view.source)) return false;
     if (query && !searchText(entry).toLocaleLowerCase().includes(query)) return false;
@@ -305,6 +308,48 @@ function visibleEntries() {
     return left.localeCompare(right) * direction || identity(a).entryId.localeCompare(identity(b).entryId);
   });
   return rows;
+}
+
+/*
+ * The framework an entry is published under, read from the entry id.
+ *
+ * The index publishes ids shaped `<kind>.<provider>.<name>`, and the first
+ * segment is the same value as `subject.kind` - so the shape is verifiable
+ * rather than assumed. When an id does NOT start with its own kind, the
+ * provider is not determinable from what is published and the entry is grouped
+ * as unattributed instead of being forced into a guess.
+ *
+ * The index carries no category, tag or collection field. Thematic categories
+ * are therefore Not published, and are shown as such rather than invented.
+ */
+function providerOf(entry) {
+  const entryId = text(entry?.entryId);
+  const kind = text(entry?.subject?.kind);
+  if (!entryId || !kind) return null;
+  if (!entryId.startsWith(`${kind}.`)) return null;
+  const rest = entryId.slice(kind.length + 1);
+  const provider = rest.split(".")[0];
+  return provider.length > 0 ? provider : null;
+}
+
+/*
+ * The part of the entry id that actually distinguishes one card from another.
+ *
+ * `subject.id` alone is NOT distinguishing: 36 entries share one with another
+ * entry (`governance-quality` is used by three). Dropping only the
+ * `<kind>.<provider>.` prefix keeps every remainder unique once the provider
+ * badge beside it is taken into account - verified against the published index,
+ * where that pair has no collisions. The full entry id stays on the tooltip and
+ * in the inspector.
+ */
+function cardTitleOf(entry) {
+  const entryId = text(entry?.entryId);
+  const kind = text(entry?.subject?.kind);
+  if (!entryId) return null;
+  if (!kind || !entryId.startsWith(`${kind}.`)) return entryId;
+  const rest = entryId.slice(kind.length + 1);
+  const withoutProvider = rest.split(".").slice(1).join(".");
+  return withoutProvider.length > 0 ? withoutProvider : rest;
 }
 
 function countBy(selector) {
@@ -322,36 +367,66 @@ function sortedCounts(counts) {
 
 /* ------------------------------------------------------------------ rendering */
 
+/*
+ * The provenance strip stays one compact line: what package this page is
+ * reading and how many entries it carries. Package hashes, commits and the
+ * index's own package block are real provenance but they are diagnostic
+ * detail, and inlining them pushed the strip past the width the design source
+ * gives it. They move into a disclosure that opens in place.
+ */
 function renderProvenance() {
   const strip = dom.provenanceStrip;
   strip.replaceChildren();
   const summary = state.summary ?? {};
   const pkg = summary.package ?? {};
   const indexPkg = summary.indexPackage ?? {};
-  const parts = [];
 
-  const lead = el("span");
-  lead.appendChild(el("span", "material-symbols-outlined text-[14px] text-primary shrink-0 align-middle", "account_tree"));
-  parts.push(lead);
-  const add = (label, value, tone) => {
-    const span = el("span");
+  const lead = el("span", "shrink-0");
+  lead.appendChild(el("span", "material-symbols-outlined text-[14px] text-primary align-middle", "account_tree"));
+  strip.appendChild(lead);
+
+  const fact = (label, value, tone) => {
+    const span = el("span", "shrink-0");
     span.appendChild(el("span", "text-on-surface font-medium", `${label} `));
     span.appendChild(el("span", tone ?? "text-outline/80", value));
-    parts.push(span);
+    strip.appendChild(span);
   };
-  add("@aihq/catalog", text(pkg.version) ?? NOT_PUBLISHED);
-  add("index", `${text(summary.format) ?? NOT_PUBLISHED} v${text(summary.version) ?? NOT_PUBLISHED}`);
-  add("entries", String(state.entries.length));
-  // The provenance of this page is a package someone packed on this machine, not a registry
-  // release: say which one it is instead of implying a published download.
-  add("provenance", "locally packed package", "text-secondary");
-  add("tarball", text(pkg.tarball) ?? NOT_PUBLISHED, "text-secondary");
-  if (indexPkg?.version && pkg?.version && indexPkg.version !== pkg.version) {
-    add("index package version", indexPkg.version, "text-tertiary");
+  fact("@aihq/catalog", text(pkg.version) ?? NOT_PUBLISHED);
+  fact("entries", String(state.entries.length));
+  strip.appendChild(el("span", "px-1.5 py-0.2 rounded bg-surface-container text-outline font-mono text-[10px] shrink-0", "read-only-mirror"));
+
+  // Everything below is diagnostic. It is published verbatim, never summarised
+  // into a claim, and it stays closed until asked for.
+  const details = el("details", "relative shrink-0");
+  const summaryNode = el("summary", "cursor-pointer list-none px-1.5 py-0.2 rounded bg-surface-container hover:bg-surface-container-high text-outline hover:text-on-surface font-mono text-[10px] select-none", "provenance");
+  summaryNode.title = "Package hashes, commits and index metadata";
+  details.appendChild(summaryNode);
+
+  const panel = el("div", "absolute left-0 top-[18px] z-40 w-[440px] max-w-[90vw] p-2 rounded bg-surface-container-lowest border border-surface-container-high/60 shadow-2xl space-y-1 text-[10px] font-mono");
+  const line = (label, value, tone) => {
+    const node = el("div", "flex items-start justify-between gap-2");
+    node.appendChild(el("span", "text-outline shrink-0", label));
+    node.appendChild(el("span", `text-right break-all ${tone ?? "text-on-surface-variant"}`, value));
+    panel.appendChild(node);
+  };
+  line("index format", `${text(summary.format) ?? NOT_PUBLISHED} v${text(summary.version) ?? NOT_PUBLISHED}`);
+  line("index sha256", text(summary.indexSha256) ?? NOT_PUBLISHED);
+  line("organization admission", text(summary.organizationAdmission) ?? NOT_PUBLISHED, "text-tertiary");
+  // A package packed on this machine, not a registry release. Say which.
+  line("provenance", "locally packed package", "text-secondary");
+  for (const installed of summary.packages ?? []) {
+    panel.appendChild(el("div", "pt-1 mt-1 border-t border-surface-container-high/40 text-on-surface font-semibold", `@aihq/${installed.name}`));
+    line("tarball", text(installed.tarball) ?? NOT_PUBLISHED);
+    line("sha256", text(installed.sha256) ?? NOT_PUBLISHED, "text-secondary");
+    line("commit", text(installed.commit) ?? NOT_PUBLISHED);
+    line("built from", text(installed.source) ?? NOT_PUBLISHED, "text-outline");
   }
-  const mirror = el("span", "px-1.5 py-0.2 rounded bg-surface-container text-outline font-mono text-[10px]", "read-only-mirror");
-  parts.push(mirror);
-  strip.append(...parts);
+  if (indexPkg?.version && pkg?.version && indexPkg.version !== pkg.version) {
+    panel.appendChild(el("div", "pt-1 mt-1 border-t border-surface-container-high/40 text-tertiary", "the index names a different package version than the one installed"));
+    line("index package", `${text(indexPkg.name) ?? NOT_PUBLISHED} ${indexPkg.version}`, "text-tertiary");
+  }
+  details.appendChild(panel);
+  strip.appendChild(details);
 }
 
 function tile(kind) {
@@ -430,20 +505,32 @@ function renderRails() {
   dom.railPackageCount.textContent = String(state.entries.length);
   dom.navSourcesCount.textContent = String(state.entries.length);
 
-  const kindList = dom.railKindList;
-  kindList.replaceChildren();
-  for (const [kind, count] of sortedCounts(state.kindCounts)) {
-    kindList.appendChild(railRow(kind, count, {
-      active: state.view.kind === kind,
-      onClick: () => {
-        state.view.kind = state.view.kind === kind ? null : kind;
-        renderView();
-      },
+  // Nested under the installed catalog, exactly where the design source puts a
+  // catalog's own scopes: one row per framework the index actually publishes.
+  const scopeList = dom.railKindList;
+  scopeList.replaceChildren();
+  for (const [provider, count] of sortedCounts(state.providerCounts)) {
+    const unattributed = provider === UNATTRIBUTED;
+    scopeList.appendChild(railRow(provider, count, {
+      active: state.view.provider === provider,
+      title: unattributed
+        ? "The entry id does not begin with its own kind, so no framework can be read from it"
+        : `Framework published in the index as ${provider}`,
+      onClick: unattributed
+        ? undefined
+        : () => {
+            state.view.provider = state.view.provider === provider ? null : provider;
+            saveView();
+            renderView();
+          },
     }));
   }
-  for (const missing of LEDGER.filter((item) => item.key === null)) {
-    kindList.appendChild(railRow(missing.label, null, { title: `Not published: the index carries no ${missing.label.toLowerCase()} entries` }));
-  }
+  // The design source lists thematic categories here. The index carries no
+  // category, tag or collection field, so the row keeps its place and its size
+  // and says what is absent. Nothing is counted and nothing is invented.
+  scopeList.appendChild(railRow("Thematic categories", null, {
+    title: `${NOT_PUBLISHED}: the index carries no category, tag or collection field`,
+  }));
 
   const sourceList = dom.railSourceList;
   sourceList.replaceChildren();
@@ -456,6 +543,7 @@ function renderRails() {
       onClick: () => {
         state.view.sourceType = state.view.sourceType === sourceType ? null : sourceType;
         state.view.source = null;
+        saveView();
         renderView();
       },
     }));
@@ -476,6 +564,7 @@ function renderRails() {
           onClick: () => {
             state.view.source = sourceFilterValue(sourceType, identityKey, sharedRevision);
             state.view.sourceType = null;
+            saveView();
             renderView();
           },
         }));
@@ -488,6 +577,7 @@ function renderRails() {
               onClick: () => {
                 state.view.source = sourceFilterValue(sourceType, identityKey, revision);
                 state.view.sourceType = null;
+                saveView();
                 renderView();
               },
             }));
@@ -507,7 +597,7 @@ function renderRails() {
 function renderFilters() {
   const kinds = sortedCounts(state.kindCounts).map(([kind]) => kind);
   dom.kindFilters.replaceChildren();
-  dom.kindFilters.appendChild(kindPill("All Kinds", state.entries.length, state.view.kind === null, () => {
+  dom.kindFilters.appendChild(kindPill("All", state.entries.length, state.view.kind === null, () => {
     state.view.kind = null;
     renderView();
   }));
@@ -533,6 +623,14 @@ function renderFilters() {
   }
   dom.sourceFilter.value = wanted;
   dom.sortSelect.value = state.view.sort;
+  markPillOverflow();
+}
+/* The fade is a scroll affordance, so it is removed once there is nothing left
+   to scroll to - otherwise it dims a label that is entirely visible. */
+function markPillOverflow() {
+  const strip = dom.kindFilters;
+  const atEnd = strip.scrollLeft + strip.clientWidth >= strip.scrollWidth - 1;
+  strip.dataset.scrolledEnd = String(atEnd);
 }
 
 function kindPill(label, count, active, onClick) {
@@ -561,13 +659,22 @@ function card(entry) {
   const top = el("div");
   const head = el("div", "flex items-start justify-between gap-2");
   const name = el("div", "flex items-center gap-1.5 min-w-0");
-  name.appendChild(el("span", "material-symbols-outlined text-[15px] text-[#ffb95f]", KIND_ICON[id.kind] ?? "extension"));
-  name.appendChild(el("span", "font-mono font-bold text-white text-[13px] tracking-tight truncate", id.entryId));
+  name.appendChild(el("span", "material-symbols-outlined text-[15px] text-[#ffb95f] shrink-0", KIND_ICON[id.kind] ?? "extension"));
+  const title = el("span", "font-mono font-bold text-white text-[13px] tracking-tight truncate", cardTitleOf(entry) ?? id.entryId);
+  title.title = id.entryId;
+  name.appendChild(title);
   head.appendChild(name);
   const badge = el("div", "flex items-center gap-1 shrink-0");
+  // The framework the index publishes this under, in the slot the design
+  // source gives a grouping label. Absent only when the id does not carry one.
+  const provider = providerOf(entry);
+  if (provider) {
+    badge.appendChild(el("span", "px-1.5 py-0.5 rounded bg-surface-container-low border border-surface-container-high/40 text-[8.5px] font-mono text-outline/90 uppercase", provider));
+  }
   badge.appendChild(el("span", "px-1.5 py-0.5 rounded bg-surface-container-low border border-surface-container-high/40 text-[8.5px] font-mono text-outline/90", id.kind.toUpperCase()));
   head.appendChild(badge);
   top.appendChild(head);
+  node.title = id.entryId;
 
   const summary = firstSummary(entry, ["gap", "finding"]);
   const body = el("p", `text-[11px] mt-2 leading-relaxed line-clamp-3 ${summary ? "text-on-surface-variant" : "text-outline/70"}`);
@@ -649,6 +756,7 @@ function renderCards() {
 
 function computeCounts() {
   state.kindCounts = countBy((entry) => text(entry?.subject?.kind) ?? "unknown");
+  state.providerCounts = countBy((entry) => providerOf(entry) ?? UNATTRIBUTED);
   state.sourceTypeCounts = countBy((entry) => entrySource(entry).type);
   dom.sourceIdentities = new Map();
   for (const entry of state.entries) {
@@ -881,13 +989,14 @@ function mastheadFacts() {
   facts.replaceChildren();
   const summary = state.summary ?? {};
   const pkg = summary.package ?? {};
-  facts.appendChild(chip("index", `${text(summary.format) ?? NOT_PUBLISHED} v${text(summary.version) ?? NOT_PUBLISHED}`));
+  // One line, as the design source has it. Hashes and commits are diagnostic
+  // and live in the provenance disclosure; repeating one here only cost a row.
   facts.appendChild(chip("entries", String(state.entries.length)));
   facts.appendChild(chip("kinds", String(state.kindCounts.size)));
-  facts.appendChild(chip("source types", String(state.sourceTypeCounts.size)));
-  facts.appendChild(chip("tarball sha256", text(pkg.tarballSha256)?.slice(0, 16) ?? NOT_PUBLISHED, "text-secondary"));
+  facts.appendChild(chip("frameworks", String(state.providerCounts.size)));
+  facts.appendChild(chip("sources", String(state.sourceTypeCounts.size)));
   const admission = el("span", "px-2 py-0.5 rounded bg-surface-container border border-surface-container-high/40 text-on-surface-variant flex items-center gap-1.5 text-[10.5px]", undefined);
-  admission.appendChild(el("span", "text-outline uppercase", "organization admission"));
+  admission.appendChild(el("span", "text-outline uppercase", "admission"));
   admission.appendChild(el("span", `font-semibold ${summary.organizationAdmission === "not-authoritative" ? "text-tertiary" : "text-on-surface"}`, text(summary.organizationAdmission) ?? NOT_PUBLISHED));
   facts.appendChild(admission);
   facts.appendChild(chip("scope", NOT_SUPPLIED));
@@ -901,6 +1010,18 @@ function presentationCss() {
   style.textContent = [
     ".material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;}",
     "html.dark .icon-dark-mode{display:block;}html.light .icon-dark-mode{display:none;}",
+    // The kind pills scroll rather than wrap, so the control strip stays the
+    // single row the design source gives it. The scrollbar itself would add a
+    // few pixels and change the row height, so it is hidden, not the overflow.
+    ".no-scrollbar{scrollbar-width:none;-ms-overflow-style:none;}",
+    ".no-scrollbar::-webkit-scrollbar{display:none;}",
+    // A scrolling strip must look scrollable. Without the fade its right edge
+    // is indistinguishable from a label that got cut off.
+    "#kind-filters{mask-image:linear-gradient(to right,#000 calc(100% - 18px),transparent 100%);" +
+      "-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 18px),transparent 100%);}",
+    "#kind-filters[data-scrolled-end=\"true\"]{mask-image:none;-webkit-mask-image:none;}",
+    // The provenance disclosure's marker would sit inside the compact strip.
+    "#provenance-strip summary::-webkit-details-marker{display:none;}",
   ].join("");
   document.head.appendChild(style);
 }
@@ -930,6 +1051,9 @@ function restoreView() {
   // A view saved by an earlier build can name a sort key or a source this build does not
   // publish. Drop those instead of leaving a control and the grid disagreeing.
   if (typeof saved.kind === "string" && state.kindCounts.has(saved.kind)) state.view.kind = saved.kind;
+  if (typeof saved.provider === "string" && state.providerCounts.has(saved.provider)) {
+    state.view.provider = saved.provider;
+  }
   if (typeof saved.sourceType === "string" && state.sourceTypeCounts.has(saved.sourceType)) state.view.sourceType = saved.sourceType;
   if (typeof saved.source === "string") {
     const sourceType = saved.source.split(FILTER_SEPARATOR)[0];
@@ -981,6 +1105,7 @@ function wireEvents() {
     saveView();
     renderView();
   });
+  dom.kindFilters.addEventListener("scroll", markPillOverflow, { passive: true });
   dom.toggleNavBtn.addEventListener("click", toggleNav);
   dom.toggleInspectorBtn.addEventListener("click", toggleInspector);
   dom.closeInspectorBtn.addEventListener("click", toggleInspector);
@@ -1007,10 +1132,12 @@ async function main() {
   }
   state.entries = index.entries;
   state.summary = summary;
+  // Counts first: restoreView validates every saved filter against them, so
+  // restoring before they exist silently discarded the saved kind and source.
+  computeCounts();
   restoreView();
   dom.search.value = state.view.query;
   wireEvents();
-  computeCounts();
   mastheadFacts();
   renderProvenance();
   dom.mastheadVersion.textContent = text(summary?.package?.version) ?? NOT_PUBLISHED;

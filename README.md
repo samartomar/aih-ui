@@ -60,6 +60,49 @@ No entry, count or label comes from a hardcoded total: every number on the page 
 counted from the installed index at run time. Absence markers are never counted as
 release labels or as source identities.
 
+## Layout parity with the design source
+
+`prototype/screens/admin-sources.html` is the design authority. The preview serves
+it from the same origin so the two can be compared at one viewport and one zoom:
+
+```
+http://127.0.0.1:4173/compare.html
+```
+
+Side by side or as a difference overlay, with a live table that reads the geometry
+out of both documents at their true 1600x1000 layout size, before scaling. At
+1600x1000 the left rail, metric tiles, split row, main column, inspector and first
+card all agree exactly on x, y, width and height, in light and dark.
+
+The composition the design source specifies: the metric tiles span the full width
+above the split, and the inspector is a **sibling of `<main>`** inside
+`#workspace-split-row` -- so it runs the full height alongside the source header,
+the source policy controls, the filters and the cards. Nesting it inside the card
+row instead puts it 179px too low and stretches the main column by 390px; that is
+what a parity check catches and a screenshot comparison of colours does not.
+
+### Reading the rail from what the Catalog publishes
+
+The index publishes no category, tag or collection field, so the thematic
+categories the design source lists are **Not published** -- the row keeps its place
+and its size and says so. What the index does publish is the entry id, shaped
+`<kind>.<provider>.<name>` with the first segment equal to `subject.kind`, so the
+shape is verifiable rather than assumed. Those provider segments are the frameworks
+in the rail, with counts taken from the index. An id that does not begin with its
+own kind is grouped as **Not attributable** rather than forced into a guess.
+
+Card titles are the entry id minus its `<kind>.<provider>.` prefix, with the
+provider beside it as a label. `subject.id` alone is not distinguishing -- 36
+entries share one with another entry, and three are all called
+`governance-quality`. The remainder plus the provider label has no collisions in
+the published index; the full entry id stays on the tooltip and in the inspector.
+
+### Unavailable states keep their component's size
+
+A metric tile with nothing published is still a tile of the same size reading
+**Not published**, never an invented count or percentage. The same holds for the
+source-policy segment, the egress readout and the policy determination choices.
+
 ## The Governance pane: one vertical slice through Core
 
 The inspector's **Governance** tab runs the whole contract end to end:
