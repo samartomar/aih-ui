@@ -1,45 +1,19 @@
 /**
- * The preview's backend API.
+ * The preview's HTTP API: routing and request handling only.
  *
  * The browser never touches a package, a filesystem path or a key. It posts a
- * small JSON request here; this module runs `core-service.mjs` inside the
- * throwaway consumer, where `@aihq/core`, `@aihq/scan` and `@aihq/catalog`
- * resolve to the installed tarballs.
+ * small JSON request here; this module decides which operation that is, asks
+ * the service for it (service-client.mjs) and hands back what came out.
  *
- * Session directories are server-owned. The page holds an opaque id and can
- * never name a path: every filesystem location below is derived from that id
- * inside the run directory.
+ * Session directories and operator-side paths belong to sessions.mjs.
  */
-import { spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
+import { callService } from "./service-client.mjs";
+import { createSessions } from "./sessions.mjs";
 
-/** One request, one child process, in the consumer's own resolution context. */
-function callService(consumerDir, request) {
-  const result = spawnSync(process.execPath, ["core-service.mjs"], {
-    cwd: consumerDir,
-    input: JSON.stringify(request),
-    encoding: "utf8",
-    windowsHide: true,
-    maxBuffer: 128 * 1024 * 1024,
-  });
-  if (result.error) return { ok: false, error: `core service failed: ${result.error.message}` };
-  if (result.status !== 0) {
-    return {
-      ok: false,
-      error: `core service exited ${result.status}: ${(result.stderr ?? "").trim().slice(0, 2000)}`,
-    };
-  }
-  try {
-    return JSON.parse(result.stdout);
-  } catch {
-    return { ok: false, error: `core service returned unparseable output: ${result.stdout.slice(0, 500)}` };
-  }
-}
+const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
 
 function readBody(request) {
   return new Promise((resolveBody, rejectBody) => {
@@ -66,24 +40,12 @@ function readBody(request) {
 }
 
 /**
- * Builds the API handler.
- *
  * @param consumerDir the throwaway consumer holding the installed packages
  * @param runDir      the run directory that owns every session
  * @param summary     provenance shown in the page's strip
  */
 export function createApi({ consumerDir, runDir, summary }) {
-  const sessionsRoot = join(runDir, "sessions");
-  mkdirSync(sessionsRoot, { recursive: true });
-
-  // Per-session operator inputs the page supplied. Held here, never in the
-  // material: material that carries its own trust is refused by the service.
-  const sessions = new Map();
-
-  function sessionDir(id) {
-    if (typeof id !== "string" || !SESSION_ID.test(id) || !sessions.has(id)) return undefined;
-    return join(sessionsRoot, id);
-  }
+  const sessions = createSessions(runDir);
 
   const ROUTES = {
     /** Provenance of what is actually installed. */
@@ -102,9 +64,7 @@ export function createApi({ consumerDir, runDir, summary }) {
      * reachable from the normal flow: the page has to ask for it by name.
      */
     "POST /api/validation-fixture": (body) => {
-      const id = randomUUID();
-      const dir = join(sessionsRoot, id);
-      mkdirSync(dir, { recursive: true });
+      const { sessionId, dir } = sessions.create();
       const built = callService(consumerDir, {
         op: "fixture",
         entryId: body.entryId,
@@ -113,7 +73,7 @@ export function createApi({ consumerDir, runDir, summary }) {
         effect: body.effect,
       });
       if (built.ok !== true) return built;
-      sessions.set(id, {
+      sessions.record(sessionId, {
         entryId: body.entryId,
         // Operator-side inputs, kept server-side and keyed by session.
         authorityBundlePath: built.authorityBundlePath,
@@ -121,16 +81,14 @@ export function createApi({ consumerDir, runDir, summary }) {
         operatorTrustPath: built.operatorTrustPath,
         mode: "validation-fixture",
       });
-      return { ...built, sessionId: id };
+      return { ...built, sessionId };
     },
 
     /** Compile and save. Core's bytes are written unchanged. */
     "POST /api/prepare": (body) => {
       // A fixture session already exists; a normal preparation opens a new one.
-      const id = sessions.has(body.sessionId) ? body.sessionId : randomUUID();
-      const dir = join(sessionsRoot, id);
-      mkdirSync(dir, { recursive: true });
-      const existing = sessions.get(id) ?? { mode: "operator-supplied" };
+      const { sessionId, dir } = sessions.open(body.sessionId);
+      const existing = sessions.get(sessionId) ?? { mode: "operator-supplied" };
       const prepared = callService(consumerDir, {
         op: "prepare",
         entryId: body.entryId,
@@ -144,8 +102,8 @@ export function createApi({ consumerDir, runDir, summary }) {
         sessionDir: dir,
       });
       if (prepared.ok !== true) return prepared;
-      sessions.set(id, { ...existing, entryId: body.entryId, preparedAt: new Date().toISOString() });
-      return { ...prepared, sessionId: id };
+      sessions.record(sessionId, { ...existing, entryId: body.entryId, preparedAt: new Date().toISOString() });
+      return { ...prepared, sessionId };
     },
 
     /**
@@ -154,7 +112,7 @@ export function createApi({ consumerDir, runDir, summary }) {
      * files on disk.
      */
     "POST /api/consume": (body) => {
-      const dir = sessionDir(body.sessionId);
+      const dir = sessions.dirOf(body.sessionId);
       if (dir === undefined) return { ok: false, error: "unknown session" };
       const session = sessions.get(body.sessionId);
       return callService(consumerDir, {
@@ -171,7 +129,7 @@ export function createApi({ consumerDir, runDir, summary }) {
      * remembered, so what the operator downloads is what was written.
      */
     "POST /api/saved": (body) => {
-      const dir = sessionDir(body.sessionId);
+      const dir = sessions.dirOf(body.sessionId);
       if (dir === undefined) return { ok: false, error: "unknown session" };
       const name = body.file === "evidence" ? "organization-evidence.json" : "governance-input.json";
       const path = join(dir, name);
@@ -186,8 +144,7 @@ export function createApi({ consumerDir, runDir, summary }) {
   };
 
   return async function handleApi(request, response, pathname) {
-    const key = `${request.method} ${pathname}`;
-    const route = ROUTES[key];
+    const route = ROUTES[`${request.method} ${pathname}`];
     if (route === undefined) return false;
 
     const send = (status, value) => {

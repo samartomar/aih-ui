@@ -12,9 +12,9 @@
  * tarballs carry the governance-input contract.
  *
  * Two halves:
- *   - a static page, served from the run directory;
- *   - an API (tools/preview-api.mjs) that runs tools/core-service.mjs inside the consumer.
- *     Every Node-only package API and every filesystem access lives on that side.
+ *   - a static page (src/), copied into the run directory with its module tree intact;
+ *   - an API (tools/server/) that runs tools/service/ inside the consumer. Every Node-only
+ *     package API and every filesystem access lives on that side.
  *
  * The generated run directory lives outside every repository. Nothing is copied back into
  * the UI repository.
@@ -27,49 +27,22 @@
 
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { createServer } from "node:http";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { copyFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, extname, join, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { EXPECTED_FORMAT, EXPECTED_VERSION, contractViolations } from "./catalog-index-contract.mjs";
 import { installConsumer, resolvePackage } from "./packages.mjs";
-import { createApi } from "./preview-api.mjs";
-import { classifyRequestPath } from "./preview-request.mjs";
+import { createApi } from "./server/api.mjs";
+import { assertReadable, pageAssets, presentationAssets, serviceAssets } from "./server/assets.mjs";
+import { createStaticServer, listen } from "./server/static.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, ".."); // the aih-ui checkout this tool belongs to
 
 const CATALOG_INDEX_EXPORT = "@aihq/catalog/catalog-index.json";
 const CATALOG_PACKAGE = "@aihq/catalog";
-
-// Page files that make up the served page. Each is copied into the run directory.
-const PAGE_FILES = ["src/index.html", "src/catalog.js", "src/governance.js"];
-// Backend files copied INTO the consumer, where the installed packages resolve.
-const SERVICE_FILES = ["tools/core-service.mjs", "tools/fixture-candidate.mjs"];
-// Presentation-only assets carried over from the design source (prototype/), unmodified.
-const PRESENTATION_FILES = [
-  // The design authority, served from the SAME origin so it can be compared at
-  // identical viewport, fonts and zoom. Screenshots taken at different origins
-  // or zoom levels are not a comparison.
-  "prototype/screens/admin-sources.html",
-  // The side-by-side / difference comparison page, at /compare.html.
-  "tools/compare.html",
-  "prototype/screens/tokens.css",
-  "prototype/screens/fonts.css",
-  "prototype/screens/wb.css",
-  "prototype/screens/mode.js",
-  "prototype/screens/tw-config.js",
-];
-
-const MIME = {
-  ".css": "text/css; charset=utf-8",
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".svg": "image/svg+xml",
-};
 
 const args = process.argv.slice(2);
 const QUIET = args.includes("--quiet");
@@ -88,11 +61,6 @@ function fatal(message) {
   process.exit(1);
 }
 
-/* ------------------------------------------------------------------ commands */
-
-
-
-
 function readJson(path) {
   try {
     return JSON.parse(readFileSync(path, "utf8"));
@@ -104,8 +72,6 @@ function readJson(path) {
 function sha256File(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
-
-
 
 /* ------------------------------------------------------------------- resolve */
 
@@ -146,60 +112,6 @@ function readInstalledPackageJson(consumerDir) {
   return { path, name: pkg.name, version: pkg.version };
 }
 
-/* --------------------------------------------------------------------- server */
-
-function createStaticServer(root, handleApi) {
-  return createServer(async (request, response) => {
-    // The API is checked first and owns its own paths. Its handler returns false
-    // for anything it does not claim, and the static path takes over from there.
-    let pathname;
-    try {
-      pathname = new URL(request.url, "http://127.0.0.1").pathname;
-    } catch {
-      response.writeHead(400, { "content-type": "text/plain; charset=utf-8" }).end("bad request");
-      return;
-    }
-    if (pathname.startsWith("/api/")) {
-      if (await handleApi(request, response, pathname)) return;
-      response
-        .writeHead(404, { "content-type": "application/json; charset=utf-8" })
-        .end(JSON.stringify({ ok: false, error: `no such endpoint: ${pathname}` }));
-      return;
-    }
-
-    // request.url is attacker-controlled; preview-request.mjs classifies it, and nothing from
-    // it is used before it parses. A malformed URL or bad percent escape answers 400 and the
-    // server keeps serving.
-    const classified = classifyRequestPath(request.url, root);
-    if (classified.status !== 200) {
-      response
-        .writeHead(classified.status, { "content-type": "text/plain; charset=utf-8" })
-        .end(classified.status === 400 ? "bad request" : "forbidden");
-      return;
-    }
-    const { file } = classified;
-    let body;
-    try {
-      body = readFileSync(file);
-    } catch {
-      response.writeHead(404, { "content-type": "text/plain; charset=utf-8" }).end("not found");
-      return;
-    }
-    response.writeHead(200, {
-      "content-type": MIME[extname(file)] ?? "application/octet-stream",
-      "cache-control": "no-store",
-    });
-    response.end(body);
-  });
-}
-
-function listen(server, port) {
-  return new Promise((resolveListen, rejectListen) => {
-    server.once("error", rejectListen);
-    server.listen(port, "127.0.0.1", () => resolveListen(server.address()));
-  });
-}
-
 /* ----------------------------------------------------------------------- main */
 
 async function main() {
@@ -208,12 +120,20 @@ async function main() {
     scan: process.env.SCAN_REPO ?? resolve(REPO_ROOT, "..", "aih-scan"),
     catalog: process.env.CATALOG_REPO ?? resolve(REPO_ROOT, "..", "aih-catalog"),
   };
-  for (const relative of [...PAGE_FILES, ...SERVICE_FILES, ...PRESENTATION_FILES]) {
-    try {
-      if (!statSync(join(REPO_ROOT, relative)).isFile()) throw new Error("not a file");
-    } catch (error) {
-      fatal(`asset ${relative} is missing from ${REPO_ROOT}: ${error.message}`);
-    }
+
+  // Discovered, not listed: a module added to src/ or tools/service/ is copied
+  // because it is there, and a missing entry point fails here rather than in a
+  // browser. Each file keeps its path - nothing is flattened.
+  let page;
+  let service;
+  let presentation;
+  try {
+    page = pageAssets(REPO_ROOT);
+    service = serviceAssets(REPO_ROOT);
+    presentation = presentationAssets();
+    assertReadable(REPO_ROOT, [...page, ...service, ...presentation]);
+  } catch (error) {
+    fatal(error.message);
   }
 
   const runDir = mkdtempSync(join(tmpdir(), "aih-ui-preview-"));
@@ -248,14 +168,13 @@ async function main() {
     installConsumer({
       consumerDir,
       packages,
-      extraFiles: Object.fromEntries(
-        SERVICE_FILES.map((relative) => [relative.split("/").pop(), join(REPO_ROOT, relative)]),
-      ),
+      extraFiles: Object.fromEntries(service.map((asset) => [asset.to, join(REPO_ROOT, asset.from)])),
       log,
     });
   } catch (error) {
     fatal(error.message);
   }
+  log(`service: ${service.length} backend modules copied into the consumer, directories intact`);
 
   // --- 3. the index, through the installed export map -----------------------
   const indexPath = await resolveIndexThroughExportMap(consumerDir);
@@ -269,19 +188,14 @@ async function main() {
   const catalogPkg = packages.find((pkg) => pkg.name === "catalog");
 
   // --- 4. page files into the run directory ---------------------------------
-  for (const relative of PAGE_FILES) {
-    const target = join(runDir, relative);
+  for (const asset of [...page, ...presentation]) {
+    const target = join(runDir, asset.to);
     mkdirSync(dirname(target), { recursive: true });
-    await copyFile(join(REPO_ROOT, relative), target);
-    // Also at the run root, so the page loads each module by plain name.
-    await copyFile(join(REPO_ROOT, relative), join(runDir, relative.split("/").pop()));
-  }
-  for (const relative of PRESENTATION_FILES) {
-    await copyFile(join(REPO_ROOT, relative), join(runDir, relative.split("/").pop()));
+    await copyFile(join(REPO_ROOT, asset.from), target);
   }
   const indexTarget = join(runDir, "catalog-index.json");
   await copyFile(indexPath, indexTarget);
-  log(`page: copied ${PAGE_FILES.length + PRESENTATION_FILES.length} files and catalog-index.json`);
+  log(`page: ${page.length} page files, ${presentation.length} presentation files and catalog-index.json`);
 
   // Provenance shown in the page's strip: what was ACTUALLY installed, by
   // tarball hash and commit, never the index's own package block alone.
@@ -322,8 +236,16 @@ async function main() {
   if (served.format !== EXPECTED_FORMAT || served.version !== EXPECTED_VERSION) {
     fatal(`served index lost its contract: ${JSON.stringify(served.format)} / ${JSON.stringify(served.version)}`);
   }
-  const page = await fetch(url);
-  if (!page.ok) fatal(`served page is not reachable at ${url} (${page.status})`);
+  const pageResponse = await fetch(url);
+  if (!pageResponse.ok) fatal(`served page is not reachable at ${url} (${pageResponse.status})`);
+  // Every module the page imports must be reachable too: a page that loads and
+  // then 404s on one module is a blank screen with a clean HTTP log.
+  for (const asset of page) {
+    const moduleResponse = await fetch(`${url}${asset.to}`);
+    if (!moduleResponse.ok) {
+      fatal(`page asset ${asset.to} is not reachable at ${url}${asset.to} (${moduleResponse.status})`);
+    }
+  }
   // Prove the backend answers before announcing the URL: a page that loads but
   // cannot reach Core would look fine and do nothing.
   const api = await fetch(`${url}api/packages`);
@@ -332,6 +254,7 @@ async function main() {
   log(`run directory: ${runDir}`);
   log(`consumer: ${consumerDir}`);
   log(`index contract: ${served.format} version ${served.version} (${served.entries.length} entries)`);
+  log(`page assets: ${page.length} served, every one reachable`);
   process.stdout.write(`${url}\n`);
   log("press Ctrl+C to stop serving; the run directory is removed on exit");
 

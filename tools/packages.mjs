@@ -32,7 +32,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 const CACHE_ROOT = join(tmpdir(), "aih-ui-package-cache");
 
@@ -200,8 +200,13 @@ export function installConsumer({ consumerDir, packages, extraFiles, log }) {
     consumerDir,
     "consumer install",
   );
+  // A target may name a subdirectory - the service is a directory of modules,
+  // not one file - so the directory is created before the copy. Flattening it
+  // would break every relative import the worker makes.
   for (const [target, source] of Object.entries(extraFiles)) {
-    copyFileSync(source, join(consumerDir, target));
+    const destination = join(consumerDir, target);
+    mkdirSync(dirname(destination), { recursive: true });
+    copyFileSync(source, destination);
   }
   log(`consumer: installed ${packages.map((p) => p.name).join(", ")} into ${consumerDir}`);
 }

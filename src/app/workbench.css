@@ -1,0 +1,32 @@
+/*
+ * Local presentation rules for the Workbench page.
+ *
+ * Everything the design source already defines stays in the prototype's own
+ * stylesheets (tokens.css, wb.css). Only what this page adds lives here.
+ */
+
+/* The Material Symbols axis the prototype renders its icons with. */
+.material-symbols-outlined {
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+/* The header's dark-mode icon swap. */
+html.dark .icon-dark-mode { display: block; }
+html.light .icon-dark-mode { display: none; }
+
+/* The kind pills scroll rather than wrap, so the control strip stays the single
+   row the design source gives it. The scrollbar itself would add a few pixels
+   and change the row height, so it is hidden - the overflow is not. */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* A scrolling strip must look scrollable. Without the fade its right edge is
+   indistinguishable from a label that got cut off. */
+#kind-filters {
+  mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent 100%);
+}
+#kind-filters[data-scrolled-end="true"] { mask-image: none; -webkit-mask-image: none; }
+
+/* The provenance disclosure's marker would sit inside the compact strip. */
+#provenance-strip summary::-webkit-details-marker { display: none; }

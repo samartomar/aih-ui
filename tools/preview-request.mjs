@@ -17,8 +17,9 @@ export function classifyRequestPath(requestUrl, root) {
   let relative;
   try {
     const requested = new URL(typeof requestUrl === "string" ? requestUrl : "/", "http://127.0.0.1");
-    // "/" is the page. Everything else is a file the page files reference by name.
-    relative = decodeURIComponent(requested.pathname === "/" ? "/src/index.html" : requested.pathname);
+    // "/" is the page. The run directory mirrors src/ at its root, so every other
+    // path is the module or asset the page references, at the path it references.
+    relative = decodeURIComponent(requested.pathname === "/" ? "/index.html" : requested.pathname);
   } catch {
     // A malformed request URL or a bad percent escape is the client's mistake: 400, keep serving.
     return { status: 400, reason: "malformed request URL" };

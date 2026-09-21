@@ -1,0 +1,217 @@
+/*
+ * Reading one published catalog entry.
+ *
+ * Every function here is a pure reader over what the index carries. Source
+ * identity is read from the `source.type` discriminator, never from whichever
+ * field happens to be present: a github source is a repository + commit + path,
+ * an npm source is a registry + package + version + integrity, and an aih
+ * source is its published release + revision. A commit is never rendered as a
+ * version, and no value is invented for a field the index does not carry.
+ *
+ * Nothing here decides, filters or renders. Selection lives in selectors.js and
+ * presentation in the components.
+ */
+
+import { text } from "../app/dom.js";
+import { NOT_PUBLISHED } from "../app/absence.js";
+
+export const KIND_ICON = {
+  skill: "extension",
+  agent: "smart_toy",
+  mcp: "dns",
+  package: "deployed_code",
+  profile: "badge",
+  tool: "handyman",
+};
+
+/* A published revision, shortened for display. Raw revision digests keep their "sha256:"
+   prefix in the index; the inspector shows one of the two consistently, and says the digest
+   is abbreviated instead of passing a short hash off as the whole value. */
+export function shortDigest(value) {
+  const digest = text(value);
+  if (digest === null) return null;
+  const hex = digest.replace(/^sha256:/, "");
+  return hex.slice(0, 12);
+}
+
+/* Identity fields per source.type. `revision` is the only value the page calls a revision:
+   a git commit for github, the published revision for aih, the SRI integrity for npm (an npm
+   tarball has no commit, so the commit row stays Not published). */
+export function sourceIdentity(entry) {
+  const source = entry?.subject?.source;
+  if (source === null || typeof source !== "object") {
+    return { type: "unknown", repository: null, commit: null, path: null, packageName: null, registry: null, version: null, integrity: null, release: null, revision: null };
+  }
+  const type = text(source.type) ?? "unknown";
+  const repository = text(source.repository);
+  const commit = text(source.commit);
+  const sourcePath = text(source.path);
+  const packageName = text(source.package);
+  const registry = text(source.registry);
+  const version = text(source.version);
+  const integrity = text(source.integrity);
+  const release = text(source.release);
+  const revision = type === "github" ? commit : type === "npm" ? integrity : text(source.revision) ?? commit;
+  return { type, repository, commit, path: sourcePath, packageName, registry, version, integrity, release, revision };
+}
+
+/* The one line that names the source identity this entry came from. */
+export function sourceLabelOf(source) {
+  if (source.type === "github") return source.repository ?? source.commit;
+  if (source.type === "npm") return source.packageName === null ? null : source.version === null ? source.packageName : `${source.packageName}@${source.version}`;
+  if (source.type === "aih") return source.release ?? null;
+  return source.release ?? source.repository ?? source.packageName ?? source.commit;
+}
+
+export function sourceLabelTitle(source, label) {
+  if (source.type === "github") return `GitHub source: revision ${source.commit ?? "not published"}`;
+  if (source.type === "npm") return `npm source: ${source.packageName ?? "package not published"} ${source.version ?? "version not published"}`.trim();
+  if (source.type === "aih") return `AIH source: release ${source.release ?? "not published"}`;
+  return `Source identity: ${label}`;
+}
+
+/* The rows the inspector shows for a source, in the order that source type publishes them. */
+export function sourceDetailRows(source) {
+  if (source.type === "github") {
+    return [
+      ["Repository", source.repository],
+      ["Commit", source.commit],
+      ["Path", source.path],
+    ];
+  }
+  if (source.type === "npm") {
+    return [
+      ["Registry", source.registry],
+      ["Package", source.packageName],
+      ["Version", source.version],
+      ["Integrity", source.integrity],
+    ];
+  }
+  if (source.type === "aih") {
+    return [
+      ["Release", source.release],
+      ["Revision", source.revision],
+    ];
+  }
+  return [
+    ["Revision", source.revision],
+    ["Repository", source.repository],
+    ["Package", source.packageName],
+  ];
+}
+
+export function identity(entry) {
+  const source = sourceIdentity(entry);
+  const sourceLabel = sourceLabelOf(source);
+  return {
+    entryId: text(entry?.entryId) ?? "(entryId not published)",
+    subjectId: text(entry?.subject?.id) ?? NOT_PUBLISHED,
+    kind: text(entry?.subject?.kind) ?? "unknown",
+    sourceType: source.type,
+    sourceLabel,
+    release: sourceLabel,
+    revision: source.revision,
+  };
+}
+
+export function statementsOf(entry) {
+  const qualification = entry?.qualification ?? {};
+  const groups = [["finding", qualification.findings], ["gap", qualification.gaps], ["right", qualification.rights]];
+  const statements = [];
+  for (const [kind, list] of groups) {
+    for (const item of Array.isArray(list) ? list : []) {
+      statements.push({
+        kind,
+        id: text(item?.evidence?.id),
+        attestor: text(item?.evidence?.attestor),
+        format: text(item?.evidence?.format),
+        summary: text(item?.evidence?.summary),
+        path: text(item?.path),
+        sha256: text(item?.sha256),
+      });
+    }
+  }
+  const report = qualification.report;
+  if (report && typeof report === "object") {
+    statements.push({
+      kind: "report",
+      id: text(report?.evidence?.id),
+      attestor: text(report?.evidence?.attestor),
+      format: text(report?.evidence?.format),
+      summary: text(report?.evidence?.summary),
+      path: text(report?.path),
+      sha256: text(report?.sha256),
+    });
+  }
+  return statements;
+}
+
+export function firstSummary(entry, kinds) {
+  const found = statementsOf(entry).find((statement) => kinds.includes(statement.kind) && statement.summary);
+  return found ? found.summary : null;
+}
+
+/* Everything the search box matches: the published ids and every published identity field of
+   the source, so a repository, package, path or commit is findable without a lookup table. */
+export function searchText(entry) {
+  const id = identity(entry);
+  const source = sourceIdentity(entry);
+  return [
+    id.entryId,
+    id.subjectId,
+    id.kind,
+    id.sourceType,
+    id.sourceLabel,
+    id.revision,
+    source.repository,
+    source.commit,
+    source.path,
+    source.packageName,
+    source.registry,
+    source.version,
+    source.integrity,
+    source.release,
+  ].filter((part) => part !== null).join(" ");
+}
+
+/*
+ * The framework an entry is published under, read from the entry id.
+ *
+ * The index publishes ids shaped `<kind>.<provider>.<name>`, and the first
+ * segment is the same value as `subject.kind` - so the shape is verifiable
+ * rather than assumed. When an id does NOT start with its own kind, the
+ * provider is not determinable from what is published and the entry is grouped
+ * as unattributed instead of being forced into a guess.
+ *
+ * The index carries no category, tag or collection field. Thematic categories
+ * are therefore Not published, and are shown as such rather than invented.
+ */
+export function providerOf(entry) {
+  const entryId = text(entry?.entryId);
+  const kind = text(entry?.subject?.kind);
+  if (!entryId || !kind) return null;
+  if (!entryId.startsWith(`${kind}.`)) return null;
+  const rest = entryId.slice(kind.length + 1);
+  const provider = rest.split(".")[0];
+  return provider.length > 0 ? provider : null;
+}
+
+/*
+ * The part of the entry id that actually distinguishes one card from another.
+ *
+ * `subject.id` alone is NOT distinguishing: 36 entries share one with another
+ * entry (`governance-quality` is used by three). Dropping only the
+ * `<kind>.<provider>.` prefix keeps every remainder unique once the provider
+ * badge beside it is taken into account - verified against the published index,
+ * where that pair has no collisions. The full entry id stays on the tooltip and
+ * in the inspector.
+ */
+export function cardTitleOf(entry) {
+  const entryId = text(entry?.entryId);
+  const kind = text(entry?.subject?.kind);
+  if (!entryId) return null;
+  if (!kind || !entryId.startsWith(`${kind}.`)) return entryId;
+  const rest = entryId.slice(kind.length + 1);
+  const withoutProvider = rest.split(".").slice(1).join(".");
+  return withoutProvider.length > 0 ? withoutProvider : rest;
+}

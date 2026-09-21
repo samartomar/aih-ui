@@ -22,10 +22,54 @@ An outside developer can build this UI from public package interfaces. The files
 
 Pack each local package with `npm pack`, install the tarballs into a throwaway consumer project, and run the scenario there. Do not use `npm link`: it hides packaging errors such as a wrong `exports` map or a missing file.
 
-## The first clickable page: Sources & Catalogs
+## How the page is put together
 
-`src/index.html` and `src/catalog.js` are the Sources & Catalogs page, built from
-`prototype/screens/admin-sources.html`. It shows the whole installed
+`src/index.html` carries the markup; `src/main.js` composes three parts and
+connects their callbacks. Nothing else knows about more than its own job.
+
+```
+src/
+  main.js               composes the parts; holds no state, renders nothing
+  app/                  the shell: rails, inspector tabs, the error banner
+    shell.js            rail collapse, tab switching, the error banner
+    elements.js         the shell's own element ids
+    dom.js              el / text / collectIds, shared by both features
+    absence.js          Not published / Not supplied / Not connected
+    workbench.css       what this page adds to the design source's stylesheets
+  catalog/              Sources & Catalogs: it presents published data only
+    controller.js       the ONE owner of selection and filter state
+    entry.js            pure readers over a published entry
+    selectors.js        search, filters, sorting, inventory counts (pure)
+    index-source.js     fetch + contract assertion of the index and summary
+    view-state.js       the view kept for a browser session
+    navigation.js       source navigation (the left rail)
+    metrics.js          the metric tiles
+    toolbar.js          the filter toolbar
+    cards.js            the cards and the grid
+    details.js          selected-item details and evidence display
+    provenance.js       the masthead facts and the provenance strip
+    elements.js         the feature's element ids, grouped per component
+  governance/           one vertical slice through @aihq/core
+    controller.js       the workflow state; holds no policy or digest logic
+    transport.js        every /api/* call
+    bytes.js            base64 <-> bytes, and exact-byte downloads
+    vocabulary.js       the six axes, their tones, and every typed refusal
+    inputs.js           subject readout, evidence import, operator fields
+    prepared.js         prepare, the prepared artifacts, the downloads
+    statuses.js         the six verification statuses
+    verdict.js          consume, and the consumption verdict
+    detector.js         detector provenance and the validation-mode button
+    rows.js / elements.js
+```
+
+Each component owns its own DOM subtree and its own listeners. Data and
+callbacks are passed in explicitly: no component reaches into another's DOM or
+mutates another's state, and selection and filter state lives in exactly one
+place. There is no event bus.
+
+### What the page shows
+
+It shows the whole installed
 `@aihq/catalog` index: list, search, and filter by kind and source; clicking a card
 shows that entry's identities and evidence statements in the inspector. It presents
 and filters only — it never decides, compiles, or publishes.
@@ -112,8 +156,10 @@ operator-supplied decision, target and effect -> prepare through `@aihq/core` ->
 save the exact bytes Core returned -> reopen them -> consume them independently ->
 display the result.
 
-`src/governance.js` collects input and renders answers. It holds no policy, digest
-or compile logic: every derivation happens in `@aihq/core` behind `/api/*`.
+`src/governance/` collects input and renders answers. It holds no policy, digest
+or compile logic: every derivation happens in `@aihq/core` behind `/api/*`. The
+workflow state is in `controller.js`; the displays it drives are independent
+components, and the HTTP calls and exact-byte downloads are their own modules.
 
 ### What the pane will not do
 
@@ -166,10 +212,36 @@ supplies the key that validates it, nothing has been verified.
 node tools/preview.mjs
 ```
 
-It serves `http://127.0.0.1:4173/`. Two halves: a static page, and a backend
-(`tools/preview-api.mjs`) that runs `tools/core-service.mjs` inside a throwaway
-consumer. All Node-only package APIs and all filesystem access live on that side;
-the page never sees a path it did not supply.
+It serves `http://127.0.0.1:4173/`. Two halves: a static page, and a backend that
+runs `tools/service/` inside a throwaway consumer. All Node-only package APIs and
+all filesystem access live on that side; the page never sees a path it did not
+supply.
+
+```
+tools/
+  preview.mjs           builds the run directory and serves it
+  packages.mjs          the three tarballs, from committed checkpoints only
+  server/               HTTP, sessions, and the seam to the consumer
+    api.mjs             routing and request handling, nothing else
+    sessions.mjs        server-owned session directories and operator paths
+    service-client.mjs  one request, one child process, in the consumer
+    static.mjs          the static half of the server
+    assets.mjs          what is copied where, discovered rather than listed
+  service/              COPIED INTO THE CONSUMER, run from there
+    core-service.mjs    the operation dispatcher (stdin -> stdout)
+    catalog-access.mjs  the installed @aihq/catalog, through its export map
+    core-adapter.mjs    calls to @aihq/core's public API; never a reimplementation
+    scan-verifier.mjs   the Scan verifier wiring and its trust boundary
+    artifacts.mjs       exact-byte artifact I/O
+    validation-fixture.mjs  VALIDATION ONLY: the one module that manufactures
+                            anything, and it labels everything it makes
+```
+
+The run directory mirrors `src/` at its root, so `src/catalog/cards.js` is served
+at `/catalog/cards.js` and the module tree the page imports is the module tree
+that is served. Page and service files are DISCOVERED by walking those
+directories, never listed, so a new module cannot be left out; the preview then
+fetches every page asset before it prints its URL.
 
 `tools/packages.mjs` resolves all three packages into tarballs and installs them
 there with `--ignore-scripts`. Everything is reached through published export
@@ -196,11 +268,12 @@ Malformed requests are the client's problem, not the server's: a request URL or 
 escape that does not parse is answered with `400` and the preview keeps serving. The
 classification lives in `tools/preview-request.mjs`.
 
-`tools/check-page-contract.mjs` runs two offline regressions with no install and no
-server — that every element id the page modules collect exists in `index.html`
-exactly once, and that request paths classify as above. The required id set is
-derived from `src/catalog.js` and `src/governance.js` rather than restated, so it
-cannot drift from them:
+`tools/check-page-contract.mjs` runs three offline regressions with no install and
+no server — that every element id the page modules collect exists in `index.html`
+exactly once, that the module graph resolves and every asset the page references
+is one the preview copies, and that request paths classify as above. The required
+id set is derived by reading EVERY module under `src/` rather than restated, so
+splitting a module cannot move an id out of the check's view:
 
 ```
 node tools/check-page-contract.mjs
