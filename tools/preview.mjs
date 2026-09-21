@@ -1,18 +1,28 @@
 #!/usr/bin/env node
 /*
- * Builds a throwaway preview of the Policy Workbench Sources & Catalogs page from the
- * published @aihq/catalog package and serves it on loopback.
+ * Builds a throwaway preview of the Policy Workbench and serves it on 127.0.0.1.
  *
- * The catalog is consumed the way an outside developer consumes it: npm pack, install the
- * tarball into a throwaway consumer with --ignore-scripts, then resolve
- * @aihq/catalog/catalog-index.json through the installed package's export map. The catalog
- * repository's own source tree and defaults/ directory are never read directly and npm link
- * is never used.
+ * All three packages are consumed the way an outside developer consumes them: npm pack,
+ * install the tarballs into a throwaway consumer with --ignore-scripts, then resolve every
+ * entry point through the installed packages' export maps. No repository's source tree is
+ * read, no `dist/` is deep-imported, and npm link is never used.
  *
- * The generated run directory lives outside every repository. It receives the page files
- * plus the resolved index JSON; nothing is copied back into the UI repository.
+ * Installing @aihq/core@0.6.2, @aihq/scan@0.4.0 or @aihq/catalog@0.2.0 FROM NPM does not
+ * provide the APIs this preview needs: the published versions predate them. Only the local
+ * tarballs carry the governance-input contract.
+ *
+ * Two halves:
+ *   - a static page, served from the run directory;
+ *   - an API (tools/preview-api.mjs) that runs tools/core-service.mjs inside the consumer.
+ *     Every Node-only package API and every filesystem access lives on that side.
+ *
+ * The generated run directory lives outside every repository. Nothing is copied back into
+ * the UI repository.
  *
  * Usage: node tools/preview.mjs [--port 4173] [--quiet]
+ *
+ * Environment: CORE_TGZ / SCAN_TGZ / CATALOG_TGZ use a supplied tarball instead of packing
+ * a checkout; CORE_REPO / SCAN_REPO / CATALOG_REPO name the checkouts to read from.
  */
 
 import { createHash } from "node:crypto";
@@ -21,9 +31,11 @@ import { createServer } from "node:http";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { copyFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, extname, join, resolve, sep } from "node:path";
+import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { EXPECTED_FORMAT, EXPECTED_VERSION, contractViolations } from "./catalog-index-contract.mjs";
+import { installConsumer, resolvePackage } from "./packages.mjs";
+import { createApi } from "./preview-api.mjs";
 import { classifyRequestPath } from "./preview-request.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -33,7 +45,9 @@ const CATALOG_INDEX_EXPORT = "@aihq/catalog/catalog-index.json";
 const CATALOG_PACKAGE = "@aihq/catalog";
 
 // Page files that make up the served page. Each is copied into the run directory.
-const PAGE_FILES = ["src/index.html", "src/catalog.js"];
+const PAGE_FILES = ["src/index.html", "src/catalog.js", "src/governance.js"];
+// Backend files copied INTO the consumer, where the installed packages resolve.
+const SERVICE_FILES = ["tools/core-service.mjs", "tools/fixture-candidate.mjs"];
 // Presentation-only assets carried over from the design source (prototype/), unmodified.
 const PRESENTATION_FILES = [
   "prototype/screens/tokens.css",
@@ -70,58 +84,8 @@ function fatal(message) {
 
 /* ------------------------------------------------------------------ commands */
 
-function npmArgs(rest) {
-  // On Windows npm is a .cmd shim; spawnSync cannot execute it without a shell. Invoke the npm
-  // CLI entry point through this same Node executable instead of building a shell string. The
-  // npm CLI always exports npm_execpath to the scripts it runs, but fall back to the shim.
-  const cli = process.env.npm_execpath;
-  if (cli && /\.[cm]?js$/.test(cli)) return [cli, ...rest];
-  return null;
-}
 
-function runNpm(rest, cwd) {
-  const viaNode = npmArgs(rest);
-  const command = viaNode ? process.execPath : process.platform === "win32" ? "npm.cmd" : "npm";
-  const commandArgs = viaNode ?? rest;
-  const useShell = !viaNode && process.platform === "win32";
-  const result = spawnSync(command, commandArgs, {
-    cwd,
-    encoding: "utf8",
-    ...(useShell ? { shell: true } : {}),
-    windowsHide: true,
-    // npm pack --json lists every packaged file, which is well past spawnSync's 1 MB default.
-    maxBuffer: 256 * 1024 * 1024,
-  });
-  if (result.error) fatal(`could not run npm (${rest.join(" ")}): ${result.error.message}`);
-  if (result.status !== 0) {
-    process.stderr.write(result.stdout ?? "");
-    process.stderr.write(result.stderr ?? "");
-    fatal(`npm ${rest.join(" ")} failed in ${cwd} with exit code ${result.status}`);
-  }
-  return { stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
-}
 
-function ensureCatalogBuild(catalogRoot) {
-  const distEntry = join(catalogRoot, "dist", "index.js");
-  let present = false;
-  try {
-    present = statSync(distEntry).isFile();
-  } catch {
-    present = false;
-  }
-  if (present) {
-    log(`catalog: dist present at ${distEntry}`);
-    return;
-  }
-  log(`catalog: dist missing, running npm ci and npm run build in ${catalogRoot}`);
-  runNpm(["ci"], catalogRoot);
-  runNpm(["run", "build"], catalogRoot);
-  try {
-    if (!statSync(distEntry).isFile()) throw new Error("missing dist/index.js");
-  } catch (error) {
-    fatal(`catalog build finished without a usable dist/index.js: ${error.message}`);
-  }
-}
 
 function readJson(path) {
   try {
@@ -135,50 +99,7 @@ function sha256File(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
-function packCatalog(catalogRoot, packDestination) {
-  const packed = runNpm(["pack", "--json", "--pack-destination", packDestination], catalogRoot);
-  const stdout = packed.stdout.trim();
-  let report;
-  try {
-    report = JSON.parse(stdout);
-  } catch {
-    fatal(`npm pack --json did not return JSON:\n${stdout}`);
-  }
-  const record = Array.isArray(report) ? report[0] : report;
-  if (!record || typeof record.filename !== "string") {
-    fatal(`npm pack --json did not report a filename:\n${stdout}`);
-  }
-  const tarball = resolve(packDestination, record.filename);
-  try {
-    if (!statSync(tarball).isFile()) throw new Error("not a file");
-  } catch (error) {
-    fatal(`npm pack reported ${tarball} but it is not readable: ${error.message}`);
-  }
-  return {
-    tarball,
-    filename: record.filename,
-    sha256: sha256File(tarball),
-    integrity: typeof record.integrity === "string" ? record.integrity : null,
-  };
-}
 
-function installIntoConsumer(consumerDir, tarball) {
-  writeFileSync(
-    join(consumerDir, "package.json"),
-    `${JSON.stringify(
-      {
-        name: "aih-ui-preview-consumer",
-        version: "0.0.0",
-        private: true,
-        type: "module",
-        description: "Throwaway consumer. Generated by aih-ui tools/preview.mjs.",
-      },
-      null,
-      2,
-    )}\n`,
-  );
-  runNpm(["install", "--ignore-scripts", "--no-audit", "--no-fund", tarball], consumerDir);
-}
 
 /* ------------------------------------------------------------------- resolve */
 
@@ -221,8 +142,25 @@ function readInstalledPackageJson(consumerDir) {
 
 /* --------------------------------------------------------------------- server */
 
-function createStaticServer(root) {
-  return createServer((request, response) => {
+function createStaticServer(root, handleApi) {
+  return createServer(async (request, response) => {
+    // The API is checked first and owns its own paths. Its handler returns false
+    // for anything it does not claim, and the static path takes over from there.
+    let pathname;
+    try {
+      pathname = new URL(request.url, "http://127.0.0.1").pathname;
+    } catch {
+      response.writeHead(400, { "content-type": "text/plain; charset=utf-8" }).end("bad request");
+      return;
+    }
+    if (pathname.startsWith("/api/")) {
+      if (await handleApi(request, response, pathname)) return;
+      response
+        .writeHead(404, { "content-type": "application/json; charset=utf-8" })
+        .end(JSON.stringify({ ok: false, error: `no such endpoint: ${pathname}` }));
+      return;
+    }
+
     // request.url is attacker-controlled; preview-request.mjs classifies it, and nothing from
     // it is used before it parses. A malformed URL or bad percent escape answers 400 and the
     // server keeps serving.
@@ -259,34 +197,61 @@ function listen(server, port) {
 /* ----------------------------------------------------------------------- main */
 
 async function main() {
-  const catalogRoot = resolve(REPO_ROOT, "..", "aih-catalog");
-  try {
-    if (!statSync(catalogRoot).isDirectory()) throw new Error("not a directory");
-  } catch (error) {
-    fatal(`catalog checkout not found at ${catalogRoot}: ${error.message}`);
-  }
-  for (const relative of [...PAGE_FILES, ...PRESENTATION_FILES]) {
+  const repos = {
+    core: process.env.CORE_REPO ?? resolve(REPO_ROOT, "..", "ai-harness"),
+    scan: process.env.SCAN_REPO ?? resolve(REPO_ROOT, "..", "aih-scan"),
+    catalog: process.env.CATALOG_REPO ?? resolve(REPO_ROOT, "..", "aih-catalog"),
+  };
+  for (const relative of [...PAGE_FILES, ...SERVICE_FILES, ...PRESENTATION_FILES]) {
     try {
       if (!statSync(join(REPO_ROOT, relative)).isFile()) throw new Error("not a file");
     } catch (error) {
-      fatal(`page asset ${relative} is missing from ${REPO_ROOT}: ${error.message}`);
+      fatal(`asset ${relative} is missing from ${REPO_ROOT}: ${error.message}`);
     }
   }
-
-  ensureCatalogBuild(catalogRoot);
 
   const runDir = mkdtempSync(join(tmpdir(), "aih-ui-preview-"));
   const consumerDir = join(runDir, "consumer");
   mkdirSync(consumerDir, { recursive: true });
   log(`run: new temp folder outside every repo -> ${runDir}`);
 
-  const archive = packCatalog(catalogRoot, runDir);
-  log(`catalog: packed ${archive.filename} (sha256 ${archive.sha256})`);
+  // --- 1. the three packages, as tarballs -----------------------------------
+  //
+  // A checkout another worker is mid-change is read only through git: its
+  // committed checkpoint is snapshotted and built elsewhere, never in place.
+  let packages;
+  try {
+    packages = ["core", "scan", "catalog"].map((name) =>
+      resolvePackage({
+        name,
+        repo: repos[name],
+        supplied: process.env[`${name.toUpperCase()}_TGZ`],
+        workspace: runDir,
+        log,
+      }),
+    );
+  } catch (error) {
+    fatal(error.message);
+  }
+  for (const pkg of packages) {
+    log(`${pkg.name}: ${pkg.sha256}  (${pkg.commit.slice(0, 12)}, ${pkg.source})`);
+  }
 
-  installIntoConsumer(consumerDir, archive.tarball);
-  const installed = readInstalledPackageJson(consumerDir);
-  log(`catalog: installed ${installed.name}@${installed.version} into ${consumerDir}`);
+  // --- 2. one throwaway consumer with all three installed -------------------
+  try {
+    installConsumer({
+      consumerDir,
+      packages,
+      extraFiles: Object.fromEntries(
+        SERVICE_FILES.map((relative) => [relative.split("/").pop(), join(REPO_ROOT, relative)]),
+      ),
+      log,
+    });
+  } catch (error) {
+    fatal(error.message);
+  }
 
+  // --- 3. the index, through the installed export map -----------------------
   const indexPath = await resolveIndexThroughExportMap(consumerDir);
   const index = readJson(indexPath);
   const violations = contractViolations(index);
@@ -294,53 +259,57 @@ async function main() {
   log(
     `index: ${CATALOG_INDEX_EXPORT} -> ${indexPath} (format ${index.format}, version ${index.version}, ${index.entries.length} entries)`,
   );
+  const installed = readInstalledPackageJson(consumerDir);
+  const catalogPkg = packages.find((pkg) => pkg.name === "catalog");
 
-  // Copy the page files and the resolved index JSON into the run directory. The index is
-  // served verbatim; the page fetches it as a static asset. src/catalog.js is additionally
-  // placed at the run root so the served page can load it as a plain module by name.
+  // --- 4. page files into the run directory ---------------------------------
   for (const relative of PAGE_FILES) {
     const target = join(runDir, relative);
     mkdirSync(dirname(target), { recursive: true });
     await copyFile(join(REPO_ROOT, relative), target);
+    // Also at the run root, so the page loads each module by plain name.
+    await copyFile(join(REPO_ROOT, relative), join(runDir, relative.split("/").pop()));
   }
-  await copyFile(join(REPO_ROOT, "src", "catalog.js"), join(runDir, "catalog.js"));
   for (const relative of PRESENTATION_FILES) {
-    const name = relative.split("/").pop();
-    await copyFile(join(REPO_ROOT, relative), join(runDir, name));
+    await copyFile(join(REPO_ROOT, relative), join(runDir, relative.split("/").pop()));
   }
   const indexTarget = join(runDir, "catalog-index.json");
   await copyFile(indexPath, indexTarget);
-  log(`page: copied ${[...PAGE_FILES, ...PRESENTATION_FILES].length} files and catalog-index.json`);
+  log(`page: copied ${PAGE_FILES.length + PRESENTATION_FILES.length} files and catalog-index.json`);
 
-  // Summary shown in the provenance strip: the installed package's own version plus the
-  // tarball identity actually installed, never the index's own package block alone.
-  writeFileSync(
-    join(runDir, "summary.json"),
-    `${JSON.stringify(
-      {
-        format: index.format,
-        version: index.version,
-        entryCount: index.entries.length,
-        organizationAdmission:
-          typeof index.organizationAdmission === "string" ? index.organizationAdmission : null,
-        indexSha256: sha256File(indexTarget),
-        package: {
-          name: installed.name,
-          version: installed.version,
-          tarball: archive.filename,
-          tarballSha256: archive.sha256,
-          integrity: archive.integrity,
-        },
-        indexPackage: index.package ?? null,
-      },
-      null,
-      2,
-    )}\n`,
-  );
+  // Provenance shown in the page's strip: what was ACTUALLY installed, by
+  // tarball hash and commit, never the index's own package block alone.
+  const summary = {
+    format: index.format,
+    version: index.version,
+    entryCount: index.entries.length,
+    organizationAdmission:
+      typeof index.organizationAdmission === "string" ? index.organizationAdmission : null,
+    indexSha256: sha256File(indexTarget),
+    package: {
+      name: installed.name,
+      version: installed.version,
+      tarball: basename(catalogPkg.tarball),
+      tarballSha256: catalogPkg.sha256,
+      commit: catalogPkg.commit,
+    },
+    packages: packages.map((pkg) => ({
+      name: pkg.name,
+      tarball: basename(pkg.tarball),
+      sha256: pkg.sha256,
+      commit: pkg.commit,
+      source: pkg.source,
+    })),
+    indexPackage: index.package ?? null,
+  };
+  writeFileSync(join(runDir, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
 
-  const server = createStaticServer(runDir);
+  // --- 5. serve ------------------------------------------------------------
+  const handleApi = createApi({ consumerDir, runDir, summary });
+  const server = createStaticServer(runDir, handleApi);
   const address = await listen(server, PORT);
   const url = `http://127.0.0.1:${address.port}/`;
+
   const health = await fetch(`${url}catalog-index.json`);
   if (!health.ok) fatal(`served index is not reachable at ${url}catalog-index.json (${health.status})`);
   const served = await health.json();
@@ -349,12 +318,16 @@ async function main() {
   }
   const page = await fetch(url);
   if (!page.ok) fatal(`served page is not reachable at ${url} (${page.status})`);
+  // Prove the backend answers before announcing the URL: a page that loads but
+  // cannot reach Core would look fine and do nothing.
+  const api = await fetch(`${url}api/packages`);
+  if (!api.ok) fatal(`the backend API is not reachable at ${url}api/packages (${api.status})`);
 
   log(`run directory: ${runDir}`);
   log(`consumer: ${consumerDir}`);
   log(`index contract: ${served.format} version ${served.version} (${served.entries.length} entries)`);
   process.stdout.write(`${url}\n`);
-  log("press Ctrl+C to stop serving; delete the run directory when finished");
+  log("press Ctrl+C to stop serving; the run directory is removed on exit");
 
   const shutdown = () => {
     server.close(() => {

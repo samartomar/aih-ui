@@ -5,7 +5,7 @@
  *
  *   node tools/check-page-contract.mjs
  *
- * 1. Every element id src/catalog.js collects exists in src/index.html, exactly once. A
+ * 1. Every element id the page modules collect exists in src/index.html, exactly once. A
  *    mismatch is a blank page, so it is checked here rather than discovered in a browser.
  * 2. Request paths classify the way the preview server must answer them: a normal request is
  *    served, a malformed URL or percent escape is a 400 (the bug this protects), and
@@ -33,19 +33,29 @@ function check(description, condition, detail = "") {
 
 const html = readFileSync(join(REPO_ROOT, "src", "index.html"), "utf8");
 const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]);
-const required = [
-  "provenance-strip", "toggle-nav-btn", "toggle-inspector-btn", "nav-rail", "nav-sources-count",
-  "rail-package-version", "rail-package-count", "rail-kind-list", "rail-source-list",
-  "framework-matrix-tabs", "masthead-version", "masthead-facts", "kind-filters",
-  "visible-count", "visible-caption", "cards-grid", "inspector-rail",
-  "inspector-name", "inspector-kind", "inspector-version", "inspector-subtitle", "inspector-flags",
-  "inspector-icon", "close-inspector-btn", "pane-details", "pane-security", "pane-json",
-  "details-identity", "details-source", "details-desc", "details-capabilities", "details-artifacts",
-  "scanner-report-statement", "statement-count", "security-statements", "catalog-error",
-  "catalog-search", "source-filter", "sort-select",
-];
-const missing = required.filter((id) => !ids.includes(id));
-check("index.html carries every id the page collects", missing.length === 0, missing.join(", "));
+
+// The required set is DERIVED from the modules rather than restated here. A
+// hardcoded copy drifts: the page grows an element, the list does not, and the
+// check keeps passing while the page is broken.
+const MODULES = ["catalog.js", "governance.js"];
+const required = new Set();
+for (const module of MODULES) {
+  const source = readFileSync(join(REPO_ROOT, "src", module), "utf8");
+  // ids collected in bulk: `const ids = [ "a", "b", ... ];`
+  for (const block of source.matchAll(/const ids = \[([\s\S]*?)\];/g)) {
+    for (const literal of block[1].matchAll(/"([a-z0-9-]+)"/g)) required.add(literal[1]);
+  }
+  // and ids looked up one at a time
+  for (const lookup of source.matchAll(/getElementById\("([^"]+)"\)/g)) required.add(lookup[1]);
+}
+check("the page modules collect at least one id", required.size > 0, "found none");
+
+const missing = [...required].filter((id) => !ids.includes(id));
+check(
+  `index.html carries every id the page collects (${required.size} checked)`,
+  missing.length === 0,
+  missing.join(", "),
+);
 const duplicates = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
 check("index.html has no duplicate id", duplicates.length === 0, duplicates.join(", "));
 

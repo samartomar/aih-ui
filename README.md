@@ -60,32 +60,104 @@ No entry, count or label comes from a hardcoded total: every number on the page 
 counted from the installed index at run time. Absence markers are never counted as
 release labels or as source identities.
 
-`tools/preview.mjs` builds and serves it against the real published package:
+## The Governance pane: one vertical slice through Core
+
+The inspector's **Governance** tab runs the whole contract end to end:
+
+catalog selection -> inspect published information -> import evidence -> select an
+operator-supplied decision, target and effect -> prepare through `@aihq/core` ->
+save the exact bytes Core returned -> reopen them -> consume them independently ->
+display the result.
+
+`src/governance.js` collects input and renders answers. It holds no policy, digest
+or compile logic: every derivation happens in `@aihq/core` behind `/api/*`.
+
+### What the pane will not do
+
+It never manufactures a decision, an approval, verifier trust or a signing key.
+Those are operator inputs, and what is not supplied is reported as **Not supplied**
+and refused. The one exception is the explicitly labelled **validation mode**,
+which generates a fixture and its matching operator trust so the plumbing can be
+exercised. Its output carries "Signed test fixture — no detector executed"
+wherever it appears.
+
+### Six statuses, six fields
+
+`structure`, `evidence`, `binding`, `authority`, `plan` and `execution` are
+rendered as six separate fields. Never one badge, and never one implying another.
+`execution` is always `not-attempted`: nothing is ever executed, so no screen says
+Applied, Executed or Published.
+
+A saved artifact may only ever *claim* a binding — the pane shows `claimed` there.
+Only independent consumption can report `bound`, and it re-derives the whole
+verdict from the bytes on disk.
+
+### Verification is about a signature, never a measurement
+
+"Attestation verified" and detector execution are two rows, always shown together.
+A signature proves who signed; it never establishes that the claimed measurements
+occurred. Only the operator's own `evidenceProvenance` declaration distinguishes
+them, and it is never inferred from the evidence.
+
+Imported material that carries `roots`, `expected`, `trust`, `publicKey` or
+`publicKeyPem` is refused outright: if the party supplying the evidence also
+supplies the key that validates it, nothing has been verified.
+
+### Known blocked states, rendered honestly
+
+- 429 of the 457 entries cannot bind today. `github` sources refuse with
+  `missing-repository-commit-provenance-record` and the one `npm` source with
+  `missing-tarball-sha512-record`. The pane shows the named reason and what it
+  would take to resolve it, never a generic failure.
+- The furthest any route reaches is `observation-missing` / `partial`:
+  qualification resolves, the effect is not executed.
+- AIH-supported qualification is unavailable. The index declares
+  `organizationAdmission: "not-authoritative"` and ships no signed support
+  receipt; the pane surfaces that field verbatim.
+- Genuine detector evidence is still outstanding. Everything shipped today is a
+  labelled fixture.
+
+## Running it
 
 ```
 node tools/preview.mjs
 ```
 
-It runs `npm ci` and `npm run build` in `../aih-catalog` when `dist` is missing,
-packs that checkout with `npm pack --json` into a new temp folder outside every
-repository, `npm install --ignore-scripts` the tarball into a throwaway consumer
-there, resolves `@aihq/catalog/catalog-index.json` through the installed package's
-export map, refuses to serve anything but format `aih-catalog-index` version `1`,
-copies the page files and that JSON into the run directory, and serves them on
-`http://127.0.0.1:4173/`. It prints the run directory and the URL it actually
-listened on. No `npm link`, and no catalog file is read except through the installed
-package.
+It serves `http://127.0.0.1:4173/`. Two halves: a static page, and a backend
+(`tools/preview-api.mjs`) that runs `tools/core-service.mjs` inside a throwaway
+consumer. All Node-only package APIs and all filesystem access live on that side;
+the page never sees a path it did not supply.
 
-The page needs the network for Tailwind, Inter, JetBrains Mono and Material Symbols,
-exactly as the prototype does. Catalog strings are rendered with `textContent`.
+`tools/packages.mjs` resolves all three packages into tarballs and installs them
+there with `--ignore-scripts`. Everything is reached through published export
+maps — no `npm link`, no `dist/` deep import, no sibling source, no fallback.
+
+**Installing @aihq/core@0.6.2, @aihq/scan@0.4.0 or @aihq/catalog@0.2.0 from npm
+does not provide these APIs.** The published versions predate them; only the local
+tarballs carry the governance-input contract.
+
+A checkout another worker is mid-change is never built and never packed. Its
+committed checkpoint is extracted with `git archive` into a workspace outside
+every repository, built there, and packed from there; the checkout itself is only
+read through git. Tarballs are cached by commit, and each run prints the commit
+and sha256 of what it actually installed. `CORE_TGZ` / `SCAN_TGZ` / `CATALOG_TGZ`
+supply a tarball directly, and then no checkout is read at all.
+
+`@aihq/catalog` exports `./catalog-index.json` and nothing for entry content. The
+index publishes every artifact's package-root-relative path, so the package root
+is derived from where the export map placed the index, and that relationship is
+checked rather than assumed. A failure there is reported; no internal directory is
+ever guessed. **Gap for @aihq/catalog: no export covers entry content.**
 
 Malformed requests are the client's problem, not the server's: a request URL or percent
 escape that does not parse is answered with `400` and the preview keeps serving. The
 classification lives in `tools/preview-request.mjs`.
 
 `tools/check-page-contract.mjs` runs two offline regressions with no install and no
-server — that every element id the page collects exists in `index.html` exactly once,
-and that request paths classify as above:
+server — that every element id the page modules collect exists in `index.html`
+exactly once, and that request paths classify as above. The required id set is
+derived from `src/catalog.js` and `src/governance.js` rather than restated, so it
+cannot drift from them:
 
 ```
 node tools/check-page-contract.mjs

@@ -14,6 +14,8 @@
  * index does not carry.
  */
 
+import { collectGovernanceDom, governanceSelect } from "./governance.js";
+
 const NOT_PUBLISHED = "Not published";
 /* Three different absences, kept apart on purpose:
    - NOT_PUBLISHED: a package field the index genuinely does not carry.
@@ -802,6 +804,8 @@ function selectEntry(entryId) {
   if (dom.inspectorRail.classList.contains("w-0")) toggleInspector();
   renderCards();
   renderInspector();
+  const entry = state.entries.find((candidate) => text(candidate?.entryId) === entryId) ?? null;
+  void governanceSelect(entry);
 }
 
 function switchTab(tab) {
@@ -816,6 +820,7 @@ function switchTab(tab) {
   }
   dom.paneDetails.classList.toggle("hidden", tab !== "details");
   dom.paneSecurity.classList.toggle("hidden", tab !== "security");
+  dom.paneGovernance.classList.toggle("hidden", tab !== "governance");
   dom.paneJson.classList.toggle("hidden", tab !== "json");
 }
 
@@ -855,6 +860,7 @@ function collectDom() {
     "inspector-icon", "close-inspector-btn", "pane-details", "pane-security", "pane-json",
     "details-identity", "details-source", "details-desc", "details-capabilities", "details-artifacts",
     "scanner-report-statement", "statement-count", "security-statements", "catalog-error",
+    "pane-governance",
   ];
   for (const id of ids) {
     const node = document.getElementById(id);
@@ -865,6 +871,9 @@ function collectDom() {
   dom.search = document.getElementById("catalog-search");
   dom.sourceFilter = document.getElementById("source-filter");
   dom.sortSelect = document.getElementById("sort-select");
+  // The governance pane owns its own elements and its own Core calls. This page
+  // hands it the selection and nothing else.
+  collectGovernanceDom();
 }
 
 function mastheadFacts() {

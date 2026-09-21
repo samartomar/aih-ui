@@ -276,6 +276,7 @@
 <div class="flex items-center p-0.5 rounded bg-surface-container-low border border-surface-container-high/40 text-[11px] gap-0.5" role="tablist">
 <button class="flex-1 py-1 px-1 rounded text-center transition-colors inspector-tab-btn bg-surface-container text-primary font-semibold shadow-xs" data-tab="details" type="button" role="tab" aria-selected="true">Details</button>
 <button class="flex-1 py-1 px-1 rounded text-center transition-colors inspector-tab-btn text-on-surface-variant hover:text-on-surface" data-tab="security" type="button" role="tab" aria-selected="false">Security Scan</button>
+<button class="flex-1 py-1 px-1 rounded text-center transition-colors inspector-tab-btn text-on-surface-variant hover:text-on-surface" data-tab="governance" type="button" role="tab" aria-selected="false">Governance</button>
 <button class="flex-1 py-1 px-1 rounded text-center transition-colors flex items-center justify-center gap-1 inspector-tab-btn text-on-surface-variant hover:text-on-surface" data-tab="json" type="button" role="tab" aria-selected="false">
 <span class="">Policy JSON</span>
 <span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
@@ -348,6 +349,105 @@
 </label>
 </div>
 </div>
+</div>
+<div class="space-y-3 hidden" id="pane-governance">
+
+<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/40 text-[10.5px] text-on-surface-variant leading-snug">
+<span class="font-semibold text-on-surface">Operator inputs only.</span> This page never
+manufactures a decision, an approval, verifier trust or a signing key. What you do not supply
+is reported as <span class="font-mono text-outline">Not supplied</span> and refused.
+</div>
+
+<div class="space-y-1">
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline">1 &middot; Subject identity (Core-derived)</span>
+<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-subject"></div>
+</div>
+
+<div class="space-y-1">
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline">2 &middot; Import evidence</span>
+<label class="flex items-center gap-2 p-2 rounded bg-surface-container-low border border-surface-container-high/40 cursor-pointer hover:border-primary/40 transition-colors">
+<span class="material-symbols-outlined text-[14px] text-primary">upload_file</span>
+<span class="text-[11px] text-on-surface-variant">Choose an organization evidence envelope</span>
+<input class="hidden" id="gov-evidence-file" type="file" accept=".json,application/json">
+</label>
+<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-evidence"></div>
+</div>
+
+<div class="space-y-1">
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline">3 &middot; Operator decision, target and effect</span>
+<div class="space-y-1.5">
+<label class="block">
+<span class="text-[10px] text-outline font-mono">Decision id</span>
+<input class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-surface-container-high/50 font-mono text-[10.5px] text-on-surface focus:border-primary/60 focus:outline-none" id="gov-decision-id" type="text" placeholder="Not supplied" autocomplete="off">
+</label>
+<label class="block">
+<span class="text-[10px] text-outline font-mono">Decision digest</span>
+<input class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-surface-container-high/50 font-mono text-[10.5px] text-on-surface focus:border-primary/60 focus:outline-none" id="gov-decision-digest" type="text" placeholder="sha256:..." autocomplete="off">
+</label>
+<div class="flex gap-1.5">
+<label class="flex-1">
+<span class="text-[10px] text-outline font-mono">Target</span>
+<input class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-surface-container-high/50 font-mono text-[10.5px] text-on-surface focus:border-primary/60 focus:outline-none" id="gov-target" type="text" value="claude" autocomplete="off">
+</label>
+<label class="flex-1">
+<span class="text-[10px] text-outline font-mono">Effect</span>
+<select class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-surface-container-high/50 font-mono text-[10.5px] text-on-surface focus:border-primary/60 focus:outline-none" id="gov-effect">
+<option value="observe">observe</option>
+<option value="configure">configure</option>
+<option value="install">install</option>
+<option value="use">use</option>
+</select>
+</label>
+</div>
+<div class="flex gap-1.5">
+<label class="flex-1">
+<span class="text-[10px] text-outline font-mono">Route (descriptive only)</span>
+<select class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-surface-container-high/50 font-mono text-[10.5px] text-on-surface focus:border-primary/60 focus:outline-none" id="gov-route">
+<option value="catalog">catalog</option>
+<option value="organization">organization</option>
+</select>
+</label>
+</div>
+</div>
+</div>
+
+<div class="space-y-1">
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline">4 &middot; Prepare and save</span>
+<button class="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-primary/15 border border-primary/40 text-primary text-[11.5px] font-medium hover:bg-primary/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed" id="gov-prepare-btn" type="button" disabled>
+<span class="material-symbols-outlined text-[14px]">build</span>
+<span class="">Prepare through Core</span>
+</button>
+<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-prepared"></div>
+<div class="flex gap-1.5">
+<button class="flex-1 text-[10px] font-mono px-1.5 py-1 rounded bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-40 disabled:cursor-not-allowed" id="gov-download-input" type="button" disabled>Download governance-input.json</button>
+<button class="flex-1 text-[10px] font-mono px-1.5 py-1 rounded bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-40 disabled:cursor-not-allowed" id="gov-download-evidence" type="button" disabled>Download evidence</button>
+</div>
+</div>
+
+<div class="space-y-1">
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline">5 &middot; Reopen and consume independently</span>
+<button class="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-secondary/15 border border-secondary/40 text-secondary text-[11.5px] font-medium hover:bg-secondary/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed" id="gov-consume-btn" type="button" disabled>
+<span class="material-symbols-outlined text-[14px]">rule</span>
+<span class="">Reopen saved bytes and consume</span>
+</button>
+<div class="grid grid-cols-2 gap-1" id="gov-statuses"></div>
+<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 text-[10.5px] space-y-1 text-on-surface-variant" id="gov-verdict"></div>
+</div>
+
+<div class="space-y-1 pt-1 border-t border-surface-container-high/40">
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline">Validation mode</span>
+<div class="p-2 rounded bg-tertiary/10 border border-tertiary/30 text-[10.5px] text-on-surface-variant leading-snug" id="gov-fixture-note">
+Generates a <span class="font-semibold text-tertiary">signed test fixture</span> and its matching
+operator trust, so the plumbing can be exercised without a detector. A verified signature
+authenticates a statement; it never establishes that the claimed measurements occurred.
+</div>
+<button class="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-surface-container border border-tertiary/40 text-tertiary text-[11px] font-medium hover:bg-surface-container-high transition-colors disabled:opacity-40 disabled:cursor-not-allowed" id="gov-fixture-btn" type="button" disabled>
+<span class="material-symbols-outlined text-[14px]">science</span>
+<span class="">Load labelled validation fixture</span>
+</button>
+<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-detector"></div>
+</div>
+
 </div>
 <div class="space-y-2.5 hidden" id="pane-json">
 <div class="flex items-center justify-between">
