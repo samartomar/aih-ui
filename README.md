@@ -51,6 +51,7 @@ src/
     elements.js         the feature's element ids, grouped per component
   governance/           one vertical slice through @aihq/core
     controller.js       the workflow state; holds no policy or digest logic
+    revisions.js        which input an answer belongs to (pure; no DOM)
     transport.js        every /api/* call
     bytes.js            base64 <-> bytes, and exact-byte downloads
     vocabulary.js       the six axes, their tones, and every typed refusal
@@ -424,6 +425,55 @@ where - sealed path, observed path, digest, length - or `Execution: refused`
 with Core's own refusal code and its plain-language sentence. An observed result
 still lists the declared files the scan did not reach.
 
+**What an observation proves, and what it does not.** Core reads the copies
+this session uploaded into its own temporary workspace, never the operator's
+machine. So `observed` proves that the snapshot they supplied is byte for byte
+the verified scan, at the same paths; it does not independently prove those
+files are still in place where they came from. The step note, the observation
+readout and the verdict's closing sentence all say that, because a reader who
+takes `observed` for "your installation is verified" has been told something
+the contract never established.
+
+### One verdict, one set of inputs
+
+Files are read asynchronously and requests answer in any order, so a folder
+chosen first can be read, sent and answered after the folder chosen second.
+Left alone, that puts a verdict on screen for inputs the session does not hold.
+The pane keeps the two together:
+
+- `src/governance/revisions.js` keeps a revision per verification input
+  (`authority`, `trust`, `material`, `observation`, `evidence`, `reopen`) and
+  one that moves on any of them. Every input change takes a token BEFORE a byte
+  is read, capturing the input's revision and the session it was supplied
+  under.
+- A token that is no longer current is not sent, and an answer that arrives for
+  one changes nothing: no state, no session id, no render. The input that
+  replaced it has its own send, and that one answers.
+- Moving to another session - a new selection, a reopen, a validation fixture -
+  stales every open token, so an upload in flight can never attach to the new
+  session or bring the old session id back. The one exception is the session an
+  upload's own answer opens: the uploads already in flight were supplied for
+  exactly that session, before it had an id.
+- Any verification input changing clears the previous verdict, statuses and
+  detector readout rather than leaving them beside inputs they do not answer
+  for.
+- Consume is offered only when nothing is in flight and every supplied input is
+  stored for the revision it is on now, and a consumption's answer is discarded
+  if the session or the inputs changed while it was being derived.
+- The session enforces the same ordering itself, because the page is not what
+  holds the bytes: `/api/operator-file` and `/api/observation` carry the
+  revision their input is on, and a store older than or equal to what that
+  input last stored in that session is refused as `superseded` without touching
+  a byte. A request with no usable revision is refused for the same reason.
+
+`tools/tests/` holds the offline regressions for both halves - the tracker's
+ordering rules and the session store's guard - with Node's own runner and no
+dependency:
+
+```
+node --test "tools/tests/*.test.mjs"
+```
+
 ### What the pane will not do
 
 It never manufactures a decision, an approval, verifier trust or a signing key.
@@ -600,6 +650,9 @@ location is derived from that id inside the run directory.
 Malformed requests are the client's problem, not the server's: a request URL or percent
 escape that does not parse is answered with `400` and the preview keeps serving. The
 classification lives in `tools/preview-request.mjs`.
+
+`tools/tests/` holds the offline regressions described under "One verdict, one
+set of inputs", run with `node --test "tools/tests/*.test.mjs"`.
 
 `tools/check-page-contract.mjs` runs three offline regressions with no install and
 no server — that every element id the page modules collect exists in `index.html`

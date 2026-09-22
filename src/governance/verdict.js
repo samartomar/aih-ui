@@ -96,13 +96,20 @@ export function createVerdict({ elements, onConsume }) {
  * The closing sentence, chosen from the execution value.
  *
  * An observed execution is the only case where Core read bytes that exist
- * outside the verified scan, and even then nothing was installed, applied,
- * executed or published: the sentence says exactly that and no more.
+ * outside the verified scan, and even then it read the COPIES this session
+ * uploaded into its own temporary workspace. That is a statement about the
+ * snapshot the operator supplied, not about their machine: the sentence says
+ * what was proved, says what it does not prove, and stops there.
  */
 function executionSentence(view) {
   if (view.execution === "observed") {
     const root = view.observation?.installRoot ?? "the install root";
-    return `Execution: observed. Core read the files under ${root} and found them one-to-one identical to the verified scan. Nothing was installed, applied, executed or published.`;
+    return (
+      `Execution: observed. Core read the copies this session uploaded into its own temporary workspace, ` +
+      `under ${root}, and found them one-to-one identical to the verified scan. That proves the snapshot ` +
+      `you supplied matches the scan; it does not independently prove those files are still in place on ` +
+      `your own machine. Nothing was installed, applied, executed or published.`
+    );
   }
   if (view.execution === "refused") {
     return "Execution: refused. The observation was refused; see the reason above. Nothing was installed, applied, executed or published.";

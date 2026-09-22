@@ -14,6 +14,15 @@
  * It never manufactures a decision, an approval, verifier trust or a signing
  * key. The one exception is the explicitly labelled validation fixture, which
  * has to be asked for by name and which says what it is everywhere it appears.
+ *
+ * ONE RULE RUNS THROUGH THE WHOLE FILE: a verdict is only ever shown for the
+ * inputs the session actually holds. Files are read asynchronously and requests
+ * answer in any order, so every input change takes a revision token first
+ * (revisions.js), and an answer that arrives for a token that is no longer
+ * current changes nothing at all - no state, no session id, no render. The
+ * previous verdict is cleared the moment any verification input changes, and
+ * Consume is offered only when nothing is in flight and every input the
+ * operator supplied is stored for the revision it is on now.
  */
 
 import { governanceElements } from "./elements.js";
@@ -23,6 +32,7 @@ import { createObservation } from "./observation.js";
 import { createOperatorFiles } from "./operator-files.js";
 import { createPrepared } from "./prepared.js";
 import { createReopen } from "./reopen.js";
+import { createRevisionTracker } from "./revisions.js";
 import { createStatuses } from "./statuses.js";
 import { createVerdict } from "./verdict.js";
 import { bytesToBase64, downloadBase64 } from "./bytes.js";
@@ -80,14 +90,27 @@ export function createGovernance() {
     reopened: null,
   };
 
-  // Uploads that may open the session run one after another, so the first
-  // response's session id is what every later upload is sent to.
+  // Which input every answer belongs to. Nothing is applied under a token this
+  // tracker no longer calls current.
+  const revisions = createRevisionTracker();
+  // How many verification inputs are between the operator changing them and
+  // their answer being applied or discarded. While any is in flight the session
+  // does not hold what the pane shows, so there is nothing consistent to
+  // consume.
+  let inFlight = 0;
+
+  // Uploads that may OPEN the session run one after another, so the first
+  // response's session id is what every later upload is sent to. Once the
+  // session exists there is nothing left to serialize: each upload carries the
+  // revision its input is on, the page applies only the newest answer, and the
+  // session refuses to store anything older for that input.
   let uploadChain = Promise.resolve();
   const enqueueUpload = (work) => {
     const next = uploadChain.then(work, work);
     uploadChain = next.catch(() => undefined);
     return next;
   };
+  const sendUpload = (work) => (state.sessionId === null ? enqueueUpload(work) : work());
 
   const inputs = createInputs({
     elements: elements.inputs,
@@ -125,36 +148,121 @@ export function createGovernance() {
       state.subject !== null && state.evidenceFacts?.parsed === true && inputs.complete(),
     );
     detector.setAvailable(state.subject !== null && state.subject.contentAvailable === true);
-    const saved = state.prepared?.prepared === true;
-    preparedView.setSaved(saved);
-    // Consumption reads bytes off disk, so it is available either because this
-    // session just prepared them or because the operator reopened them here.
-    verdict.setSaved(saved || state.reopened !== null);
+    preparedView.setSaved(state.prepared?.prepared === true);
+    verdict.setSaved(canConsume());
+  }
+
+  /**
+   * Whether consuming right now would answer for what the pane is showing.
+   *
+   * Consumption reads what the SESSION holds, so it is offered only when there
+   * are bytes to read - this session prepared them, or the operator reopened
+   * them here - and when what the session holds is what the operator supplied:
+   * nothing in flight, and every supplied input stored for its current
+   * revision. Anything else would put a verdict beside inputs it did not answer
+   * for.
+   */
+  function canConsume() {
+    const savedBytes = state.prepared?.prepared === true || state.reopened !== null;
+    return savedBytes && inFlight === 0 && storedForCurrentInputs();
+  }
+
+  /** Every input the operator supplied, stored for the revision it is on now. */
+  function storedForCurrentInputs() {
+    for (const kind of ["authority", "trust", "material"]) {
+      const stored = state.operatorFiles[kind];
+      // Not supplied is not out of date: the consumption refuses on that basis
+      // and says which input was missing.
+      if (stored === undefined) continue;
+      if (stored.ok !== true || stored.revision !== revisions.revisionOf(kind)) return false;
+    }
+    const observed = state.observation;
+    const supplied = observed.manifest !== null || observed.files !== null || observed.installRoot !== "";
+    if (!supplied) return true;
+    return observed.stored?.ok === true && observed.stored.revision === revisions.revisionOf("observation");
   }
 
   /** Everything downstream of the evidence, cleared together. */
   function clearResults() {
     preparedView.render(state.prepared);
+    clearVerdict();
+  }
+
+  /**
+   * The verdict, cleared.
+   *
+   * A verdict answers for the inputs it was derived from. The moment one of
+   * them changes it answers for nothing on screen, so it goes rather than sits
+   * there looking current.
+   */
+  function clearVerdict() {
     statuses.render(null);
     verdict.render(null);
     detector.render(null, state.fixture);
   }
 
-  /** One operator-supplied configuration file, stored server-side by kind. */
-  async function onOperatorFile(kind, file) {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    await enqueueUpload(async () => {
-      const stored = await storeOperatorFile({
-        sessionId: state.sessionId,
-        kind,
-        base64: bytesToBase64(bytes),
-      });
-      state.operatorFiles = { ...state.operatorFiles, [kind]: stored };
-      // The first operator file opens the session these inputs belong to, so
-      // everything that follows lands in the same one.
-      if (stored.sessionId !== undefined) state.sessionId = stored.sessionId;
-      operatorFiles.render(state.operatorFiles);
+  /**
+   * One verification input, from the operator changing it to its answer being
+   * applied or discarded.
+   *
+   * The token is taken FIRST, before a single byte is read: what matters is
+   * which input they had supplied when they supplied it, not which one they
+   * have by the time a folder has been read into memory.
+   */
+  async function supplying(slot, work) {
+    const token = revisions.begin(slot);
+    inFlight += 1;
+    clearVerdict();
+    refreshEnabled();
+    try {
+      await work(token);
+    } finally {
+      inFlight -= 1;
       refreshEnabled();
+    }
+  }
+
+  /**
+   * The session an answer came back in.
+   *
+   * A session the page did not have yet is the one the uploads already in
+   * flight are filling, so they keep their tokens. Any other change of session
+   * is a DIFFERENT session, and every input captured for the previous one is
+   * staled so it can never attach to this one.
+   */
+  function adoptSession(sessionId) {
+    if (sessionId === undefined || sessionId === null || sessionId === state.sessionId) return;
+    revisions.sessionChanged(sessionId, { opened: state.sessionId === null });
+    state.sessionId = sessionId;
+  }
+
+  /** One operator-supplied configuration file, stored server-side by kind. */
+  function onOperatorFile(kind, file) {
+    return supplying(kind, async (token) => {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      await sendUpload(async () => {
+        // Superseded before it was ever sent. Nothing is reported: the input
+        // that replaced this one has its own send, and that one answers.
+        if (!revisions.isCurrent(token, state.sessionId)) return;
+        const stored = await storeOperatorFile({
+          sessionId: state.sessionId,
+          kind,
+          revision: token.revision,
+          base64: bytesToBase64(bytes),
+        });
+        // An answer about an input the operator has since replaced, or about a
+        // session this page has left, is not an answer about anything on
+        // screen: no state, no session id, no render.
+        if (!revisions.isCurrent(token, state.sessionId)) return;
+        state.operatorFiles = {
+          ...state.operatorFiles,
+          [kind]: { ...stored, revision: token.revision },
+        };
+        // The first operator file opens the session these inputs belong to, so
+        // everything that follows lands in the same one.
+        adoptSession(stored.sessionId);
+        operatorFiles.render(state.operatorFiles);
+      });
     });
   }
 
@@ -166,35 +274,39 @@ export function createGovernance() {
    * exactly what the operator last chose. Until all three are there, nothing is
    * sent and the missing parts read "Not supplied".
    */
-  async function onObservationPart(part) {
-    const pending = { ...state.observation, ...part, stored: null };
-    state.observation = pending;
-    observation.render(state.observation);
-    const { manifest, installRoot, files } = pending;
-    if (manifest === null || files === null || installRoot === "") return;
-
-    const manifestBytes = new Uint8Array(await manifest.arrayBuffer());
-    const uploaded = await Promise.all(
-      files.map(async (file) => ({
-        relativePath: relativePathOf(file),
-        base64: bytesToBase64(new Uint8Array(await file.arrayBuffer())),
-      })),
-    );
-    await enqueueUpload(async () => {
-      const stored = await storeObservation({
-        sessionId: state.sessionId,
-        installRoot,
-        manifestBase64: bytesToBase64(manifestBytes),
-        files: uploaded,
-      });
-      // A part that changed while this was in flight is a different observation,
-      // and its own send is the one that answers for it.
-      if (state.observation !== pending) return;
-      state.observation = { ...pending, stored };
-      // Like the operator files, the first thing supplied opens the session these
-      // inputs belong to, so everything that follows lands in the same one.
-      if (stored.sessionId !== undefined) state.sessionId = stored.sessionId;
+  function onObservationPart(part) {
+    return supplying("observation", async (token) => {
+      const pending = { ...state.observation, ...part, stored: null };
+      state.observation = pending;
       observation.render(state.observation);
+      const { manifest, installRoot, files } = pending;
+      if (manifest === null || files === null || installRoot === "") return;
+
+      const manifestBytes = new Uint8Array(await manifest.arrayBuffer());
+      const uploaded = await Promise.all(
+        files.map(async (file) => ({
+          relativePath: relativePathOf(file),
+          base64: bytesToBase64(new Uint8Array(await file.arrayBuffer())),
+        })),
+      );
+      await sendUpload(async () => {
+        // A part that changed while these bytes were being read is a different
+        // observation, and its own send is the one that answers for it.
+        if (!revisions.isCurrent(token, state.sessionId)) return;
+        const stored = await storeObservation({
+          sessionId: state.sessionId,
+          installRoot,
+          revision: token.revision,
+          manifestBase64: bytesToBase64(manifestBytes),
+          files: uploaded,
+        });
+        if (!revisions.isCurrent(token, state.sessionId)) return;
+        state.observation = { ...pending, stored: { ...stored, revision: token.revision } };
+        // Like the operator files, the first thing supplied opens the session these
+        // inputs belong to, so everything that follows lands in the same one.
+        adoptSession(stored.sessionId);
+        observation.render(state.observation);
+      });
     });
   }
 
@@ -204,81 +316,99 @@ export function createGovernance() {
    * Everything this pane believed is dropped: the verdict that follows comes
    * from those bytes and the operator configuration alone.
    */
-  async function onReopen() {
+  function onReopen() {
     const files = state.reopenFiles;
-    if (files === undefined || files.input === null || files.evidence === null) return;
-    const [inputBytes, evidenceBytes] = await Promise.all([
-      files.input.arrayBuffer(),
-      files.evidence.arrayBuffer(),
-    ]);
-    const opened = await reopenFromFiles({
-      inputBase64: bytesToBase64(new Uint8Array(inputBytes)),
-      evidenceBase64: bytesToBase64(new Uint8Array(evidenceBytes)),
+    if (files === undefined || files.input === null || files.evidence === null) return Promise.resolve();
+    return supplying("reopen", async (token) => {
+      const [inputBytes, evidenceBytes] = await Promise.all([
+        files.input.arrayBuffer(),
+        files.evidence.arrayBuffer(),
+      ]);
+      const opened = await reopenFromFiles({
+        inputBase64: bytesToBase64(new Uint8Array(inputBytes)),
+        evidenceBase64: bytesToBase64(new Uint8Array(evidenceBytes)),
+      });
+      if (!revisions.isCurrent(token, state.sessionId)) return;
+      if (opened.ok === false) {
+        reopen.renderError(opened.error);
+        return;
+      }
+      state.reopened = opened;
+      // A different session entirely. Every input captured for the one before
+      // it is staled here, so an upload still in flight can never attach to
+      // this session or bring its session id back.
+      revisions.sessionChanged(opened.sessionId);
+      state.sessionId = opened.sessionId;
+      // The new session has no operator configuration of its own yet. Say so
+      // rather than letting the previous session's files appear to carry over.
+      state.operatorFiles = {};
+      state.prepared = null;
+      // The observation belongs to the session it was uploaded into. A fresh one
+      // has none, so the inputs are cleared rather than left looking carried over.
+      state.observation = noObservation();
+      operatorFiles.reset();
+      operatorFiles.render(state.operatorFiles);
+      observation.reset();
+      observation.render(state.observation);
+      reopen.render(opened);
+      clearVerdict();
     });
-    if (opened.ok === false) {
-      reopen.renderError(opened.error);
-      return;
-    }
-    state.reopened = opened;
-    state.sessionId = opened.sessionId;
-    // The new session has no operator configuration of its own yet. Say so
-    // rather than letting the previous session's files appear to carry over.
-    state.operatorFiles = {};
-    state.prepared = null;
-    // The observation belongs to the session it was uploaded into. A fresh one
-    // has none, so the inputs are cleared rather than left looking carried over.
-    state.observation = noObservation();
-    operatorFiles.reset();
-    operatorFiles.render(state.operatorFiles);
-    observation.reset();
-    observation.render(state.observation);
-    reopen.render(opened);
-    statuses.render(null);
-    verdict.render(null);
-    detector.render(null, state.fixture);
-    // Consumption is what reads these bytes, so it is available immediately.
-    verdict.setSaved(true);
-    preparedView.setSaved(false);
   }
 
-  async function onEvidenceFile(file) {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    state.evidenceBase64 = bytesToBase64(bytes);
-    // Core's own parser decides whether these bytes are acceptable. The page
-    // never normalises, reformats or repairs them.
-    state.evidenceFacts = await parseEvidence(state.evidenceBase64);
-    inputs.renderEvidence(state.evidenceFacts);
-    refreshEnabled();
+  function onEvidenceFile(file) {
+    return supplying("evidence", async (token) => {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const base64 = bytesToBase64(bytes);
+      // Core's own parser decides whether these bytes are acceptable. The page
+      // never normalises, reformats or repairs them.
+      const facts = await parseEvidence(base64);
+      // An answer about evidence the operator has since replaced would leave
+      // the bytes and the facts describing two different files.
+      if (!revisions.isCurrent(token, state.sessionId)) return;
+      state.evidenceBase64 = base64;
+      state.evidenceFacts = facts;
+      inputs.renderEvidence(state.evidenceFacts);
+    });
   }
 
   async function onPrepare() {
     const values = inputs.values();
-    const answer = await prepare({
-      sessionId: state.sessionId,
-      entryId: state.entry.entryId,
-      route: values.route,
-      target: values.target,
-      effect: values.effect,
-      decisionId: values.decisionId,
-      decisionDigest: values.decisionDigest,
-      evidenceBase64: state.evidenceBase64,
-      bindingClaim: state.bindingClaim,
-    });
+    // Preparing can open the session too, so before there is one it takes its
+    // turn with the uploads rather than opening a second session beside them
+    // and leaving the operator's inputs split across two.
+    const answer = await sendUpload(() =>
+      prepare({
+        sessionId: state.sessionId,
+        entryId: state.entry.entryId,
+        route: values.route,
+        target: values.target,
+        effect: values.effect,
+        decisionId: values.decisionId,
+        decisionDigest: values.decisionDigest,
+        evidenceBase64: state.evidenceBase64,
+        bindingClaim: state.bindingClaim,
+      }),
+    );
     if (answer.ok === false) {
       preparedView.renderError(answer.error);
       return;
     }
     state.prepared = answer;
-    state.sessionId = answer.sessionId ?? state.sessionId;
+    adoptSession(answer.sessionId);
     preparedView.render(state.prepared);
-    statuses.render(null);
-    verdict.render(null);
-    detector.render(null, state.fixture);
+    clearVerdict();
     refreshEnabled();
   }
 
   async function onConsume() {
-    const view = await consume(state.sessionId);
+    // The button is disabled when this does not hold; a click that reaches here
+    // anyway is not a reason to consume a session that does not match the pane.
+    if (!canConsume()) return;
+    const asked = { sessionId: state.sessionId, inputs: revisions.inputsRevision() };
+    const view = await consume(asked.sessionId);
+    // A verdict about a session the page has left, or about inputs the operator
+    // changed while it was being derived, answers for nothing on screen.
+    if (asked.sessionId !== state.sessionId || asked.inputs !== revisions.inputsRevision()) return;
     if (view.ok === false) {
       verdict.renderError(view.error);
       return;
@@ -306,24 +436,40 @@ export function createGovernance() {
       return;
     }
     state.fixture = built;
+    // Its own session, and not the one any pending upload was supplied for:
+    // every open token is staled so an operator file still in flight cannot
+    // land on top of the fixture's own.
+    revisions.sessionChanged(built.sessionId);
     state.sessionId = built.sessionId;
     // The fixture writes its own operator files into its own session. Show what
     // it wrote, labelled as the fixture's, rather than leaving the rows empty.
     const generated = "generated by validation mode, not supplied by you";
+    const wrote = (storedAs, kind) => ({
+      ok: true,
+      storedAs,
+      note: generated,
+      revision: revisions.revisionOf(kind),
+    });
     state.operatorFiles = {
-      authority: { ok: true, storedAs: "operator/authority-bundle.json", note: generated },
-      trust: { ok: true, storedAs: "operator/operator-trust.json", note: generated },
-      material: { ok: true, storedAs: "attestation-material.json", note: generated },
+      authority: wrote("operator/authority-bundle.json", "authority"),
+      trust: wrote("operator/operator-trust.json", "trust"),
+      material: wrote("attestation-material.json", "material"),
     };
     operatorFiles.render(state.operatorFiles);
     // The fixture opens its own session, which holds no observation.
     state.observation = noObservation();
     observation.reset();
     observation.render(state.observation);
+    // The fixture supplies the evidence too, so it takes the evidence input the
+    // same way an operator does: an evidence file chosen while this is being
+    // parsed is the current one, and the fixture's answer is then discarded.
+    const evidenceToken = revisions.begin("evidence");
     state.evidenceBase64 = built.evidenceBase64;
     state.bindingClaim = built.bindingClaim;
     inputs.setDecision({ decisionId: built.decisionId, decisionDigest: built.decisionDigest });
-    state.evidenceFacts = await parseEvidence(built.evidenceBase64);
+    const facts = await parseEvidence(built.evidenceBase64);
+    if (!revisions.isCurrent(evidenceToken, state.sessionId)) return;
+    state.evidenceFacts = facts;
     inputs.renderEvidence(state.evidenceFacts);
     // Nothing has been consumed yet, so there is no attestation verdict to
     // show - but the fixture's own declaration is available and is shown now.
@@ -357,6 +503,10 @@ export function createGovernance() {
       state.catalog = null;
       state.evidenceBase64 = null;
       state.evidenceFacts = null;
+      // A new selection is a new workflow. Everything still in flight for the
+      // previous one is staled here, so nothing it was carrying can open or
+      // fill a session under this selection.
+      revisions.sessionChanged(null);
       state.sessionId = null;
       state.prepared = null;
       state.fixture = null;

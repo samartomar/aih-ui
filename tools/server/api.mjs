@@ -104,15 +104,22 @@ export function createApi({ consumerDir, runDir, summary }) {
      * and the scan attestation material, each as its own kind.
      *
      * They are stored separately from the imported evidence and from each
-     * other. The page sends a kind and bytes; the server decides where they go
-     * and answers with a description of the bytes, never their contents.
+     * other. The page sends a kind, bytes and the revision that kind is on; the
+     * server decides where they go and answers with a description of the bytes,
+     * never their contents. Only a newer revision replaces what the session
+     * holds, so an upload the operator has already replaced cannot land late.
      */
     "POST /api/operator-file": (body) => {
       const { sessionId } = sessions.open(body.sessionId);
       if (typeof body.base64 !== "string" || body.base64.length === 0) {
         return { ok: false, error: "no file contents were supplied" };
       }
-      const stored = sessions.storeOperatorFile(sessionId, body.kind, Buffer.from(body.base64, "base64"));
+      const stored = sessions.storeOperatorFile(
+        sessionId,
+        body.kind,
+        Buffer.from(body.base64, "base64"),
+        body.revision,
+      );
       return stored.ok === false ? stored : { ...stored, sessionId };
     },
 
@@ -120,10 +127,12 @@ export function createApi({ consumerDir, runDir, summary }) {
      * The operator's observation inputs: their upstream artifact manifest, the
      * root-relative directory the files sit under, and the files themselves.
      *
-     * The page sends bytes and relative paths; the server decides where they go
-     * and refuses, with a reason, anything it is not willing to write. Nothing
-     * is checked against the evidence here - Core does that during consumption,
-     * and nothing is installed, applied or executed anywhere.
+     * The page sends bytes, relative paths and the revision the observation is
+     * on; the server decides where they go and refuses, with a reason, anything
+     * it is not willing to write - including an observation older than the one
+     * the session already holds. Nothing is checked against the evidence here -
+     * Core does that during consumption, and nothing is installed, applied or
+     * executed anywhere.
      */
     "POST /api/observation": (body) => {
       const { sessionId } = sessions.open(body.sessionId);

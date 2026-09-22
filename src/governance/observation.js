@@ -85,7 +85,7 @@ export function createObservation({ elements, onManifest, onRoot, onFiles }) {
         el(
           "div",
           "text-outline leading-snug",
-          "Supplied by you and kept beside the session. Core reads them at their exact paths; nothing is installed, applied or executed.",
+          "Supplied by you and uploaded into this session's temporary workspace. Core reads those copies at their exact paths, which proves the snapshot you supplied matches the scan - not that these files are still in place on your machine. Nothing is installed, applied or executed.",
         ),
       );
     },

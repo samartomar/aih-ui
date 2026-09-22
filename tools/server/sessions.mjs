@@ -79,6 +79,18 @@ function isBoundedRelativePath(value) {
   );
 }
 
+/**
+ * The revision the page says an input is on.
+ *
+ * It is required, and it is a positive whole number. A request without one
+ * cannot be ordered against the requests that carry one, so it is refused
+ * rather than written: an unordered write is exactly the one that overwrites a
+ * newer input with an older upload's bytes.
+ */
+function isRevision(value) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+
 function writeBytes(path, bytes) {
   mkdirSync(dirname(path), { recursive: true });
   // Exactly the bytes that arrived. An operator's file is never reformatted:
@@ -94,6 +106,46 @@ export function createSessions(runDir) {
   const sessionsRoot = join(runDir, "sessions");
   mkdirSync(sessionsRoot, { recursive: true });
   const known = new Map();
+
+  /**
+   * The revision each input last stored, per session and per input.
+   *
+   * Separate counters, because the inputs are separately supplied: a session
+   * that has stored the operator's material at revision 12 must still accept
+   * the first folder they observe.
+   */
+  const storedRevisions = new Map();
+  const lastRevision = (id, slot) => storedRevisions.get(id)?.get(slot);
+  const recordRevision = (id, slot, revision) => {
+    const perSlot = storedRevisions.get(id) ?? new Map();
+    perSlot.set(slot, revision);
+    storedRevisions.set(id, perSlot);
+  };
+
+  /**
+   * Whether this write may proceed, or the refusal that stops it.
+   *
+   * Only a revision NEWER than the one this input last stored in this session
+   * replaces it. Anything older or equal is an answer to an input the operator
+   * has already replaced, and it is refused before a byte is written.
+   */
+  const guardRevision = (id, slot, revision) => {
+    if (!isRevision(revision)) {
+      return {
+        ok: false,
+        error: `${slot} was supplied with no usable input revision, so it cannot be ordered against the others`,
+      };
+    }
+    const last = lastRevision(id, slot);
+    if (last !== undefined && revision <= last) {
+      return {
+        ok: false,
+        superseded: true,
+        error: `${slot} revision ${revision} is not newer than the ${last} this session already stored; the newer input stands`,
+      };
+    }
+    return undefined;
+  };
 
   return {
     /** Opens a directory for `id`, or for a fresh id when that one is unknown. */
@@ -136,16 +188,30 @@ export function createSessions(runDir) {
      * The page never names a path: it names a KIND, and the server decides the
      * location. What comes back describes the bytes - name, length, digest -
      * and never their contents.
+     *
+     * `revision` is which version of that kind the page is supplying. Only a
+     * newer one replaces what this session holds, so an upload that answers
+     * late can never put an operator's replaced file back.
      */
-    storeOperatorFile(id, kind, bytes) {
+    storeOperatorFile(id, kind, bytes, revision) {
       const spec = OPERATOR_FILES[kind];
       if (spec === undefined) return { ok: false, error: `unknown operator file kind: ${String(kind)}` };
       const dir = this.dirOf(id);
       if (dir === undefined) return { ok: false, error: "unknown session" };
+      const refusal = guardRevision(id, kind, revision);
+      if (refusal !== undefined) return refusal;
       const path = join(dir, spec.path);
       writeBytes(path, bytes);
+      recordRevision(id, kind, revision);
       known.set(id, { ...known.get(id), [spec.records]: path });
-      return { ok: true, kind, storedAs: spec.path, byteLength: bytes.byteLength, sha256: sha256(bytes) };
+      return {
+        ok: true,
+        kind,
+        storedAs: spec.path,
+        revision,
+        byteLength: bytes.byteLength,
+        sha256: sha256(bytes),
+      };
     },
 
     /**
@@ -157,10 +223,17 @@ export function createSessions(runDir) {
      * observation is removed first, so what the session holds afterwards is
      * exactly what this request supplied - never a leftover from an earlier one.
      * What comes back describes the stored bytes, never their contents.
+     *
+     * `revision` is which observation the page is supplying. An observation
+     * that arrives after a newer one is refused as superseded, before the
+     * previous one is removed: the session keeps the newest, and the operator
+     * is never shown one folder while a consume reads another.
      */
-    storeObservation(id, { installRoot, manifestBase64, files }) {
+    storeObservation(id, { installRoot, manifestBase64, files, revision }) {
       const dir = this.dirOf(id);
       if (dir === undefined) return { ok: false, error: "unknown session" };
+      const refusal = guardRevision(id, "observation", revision);
+      if (refusal !== undefined) return refusal;
       if (!isBoundedRelativePath(installRoot)) {
         return {
           ok: false,
@@ -241,6 +314,7 @@ export function createSessions(runDir) {
         }
       }
       known.set(id, { ...known.get(id), observation: { installRoot } });
+      recordRevision(id, "observation", revision);
 
       const describe = (item) => ({
         storedAs: item.storedAs,
@@ -250,6 +324,7 @@ export function createSessions(runDir) {
       return {
         ok: true,
         installRoot,
+        revision,
         manifest: describe(stored[0]),
         files: stored
           .slice(1)

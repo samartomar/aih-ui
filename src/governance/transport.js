@@ -44,9 +44,13 @@ export function prepare(request) {
 /**
  * One operator-supplied configuration file, by kind: "authority", "trust" or
  * "material". The page sends a kind, never a path.
+ *
+ * `revision` is which version of that kind this is. It travels with the bytes
+ * so the session can refuse an upload the operator has already replaced, even
+ * when it arrives after the replacement.
  */
-export function storeOperatorFile({ sessionId, kind, base64 }) {
-  return api("/api/operator-file", { sessionId, kind, base64 });
+export function storeOperatorFile({ sessionId, kind, revision, base64 }) {
+  return api("/api/operator-file", { sessionId, kind, revision, base64 });
 }
 
 /**
@@ -54,9 +58,12 @@ export function storeOperatorFile({ sessionId, kind, base64 }) {
  * root-relative directory the files sit under, and the files themselves with
  * the relative paths the folder selection carried. Bytes only - the page
  * parses nothing and decides nothing; Core checks them during consumption.
+ *
+ * `revision` is which observation this is, for the same reason: a folder that
+ * answers late never replaces the folder the operator chose after it.
  */
-export function storeObservation({ sessionId, installRoot, manifestBase64, files }) {
-  return api("/api/observation", { sessionId, installRoot, manifestBase64, files });
+export function storeObservation({ sessionId, installRoot, revision, manifestBase64, files }) {
+  return api("/api/observation", { sessionId, installRoot, revision, manifestBase64, files });
 }
 
 /** A fresh session holding exactly the bytes the operator handed back. */

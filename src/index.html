@@ -445,9 +445,11 @@ beside the session, never inside the imported material: material that carries it
 <span class="text-[10px] font-mono uppercase tracking-wider text-outline">4b &middot; Observe installed files &middot; optional</span>
 <div class="p-2 rounded bg-surface-container-low border border-surface-container-high/40 text-[10.5px] text-on-surface-variant leading-snug">
 Supply the upstream artifact manifest, the root the files sit under, and the folder itself.
-They are copied into this session beside the saved document so <span class="font-mono text-outline">@aihq/core</span>
-can read them: Core checks every file one to one against the verified scan, at its exact path.
-Nothing here installs, applies or executes anything, and nothing is written outside the session.
+They are uploaded into this session's temporary workspace, where <span class="font-mono text-outline">@aihq/core</span>
+checks the uploaded copies one to one against the verified scan, at their exact paths. That proves the
+snapshot you supplied matches the scan; it does not independently prove those files are still in place
+on your own machine. Nothing here installs, applies or executes anything, and nothing is written
+outside the session.
 </div>
 <div class="space-y-1">
 <label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-surface-container-high/40 cursor-pointer hover:border-primary/40 transition-colors">
