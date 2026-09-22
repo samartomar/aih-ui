@@ -376,6 +376,15 @@ or compile logic: every derivation happens in `@aihq/core` behind `/api/*`. The
 workflow state is in `controller.js`; the displays it drives are independent
 components, and the HTTP calls and exact-byte downloads are their own modules.
 
+Binding route. When the saved document carries no selected-file binding claim,
+the backend supplies Core's optional assessment resolver, which returns the
+installed Catalog's published assessment artifact for the identity Core derived
+from the saved subject; Core hashes it and proves the assessment declares the
+scanned material. A saved claim keeps Core on its subject-content route. The
+verdict shows the material root, the scanned files, the declared-file count and
+an explicit "Not scanned:" list; coverage is never folded into the binding
+status.
+
 ### What the pane will not do
 
 It never manufactures a decision, an approval, verifier trust or a signing key.

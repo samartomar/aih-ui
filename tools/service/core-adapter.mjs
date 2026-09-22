@@ -202,10 +202,14 @@ export async function consume({ sessionDir, authorityBundlePath, scanMaterialPat
     env,
     now,
     ...(verification.scan === undefined ? {} : { scan: verification.scan }),
-    // Core's optional assessment route. The resolver is keyed by the identity
-    // Core derives from the SAVED subject; whatever bytes come back are hashed
-    // by Core, which refuses on mismatch. Deciding is Core's alone.
-    assessment: createCatalogAssessmentResolver(),
+    // The resolver is supplied only when the saved document carries no
+    // selected-file binding claim. A saved claim means the authoring
+    // application bound through a scanned file (the validation fixture seals
+    // the Catalog artifact directory) and Core recomputes that on its
+    // subject-content route. A document without a claim asks Core to prove the
+    // published assessment declares the scanned material. Core verifies
+    // everything on either route.
+    ...(reopened.bindingClaim === undefined ? { assessment: createCatalogAssessmentResolver() } : {}),
   });
 
   return {
@@ -223,7 +227,10 @@ export async function consume({ sessionDir, authorityBundlePath, scanMaterialPat
     matchedPath: result.matchedPath ?? null,
     bindingRoute: result.bindingRoute ?? null,
     assessmentBinding: result.assessmentBinding ?? null,
-    assessmentSource: "installed @aihq/catalog, looked up by the saved subject's identity digest",
+    assessmentSource:
+      reopened.bindingClaim === undefined
+        ? "installed @aihq/catalog, looked up by the saved subject's identity digest"
+        : null,
     authorityTransport: result.authorityTransport ?? null,
     subjectDigest: result.subjectDigest ?? null,
     decisionDigest: result.decisionDigest ?? null,

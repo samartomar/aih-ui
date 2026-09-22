@@ -101,23 +101,26 @@ function renderAssessmentBinding(box, binding) {
   if (binding === null || binding === undefined) return;
   const detail = el("div", "pt-1 space-y-0.5 font-mono text-[10px]");
   row(detail, "Material root", binding.materialRoot, NOT_SUPPLIED);
-  row(detail, "Scanned files", `${binding.scannedMaterial.files.length}`, NOT_SUPPLIED);
-  for (const file of binding.scannedMaterial.files) {
+  const scannedFiles = binding.scannedMaterial?.files ?? [];
+  row(detail, "Scanned files", `${scannedFiles.length}`, NOT_SUPPLIED);
+  row(detail, "Declared files", `${binding.itemCoverage?.declaredFiles?.length ?? 0}`, NOT_SUPPLIED);
+  for (const file of scannedFiles) {
     row(
       detail,
-      "  scanned",
+      "scanned file",
       `${file.declaredPath} ${file.sha256.slice(0, 12)} ${file.byteLength} B`,
       NOT_SUPPLIED,
     );
   }
-  row(detail, "Whole item covered", binding.itemCoverage.complete ? "yes" : "no", NOT_SUPPLIED);
+  row(detail, "Whole item covered", binding.itemCoverage?.complete ? "yes" : "no", NOT_SUPPLIED);
   box.appendChild(detail);
-  if (binding.itemCoverage.uncoveredPaths.length > 0) {
+  const uncoveredPaths = binding.itemCoverage?.uncoveredPaths ?? [];
+  if (uncoveredPaths.length > 0) {
     box.appendChild(
       el(
         "div",
         "text-tertiary leading-snug",
-        `Not scanned: ${binding.itemCoverage.uncoveredPaths.join(", ")}`,
+        `Not scanned: ${uncoveredPaths.join(", ")}`,
       ),
     );
   }
