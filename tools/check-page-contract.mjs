@@ -21,6 +21,10 @@ import { join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { classifyRequestPath } from "./preview-request.mjs";
 import { pageAssets } from "./server/assets.mjs";
+// The page's own constant, imported rather than restated: a copy here would be
+// the thing that drifts. These selector helpers are pure and touch no DOM at
+// import time, so Node can read them.
+import { SORT_KEYS } from "../src/catalog/selectors.js";
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 let failures = 0;
@@ -59,8 +63,11 @@ const MODULES = jsModules(SRC);
 const required = new Set();
 for (const module of MODULES) {
   const source = readFileSync(join(SRC, module), "utf8");
-  // ids collected in bulk: `const ids = [ "a", "b", ... ];`
-  for (const block of source.matchAll(/const ids = \[([\s\S]*?)\];/g)) {
+  // ids collected in bulk, in either form a module writes them:
+  //   const ids = [ "a", "b", ... ];        and        collectIds([ "a", ... ])
+  // The second form was unchecked until 2026-09-22, which left the header's
+  // ai-tools ids required at run time and covered by nothing.
+  for (const block of source.matchAll(/(?:const ids = |collectIds\()\[([\s\S]*?)\]/g)) {
     for (const literal of block[1].matchAll(/"([a-z0-9-]+)"/g)) required.add(literal[1]);
   }
   // and ids looked up one at a time
@@ -83,6 +90,29 @@ check(
   "index.html carries the inspector tab buttons",
   /class="[^"]*inspector-tab-btn/.test(html),
   "no .inspector-tab-btn in the page",
+);
+
+/* ------------------------------------- 1b. the sort control and its keys */
+
+// Every option the page offers must be a key the selectors accept. An option
+// the sort does not implement silently shows the unsorted order; a key with no
+// option is not a fault, but it is reported so the difference is deliberate and
+// not a drift nobody noticed. Options are never added here: the design source
+// decides which of them the page offers.
+const sortBlock = /<select[^>]*id="sort-select"[\s\S]*?<\/select>/.exec(html);
+check("index.html carries the sort control", sortBlock !== null, "no #sort-select in the page");
+const sortOptions = sortBlock === null ? [] : [...sortBlock[0].matchAll(/<option value="([^"]*)"/g)].map((m) => m[1]);
+const unknownOptions = sortOptions.filter((option) => !SORT_KEYS.includes(option));
+check(
+  `every #sort-select option is a SORT_KEYS member (${sortOptions.length} options, ${SORT_KEYS.length} keys)`,
+  sortOptions.length > 0 && unknownOptions.length === 0,
+  sortOptions.length === 0 ? "the control offers no option" : unknownOptions.join(", "),
+);
+const unusedKeys = SORT_KEYS.filter((key) => !sortOptions.includes(key));
+process.stdout.write(
+  unusedKeys.length === 0
+    ? "note SORT_KEYS holds no key the page does not offer\n"
+    : `note ${unusedKeys.length} SORT_KEYS the page offers no option for: ${unusedKeys.join(", ")}\n`,
 );
 
 /* --------------------------------------------- 2. the module graph resolves */
