@@ -20,6 +20,7 @@ import {
 
 import { b64, fromB64, readExactBytes, writeExactBytes } from "./artifacts.mjs";
 import { catalogEntry } from "./catalog-access.mjs";
+import { createCatalogAssessmentResolver } from "./catalog-assessment.mjs";
 import { buildScanVerification } from "./scan-verifier.mjs";
 
 /**
@@ -201,6 +202,10 @@ export async function consume({ sessionDir, authorityBundlePath, scanMaterialPat
     env,
     now,
     ...(verification.scan === undefined ? {} : { scan: verification.scan }),
+    // Core's optional assessment route. The resolver is keyed by the identity
+    // Core derives from the SAVED subject; whatever bytes come back are hashed
+    // by Core, which refuses on mismatch. Deciding is Core's alone.
+    assessment: createCatalogAssessmentResolver(),
   });
 
   return {
@@ -216,6 +221,9 @@ export async function consume({ sessionDir, authorityBundlePath, scanMaterialPat
     reason: result.status.reason ?? null,
     evidenceClaim: result.evidenceClaim ?? null,
     matchedPath: result.matchedPath ?? null,
+    bindingRoute: result.bindingRoute ?? null,
+    assessmentBinding: result.assessmentBinding ?? null,
+    assessmentSource: "installed @aihq/catalog, looked up by the saved subject's identity digest",
     authorityTransport: result.authorityTransport ?? null,
     subjectDigest: result.subjectDigest ?? null,
     decisionDigest: result.decisionDigest ?? null,

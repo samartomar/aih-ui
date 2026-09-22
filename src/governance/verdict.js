@@ -61,12 +61,16 @@ export function createVerdict({ elements, onConsume }) {
       // said when the claim is scan-attestation-v2 AND evidence verified.
       row(detail, "Evidence claim", view.evidenceClaim, NOT_SUPPLIED);
       row(detail, "Matched path", view.matchedPath, NOT_SUPPLIED);
+      row(detail, "Binding route", view.bindingRoute, NOT_SUPPLIED);
       row(detail, "Authority transport", view.authorityTransport, NOT_SUPPLIED);
       row(detail, "Authority source", view.authoritySource, NOT_SUPPLIED);
       row(detail, "Verifier trust from", view.trustSource, NOT_SUPPLIED);
       row(detail, "Subject digest", view.subjectDigest, NOT_SUPPLIED);
       row(detail, "Decision digest", view.decisionDigest, NOT_SUPPLIED);
       box.appendChild(detail);
+      // What the assessment route bound, and what it did not scan. Coverage is
+      // shown beside the binding, never folded into it.
+      renderAssessmentBinding(box, view.assessmentBinding);
 
       for (const diagnostic of view.diagnostics ?? []) {
         box.appendChild(
@@ -83,4 +87,38 @@ export function createVerdict({ elements, onConsume }) {
       );
     },
   };
+}
+
+/**
+ * Core's assessment binding, as Core stated it.
+ *
+ * The material root and the scanned files are Core's own records; the uncovered
+ * paths are its statement of what the scan did NOT reach. Coverage is shown as
+ * its own line and never changes the binding status text above: "not scanned"
+ * is a fact about the scan's reach, not about whether the bytes bound.
+ */
+function renderAssessmentBinding(box, binding) {
+  if (binding === null || binding === undefined) return;
+  const detail = el("div", "pt-1 space-y-0.5 font-mono text-[10px]");
+  row(detail, "Material root", binding.materialRoot, NOT_SUPPLIED);
+  row(detail, "Scanned files", `${binding.scannedMaterial.files.length}`, NOT_SUPPLIED);
+  for (const file of binding.scannedMaterial.files) {
+    row(
+      detail,
+      "  scanned",
+      `${file.declaredPath} ${file.sha256.slice(0, 12)} ${file.byteLength} B`,
+      NOT_SUPPLIED,
+    );
+  }
+  row(detail, "Whole item covered", binding.itemCoverage.complete ? "yes" : "no", NOT_SUPPLIED);
+  box.appendChild(detail);
+  if (binding.itemCoverage.uncoveredPaths.length > 0) {
+    box.appendChild(
+      el(
+        "div",
+        "text-tertiary leading-snug",
+        `Not scanned: ${binding.itemCoverage.uncoveredPaths.join(", ")}`,
+      ),
+    );
+  }
 }
