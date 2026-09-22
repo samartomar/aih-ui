@@ -4,8 +4,10 @@
  * 1. SIX STATUSES, SIX FIELDS. structure, evidence, binding, authority, plan
  *    and execution are rendered separately. Never one badge, and never one
  *    implying another.
- * 2. execution is always "not-attempted". No screen may ever say Applied,
- *    Executed or Published - nothing has run.
+ * 2. execution is "not-attempted", "observed" or "refused". "observed" means
+ *    Core read the installed files under an explicit install root and found
+ *    them one-to-one identical to the verified scan. No screen may ever say
+ *    Applied, Installed, Executed or Published - nothing is installed or run.
  * 3. Tone is NOT a pass/fail split: "not-evaluated" is its own thing, and
  *    "claimed" is never coloured like "bound".
  * 4. Every typed refusal Core can return has plain-language, actionable
@@ -29,6 +31,7 @@ export const TONE = {
   prepared: "text-primary",
   refused: "text-error",
   "not-attempted": "text-outline",
+  observed: "text-primary",
 };
 
 export const REFUSAL = {
@@ -75,4 +78,15 @@ export const REFUSAL = {
   "decision-scope-mismatch": "The decision does not cover this subject, target or effect.",
   "qualification-unverified": "The qualification basis did not verify against the evidence supplied.",
   "observation-missing": "Qualification resolved, but there is no observation source for the effect, so nothing was executed. This is the furthest any route reaches today.",
+  "observation-manifest-unavailable": "No upstream-artifact manifest was found at the path supplied for observation.",
+  "observation-manifest-unsafe": "The observation manifest failed its custody check: it is a symlink, a hard link, or it changed while being read.",
+  "observation-manifest-mismatch": "The observation manifest names a different decision, subject, target or effect than the saved document and the authorized decision.",
+  "observation-mapping-invalid": "The install root supplied for observation is not a safe root-relative directory, or it overlaps the manifest or evidence path.",
+  "observation-path-mismatch": "The manifest's file paths are not one-to-one with the scanned paths under the install root. Identical bytes under a different filename do not count.",
+  "observation-outside-sealed-closure": "The observation cannot be tied to a verified scan: the evidence carries no seal, or a manifest digest differs from the sealed digest at that path.",
+  "observed-file-unavailable": "A file the manifest names is missing at its exact path under the install root.",
+  "observed-file-unsafe": "An observed file failed its custody check: a symlink, a hard link, two paths sharing one file, or a size beyond the bound.",
+  "observed-file-mismatch": "An observed file's bytes differ from the sealed record at that path: changed contents, or contents that belong to another path.",
+  "observed-file-changed": "An observed file changed between the two reads. Observation will not accept a moving target.",
+  "observation-not-effective": "The observation receipt was minted but did not resolve to an effective observation under the current authority and decision.",
 };

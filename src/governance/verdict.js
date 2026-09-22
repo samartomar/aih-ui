@@ -71,6 +71,7 @@ export function createVerdict({ elements, onConsume }) {
       // What the assessment route bound, and what it did not scan. Coverage is
       // shown beside the binding, never folded into it.
       renderAssessmentBinding(box, view.assessmentBinding);
+      renderObservation(box, view.observation);
 
       for (const diagnostic of view.diagnostics ?? []) {
         box.appendChild(
@@ -82,11 +83,29 @@ export function createVerdict({ elements, onConsume }) {
         el(
           "div",
           "pt-1 mt-1 border-t border-surface-container-high/40 text-[10.5px] text-outline leading-snug",
-          `Execution: ${view.execution}. No effect was applied, executed or published — this contract never executes.`,
+          executionSentence(view),
         ),
       );
     },
   };
+}
+
+/**
+ * The closing sentence, chosen from the execution value.
+ *
+ * An observed execution is the only case where Core read bytes that exist
+ * outside the verified scan, and even then nothing was installed, applied,
+ * executed or published: the sentence says exactly that and no more.
+ */
+function executionSentence(view) {
+  if (view.execution === "observed") {
+    const root = view.observation?.installRoot ?? "the install root";
+    return `Execution: observed. Core read the files under ${root} and found them one-to-one identical to the verified scan. Nothing was installed, applied, executed or published.`;
+  }
+  if (view.execution === "refused") {
+    return "Execution: refused. The observation was refused; see the reason above. Nothing was installed, applied, executed or published.";
+  }
+  return `Execution: ${view.execution}. No effect was applied, executed or published — this contract never executes.`;
 }
 
 /**
@@ -124,4 +143,30 @@ function renderAssessmentBinding(box, binding) {
       ),
     );
   }
+}
+
+/**
+ * Core's observation, as Core stated it.
+ *
+ * One row per file pairs the sealed path with the path it was actually read at,
+ * so a renamed file can never pass for a match. The install root is shown on its
+ * own line, and the validity window and digest make the receipt checkable.
+ */
+function renderObservation(box, observation) {
+  if (observation === null || observation === undefined) return;
+  const detail = el("div", "pt-1 space-y-0.5 font-mono text-[10px]");
+  row(detail, "Install root", observation.installRoot, NOT_SUPPLIED);
+  row(detail, "Observed files", `${(observation.files ?? []).length}`, NOT_SUPPLIED);
+  for (const file of observation.files ?? []) {
+    row(
+      detail,
+      "observed file",
+      `${file.sealedPath} → ${file.observedPath} ${String(file.sha256).slice(0, 12)} ${file.byteLength} B`,
+      NOT_SUPPLIED,
+    );
+  }
+  row(detail, "Observed at", observation.observedAt, NOT_SUPPLIED);
+  row(detail, "Valid until", observation.validUntil, NOT_SUPPLIED);
+  row(detail, "Observation digest", observation.observationDigest, NOT_SUPPLIED);
+  box.appendChild(detail);
 }

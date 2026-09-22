@@ -383,7 +383,11 @@ from the saved subject; Core hashes it and proves the assessment declares the
 scanned material. A saved claim keeps Core on its subject-content route. The
 verdict shows the material root, the scanned files, the declared-file count and
 an explicit "Not scanned:" list; coverage is never folded into the binding
-status.
+status. The execution axis can now read "observed" when an operator-supplied
+manifest and install root under the consumption root let Core check every
+installed file against the verified scan one to one; the page never says Applied
+or Installed, and an observed result still lists the declared files the scan did
+not reach.
 
 ### What the pane will not do
 

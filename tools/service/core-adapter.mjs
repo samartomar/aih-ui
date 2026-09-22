@@ -231,6 +231,7 @@ export async function consume({ sessionDir, authorityBundlePath, scanMaterialPat
       reopened.bindingClaim === undefined
         ? "installed @aihq/catalog, looked up by the saved subject's identity digest"
         : null,
+    observation: result.observation ?? null,
     authorityTransport: result.authorityTransport ?? null,
     subjectDigest: result.subjectDigest ?? null,
     decisionDigest: result.decisionDigest ?? null,
