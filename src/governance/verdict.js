@@ -3,8 +3,10 @@
  * back.
  *
  * This component owns the Consume button and the verdict readout. The verdict
- * always ends with the execution sentence: `execution` is always
- * "not-attempted", so nothing here may ever read as Applied, Executed or
+ * always ends with the execution sentence, chosen from the execution value:
+ * "not-attempted", "observed" (Core read the installed files under an explicit
+ * install root and found them one-to-one identical to the verified scan) or
+ * "refused". Nothing here may ever read as Applied, Installed, Executed or
  * Published.
  */
 
