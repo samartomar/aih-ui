@@ -205,6 +205,12 @@ selected and connected are kept apart:
 
 The design source's `3 of 11` was sample data and is not restored as state.
 
+The Governance pane's **Target** field reads that same list and keeps no copy
+either: its options are Core's targets in Core's own order, so a Core listing
+different ones changes the field with no UI edit. A Core that publishes no list
+leaves the field disabled reading **Not connected**, and nothing can be prepared
+— the page no longer falls back to a target nobody chose.
+
 ### One theme icon
 
 The theme button holds ONE icon naming the destination: a sun on a dark page
@@ -487,8 +493,10 @@ wherever it appears.
 
 `structure`, `evidence`, `binding`, `authority`, `plan` and `execution` are
 rendered as six separate fields. Never one badge, and never one implying another.
-`execution` is always `not-attempted`: nothing is ever executed, so no screen says
-Applied, Executed or Published.
+`execution` is `not-attempted`, `observed` or `refused`. `observed` means Core
+read the files under an explicit install root and found them one to one identical
+to the verified scan. Nothing is ever installed, applied or executed, so no screen
+says Applied, Installed, Executed or Published.
 
 A saved artifact may only ever *claim* a binding — the pane shows `claimed` there.
 Only independent consumption can report `bound`, and it re-derives the whole
@@ -507,17 +515,40 @@ supplies the key that validates it, nothing has been verified.
 
 ### Known blocked states, rendered honestly
 
-- 429 of the 457 entries cannot bind today. `github` sources refuse with
-  `missing-repository-commit-provenance-record` and the one `npm` source with
-  `missing-tarball-sha512-record`. The pane shows the named reason and what it
-  would take to resolve it, never a generic failure.
-- The furthest any route reaches is `observation-missing` / `partial`:
-  qualification resolves, the effect is not executed.
+- 429 of the 457 entries cannot bind on the `subject-content` route. `github`
+  sources refuse with `missing-repository-commit-provenance-record` and the one
+  `npm` source with `missing-tarball-sha512-record`. The pane shows the named
+  reason and what it would take to resolve it, never a generic failure. The
+  `assessment-material` route applies only to an `aih` identity, so it does not
+  change this count: a github or npm subject still refuses with the named reason.
+- Without an observation the furthest a route reaches is `observation-missing` /
+  `partial`. With the operator's manifest, install root and folder, a route
+  reaches `observed` / `observed` — Core read the uploaded copies and found them
+  identical to the verified scan; nothing was installed, applied or executed.
 - AIH-supported qualification is unavailable. The index declares
   `organizationAdmission: "not-authoritative"` and ships no signed support
   receipt; the pane surfaces that field verbatim.
-- Genuine detector evidence is still outstanding. Everything shipped today is a
-  labelled fixture.
+- Genuine detector evidence is used: the isolated-organization lane runs on
+  genuine detector facts. What is still a fixture is (a) the explicitly labelled
+  validation mode, which manufactures a fixture and its matching operator trust,
+  and (b) the **authority** — every positive authority result is a fictional test
+  organization's policy file and a disposable key, and the genuine capture's
+  validation signature expires 2026-09-22T19:50:20.085Z, after which that lane
+  reports an honest refusal.
+
+Four slots on these screens are empty because a **package** does not publish the
+field, not because this page has not been built. Each names its owner on screen,
+so a reader can tell a UI gap from a package gap:
+
+| Slot | Owner | What is missing |
+| --- | --- | --- |
+| Rail categories row | `@aihq/catalog` | a curated category taxonomy with membership. The presentation sidecar publishes a category for a handful of entries and no taxonomy; the row counts both numbers at run time and states them. |
+| Inspector evidence statement text | `@aihq/catalog` | the evidence `summary`. The reader validates it and then drops it, so the only human-readable text on a `CatalogEvidenceV1` record is unreachable through the public reader. |
+| Security pane per-detector rows | `@aihq/scan` | a `detectors[]` array with a per-detector run state. A record carries one detector object, so "4 of 4 scanners ran" cannot be stated. |
+| Security pane finding detail | `@aihq/scan` | a typed per-finding record, or an exported parser for the annex bytes. A finding is an occurrence fingerprint and a multiplicity: no rule id, severity, message or location. |
+
+Until each package publishes its field, the slot keeps its place, its size and
+its reason. When one does, the wording lookup is what changes — not the layout.
 
 ## Running it
 
@@ -576,7 +607,8 @@ CORE_REPO=<core checkout> CATALOG_REPO=<catalog checkout> node tools/preview.mjs
 ```
 
 A Core without `SUPPORTED_CLIS` leaves the AI tools control reading **Not
-published**; a Catalog without the collection view stops the preview.
+published** and the Governance pane's Target field disabled reading **Not
+connected**; a Catalog without the collection view stops the preview.
 
 A checkout another worker is mid-change is never built and never packed. Its
 committed checkpoint is extracted with `git archive` into a workspace outside
