@@ -80,6 +80,15 @@ export function createGovernance() {
     reopened: null,
   };
 
+  // Uploads that may open the session run one after another, so the first
+  // response's session id is what every later upload is sent to.
+  let uploadChain = Promise.resolve();
+  const enqueueUpload = (work) => {
+    const next = uploadChain.then(work, work);
+    uploadChain = next.catch(() => undefined);
+    return next;
+  };
+
   const inputs = createInputs({
     elements: elements.inputs,
     onEvidenceFile: (file) => void onEvidenceFile(file),
@@ -134,17 +143,19 @@ export function createGovernance() {
   /** One operator-supplied configuration file, stored server-side by kind. */
   async function onOperatorFile(kind, file) {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const stored = await storeOperatorFile({
-      sessionId: state.sessionId,
-      kind,
-      base64: bytesToBase64(bytes),
+    await enqueueUpload(async () => {
+      const stored = await storeOperatorFile({
+        sessionId: state.sessionId,
+        kind,
+        base64: bytesToBase64(bytes),
+      });
+      state.operatorFiles = { ...state.operatorFiles, [kind]: stored };
+      // The first operator file opens the session these inputs belong to, so
+      // everything that follows lands in the same one.
+      if (stored.sessionId !== undefined) state.sessionId = stored.sessionId;
+      operatorFiles.render(state.operatorFiles);
+      refreshEnabled();
     });
-    state.operatorFiles = { ...state.operatorFiles, [kind]: stored };
-    // The first operator file opens the session these inputs belong to, so
-    // everything that follows lands in the same one.
-    if (stored.sessionId !== undefined) state.sessionId = stored.sessionId;
-    operatorFiles.render(state.operatorFiles);
-    refreshEnabled();
   }
 
   /**
@@ -169,20 +180,22 @@ export function createGovernance() {
         base64: bytesToBase64(new Uint8Array(await file.arrayBuffer())),
       })),
     );
-    const stored = await storeObservation({
-      sessionId: state.sessionId,
-      installRoot,
-      manifestBase64: bytesToBase64(manifestBytes),
-      files: uploaded,
+    await enqueueUpload(async () => {
+      const stored = await storeObservation({
+        sessionId: state.sessionId,
+        installRoot,
+        manifestBase64: bytesToBase64(manifestBytes),
+        files: uploaded,
+      });
+      // A part that changed while this was in flight is a different observation,
+      // and its own send is the one that answers for it.
+      if (state.observation !== pending) return;
+      state.observation = { ...pending, stored };
+      // Like the operator files, the first thing supplied opens the session these
+      // inputs belong to, so everything that follows lands in the same one.
+      if (stored.sessionId !== undefined) state.sessionId = stored.sessionId;
+      observation.render(state.observation);
     });
-    // A part that changed while this was in flight is a different observation,
-    // and its own send is the one that answers for it.
-    if (state.observation !== pending) return;
-    state.observation = { ...pending, stored };
-    // Like the operator files, the first thing supplied opens the session these
-    // inputs belong to, so everything that follows lands in the same one.
-    if (stored.sessionId !== undefined) state.sessionId = stored.sessionId;
-    observation.render(state.observation);
   }
 
   /**
