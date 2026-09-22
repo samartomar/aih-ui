@@ -7,8 +7,13 @@
  *   body     the publisher's PRODUCT DESCRIPTION
  *   footer   the SCAN STATUS pill, the TOKEN ESTIMATE chip, the allow toggle
  *
- * The title, category and description come from Catalog's publisher metadata:
- * the upstream publisher's own text, verbatim, where Catalog publishes it. Where
+ * The title and description come from Catalog's publisher metadata: the
+ * upstream publisher's own text, verbatim, where Catalog publishes it. The
+ * category badge is Catalog's CURATED category when the installed Catalog
+ * publishes its curated dataset - its label, or "Not curated", with the
+ * rationale on the tooltip - and otherwise the category the upstream publisher
+ * declares, as before. A curated category is never called an upstream
+ * declaration, and an upstream one is never called curated. Where
  * it does not - and for scan status and token estimate, which nothing publishes -
  * each slot keeps its place and its look and says "Not published"; it is not
  * borrowed for something else. The
@@ -24,13 +29,26 @@ import { el } from "../app/dom.js";
 import { NOT_PUBLISHED } from "../app/absence.js";
 import { KIND_ICON, KIND_PRIMITIVE, identity } from "./entry.js";
 import { provenanceNote, publishedText, publisherOf } from "./publisher.js";
+import { categoryBadge } from "./categories.js";
 
-function card(entry, selectedId, onSelect, publisher) {
+/** The category badge's text, whether it reads as a value, and its tooltip. */
+function badgeOf(entry, record, categories) {
+  const curated = categoryBadge(categories, entry);
+  if (curated !== null) return { text: curated.text, value: curated.curated, title: curated.title };
+  const declared = publishedText(record, "category");
+  return {
+    text: declared ?? NOT_PUBLISHED,
+    value: declared !== null,
+    title: provenanceNote(record, "category", "Category"),
+  };
+}
+
+function card(entry, selectedId, onSelect, publisher, categories) {
   const id = identity(entry);
   const record = publisherOf(publisher, entry);
   const title = publishedText(record, "title");
   const description = publishedText(record, "description");
-  const categoryText = publishedText(record, "category");
+  const badge = badgeOf(entry, record, categories);
   const isSelected = selectedId === id.entryId;
 
   const node = el("div", `group rounded border p-3 flex flex-col justify-between hover:border-primary transition-all cursor-pointer shadow-xs ${isSelected ? "border-primary" : "border-surface-container-high/60"}`);
@@ -58,10 +76,10 @@ function card(entry, selectedId, onSelect, publisher) {
   const badges = el("div", "flex items-center gap-1 shrink-0");
   const category = el(
     "span",
-    `px-1.5 py-0.5 rounded bg-surface-container-low border border-surface-container-high/40 text-[8.5px] font-mono text-outline/90${categoryText === null ? "" : " uppercase"}`,
-    categoryText ?? NOT_PUBLISHED,
+    `px-1.5 py-0.5 rounded bg-surface-container-low border border-surface-container-high/40 text-[8.5px] font-mono text-outline/90${badge.value ? " uppercase" : ""}`,
+    badge.text,
   );
-  category.title = provenanceNote(record, "category", "Category");
+  category.title = badge.title;
   badges.appendChild(category);
   head.appendChild(badges);
   top.appendChild(head);
@@ -122,7 +140,7 @@ function card(entry, selectedId, onSelect, publisher) {
  */
 export function createCards({ elements, onSelect }) {
   return {
-    /** @param model { entries, total, noun, selectedId, publisher } */
+    /** @param model { entries, total, noun, selectedId, publisher, categories } */
     render(model) {
       elements.cardsGrid.replaceChildren();
       if (!model.entries.length) {
@@ -130,7 +148,7 @@ export function createCards({ elements, onSelect }) {
         empty.appendChild(el("span", "font-mono text-on-surface", String(model.total)));
         elements.cardsGrid.appendChild(empty);
       } else {
-        elements.cardsGrid.append(...model.entries.map((entry) => card(entry, model.selectedId, onSelect, model.publisher)));
+        elements.cardsGrid.append(...model.entries.map((entry) => card(entry, model.selectedId, onSelect, model.publisher, model.categories)));
       }
       elements.visibleCount.textContent = String(model.entries.length);
       elements.visibleCaption.textContent = `of ${model.total} ${model.noun ?? "catalog entries"}`;

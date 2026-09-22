@@ -23,6 +23,8 @@
  *   catalog-publisher.mjs   Catalog's publisher titles and descriptions
  *   catalog-served.mjs     the catalog document the page is served: the
  *                          public reader's result, member by member
+ *   catalog-qualification.mjs  Catalog's publisher qualification, via its reader
+ *   catalog-categories.mjs  Catalog's curated categories, via its reader
  *   core-targets.mjs       Core's supported AI CLI targets
  *   validation-fixture.mjs VALIDATION ONLY: the one module that manufactures
  *                          anything, and it labels everything it makes
@@ -81,6 +83,14 @@ const OPS = {
   async publisher() {
     const { catalogPublisher } = await import("./catalog-publisher.mjs");
     return catalogPublisher();
+  },
+  async qualification() {
+    const { catalogQualification } = await import("./catalog-qualification.mjs");
+    return catalogQualification();
+  },
+  async categories() {
+    const { catalogCategories } = await import("./catalog-categories.mjs");
+    return catalogCategories();
   },
 };
 

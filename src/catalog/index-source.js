@@ -8,6 +8,8 @@
  * projected member by member in the backend - never the raw index file. So
  * every field read here is a field of the reader's result type, and a field
  * an installed reader does not return is simply not there to render.
+ * Catalog's qualification and curated categories arrive the same way, each
+ * from its own reader, when the installed Catalog publishes them.
  *
  * Every render starts from the contract, not from whatever the file happens to
  * hold: a document that does not declare the expected format and version is a
@@ -16,6 +18,8 @@
 
 import { applyCollections } from "./collections.js";
 import { applyPublisher } from "./publisher.js";
+import { applyQualification } from "./qualification.js";
+import { applyCategories } from "./categories.js";
 
 const INDEX_URL = "./catalog-index.json";
 const SUMMARY_URL = "./summary.json";
@@ -66,5 +70,18 @@ export async function loadCatalog() {
     ? await loadJson(facts.url, "Catalog's publisher metadata")
     : null;
   const publisher = applyPublisher(facts, data, index.entries);
-  return { entries: inventory.current, inventory, summary, publisher };
+  // Qualification and curated categories: display-only, each optional.
+  const sidecar = async (block, what) =>
+    block?.state === "published" ? loadJson(block.url, what) : null;
+  const qualification = applyQualification(
+    summary?.qualification ?? null,
+    await sidecar(summary?.qualification, "Catalog's qualification"),
+    index.entries,
+  );
+  const categories = applyCategories(
+    summary?.categories ?? null,
+    await sidecar(summary?.categories, "Catalog's curated categories"),
+    index.entries,
+  );
+  return { entries: inventory.current, inventory, summary, publisher, qualification, categories };
 }

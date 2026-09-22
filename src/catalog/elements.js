@@ -18,6 +18,7 @@ export function catalogElements() {
     "details-identity", "details-source", "details-desc", "details-capabilities",
     "details-artifacts", "detector-run-state", "detector-finding-detail",
     "scanner-report-statement", "statement-count", "security-statements",
+    "qualification-evaluated", "security-qualification", "qualification-footer",
   ];
   const found = collectIds(ids);
   return {
@@ -62,6 +63,9 @@ export function catalogElements() {
       scannerReportStatement: found.scannerReportStatement,
       statementCount: found.statementCount,
       securityStatements: found.securityStatements,
+      qualificationEvaluated: found.qualificationEvaluated,
+      securityQualification: found.securityQualification,
+      qualificationFooter: found.qualificationFooter,
     },
   };
 }

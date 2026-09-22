@@ -115,6 +115,24 @@ function startupFact(consumerDir, op) {
   return { state: "unavailable", reason: answer.error };
 }
 
+/**
+ * A Catalog sidecar the page can do without. `absent` means the installed
+ * Catalog does not export it; `unavailable` means its own reader refused it or
+ * the service failed. Neither is ever turned into a value.
+ */
+function sidecarFact(consumerDir, op) {
+  const fact = startupFact(consumerDir, op);
+  if (fact.state === "published" && fact[op] === null) return { state: "absent", reason: fact.absent };
+  return fact;
+}
+
+/** The summary block for a sidecar: where the page fetches it, or why it cannot. */
+function sidecarSummary(fact, key, url) {
+  if (fact.state !== "published") return { state: fact.state, reason: fact.reason };
+  const { entries, ...facts } = fact[key];
+  return { state: "published", url, ...facts };
+}
+
 /* ----------------------------------------------------------------------- main */
 
 async function main() {
@@ -232,6 +250,22 @@ async function main() {
       : `publisher: unavailable (${publisher.reason})`,
   );
 
+  // Catalog's publisher qualification and curated categories. Display-only:
+  // a Catalog that predates either export leaves its block reading Not
+  // published, and one whose sidecar its own reader refuses says so.
+  const qualification = sidecarFact(consumerDir, "qualification");
+  log(
+    qualification.state === "published"
+      ? `qualification: ${qualification.qualification.coverage.qualified} of ${qualification.qualification.coverage.entries} entries qualified at ${qualification.qualification.evaluatedAt}; signature ${qualification.qualification.signature}, attestation ${qualification.qualification.attestation}`
+      : `qualification: ${qualification.state} (${qualification.reason})`,
+  );
+  const categories = sidecarFact(consumerDir, "categories");
+  log(
+    categories.state === "published"
+      ? `categories: ${categories.categories.taxonomy.length} curated categories; ${categories.categories.coverage.curated} of ${categories.categories.coverage.entries} entries curated`
+      : `categories: ${categories.state} (${categories.reason})`,
+  );
+
   // --- 4. page files into the run directory ---------------------------------
   for (const asset of [...page, ...presentation]) {
     const target = join(runDir, asset.to);
@@ -240,6 +274,14 @@ async function main() {
   }
   if (publisher.state === "published") {
     writeFileSync(join(runDir, "publisher-metadata.json"), `${JSON.stringify(publisher.publisher)}
+`);
+  }
+  if (qualification.state === "published") {
+    writeFileSync(join(runDir, "catalog-qualification.json"), `${JSON.stringify(qualification.qualification)}
+`);
+  }
+  if (categories.state === "published") {
+    writeFileSync(join(runDir, "catalog-categories.json"), `${JSON.stringify(categories.categories)}
 `);
   }
   // The URL is unchanged; the bytes are the reader's projection.
@@ -289,6 +331,10 @@ async function main() {
             coverage: publisher.publisher.coverage,
           }
         : { state: "unavailable", reason: publisher.reason },
+    // Catalog's qualification and curated categories: where each is served, or
+    // why it is not.
+    qualification: sidecarSummary(qualification, "qualification", "./catalog-qualification.json"),
+    categories: sidecarSummary(categories, "categories", "./catalog-categories.json"),
     // Core's supported targets, or why they are unavailable.
     coreTargets:
       coreTargets.state === "published"

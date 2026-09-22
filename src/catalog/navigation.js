@@ -15,14 +15,19 @@
  *   - collection: its current content release, with a marker when the
  *                 installed owning package is a different release.
  *
- * The selected source opens to show its categories. Catalog publishes none, so
- * that row holds its place and says so. The organization's own additions come
- * last and are empty until something is actually imported.
+ * The selected source opens to show its categories. When the installed Catalog
+ * publishes its curated dataset, those are the taxonomy categories its items
+ * carry, each with a count taken from the served records at run time, then how
+ * many no rule curated - all of it "curated by Catalog maintainers", never an
+ * upstream declaration. Without that dataset the row holds its place and says
+ * Not published. The organization's own additions come last and are empty
+ * until something is actually imported.
  */
 
 import { el } from "../app/dom.js";
-import { NOT_PUBLISHED, NOT_SUPPLIED } from "../app/absence.js";
+import { NOT_CURATED, NOT_PUBLISHED, NOT_SUPPLIED } from "../app/absence.js";
 import { describeScope, sourceScopes } from "./selectors.js";
+import { curationNote } from "./categories.js";
 
 function badgeNode(scope, selected) {
   if (scope.badge === null) return null;
@@ -47,7 +52,10 @@ function badgeNode(scope, selected) {
  * that publishes a curated taxonomy changes this sentence by itself, and a
  * coverage this page could not read says so rather than showing a zero.
  */
-function categoriesReason(coverage) {
+function categoriesReason(coverage, curated) {
+  if (curated?.view?.state === "unavailable") {
+    return `${NOT_PUBLISHED}: Catalog's category reader refused the installed curated categories (${curated.view.reason ?? "no reason given"}).`;
+  }
   // Two numbers or none: a missing count is stated as a missing count, never
   // rendered as a zero and never as the word "undefined".
   if (typeof coverage?.published !== "number" || typeof coverage?.entries !== "number") {
@@ -56,7 +64,41 @@ function categoriesReason(coverage) {
   return `${NOT_PUBLISHED}: Catalog publishes a category for ${coverage.published} of ${coverage.entries} entries and no curated taxonomy.`;
 }
 
-function scopeRow(row, selected, onSelect, coverage) {
+/** One category line in the design source's own layout: its name and its count. */
+function categoryLine(label, count, title, key) {
+  const line = el("div", "flex items-center justify-between px-1.5 py-0.5 rounded text-on-surface-variant");
+  line.dataset.category = key;
+  line.title = title;
+  line.appendChild(el("span", "truncate", label));
+  line.appendChild(el("span", "font-mono text-outline text-[10px]", String(count)));
+  return line;
+}
+
+/**
+ * The selected scope's curated categories: who curated them, then one line per
+ * category its items carry, then the items no rule curated. Every count is the
+ * page's own, over the served records of this scope.
+ */
+function curatedCategories(curated) {
+  const categories = el("div", "pl-2 space-y-0.5 text-[10.5px]");
+  categories.dataset.categories = "curated";
+  const note = curationNote(curated.view);
+  categories.title = note;
+  const caption = el("div", "px-1.5 pt-0.5 text-[9.5px] font-mono text-outline truncate", "Curated by Catalog maintainers");
+  caption.title = note;
+  categories.appendChild(caption);
+  for (const item of curated.rows) {
+    categories.appendChild(categoryLine(item.label, item.count, `${item.label}: ${item.description} ${note}`, item.id));
+  }
+  if (curated.notCurated > 0) {
+    categories.appendChild(
+      categoryLine(NOT_CURATED, curated.notCurated, `No rule of the Catalog maintainers' curation assigns these items a category. ${note}`, "not-curated"),
+    );
+  }
+  return categories;
+}
+
+function scopeRow(row, selected, onSelect, coverage, curated) {
   const scope = describeScope(row);
   const panel = el(
     "div",
@@ -100,14 +142,16 @@ function scopeRow(row, selected, onSelect, coverage) {
   head.addEventListener("click", () => onSelect(selected ? null : row.filterValue));
   panel.appendChild(head);
 
-  if (selected) {
+  if (selected && curated?.view?.state === "published") {
     // Where the design source lists this source's categories, with counts.
-    // Catalog publishes no curated taxonomy, so the row keeps its place and
-    // says how little it does publish, counted from the served data.
+    panel.appendChild(curatedCategories(curated));
+  } else if (selected) {
+    // Without Catalog's curated dataset the row keeps its place and says how
+    // little the presentation data publishes, counted from the served data.
     const categories = el("div", "pl-2 space-y-0.5 text-[10.5px]");
     const missing = el("div", "flex items-center justify-between px-1.5 py-0.5 rounded text-on-surface-variant opacity-60 cursor-not-allowed");
     missing.dataset.absence = "categories";
-    missing.title = categoriesReason(coverage);
+    missing.title = categoriesReason(coverage, curated);
     missing.appendChild(el("span", "truncate", "Categories"));
     missing.appendChild(el("span", "font-mono text-outline text-[10px]", NOT_PUBLISHED));
     categories.appendChild(missing);
@@ -138,13 +182,13 @@ function additionsRow(organizationName) {
  */
 export function createNavigation({ elements, onSelectSource }) {
   return {
-    /** @param model { view, total, counts, organizationName, categoryCoverage } */
+    /** @param model { view, total, counts, organizationName, categoryCoverage, curated } */
     render(model) {
       elements.navSourcesCount.textContent = String(model.total);
       elements.scopeList.replaceChildren();
       for (const row of sourceScopes(model.counts)) {
         elements.scopeList.appendChild(
-          scopeRow(row, model.view.source === row.filterValue, onSelectSource, model.categoryCoverage),
+          scopeRow(row, model.view.source === row.filterValue, onSelectSource, model.categoryCoverage, model.curated),
         );
       }
       elements.scopeList.appendChild(additionsRow(model.organizationName ?? null));

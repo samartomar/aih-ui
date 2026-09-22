@@ -39,3 +39,12 @@ export const FINDING_DETAIL_ABSENT =
 export const EVIDENCE_SUMMARY_ABSENT =
   `${NOT_PUBLISHED}: Catalog's public reader does not surface the evidence summary.`;
 
+/** The Security pane's Qualification block when Catalog ships no sidecar. */
+export const QUALIFICATION_ABSENT =
+  `${NOT_PUBLISHED}: the installed Catalog publishes no qualification sidecar.`;
+
+/** Said under every Qualification block, whatever state it shows. */
+export const QUALIFICATION_IS_NOT_AUTHORIZATION = "Publisher qualification is not organizational authorization.";
+
+/** A curated category the Catalog maintainers' curation does not assign. */
+export const NOT_CURATED = "Not curated";

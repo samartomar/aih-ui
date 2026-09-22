@@ -20,14 +20,28 @@
  * The header's flags slot is where the design source reports scan flags. No
  * scan result is published per item, so it says so rather than showing a count
  * of the Catalog's own evidence statements in that place. Those statements are
- * on the Security tab, labelled as statements.
+ * on the Security tab, labelled as statements, with each one's summary as
+ * Catalog's public reader returns it.
+ *
+ * The Security tab's Qualification block shows Catalog's publisher
+ * qualification for the entry - the reader's state word, the receipt window,
+ * the signed head's signature state and the attestation state - with the same
+ * footer under every state: publisher qualification is not organizational
+ * authorization. A qualified state is Catalog's word, never an approval.
  */
 
 import { el, text } from "../app/dom.js";
-import { EVIDENCE_SUMMARY_ABSENT, FINDING_DETAIL_ABSENT, NOT_DECLARED, NOT_PUBLISHED } from "../app/absence.js";
+import {
+  EVIDENCE_SUMMARY_ABSENT,
+  FINDING_DETAIL_ABSENT,
+  NOT_DECLARED,
+  NOT_PUBLISHED,
+  QUALIFICATION_IS_NOT_AUTHORIZATION,
+} from "../app/absence.js";
 import { KIND_ICON, identity, shortDigest, sourceDetailRows, sourceIdentity, sourceLabelOf, statementsOf } from "./entry.js";
 import { collectionOf, scopeCountOf } from "./selectors.js";
 import { provenanceNote, publishedText, publisherOf } from "./publisher.js";
+import { QUALIFICATION_STATE_MEANING, attestationSentence, qualificationOf } from "./qualification.js";
 
 /*
  * Why each Scanner Telemetry slot is empty. Each names the package that owns
@@ -37,6 +51,9 @@ import { provenanceNote, publishedText, publisherOf } from "./publisher.js";
  */
 const DETECTOR_RUN_STATE_ABSENT =
   `${NOT_PUBLISHED}: Scan publishes one detector per record and no per-detector run state.`;
+/** An entry the installed Catalog's qualification sidecar does not name. */
+const QUALIFICATION_NOT_COVERED =
+  `${NOT_PUBLISHED}: the installed Catalog's qualification sidecar does not cover this entry.`;
 
 function row(parent, label, value, title) {
   const line = el("div", "flex justify-between gap-2");
@@ -97,12 +114,79 @@ function originOf(source) {
   return sourceLabelOf(source);
 }
 
+/** A "label value" line of the Qualification block; the value is the reader's word, as text. */
+function qualificationLine(parent, label, value, title, key) {
+  const line = el("div", "flex justify-between gap-2");
+  line.appendChild(el("span", "shrink-0 font-mono text-outline", label));
+  const valueNode = el("span", "font-mono text-on-surface text-right break-all", value);
+  valueNode.dataset.qualification = key;
+  if (title) valueNode.title = title;
+  line.appendChild(valueNode);
+  parent.appendChild(line);
+}
+
+/**
+ * The Qualification block for one entry, or its reason when there is none.
+ * Nothing here is coloured as success: `qualified` is Catalog's statement
+ * about its own signed catalog, not a decision anyone made about this item.
+ */
+function renderQualification(elements, view, entry) {
+  const box = elements.securityQualification;
+  box.replaceChildren();
+  const sidecar = view?.state === "published" ? view.document : null;
+  elements.qualificationEvaluated.textContent = sidecar === null ? "-" : `evaluated ${sidecar.evaluatedAt}`;
+  elements.qualificationEvaluated.title = sidecar === null
+    ? ""
+    : `Catalog's qualification reader evaluated every receipt at ${sidecar.evaluatedAt}, when this preview started.`;
+  const reason = entry === null
+    ? "No entry is selected, so there is no qualification to state."
+    : sidecar === null
+      ? view?.reason ?? `${NOT_PUBLISHED}: the preview supplied no qualification.`
+      : qualificationOf(view, entry) === null
+        ? QUALIFICATION_NOT_COVERED
+        : null;
+  if (reason !== null) {
+    box.className = "p-2 rounded bg-surface-container-low border border-surface-container-high/40 space-y-1 text-[10.5px] text-outline";
+    box.dataset.absence = "qualification";
+    box.textContent = NOT_PUBLISHED;
+    box.title = reason;
+    return;
+  }
+  delete box.dataset.absence;
+  box.title = "";
+  box.className = "p-2 rounded bg-surface-container-low border border-surface-container-high/40 space-y-1 text-[10.5px] text-on-surface-variant";
+  const record = qualificationOf(view, entry);
+  qualificationLine(
+    box, "state", record.state,
+    `${record.state}: ${QUALIFICATION_STATE_MEANING[record.state] ?? "a state this build has no wording for"}, ` +
+      `at ${sidecar.evaluatedAt}. ${QUALIFICATION_IS_NOT_AUTHORIZATION}`,
+    "state",
+  );
+  qualificationLine(box, "notBefore", record.notBefore, "The receipt's validity window opens at this instant.", "notBefore");
+  qualificationLine(box, "expiresAt", record.expiresAt, "The receipt's validity window closes at this instant.", "expiresAt");
+  qualificationLine(
+    box, "signature", sidecar.signature,
+    `The shipped signed catalog head (sequence ${sidecar.catalog?.sequence}, signed by ${sidecar.catalog?.signerIdentity}), ` +
+      "re-verified against the shipped public signer root by Catalog's reader.",
+    "signature",
+  );
+  qualificationLine(
+    box, "attestation", sidecar.attestation,
+    `The outer attestation over the receipts, for ${sidecar.publisher?.repository}.`,
+    "attestation",
+  );
+  const sentence = el("p", "text-[10px] text-outline leading-snug break-words", attestationSentence(sidecar));
+  sentence.dataset.qualification = "attestation-sentence";
+  box.appendChild(sentence);
+}
+
 /** @param elements the inspector header and the two panes' containers */
 export function createDetails({ elements }) {
   // Two Scanner Telemetry slots the design source fills from a scan result.
   // Neither depends on the selection, so each states its reason once, here.
   elements.detectorRunState.title = DETECTOR_RUN_STATE_ABSENT;
   elements.detectorFindingDetail.title = `${NOT_PUBLISHED}: ${FINDING_DETAIL_ABSENT}`;
+  elements.qualificationFooter.textContent = QUALIFICATION_IS_NOT_AUTHORIZATION;
 
   function reset() {
     elements.detailsIdentity.replaceChildren();
@@ -160,9 +244,10 @@ export function createDetails({ elements }) {
   }
 
   return {
-    /** @param model { entry, counts, publisher } */
-    render({ entry, counts, publisher }) {
+    /** @param model { entry, counts, publisher, qualification } */
+    render({ entry, counts, publisher, qualification }) {
       reset();
+      renderQualification(elements, qualification, entry ?? null);
       if (!entry) {
         renderEmpty();
         return;
@@ -266,6 +351,12 @@ export function createDetails({ elements }) {
       } else {
         row(elements.detailsArtifacts, "Publisher text file", null, provenanceNote(record, "description", "Publisher text"));
       }
+      // What the upstream publisher declares, kept apart from Catalog's
+      // curated category on the card badge.
+      row(
+        elements.detailsArtifacts, "Upstream category", publishedText(record, "category"),
+        provenanceNote(record, "category", "Upstream category"),
+      );
       row(elements.detailsArtifacts, "Seed path", entry.seed?.path);
       row(elements.detailsArtifacts, "Seed sha256", entry.seed?.sha256);
       for (const [name, artifact] of Object.entries(entry.artifacts ?? {})) {

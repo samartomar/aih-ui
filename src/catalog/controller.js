@@ -15,8 +15,9 @@ import { createNavigation } from "./navigation.js";
 import { createProvenance } from "./provenance.js";
 import { createToolbar } from "./toolbar.js";
 import { categoryCoverage } from "./publisher.js";
+import { categoryRows } from "./categories.js";
 import { loadCatalog } from "./index-source.js";
-import { inventoryCounts, scopeTotal, selectedScope, visibleEntries } from "./selectors.js";
+import { inventoryCounts, scopeEntries, scopeTotal, selectedScope, visibleEntries } from "./selectors.js";
 import { emptyView, restoreView, saveView } from "./view-state.js";
 import { text } from "../app/dom.js";
 
@@ -37,6 +38,10 @@ export function createCatalog({ onSelectEntry, onSummary }) {
     inventory: null,
     // Catalog's publisher titles and descriptions, bound to the served index.
     publisher: null,
+    // Catalog's publisher qualification and curated categories, each bound to
+    // the served index, or the reason the installed Catalog has none.
+    qualification: null,
+    categories: null,
     context: { membership: new Map(), installed: new Map() },
     view: emptyView(),
     selectedId: null,
@@ -77,12 +82,32 @@ export function createCatalog({ onSelectEntry, onSummary }) {
   function cardsModel() {
     const scope = selectedScope(state.counts, state.view);
     return {
-      entries: visibleEntries(state.entries, state.view, state.context.membership, state.publisher),
+      entries: visibleEntries(state.entries, state.view, state.context.membership, state.publisher, state.categories),
       total: scopeTotal(state.entries, state.view, state.context.membership),
       noun: scope === null ? "catalog entries" : "entries from this source",
       selectedId: state.selectedId,
       publisher: state.publisher,
+      categories: state.categories,
     };
+  }
+
+  /** The rail's model: its categories are counted here, over the selected scope only. */
+  function navigationModel() {
+    const curated = state.categories?.state === "published" && state.view.source
+      ? { view: state.categories, ...categoryRows(state.categories, scopeEntries(state.entries, state.view, state.context.membership)) }
+      : { view: state.categories, rows: [], notCurated: 0 };
+    return {
+      view: state.view,
+      total: state.entries.length,
+      counts: state.counts,
+      organizationName: state.organizationName,
+      categoryCoverage: categoryCoverage(state.publisher, state.summary?.entryCount),
+      curated,
+    };
+  }
+
+  function detailsModel(entry) {
+    return { entry, counts: state.counts, publisher: state.publisher, qualification: state.qualification };
   }
 
   function render() {
@@ -99,13 +124,7 @@ export function createCatalog({ onSelectEntry, onSummary }) {
       inventory: state.inventory,
     });
     metrics.render({ kindCounts: state.counts.kindCounts, total, activeKind: state.view.kind });
-    navigation.render({
-      view: state.view,
-      total,
-      counts: state.counts,
-      organizationName: state.organizationName,
-      categoryCoverage: categoryCoverage(state.publisher, state.summary?.entryCount),
-    });
+    navigation.render(navigationModel());
     toolbar.render({
       kindCounts: state.counts.kindCounts,
       sourceTypeCounts: state.counts.sourceTypeCounts,
@@ -114,22 +133,24 @@ export function createCatalog({ onSelectEntry, onSummary }) {
       view: state.view,
     });
     cards.render(cardsModel());
-    details.render({ entry: selectedEntry(), counts: state.counts, publisher: state.publisher });
+    details.render(detailsModel(selectedEntry()));
   }
 
   function select(entryId) {
     state.selectedId = entryId;
     const entry = selectedEntry();
     cards.render(cardsModel());
-    details.render({ entry, counts: state.counts, publisher: state.publisher });
+    details.render(detailsModel(entry));
     onSelectEntry(entry);
   }
 
   return {
     async start() {
-      const { entries, inventory, summary, publisher } = await loadCatalog();
+      const { entries, inventory, summary, publisher, qualification, categories } = await loadCatalog();
       state.entries = entries;
       state.publisher = publisher;
+      state.qualification = qualification;
+      state.categories = categories;
       state.inventory = inventory;
       state.summary = summary;
       onSummary?.(summary);
@@ -153,15 +174,7 @@ export function createCatalog({ onSelectEntry, onSummary }) {
     /** The organization name the user saved, or null. Re-renders the rail. */
     setOrganizationName(name) {
       state.organizationName = name;
-      if (state.entries.length > 0) {
-        navigation.render({
-          view: state.view,
-          total: state.entries.length,
-          counts: state.counts,
-          organizationName: state.organizationName,
-          categoryCoverage: categoryCoverage(state.publisher, state.summary?.entryCount),
-        });
-      }
+      if (state.entries.length > 0) navigation.render(navigationModel());
     },
   };
 }
