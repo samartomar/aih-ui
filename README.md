@@ -40,7 +40,9 @@ src/
     controller.js       the ONE owner of selection and filter state
     entry.js            pure readers over a published entry
     selectors.js        search, filters, sorting, inventory counts (pure)
-    index-source.js     fetch + contract assertion of the index and summary
+    index-source.js     fetch + contract assertion of the served catalog and summary
+    qualification.js    Catalog's publisher qualification, bound to the served index
+    categories.js       Catalog's curated categories, bound to the served index
     view-state.js       the view kept for a browser session
     navigation.js       source navigation (the left rail)
     metrics.js          the metric tiles
@@ -146,9 +148,36 @@ release.
 
 Selecting a row scopes the grid, the "All Items" count and the masthead to that
 source; selecting it again shows every source. The selected row opens to where the
-design source lists categories. The index publishes none, so that row says **Not
-published** rather than inventing one. The organization's own additions come last
-and read **Not supplied** until something is actually imported.
+design source lists categories: see "Curated categories" below. The organization's
+own additions come last and read **Not supplied** until something is actually
+imported.
+
+### Curated categories
+
+When the installed Catalog publishes its curated dataset
+(`@aihq/catalog/catalog-categories.json`, read in the backend with
+`readCatalogCategoriesV1` and served as `catalog-categories.json`), the page uses
+it as given:
+
+- the selected rail row lists, under **Curated by Catalog maintainers**, each
+  taxonomy category its items carry with a count taken from the served records at
+  run time, largest first, then **Not curated** with the count of items no rule
+  assigned;
+- each card's category badge shows its curated category's label, with a tooltip
+  naming `basis: curated` and the maintainers' one-sentence rationale; an entry
+  whose category is `null` reads **Not curated**;
+- search matches the curated label.
+
+This is curation by the Catalog maintainers, never an upstream declaration, and
+the page never words it as one. What an upstream publisher declares stays in the
+presentation data and is shown as **Upstream category** in the inspector's
+identity disclosure. A category says nothing about scanning, qualification or
+policy.
+
+Against an older Catalog without the export the rail row keeps its place and reads
+**Not published** with both counts from the presentation data, and the badge shows
+the upstream category where one is declared, as before. A dataset Catalog's own
+reader refuses reads **Not published** with that reason.
 
 ### One current collection per owner
 
@@ -263,8 +292,9 @@ nothing.
 - A published description fills the card body and Publisher Overview, set as
   text, never markup. Its tooltip names the upstream field and file. The file
   path and sha256 are in the identity disclosure.
-- A category appears only where the upstream file declares one. No taxonomy is
-  inferred.
+- A category the upstream file declares is shown as **Upstream category**. It is
+  the card badge only when the installed Catalog publishes no curated categories
+  (see "Curated categories"). No taxonomy is inferred.
 - An unavailable value reads **Not published**, and its tooltip gives Catalog's
   reason: not declared upstream, not in the source file, and so on.
 - Search matches published titles, descriptions and categories too.
@@ -525,9 +555,10 @@ supplies the key that validates it, nothing has been verified.
   `partial`. With the operator's manifest, install root and folder, a route
   reaches `observed` / `observed` — Core read the uploaded copies and found them
   identical to the verified scan; nothing was installed, applied or executed.
-- AIH-supported qualification is unavailable. The index declares
-  `organizationAdmission: "not-authoritative"` and ships no signed support
-  receipt; the pane surfaces that field verbatim.
+- Publisher qualification is Catalog's statement, never organizational
+  authorization. A Catalog that ships its qualification sidecar is shown on the
+  Security tab (see "Publisher qualification"); `organizationAdmission` stays
+  `"not-authoritative"` and the pane surfaces it verbatim.
 - Genuine detector evidence is used: the isolated-organization lane runs on
   genuine detector facts. What is still a fixture is (a) the explicitly labelled
   validation mode, which manufactures a fixture and its matching operator trust,
@@ -536,14 +567,15 @@ supplies the key that validates it, nothing has been verified.
   validation signature expires 2026-09-22T19:50:20.085Z, after which that lane
   reports an honest refusal.
 
-Four slots on these screens are empty because a **package** does not publish the
-field, not because this page has not been built. Each names its owner on screen,
+These slots are empty when a **package** does not publish the field, not because
+this page has not been built. Each names its owner on screen,
 so a reader can tell a UI gap from a package gap:
 
 | Slot | Owner | What is missing |
 | --- | --- | --- |
-| Rail categories row | `@aihq/catalog` | a curated category taxonomy with membership. The presentation sidecar publishes a category for a handful of entries and no taxonomy; the row counts both numbers at run time and states them. |
-| Inspector evidence statement text | `@aihq/catalog` | the evidence `summary`. The reader validates it and then drops it, so the only human-readable text on a `CatalogEvidenceV1` record is unreachable through the public reader. |
+| Rail categories row | `@aihq/catalog` older than the curated dataset | a curated category taxonomy with membership. The presentation sidecar publishes a category for a handful of entries and no taxonomy; the row counts both numbers at run time and states them. A Catalog with `readCatalogCategoriesV1` fills it. |
+| Inspector evidence statement text | `@aihq/catalog` older than the reader's `summary` | the evidence `summary`: that reader validates it and then drops it, so the slot reads **Not published** with that reason. A Catalog whose reader returns `summary` fills it, verbatim. |
+| Security pane Qualification block | `@aihq/catalog` older than the qualification sidecar | publisher qualification. The block reads "Not published: the installed Catalog publishes no qualification sidecar." |
 | Security pane per-detector rows | `@aihq/scan` | a `detectors[]` array with a per-detector run state. A record carries one detector object, so "4 of 4 scanners ran" cannot be stated. |
 | Security pane finding detail | `@aihq/scan` | a typed per-finding record, or an exported parser for the annex bytes. A finding is an occurrence fingerprint and a multiplicity: no rule id, severity, message or location. |
 
@@ -580,6 +612,9 @@ tools/
     catalog-collections.mjs  Catalog's current collection view, via its reader
     core-targets.mjs    Core's supported AI CLI targets, via its public export
     catalog-publisher.mjs  Catalog's publisher titles and descriptions, via its reader
+    catalog-served.mjs  the catalog document the page is served, from the reader's result
+    catalog-qualification.mjs  Catalog's publisher qualification, via its reader
+    catalog-categories.mjs  Catalog's curated categories, via its reader
     validation-fixture.mjs  VALIDATION ONLY: the one module that manufactures
                             anything, and it labels everything it makes
 ```
@@ -627,11 +662,57 @@ joins every descriptor path and refuses one that escapes the package root. The
 relationship between the subpath export and the root-relative location is
 checked, not assumed; a failure is reported and no internal directory is guessed.
 
-**Remaining gap for @aihq/catalog:** it publishes artifact paths but not the
-directory that contains them, so the one place that still reads a layout off a
-path is `entryContentDir` in `tools/service/catalog-access.mjs`. It works from a
-path `resolveCatalogContentPathV1` has already validated, and it is the single
-place to change when Catalog publishes an accessor for it.
+**The page is served the reader's output, never the raw index.** The raw
+`defaults/catalog-index-v1.json` bytes do not reach the page. At start the
+backend reads the index with `readCatalogContentV1` and serves, at the same
+`catalog-index.json` URL, `{ format, version, digest, package,
+organizationAdmission, entries }` built member by member from the reader's
+result type (`tools/service/catalog-served.mjs`). A field the installed reader
+does not return cannot be rendered, whatever the index file holds: against a
+Catalog whose reader returns the evidence `summary` the statements show it
+verbatim, and against an older one the slot reads "Not published: Catalog's
+public reader does not surface the evidence summary." The provenance
+disclosure's index sha256 is the reader's digest over the exact published bytes,
+not a hash of the served projection. The regression
+`tools/tests/catalog-served.test.mjs` feeds the builder a reader result carrying
+extra members at every level and asserts none of them is served.
+
+The same rule holds for every other Catalog view: collections, presentation,
+qualification and curated categories each come from their own reader, as plain
+data, and nothing on the page is read around a reader.
+
+**Remaining gap for @aihq/catalog, backend only:** it publishes artifact paths
+but not the directory that contains them, so Core's subject derivation still
+takes that directory from a path, in `entryContentDir`
+(`tools/service/catalog-access.mjs`). It works from a path
+`resolveCatalogContentPathV1` has already validated, never reaches the page, and
+is the single place to change when Catalog publishes an accessor for it.
+
+### Publisher qualification
+
+When the installed Catalog exports `readCatalogQualificationV1` and
+`@aihq/catalog/catalog-qualification.json`, the backend reads the sidecar at
+start with `verifyReceipts` and `verifySignature` - the reader re-verifies the
+shipped signed head (`@aihq/catalog/signed-catalog.json`) against the shipped
+public signer root and hashes every receipt - at the preview's own clock, and
+serves the reader's words as `catalog-qualification.json`. The Security tab's
+**Qualification** block shows, for the selected entry:
+
+- the reader's state word, verbatim (`qualified`, `expired`, `not-yet-valid`,
+  `receipt-absent`, `receipt-digest-mismatch`, `receipt-malformed`,
+  `basis-mismatch`, `member-mismatch`, `subject-mismatch`, `not-evaluated`), with
+  the instant it was evaluated at;
+- the receipt window, `notBefore` and `expiresAt`;
+- `signature`, the signed head's state;
+- `attestation`: today `absent`, with "absent: receipts are not attested until
+  the owner's signed-catalog dispatch" and the sidecar's own `requiredOperation`
+  verbatim.
+
+Every state carries the same footer: **Publisher qualification is not
+organizational authorization.** `qualified` is never coloured or worded as
+approval. An entry the sidecar does not cover reads **Not published** with that
+reason; against an older Catalog without the export the block reads "Not
+published: the installed Catalog publishes no qualification sidecar."
 
 `@aihq/scan` publishes `readScanResultRecordV1` and
 `readScanResultSubjectBindingV1`. Both accept only a value
@@ -662,6 +743,7 @@ The Governance pane never merges answers that belong to different owners:
 | --- | --- | --- |
 | Catalog artifact integrity | Catalog | `readCatalogContentV1` with `verifyArtifacts`, via `/api/catalog-integrity` |
 | Published evidence | Catalog | the index's qualification records — **declared, and not byte-checked by that reader** |
+| Publisher qualification | Catalog | `readCatalogQualificationV1`, on the Security tab — **not organizational authorization** |
 | Scanner attestation | Scan, under operator trust | `verifyScanAttestationV2` inside Core's consumption |
 | Scanner result facts | Scan | `readScanResultRecordV1`, read after verification |
 | Binding | Core | the six status axes |
