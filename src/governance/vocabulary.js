@@ -77,7 +77,7 @@ export const REFUSAL = {
   "decision-not-current": "The referenced decision is outside its validity window.",
   "decision-scope-mismatch": "The decision does not cover this subject, target or effect.",
   "qualification-unverified": "The qualification basis did not verify against the evidence supplied.",
-  "observation-missing": "Qualification resolved, but there is no observation source for the effect, so nothing was executed. This is the furthest any route reaches today.",
+  "observation-missing": "Qualification resolved, but there is no observation source for the effect, so nothing was executed. Supply the upstream-artifact manifest, the install root and the folder itself, and Core can reach an observation.",
   "observation-manifest-unavailable": "No upstream-artifact manifest was found at the path supplied for observation.",
   "observation-manifest-unsafe": "The observation manifest failed its custody check: it is a symlink, a hard link, or it changed while being read.",
   "observation-manifest-mismatch": "The observation manifest names a different decision, subject, target or effect than the saved document and the authorized decision.",
@@ -90,3 +90,19 @@ export const REFUSAL = {
   "observed-file-changed": "An observed file changed between the two reads. Observation will not accept a moving target.",
   "observation-not-effective": "The observation receipt was minted but did not resolve to an effective observation under the current authority and decision.",
 };
+
+/**
+ * The plain sentence for a refusal code, never an empty line.
+ *
+ * Core owns the codes; this page owns their wording. A Core that returns a code
+ * added after this build says so in as many words: an empty explanation under a
+ * code reads as "nothing is wrong with it", which is the opposite of the truth.
+ */
+export function refusalWording(code) {
+  return (
+    REFUSAL[code]
+    ?? `${code}: No plain-language wording is published for this refusal code yet. ` +
+      "It is a typed refusal from @aihq/core and this page is older than it. " +
+      "The code above is the exact term to search the Core contract for."
+  );
+}

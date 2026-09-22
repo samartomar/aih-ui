@@ -11,7 +11,7 @@
 
 import { el } from "../app/dom.js";
 import { NOT_SUPPLIED } from "../app/absence.js";
-import { REFUSAL, TONE } from "./vocabulary.js";
+import { TONE, refusalWording } from "./vocabulary.js";
 import { row } from "./rows.js";
 
 /**
@@ -47,7 +47,7 @@ export function createPrepared({ elements, onPrepare, onDownload }) {
       }
       if (prepared.prepared !== true) {
         box.appendChild(el("div", "text-error font-semibold", `Refused: ${prepared.status.reason}`));
-        box.appendChild(el("div", "text-on-surface-variant leading-snug", REFUSAL[prepared.status.reason] ?? ""));
+        box.appendChild(el("div", "text-on-surface-variant leading-snug", refusalWording(prepared.status.reason)));
         for (const diagnostic of prepared.diagnostics ?? []) {
           box.appendChild(el("div", "text-outline leading-snug", `${diagnostic.field}: ${diagnostic.detail}`));
         }

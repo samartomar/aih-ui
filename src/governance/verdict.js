@@ -12,7 +12,7 @@
 
 import { el } from "../app/dom.js";
 import { NOT_SUPPLIED } from "../app/absence.js";
-import { REFUSAL } from "./vocabulary.js";
+import { refusalWording } from "./vocabulary.js";
 import { row } from "./rows.js";
 
 /**
@@ -55,7 +55,7 @@ export function createVerdict({ elements, onConsume }) {
       box.appendChild(el("div", `font-semibold ${outcomeTone}`, `Outcome: ${view.outcome}`));
       if (view.reason) {
         box.appendChild(el("div", "font-mono text-[10px] text-outline", view.reason));
-        box.appendChild(el("div", "text-on-surface-variant leading-snug", REFUSAL[view.reason] ?? ""));
+        box.appendChild(el("div", "text-on-surface-variant leading-snug", refusalWording(view.reason)));
       }
 
       const detail = el("div", "pt-1 space-y-0.5 font-mono text-[10px]");
