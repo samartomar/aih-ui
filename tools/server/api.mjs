@@ -14,14 +14,20 @@ import { callService } from "./service-client.mjs";
 import { createSessions } from "./sessions.mjs";
 
 const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
+/**
+ * The observation carries a folder, not one document: its ceiling is the 16 MiB
+ * of file bytes sessions.mjs accepts, plus the growth base64 costs and the paths
+ * around it. Every other route keeps the smaller bound.
+ */
+const MAX_BODY_BYTES = { "/api/observation": 24 * 1024 * 1024 };
 
-function readBody(request) {
+function readBody(request, limit) {
   return new Promise((resolveBody, rejectBody) => {
     const chunks = [];
     let total = 0;
     request.on("data", (chunk) => {
       total += chunk.length;
-      if (total > MAX_REQUEST_BYTES) {
+      if (total > limit) {
         rejectBody(new Error("request body is too large"));
         request.destroy();
         return;
@@ -111,6 +117,21 @@ export function createApi({ consumerDir, runDir, summary }) {
     },
 
     /**
+     * The operator's observation inputs: their upstream artifact manifest, the
+     * root-relative directory the files sit under, and the files themselves.
+     *
+     * The page sends bytes and relative paths; the server decides where they go
+     * and refuses, with a reason, anything it is not willing to write. Nothing
+     * is checked against the evidence here - Core does that during consumption,
+     * and nothing is installed, applied or executed anywhere.
+     */
+    "POST /api/observation": (body) => {
+      const { sessionId } = sessions.open(body.sessionId);
+      const stored = sessions.storeObservation(sessionId, body);
+      return stored.ok === false ? stored : { ...stored, sessionId };
+    },
+
+    /**
      * A fresh session holding exactly the bytes an operator downloaded earlier.
      *
      * It carries nothing from the session that produced them. Consumption then
@@ -165,6 +186,9 @@ export function createApi({ consumerDir, runDir, summary }) {
         authorityBundlePath: session.authorityBundlePath ?? null,
         scanMaterialPath: session.scanMaterialPath ?? null,
         operatorTrustPath: session.operatorTrustPath ?? null,
+        // The observation this session gathered, if any: the install root the
+        // operator named and the directory holding what they supplied.
+        observation: sessions.observationOf(body.sessionId) ?? null,
       });
     },
 
@@ -198,7 +222,10 @@ export function createApi({ consumerDir, runDir, summary }) {
     };
 
     try {
-      const body = request.method === "POST" ? await readBody(request) : {};
+      const body =
+        request.method === "POST"
+          ? await readBody(request, MAX_BODY_BYTES[pathname] ?? MAX_REQUEST_BYTES)
+          : {};
       const value = await route(body);
       send(value?.ok === false ? 422 : 200, value);
     } catch (error) {

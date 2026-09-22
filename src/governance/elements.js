@@ -12,6 +12,7 @@ export function governanceElements() {
     "gov-consume-btn", "gov-statuses", "gov-verdict", "gov-fixture-btn", "gov-detector",
     "gov-authority-file", "gov-trust-file", "gov-material-file", "gov-operator-files",
     "gov-reopen-input-file", "gov-reopen-evidence-file", "gov-reopen-btn", "gov-reopen",
+    "gov-observation-manifest-file", "gov-observation-root", "gov-observation-files", "gov-observation",
   ];
   const found = collectIds(ids);
   return {
@@ -43,6 +44,12 @@ export function governanceElements() {
       govReopenEvidenceFile: found.govReopenEvidenceFile,
       govReopenBtn: found.govReopenBtn,
       govReopen: found.govReopen,
+    },
+    observation: {
+      govObservationManifestFile: found.govObservationManifestFile,
+      govObservationRoot: found.govObservationRoot,
+      govObservationFiles: found.govObservationFiles,
+      govObservation: found.govObservation,
     },
     verdict: { govConsumeBtn: found.govConsumeBtn, govVerdict: found.govVerdict },
     detector: { govFixtureBtn: found.govFixtureBtn, govDetector: found.govDetector },

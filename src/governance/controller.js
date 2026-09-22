@@ -19,6 +19,7 @@
 import { governanceElements } from "./elements.js";
 import { createDetector } from "./detector.js";
 import { createInputs } from "./inputs.js";
+import { createObservation } from "./observation.js";
 import { createOperatorFiles } from "./operator-files.js";
 import { createPrepared } from "./prepared.js";
 import { createReopen } from "./reopen.js";
@@ -34,8 +35,27 @@ import {
   parseEvidence,
   prepare,
   reopenFromFiles,
+  storeObservation,
   storeOperatorFile,
 } from "./transport.js";
+
+/** No manifest, no root, no folder: what a session starts with. */
+function noObservation() {
+  return { manifest: null, installRoot: "", files: null, stored: null };
+}
+
+/**
+ * The relative path a folder selection carried, without the selected folder's
+ * own name: the operator picked that folder BECAUSE it is the install root, so
+ * its name is the root, not part of the paths inside it.
+ *
+ * This reads the browser's own record of what was selected. Nothing is derived
+ * from any file's contents, and the backend validates every path it is given.
+ */
+function relativePathOf(file) {
+  const parts = String(file.webkitRelativePath ?? "").split("/").filter(Boolean);
+  return parts.length > 1 ? parts.slice(1).join("/") : file.name;
+}
 
 export function createGovernance() {
   const elements = governanceElements();
@@ -53,6 +73,10 @@ export function createGovernance() {
     bindingClaim: null,
     // What the operator supplied themselves, by kind. Never generated.
     operatorFiles: {},
+    // The operator's own installation location and the files that are there,
+    // plus what the backend reported storing. Optional: without it Core simply
+    // reports that no observation was made.
+    observation: noObservation(),
     reopened: null,
   };
 
@@ -69,6 +93,12 @@ export function createGovernance() {
   const operatorFiles = createOperatorFiles({
     elements: elements.operatorFiles,
     onFile: ({ kind, file }) => void onOperatorFile(kind, file),
+  });
+  const observation = createObservation({
+    elements: elements.observation,
+    onManifest: (file) => void onObservationPart({ manifest: file }),
+    onRoot: (value) => void onObservationPart({ installRoot: value.trim() }),
+    onFiles: (files) => void onObservationPart({ files: [...files] }),
   });
   const statuses = createStatuses({ elements: elements.statuses });
   const reopen = createReopen({
@@ -118,6 +148,44 @@ export function createGovernance() {
   }
 
   /**
+   * One part of the observation: the manifest, the install root or the folder.
+   *
+   * Each part is remembered as it arrives and the three are sent together, so
+   * changing any one of them re-sends the whole set and the session holds
+   * exactly what the operator last chose. Until all three are there, nothing is
+   * sent and the missing parts read "Not supplied".
+   */
+  async function onObservationPart(part) {
+    const pending = { ...state.observation, ...part, stored: null };
+    state.observation = pending;
+    observation.render(state.observation);
+    const { manifest, installRoot, files } = pending;
+    if (manifest === null || files === null || installRoot === "") return;
+
+    const manifestBytes = new Uint8Array(await manifest.arrayBuffer());
+    const uploaded = await Promise.all(
+      files.map(async (file) => ({
+        relativePath: relativePathOf(file),
+        base64: bytesToBase64(new Uint8Array(await file.arrayBuffer())),
+      })),
+    );
+    const stored = await storeObservation({
+      sessionId: state.sessionId,
+      installRoot,
+      manifestBase64: bytesToBase64(manifestBytes),
+      files: uploaded,
+    });
+    // A part that changed while this was in flight is a different observation,
+    // and its own send is the one that answers for it.
+    if (state.observation !== pending) return;
+    state.observation = { ...pending, stored };
+    // Like the operator files, the first thing supplied opens the session these
+    // inputs belong to, so everything that follows lands in the same one.
+    if (stored.sessionId !== undefined) state.sessionId = stored.sessionId;
+    observation.render(state.observation);
+  }
+
+  /**
    * A fresh session holding exactly the bytes the operator handed back.
    *
    * Everything this pane believed is dropped: the verdict that follows comes
@@ -144,8 +212,13 @@ export function createGovernance() {
     // rather than letting the previous session's files appear to carry over.
     state.operatorFiles = {};
     state.prepared = null;
+    // The observation belongs to the session it was uploaded into. A fresh one
+    // has none, so the inputs are cleared rather than left looking carried over.
+    state.observation = noObservation();
     operatorFiles.reset();
     operatorFiles.render(state.operatorFiles);
+    observation.reset();
+    observation.render(state.observation);
     reopen.render(opened);
     statuses.render(null);
     verdict.render(null);
@@ -230,6 +303,10 @@ export function createGovernance() {
       material: { ok: true, storedAs: "attestation-material.json", note: generated },
     };
     operatorFiles.render(state.operatorFiles);
+    // The fixture opens its own session, which holds no observation.
+    state.observation = noObservation();
+    observation.reset();
+    observation.render(state.observation);
     state.evidenceBase64 = built.evidenceBase64;
     state.bindingClaim = built.bindingClaim;
     inputs.setDecision({ decisionId: built.decisionId, decisionDigest: built.decisionDigest });
@@ -253,6 +330,7 @@ export function createGovernance() {
       inputs.renderSubject(null, null);
       inputs.renderEvidence(null);
       operatorFiles.render(state.operatorFiles);
+      observation.render(state.observation);
       reopen.render(null);
       clearResults();
       refreshEnabled();
@@ -271,12 +349,15 @@ export function createGovernance() {
       state.fixture = null;
       state.bindingClaim = null;
       state.operatorFiles = {};
+      state.observation = noObservation();
       state.reopened = null;
       state.reopenFiles = undefined;
       inputs.clearDecision();
       inputs.renderEvidence(null);
       operatorFiles.reset();
       operatorFiles.render(state.operatorFiles);
+      observation.reset();
+      observation.render(state.observation);
       reopen.render(null);
       clearResults();
 

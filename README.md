@@ -56,6 +56,7 @@ src/
     vocabulary.js       the six axes, their tones, and every typed refusal
     inputs.js           subject readout, evidence import, operator fields
     operator-files.js   the operator's own authority, trust and material
+    observation.js      the operator's manifest, install root and files
     reopen.js           reopening downloaded bytes in a fresh session
     prepared.js         prepare, the prepared artifacts, the downloads
     statuses.js         the six verification statuses
@@ -389,6 +390,40 @@ installed file against the verified scan one to one; the page never says Applied
 or Installed, and an observed result still lists the declared files the scan did
 not reach.
 
+### Observation inputs: what the operator supplies, what Core checks
+
+Step 4b is optional and is the operator's statement about their own machine.
+Three inputs, because they are three separate statements:
+
+| Input | What it is |
+| --- | --- |
+| Upstream artifact manifest | The `aih-upstream-artifact-manifest` v1 file, exactly as written |
+| Install root | The root-relative directory the files sit under, e.g. `packs/governance-quality/aih-gov-doctor` |
+| The folder itself | A directory selection; each file keeps the relative path the selection carried, without the selected folder's own name |
+
+The page collects and sends bytes. It parses no manifest, hashes nothing for
+verification, derives no path from any file's contents and decides nothing. The
+server validates every path as a bounded root-relative POSIX path, bounds the
+request (at most 256 files and 16 MiB), stores the bytes exactly as they
+arrived beside the session, and answers with what it stored - name, length and
+sha256 - never the contents. Anything malformed is refused with a reason.
+
+A consume rebuilds its consumption root from nothing, writes the evidence at the
+path the saved document names, copies the manifest to `manifest.json` and the
+files to `<install root>/**` byte for byte, and hands Core
+`observation: { manifestPath, installRoot }`. Everything after that is Core's:
+the manifest must declare the saved decision, subject, target and effect; the
+manifest's paths must be exactly the sealed paths under that root, one to one;
+each file's bytes must be the sealed bytes at that exact path; and the minted
+receipt must resolve to an effective observation. Identical bytes under another
+filename are a path mismatch, never a match.
+
+**Nothing installs, applies or executes.** The copy exists only so Core has
+bytes to read. The verdict says `Execution: observed` with what was read and
+where - sealed path, observed path, digest, length - or `Execution: refused`
+with Core's own refusal code and its plain-language sentence. An observed result
+still lists the declared files the scan did not reach.
+
 ### What the pane will not do
 
 It never manufactures a decision, an approval, verifier trust or a signing key.
@@ -556,8 +591,9 @@ which are separate paths in the same index, so the pane shows the record count
 beside `Bytes checked here: 0` rather than letting one read as the other.
 
 The page's own calls are `/api/subject`, `/api/catalog-integrity`,
-`/api/evidence`, `/api/operator-file`, `/api/validation-fixture`,
-`/api/prepare`, `/api/reopen`, `/api/consume` and `/api/saved`. The page never
+`/api/evidence`, `/api/operator-file`, `/api/observation`,
+`/api/validation-fixture`, `/api/prepare`, `/api/reopen`, `/api/consume` and
+`/api/saved`. The page never
 names a filesystem path in any of them: it holds an opaque session id, and every
 location is derived from that id inside the run directory.
 

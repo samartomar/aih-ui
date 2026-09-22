@@ -442,6 +442,33 @@ beside the session, never inside the imported material: material that carries it
 </div>
 
 <div class="space-y-1">
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline">4b &middot; Observe installed files &middot; optional</span>
+<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/40 text-[10.5px] text-on-surface-variant leading-snug">
+Supply the upstream artifact manifest, the root the files sit under, and the folder itself.
+They are copied into this session beside the saved document so <span class="font-mono text-outline">@aihq/core</span>
+can read them: Core checks every file one to one against the verified scan, at its exact path.
+Nothing here installs, applies or executes anything, and nothing is written outside the session.
+</div>
+<div class="space-y-1">
+<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-surface-container-high/40 cursor-pointer hover:border-primary/40 transition-colors">
+<span class="material-symbols-outlined text-[14px] text-secondary">receipt_long</span>
+<span class="text-[10.5px] text-on-surface-variant">Upstream artifact manifest (manifest.json)</span>
+<input class="hidden" id="gov-observation-manifest-file" type="file" accept=".json,application/json">
+</label>
+<label class="block">
+<span class="text-[10px] text-outline font-mono">Install root (root-relative directory)</span>
+<input class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-surface-container-high/50 font-mono text-[10.5px] text-on-surface focus:border-primary/60 focus:outline-none" id="gov-observation-root" type="text" placeholder="packs/governance-quality/aih-gov-doctor" autocomplete="off">
+</label>
+<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-surface-container-high/40 cursor-pointer hover:border-primary/40 transition-colors">
+<span class="material-symbols-outlined text-[14px] text-secondary">folder_open</span>
+<span class="text-[10.5px] text-on-surface-variant">The folder that root names</span>
+<input class="hidden" id="gov-observation-files" type="file" webkitdirectory multiple>
+</label>
+</div>
+<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-observation"></div>
+</div>
+
+<div class="space-y-1">
 <span class="text-[10px] font-mono uppercase tracking-wider text-outline">5 &middot; Reopen and consume independently</span>
 <button class="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-secondary/15 border border-secondary/40 text-secondary text-[11.5px] font-medium hover:bg-secondary/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed" id="gov-consume-btn" type="button" disabled>
 <span class="material-symbols-outlined text-[14px]">rule</span>

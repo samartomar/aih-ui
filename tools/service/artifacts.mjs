@@ -6,8 +6,8 @@
  * JSON.stringify on an artifact: a pretty-printed copy of a valid document is
  * not a valid document.
  */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join, posix } from "node:path";
 
 export const b64 = (bytes) => Buffer.from(bytes).toString("base64");
 export const fromB64 = (value) => Buffer.from(value, "base64");
@@ -20,6 +20,44 @@ export function writeExactBytes(path, bytes) {
 
 export function readExactBytes(path) {
   return readFileSync(path);
+}
+
+/**
+ * Removes a directory and creates it empty again.
+ *
+ * A consumption root is rebuilt rather than added to, so what Core reads is
+ * exactly what this consume placed there and never a leftover from an earlier
+ * attempt with different inputs.
+ */
+export function recreateDirectory(path) {
+  rmSync(path, { recursive: true, force: true });
+  mkdirSync(path, { recursive: true });
+}
+
+/**
+ * Copies every regular file under `fromDir` into `toDir`, byte for byte, with
+ * its relative path intact. Nothing is renamed, flattened or rewritten: the
+ * bytes and the paths are the whole point of what Core then checks.
+ *
+ * Returns the relative paths copied, in the order they were read.
+ */
+export function copyExactTree(fromDir, toDir) {
+  const copied = [];
+  const walk = (prefix) => {
+    for (const item of readdirSync(prefix === "" ? fromDir : join(fromDir, prefix), { withFileTypes: true })) {
+      const relative = prefix === "" ? item.name : posix.join(prefix, item.name);
+      const segments = relative.split("/");
+      if (item.isDirectory()) {
+        walk(relative);
+        continue;
+      }
+      if (!item.isFile()) continue;
+      writeExactBytes(join(toDir, ...segments), readFileSync(join(fromDir, ...segments)));
+      copied.push(relative);
+    }
+  };
+  walk("");
+  return copied;
 }
 
 /**

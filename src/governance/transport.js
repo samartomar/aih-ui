@@ -49,6 +49,16 @@ export function storeOperatorFile({ sessionId, kind, base64 }) {
   return api("/api/operator-file", { sessionId, kind, base64 });
 }
 
+/**
+ * The operator's observation inputs: their upstream artifact manifest, the
+ * root-relative directory the files sit under, and the files themselves with
+ * the relative paths the folder selection carried. Bytes only - the page
+ * parses nothing and decides nothing; Core checks them during consumption.
+ */
+export function storeObservation({ sessionId, installRoot, manifestBase64, files }) {
+  return api("/api/observation", { sessionId, installRoot, manifestBase64, files });
+}
+
 /** A fresh session holding exactly the bytes the operator handed back. */
 export function reopenFromFiles({ inputBase64, evidenceBase64 }) {
   return api("/api/reopen", { inputBase64, evidenceBase64 });

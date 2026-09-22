@@ -18,7 +18,14 @@ import {
   prepareGovernanceInputV1,
 } from "@aihq/core";
 
-import { b64, fromB64, readExactBytes, writeExactBytes } from "./artifacts.mjs";
+import {
+  b64,
+  copyExactTree,
+  fromB64,
+  readExactBytes,
+  recreateDirectory,
+  writeExactBytes,
+} from "./artifacts.mjs";
 import { catalogEntry } from "./catalog-access.mjs";
 import { createCatalogAssessmentResolver } from "./catalog-assessment.mjs";
 import { buildScanVerification } from "./scan-verifier.mjs";
@@ -159,11 +166,45 @@ export function prepare({ entryId, route, target, effect, decisionId, decisionDi
 }
 
 /**
+ * The name the observation manifest is placed under inside the consumption
+ * root. It sits at the root, beside the evidence path the document names and
+ * outside the install root, because Core refuses an install root that overlaps
+ * either of them.
+ */
+const OBSERVATION_MANIFEST_PATH = "manifest.json";
+
+/**
+ * Places the operator's observation inputs in the consumption root so Core can
+ * read them, and returns the request Core is given.
+ *
+ * Copying is all that happens: the manifest and each file go in byte for byte,
+ * at the exact paths the operator's own selection named. Nothing is installed,
+ * applied or executed, nothing is written outside this session's root, and no
+ * path, digest or decision is derived here - Core checks the files one to one
+ * against the verified scan and answers.
+ */
+function placeObservation(root, observation) {
+  if (observation === undefined || observation === null) return undefined;
+  writeExactBytes(
+    join(root, OBSERVATION_MANIFEST_PATH),
+    readExactBytes(join(observation.dir, "manifest.json")),
+  );
+  copyExactTree(join(observation.dir, "files"), join(root, ...observation.installRoot.split("/")));
+  return { manifestPath: OBSERVATION_MANIFEST_PATH, installRoot: observation.installRoot };
+}
+
+/**
  * Reopen the saved bytes from disk and consume them independently: parse, then
  * re-derive the whole verdict. Nothing from the preparation step is carried
  * over - that is what makes this independent.
  */
-export async function consume({ sessionDir, authorityBundlePath, scanMaterialPath, operatorTrustPath }) {
+export async function consume({
+  sessionDir,
+  authorityBundlePath,
+  scanMaterialPath,
+  operatorTrustPath,
+  observation,
+}) {
   const savedBytes = readExactBytes(join(sessionDir, "governance-input.json"));
 
   // Reopen: the saved document must still be canonical, or it was altered.
@@ -179,11 +220,17 @@ export async function consume({ sessionDir, authorityBundlePath, scanMaterialPat
 
   // The evidence file must sit under the consumption root at the path the
   // saved document names. Consumption re-reads it from there.
+  //
+  // The root is rebuilt from nothing on every consume, so it holds exactly the
+  // inputs this session has now: an observation the operator replaced leaves no
+  // file behind from the one before it.
   const root = join(sessionDir, "consume-root");
+  recreateDirectory(root);
   writeExactBytes(
     join(root, reopened.evidence.path),
     readExactBytes(join(sessionDir, "organization-evidence.json")),
   );
+  const observationRequest = placeObservation(root, observation);
 
   const now = new Date().toISOString();
   const verification = buildScanVerification({ scanMaterialPath, operatorTrustPath, now });
@@ -210,6 +257,10 @@ export async function consume({ sessionDir, authorityBundlePath, scanMaterialPat
     // published assessment declares the scanned material. Core verifies
     // everything on either route.
     ...(reopened.bindingClaim === undefined ? { assessment: createCatalogAssessmentResolver() } : {}),
+    // Supplied only when the operator supplied one. Without it Core reports
+    // that there was no observation source for the effect; with it, Core reads
+    // the manifest and the named files and decides. Either way nothing runs.
+    ...(observationRequest === undefined ? {} : { observation: observationRequest }),
   });
 
   return {
