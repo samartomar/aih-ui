@@ -135,8 +135,9 @@ export function createInputs({ elements, onEvidenceFile, onInput }) {
   // revision tracking, and refreshing twice for one change costs nothing.
   elements.govTarget.addEventListener("change", onInput);
 
-  // Nothing is offered until Core's list arrives: an empty select supplies no
-  // target, so `complete()` is false and Prepare stays disabled.
+  // No target is offered until Core's list arrives: the field starts disabled
+  // reading Not connected, supplies no target, and `complete()` is therefore
+  // false, so Prepare stays disabled.
   setTargetOptions(elements.govTarget, null);
 
   return {

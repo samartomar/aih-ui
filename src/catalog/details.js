@@ -129,7 +129,8 @@ export function createDetails({ elements }) {
     row(elements.detailsIdentity, "Entry id", null);
     elements.detailsArtifacts.appendChild(el("div", "text-outline/70", NOT_PUBLISHED));
     elements.scannerReportStatement.textContent = NOT_PUBLISHED;
-    elements.scannerReportStatement.title = EVIDENCE_SUMMARY_ABSENT;
+    // Nothing is selected yet, so this slot is not Catalog's gap. Say which.
+    elements.scannerReportStatement.title = "No entry is selected, so there is no evidence record to summarise.";
     elements.statementCount.textContent = "0 statements";
   }
 
@@ -143,9 +144,10 @@ export function createDetails({ elements }) {
       head.appendChild(el("span", "font-mono text-[10px] uppercase tracking-wider text-outline", statement.kind));
       head.appendChild(el("span", "font-mono text-[10px] text-on-surface break-all text-right", statement.id ?? NOT_PUBLISHED));
       box.appendChild(head);
-      // Catalog validates a summary on each evidence record and then drops it
-      // before the public reader hands the record over, so this slot states
-      // which package owns the gap rather than sitting empty.
+      // The served index carries a summary on every evidence record today, and
+      // it is rendered verbatim. Catalog's PUBLIC reader validates that same
+      // field and then drops it, so a record that reaches this page without one
+      // states which package owns the gap rather than sitting empty.
       const prose = el("p", "text-[10.5px] text-on-surface-variant leading-snug break-words", statement.summary ?? NOT_PUBLISHED);
       if (statement.summary === null || statement.summary === undefined) prose.title = EVIDENCE_SUMMARY_ABSENT;
       box.appendChild(prose);

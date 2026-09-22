@@ -48,7 +48,9 @@ function badgeNode(scope, selected) {
  * coverage this page could not read says so rather than showing a zero.
  */
 function categoriesReason(coverage) {
-  if (coverage?.published === null || coverage?.entries === null || coverage === undefined) {
+  // Two numbers or none: a missing count is stated as a missing count, never
+  // rendered as a zero and never as the word "undefined".
+  if (typeof coverage?.published !== "number" || typeof coverage?.entries !== "number") {
     return `${NOT_PUBLISHED}: Catalog publishes no curated category taxonomy, and this preview could not read how many entries carry a category.`;
   }
   return `${NOT_PUBLISHED}: Catalog publishes a category for ${coverage.published} of ${coverage.entries} entries and no curated taxonomy.`;
