@@ -57,6 +57,26 @@ export function publisherOf(publisher, entry) {
   return publisher?.byEntryId?.get(text(entry?.entryId)) ?? null;
 }
 
+/**
+ * How many entries Catalog publishes a category for, counted here from the
+ * served records, and how many entries the installed index holds.
+ *
+ * Both numbers are read at run time so the rail can say how thin the published
+ * coverage is without a figure ever being written into this page. Either one
+ * being unavailable is reported as null, never as a zero.
+ *
+ * @param publisher   the applied publisher view
+ * @param entryCount  the summary's own count of indexed entries
+ */
+export function categoryCoverage(publisher, entryCount) {
+  if (publisher?.state !== "published") return { published: null, entries: null };
+  let published = 0;
+  for (const record of publisher.byEntryId.values()) {
+    if (record?.category?.state === "published") published += 1;
+  }
+  return { published, entries: Number.isInteger(entryCount) ? entryCount : null };
+}
+
 /** A published value's text, or null. */
 export function publishedText(record, field) {
   const value = record?.[field];

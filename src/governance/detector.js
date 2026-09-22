@@ -22,7 +22,7 @@
  */
 
 import { el } from "../app/dom.js";
-import { NOT_SUPPLIED } from "../app/absence.js";
+import { FINDING_DETAIL_ABSENT, NOT_SUPPLIED } from "../app/absence.js";
 import { row } from "./rows.js";
 
 function section(box, label) {
@@ -65,13 +65,7 @@ function renderScanResult(box, scan) {
     row(box, "finding", `${finding.rawOccurrenceFingerprint} x${finding.multiplicity}`);
   }
   if ((scan.findingCount ?? 0) > 0) {
-    box.appendChild(
-      el(
-        "div",
-        "text-outline leading-snug",
-        "Each finding is an occurrence fingerprint and a multiplicity. The attestation carries no message, location or severity for it.",
-      ),
-    );
+    box.appendChild(el("div", "text-outline leading-snug", FINDING_DETAIL_ABSENT));
   }
   row(box, "SARIF", scan.sarifState, NOT_SUPPLIED, "text-tertiary");
 

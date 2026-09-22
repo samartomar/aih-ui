@@ -16,7 +16,8 @@ export function catalogElements() {
     "inspector-name", "inspector-kind", "inspector-version", "inspector-subtitle",
     "inspector-flags", "inspector-icon",
     "details-identity", "details-source", "details-desc", "details-capabilities",
-    "details-artifacts", "scanner-report-statement", "statement-count", "security-statements",
+    "details-artifacts", "detector-run-state", "detector-finding-detail",
+    "scanner-report-statement", "statement-count", "security-statements",
   ];
   const found = collectIds(ids);
   return {
@@ -56,6 +57,8 @@ export function catalogElements() {
       detailsDesc: found.detailsDesc,
       detailsCapabilities: found.detailsCapabilities,
       detailsArtifacts: found.detailsArtifacts,
+      detectorRunState: found.detectorRunState,
+      detectorFindingDetail: found.detectorFindingDetail,
       scannerReportStatement: found.scannerReportStatement,
       statementCount: found.statementCount,
       securityStatements: found.securityStatements,

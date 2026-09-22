@@ -14,6 +14,7 @@ import { createMetrics } from "./metrics.js";
 import { createNavigation } from "./navigation.js";
 import { createProvenance } from "./provenance.js";
 import { createToolbar } from "./toolbar.js";
+import { categoryCoverage } from "./publisher.js";
 import { loadCatalog } from "./index-source.js";
 import { inventoryCounts, scopeTotal, selectedScope, visibleEntries } from "./selectors.js";
 import { emptyView, restoreView, saveView } from "./view-state.js";
@@ -103,6 +104,7 @@ export function createCatalog({ onSelectEntry, onSummary }) {
       total,
       counts: state.counts,
       organizationName: state.organizationName,
+      categoryCoverage: categoryCoverage(state.publisher, state.summary?.entryCount),
     });
     toolbar.render({
       kindCounts: state.counts.kindCounts,
@@ -157,6 +159,7 @@ export function createCatalog({ onSelectEntry, onSummary }) {
           total: state.entries.length,
           counts: state.counts,
           organizationName: state.organizationName,
+          categoryCoverage: categoryCoverage(state.publisher, state.summary?.entryCount),
         });
       }
     },

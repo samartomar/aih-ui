@@ -1,13 +1,31 @@
 /*
- * Three different absences, kept apart on purpose. Collapsing them into one
+ * Four different absences, kept apart on purpose. Collapsing them into one
  * word is how a page starts implying that an organization failed to supply
  * something the catalog was never going to carry.
  *
  * - NOT_PUBLISHED: a package field the installed index genuinely does not carry.
+ * - NOT_DECLARED:  a field the index DOES carry, as an empty list. An empty
+ *                  declaration is not a measurement, so it never reads "none".
  * - NOT_SUPPLIED:  operator input. Organizations supply it; no package will.
  * - NOT_CONNECTED: an action or telemetry feed with no Core contract wired yet.
+ *
+ * Below the four words: reasons that more than one component states, kept here
+ * so two panes can never word the same absence differently.
  */
 
 export const NOT_PUBLISHED = "Not published";
+export const NOT_DECLARED = "Not declared";
 export const NOT_SUPPLIED = "Not supplied";
 export const NOT_CONNECTED = "Not connected";
+
+/**
+ * What a Scan finding record carries, and what it does not.
+ *
+ * The Governance pane says this under the finding list it read from a verified
+ * attestation; the inspector's Security pane says it in the slot where the
+ * design source shows a rule id, a severity, a message and a file location.
+ * One sentence, one place, so the two panes cannot drift apart.
+ */
+export const FINDING_DETAIL_ABSENT =
+  "Each finding is an occurrence fingerprint and a multiplicity. " +
+  "The attestation carries no message, location or severity for it.";

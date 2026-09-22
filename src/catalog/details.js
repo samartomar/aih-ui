@@ -24,12 +24,21 @@
  */
 
 import { el, text } from "../app/dom.js";
-import { NOT_PUBLISHED } from "../app/absence.js";
+import { FINDING_DETAIL_ABSENT, NOT_DECLARED, NOT_PUBLISHED } from "../app/absence.js";
 import { KIND_ICON, identity, shortDigest, sourceDetailRows, sourceIdentity, sourceLabelOf, statementsOf } from "./entry.js";
 import { collectionOf, scopeCountOf } from "./selectors.js";
 import { provenanceNote, publishedText, publisherOf } from "./publisher.js";
 
-const NOT_DECLARED = "Not declared";
+/*
+ * Why each Scanner Telemetry slot is empty. Each names the package that owns
+ * the missing field, so a reader can tell a gap in this page from a gap in a
+ * package. When Scan publishes them, these lookups are what change - the slots
+ * and their geometry stay as they are.
+ */
+const DETECTOR_RUN_STATE_ABSENT =
+  `${NOT_PUBLISHED}: Scan publishes one detector per record and no per-detector run state.`;
+const EVIDENCE_SUMMARY_ABSENT =
+  `${NOT_PUBLISHED}: Catalog's public reader does not surface the evidence summary.`;
 
 function row(parent, label, value, title) {
   const line = el("div", "flex justify-between gap-2");
@@ -92,6 +101,11 @@ function originOf(source) {
 
 /** @param elements the inspector header and the two panes' containers */
 export function createDetails({ elements }) {
+  // Two Scanner Telemetry slots the design source fills from a scan result.
+  // Neither depends on the selection, so each states its reason once, here.
+  elements.detectorRunState.title = DETECTOR_RUN_STATE_ABSENT;
+  elements.detectorFindingDetail.title = `${NOT_PUBLISHED}: ${FINDING_DETAIL_ABSENT}`;
+
   function reset() {
     elements.detailsIdentity.replaceChildren();
     elements.detailsSource.replaceChildren();
@@ -115,6 +129,7 @@ export function createDetails({ elements }) {
     row(elements.detailsIdentity, "Entry id", null);
     elements.detailsArtifacts.appendChild(el("div", "text-outline/70", NOT_PUBLISHED));
     elements.scannerReportStatement.textContent = NOT_PUBLISHED;
+    elements.scannerReportStatement.title = EVIDENCE_SUMMARY_ABSENT;
     elements.statementCount.textContent = "0 statements";
   }
 
@@ -128,7 +143,12 @@ export function createDetails({ elements }) {
       head.appendChild(el("span", "font-mono text-[10px] uppercase tracking-wider text-outline", statement.kind));
       head.appendChild(el("span", "font-mono text-[10px] text-on-surface break-all text-right", statement.id ?? NOT_PUBLISHED));
       box.appendChild(head);
-      box.appendChild(el("p", "text-[10.5px] text-on-surface-variant leading-snug break-words", statement.summary ?? NOT_PUBLISHED));
+      // Catalog validates a summary on each evidence record and then drops it
+      // before the public reader hands the record over, so this slot states
+      // which package owns the gap rather than sitting empty.
+      const prose = el("p", "text-[10.5px] text-on-surface-variant leading-snug break-words", statement.summary ?? NOT_PUBLISHED);
+      if (statement.summary === null || statement.summary === undefined) prose.title = EVIDENCE_SUMMARY_ABSENT;
+      box.appendChild(prose);
       const meta = el("div", "font-mono text-[9.5px] text-outline space-y-0.5");
       row(meta, "attestor", statement.attestor);
       row(meta, "format", statement.format);
@@ -255,7 +275,11 @@ export function createDetails({ elements }) {
       // ----------------------------------------------------------- Security
       const statements = statementsOf(entry);
       const report = statements.find((statement) => statement.kind === "report");
-      elements.scannerReportStatement.textContent = report?.summary ?? NOT_PUBLISHED;
+      const reportSummary = text(report?.summary);
+      elements.scannerReportStatement.textContent = reportSummary ?? NOT_PUBLISHED;
+      elements.scannerReportStatement.title = reportSummary === null
+        ? EVIDENCE_SUMMARY_ABSENT
+        : "The evidence record's own summary, as Catalog published it.";
       elements.statementCount.textContent = `${statements.length} statements · envelope counts, not raw findings`;
       renderStatements(statements);
     },

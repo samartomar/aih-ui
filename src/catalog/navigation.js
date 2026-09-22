@@ -41,7 +41,20 @@ function badgeNode(scope, selected) {
   return node;
 }
 
-function scopeRow(row, selected, onSelect) {
+/**
+ * Why the categories row is empty, with both numbers counted at run time from
+ * the served presentation data. Nothing is written into the page: a Catalog
+ * that publishes a curated taxonomy changes this sentence by itself, and a
+ * coverage this page could not read says so rather than showing a zero.
+ */
+function categoriesReason(coverage) {
+  if (coverage?.published === null || coverage?.entries === null || coverage === undefined) {
+    return `${NOT_PUBLISHED}: Catalog publishes no curated category taxonomy, and this preview could not read how many entries carry a category.`;
+  }
+  return `${NOT_PUBLISHED}: Catalog publishes a category for ${coverage.published} of ${coverage.entries} entries and no curated taxonomy.`;
+}
+
+function scopeRow(row, selected, onSelect, coverage) {
   const scope = describeScope(row);
   const panel = el(
     "div",
@@ -86,11 +99,13 @@ function scopeRow(row, selected, onSelect) {
   panel.appendChild(head);
 
   if (selected) {
-    // Where the design source lists this source's categories. Catalog
-    // publishes no category, so the row keeps its place and says so.
+    // Where the design source lists this source's categories, with counts.
+    // Catalog publishes no curated taxonomy, so the row keeps its place and
+    // says how little it does publish, counted from the served data.
     const categories = el("div", "pl-2 space-y-0.5 text-[10.5px]");
     const missing = el("div", "flex items-center justify-between px-1.5 py-0.5 rounded text-on-surface-variant opacity-60 cursor-not-allowed");
-    missing.title = `${NOT_PUBLISHED}: the index carries no category for these items`;
+    missing.dataset.absence = "categories";
+    missing.title = categoriesReason(coverage);
     missing.appendChild(el("span", "truncate", "Categories"));
     missing.appendChild(el("span", "font-mono text-outline text-[10px]", NOT_PUBLISHED));
     categories.appendChild(missing);
@@ -121,12 +136,14 @@ function additionsRow(organizationName) {
  */
 export function createNavigation({ elements, onSelectSource }) {
   return {
-    /** @param model { view, total, counts, organizationName } */
+    /** @param model { view, total, counts, organizationName, categoryCoverage } */
     render(model) {
       elements.navSourcesCount.textContent = String(model.total);
       elements.scopeList.replaceChildren();
       for (const row of sourceScopes(model.counts)) {
-        elements.scopeList.appendChild(scopeRow(row, model.view.source === row.filterValue, onSelectSource));
+        elements.scopeList.appendChild(
+          scopeRow(row, model.view.source === row.filterValue, onSelectSource, model.categoryCoverage),
+        );
       }
       elements.scopeList.appendChild(additionsRow(model.organizationName ?? null));
     },
