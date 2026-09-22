@@ -31,7 +31,8 @@ async function main() {
     governance.mount();
 
     // Core's supported targets arrive with the preview summary the catalog
-    // loads; the AI tools control only receives them.
+    // loads. Two controls read the SAME list and keep no copy of their own: the
+    // header's AI tools control, and the Governance pane's Target field.
     const aiTools = createAiTools({ elements: aiToolsElements() });
 
     const catalog = createCatalog({
@@ -39,7 +40,11 @@ async function main() {
         shell.openInspector();
         void governance.select(entry);
       },
-      onSummary: (summary) => aiTools.setTargets(summary?.coreTargets ?? null),
+      onSummary: (summary) => {
+        const coreTargets = summary?.coreTargets ?? null;
+        aiTools.setTargets(coreTargets);
+        governance.setTargets(coreTargets);
+      },
     });
 
     // The organization is the user's own input. Its saved name labels the

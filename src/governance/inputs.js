@@ -11,8 +11,8 @@
  * inputs directly.
  */
 
-import { el } from "../app/dom.js";
-import { NOT_PUBLISHED, NOT_SUPPLIED } from "../app/absence.js";
+import { el, text } from "../app/dom.js";
+import { NOT_CONNECTED, NOT_PUBLISHED, NOT_SUPPLIED } from "../app/absence.js";
 import { row } from "./rows.js";
 
 function section(box, label) {
@@ -68,6 +68,55 @@ function renderCatalog(box, catalog) {
 }
 
 /**
+ * The Target field's options, built from @aihq/core's own SUPPORTED_CLIS.
+ *
+ * The page keeps no list of AI CLIs: a Core that lists different targets
+ * changes this field with no UI edit, and a Core that publishes no list leaves
+ * it disabled, reading "Not connected", supplying no target at all. Nothing
+ * here checks whether a tool is installed or connected - that is a separate
+ * fact, and no list of identities carries it.
+ *
+ * @param select  the `gov-target` element
+ * @param coreTargets  the preview summary's { state, targets, source } or
+ *                     { state, reason }, or null before the summary arrives
+ */
+function setTargetOptions(select, coreTargets) {
+  const chosen = select.value;
+  const targets =
+    coreTargets?.state === "published" && Array.isArray(coreTargets.targets)
+      ? coreTargets.targets.filter((target) => typeof target === "string" && target !== "")
+      : null;
+  select.replaceChildren();
+
+  if (targets === null || targets.length === 0) {
+    const reason = text(coreTargets?.reason)
+      ?? (coreTargets === null
+        ? "The preview summary has not answered yet."
+        : "The installed @aihq/core publishes no supported targets.");
+    const option = el("option", "", NOT_CONNECTED);
+    option.value = "";
+    select.appendChild(option);
+    select.value = "";
+    select.disabled = true;
+    select.title = `Target: ${NOT_CONNECTED}. ${reason}`;
+    return;
+  }
+
+  for (const target of targets) {
+    const option = el("option", "", target);
+    option.value = target;
+    select.appendChild(option);
+  }
+  select.disabled = false;
+  // A target the operator already chose survives a list that still carries it;
+  // otherwise the first target Core lists stands, visibly, until they choose.
+  select.value = targets.includes(chosen) ? chosen : targets[0];
+  select.title =
+    `The ${targets.length} AI CLIs @aihq/core lists as targets (SUPPORTED_CLIS), in its own order. ` +
+    `Whether the tool is installed or connected: ${NOT_CONNECTED}.`;
+}
+
+/**
  * @param elements  { govSubject, govEvidence, govEvidenceFile, govDecisionId,
  *                    govDecisionDigest, govTarget, govEffect, govRoute }
  * @param onEvidenceFile  called with the File the operator chose
@@ -81,6 +130,14 @@ export function createInputs({ elements, onEvidenceFile, onInput }) {
   for (const input of [elements.govDecisionId, elements.govDecisionDigest, elements.govTarget]) {
     input.addEventListener("input", onInput);
   }
+  // A select reports "input" in current browsers and "change" everywhere. Both
+  // are wired: a target the operator changed must never be left behind by the
+  // revision tracking, and refreshing twice for one change costs nothing.
+  elements.govTarget.addEventListener("change", onInput);
+
+  // Nothing is offered until Core's list arrives: an empty select supplies no
+  // target, so `complete()` is false and Prepare stays disabled.
+  setTargetOptions(elements.govTarget, null);
 
   return {
     values() {
@@ -91,6 +148,14 @@ export function createInputs({ elements, onEvidenceFile, onInput }) {
         decisionId: elements.govDecisionId.value.trim(),
         decisionDigest: elements.govDecisionDigest.value.trim(),
       };
+    },
+
+    /**
+     * Core's supported targets, as the preview summary reports them. Called
+     * once the summary arrives; until then the field offers nothing.
+     */
+    setTargets(coreTargets) {
+      setTargetOptions(elements.govTarget, coreTargets);
     },
 
     /** True only when every operator input the contract needs is present. */
