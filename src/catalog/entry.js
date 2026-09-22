@@ -129,35 +129,34 @@ export function identity(entry) {
   };
 }
 
+/*
+ * The entry's evidence statements, in the shape Catalog's public reader returns
+ * them (`CatalogEvidenceV1`: path, sha256, subjectDigest, format, kind, id,
+ * attestor and - from a reader that carries it - summary). The page is served
+ * that reader's output, so a summary an installed reader does not return is
+ * null here, and the slot says so.
+ */
+function statement(kind, item) {
+  return {
+    kind,
+    id: text(item?.id),
+    attestor: text(item?.attestor),
+    format: text(item?.format),
+    summary: text(item?.summary),
+    path: text(item?.path),
+    sha256: text(item?.sha256),
+  };
+}
+
 export function statementsOf(entry) {
   const qualification = entry?.qualification ?? {};
   const groups = [["finding", qualification.findings], ["gap", qualification.gaps], ["right", qualification.rights]];
   const statements = [];
   for (const [kind, list] of groups) {
-    for (const item of Array.isArray(list) ? list : []) {
-      statements.push({
-        kind,
-        id: text(item?.evidence?.id),
-        attestor: text(item?.evidence?.attestor),
-        format: text(item?.evidence?.format),
-        summary: text(item?.evidence?.summary),
-        path: text(item?.path),
-        sha256: text(item?.sha256),
-      });
-    }
+    for (const item of Array.isArray(list) ? list : []) statements.push(statement(kind, item));
   }
   const report = qualification.report;
-  if (report && typeof report === "object") {
-    statements.push({
-      kind: "report",
-      id: text(report?.evidence?.id),
-      attestor: text(report?.evidence?.attestor),
-      format: text(report?.evidence?.format),
-      summary: text(report?.evidence?.summary),
-      path: text(report?.path),
-      sha256: text(report?.sha256),
-    });
-  }
+  if (report && typeof report === "object") statements.push(statement("report", report));
   return statements;
 }
 

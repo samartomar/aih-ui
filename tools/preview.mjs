@@ -12,7 +12,9 @@
  * tarballs carry the governance-input contract.
  *
  * Two halves:
- *   - a static page (src/), copied into the run directory with its module tree intact;
+ *   - a static page (src/), copied into the run directory with its module tree intact,
+ *     beside the catalog document it reads - the OUTPUT of Catalog's public reader,
+ *     never the raw index bytes;
  *   - an API (tools/server/) that runs tools/service/ inside the consumer. Every Node-only
  *     package API and every filesystem access lives on that side.
  *
@@ -25,9 +27,7 @@
  * a checkout; CORE_REPO / SCAN_REPO / CATALOG_REPO name the checkouts to read from.
  */
 
-import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { copyFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -42,7 +42,6 @@ import { createStaticServer, listen } from "./server/static.mjs";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, ".."); // the aih-ui checkout this tool belongs to
 
-const CATALOG_INDEX_EXPORT = "@aihq/catalog/catalog-index.json";
 const CATALOG_PACKAGE = "@aihq/catalog";
 
 const args = process.argv.slice(2);
@@ -68,42 +67,6 @@ function readJson(path) {
   } catch (error) {
     fatal(`could not read JSON at ${path}: ${error.message}`);
   }
-}
-
-function sha256File(path) {
-  return createHash("sha256").update(readFileSync(path)).digest("hex");
-}
-
-/* ------------------------------------------------------------------- resolve */
-
-async function resolveIndexThroughExportMap(consumerDir) {
-  const resolver = join(consumerDir, "resolve-catalog-index.mjs");
-  writeFileSync(
-    resolver,
-    [
-      "// Resolves the public catalog index through the installed package export map.",
-      `const url = import.meta.resolve(${JSON.stringify(CATALOG_INDEX_EXPORT)});`,
-      "process.stdout.write(url);",
-      "",
-    ].join("\n"),
-  );
-  const resolved = spawnSync(process.execPath, [resolver], { cwd: consumerDir, encoding: "utf8" });
-  if (resolved.error) fatal(`could not resolve ${CATALOG_INDEX_EXPORT}: ${resolved.error.message}`);
-  if (resolved.status !== 0) {
-    process.stderr.write(resolved.stderr ?? "");
-    fatal(
-      `${CATALOG_INDEX_EXPORT} did not resolve through the installed package (exit code ${resolved.status})`,
-    );
-  }
-  const url = resolved.stdout.trim();
-  if (!url.startsWith("file:")) fatal(`${CATALOG_INDEX_EXPORT} resolved to a non-file URL: ${url}`);
-  const path = fileURLToPath(url);
-  try {
-    if (!statSync(path).isFile()) throw new Error("not a file");
-  } catch (error) {
-    fatal(`${CATALOG_INDEX_EXPORT} resolved to ${path}, which is not readable: ${error.message}`);
-  }
-  return path;
 }
 
 const VERSION = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?$/;
@@ -216,13 +179,20 @@ async function main() {
   }
   log(`service: ${service.length} backend modules copied into the consumer, directories intact`);
 
-  // --- 3. the index, through the installed export map -----------------------
-  const indexPath = await resolveIndexThroughExportMap(consumerDir);
-  const index = readJson(indexPath);
+  // --- 3. the catalog, through Catalog's public reader ----------------------
+  //
+  // The page is served what readCatalogContentV1 returned, projected member by
+  // member - never the raw index bytes - so every field it can render is a
+  // field of the reader's result type.
+  const servedFact = startupFact(consumerDir, "servedCatalog");
+  if (servedFact.state !== "published") {
+    fatal(`the installed ${CATALOG_PACKAGE} index could not be read through its public reader: ${servedFact.reason}`);
+  }
+  const index = servedFact.catalog;
   const violations = contractViolations(index);
   if (violations.length) fatal(violations.join("; "));
   log(
-    `index: ${CATALOG_INDEX_EXPORT} -> ${indexPath} (format ${index.format}, version ${index.version}, ${index.entries.length} entries)`,
+    `index: read with readCatalogContentV1 (format ${index.format}, version ${index.version}, ${index.entries.length} entries, ${index.digest})`,
   );
   const installedPackages = readInstalledPackages(consumerDir, packages);
   const installed = installedPackages.find((pkg) => pkg.name === CATALOG_PACKAGE);
@@ -272,9 +242,10 @@ async function main() {
     writeFileSync(join(runDir, "publisher-metadata.json"), `${JSON.stringify(publisher.publisher)}
 `);
   }
-  const indexTarget = join(runDir, "catalog-index.json");
-  await copyFile(indexPath, indexTarget);
-  log(`page: ${page.length} page files, ${presentation.length} presentation files and catalog-index.json`);
+  // The URL is unchanged; the bytes are the reader's projection.
+  writeFileSync(join(runDir, "catalog-index.json"), `${JSON.stringify(index)}
+`);
+  log(`page: ${page.length} page files, ${presentation.length} presentation files and the served catalog document`);
 
   // Provenance shown in the page's strip: what was ACTUALLY installed, by
   // tarball hash and commit, never the index's own package block alone.
@@ -282,9 +253,10 @@ async function main() {
     format: index.format,
     version: index.version,
     entryCount: index.entries.length,
-    organizationAdmission:
-      typeof index.organizationAdmission === "string" ? index.organizationAdmission : null,
-    indexSha256: sha256File(indexTarget),
+    organizationAdmission: index.organizationAdmission,
+    // The reader's digest over the exact published index bytes, not over the
+    // served projection.
+    indexSha256: index.digest.replace(/^sha256:/, ""),
     package: {
       name: installed.name,
       version: installed.version,

@@ -21,11 +21,14 @@
  *   artifacts.mjs          exact-byte artifact I/O
  *   catalog-collections.mjs Catalog's current collection view
  *   catalog-publisher.mjs   Catalog's publisher titles and descriptions
+ *   catalog-served.mjs     the catalog document the page is served: the
+ *                          public reader's result, member by member
  *   core-targets.mjs       Core's supported AI CLI targets
  *   validation-fixture.mjs VALIDATION ONLY: the one module that manufactures
  *                          anything, and it labels everything it makes
  */
-import { catalogEntry, catalogIntegrity, entryContentDir } from "./catalog-access.mjs";
+import { catalogEntry, catalogIntegrity, entryContentDir, readCatalog } from "./catalog-access.mjs";
+import { servedCatalogDocument } from "./catalog-served.mjs";
 import { consume, parseEvidence, prepare, subject } from "./core-adapter.mjs";
 import { buildValidationFixture } from "./validation-fixture.mjs";
 
@@ -47,6 +50,15 @@ const OPS = {
   catalogIntegrity({ entryId }) {
     const { entry, content } = catalogEntry(entryId, { verifyArtifacts: true });
     return catalogIntegrity(content, entry);
+  },
+  /**
+   * The catalog document the page is served: what readCatalogContentV1
+   * returned, projected member by member. The raw index bytes never reach the
+   * page, so it cannot render a field the public reader does not carry.
+   */
+  servedCatalog() {
+    const { content } = readCatalog();
+    return { catalog: servedCatalogDocument(content) };
   },
   parseEvidence,
   prepare,

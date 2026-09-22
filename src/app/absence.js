@@ -29,3 +29,13 @@ export const NOT_CONNECTED = "Not connected";
 export const FINDING_DETAIL_ABSENT =
   "Each finding is an occurrence fingerprint and a multiplicity. " +
   "The attestation carries no message, location or severity for it.";
+
+/**
+ * The evidence summary slot when the installed Catalog's public reader does
+ * not return a `summary` for an evidence record. The page is served that
+ * reader's output only, so this is the one thing it can say about an older
+ * Catalog: the summary exists in no field it was given.
+ */
+export const EVIDENCE_SUMMARY_ABSENT =
+  `${NOT_PUBLISHED}: Catalog's public reader does not surface the evidence summary.`;
+

@@ -4,6 +4,11 @@
  * and Core's supported targets - both served by tools/preview.mjs out of the
  * throwaway consumer.
  *
+ * The index document is Catalog's PUBLIC READER output (`readCatalogContentV1`),
+ * projected member by member in the backend - never the raw index file. So
+ * every field read here is a field of the reader's result type, and a field
+ * an installed reader does not return is simply not there to render.
+ *
  * Every render starts from the contract, not from whatever the file happens to
  * hold: a document that does not declare the expected format and version is a
  * reported failure, never a partially rendered page.
