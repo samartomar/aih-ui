@@ -23,6 +23,8 @@ export function createShell(elements) {
     for (const button of elements.tabButtons) {
       const active = button.dataset.tab === tab;
       button.setAttribute("aria-selected", String(active));
+      // One tab stop for the whole list; the arrow keys move between tabs.
+      button.tabIndex = active ? 0 : -1;
       button.classList.toggle("bg-surface-container", active);
       button.classList.toggle("text-primary", active);
       button.classList.toggle("font-semibold", active);
@@ -53,10 +55,27 @@ export function createShell(elements) {
   elements.closeInspectorBtn.addEventListener("click", toggleInspector);
   for (const button of elements.tabButtons) {
     button.addEventListener("click", () => switchTab(button.dataset.tab));
+    // Left and Right move to the neighbouring tab and show it; Home and End
+    // jump to the first and last. Escape is not handled here: it belongs to
+    // whichever layer is open, and with none open it does nothing.
+    button.addEventListener("keydown", (event) => {
+      const step = { ArrowRight: 1, ArrowLeft: -1, Home: -Infinity, End: Infinity }[event.key];
+      if (step === undefined) return;
+      event.preventDefault();
+      const tabs = elements.tabButtons;
+      const here = tabs.indexOf(button);
+      const there = step === -Infinity ? 0 : step === Infinity ? tabs.length - 1 : (here + step + tabs.length) % tabs.length;
+      switchTab(tabs[there].dataset.tab);
+      tabs[there].focus();
+    });
   }
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") switchTab("details");
-  });
+  // The rail's links to screens with no contract yet are marked unavailable. An
+  // unavailable link is followed nowhere and is not a tab stop; the Sources link
+  // is this very page and is not followed either.
+  for (const link of elements.navRail.querySelectorAll('a[href="#"]')) {
+    link.addEventListener("click", (event) => event.preventDefault());
+    if (link.getAttribute("aria-disabled") === "true") link.tabIndex = -1;
+  }
 
   return {
     /** Called when a selection needs the inspector visible. Already-open stays open. */

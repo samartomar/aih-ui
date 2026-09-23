@@ -27,7 +27,12 @@ import { text } from "../app/dom.js";
  * @param onSummary      called once with the preview summary it loaded, for the
  *                       header controls that report installed package facts
  */
-export function createCatalog({ onSelectEntry, onSummary }) {
+/**
+ * @param onSelectEntry    called with the entry when the selection changes
+ * @param onReselectEntry  called when the selected card is activated again
+ * @param onSummary        called with the preview summary once it has loaded
+ */
+export function createCatalog({ onSelectEntry, onReselectEntry = () => {}, onSummary }) {
   const elements = catalogElements();
   const state = {
     entries: [],
@@ -137,9 +142,19 @@ export function createCatalog({ onSelectEntry, onSummary }) {
   }
 
   function select(entryId) {
+    // The selected card again is not a new selection. The inspector is shown
+    // if it was collapsed, and nothing else moves: the Governance workflow for
+    // this entry stays exactly as it is.
+    if (entryId === state.selectedId) {
+      onReselectEntry();
+      return;
+    }
+    const previous = state.selectedId;
     state.selectedId = entryId;
     const entry = selectedEntry();
-    cards.render(cardsModel());
+    // The two cards concerned are updated in place. The grid is not rebuilt,
+    // so the card the operator activated keeps keyboard focus.
+    cards.setSelected(previous, entryId);
     details.render(detailsModel(entry));
     onSelectEntry(entry);
   }

@@ -243,6 +243,7 @@ export function createOrganization({ elements, onChange }) {
     renderEmails();
     renderPosture();
     restoreFocus = document.activeElement;
+    setPageInert(true);
     elements.orgModalOverlay.classList.remove("hidden");
     elements.orgInputName.focus();
   }
@@ -250,8 +251,31 @@ export function createOrganization({ elements, onChange }) {
   function close() {
     working = null;
     elements.orgModalOverlay.classList.add("hidden");
+    // The page has to be reachable again before focus can go back to it.
+    setPageInert(false);
     if (restoreFocus && typeof restoreFocus.focus === "function") restoreFocus.focus();
     restoreFocus = null;
+  }
+
+  /**
+   * While the popup is open the page behind it is inert: nothing there can be
+   * focused, clicked or read, so Tab and a screen reader stay in the dialog.
+   */
+  function setPageInert(inert) {
+    // Every node that is not the popup or one of its ancestors: at each level
+    // from the popup up to <body>, the popup's line stays live and its
+    // siblings do not.
+    for (let node = elements.orgModalOverlay; node.parentElement !== null && node !== document.body; node = node.parentElement) {
+      for (const sibling of node.parentElement.children) {
+        if (sibling !== node) sibling.inert = inert;
+      }
+    }
+  }
+
+  /** What Tab can reach inside the popup, in document order. */
+  function focusableInDialog() {
+    return [...elements.orgModalOverlay.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+      .filter((node) => !node.disabled && node.getClientRects().length > 0);
   }
 
   function isOpen() {
@@ -307,6 +331,21 @@ export function createOrganization({ elements, onChange }) {
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && isOpen()) close();
+  });
+  // Tab wraps at either end of the dialog rather than leaving it.
+  elements.orgModalOverlay.addEventListener("keydown", (event) => {
+    if (event.key !== "Tab") return;
+    const focusable = focusableInDialog();
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   });
 
   renderTrigger();

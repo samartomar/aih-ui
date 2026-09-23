@@ -153,5 +153,21 @@ export function createCards({ elements, onSelect }) {
       elements.visibleCount.textContent = String(model.entries.length);
       elements.visibleCaption.textContent = `of ${model.total} ${model.noun ?? "catalog entries"}`;
     },
+
+    /**
+     * Moves the selection from one card to another without rebuilding the
+     * grid, so the card the operator activated keeps keyboard focus. A card
+     * the current view does not show is simply not there to mark.
+     */
+    setSelected(previousId, nextId) {
+      for (const [entryId, selected] of [[previousId, false], [nextId, true]]) {
+        if (entryId === null || entryId === undefined) continue;
+        const node = elements.cardsGrid.querySelector(`[data-card-id="${CSS.escape(entryId)}"]`);
+        if (node === null) continue;
+        node.setAttribute("aria-pressed", String(selected));
+        node.classList.toggle("border-primary", selected);
+        node.classList.toggle("border-surface-container-high/60", !selected);
+      }
+    },
   };
 }

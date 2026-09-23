@@ -40,6 +40,9 @@ async function main() {
         shell.openInspector();
         void governance.select(entry);
       },
+      // The same card again only brings the inspector back if it was
+      // collapsed. Governance is not told: its workflow for the entry stays.
+      onReselectEntry: () => shell.openInspector(),
       onSummary: (summary) => {
         const coreTargets = summary?.coreTargets ?? null;
         aiTools.setTargets(coreTargets);

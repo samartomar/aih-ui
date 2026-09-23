@@ -358,6 +358,33 @@ sample values.
 - None of it is policy authority. A name, an id, a repository reference, an email
   or a preference establishes no decision; policy artifacts still go through Core.
 
+### Keyboard and focus
+
+The page is driven from the keyboard as readily as from the mouse, and nothing
+moves the operator's focus or state without their asking:
+
+- Activating a card with Enter or Space selects it and leaves focus on that
+  card: the two cards concerned are updated in place, and the grid is not
+  rebuilt. Activating the selected card again is not a new selection; it shows
+  the inspector if it was collapsed and leaves the Governance workflow for that
+  entry exactly as it is.
+- The inspector tabs are one tab stop. Left and Right move to the neighbouring
+  tab and show it, Home and End jump to the first and last; each tab names its
+  pane (`aria-controls`) and each pane its tab.
+- Escape belongs to whichever layer is open - the organization popup, the AI
+  tools popover - and closes that layer only. With none open it does nothing;
+  in particular it never changes the inspector tab.
+- While the organization popup is open the rest of the page is `inert`, and Tab
+  wraps at either end of the dialog rather than leaving it.
+- A rail link to a screen with no contract yet is marked unavailable: it is
+  followed nowhere and is not a tab stop. The Sources link is this page
+  (`aria-current="page"`) and is not followed either.
+- Every focusable control shows a focus ring under `:focus-visible`, the metric
+  tiles and the toolbar selects included.
+- Text is selectable inside the inspector and the provenance panel, so a
+  digest, a commit or an entry id can be copied; the shell chrome around them
+  stays `select-none` as the design source draws it.
+
 ### Unavailable states keep their component's size
 
 A metric tile with nothing published is still a tile of the same size reading
