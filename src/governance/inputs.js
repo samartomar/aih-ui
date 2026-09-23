@@ -180,6 +180,14 @@ export function createInputs({ elements, onEvidenceFile, onInput }) {
     },
 
     /**
+     * Forgets the chosen evidence file, so the same file chosen again is a
+     * change the browser reports rather than a repeat it swallows.
+     */
+    resetEvidenceInput() {
+      elements.govEvidenceFile.value = "";
+    },
+
+    /**
      * @param subject the Core-derived identity, or null
      * @param catalog Catalog's own integrity result, "pending" while it is
      *                still being read, or null when nothing is selected
@@ -227,8 +235,10 @@ export function createInputs({ elements, onEvidenceFile, onInput }) {
         return;
       }
       if (facts.parsed !== true) {
-        box.appendChild(el("div", "text-error leading-snug", facts.reason));
-        row(box, "Bytes read", `${facts.byteLength}`);
+        // Core's parse refusal carries a reason; a request that never reached
+        // the server carries an error. Either is shown, never a blank line.
+        box.appendChild(el("div", "text-error leading-snug", facts.reason ?? facts.error));
+        if (facts.byteLength !== undefined) row(box, "Bytes read", `${facts.byteLength}`);
         return;
       }
       row(box, "Envelope digest", facts.digest);
