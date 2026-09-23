@@ -795,6 +795,19 @@ splitting a module cannot move an id out of the check's view:
 node tools/check-page-contract.mjs
 ```
 
+`tools/acceptance-sweep.mjs` runs against a RUNNING preview, with no browser. It
+makes the same `/api/*` calls the Governance pane makes, in the same order, and
+checks what the page would be shown: that no answer names a filesystem location;
+that a fixture, a prepare and a consume for one entry share one session and the
+verdict names its operator files by their session-relative names; that the two
+saved files reopen into a fresh session, consume, and read back byte for byte;
+and that an unknown session and an unparseable body are each refused with a JSON
+reason rather than a crash. One line per check, non-zero exit on any failure:
+
+```
+node tools/acceptance-sweep.mjs http://127.0.0.1:4173/
+```
+
 Where the prototype showed a field the index does not publish, the page keeps the
 layout, shows **Not published**, **Not supplied** or **Not connected** as above, and
 disables the control. The current list:

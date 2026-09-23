@@ -88,15 +88,17 @@ export function createApi({ consumerDir, runDir, summary }) {
         effect: body.effect,
       });
       if (built.ok !== true) return built;
+      // Where the fixture wrote its operator-side inputs is kept server-side,
+      // keyed by session. The page is told the session id and never a path.
+      const { authorityBundlePath, scanMaterialPath, operatorTrustPath, ...shown } = built;
       sessions.record(sessionId, {
         entryId: body.entryId,
-        // Operator-side inputs, kept server-side and keyed by session.
-        authorityBundlePath: built.authorityBundlePath,
-        scanMaterialPath: built.scanMaterialPath,
-        operatorTrustPath: built.operatorTrustPath,
+        authorityBundlePath,
+        scanMaterialPath,
+        operatorTrustPath,
         mode: "validation-fixture",
       });
-      return { ...built, sessionId };
+      return { ...shown, sessionId };
     },
 
     /**
