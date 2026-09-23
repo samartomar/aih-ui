@@ -237,8 +237,9 @@ export function buildValidationFixture({ entryId, sessionDir, target, effect }) 
     decisionId: decision.id,
     decisionDigest,
     keyId,
+    // How many files the seal covers. Where they were read from is a location
+    // on this machine, and the page is never told one.
     sealedFileCount: relative.length,
-    sealedFrom: contentDir,
     bindingClaim: {
       // The seal was taken over the entry's content directory, so the matched
       // path is this artifact relative to that directory. Both come from the

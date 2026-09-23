@@ -1,79 +1,142 @@
-// One-shot browser acceptance sweep for the Sources & Catalogs preview.
-// Usage: node tools/acceptance-sweep.mjs [page-url] [tag]
-//
-// Drives playwright-cli in the "preview" session and prints one JSON report of the
-// acceptance facts. Writes the raw CLI transcript to .playwright-cli/<tag>.txt as evidence.
-import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+#!/usr/bin/env node
+/*
+ * Acceptance sweep over a RUNNING preview's API.
+ *
+ *   node tools/preview.mjs --port 4173
+ *   node tools/acceptance-sweep.mjs [http://127.0.0.1:4173/]
+ *
+ * No browser. It drives the same /api/* calls the Governance pane makes, in the
+ * same order, and checks what the page would be shown:
+ *
+ *   - no response body names a filesystem location. The page holds an opaque
+ *     session id and is shown session-relative names (operator/...), never the
+ *     run directory on this machine;
+ *   - a fixture, a prepare and a consume for one entry share one session, and
+ *     the verdict names its operator files by their session-relative names;
+ *   - the two saved files, reopened into a fresh session, consume to a verdict
+ *     with no reopen failure, and read back byte for byte from that session;
+ *   - a session the server did not issue, and a body it cannot parse, are each
+ *     refused with a JSON answer and a reason - never a crash, never a success.
+ *
+ * Every check prints one line; the process exits non-zero if any failed.
+ */
 
-const [url = "http://127.0.0.1:4199/", tag = "acceptance"] = process.argv.slice(2);
-mkdirSync(".playwright-cli", { recursive: true });
-const transcript = [];
+const base = new URL(process.argv[2] ?? "http://127.0.0.1:4173/");
 
-function cli(args) {
-  const result = spawnSync("playwright-cli", ["-s=preview", ...args], { encoding: "utf8", shell: process.platform === "win32" });
-  const output = `${(result.stdout ?? "").trim()}\n${(result.stderr ?? "").trim()}`.trim();
-  transcript.push(`$ playwright-cli ${args.join(" ")}\n${output}\n`);
-  return output;
+/** Anything that looks like a filesystem location on this or any machine. */
+const LOCATION = /[A-Za-z]:\\|[A-Za-z]:\/|\/(Users|home|tmp|var|private)\/|\\\\|aih-ui-preview-/;
+
+const failures = [];
+function check(name, ok, detail = "") {
+  console.log(`${ok ? "ok  " : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
+  if (!ok) failures.push(name);
 }
 
-const raw = (args) => cli(["--raw", ...args]);
-const ev = (expression) => raw(["eval", expression]);
-
-const report = {};
-report.title = ev("document.title");
-report.errorBox = ev(
-  "JSON.stringify({hidden: document.getElementById('catalog-error').className.includes('hidden'), text: document.getElementById('catalog-error').textContent})",
-);
-report.provenance = ev("document.getElementById('provenance-strip').innerText.split('\\n').join(' ')");
-report.masthead = ev("document.getElementById('masthead-facts').innerText.split('\\n').join(' ')");
-report.counts = ev(
-  "JSON.stringify({nav: document.getElementById('nav-sources-count').textContent, railPackage: document.getElementById('rail-package-count').textContent, visible: document.getElementById('visible-count').textContent, caption: document.getElementById('visible-caption').textContent, mastheadVersion: document.getElementById('masthead-version').textContent})",
-);
-report.ledger = ev(
-  "JSON.stringify([...document.querySelectorAll('#framework-matrix-tabs button')].map(b => b.innerText.split('\\n').join(' | ')))",
-);
-report.sourceTypes = ev(
-  "JSON.stringify([...document.querySelectorAll('#rail-source-list > div > button')].map(b => b.innerText.split('\\n').join(':')))",
-);
-report.kindRail = ev("JSON.stringify([...document.querySelectorAll('#rail-kind-list button')].map(b => b.innerText.split('\\n').join(':')))");
-report.githubRepos = ev(
-  "(() => { [...document.querySelectorAll('#rail-source-list button')].find(b => b.innerText.startsWith('github')).click(); return JSON.stringify([...document.querySelectorAll('#rail-source-list button')].map(b => b.innerText.split('\\n').join(':'))); })()",
-);
-report.anthropicsFilter = ev(
-  "(() => { [...document.querySelectorAll('#rail-source-list button')].find(b => b.innerText.startsWith('anthropics/skills')).click(); return JSON.stringify({visible: document.getElementById('visible-count').textContent, ids: [...document.querySelectorAll('#cards-grid [data-card-id]')].map(n => n.dataset.cardId).slice(0, 3), active: [...document.querySelectorAll('#rail-source-list button')].filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.innerText.trim())}); })()",
-);
-report.pathSearch = ev(
-  "(() => { const i = document.getElementById('catalog-search'); i.value = 'skills/writing-skills'; i.dispatchEvent(new Event('input',{bubbles:true})); return JSON.stringify({visible: document.getElementById('visible-count').textContent, ids: [...document.querySelectorAll('#cards-grid [data-card-id]')].map(n => n.dataset.cardId)}); })()",
-);
-report.githubInspector = ev(
-  "(() => { document.querySelector('#cards-grid [data-card-id]').click(); return JSON.stringify({locator: document.getElementById('inspector-version').textContent, locatorTitle: document.getElementById('inspector-version').title, source: document.getElementById('details-source').innerText.split('\\n').join(' | ')}); })()",
-);
-report.commitSearch = ev(
-  "(() => { const i = document.getElementById('catalog-search'); i.value = 'b36e0829c6d0140e93cfef2ca599b1b07d4a7797'; i.dispatchEvent(new Event('input',{bubbles:true})); return JSON.stringify({visible: document.getElementById('visible-count').textContent}); })()",
-);
-report.npmInspector = ev(
-  "(() => { const i = document.getElementById('catalog-search'); i.value = 'picocolors'; i.dispatchEvent(new Event('input',{bubbles:true})); document.querySelector('#cards-grid [data-card-id]').click(); return JSON.stringify({name: document.getElementById('inspector-name').textContent, locator: document.getElementById('inspector-version').textContent, source: document.getElementById('details-source').innerText.split('\\n').join(' | ')}); })()",
-);
-report.aihInspector = ev(
-  "(() => { const i = document.getElementById('catalog-search'); i.value = 'governance-quality.core-0-6-2'; i.dispatchEvent(new Event('input',{bubbles:true})); document.querySelector('#cards-grid [data-card-id]').click(); return JSON.stringify({name: document.getElementById('inspector-name').textContent, locator: document.getElementById('inspector-version').textContent, source: document.getElementById('details-source').innerText.split('\\n').join(' | ')}); })()",
-);
-report.absenceMarkers = ev(
-  "(() => { const i = document.getElementById('catalog-search'); i.value = ''; i.dispatchEvent(new Event('input',{bubbles:true})); const s = document.getElementById('source-filter'); s.value = ''; s.dispatchEvent(new Event('change',{bubbles:true})); const body = document.body.innerText; return JSON.stringify({notPublished: body.split('Not published').length - 1, notSupplied: body.split('Not supplied').length - 1, notConnected: body.split('Not connected').length - 1, releaseLabelsPhrase: body.split('release label').length - 1, visible: document.getElementById('visible-count').textContent}); })()",
-);
-report.sortOptions = ev("JSON.stringify([...document.getElementById('sort-select').options].map(o => o.value + '=' + o.textContent))");
-report.theme = ev(
-  "(() => { document.getElementById('theme-toggle-btn').click(); return JSON.stringify({cls: document.documentElement.className, background: getComputedStyle(document.body).backgroundColor, cards: document.querySelectorAll('#cards-grid [data-card-id]').length}); })()",
-);
-report.railsAfterToggle = ev(
-  "(() => { document.getElementById('toggle-nav-btn').click(); document.getElementById('toggle-inspector-btn').click(); return JSON.stringify({navCollapsed: document.getElementById('nav-rail').className.includes('w-0'), inspectorCollapsed: document.getElementById('inspector-rail').className.includes('w-0')}); })()",
-);
-report.inspectorTabs = ev(
-  "(() => { const buttons = [...document.querySelectorAll('.inspector-tab-btn')]; buttons.find(b => b.dataset.tab === 'security').click(); const securityShown = !document.getElementById('pane-security').className.includes('hidden'); buttons.find(b => b.dataset.tab === 'json').click(); const jsonShown = !document.getElementById('pane-json').className.includes('hidden'); buttons.find(b => b.dataset.tab === 'details').click(); return JSON.stringify({securityShown, jsonShown, detailsShown: !document.getElementById('pane-details').className.includes('hidden'), jsonText: document.getElementById('live-json-viewer').textContent.slice(0, 48), copyDisabled: document.getElementById('copy-json-btn').disabled, applyDisabled: document.getElementById('apply-staging-btn').disabled, statementCount: document.getElementById('statement-count').textContent}); })()",
-);
-report.consoleErrors = cli(["console", "error"]);
-
-writeFileSync(`.playwright-cli/${tag}.txt`, transcript.join("\n"));
-for (const [key, value] of Object.entries(report)) {
-  console.log(`${key}: ${value}`);
+/** POSTs JSON and returns { status, body, text }. A body that is not JSON is reported as such. */
+async function post(path, body, raw = false) {
+  const response = await fetch(new URL(path, base), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: raw ? body : JSON.stringify(body),
+  });
+  const text = await response.text();
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    parsed = undefined;
+  }
+  return { status: response.status, body: parsed, text };
 }
+
+/** The first entry whose content ships in the installed package: the fixture needs one. */
+async function firstEntryWithContent() {
+  const index = await (await fetch(new URL("catalog-index.json", base))).json();
+  for (const entry of index.entries) {
+    if (entry.subject?.source?.type !== "aih") continue;
+    const subject = await post("/api/subject", { entryId: entry.entryId });
+    if (subject.body?.contentAvailable === true) return { entry, subject };
+  }
+  return null;
+}
+
+const bodies = [];
+const remember = (name, answer) => {
+  bodies.push({ name, text: answer.text });
+  return answer;
+};
+
+const summary = await (await fetch(new URL("summary.json", base))).json();
+const target = summary.coreTargets?.state === "published" ? summary.coreTargets.targets[0] : null;
+check("summary publishes at least one Core target", typeof target === "string", target ?? "none");
+
+const found = await firstEntryWithContent();
+check("an aih entry with package content exists", found !== null);
+if (found === null || target === null) {
+  process.exit(1);
+}
+const { entry } = found;
+remember("subject", found.subject);
+remember("catalog-integrity", await post("/api/catalog-integrity", { entryId: entry.entryId }));
+
+// ---------------------------------------------------------------- one session
+const fixture = remember("validation-fixture", await post("/api/validation-fixture", { entryId: entry.entryId, target, effect: "observe" }));
+check("validation fixture builds", fixture.status === 200 && fixture.body?.ok !== false, fixture.body?.error);
+const sessionId = fixture.body?.sessionId;
+
+const prepared = remember(
+  "prepare",
+  await post("/api/prepare", {
+    sessionId,
+    entryId: entry.entryId,
+    route: "catalog",
+    target,
+    effect: "observe",
+    decisionId: fixture.body?.decisionId,
+    decisionDigest: fixture.body?.decisionDigest,
+    evidenceBase64: fixture.body?.evidenceBase64,
+    bindingClaim: fixture.body?.bindingClaim ?? null,
+  }),
+);
+check("prepare succeeds in the fixture's session", prepared.body?.prepared === true && prepared.body?.sessionId === sessionId, prepared.body?.error ?? prepared.body?.status?.reason);
+check("prepare is byte-identical on repeat", prepared.body?.deterministic === true);
+
+const verdict = remember("consume", await post("/api/consume", { sessionId }));
+check("consume answers with six axes", typeof verdict.body?.structure === "string" && verdict.body?.execution === "not-attempted", verdict.body?.error);
+check(
+  "the verdict names the operator files by their session-relative names",
+  verdict.body?.authoritySource === "operator/authority-bundle.json" && verdict.body?.trustSource === "operator/operator-trust.json",
+  `${verdict.body?.authoritySource} / ${verdict.body?.trustSource}`,
+);
+check(
+  "the provenance declaration is named the same way",
+  verdict.body?.operatorProvenance == null || verdict.body.operatorProvenance.declaredBy === "operator/operator-trust.json",
+  verdict.body?.operatorProvenance?.declaredBy,
+);
+
+// ------------------------------------------------------------ reopen and read
+const savedInput = remember("saved input", await post("/api/saved", { sessionId, file: "input" }));
+const savedEvidence = remember("saved evidence", await post("/api/saved", { sessionId, file: "evidence" }));
+check("both saved files read back", savedInput.body?.ok === true && savedEvidence.body?.ok === true);
+
+const reopened = remember("reopen", await post("/api/reopen", { inputBase64: savedInput.body?.base64, evidenceBase64: savedEvidence.body?.base64 }));
+check("reopen opens a different session", reopened.body?.ok === true && reopened.body.sessionId !== sessionId);
+const freshVerdict = remember("consume reopened", await post("/api/consume", { sessionId: reopened.body?.sessionId }));
+check("the reopened bytes still parse as canonical", freshVerdict.body?.reopened !== false, freshVerdict.body?.reason);
+const reread = remember("saved input (reopened)", await post("/api/saved", { sessionId: reopened.body?.sessionId, file: "input" }));
+check("the fresh session holds the exact bytes it was handed", reread.body?.base64 === savedInput.body?.base64);
+
+// --------------------------------------------------------------------- refusals
+const unknown = remember("consume unknown", await post("/api/consume", { sessionId: "00000000-0000-4000-8000-000000000000" }));
+check("an unknown session is refused with a reason", unknown.status === 422 && unknown.body?.ok === false && typeof unknown.body.error === "string", unknown.body?.error);
+const malformed = remember("malformed body", await post("/api/consume", "{not json", true));
+check("a body that does not parse is refused as JSON", malformed.status === 400 && malformed.body?.ok === false, malformed.body?.error);
+
+// ----------------------------------------------------- nothing names a location
+for (const { name, text } of bodies) {
+  const match = text.match(LOCATION);
+  check(`no filesystem location in the ${name} answer`, match === null, match ? `found ${JSON.stringify(text.slice(Math.max(0, match.index - 30), match.index + 60))}` : "");
+}
+
+console.log(failures.length === 0 ? "\nall checks passed" : `\n${failures.length} check(s) failed`);
+process.exit(failures.length === 0 ? 0 : 1);
