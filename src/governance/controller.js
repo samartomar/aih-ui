@@ -343,6 +343,17 @@ export function createGovernance() {
       // rather than letting the previous session's files appear to carry over.
       state.operatorFiles = {};
       state.prepared = null;
+      // Nor does it hold the evidence, the binding claim, the decision or the
+      // fixture the previous session prepared from. A fresh session is consumed
+      // from the two files it was handed and nothing else, so with these gone
+      // Prepare is withdrawn and cannot write over those files.
+      state.evidenceBase64 = null;
+      state.evidenceFacts = null;
+      state.bindingClaim = null;
+      state.fixture = null;
+      inputs.clearDecision();
+      inputs.resetEvidenceInput();
+      inputs.renderEvidence(null);
       // The observation belongs to the session it was uploaded into. A fresh one
       // has none, so the inputs are cleared rather than left looking carried over.
       state.observation = noObservation();
@@ -351,7 +362,9 @@ export function createGovernance() {
       observation.reset();
       observation.render(state.observation);
       reopen.render(opened);
-      clearVerdict();
+      // The prepared readout goes with the verdict: it described the session
+      // that was left, not the one that was just opened.
+      clearResults();
     });
   }
 
@@ -372,6 +385,9 @@ export function createGovernance() {
   }
 
   async function onPrepare() {
+    // Which selection this preparation is for. Its answer is applied only if
+    // the operator is still on it.
+    const entry = state.entry;
     const values = inputs.values();
     // Preparing can open the session too, so before there is one it takes its
     // turn with the uploads rather than opening a second session beside them
@@ -389,6 +405,9 @@ export function createGovernance() {
         bindingClaim: state.bindingClaim,
       }),
     );
+    // An answer for a selection the operator has since left describes nothing
+    // on screen: no state, no session id, no render.
+    if (state.entry !== entry) return;
     if (answer.ok === false) {
       preparedView.renderError(answer.error);
       return;
@@ -425,6 +444,9 @@ export function createGovernance() {
   }
 
   async function onFixture() {
+    // Which selection this fixture is for. Its answer is applied only if the
+    // operator is still on it.
+    const entry = state.entry;
     const values = inputs.values();
     // No target, no fixture. The pane used to fall back to "claude"; a target
     // the operator never chose, and that this Core may not even list, is not a
@@ -437,10 +459,13 @@ export function createGovernance() {
       return;
     }
     const built = await loadValidationFixture({
-      entryId: state.entry.entryId,
+      entryId: entry.entryId,
       target: values.target,
       effect: values.effect,
     });
+    // A fixture built for a selection the operator has since left is not this
+    // selection's fixture. Nothing of it is applied.
+    if (state.entry !== entry) return;
     if (built.ok === false) {
       detector.renderError(built.error);
       return;
@@ -536,11 +561,13 @@ export function createGovernance() {
       state.reopened = null;
       state.reopenFiles = undefined;
       inputs.clearDecision();
+      inputs.resetEvidenceInput();
       inputs.renderEvidence(null);
       operatorFiles.reset();
       operatorFiles.render(state.operatorFiles);
       observation.reset();
       observation.render(state.observation);
+      reopen.reset();
       reopen.render(null);
       clearResults();
 

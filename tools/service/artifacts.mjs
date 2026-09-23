@@ -7,10 +7,27 @@
  * not a valid document.
  */
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, posix } from "node:path";
+import { dirname, join, posix, relative as pathRelative, sep } from "node:path";
 
 export const b64 = (bytes) => Buffer.from(bytes).toString("base64");
 export const fromB64 = (value) => Buffer.from(value, "base64");
+
+/**
+ * Where an operator-side file sits, named relative to its session.
+ *
+ * The page holds a session id and never a path, so what it is shown is the
+ * session-relative name `/api/operator-file` answered with when the file was
+ * stored - `operator/authority-bundle.json` - and never where the run
+ * directory happens to be on this machine. A path outside the session, or no
+ * path at all, is null: there is no session-relative name for it.
+ */
+export function sessionRelativePath(sessionDir, path) {
+  if (typeof path !== "string" || path.length === 0) return null;
+  const relative = posix.normalize(pathRelative(sessionDir, path).split(sep).join("/"));
+  if (relative === "" || relative === "." || relative === ".." || relative.startsWith("../")) return null;
+  if (posix.isAbsolute(relative) || /^[A-Za-z]:/.test(relative)) return null;
+  return relative;
+}
 
 /** Writes the bytes exactly as given, creating the directory if it is new. */
 export function writeExactBytes(path, bytes) {

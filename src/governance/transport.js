@@ -8,12 +8,25 @@
  */
 
 async function api(path, body) {
-  const response = await fetch(path, {
-    method: body === undefined ? "GET" : "POST",
-    ...(body === undefined
-      ? {}
-      : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
-  });
+  let response;
+  try {
+    response = await fetch(path, {
+      method: body === undefined ? "GET" : "POST",
+      ...(body === undefined
+        ? {}
+        : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+    });
+  } catch (error) {
+    // The preview server did not answer at all. That is an answer too, and it
+    // is reported where the action was started - never left as an unhandled
+    // rejection with nothing on screen.
+    return {
+      ok: false,
+      error:
+        `Could not reach the preview server (${error?.message ?? String(error)}). ` +
+        "Check that it is still running, then try again.",
+    };
+  }
   return response.json().catch(() => ({ ok: false, error: `HTTP ${response.status}` }));
 }
 

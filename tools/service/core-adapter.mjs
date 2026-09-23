@@ -24,6 +24,7 @@ import {
   fromB64,
   readExactBytes,
   recreateDirectory,
+  sessionRelativePath,
   writeExactBytes,
 } from "./artifacts.mjs";
 import { catalogEntry } from "./catalog-access.mjs";
@@ -288,9 +289,14 @@ export async function consume({
     decisionDigest: result.decisionDigest ?? null,
     evidenceDigest: result.evidenceDigest ?? null,
     diagnostics: result.diagnostics,
-    // Provenance of the inputs, so the page can label honestly.
-    authoritySource: authorityBundlePath ?? "Not supplied",
-    trustSource: verification.trustSource,
+    // Provenance of the inputs, so the page can label honestly. Each is the
+    // session-relative name the file was stored under, never the absolute
+    // location: the page never sees a path it did not supply.
+    authoritySource: sessionRelativePath(sessionDir, authorityBundlePath) ?? "Not supplied",
+    trustSource:
+      verification.scan === undefined
+        ? verification.trustSource
+        : sessionRelativePath(sessionDir, verification.trustSource) ?? "Not supplied",
     // Read after the verification Core performed, so it names the key that
     // actually signed rather than a configured root.
     signerKeyId: verification.signerKeyId(),
@@ -302,6 +308,18 @@ export async function consume({
     // The operator's declaration about their own signer: the only statement
     // that can speak to a real detector run, attributed to the trust entry
     // belonging to the signer that actually signed.
-    operatorProvenance: verification.operatorProvenance(),
+    operatorProvenance: withinSession(sessionDir, verification.operatorProvenance()),
+  };
+}
+
+/**
+ * The operator's provenance declaration with its `declaredBy` named relative
+ * to the session, for the same reason as the sources above.
+ */
+function withinSession(sessionDir, provenance) {
+  if (provenance === null || provenance === undefined) return provenance;
+  return {
+    ...provenance,
+    declaredBy: sessionRelativePath(sessionDir, provenance.declaredBy) ?? "Not supplied",
   };
 }

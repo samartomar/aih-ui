@@ -496,6 +496,18 @@ The pane keeps the two together:
 - Consume is offered only when nothing is in flight and every supplied input is
   stored for the revision it is on now, and a consumption's answer is discarded
   if the session or the inputs changed while it was being derived.
+- A prepare or a validation fixture answers for the selection it was asked for.
+  If the operator has left that selection by the time it answers, nothing of it
+  is applied.
+- A reopened session holds the two files it was handed and nothing to prepare
+  from: the evidence, binding claim, decision and fixture of the session that
+  was left go with it, so Prepare is withdrawn and cannot write over those
+  files. Choosing a different card forgets the files chosen for reopening, and
+  the evidence file, so the same file chosen again is a change the browser
+  reports.
+- A request that never reaches the preview server is an answer too: it is
+  reported in the step that started it, never left as an unhandled rejection
+  with nothing on screen.
 - The session enforces the same ordering itself, because the page is not what
   holds the bytes: `/api/operator-file` and `/api/observation` carry the
   revision their input is on, and a store older than or equal to what that
@@ -591,7 +603,11 @@ node tools/preview.mjs
 It serves `http://127.0.0.1:4173/`. Two halves: a static page, and a backend that
 runs `tools/service/` inside a throwaway consumer. All Node-only package APIs and
 all filesystem access live on that side; the page never sees a path it did not
-supply.
+supply. Where a result names an operator-side file - the authority source, the
+verifier trust, the provenance declaration - it is the session-relative name the
+file was stored under (`operator/authority-bundle.json`), the same string
+`/api/operator-file` answered with, never the run directory's location on this
+machine (`tools/tests/session-relative.test.mjs`).
 
 ```
 tools/

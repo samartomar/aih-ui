@@ -44,6 +44,19 @@ export function createReopen({ elements, onFiles, onReopen }) {
       elements.govReopen.replaceChildren(el("div", "text-error leading-snug", message));
     },
 
+    /**
+     * Forgets the chosen files when the selection changes. The button is
+     * offered again only once both files are chosen for the new selection;
+     * nothing carries over.
+     */
+    reset() {
+      chosen.input = null;
+      chosen.evidence = null;
+      elements.govReopenInputFile.value = "";
+      elements.govReopenEvidenceFile.value = "";
+      elements.govReopenBtn.disabled = true;
+    },
+
     /** @param opened { sessionId, files } from the backend, or null */
     render(opened) {
       const box = elements.govReopen;
