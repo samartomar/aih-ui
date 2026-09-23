@@ -281,7 +281,7 @@ export function createDetails({ elements }) {
       elements.detailsDesc.className = description === null
         ? "text-outline/70 leading-relaxed text-[11px]"
         : "text-on-surface-variant leading-relaxed text-[11px] whitespace-pre-line break-words";
-      elements.detailsDesc.title = provenanceNote(record, "description", "Publisher description");
+      elements.detailsDesc.title = provenanceNote(record, "description", "Publisher description", publisher);
 
       // ---------------------------------------------- Declared Capabilities
       const capabilities = entry.capabilities ?? {};
@@ -349,13 +349,13 @@ export function createDetails({ elements }) {
         row(elements.detailsArtifacts, "Publisher text file", record.source.path);
         row(elements.detailsArtifacts, "Publisher text sha256", record.source.sha256);
       } else {
-        row(elements.detailsArtifacts, "Publisher text file", null, provenanceNote(record, "description", "Publisher text"));
+        row(elements.detailsArtifacts, "Publisher text file", null, provenanceNote(record, "description", "Publisher text", publisher));
       }
       // What the upstream publisher declares, kept apart from Catalog's
       // curated category on the card badge.
       row(
         elements.detailsArtifacts, "Upstream category", publishedText(record, "category"),
-        provenanceNote(record, "category", "Upstream category"),
+        provenanceNote(record, "category", "Upstream category", publisher),
       );
       row(elements.detailsArtifacts, "Seed path", entry.seed?.path);
       row(elements.detailsArtifacts, "Seed sha256", entry.seed?.sha256);

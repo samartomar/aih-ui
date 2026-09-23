@@ -32,14 +32,14 @@ import { provenanceNote, publishedText, publisherOf } from "./publisher.js";
 import { categoryBadge } from "./categories.js";
 
 /** The category badge's text, whether it reads as a value, and its tooltip. */
-function badgeOf(entry, record, categories) {
+function badgeOf(entry, record, categories, publisher) {
   const curated = categoryBadge(categories, entry);
   if (curated !== null) return { text: curated.text, value: curated.curated, title: curated.title };
   const declared = publishedText(record, "category");
   return {
     text: declared ?? NOT_PUBLISHED,
     value: declared !== null,
-    title: provenanceNote(record, "category", "Category"),
+    title: provenanceNote(record, "category", "Category", publisher),
   };
 }
 
@@ -48,7 +48,7 @@ function card(entry, selectedId, onSelect, publisher, categories) {
   const record = publisherOf(publisher, entry);
   const title = publishedText(record, "title");
   const description = publishedText(record, "description");
-  const badge = badgeOf(entry, record, categories);
+  const badge = badgeOf(entry, record, categories, publisher);
   const isSelected = selectedId === id.entryId;
 
   const node = el("div", `group rounded border p-3 flex flex-col justify-between hover:border-primary transition-all cursor-pointer shadow-xs ${isSelected ? "border-primary" : "border-surface-container-high/60"}`);
@@ -88,7 +88,7 @@ function card(entry, selectedId, onSelect, publisher, categories) {
   // show: an unavailable state holds the component's dimensions, so the grid
   // keeps the design source's card proportions instead of closing up.
   const body = el("p", "text-[11px] text-outline/70 mt-2 leading-relaxed line-clamp-3 min-h-[4.875em] break-words", description ?? NOT_PUBLISHED);
-  body.title = provenanceNote(record, "description", "Description");
+  body.title = provenanceNote(record, "description", "Description", publisher);
   top.appendChild(body);
   node.appendChild(top);
 

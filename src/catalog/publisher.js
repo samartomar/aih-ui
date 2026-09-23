@@ -83,8 +83,15 @@ export function publishedText(record, field) {
   return value?.state === "published" ? text(value.value) : null;
 }
 
-/** The tooltip that says where a value came from, or why it is missing. */
-export function provenanceNote(record, field, label) {
+/**
+ * The tooltip that says where a value came from, or why it is missing.
+ *
+ * @param publisher  the applied publisher view. When Catalog's presentation
+ *                   reader refused the installed sidecar, or the installed
+ *                   Catalog does not export it, that is what the slot says,
+ *                   with the reason - never that Catalog publishes nothing.
+ */
+export function provenanceNote(record, field, label, publisher = null) {
   const value = record?.[field];
   if (value?.state === "published") {
     return `${label} as published upstream (${value.field} in ${record.source?.path ?? "the upstream file"}), ` +
@@ -92,6 +99,10 @@ export function provenanceNote(record, field, label) {
   }
   if (value?.state === "unavailable") {
     return `${label}: not published - ${UNAVAILABLE_REASON[value.reason] ?? value.reason}.`;
+  }
+  if (publisher?.state === "unavailable") {
+    return `${label}: not published. The preview could not read Catalog's publisher metadata: ` +
+      `${text(publisher.reason) ?? "no reason given"}.`;
   }
   return `${label}: not published. Catalog publishes no publisher metadata for this item.`;
 }
