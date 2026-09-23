@@ -103,7 +103,7 @@ export function createProvenance({ elements }) {
     summaryNode.title = "Package hashes, commits, index metadata and the collection view";
     details.appendChild(summaryNode);
 
-    const panel = el("div", "absolute left-0 top-[18px] z-40 w-[460px] max-w-[90vw] max-h-[70vh] overflow-y-auto p-2 rounded bg-surface-container-lowest border border-surface-container-high/60 shadow-2xl space-y-1 text-[10px] font-mono");
+    const panel = el("div", "absolute left-0 top-[18px] z-40 w-[460px] max-w-[90vw] max-h-[70vh] overflow-y-auto p-2 rounded bg-surface-container-lowest border border-surface-container-high/60 shadow-2xl space-y-1 text-[10px] font-mono select-text");
     const line = (label, value, tone) => {
       const node = el("div", "flex items-start justify-between gap-2");
       node.appendChild(el("span", "text-outline shrink-0", label));

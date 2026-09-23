@@ -23,7 +23,7 @@ const LEDGER = [
 function tile(kind, model, onToggleKind) {
   const count = kind.key === null ? null : (model.kindCounts.get(kind.key) ?? 0);
   const active = kind.key !== null && model.activeKind === kind.key;
-  const button = el("button", `px-4 pt-3 pb-3 flex flex-col gap-2 text-left transition-colors focus:outline-none ${active ? "bg-[#ffb95f]/[0.07] cursor-pointer" : kind.key === null ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-surface-container/50"}`, undefined);
+  const button = el("button", `px-4 pt-3 pb-3 flex flex-col gap-2 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${active ? "bg-[#ffb95f]/[0.07] cursor-pointer" : kind.key === null ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-surface-container/50"}`, undefined);
   button.type = "button";
   button.setAttribute("aria-pressed", String(active));
   if (kind.key === null) {
