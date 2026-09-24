@@ -25,7 +25,7 @@ export function createStatuses({ elements }) {
         );
         cell.appendChild(el("div", "text-[9px] font-mono uppercase tracking-wider text-outline", axis));
         cell.appendChild(
-          el("div", `text-[11px] font-mono font-semibold ${TONE[value] ?? "text-on-surface"}`, value),
+          el("div", `text-[11px] font-mono font-medium ${TONE[value] ?? "text-on-surface"}`, value),
         );
         grid.appendChild(cell);
       }

@@ -67,7 +67,7 @@ function categoriesReason(coverage, curated) {
 /** One category line in the design source's own layout: its name and its count. */
 function categoryLine(label, count, title, key, selected, onToggle) {
   const active = selected != null && selected.id === key;
-  const line = el("button", `w-full flex items-center justify-between gap-2 px-1.5 py-0.5 rounded text-left cursor-pointer ${active ? "bg-surface-container-highest text-primary font-semibold shadow-xs" : "text-on-surface-variant hover:bg-surface-container"}`);
+  const line = el("button", `w-full flex items-center justify-between gap-2 px-1.5 py-0.5 rounded text-left cursor-pointer ${active ? "bg-surface-container-highest text-primary font-medium shadow-xs" : "text-on-surface-variant hover:bg-surface-container"}`);
   line.type = "button";
   line.setAttribute("aria-pressed", String(active));
   line.dataset.focusKey = JSON.stringify(["category", key]);
@@ -123,7 +123,7 @@ function scopeRow(row, selected, onSelect, coverage, curated, category, onToggle
     el("span", `material-symbols-outlined ${selected ? "text-[14px] text-primary" : "text-[15px] text-outline"} shrink-0`, selected ? "folder_open" : "folder"),
   );
   left.appendChild(
-    el("span", `${selected ? "text-primary" : "text-on-surface"} truncate font-semibold text-[11.5px]`, scope.name),
+    el("span", `${selected ? "text-primary" : "text-on-surface"} truncate font-medium text-[11.5px]`, scope.name),
   );
   const badge = badgeNode(scope, selected);
   if (badge) left.appendChild(badge);
@@ -140,7 +140,7 @@ function scopeRow(row, selected, onSelect, coverage, curated, category, onToggle
     el(
       "span",
       selected
-        ? "font-mono text-[10px] px-1 rounded bg-surface-container-highest text-metadata-revision font-bold shrink-0"
+        ? "font-mono text-[10px] px-1 rounded bg-surface-container-highest text-metadata-revision font-medium shrink-0"
         : "font-mono text-[10.5px] px-1 text-outline shrink-0",
       String(row.total),
     ),
@@ -177,7 +177,7 @@ function additionsRow(organizationName) {
   const left = el("div", "flex items-center gap-2 min-w-0 flex-1 mr-1");
   left.appendChild(el("span", "material-symbols-outlined text-[15px] text-outline shrink-0", "extension"));
   left.appendChild(
-    el("span", "text-on-surface truncate font-semibold text-[11.5px]", organizationName ? `${organizationName} Additions` : "Your Additions"),
+    el("span", "text-on-surface truncate font-medium text-[11.5px]", organizationName ? `${organizationName} Additions` : "Your Additions"),
   );
   head.appendChild(left);
   head.appendChild(el("span", "font-mono text-[10.5px] px-1 text-outline shrink-0", NOT_SUPPLIED));

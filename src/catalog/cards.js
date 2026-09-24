@@ -76,7 +76,7 @@ function card(entry, selectedId, onSelect, publisher, categories) {
     ),
   );
   // The publisher's own name when Catalog publishes one; otherwise the item's id.
-  name.appendChild(el("span", "wb-card-title text-wb-body font-mono font-bold text-wb-title tracking-tight truncate", title ?? id.name));
+  name.appendChild(el("span", "wb-card-title text-wb-body font-mono font-medium text-wb-title tracking-tight truncate", title ?? id.name));
   head.appendChild(name);
   const badges = el("div", "flex items-center gap-1 shrink-0");
   const category = el(

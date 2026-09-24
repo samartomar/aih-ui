@@ -147,6 +147,11 @@ live in the root theme tokens, following Carbon's surface-layering approach.
 Typography sizes for the body, source heading, card text, and metric counts live
 in `src/styles/tokens.css` as `--type-*` tokens. Components use semantic classes
 for these roles so changing the dense scale does not require editing card markup.
+The Geist / Geist Mono weight scale is deliberately restrained: body text stays
+at 400, labels and card titles use 500, and the main source heading, key counts
+and important governance outcomes use 600. Weight 300 is limited to the larger
+setup headings and source revision line. Both families load exactly 300–600;
+Tailwind weight utilities and direct CSS share the `--fw-*` tokens.
 
 The metric tiles span the full width
 above the split, and the inspector is a **sibling of `<main>`** inside

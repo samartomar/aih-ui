@@ -57,6 +57,12 @@ module.exports = {
         "wb-heading": "var(--type-heading)",
         "wb-metric": "var(--type-metric)",
       },
+      fontWeight: {
+        light: "var(--fw-light)",
+        normal: "var(--fw-regular)",
+        medium: "var(--fw-medium)",
+        semibold: "var(--fw-strong)",
+      },
       fontFamily: {
         "code-block": ["Geist Mono", "monospace"],
         mono: ["Geist Mono", "monospace"],

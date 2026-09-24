@@ -143,7 +143,7 @@ html.light {
   --inspector-width: 340px;
   --font: "Geist", sans-serif;
   --mono: "Geist Mono", monospace;
-  --fw-regular: 400; --fw-medium: 500; --fw-strong: 600; --fw-title: 700;
+  --fw-light: 300; --fw-regular: 400; --fw-medium: 500; --fw-strong: 600;
   --track-title: -0.01em;
   --font-title: var(--mono); --font-lab: var(--mono);
   --r-sm: 2px; --r: 4px; --r-lg: 6px; --r-full: 8px;

@@ -43,7 +43,7 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
       radio.checked = value === option.value;
       radio.addEventListener("change", () => { onChange(option.value); error(null); renderProgress(); });
       const text = el("span", "space-y-1");
-      text.append(el("strong", "block text-on-surface text-[14px]", option.title), el("span", "block text-on-surface-variant text-[12px] leading-relaxed", option.description));
+      text.append(el("strong", "block font-medium text-on-surface text-[14px]", option.title), el("span", "block text-on-surface-variant text-[12px] leading-relaxed", option.description));
       label.append(radio, text);
       group.append(label);
     }
@@ -103,7 +103,7 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
         draft.capabilities = box.checked ? [...draft.capabilities, capability.id] : draft.capabilities.filter((id) => id !== capability.id);
       });
       const text = el("span", "space-y-1.5");
-      text.append(el("strong", "block text-on-surface text-[12px]", capability.title), el("span", "block text-on-surface-variant text-[11px] leading-relaxed", `Proposed benefit: ${capability.benefit}`), el("span", "block text-outline text-[11px] leading-relaxed", `If skipped: ${capability.skipped}`));
+      text.append(el("strong", "block font-medium text-on-surface text-[12px]", capability.title), el("span", "block text-on-surface-variant text-[11px] leading-relaxed", `Proposed benefit: ${capability.benefit}`), el("span", "block text-outline text-[11px] leading-relaxed", `If skipped: ${capability.skipped}`));
       label.append(box, text);
       group.append(label);
     }
@@ -133,7 +133,7 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
   function renderProgress() {
     elements.setupProgress.replaceChildren();
     steps().forEach((key, index) => {
-      const item = el("li", index === step ? "text-primary font-semibold" : "text-outline", `${index + 1}. ${STEP_LABELS[key]}`);
+      const item = el("li", index === step ? "text-primary font-medium" : "text-outline", `${index + 1}. ${STEP_LABELS[key]}`);
       if (index === step) item.setAttribute("aria-current", "step");
       elements.setupProgress.append(item);
     });

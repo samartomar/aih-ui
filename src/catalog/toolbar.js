@@ -27,7 +27,7 @@ import { el } from "../app/dom.js";
 import { NOT_PUBLISHED } from "../app/absence.js";
 import { sortedCounts } from "./selectors.js";
 
-const PILL_ACTIVE = "px-2.5 py-1 rounded bg-surface-container-highest text-on-surface font-semibold text-[10.5px] font-mono shadow-xs transition-colors shrink-0";
+const PILL_ACTIVE = "px-2.5 py-1 rounded bg-surface-container-highest text-on-surface font-medium text-[10.5px] font-mono shadow-xs transition-colors shrink-0";
 const PILL_IDLE = "px-2.5 py-1 rounded hover:bg-surface-container text-on-surface-variant text-[10.5px] font-mono transition-colors shrink-0";
 const PILL_UNAVAILABLE = "px-2.5 py-1 rounded text-on-surface-variant text-[10.5px] font-mono shrink-0 opacity-50 cursor-not-allowed";
 
@@ -67,7 +67,7 @@ function summaryChip(icon, label, title) {
 function kindPill(label, count, active, onClick, key = label) {
   // Sized to the header's own 16.5px line, so moving the kind filter here
   // does not make the row taller than the design source's sort line.
-  const button = el("button", `px-2 py-0 leading-[16.5px] rounded text-[10px] font-mono transition-colors shrink-0 ${active ? "bg-surface-container-highest text-on-surface font-semibold shadow-xs" : "hover:bg-surface-container text-on-surface-variant"}`, undefined);
+  const button = el("button", `px-2 py-0 leading-[16.5px] rounded text-[10px] font-mono transition-colors shrink-0 ${active ? "bg-surface-container-highest text-on-surface font-medium shadow-xs" : "hover:bg-surface-container text-on-surface-variant"}`, undefined);
   button.type = "button";
   button.dataset.kind = JSON.stringify(key);
   button.setAttribute("aria-pressed", String(active));

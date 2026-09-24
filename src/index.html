@@ -7,7 +7,7 @@
 <!-- Geist and Material Symbols load from Google Fonts; Tailwind is compiled locally. -->
 <link href="https://fonts.googleapis.com" rel="preconnect">
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&amp;family=Geist+Mono:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
 <link rel="stylesheet" href="styles/tailwind.css">
 <link rel="stylesheet" href="styles/tokens.css">
@@ -25,7 +25,7 @@
 <div class="w-5 h-5 rounded bg-primary-container flex items-center justify-center shadow-sm">
 <span class="material-symbols-outlined text-on-primary text-[14px]">shield_with_house</span>
 </div>
-<span class="font-semibold text-[11px] tracking-tight text-on-surface">aih Policy</span>
+<span class="font-medium text-[11px] tracking-tight text-on-surface">aih Policy</span>
 <span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-medium" id="workbench-role">Local</span>
 </div>
 <div class="h-3.5 w-px bg-surface-container-high mx-0.5"></div>
@@ -47,7 +47,7 @@
 <span class="material-symbols-outlined text-[13px] text-outline">arrow_drop_down</span>
 </button>
 <div class="hidden absolute left-0 top-7 w-64 p-2 rounded bg-surface-container-lowest border border-wb-border shadow-panel space-y-1 text-[11.5px] z-50" id="ai-tools-pop" role="group" aria-label="AI tools">
-<div class="px-1 pb-1 text-[10px] font-mono uppercase tracking-wider text-outline font-semibold">Set up for</div>
+<div class="px-1 pb-1 text-[10px] font-mono uppercase tracking-wider text-outline font-medium">Set up for</div>
 <div class="space-y-0.5 max-h-[360px] overflow-y-auto" id="ai-tools-list"></div>
 <div class="px-1 pt-1 space-y-0.5 text-[10px] text-outline leading-snug border-t border-wb-border" id="ai-tools-note"></div>
 </div>
@@ -57,7 +57,7 @@
 <div class="flex items-center gap-2 shrink-0">
 <button class="flex items-center gap-1.5 px-2 py-1 rounded bg-surface-container-low text-on-surface-variant text-[12px] opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not connected: needs organization review state from Core, and organizations supply the workflow">
 <span class="">Review Changes</span>
-<span class="text-[10px] font-mono px-1 py-0.2 rounded bg-surface-container-high text-outline font-bold">Not connected</span>
+<span class="text-[10px] font-mono px-1 py-0.2 rounded bg-surface-container-high text-outline font-medium">Not connected</span>
 </button>
 <button class="px-2.5 py-1 rounded bg-surface-container text-on-surface-variant text-[12px] font-medium opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not connected: needs a Core check-policy contract">
         Check Policy
@@ -102,7 +102,7 @@
 <div class="p-2 space-y-3">
 <!-- WORKBENCH / VIEW SELECTOR (Compact) -->
 <div class="space-y-1">
-<div class="px-2 py-0.5 text-[10px] font-mono tracking-wider text-outline uppercase font-semibold flex items-center justify-between">
+<div class="px-2 py-0.5 text-[10px] font-mono tracking-wider text-outline uppercase font-medium flex items-center justify-between">
 <span class="">WORKBENCH</span>
 <span class="material-symbols-outlined text-[12px] text-outline">tune</span>
 </div>
@@ -112,7 +112,7 @@
 <span class="material-symbols-outlined text-[14px]">inventory_2</span>
 <span class="">Sources &amp; Catalogs</span>
 </span>
-<span class="font-mono text-[10px] px-1 rounded bg-surface-container-highest text-on-surface-variant font-semibold" id="nav-sources-count">-</span>
+<span class="font-mono text-[10px] px-1 rounded bg-surface-container-highest text-on-surface-variant font-medium" id="nav-sources-count">-</span>
 </a>
 <a class="flex items-center justify-between px-2 py-1 rounded text-on-surface-variant opacity-50 cursor-not-allowed" href="#" aria-disabled="true" title="Not connected: no organization workflow read contract">
 <span class="flex items-center gap-1.5">
@@ -132,7 +132,7 @@
 </div>
 <!-- CATALOG SCOPES: one row per published source identity -->
 <div class="space-y-1 pt-1 border-t border-wb-border">
-<div class="px-2 py-0.5 text-[10px] font-mono tracking-wider text-outline uppercase font-semibold flex items-center justify-between">
+<div class="px-2 py-0.5 text-[10px] font-mono tracking-wider text-outline uppercase font-medium flex items-center justify-between">
 <span class="">CATALOG SCOPES</span>
 <span class="material-symbols-outlined text-[12px] text-outline">account_tree</span>
 </div>
@@ -140,7 +140,7 @@
 </div>
 <!-- GOVERNANCE & TELEMETRY -->
 <div class="space-y-1 pt-1 border-t border-wb-border">
-<div class="px-2 py-0.5 text-[10px] font-mono tracking-wider text-outline uppercase font-semibold">
+<div class="px-2 py-0.5 text-[10px] font-mono tracking-wider text-outline uppercase font-medium">
 <span class="">TELEMETRY</span>
 </div>
 <nav class="space-y-0.5 text-[11px]">
@@ -160,7 +160,7 @@
 <div class="flex items-center justify-between">
 <span class="flex items-center gap-1.5 text-on-surface-variant font-medium">
 <span class="w-1.5 h-1.5 rounded-full bg-outline"></span>Egress Guard</span>
-<span class="font-mono text-outline font-bold">Not connected</span>
+<span class="font-mono text-outline font-medium">Not connected</span>
 </div>
 <div class="w-full bg-surface-container-highest rounded h-1 overflow-hidden"></div>
 <div class="flex items-center justify-between text-outline font-mono">
@@ -179,11 +179,11 @@
 <div class="px-5 pt-4 pb-3 border-b border-wb-border bg-wb-subhead flex flex-col gap-2 shrink-0">
 <div class="flex items-center justify-between flex-wrap gap-2">
 <div>
-<div class="text-[10px] font-mono tracking-wider uppercase text-outline font-semibold mb-0.5">CATALOG INDEX · READ-ONLY MIRROR</div>
-<h1 class="wb-source-heading text-wb-heading font-bold text-wb-title tracking-tight flex items-center gap-2 font-mono min-w-0">
+<div class="text-[10px] font-mono tracking-wider uppercase text-outline font-medium mb-0.5">CATALOG INDEX · READ-ONLY MIRROR</div>
+<h1 class="wb-source-heading text-wb-heading font-semibold text-wb-title tracking-tight flex items-center gap-2 font-mono min-w-0">
 <span class="truncate" id="masthead-name">-</span>
 <span class="text-outline font-light">—</span>
-<span class="text-metadata-emphasis" id="masthead-version">-</span>
+<span class="text-metadata-emphasis font-light" id="masthead-version">-</span>
 </h1>
 </div>
 <div class="flex items-center gap-2">
@@ -211,7 +211,7 @@
 <div class="flex-1 overflow-y-auto p-4 bg-wb-cards flex flex-col gap-3">
 <div class="flex items-center justify-between gap-4 text-[11px] font-mono text-outline pb-1" id="results-controls">
 <div class="shrink-0 whitespace-nowrap">
-<strong class="text-wb-title font-bold" id="visible-count" title="Inventory count. Not an approval.">0</strong> <span id="visible-caption">of 0 catalog entries</span></div>
+<strong class="text-wb-title font-semibold" id="visible-count" title="Inventory count. Not an approval.">0</strong> <span id="visible-caption">of 0 catalog entries</span></div>
 <div class="flex items-center gap-2 min-w-0">
 <div class="flex flex-nowrap items-center gap-1.5 overflow-x-auto no-scrollbar min-w-0" id="kind-filters" role="group" aria-label="Filter by kind"></div>
 <label class="flex items-center gap-1 shrink-0" title="Filter by published source type">
@@ -219,7 +219,7 @@
 <select class="w-[104px] p-0 border-0 bg-transparent bg-none leading-none text-on-surface text-[10.5px] font-mono focus:outline-none focus:ring-0 focus-visible:ring-1 focus-visible:ring-primary cursor-pointer" id="source-filter" aria-label="Filter by published source type"></select>
 </label>
 <span class="text-[10px] shrink-0">SORT:</span>
-<select class="w-[112px] p-0 border-0 bg-transparent bg-none leading-none text-on-surface font-semibold text-[10.5px] font-mono focus:outline-none focus:ring-0 focus-visible:ring-1 focus-visible:ring-primary cursor-pointer shrink-0" id="sort-select" aria-label="Sort">
+<select class="w-[112px] p-0 border-0 bg-transparent bg-none leading-none text-on-surface font-medium text-[10.5px] font-mono focus:outline-none focus:ring-0 focus-visible:ring-1 focus-visible:ring-primary cursor-pointer shrink-0" id="sort-select" aria-label="Sort">
 <option value="name">NAME (A-Z)</option>
 <option value="name-desc">NAME (Z-A)</option>
 <option value="entryId">ENTRY ID (A-Z)</option>
@@ -241,7 +241,7 @@
 <div class="min-w-0">
 <div class="flex items-center gap-1.5">
 <span class="material-symbols-outlined text-[15px] text-kind-skill" id="inspector-icon">extension</span>
-<span class="min-w-0 font-mono font-bold text-wb-title text-[11px] tracking-tight" id="inspector-name">No entry selected</span>
+<span class="min-w-0 font-mono font-medium text-wb-title text-[11px] tracking-tight" id="inspector-name">No entry selected</span>
 </div>
 <div class="flex items-center gap-2 mt-1">
 <span class="text-[10px] font-mono px-1 rounded bg-surface-container-highest text-on-surface-variant" id="inspector-kind">-</span>
@@ -254,10 +254,10 @@
 </div>
 <div class="inspector-subheading flex items-center justify-between text-[11px]">
 <span class="text-outline" id="inspector-subtitle">Select a card to read its published identities and evidence</span>
-<span class="font-mono text-on-surface-variant font-semibold" id="inspector-flags">Not published</span>
+<span class="font-mono text-on-surface-variant font-medium" id="inspector-flags">Not published</span>
 </div>
 <div class="inspector-tabs flex items-center p-0.5 rounded bg-surface-container-low border border-wb-border text-[11px] gap-0.5" role="tablist" aria-label="Entry inspector">
-<button class="flex-1 py-1 px-1 rounded text-center transition-colors inspector-tab-btn bg-surface-container text-primary font-semibold shadow-xs" data-tab="details" type="button" role="tab" id="tab-details" aria-controls="pane-details" aria-selected="true" tabindex="0">Details</button>
+<button class="flex-1 py-1 px-1 rounded text-center transition-colors inspector-tab-btn bg-surface-container text-primary font-medium shadow-xs" data-tab="details" type="button" role="tab" id="tab-details" aria-controls="pane-details" aria-selected="true" tabindex="0">Details</button>
 <button class="flex-1 py-1 px-1 rounded text-center transition-colors inspector-tab-btn text-on-surface-variant hover:text-on-surface" data-tab="security" type="button" role="tab" id="tab-security" aria-controls="pane-security" aria-selected="false" tabindex="-1">Security Scan</button>
 <button class="flex-1 py-1 px-1 rounded text-center transition-colors inspector-tab-btn text-on-surface-variant hover:text-on-surface" data-tab="governance" type="button" role="tab" id="tab-governance" aria-controls="pane-governance" aria-selected="false" tabindex="-1">Governance</button>
 <button class="inspector-icon-tab shrink-0 py-1 px-1 rounded text-center transition-colors flex items-center justify-center inspector-tab-btn text-on-surface-variant hover:text-on-surface" data-tab="json" type="button" role="tab" id="tab-json" aria-label="Policy JSON" title="Policy JSON · not published" aria-controls="pane-json" aria-selected="false" tabindex="-1">
@@ -292,17 +292,17 @@
 </div>
 <div class="space-y-3 hidden" id="pane-security" role="tabpanel" aria-labelledby="tab-security">
 <div class="space-y-1.5">
-<span class="text-[10px] font-mono uppercase tracking-wider text-outline font-semibold">Scanner Telemetry</span>
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline font-medium">Scanner Telemetry</span>
 <!-- Two slots the design source fills from a scan result. Scan publishes
      neither, so each keeps its place and states why; catalog/details.js sets
      the reasons, so the wording lives beside its siblings. -->
 <div class="p-2 rounded bg-surface-container-low border border-wb-border flex items-center justify-between text-[11px]" id="detector-run-state">
 <span class="text-on-surface-variant">Detector identities and per-engine run state</span>
-<span class="font-mono text-outline text-[10px] font-semibold">Not published</span>
+<span class="font-mono text-outline text-[10px] font-medium">Not published</span>
 </div>
 <div class="p-2 rounded bg-surface-container-low border border-wb-border flex items-center justify-between text-[11px]" id="detector-finding-detail">
 <span class="text-on-surface-variant">Finding rule, severity, message and location</span>
-<span class="font-mono text-outline text-[10px] font-semibold">Not published</span>
+<span class="font-mono text-outline text-[10px] font-medium">Not published</span>
 </div>
 <div class="p-2 rounded bg-surface-container-low border border-wb-border text-[10.5px] text-outline break-words" id="scanner-report-statement">Not published</div>
 </div>
@@ -310,7 +310,7 @@
 <!-- Catalog's publisher qualification for the selected entry, as its
      qualification reader states it. catalog/details.js fills it; the footer is
      said under every state, because qualified is never approval. -->
-<div class="inspector-section-heading flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-outline font-semibold">
+<div class="inspector-section-heading flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-outline font-medium">
 <span class="">Qualification</span>
 <span class="text-on-surface-variant font-mono text-[10px] normal-case tracking-normal font-normal" id="qualification-evaluated">-</span>
 </div>
@@ -318,14 +318,14 @@
 <div class="text-[10px] text-outline leading-snug" id="qualification-footer">Publisher qualification is not organizational authorization.</div>
 </div>
 <div class="space-y-1.5">
-<div class="inspector-section-heading flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-outline font-semibold">
+<div class="inspector-section-heading flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-outline font-medium">
 <span class="">Evidence Statements</span>
 <span class="text-on-surface-variant font-mono text-[10px]" id="statement-count">0 statements</span>
 </div>
 <div class="space-y-1 text-[11px]" id="security-statements"></div>
 </div>
 <div class="space-y-1.5 pt-1">
-<span class="text-[10px] font-mono uppercase tracking-wider text-outline font-semibold">Policy Determination</span>
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline font-medium">Policy Determination</span>
 <div class="p-2 rounded bg-surface-container-low border border-wb-border text-[10.5px] text-outline">Not published: needs a Core determination contract. This page reads evidence and never records a decision.</div>
 <div class="space-y-1 text-[11px] opacity-50">
 <label class="flex items-start gap-2 p-2 rounded bg-surface-container-low border border-wb-border cursor-not-allowed">
@@ -355,7 +355,7 @@
 <div class="space-y-3 hidden" id="pane-governance" role="tabpanel" aria-labelledby="tab-governance">
 
 <div class="p-2 rounded bg-surface-container-low border border-wb-border text-[10.5px] text-on-surface-variant leading-snug">
-<span class="font-semibold text-on-surface">Operator inputs only.</span> This page never
+<span class="font-medium text-on-surface">Operator inputs only.</span> This page never
 manufactures a decision, an approval, verifier trust or a signing key. What you do not supply
 is reported as <span class="font-mono text-outline">Not supplied</span> and refused.
 </div>
@@ -524,7 +524,7 @@ that produced them. Consumption then re-derives the whole verdict from those byt
 <div class="space-y-1 pt-1 border-t border-wb-border">
 <span class="text-[10px] font-mono uppercase tracking-wider text-outline">Validation mode</span>
 <div class="p-2 rounded bg-tertiary/10 border border-tertiary/30 text-[10.5px] text-on-surface-variant leading-snug" id="gov-fixture-note">
-Generates a <span class="font-semibold text-tertiary">signed test fixture</span> and its matching
+Generates a <span class="font-medium text-tertiary">signed test fixture</span> and its matching
 operator trust, so the plumbing can be exercised without a detector. A verified signature
 authenticates a statement; it never establishes that the claimed measurements occurred.
 </div>
@@ -569,7 +569,7 @@ authenticates a statement; it never establishes that the claimed measurements oc
 <button type="button" data-mode-toggle aria-label="Switch to light mode" class="p-1.5 rounded bg-surface-container text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined text-[16px]">light_mode</span></button>
 </div>
 <ol id="setup-progress" class="setup-progress" aria-label="Setup progress"></ol>
-<h1 id="setup-title" class="text-wb-heading font-semibold text-on-surface" tabindex="-1">Opening your Workbench</h1>
+<h1 id="setup-title" class="text-wb-heading font-light text-on-surface" tabindex="-1">Opening your Workbench</h1>
 <p id="setup-description" class="text-on-surface-variant leading-relaxed mt-2">Loading saved setup for this workspace.</p>
 <p id="setup-fixed-experience" class="setup-notice mt-3" hidden></p>
 </header>
@@ -588,7 +588,7 @@ authenticates a statement; it never establishes that the claimed measurements oc
 <dialog id="org-modal-overlay" class="setup-dialog" aria-labelledby="org-modal-title">
 <div class="setup-frame">
 <header class="setup-header">
-<div><h2 id="org-modal-title" class="text-wb-heading font-semibold text-on-surface">Saved local setup</h2><p class="text-on-surface-variant mt-2">Recorded on this machine. Enterprise approval is not verified.</p></div>
+<div><h2 id="org-modal-title" class="text-wb-heading font-light text-on-surface">Saved local setup</h2><p class="text-on-surface-variant mt-2">Recorded on this machine. Enterprise approval is not verified.</p></div>
 </header>
 <div id="org-setup-summary" class="setup-content"></div>
 <footer class="setup-footer setup-summary-actions">

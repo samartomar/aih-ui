@@ -27,7 +27,7 @@ export function createShell(elements) {
       button.tabIndex = active ? 0 : -1;
       button.classList.toggle("bg-surface-container", active);
       button.classList.toggle("text-primary", active);
-      button.classList.toggle("font-semibold", active);
+      button.classList.toggle("font-medium", active);
       button.classList.toggle("shadow-xs", active);
       button.classList.toggle("text-on-surface-variant", !active);
     }

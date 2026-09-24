@@ -111,7 +111,7 @@ export function createProvenance({ elements }) {
       panel.appendChild(node);
     };
     const heading = (value) =>
-      panel.appendChild(el("div", "pt-1 mt-1 border-t border-wb-border text-on-surface font-semibold", value));
+      panel.appendChild(el("div", "pt-1 mt-1 border-t border-wb-border text-on-surface font-medium", value));
 
     line("index format", `${text(summary.format) ?? NOT_PUBLISHED} v${text(summary.version) ?? NOT_PUBLISHED}`);
     line("index sha256", text(summary.indexSha256) ?? NOT_PUBLISHED);
@@ -180,7 +180,7 @@ export function createProvenance({ elements }) {
     const node = el("span", "");
     if (label) node.appendChild(document.createTextNode(`${label} `));
     const absent = value === NOT_SUPPLIED || value === NOT_CONNECTED || value === NOT_PUBLISHED;
-    node.appendChild(el("strong", absent ? "text-outline font-semibold" : "text-on-surface font-semibold", value));
+    node.appendChild(el("strong", absent ? "text-outline font-medium" : "text-on-surface font-medium", value));
     if (title) node.title = title;
     return node;
   }
@@ -217,7 +217,7 @@ export function createProvenance({ elements }) {
     line.replaceChildren();
 
     // The design source's ENABLED slot: organization / Core state, not Catalog's.
-    const enabled = el("span", "px-2 py-0.5 rounded bg-surface-container border border-wb-border text-outline font-semibold flex items-center gap-1.5 text-[10.5px]");
+    const enabled = el("span", "px-2 py-0.5 rounded bg-surface-container border border-wb-border text-outline font-medium flex items-center gap-1.5 text-[10.5px]");
     enabled.appendChild(el("span", "w-1.5 h-1.5 rounded-full bg-outline"));
     enabled.appendChild(document.createTextNode(`ENABLED · ${NOT_CONNECTED}`));
     enabled.title = `Whether this source is enabled is organization and Core state. ${NOT_CONNECTED}: nothing supplies it yet.`;

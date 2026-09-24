@@ -206,7 +206,7 @@ export function createDetails({ elements }) {
     elements.inspectorVersion.textContent = "-";
     elements.inspectorSubtitle.textContent = "Select a card to read its published identities and evidence";
     elements.inspectorFlags.textContent = NOT_PUBLISHED;
-    elements.inspectorFlags.className = "font-mono text-outline font-semibold";
+    elements.inspectorFlags.className = "font-mono text-outline font-medium";
     elements.detailsDesc.textContent = NOT_PUBLISHED;
     capability(elements.detailsCapabilities, "Network Egress", "wifi", "tertiary", NOT_PUBLISHED);
     capability(elements.detailsCapabilities, "Execution Sandbox", "terminal", "secondary", NOT_PUBLISHED);
@@ -276,7 +276,7 @@ export function createDetails({ elements }) {
       elements.inspectorSubtitle.textContent = `${id.kind} · ${originOf(source) ?? source.type}`;
       elements.inspectorIcon.textContent = KIND_ICON[id.kind] ?? "extension";
       elements.inspectorFlags.textContent = NOT_PUBLISHED;
-      elements.inspectorFlags.className = "font-mono text-outline font-semibold";
+      elements.inspectorFlags.className = "font-mono text-outline font-medium";
       elements.inspectorFlags.title = "Scan flags: not published. No scan result is published for this item.";
 
       // --------------------------------------------- Publisher Overview

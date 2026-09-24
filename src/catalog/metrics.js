@@ -35,14 +35,14 @@ function tile(kind, model, onToggleKind) {
   const head = el("div", "flex items-center justify-between gap-2 min-w-0");
   const name = el("span", "flex items-center gap-1.5 min-w-0");
   name.appendChild(el("span", `material-symbols-outlined text-[14px] ${kind.iconTone}`, kind.icon));
-  name.appendChild(el("span", `text-[10px] uppercase font-semibold tracking-[0.08em] truncate ${active ? "text-wb-title" : "text-outline"}`, kind.label));
+  name.appendChild(el("span", `text-[10px] uppercase font-medium tracking-[0.08em] truncate ${active ? "text-wb-title" : "text-outline"}`, kind.label));
   head.appendChild(name);
   head.appendChild(el("span", "text-[10px] font-mono tabular-nums shrink-0 text-outline", count === null ? NOT_PUBLISHED : `${count}`));
   button.appendChild(head);
 
   const metrics = el("div", "flex items-baseline justify-between gap-2");
   if (count === null) {
-    metrics.appendChild(el("span", "text-[11px] leading-none font-semibold font-mono tracking-tight text-outline", NOT_PUBLISHED));
+    metrics.appendChild(el("span", "text-[11px] leading-none font-medium font-mono tracking-tight text-outline", NOT_PUBLISHED));
   } else {
     const numbers = el("span", "flex items-baseline gap-1");
     numbers.appendChild(el("span", "wb-metric-count text-wb-metric leading-none font-semibold font-mono tabular-nums tracking-tight text-wb-title", String(count)));
