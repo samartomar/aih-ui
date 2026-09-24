@@ -12,7 +12,7 @@ export function catalogElements() {
     "nav-sources-count", "rail-scope-list", "framework-matrix-tabs",
     "review-filters", "review-summary",
     "kind-filters", "catalog-search", "source-filter", "sort-select",
-    "visible-count", "visible-caption", "cards-grid",
+    "visible-count", "visible-caption", "category-context", "cards-grid",
     "inspector-name", "inspector-kind", "inspector-version", "inspector-subtitle",
     "inspector-flags", "inspector-icon",
     "details-identity", "details-source", "details-desc", "details-capabilities",
@@ -45,6 +45,7 @@ export function catalogElements() {
       cardsGrid: found.cardsGrid,
       visibleCount: found.visibleCount,
       visibleCaption: found.visibleCaption,
+      categoryContext: found.categoryContext,
     },
     details: {
       inspectorName: found.inspectorName,

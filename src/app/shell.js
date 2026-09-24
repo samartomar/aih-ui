@@ -35,6 +35,9 @@ export function createShell(elements) {
   }
 
   function toggleNav() {
+    if (window.innerWidth <= 760 && elements.navRail.classList.contains("w-0") && !elements.inspectorRail.classList.contains("w-0")) {
+      toggleInspector();
+    }
     const collapsed = elements.navRail.classList.toggle("w-0");
     elements.navRail.classList.toggle("w-60", !collapsed);
     elements.navRail.classList.toggle("border-r-0", collapsed);
@@ -43,6 +46,9 @@ export function createShell(elements) {
   }
 
   function toggleInspector() {
+    if (window.innerWidth <= 760 && elements.inspectorRail.classList.contains("w-0") && !elements.navRail.classList.contains("w-0")) {
+      toggleNav();
+    }
     const collapsed = elements.inspectorRail.classList.toggle("w-0");
     elements.inspectorRail.classList.toggle("w-[390px]", !collapsed);
     elements.inspectorRail.classList.toggle("border-l-0", collapsed);
@@ -53,6 +59,15 @@ export function createShell(elements) {
   elements.toggleNavBtn.addEventListener("click", toggleNav);
   elements.toggleInspectorBtn.addEventListener("click", toggleInspector);
   elements.closeInspectorBtn.addEventListener("click", toggleInspector);
+  const narrowInspector = window.matchMedia("(max-width: 1100px)");
+  const narrowNav = window.matchMedia("(max-width: 760px)");
+  function fitRails() {
+    if (narrowInspector.matches && !elements.inspectorRail.classList.contains("w-0")) toggleInspector();
+    if (narrowNav.matches && !elements.navRail.classList.contains("w-0")) toggleNav();
+  }
+  narrowInspector.addEventListener("change", fitRails);
+  narrowNav.addEventListener("change", fitRails);
+  fitRails();
   for (const button of elements.tabButtons) {
     button.addEventListener("click", () => switchTab(button.dataset.tab));
     // Left and Right move to the neighbouring tab and show it; Home and End

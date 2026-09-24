@@ -203,7 +203,7 @@
 </div>
 <div class="flex flex-wrap items-center gap-2 text-[11px] font-mono text-outline/90 pt-0.5" id="masthead-status"></div>
 </div>
-<div class="px-5 py-2 border-b border-surface-container-high/40 bg-[#0e131d] flex flex-nowrap items-center justify-between gap-2 shrink-0 text-[11.5px]">
+<div class="px-5 py-2 border-b border-surface-container-high/40 bg-[#0e131d] flex flex-nowrap items-center justify-between gap-2 shrink-0 text-[11.5px]" id="workbench-toolbar">
 <div class="flex items-center gap-2 flex-1 min-w-0">
 <label class="w-8 h-8 rounded border border-surface-container-high/60 bg-[#141822] hover:bg-surface-container text-outline hover:text-on-surface flex items-center justify-center shrink-0 transition-colors cursor-pointer" for="catalog-search" title="Search published identities">
 <span class="material-symbols-outlined text-[15px]">search</span>
@@ -211,11 +211,11 @@
 <input class="flex-1 min-w-[96px] max-w-[260px] h-8 px-2 py-1 rounded bg-[#141822] border border-surface-container-high/60 text-on-surface text-[11.5px] font-mono placeholder:text-outline/70 focus:border-primary focus:outline-none" id="catalog-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search" title="Search entry id, subject id, repository, package, path, commit or revision" aria-label="Search published entry and source identities">
 <div class="flex items-center gap-2 shrink-0" id="review-filters" role="group" aria-label="Filter by review state"></div>
 </div>
-<div class="flex items-center gap-2 font-mono text-[10.5px] shrink-0" id="review-summary"></div>
+<details class="relative shrink-0 text-[11px]" id="review-signals"><summary class="cursor-pointer text-on-surface-variant hover:text-on-surface">Signals</summary><div class="flex items-center gap-2 font-mono text-[10.5px]" id="review-summary"></div></details>
 </div>
 <div class="flex-1 flex overflow-hidden">
 <div class="flex-1 overflow-y-auto p-4 bg-[#0d111a] flex flex-col gap-3">
-<div class="flex items-center justify-between gap-4 text-[11px] font-mono text-outline pb-1">
+<div class="flex items-center justify-between gap-4 text-[11px] font-mono text-outline pb-1" id="results-controls">
 <div class="shrink-0 whitespace-nowrap">
 <strong class="text-white font-bold" id="visible-count" title="Inventory count. Not an approval.">0</strong> <span id="visible-caption">of 0 catalog entries</span></div>
 <div class="flex items-center gap-2 min-w-0">
@@ -234,6 +234,7 @@
 </select>
 </div>
 </div>
+<div id="category-context" aria-live="polite"></div>
 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3" id="cards-grid"></div>
 </div>
 </div>

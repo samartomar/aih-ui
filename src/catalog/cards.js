@@ -3,7 +3,7 @@
  *
  * Each slot keeps the meaning the design source gives it:
  *
- *   header   kind icon, the item's name, its CATEGORY badge
+ *   header   kind icon, the item's name, its CATEGORY badge when categories vary
  *   body     the publisher's PRODUCT DESCRIPTION
  *   footer   the SCAN STATUS pill, the TOKEN ESTIMATE chip, the allow toggle
  *
@@ -22,6 +22,8 @@
  * the token slot all live in the inspector now, where they are labelled as what
  * they are.
  *
+ * When every visible entry shares a category, its label is shown once above the
+ * grid; each card retains its own provenance and rationale in its tooltip.
  * The toggle stays disabled: there is no source-posture contract to drive it.
  */
 
@@ -34,12 +36,13 @@ import { categoryBadge } from "./categories.js";
 /** The category badge's text, whether it reads as a value, and its tooltip. */
 function badgeOf(entry, record, categories, publisher) {
   const curated = categoryBadge(categories, entry);
-  if (curated !== null) return { text: curated.text, value: curated.curated, title: curated.title };
+  if (curated !== null) return { text: curated.text, value: curated.curated, title: curated.title, source: "Catalog category" };
   const declared = publishedText(record, "category");
   return {
     text: declared ?? NOT_PUBLISHED,
     value: declared !== null,
     title: provenanceNote(record, "category", "Category", publisher),
+    source: "Upstream category",
   };
 }
 
@@ -53,6 +56,9 @@ function card(entry, selectedId, onSelect, publisher, categories) {
 
   const node = el("div", `group rounded border p-3 flex flex-col justify-between hover:border-primary transition-all cursor-pointer shadow-xs ${isSelected ? "border-primary" : "border-surface-container-high/60"}`);
   node.dataset.cardId = id.entryId;
+  node.dataset.categoryLabel = badge.text;
+  node.dataset.categoryExplanation = badge.title ?? badge.text;
+  node.dataset.categorySource = badge.source;
   node.tabIndex = 0;
   node.setAttribute("role", "button");
   node.setAttribute("aria-pressed", String(isSelected));
@@ -135,7 +141,7 @@ function card(entry, selectedId, onSelect, publisher, categories) {
 }
 
 /**
- * @param elements  { cardsGrid, visibleCount, visibleCaption }
+ * @param elements  { cardsGrid, visibleCount, visibleCaption, categoryContext }
  * @param onSelect  called with the entry id a card stands for
  */
 export function createCards({ elements, onSelect }) {
@@ -143,12 +149,23 @@ export function createCards({ elements, onSelect }) {
     /** @param model { entries, total, noun, selectedId, publisher, categories } */
     render(model) {
       elements.cardsGrid.replaceChildren();
+      elements.categoryContext.textContent = "";
       if (!model.entries.length) {
         const empty = el("div", "p-4 rounded border border-surface-container-high/60 text-on-surface-variant text-[12px]", "No catalog entry matches this view. Published entries: ");
         empty.appendChild(el("span", "font-mono text-on-surface", String(model.total)));
         elements.cardsGrid.appendChild(empty);
       } else {
-        elements.cardsGrid.append(...model.entries.map((entry) => card(entry, model.selectedId, onSelect, model.publisher, model.categories)));
+        const nodes = model.entries.map((entry) => card(entry, model.selectedId, onSelect, model.publisher, model.categories));
+        const shared = nodes[0].dataset.categoryLabel;
+        if (shared !== NOT_PUBLISHED && nodes.every((node) => node.dataset.categoryLabel === shared && node.dataset.categorySource === nodes[0].dataset.categorySource)) {
+          elements.categoryContext.textContent = `${nodes[0].dataset.categorySource} · ${shared}`;
+          elements.categoryContext.title = "Hover an item for its own category provenance and rationale.";
+          for (const node of nodes) {
+            node.dataset.sharedCategory = "true";
+            node.title = `${node.dataset.cardId}\n${node.dataset.categoryExplanation}`;
+          }
+        }
+        elements.cardsGrid.append(...nodes);
       }
       elements.visibleCount.textContent = String(model.entries.length);
       elements.visibleCaption.textContent = `of ${model.total} ${model.noun ?? "catalog entries"}`;

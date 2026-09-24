@@ -12,6 +12,9 @@
  * a measurement, so it cannot be counted as "does not send data out". A count
  * would be invented; a disabled control with its reason is not.
  *
+ * The unavailable signal chips remain in the toolbar's Signals disclosure,
+ * so their explicit absence wording stays available without repeating a row.
+ *
  * SECONDARY - the technical filters that are genuinely available (kind, source
  * type, sort), in the grid header where the design source puts its sort
  * control, so they no longer displace the approved toolbar.
