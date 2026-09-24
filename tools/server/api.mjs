@@ -12,6 +12,7 @@ import { join } from "node:path";
 
 import { callService } from "./service-client.mjs";
 import { createSessions } from "./sessions.mjs";
+import { createSettingsStore } from "./settings.mjs";
 
 const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
 /**
@@ -19,7 +20,7 @@ const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
  * of file bytes sessions.mjs accepts, plus the growth base64 costs and the paths
  * around it. Every other route keeps the smaller bound.
  */
-const MAX_BODY_BYTES = { "/api/observation": 24 * 1024 * 1024 };
+const MAX_BODY_BYTES = { "/api/observation": 24 * 1024 * 1024, "/api/workbench-settings": 16384, "/api/workbench-settings/update": 16384, "/api/workbench-settings/clients": 16384 };
 
 function readBody(request, limit) {
   return new Promise((resolveBody, rejectBody) => {
@@ -49,11 +50,17 @@ function readBody(request, limit) {
  * @param consumerDir the throwaway consumer holding the installed packages
  * @param runDir      the run directory that owns every session
  * @param summary     provenance shown in the page's strip
+ * @param settingsPath optional isolated test-store path; never an HTTP input
  */
-export function createApi({ consumerDir, runDir, summary }) {
+export function createApi({ consumerDir, runDir, summary, settingsPath }) {
   const sessions = createSessions(runDir);
+  const settings = createSettingsStore({ coreTargets: summary?.coreTargets, settingsPath });
 
   const ROUTES = {
+    "GET /api/workbench-settings": () => settings.read(),
+    "POST /api/workbench-settings": (body) => settings.create(body),
+    "POST /api/workbench-settings/update": (body) => settings.update(body),
+    "POST /api/workbench-settings/clients": (body) => settings.updateClients(body),
     /** Provenance of what is actually installed. */
     "GET /api/packages": () => ({ ok: true, ...summary }),
 
@@ -233,12 +240,24 @@ export function createApi({ consumerDir, runDir, summary }) {
     };
 
     try {
+      if (pathname.startsWith("/api/workbench-settings")) {
+        const host = request.headers.host;
+        const allowedHosts = [`127.0.0.1:${request.socket.localPort}`, `localhost:${request.socket.localPort}`];
+        if (!allowedHosts.includes(host) || (request.headers.origin && request.headers.origin !== `http://${host}`) || request.headers["sec-fetch-site"] === "cross-site") {
+          send(403, { ok: false, error: "Local setup requires a same-origin request." });
+          return true;
+        }
+        if (request.method === "POST" && request.headers["content-type"]?.split(";")[0].trim() !== "application/json") {
+          send(415, { ok: false, error: "Local setup requires application/json." });
+          return true;
+        }
+      }
       const body =
         request.method === "POST"
           ? await readBody(request, MAX_BODY_BYTES[pathname] ?? MAX_REQUEST_BYTES)
           : {};
       const value = await route(body);
-      send(value?.ok === false ? 422 : 200, value);
+      send(value?.ok === false ? (value.status ?? 422) : 200, value);
     } catch (error) {
       // Surface the failure; never substitute a success.
       send(400, { ok: false, error: error?.message ?? String(error) });

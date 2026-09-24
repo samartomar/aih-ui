@@ -65,12 +65,17 @@ function categoriesReason(coverage, curated) {
 }
 
 /** One category line in the design source's own layout: its name and its count. */
-function categoryLine(label, count, title, key) {
-  const line = el("div", "flex items-center justify-between px-1.5 py-0.5 rounded text-on-surface-variant");
-  line.dataset.category = key;
-  line.title = title;
+function categoryLine(label, count, title, key, selected, onToggle) {
+  const active = selected != null && selected.id === key;
+  const line = el("button", `w-full flex items-center justify-between gap-2 px-1.5 py-0.5 rounded text-left cursor-pointer ${active ? "bg-surface-container-highest text-primary font-semibold shadow-xs" : "text-on-surface-variant hover:bg-surface-container"}`);
+  line.type = "button";
+  line.setAttribute("aria-pressed", String(active));
+  line.dataset.focusKey = JSON.stringify(["category", key]);
+  line.dataset.category = key ?? "not-curated";
+  line.title = `${title} ${count} items in this source. ${active ? "Select again to clear this category filter." : "Select to filter this source by category."}`;
   line.appendChild(el("span", "truncate", label));
-  line.appendChild(el("span", "font-mono text-outline text-[10px]", String(count)));
+  line.appendChild(el("span", `font-mono text-[10px] ${active ? "text-primary" : "text-outline"}`, String(count)));
+  line.addEventListener("click", () => onToggle({ id: key }));
   return line;
 }
 
@@ -79,7 +84,7 @@ function categoryLine(label, count, title, key) {
  * category its items carry, then the items no rule curated. Every count is the
  * page's own, over the served records of this scope.
  */
-function curatedCategories(curated) {
+function curatedCategories(curated, selected, onToggle) {
   const categories = el("div", "pl-2 space-y-0.5 text-[10.5px]");
   categories.dataset.categories = "curated";
   const note = curationNote(curated.view);
@@ -88,17 +93,17 @@ function curatedCategories(curated) {
   caption.title = note;
   categories.appendChild(caption);
   for (const item of curated.rows) {
-    categories.appendChild(categoryLine(item.label, item.count, `${item.label}: ${item.description} ${note}`, item.id));
+    categories.appendChild(categoryLine(item.label, item.count, `${item.label}: ${item.description} ${note}`, item.id, selected, onToggle));
   }
   if (curated.notCurated > 0) {
     categories.appendChild(
-      categoryLine(NOT_CURATED, curated.notCurated, `No rule of the Catalog maintainers' curation assigns these items a category. ${note}`, "not-curated"),
+      categoryLine(NOT_CURATED, curated.notCurated, `No rule of the Catalog maintainers' curation assigns these items a category. ${note}`, null, selected, onToggle),
     );
   }
   return categories;
 }
 
-function scopeRow(row, selected, onSelect, coverage, curated) {
+function scopeRow(row, selected, onSelect, coverage, curated, category, onToggleCategory) {
   const scope = describeScope(row);
   const panel = el(
     "div",
@@ -108,6 +113,7 @@ function scopeRow(row, selected, onSelect, coverage, curated) {
   );
   const head = el("button", `w-full flex items-center justify-between px-1.5 py-1 text-on-surface font-medium text-left cursor-pointer`);
   head.type = "button";
+  head.dataset.focusKey = JSON.stringify(["source", row.filterValue]);
   head.setAttribute("aria-pressed", String(selected));
   head.title = selected
     ? `${scope.name}: selected. Select again to show every published source.`
@@ -144,12 +150,15 @@ function scopeRow(row, selected, onSelect, coverage, curated) {
 
   if (selected && curated?.view?.state === "published") {
     // Where the design source lists this source's categories, with counts.
-    panel.appendChild(curatedCategories(curated));
+    panel.appendChild(curatedCategories(curated, category, onToggleCategory));
   } else if (selected) {
     // Without Catalog's curated dataset the row keeps its place and says how
     // little the presentation data publishes, counted from the served data.
     const categories = el("div", "pl-2 space-y-0.5 text-[10.5px]");
-    const missing = el("div", "flex items-center justify-between px-1.5 py-0.5 rounded text-on-surface-variant opacity-60 cursor-not-allowed");
+    const missing = el("button", "w-full flex items-center justify-between px-1.5 py-0.5 rounded text-on-surface-variant opacity-60 cursor-not-allowed");
+    missing.type = "button";
+    missing.disabled = true;
+    missing.setAttribute("aria-disabled", "true");
     missing.dataset.absence = "categories";
     missing.title = categoriesReason(coverage, curated);
     missing.appendChild(el("span", "truncate", "Categories"));
@@ -179,19 +188,22 @@ function additionsRow(organizationName) {
 /**
  * @param elements  { navSourcesCount, scopeList }
  * @param onSelectSource  called with a scope's filter value, or null for all
+ * @param onToggleCategory  called with { id } (null id means explicitly uncurated)
  */
-export function createNavigation({ elements, onSelectSource }) {
+export function createNavigation({ elements, onSelectSource, onToggleCategory }) {
   return {
     /** @param model { view, total, counts, organizationName, categoryCoverage, curated } */
     render(model) {
       elements.navSourcesCount.textContent = String(model.total);
+      const focusKey = elements.scopeList.contains(document.activeElement) ? document.activeElement.dataset.focusKey : null;
       elements.scopeList.replaceChildren();
       for (const row of sourceScopes(model.counts)) {
         elements.scopeList.appendChild(
-          scopeRow(row, model.view.source === row.filterValue, onSelectSource, model.categoryCoverage, model.curated),
+          scopeRow(row, model.view.source === row.filterValue, onSelectSource, model.categoryCoverage, model.curated, model.view.category, onToggleCategory),
         );
       }
       elements.scopeList.appendChild(additionsRow(model.organizationName ?? null));
+      if (focusKey) [...elements.scopeList.querySelectorAll("button[data-focus-key]")].find((button) => button.dataset.focusKey === focusKey)?.focus({ preventScroll: true });
     },
   };
 }

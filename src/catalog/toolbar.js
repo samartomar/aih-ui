@@ -5,7 +5,7 @@
  *
  *   All Items   Needs Review   Egress Out          need review   send data out
  *
- * "All Items" counts the items in the current source scope. "Needs Review" and
+ * "All Items" counts the cards matching the current filters. "Needs Review" and
  * "Egress Out" keep their purpose and their place but are unavailable, with no
  * count: no per-item scan result or Core disposition is published to derive a
  * review state from, and no item declares egress - an empty declaration is not
@@ -64,12 +64,14 @@ function summaryChip(icon, label, title) {
   return chip;
 }
 
-function kindPill(label, count, active, onClick) {
+function kindPill(label, count, active, onClick, key = label) {
   // Sized to the header's own 16.5px line, so moving the kind filter here
   // does not make the row taller than the design source's sort line.
   const button = el("button", `px-2 py-0 leading-[16.5px] rounded text-[10px] font-mono transition-colors shrink-0 ${active ? "bg-surface-container-highest text-on-surface font-semibold shadow-xs" : "hover:bg-surface-container text-on-surface-variant"}`, undefined);
   button.type = "button";
+  button.dataset.kind = JSON.stringify(key);
   button.setAttribute("aria-pressed", String(active));
+  button.title = `${count} items matching this kind and the current source, category and search filters.`;
   button.textContent = `${label} (${count})`;
   button.addEventListener("click", onClick);
   return button;
@@ -97,13 +99,13 @@ export function createToolbar({ elements, onQuery, onToggleKind, onSourceType, o
       elements.search.value = query;
     },
 
-    /** @param model { kindCounts, sourceTypeCounts, total, scopeTotal, view } */
+    /** @param model { kindCounts, sourceTypeCounts, total, visibleTotal, view } */
     render(model) {
       // --- primary: the prototype's review task ---------------------------
       // "All Items" is the only review state that can be derived, so it is the
       // selected one; selecting it again changes nothing.
       elements.reviewFilters.replaceChildren(
-        reviewPill("All Items", model.scopeTotal, true, () => {}),
+        reviewPill("All Items", model.visibleTotal, true, () => {}),
         reviewPill("Needs Review", null, false, null),
         reviewPill("Egress Out", null, false, null),
       );
@@ -113,15 +115,17 @@ export function createToolbar({ elements, onQuery, onToggleKind, onSourceType, o
       );
 
       // --- secondary: the technical filters -------------------------------
+      const focusedKind = elements.kindFilters.contains(document.activeElement) ? document.activeElement.dataset.kind : null;
       elements.kindFilters.replaceChildren();
       elements.kindFilters.appendChild(
-        kindPill("All kinds", model.total, model.view.kind === null, () => onToggleKind(null)),
+        kindPill("All kinds", model.total, model.view.kind === null, () => onToggleKind(null), null),
       );
       for (const [kind] of sortedCounts(model.kindCounts)) {
         elements.kindFilters.appendChild(
           kindPill(kind, model.kindCounts.get(kind), model.view.kind === kind, () => onToggleKind(kind)),
         );
       }
+      if (focusedKind) [...elements.kindFilters.querySelectorAll("button[data-kind]")].find((button) => button.dataset.kind === focusedKind)?.focus({ preventScroll: true });
 
       // The option list is rebuilt only when the published source types change:
       // replacing it on every render would drop the control's open state.

@@ -13,7 +13,7 @@
 import { el } from "../app/dom.js";
 import { NOT_SUPPLIED } from "../app/absence.js";
 import { refusalWording } from "./vocabulary.js";
-import { row } from "./rows.js";
+import { row, codeRow } from "./rows.js";
 
 /**
  * @param elements   { govConsumeBtn, govVerdict }
@@ -62,13 +62,13 @@ export function createVerdict({ elements, onConsume }) {
       // What the evidence actually was. "Verified scanner evidence" is only ever
       // said when the claim is scan-attestation-v2 AND evidence verified.
       row(detail, "Evidence claim", view.evidenceClaim, NOT_SUPPLIED);
-      row(detail, "Matched path", view.matchedPath, NOT_SUPPLIED);
+      codeRow(detail, "Matched path", view.matchedPath, NOT_SUPPLIED);
       row(detail, "Binding route", view.bindingRoute, NOT_SUPPLIED);
       row(detail, "Authority transport", view.authorityTransport, NOT_SUPPLIED);
       row(detail, "Authority source", view.authoritySource, NOT_SUPPLIED);
       row(detail, "Verifier trust from", view.trustSource, NOT_SUPPLIED);
-      row(detail, "Subject digest", view.subjectDigest, NOT_SUPPLIED);
-      row(detail, "Decision digest", view.decisionDigest, NOT_SUPPLIED);
+      codeRow(detail, "Subject digest", view.subjectDigest, NOT_SUPPLIED);
+      codeRow(detail, "Decision digest", view.decisionDigest, NOT_SUPPLIED);
       box.appendChild(detail);
       // What the assessment route bound, and what it did not scan. Coverage is
       // shown beside the binding, never folded into it.
@@ -128,12 +128,12 @@ function executionSentence(view) {
 function renderAssessmentBinding(box, binding) {
   if (binding === null || binding === undefined) return;
   const detail = el("div", "pt-1 space-y-0.5 font-mono text-[10px]");
-  row(detail, "Material root", binding.materialRoot, NOT_SUPPLIED);
+  codeRow(detail, "Material root", binding.materialRoot, NOT_SUPPLIED);
   const scannedFiles = binding.scannedMaterial?.files ?? [];
   row(detail, "Scanned files", `${scannedFiles.length}`, NOT_SUPPLIED);
   row(detail, "Declared files", `${binding.itemCoverage?.declaredFiles?.length ?? 0}`, NOT_SUPPLIED);
   for (const file of scannedFiles) {
-    row(
+    codeRow(
       detail,
       "scanned file",
       `${file.declaredPath} ${file.sha256.slice(0, 12)} ${file.byteLength} B`,
@@ -164,10 +164,10 @@ function renderAssessmentBinding(box, binding) {
 function renderObservation(box, observation) {
   if (observation === null || observation === undefined) return;
   const detail = el("div", "pt-1 space-y-0.5 font-mono text-[10px]");
-  row(detail, "Install root", observation.installRoot, NOT_SUPPLIED);
+  codeRow(detail, "Install root", observation.installRoot, NOT_SUPPLIED);
   row(detail, "Observed files", `${(observation.files ?? []).length}`, NOT_SUPPLIED);
   for (const file of observation.files ?? []) {
-    row(
+    codeRow(
       detail,
       "observed file",
       `${file.sealedPath} → ${file.observedPath} ${String(file.sha256).slice(0, 12)} ${file.byteLength} B`,
@@ -176,6 +176,6 @@ function renderObservation(box, observation) {
   }
   row(detail, "Observed at", observation.observedAt, NOT_SUPPLIED);
   row(detail, "Valid until", observation.validUntil, NOT_SUPPLIED);
-  row(detail, "Observation digest", observation.observationDigest, NOT_SUPPLIED);
+  codeRow(detail, "Observation digest", observation.observationDigest, NOT_SUPPLIED);
   box.appendChild(detail);
 }

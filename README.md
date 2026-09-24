@@ -6,6 +6,7 @@ The Policy Workbench user interface for AIH, built as an independent application
 
 - The screens, interaction and presentation of the Policy Workbench.
 - `src/` owns the live screens, design tokens, and presentation. Tailwind utilities are compiled locally from the classes used in `src/`.
+- Local onboarding preferences (experience, organization context, requested assistance and explicit AI clients). These are UI settings, not policy artifacts or enterprise authorization.
 
 ## What it must never contain
 
@@ -16,7 +17,7 @@ The Policy Workbench user interface for AIH, built as an independent application
 
 ## Done means
 
-An outside developer can build this UI from public package interfaces. The files it saves are consumed by `@aihq/core` without the UI. Updating only `@aihq/catalog` brings compatible new content without changing core.
+An outside developer can build this UI from public package interfaces. The policy artifacts it saves are consumed by `@aihq/core` without the UI; local onboarding settings are owned only by this UI. Updating only `@aihq/catalog` brings compatible new content without changing core.
 
 ## Testing against unpublished packages
 
@@ -37,6 +38,10 @@ src/
     absence.js          Not published / Not supplied / Not connected
     workbench.css       interaction-specific presentation rules
     mode.js             theme preference and toggle
+    onboarding.js       first-run wizard and saved-setup loading
+    setup-model.js      versioned UI settings shape and input validation
+    settings-client.js  local setup API transport
+    setup-summary.js    read-only review of saved preferences
   styles/               Workbench design tokens and presentation rules
     tokens.css          dark and light colour roles
     workbench.css       compact layout and component styling
@@ -148,6 +153,15 @@ above the split, and the inspector is a **sibling of `<main>`** inside
 `#workspace-split-row` -- so it runs the full height alongside the source header,
 the source policy controls, the filters and the cards.
 
+The inspector width is controlled by `--inspector-width` (340px), capped by the
+viewport when shown as an overlay. Its Policy JSON icon retains a named keyboard
+tab. Published prose stays plain text; identifiers, paths and digests use
+selectable, wrapping code blocks with theme-aware surface and text roles.
+The current public presentation contract supplies extracted descriptions, not
+full Markdown bodies. Policy JSON remains an unavailable placeholder until a
+public compiler/template contract exists. Governance downloads keep the original
+bytes supplied by Core; display formatting never re-serializes them.
+
 ### The rail lists published sources and current collections
 
 Catalog Scopes has one row per **published source identity** -- a repository for
@@ -182,6 +196,16 @@ it as given:
   naming `basis: curated` and the maintainers' one-sentence rationale; an entry
   whose category is `null` reads **Not curated**;
 - search matches the curated label.
+
+Category rows are keyboard-accessible toggle buttons. Selecting one narrows the
+chosen source; selecting it again clears the category. Choosing another source
+clears it too. **Not curated** matches only explicit null category records, never
+missing or unavailable data. An unavailable category row stays disabled. The
+selected category is saved for this browser session and restored only while the
+current source still offers it. Category selection combines with search, kind,
+compatible source type and sort; a different source type clears the source and
+category together. Rail category counts describe that source's inventory; the
+grid and **All Items** counts describe the cards matching the active filters.
 
 This is curation by the Catalog maintainers, never an upstream declaration, and
 the page never words it as one. What an upstream publisher declares stays in the
@@ -244,7 +268,7 @@ the version with no UI edit. It reads `<selected> of <supported>`. Supported,
 selected and connected are kept apart:
 
 - supported is Core's list;
-- selected is the user's draft, kept in this browser -- not a policy;
+- selected is the user's explicit choice, saved in the workspace setup file -- not a policy;
 - installed or connected is **Not connected**: nothing here checks a tool.
 
 The Workbench design's `3 of 11` was sample data and is not restored as state.
@@ -336,7 +360,7 @@ renders it; agents and MCP servers use their own primitive colours.
 The primary toolbar is **All Items**, **Needs Review**, **Egress Out**, with the
 "need review" and "send data out" summaries on the right, in their original
 places. Only "All Items" can be derived, so it is the selected state and counts the
-items in scope. The other two keep their purpose but are unavailable, with no count:
+cards matching the active filters. The other two keep their purpose but are unavailable, with no count:
 
 - no scan result or Core disposition is published per item, so no review state can
   be derived;
@@ -344,6 +368,8 @@ items in scope. The other two keep their purpose but are unavailable, with no co
 
 The technical filters that ARE available -- kind, source type and sort -- are in the
 grid header, where the Workbench design puts its sort control.
+Kind counts include the current source, category and search filters before the
+kind selection itself. Kinds with no matches stay visible and can be cleared.
 
 ### Four words for four kinds of absence
 
@@ -354,24 +380,56 @@ grid header, where the Workbench design puts its sort control.
 - **Not supplied** -- the user's own input, such as the organization.
 - **Not connected** -- an action with no Core contract wired yet.
 
-### Your organization
+### First-run setup and local persistence
 
-The header's organization control is always enabled: organization details are the
-user's input, not missing Catalog data. It opens the Workbench design's setup popup
--- name, short id, policy repository, the people who answer for it, and the
-Vibe / Enterprise preference -- with the same layout and labels, and none of its
-sample values.
+Without valid saved setup, the page opens a wizard: Vibe coder or Enterprise;
+Enterprise then chooses Admin or Developer. Admin records organization name,
+short ID, policy repository and contact emails. Developer records the organization
+and repository supplied by their admin, with optional contact emails. Vibe does
+not require enterprise details. No repository is read or verified by setup.
 
-- It starts empty, or with what the user saved. Nothing is read from git, and no
-  field claims to have been.
-- Save validates the fields and keeps the draft in this browser, so it survives a
-  reload; the header then shows the name. Cancel, the close button, a click outside
-  and Escape all leave the saved draft exactly as it was.
-- Emails can be added and removed; a malformed or duplicate one is refused.
-- The Vibe / Enterprise choice is recorded as a preference. Signing and verifying
-  policies is not implemented here, and the popup says so.
-- None of it is policy authority. A name, an id, a repository reference, an email
-  or a preference establishes no decision; policy artifacts still go through Core.
+Optional assistance requests (code review, codebase memory, workspace help,
+Headroom, Serena and context/token optimization) start selected in new setups.
+Each can be deselected, and **Skip all assistance** clears the six selections.
+This is a UI default for these six choices, not a package recommendation. Saved
+choices, including an intentionally empty list, are restored exactly on edit.
+Each explains its proposed benefit and the consequence of skipping. All are
+recorded preferences only: integrations are not installed or connected, no code
+is accessed, and no data is sent to those integrations. The separate client step
+uses Core's public `SUPPORTED_CLIS`; it never infers clients from capabilities.
+
+Completing setup atomically writes the version-1 `aih-ui-settings` record to
+`.aih-ui/settings.v1.json` under this repository, a fixed gitignored location.
+The same file survives preview restarts and different disposable consumers.
+The API accepts only the defined fields, validates choices and size, and does not
+accept a browser-supplied filename. JSON mutations require same-origin requests.
+Malformed or unknown-version files show the wizard with an explanation and are
+replaced only when the user completes setup. Old browser-local organization and
+client drafts are no longer used to determine or restore setup.
+
+On reopening, valid saved settings enter the saved experience. The existing
+catalog and governance remain available; a self-declared Admin/Developer role
+does not enforce permissions. The header shows the saved role and a setup summary
+with the full, copyable settings path returned by the server. **Update my Workbench
+information** opens a draft of the saved organization details, assistance choices
+and AI clients. Cancel (or Escape) discards the draft; **Save changes** validates
+and atomically replaces the same local file. Experience and enterprise role are
+fixed in both the edit UI and its server endpoint. To change either, delete the
+settings file at the displayed path and restart the Workbench. AI client choices
+can also be updated from the AI tools control.
+
+The installed public packages do not expose an assistance-card contract for
+recommendations, links or recipes: Core's `CAPABILITIES` is a CLI command inventory;
+Catalog runtime descriptors distribute framework runtime material. Richer
+assistance cards await an appropriate published presentation contract.
+
+This local file is not proof of enterprise authorization or an approval shared
+with developers on other machines. Those workflows require future public
+interfaces; policy artifacts continue to go through Core independently.
+
+`node --test tools/tests/settings.test.mjs` checks validation, atomic replacement,
+reopening, editing, immutable experience/role, new-draft defaults and deleting
+settings using isolated fixtures inside `.tmp/`.
 
 ### Keyboard and focus
 
@@ -386,11 +444,12 @@ moves the operator's focus or state without their asking:
 - The inspector tabs are one tab stop. Left and Right move to the neighbouring
   tab and show it, Home and End jump to the first and last; each tab names its
   pane (`aria-controls`) and each pane its tab.
-- Escape belongs to whichever layer is open - the organization popup, the AI
+- Escape belongs to whichever layer is open - the saved setup view, the AI
   tools popover - and closes that layer only. With none open it does nothing;
   in particular it never changes the inspector tab.
-- While the organization popup is open the rest of the page is `inert`, and Tab
-  wraps at either end of the dialog rather than leaving it.
+- Setup uses native modal dialogs: the background is inert and keyboard focus
+  stays inside. The first-run wizard keeps Escape from bypassing setup; the
+  read-only saved setup view can be closed normally.
 - A rail link to a screen with no contract yet is marked unavailable: it is
   followed nowhere and is not a tab stop. The Sources link is this page
   (`aria-current="page"`) and is not followed either.

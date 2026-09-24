@@ -13,7 +13,7 @@
 
 import { el, text } from "../app/dom.js";
 import { NOT_CONNECTED, NOT_PUBLISHED, NOT_SUPPLIED } from "../app/absence.js";
-import { row } from "./rows.js";
+import { row, codeRow } from "./rows.js";
 
 function section(box, label) {
   box.appendChild(
@@ -45,7 +45,7 @@ function renderCatalog(box, catalog) {
     box.appendChild(el("div", "text-error leading-snug", catalog.error));
     return;
   }
-  row(box, "Index digest", catalog.indexDigest, NOT_PUBLISHED);
+  codeRow(box, "Index digest", catalog.indexDigest, NOT_PUBLISHED);
   row(box, "Index structure", catalog.indexStructure, NOT_PUBLISHED, catalog.indexStructure === "valid" ? "text-primary" : "text-error");
   row(
     box,
@@ -200,10 +200,10 @@ export function createInputs({ elements, onEvidenceFile, onInput }) {
         return;
       }
       row(box, "Kind", subject.kind);
-      row(box, "Subject id", subject.id);
+      codeRow(box, "Subject id", subject.id);
       row(box, "Source type", subject.source?.type);
-      row(box, "Source digest", subject.sourceDigest);
-      row(box, "Subject digest", subject.subjectDigest);
+      codeRow(box, "Source digest", subject.sourceDigest);
+      codeRow(box, "Subject digest", subject.subjectDigest);
       // The index carries digest copies but no signature, so they authenticate
       // nothing. Cross-check them and show disagreement rather than choosing.
       row(
@@ -241,8 +241,8 @@ export function createInputs({ elements, onEvidenceFile, onInput }) {
         if (facts.byteLength !== undefined) row(box, "Bytes read", `${facts.byteLength}`);
         return;
       }
-      row(box, "Envelope digest", facts.digest);
-      row(box, "Subject digest", facts.subjectDigest);
+      codeRow(box, "Envelope digest", facts.digest);
+      codeRow(box, "Subject digest", facts.subjectDigest);
       row(box, "Evidence kind", facts.evidenceKind);
       row(box, "Attestor", facts.attestor);
       row(box, "Not before", facts.notBefore);

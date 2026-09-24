@@ -5,7 +5,7 @@
  * no state and renders nothing itself:
  *
  *   app/        the shell - rails, inspector tabs, the error banner, the theme
- *               settling, the organization setup popup and the AI tools control
+ *               settling, first-run setup and the AI tools control
  *   catalog/    Sources & Catalogs: it presents published catalog data only
  *   governance/ the Governance pane: one vertical slice through @aihq/core
  *
@@ -18,6 +18,8 @@ import { aiToolsElements, organizationElements, shellElements } from "./app/elem
 import { createAiTools } from "./app/ai-tools.js";
 import { createOrganization } from "./app/organization.js";
 import { createTheme } from "./app/theme.js";
+import { createOnboarding } from "./app/onboarding.js";
+import { saveClients } from "./app/settings-client.js";
 import { createCatalog } from "./catalog/controller.js";
 import { createGovernance } from "./governance/controller.js";
 
@@ -33,7 +35,23 @@ async function main() {
     // Core's supported targets arrive with the preview summary the catalog
     // loads. Two controls read the SAME list and keep no copy of their own: the
     // header's AI tools control, and the Governance pane's Target field.
-    const aiTools = createAiTools({ elements: aiToolsElements() });
+    const organization = createOrganization({ elements: organizationElements(), onEdit: () => onboarding.edit() });
+    const aiTools = createAiTools({
+      elements: aiToolsElements(),
+      onSelectionChange: async (clients) => {
+        const result = await saveClients(clients);
+        organization.setSettings(result.settings, result.location);
+      },
+    });
+
+    const onboarding = createOnboarding({
+      onCloseEdit: () => organization.open(),
+      onComplete: (settings, location) => {
+        organization.setSettings(settings, location);
+        aiTools.setSelection(settings.clients);
+        catalog.setOrganizationName(settings.organization?.name ?? null);
+      },
+    });
 
     const catalog = createCatalog({
       onSelectEntry: (entry) => {
@@ -46,19 +64,14 @@ async function main() {
       onSummary: (summary) => {
         const coreTargets = summary?.coreTargets ?? null;
         aiTools.setTargets(coreTargets);
+        onboarding.setTargets(coreTargets);
         governance.setTargets(coreTargets);
       },
     });
 
-    // The organization is the user's own input. Its saved name labels the
-    // organization's additions in the rail; nothing else reads it.
-    const organization = createOrganization({
-      elements: organizationElements(),
-      onChange: (draft) => catalog.setOrganizationName(draft?.name ?? null),
-    });
-    catalog.setOrganizationName(organization.current()?.name ?? null);
-
-    await catalog.start();
+    // Open setup immediately while the catalog and Core's published clients load.
+    // Browser-local drafts never decide whether first-run setup is complete.
+    await Promise.all([onboarding.start(), catalog.start()]);
   } catch (error) {
     shell.showError(error?.message ?? String(error));
   }

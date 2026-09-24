@@ -18,7 +18,7 @@
 
 import { el } from "../app/dom.js";
 import { NOT_SUPPLIED } from "../app/absence.js";
-import { row } from "./rows.js";
+import { row, codeRow } from "./rows.js";
 
 /**
  * @param elements    { govObservationManifestFile, govObservationRoot, govObservationFiles, govObservation }
@@ -59,13 +59,13 @@ export function createObservation({ elements, onManifest, onRoot, onFiles }) {
       // can only say which file the operator picked.
       if (stored?.ok === true) {
         row(box, "Manifest", `${stored.manifest.byteLength} bytes`, NOT_SUPPLIED, "text-on-surface");
-        row(box, "stored as", stored.manifest.storedAs);
-        row(box, "sha256", stored.manifest.sha256);
+        codeRow(box, "stored as", stored.manifest.storedAs);
+        codeRow(box, "sha256", stored.manifest.sha256);
       } else {
         row(box, "Manifest", view?.manifest?.name ?? null, NOT_SUPPLIED);
       }
 
-      row(
+      codeRow(
         box,
         "Install root",
         (stored?.ok === true ? stored.installRoot : view?.installRoot) || null,
@@ -75,7 +75,7 @@ export function createObservation({ elements, onManifest, onRoot, onFiles }) {
       if (stored?.ok === true) {
         row(box, "Files", `${stored.files.length}`, NOT_SUPPLIED, "text-on-surface");
         for (const file of stored.files) {
-          row(box, "file", `${file.relativePath} ${file.sha256.slice(0, 12)} ${file.byteLength} B`);
+          codeRow(box, "file", `${file.relativePath} ${file.sha256.slice(0, 12)} ${file.byteLength} B`);
         }
       } else {
         row(box, "Files", view?.files?.length ? `${view.files.length} chosen` : null, NOT_SUPPLIED);

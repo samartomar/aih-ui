@@ -14,7 +14,7 @@
 
 import { el } from "../app/dom.js";
 import { NOT_SUPPLIED } from "../app/absence.js";
-import { row } from "./rows.js";
+import { row, codeRow } from "./rows.js";
 
 /** What each input is for, in the order the operator meets them. */
 const KINDS = [
@@ -72,12 +72,12 @@ export function createOperatorFiles({ elements, onFile }) {
           // Validation mode writes these itself. It says so instead of
           // reporting a byte count and a digest for a file nobody supplied.
           row(box, spec.label, value.note, NOT_SUPPLIED, "text-tertiary");
-          row(box, "stored as", value.storedAs);
+          codeRow(box, "stored as", value.storedAs);
           continue;
         }
         row(box, spec.label, `${value.byteLength} bytes`, NOT_SUPPLIED, "text-on-surface");
-        row(box, "stored as", value.storedAs);
-        row(box, "sha256", value.sha256);
+        codeRow(box, "stored as", value.storedAs);
+        codeRow(box, "sha256", value.sha256);
       }
       box.appendChild(
         el(

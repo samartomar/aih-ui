@@ -1,0 +1,73 @@
+/* Setup uses the same theme roles as the Workbench. */
+.setup-dialog {
+  width: min(780px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--r-lg);
+  background: var(--color-panel);
+  color: var(--color-text);
+  box-shadow: var(--panel-shadow);
+  font-size: var(--type-body);
+  user-select: text;
+}
+.setup-dialog::backdrop { background: var(--color-scrim); }
+.setup-frame { display: flex; flex-direction: column; max-height: calc(100dvh - 34px); }
+.setup-header { flex: none; padding: 20px 24px 16px; border-bottom: 1px solid var(--color-border); }
+/* The heading receives programmatic focus to announce each step, not a tab stop. */
+#setup-title:focus { outline: none; }
+.setup-progress { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 14px 0 18px; font-size: var(--type-body); }
+.setup-content { padding: 20px 24px; min-height: 0; overflow-y: auto; }
+.setup-options, .setup-capabilities, .setup-clients { display: grid; gap: 12px; }
+.setup-options, .setup-capabilities { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.setup-clients { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.setup-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px;
+  background: var(--color-card);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--r);
+  cursor: pointer;
+}
+.setup-choice:hover { border-color: var(--color-control-border); }
+.setup-choice:has(input:checked) { border-color: var(--color-primary); box-shadow: inset 0 0 0 1px var(--color-primary); }
+.setup-choice:focus-within { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.setup-choice input { flex-shrink: 0; margin-top: 2px; width: 14px; height: 14px; accent-color: var(--color-primary-container); }
+.setup-input {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--r);
+  padding: 8px 10px;
+  font: inherit;
+  background: var(--color-field);
+  color: var(--color-text);
+}
+.setup-input:focus { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.setup-input[aria-invalid="true"] { border-color: var(--color-error); }
+.setup-path { font-family: var(--mono); overflow-wrap: anywhere; resize: none; }
+.setup-summary-actions { flex-wrap: wrap; }
+.setup-summary-actions .setup-button { white-space: normal; }
+.setup-notice { padding: 12px; border: 1px solid var(--color-border); border-radius: var(--r); background: var(--color-subtle); color: var(--color-meta); line-height: 1.6; }
+.setup-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 24px; border-top: 1px solid var(--color-border); flex: none; }
+.setup-button { padding: 8px 12px; border: 1px solid var(--color-border); border-radius: var(--r); background: var(--color-subtle); color: var(--color-text); cursor: pointer; white-space: nowrap; }
+.setup-button:hover { background: var(--color-hover); }
+.setup-button:disabled { opacity: .5; cursor: not-allowed; }
+.setup-primary { background: var(--color-primary-container); border-color: var(--color-primary-container); color: var(--color-on-primary); font-weight: 600; }
+.setup-primary:hover { background: var(--color-primary-bright); }
+.setup-error { color: var(--color-error); margin: 0; padding: 12px 24px; flex: none; line-height: 1.5; }
+.setup-summary { display: grid; gap: 14px; }
+.setup-summary > div { display: grid; grid-template-columns: minmax(120px, 1fr) 2fr; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--color-border); }
+.setup-summary dd { margin: 0; }
+@media (max-width: 520px) {
+  .setup-dialog { width: calc(100% - 16px); max-height: calc(100dvh - 16px); }
+  .setup-frame { max-height: calc(100dvh - 18px); }
+  .setup-header, .setup-content, .setup-footer { padding: 14px; }
+  .setup-options, .setup-capabilities { grid-template-columns: 1fr; }
+  .setup-clients { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .setup-summary > div { grid-template-columns: 1fr; gap: 4px; }
+  .setup-footer { align-items: flex-start; }
+}

@@ -140,6 +140,7 @@ html.light {
   --type-body: 11px;
   --type-heading: 16px;
   --type-metric: 18px;
+  --inspector-width: 340px;
   --font: "Geist", sans-serif;
   --mono: "Geist Mono", monospace;
   --fw-regular: 400; --fw-medium: 500; --fw-strong: 600; --fw-title: 700;

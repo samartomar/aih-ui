@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="styles/tokens.css">
 <script src="app/mode.js"></script>
 <link rel="stylesheet" href="styles/workbench.css">
+<link rel="stylesheet" href="styles/onboarding.css">
 <link rel="stylesheet" href="app/workbench.css">
 </head>
 <body class="wb-page bg-background font-body text-on-surface leading-normal antialiased select-none">
@@ -25,19 +26,15 @@
 <span class="material-symbols-outlined text-on-primary text-[14px]">shield_with_house</span>
 </div>
 <span class="font-semibold text-[11px] tracking-tight text-on-surface">aih Policy</span>
-<span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-medium">Admin</span>
+<span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-medium" id="workbench-role">Local</span>
 </div>
 <div class="h-3.5 w-px bg-surface-container-high mx-0.5"></div>
 <!-- Scope Switcher: the organization is an input supplied by organizations, never a catalog value -->
-<button class="flex items-center gap-1 px-2 py-1 rounded bg-surface-container-low hover:bg-surface-container text-on-surface text-[12px] font-medium transition-colors cursor-pointer" type="button" id="org-modal-trigger" aria-haspopup="dialog" aria-controls="org-modal-overlay" title="Your organization: entered by you, kept in this browser">
+<button class="flex items-center gap-1 px-2 py-1 rounded bg-surface-container-low hover:bg-surface-container text-on-surface text-[12px] font-medium transition-colors cursor-pointer" type="button" id="org-modal-trigger" aria-haspopup="dialog" aria-controls="org-modal-overlay" title="View saved local setup">
 <span class="" id="org-trigger-label">Not supplied</span>
 <span class="material-symbols-outlined text-[13px] text-outline">expand_more</span>
 </button>
-<!-- Mode Toggle: presentation mode; the tool inventory behind it is not published -->
-<div class="flex items-center bg-surface-container-lowest p-0.5 rounded border border-wb-border">
-<button class="px-2 py-0.5 rounded text-[11px] text-on-surface-variant opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not published: tool inventory needs a Core/host contract">Vibe</button>
-<button class="px-2 py-0.5 rounded bg-surface-container text-[11px] text-on-surface-variant opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not published: tool inventory needs a Core/host contract">Enterprise</button>
-</div>
+<span class="text-[11px] text-on-surface-variant" id="workbench-experience">Local setup</span>
 <div class="h-3.5 w-px bg-surface-container-high mx-0.5"></div>
 <!-- AI Tools: the AI CLIs @aihq/core supports as targets, and the user's
      selection as a draft. Supported, selected and connected are kept apart:
@@ -238,13 +235,13 @@
 </div>
 </main>
 <!-- RIGHT COLUMN: Interactive Multi-Inspector (Collapsible Drawer) -->
-<aside class="inspector-transition shrink-0 bg-wb-inspector border-l border-wb-border flex flex-col justify-between overflow-hidden shadow-panel z-20 w-[390px] select-text" id="inspector-rail">
+<aside class="inspector-transition shrink-0 bg-wb-inspector border-l border-wb-border flex flex-col justify-between overflow-hidden shadow-panel z-20 w-[var(--inspector-width)] select-text" id="inspector-rail">
 <div class="p-3 border-b border-wb-border space-y-2 shrink-0">
 <div class="flex items-start justify-between gap-2">
 <div class="min-w-0">
 <div class="flex items-center gap-1.5">
 <span class="material-symbols-outlined text-[15px] text-kind-skill" id="inspector-icon">extension</span>
-<span class="font-mono font-bold text-wb-title text-[11px] tracking-tight truncate" id="inspector-name">No entry selected</span>
+<span class="min-w-0 font-mono font-bold text-wb-title text-[11px] tracking-tight" id="inspector-name">No entry selected</span>
 </div>
 <div class="flex items-center gap-2 mt-1">
 <span class="text-[10px] font-mono px-1 rounded bg-surface-container-highest text-on-surface-variant" id="inspector-kind">-</span>
@@ -255,21 +252,20 @@
 <span class="material-symbols-outlined text-[16px]">chevron_right</span>
 </button>
 </div>
-<div class="flex items-center justify-between text-[11px]">
+<div class="inspector-subheading flex items-center justify-between text-[11px]">
 <span class="text-outline" id="inspector-subtitle">Select a card to read its published identities and evidence</span>
 <span class="font-mono text-on-surface-variant font-semibold" id="inspector-flags">Not published</span>
 </div>
-<div class="flex items-center p-0.5 rounded bg-surface-container-low border border-wb-border text-[11px] gap-0.5" role="tablist">
+<div class="inspector-tabs flex items-center p-0.5 rounded bg-surface-container-low border border-wb-border text-[11px] gap-0.5" role="tablist" aria-label="Entry inspector">
 <button class="flex-1 py-1 px-1 rounded text-center transition-colors inspector-tab-btn bg-surface-container text-primary font-semibold shadow-xs" data-tab="details" type="button" role="tab" id="tab-details" aria-controls="pane-details" aria-selected="true" tabindex="0">Details</button>
 <button class="flex-1 py-1 px-1 rounded text-center transition-colors inspector-tab-btn text-on-surface-variant hover:text-on-surface" data-tab="security" type="button" role="tab" id="tab-security" aria-controls="pane-security" aria-selected="false" tabindex="-1">Security Scan</button>
 <button class="flex-1 py-1 px-1 rounded text-center transition-colors inspector-tab-btn text-on-surface-variant hover:text-on-surface" data-tab="governance" type="button" role="tab" id="tab-governance" aria-controls="pane-governance" aria-selected="false" tabindex="-1">Governance</button>
-<button class="flex-1 py-1 px-1 rounded text-center transition-colors flex items-center justify-center gap-1 inspector-tab-btn text-on-surface-variant hover:text-on-surface" data-tab="json" type="button" role="tab" id="tab-json" aria-controls="pane-json" aria-selected="false" tabindex="-1">
-<span class="">Policy JSON</span>
-<span class="w-1.5 h-1.5 rounded-full bg-outline"></span>
+<button class="inspector-icon-tab shrink-0 py-1 px-1 rounded text-center transition-colors flex items-center justify-center inspector-tab-btn text-on-surface-variant hover:text-on-surface" data-tab="json" type="button" role="tab" id="tab-json" aria-label="Policy JSON" title="Policy JSON · not published" aria-controls="pane-json" aria-selected="false" tabindex="-1">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 4H6v6l-2 2 2 2v6h2M16 4h2v6l2 2-2 2v6h-2"/><circle cx="12" cy="12" r="1"/></svg>
 </button>
 </div>
 </div>
-<div class="flex-1 overflow-y-auto p-3 text-[12px]">
+<div class="inspector-content flex-1 overflow-y-auto p-3 text-[12px]">
 <div class="space-y-3" id="pane-details" role="tabpanel" aria-labelledby="tab-details">
 <div class="space-y-1">
 <span class="text-[10px] font-mono uppercase tracking-wider text-outline">Publisher Overview</span>
@@ -314,7 +310,7 @@
 <!-- Catalog's publisher qualification for the selected entry, as its
      qualification reader states it. catalog/details.js fills it; the footer is
      said under every state, because qualified is never approval. -->
-<div class="flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-outline font-semibold">
+<div class="inspector-section-heading flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-outline font-semibold">
 <span class="">Qualification</span>
 <span class="text-on-surface-variant font-mono text-[10px] normal-case tracking-normal font-normal" id="qualification-evaluated">-</span>
 </div>
@@ -322,7 +318,7 @@
 <div class="text-[10px] text-outline leading-snug" id="qualification-footer">Publisher qualification is not organizational authorization.</div>
 </div>
 <div class="space-y-1.5">
-<div class="flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-outline font-semibold">
+<div class="inspector-section-heading flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-outline font-semibold">
 <span class="">Evidence Statements</span>
 <span class="text-on-surface-variant font-mono text-[10px]" id="statement-count">0 statements</span>
 </div>
@@ -455,7 +451,7 @@ beside the session, never inside the imported material: material that carries it
 <span class="">Prepare through Core</span>
 </button>
 <div class="p-2 rounded bg-surface-container-low border border-wb-border font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-prepared"></div>
-<div class="flex gap-1.5">
+<div class="inspector-downloads flex gap-1.5">
 <button class="flex-1 text-[10px] font-mono px-1.5 py-1 rounded bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-40 disabled:cursor-not-allowed" id="gov-download-input" type="button" disabled>Download governance-input.json</button>
 <button class="flex-1 text-[10px] font-mono px-1.5 py-1 rounded bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-40 disabled:cursor-not-allowed" id="gov-download-evidence" type="button" disabled>Download evidence</button>
 </div>
@@ -565,79 +561,42 @@ authenticates a statement; it never establishes that the claimed measurements oc
 </aside>
 </div>
 </div>
-<div id="org-modal-overlay" class="fixed inset-0 z-50 flex items-center justify-center bg-wb-scrim backdrop-blur-xs transition-opacity duration-200 hidden" role="dialog" aria-modal="true" aria-labelledby="org-modal-title">
-<div class="relative w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col rounded bg-surface-container-lowest border border-wb-border shadow-panel overflow-hidden" id="org-modal-card">
-<div class="flex items-start justify-between p-4 border-b border-wb-border bg-surface-container-low/50">
-<div class="space-y-1">
-<div class="flex items-center gap-2">
-<span class="material-symbols-outlined text-primary text-[18px]">domain</span>
-<h2 class="text-wb-heading font-semibold text-wb-title tracking-tight" id="org-modal-title">Your organization</h2>
-<span class="px-1.5 py-0.5 rounded bg-surface-container-highest font-mono text-[10px] text-metadata-revision font-medium">enterprise policy</span>
+<dialog id="setup-dialog" class="setup-dialog" aria-labelledby="setup-title" aria-describedby="setup-description">
+<form id="setup-form" class="setup-frame" novalidate>
+<header class="setup-header">
+<div class="flex items-center justify-between gap-4">
+<span class="font-mono text-outline text-[10px] uppercase tracking-wider">aih Policy · Local setup</span>
+<button type="button" data-mode-toggle aria-label="Switch to light mode" class="p-1.5 rounded bg-surface-container text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined text-[16px]">light_mode</span></button>
 </div>
-<p class="text-[11.5px] text-on-surface-variant leading-relaxed max-w-xl">Entered by you and kept in this browser as a draft. Nothing here is read from git, and saving it does not create policy authority.</p>
+<ol id="setup-progress" class="setup-progress" aria-label="Setup progress"></ol>
+<h1 id="setup-title" class="text-wb-heading font-semibold text-on-surface" tabindex="-1">Opening your Workbench</h1>
+<p id="setup-description" class="text-on-surface-variant leading-relaxed mt-2">Loading saved setup for this workspace.</p>
+<p id="setup-fixed-experience" class="setup-notice mt-3" hidden></p>
+</header>
+<div id="setup-content" class="setup-content"></div>
+<p id="setup-error" class="setup-error" role="alert" hidden></p>
+<footer class="setup-footer">
+<button id="setup-back" type="button" class="setup-button" disabled>Back</button>
+<div class="flex flex-wrap justify-end gap-2">
+<button id="setup-cancel" type="button" class="setup-button" hidden>Cancel</button>
+<button id="setup-skip" type="button" class="setup-button" hidden>Skip all assistance</button>
+<button id="setup-next" type="submit" class="setup-button setup-primary" disabled>Continue</button>
 </div>
-<button type="button" id="close-org-modal-btn" class="p-1 rounded hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer" title="Close without saving" aria-label="Close without saving">
-<span class="material-symbols-outlined text-[18px]">close</span>
-</button>
-</div>
-<form class="p-5 overflow-y-auto space-y-4 text-[12px]" id="org-form" novalidate>
-<div class="space-y-1">
-<label class="block font-mono text-[10.5px] uppercase tracking-wider text-outline font-semibold" for="org-input-name">NAME</label>
-<input type="text" id="org-input-name" autocomplete="organization" maxlength="120" class="w-full px-3 py-1.5 rounded bg-wb-input border border-wb-control-border text-on-surface text-[12px] font-medium focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-<p class="text-[10.5px] text-outline leading-normal">Shown at the top of the page, and as the name of your own source.</p>
-<p class="text-[10.5px] text-error leading-normal hidden" id="org-error-name" role="alert"></p>
-</div>
-<div class="space-y-1">
-<div class="flex items-center gap-1.5">
-<label class="block font-mono text-[10.5px] uppercase tracking-wider text-outline font-semibold" for="org-input-id">SHORT ID</label>
-</div>
-<input type="text" id="org-input-id" autocomplete="off" spellcheck="false" maxlength="40" class="w-60 font-mono px-3 py-1.5 rounded bg-wb-input border border-wb-control-border text-on-surface text-[12px] font-medium focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-<p class="text-[10.5px] text-outline leading-normal">Lower case, no spaces. Used in file names and as the issuer of every policy. Hard to change later.</p>
-<p class="text-[10.5px] text-error leading-normal hidden" id="org-error-id" role="alert"></p>
-</div>
-<div class="space-y-1">
-<div class="flex items-center gap-1.5">
-<label class="block font-mono text-[10.5px] uppercase tracking-wider text-outline font-semibold" for="org-input-repo">POLICY REPO</label>
-</div>
-<input type="text" id="org-input-repo" autocomplete="off" spellcheck="false" maxlength="200" placeholder="github.com/your-org/ai-policies" class="w-full font-mono text-primary px-3 py-1.5 rounded bg-wb-input border border-wb-control-border text-on-surface text-[12px] font-medium focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-<p class="text-[10.5px] text-outline leading-normal">Where your policy file lives. Everyone gets read access; who can write is decided in GitHub, not here. One organization per repo. This page does not read or write that repository.</p>
-<p class="text-[10.5px] text-error leading-normal hidden" id="org-error-repo" role="alert"></p>
-</div>
-<div class="space-y-1.5">
-<div class="flex items-center gap-1.5">
-<label class="block font-mono text-[10.5px] uppercase tracking-wider text-outline font-semibold" for="org-input-email">PEOPLE WHO ANSWER FOR IT</label>
-</div>
-<div class="flex flex-wrap items-center gap-2" id="org-email-list"></div>
-<div class="flex items-center gap-2">
-<input type="email" id="org-input-email" autocomplete="email" spellcheck="false" maxlength="254" placeholder="name@your-org.example" class="w-64 font-mono px-3 py-1.5 rounded bg-wb-input border border-wb-control-border text-on-surface text-[12px] font-medium focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-<button type="button" id="org-add-email-btn" class="flex items-center gap-1 px-2.5 py-1 rounded border border-dashed border-wb-border hover:border-primary text-primary text-[11px] font-medium transition-colors cursor-pointer">
-<span class="material-symbols-outlined text-[13px]">add</span>
-<span class="">Add email</span>
-</button>
-</div>
-<p class="text-[10.5px] text-outline leading-normal">Work emails, recorded as attribution on decisions you make. They are not logins.</p>
-<p class="text-[10.5px] text-error leading-normal hidden" id="org-error-email" role="alert"></p>
-</div>
-<div class="space-y-1.5 pt-1 border-t border-wb-border">
-<div class="flex items-center gap-1.5">
-<span class="block font-mono text-[10.5px] uppercase tracking-wider text-outline font-semibold">HOW USERS KNOW A POLICY IS REALLY YOURS</span>
-<span class="px-1 py-0.2 rounded bg-surface-container text-outline font-mono text-[9px]">later</span>
-</div>
-<div class="grid grid-cols-2 gap-2 max-w-md" role="radiogroup" aria-label="Posture preference" id="org-posture"></div>
-<p class="text-[10.5px] text-outline leading-normal">A preference only. Signing and verifying policies is not implemented in this page, and choosing one does not enable it.</p>
-</div>
+</footer>
 </form>
-<div class="p-3 px-5 border-t border-wb-border bg-surface-container-lowest flex items-center justify-between gap-2 shrink-0">
-<button type="button" id="cancel-org-modal-btn" class="px-3 py-1.5 rounded hover:bg-surface-container text-on-surface-variant hover:text-on-surface text-[12px] font-medium transition-colors cursor-pointer">Cancel</button>
-<div class="flex items-center gap-2">
-<button type="submit" form="org-form" id="save-org-modal-btn" class="flex items-center gap-1.5 px-4 py-1.5 rounded bg-primary-container hover:bg-primary-bright text-on-primary text-[12px] font-medium transition-colors shadow-xs cursor-pointer">
-<span class="material-symbols-outlined text-[14px]">check</span>
-<span class="">Save changes</span>
-</button>
+</dialog>
+<dialog id="org-modal-overlay" class="setup-dialog" aria-labelledby="org-modal-title">
+<div class="setup-frame">
+<header class="setup-header">
+<div><h2 id="org-modal-title" class="text-wb-heading font-semibold text-on-surface">Saved local setup</h2><p class="text-on-surface-variant mt-2">Recorded on this machine. Enterprise approval is not verified.</p></div>
+</header>
+<div id="org-setup-summary" class="setup-content"></div>
+<footer class="setup-footer setup-summary-actions">
+<button id="update-org-setup-btn" type="button" class="setup-button setup-primary">Update my Workbench information</button>
+<button id="close-org-modal-btn" type="button" class="setup-button" aria-label="Close saved setup">Close</button>
+</footer>
 </div>
-</div>
-</div>
-</div>
+</dialog>
 <div id="catalog-error" class="fixed bottom-3 left-3 z-50 max-w-xl p-3 rounded bg-error-container text-on-error-container text-[11.5px] font-mono hidden" role="alert"></div>
 <script type="module" src="main.js"></script>
 </body>

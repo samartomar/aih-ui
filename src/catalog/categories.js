@@ -69,6 +69,16 @@ export function curatedCategoryOf(view, entry) {
   return { state: "curated", id: item.id, label: item.label, description: item.description, rationale: record.rationale };
 }
 
+/** null means no filter; { id: null } means Catalog explicitly left it uncurated. */
+export function matchesCategoryFilter(view, entry, filter) {
+  if (filter == null) return true;
+  const category = curatedCategoryOf(view, entry);
+  if (category === null) return false;
+  return filter.id === null
+    ? category.state === "not-curated"
+    : category.state === "curated" && category.id === filter.id;
+}
+
 /** Who curated the dataset, in the words every tooltip uses. */
 export function curationNote(view) {
   return `Curated by Catalog maintainers (${view?.curatedBy ?? NOT_PUBLISHED}, ${view?.curatedAt ?? NOT_PUBLISHED}); ` +

@@ -12,7 +12,7 @@
 import { el } from "../app/dom.js";
 import { NOT_SUPPLIED } from "../app/absence.js";
 import { TONE, refusalWording } from "./vocabulary.js";
-import { row } from "./rows.js";
+import { row, codeRow } from "./rows.js";
 
 /**
  * @param elements  { govPrepareBtn, govPrepared, govDownloadInput, govDownloadEvidence }
@@ -57,9 +57,9 @@ export function createPrepared({ elements, onPrepare, onDownload }) {
       // A domain-separated digest OVER the document, not a hash of the file. The
       // label says so: an operator who hashes the download will get a different
       // value and should not be left wondering which one is wrong.
-      row(box, "input document digest", prepared.input.digest);
-      row(box, "evidence path", prepared.evidence.rootRelativePath);
-      row(box, "evidence envelope digest", prepared.evidence.digest);
+      codeRow(box, "input document digest", prepared.input.digest);
+      codeRow(box, "evidence path", prepared.evidence.rootRelativePath);
+      codeRow(box, "evidence envelope digest", prepared.evidence.digest);
       row(
         box,
         "Byte-identical on repeat",

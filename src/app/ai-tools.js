@@ -6,7 +6,7 @@
  *   - SUPPORTED: the targets @aihq/core lists in its public SUPPORTED_CLIS
  *     export, read by the backend from the installed package. The page keeps
  *     no list of its own, so a reinstalled Core changes this with no UI edit.
- *   - SELECTED:  the user's choice, a draft kept in this browser.
+ *   - SELECTED: the user's explicit choice in the workspace's local setup file.
  *   - CONNECTED: whether a tool is installed or connected. Nothing supplies
  *     that yet, so it is never implied - not by the dot, not by the count.
  *
@@ -18,33 +18,13 @@
 import { el, text } from "./dom.js";
 import { NOT_CONNECTED, NOT_PUBLISHED } from "./absence.js";
 
-const STORAGE_KEY = "aih-ui-ai-tools-draft";
-const DRAFT_VERSION = 1;
-
-function loadSelection() {
-  try {
-    const value = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
-    if (value === null || typeof value !== "object" || value.version !== DRAFT_VERSION) return [];
-    return Array.isArray(value.selected) ? value.selected.filter((item) => typeof item === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveSelection(selected) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: DRAFT_VERSION, selected }));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /** @param elements { aiToolsTrigger, aiToolsCount, aiToolsPop, aiToolsList, aiToolsNote } */
-export function createAiTools({ elements }) {
+export function createAiTools({ elements, onSelectionChange }) {
   let supported = null;
   let unavailableReason = null;
-  let selected = loadSelection();
+  let selected = [];
+  let saving = false;
+  let saveError = null;
 
   const isOpen = () => !elements.aiToolsPop.classList.contains("hidden");
   function setOpen(open) {
@@ -72,7 +52,7 @@ export function createAiTools({ elements }) {
     const chosen = supported.filter((target) => selected.includes(target));
     elements.aiToolsCount.textContent = `${chosen.length} of ${supported.length}`;
     elements.aiToolsTrigger.title =
-      `${supported.length} AI CLIs @aihq/core supports as targets; ${chosen.length} selected as a draft in this browser. ` +
+      `${supported.length} AI CLIs @aihq/core supports as targets; ${chosen.length} selected in this workspace's local setup. ` +
       `Installed or connected: ${NOT_CONNECTED}.`;
 
     for (const target of supported) {
@@ -80,12 +60,17 @@ export function createAiTools({ elements }) {
       const box = el("input", "rounded-sm w-3.5 h-3.5 accent-primary");
       box.type = "checkbox";
       box.checked = selected.includes(target);
+      box.disabled = saving;
       box.dataset.target = target;
-      box.addEventListener("change", () => {
-        selected = box.checked
-          ? [...selected.filter((item) => item !== target), target]
-          : selected.filter((item) => item !== target);
-        saveSelection(selected);
+      box.addEventListener("change", async () => {
+        const previous = [...selected];
+        selected = box.checked ? [...selected.filter((item) => item !== target), target] : selected.filter((item) => item !== target);
+        saving = true;
+        saveError = null;
+        render();
+        try { await onSelectionChange([...selected]); }
+        catch (error) { selected = previous; saveError = error.message; }
+        finally { saving = false; }
         render();
         elements.aiToolsList.querySelector(`input[data-target="${CSS.escape(target)}"]`)?.focus();
       });
@@ -95,7 +80,12 @@ export function createAiTools({ elements }) {
     }
 
     note(`Supported: the ${supported.length} targets @aihq/core lists (SUPPORTED_CLIS).`);
-    note("Selected: your draft, kept in this browser. It is not a policy.");
+    note(saving ? "Saving client selection…" : "Selected: saved in this workspace's local setup file. It is not a policy.");
+    if (saveError) {
+      const failure = el("p", "text-error", `Selection was not saved: ${saveError}`);
+      failure.setAttribute("role", "alert");
+      elements.aiToolsNote.appendChild(failure);
+    }
     note(`Installed or connected: ${NOT_CONNECTED}. Nothing here checks a tool.`);
     // A saved choice this Core no longer lists stays saved, but is not counted.
     const unknown = selected.filter((item) => !supported.includes(item));
@@ -120,6 +110,10 @@ export function createAiTools({ elements }) {
   render();
 
   return {
+    setSelection(clients) {
+      selected = [...clients];
+      render();
+    },
     /** @param coreTargets the summary's { state, targets } or { state, reason } */
     setTargets(coreTargets) {
       if (coreTargets?.state === "published" && Array.isArray(coreTargets.targets)) {

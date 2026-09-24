@@ -23,7 +23,7 @@
 
 import { el } from "../app/dom.js";
 import { FINDING_DETAIL_ABSENT, NOT_SUPPLIED } from "../app/absence.js";
-import { row } from "./rows.js";
+import { row, codeRow } from "./rows.js";
 
 function section(box, label) {
   box.appendChild(
@@ -48,13 +48,13 @@ function renderScanResult(box, scan) {
   row(box, "Signer identity", scan.signer?.identity);
   // Never presented as provenance: the class is whatever the signer declared.
   row(box, "Signer class (declared)", scan.signer?.class, NOT_SUPPLIED, "text-tertiary");
-  row(box, "Signer keyId", scan.signer?.keyId);
+  codeRow(box, "Signer keyId", scan.signer?.keyId);
   row(box, "Run state (declared)", scan.declaredRunState, NOT_SUPPLIED, "text-tertiary");
   row(box, "Run provenance (declared)", scan.declaredProvenance, NOT_SUPPLIED, "text-tertiary");
   row(box, "Platform", scan.platform ? `${scan.platform.os}/${scan.platform.architecture}` : null);
-  row(box, "Detector id", scan.detector?.id);
+  codeRow(box, "Detector id", scan.detector?.id);
   row(box, "Analyzer identity", scan.detector?.analyzerIdentity);
-  row(box, "Coverage", scan.coverage ? `${scan.coverage.kind} ${scan.coverage.sha256}` : null);
+  codeRow(box, "Coverage", scan.coverage ? `${scan.coverage.kind} ${scan.coverage.sha256}` : null);
   row(box, "Observations", String(scan.observationCount ?? 0));
   row(box, "Findings", String(scan.findingCount ?? 0));
 
@@ -62,7 +62,7 @@ function renderScanResult(box, scan) {
   // nothing else. Message, location and severity are NOT in the attestation;
   // they are listed as missing below rather than filled in with a guess.
   for (const finding of scan.findings ?? []) {
-    row(box, "finding", `${finding.rawOccurrenceFingerprint} x${finding.multiplicity}`);
+    codeRow(box, "finding", `${finding.rawOccurrenceFingerprint} x${finding.multiplicity}`);
   }
   if ((scan.findingCount ?? 0) > 0) {
     box.appendChild(el("div", "text-outline leading-snug", FINDING_DETAIL_ABSENT));
@@ -73,7 +73,7 @@ function renderScanResult(box, scan) {
   const tree = scan.scannedTree ?? {};
   row(box, "Scanned subject", tree.status === "bound" ? tree.subjectName : tree.status, NOT_SUPPLIED, tree.status === "bound" ? "text-on-surface" : "text-outline");
   if (tree.status === "bound") {
-    row(box, "Scanned tree sha256", tree.subjectSha256);
+    codeRow(box, "Scanned tree sha256", tree.subjectSha256);
     box.appendChild(
       el(
         "div",
@@ -149,7 +149,7 @@ export function createDetector({ elements, onFixture }) {
         // actually signed. When that entry cannot be identified there is no
         // declaration to show, only the reason - never the first root.
         if (declared.attributed === true) {
-          row(box, "Verified signer", declared.signerKeyId);
+          codeRow(box, "Verified signer", declared.signerKeyId);
           row(box, "Declared provenance", declared.evidenceProvenance, NOT_SUPPLIED, "text-tertiary");
           row(box, "Declared label", declared.provenanceLabel, NOT_SUPPLIED, "text-tertiary");
           row(box, "Declared by", declared.declaredBy);
@@ -162,7 +162,7 @@ export function createDetector({ elements, onFixture }) {
       if (fixture !== null) {
         row(box, "Detector execution", fixture.label, NOT_SUPPLIED, "text-tertiary");
         row(box, "Detector executed", String(fixture.detectorExecuted), NOT_SUPPLIED, "text-tertiary");
-        row(box, "Signer keyId", fixture.keyId);
+        codeRow(box, "Signer keyId", fixture.keyId);
         row(box, "Sealed files", `${fixture.sealedFileCount} from the installed package`);
         box.appendChild(el("div", "text-outline leading-snug", fixture.note));
       }

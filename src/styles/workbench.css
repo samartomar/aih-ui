@@ -182,13 +182,56 @@ body:has(#main-content) > header > div::-webkit-scrollbar-thumb {
   background: transparent !important;
 }
 
+/* Compact inspector: prose and structured values remain distinct and readable. */
+.inspector-content { min-width: 0; line-height: 1.5; }
+.inspector-content [role="tabpanel"] { overflow-wrap: anywhere; }
+.inspector-tabs { min-width: 0; }
+.inspector-tabs > button { min-width: 0; white-space: nowrap; }
+.inspector-tabs .inspector-icon-tab { flex: 0 0 30px; height: 28px; }
+.inspector-subheading { align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+#inspector-name { overflow-wrap: anywhere; }
+#inspector-subtitle { min-width: 0; }
+#inspector-flags { flex-shrink: 0; }
+.inspector-section-heading { align-items: flex-start; flex-wrap: wrap; gap: 4px 8px; }
+.inspector-content .inspector-row {
+  display: grid;
+  grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr);
+  align-items: start;
+  gap: 4px 10px;
+  padding-block: 4px;
+  line-height: 1.5;
+}
+.inspector-row > * { min-width: 0; overflow-wrap: anywhere; word-break: normal; }
+.inspector-content .inspector-row > :last-child { text-align: left; }
+.inspector-content .inspector-row-code { grid-template-columns: minmax(0, 1fr); }
+.inspector-content .inspector-code-value {
+  display: block;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--r);
+  background: var(--color-field);
+  color: var(--color-text);
+  font-family: var(--mono);
+  font-size: var(--type-body);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.inspector-content .inspector-prose { white-space: pre-line; line-height: 1.65; overflow-wrap: anywhere; }
+.inspector-downloads { flex-direction: column; }
+.inspector-content :where(input, select, textarea, label) { min-width: 0; max-width: 100%; }
+.inspector-content :where(#detector-run-state, #detector-finding-detail) { align-items: flex-start; gap: 10px; }
+.inspector-content :where(#detector-run-state, #detector-finding-detail) > :last-child { flex-shrink: 0; }
+.inspector-content #live-json-viewer { padding: 12px; line-height: 1.6; white-space: normal; }
+
 @media (max-width: 1100px) {
   #inspector-rail:not(.w-0) {
     position: absolute;
     top: 0;
     right: 0;
     bottom: 0;
-    width: min(390px, 100%) !important;
+    width: min(var(--inspector-width), 100%) !important;
     max-width: 100%;
     box-shadow: var(--panel-shadow);
   }

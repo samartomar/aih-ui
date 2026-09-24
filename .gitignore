@@ -3,5 +3,6 @@ src/styles/tailwind.css
 dist/
 *.tgz
 .tmp/
+.aih-ui/
 .env*
 .playwright-cli/

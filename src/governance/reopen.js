@@ -15,7 +15,7 @@
 
 import { el } from "../app/dom.js";
 import { NOT_SUPPLIED } from "../app/absence.js";
-import { row } from "./rows.js";
+import { row, codeRow } from "./rows.js";
 
 /**
  * @param elements  { govReopenInputFile, govReopenEvidenceFile, govReopenBtn, govReopen }
@@ -68,7 +68,7 @@ export function createReopen({ elements, onFiles, onReopen }) {
       row(box, "Fresh session", "opened", NOT_SUPPLIED, "text-primary");
       for (const file of opened.files ?? []) {
         row(box, file.name, `${file.byteLength} bytes`);
-        row(box, "sha256", file.sha256);
+        codeRow(box, "sha256", file.sha256);
       }
       box.appendChild(
         el(

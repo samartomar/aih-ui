@@ -50,7 +50,7 @@ export function createShell(elements) {
       toggleNav();
     }
     const collapsed = elements.inspectorRail.classList.toggle("w-0");
-    elements.inspectorRail.classList.toggle("w-[390px]", !collapsed);
+    elements.inspectorRail.classList.toggle("w-[var(--inspector-width)]", !collapsed);
     elements.inspectorRail.classList.toggle("border-l-0", collapsed);
     elements.toggleInspectorBtn.classList.toggle("text-primary", !collapsed);
     elements.toggleInspectorBtn.classList.toggle("text-on-surface-variant", collapsed);

@@ -55,21 +55,24 @@ const DETECTOR_RUN_STATE_ABSENT =
 const QUALIFICATION_NOT_COVERED =
   `${NOT_PUBLISHED}: the installed Catalog's qualification sidecar does not cover this entry.`;
 
-function row(parent, label, value, title) {
-  const line = el("div", "flex justify-between gap-2");
+function row(parent, label, value, title, code = false) {
+  const present = text(value) !== null;
+  const line = el("div", `inspector-row ${code && present ? "inspector-row-code" : ""}`);
   line.appendChild(el("span", "shrink-0", label));
   const shown = text(value) ?? NOT_PUBLISHED;
-  const valueNode = el("span", shown === NOT_PUBLISHED ? "text-outline text-right" : "text-on-surface text-right break-all", shown);
+  const valueNode = el(code && present ? "code" : "span", code && present ? "inspector-code-value" : shown === NOT_PUBLISHED ? "text-outline" : "text-on-surface", shown);
   if (title) valueNode.title = title;
   line.appendChild(valueNode);
   parent.appendChild(line);
   return line;
 }
 
+function codeRow(parent, label, value, title) { return row(parent, label, value, title, true); }
+
 /* A row whose value is a count of entries rather than a package field: the page computed it,
    so an empty list reads as zero and never borrows the "Not published" wording. */
 function countRow(parent, label, value) {
-  const line = el("div", "flex justify-between gap-2");
+  const line = el("div", "inspector-row");
   line.appendChild(el("span", "shrink-0", label));
   line.appendChild(el("span", "text-on-surface text-right break-all", String(value)));
   parent.appendChild(line);
@@ -117,7 +120,7 @@ function originOf(source) {
 
 /** A "label value" line of the Qualification block; the value is the reader's word, as text. */
 function qualificationLine(parent, label, value, title, key) {
-  const line = el("div", "flex justify-between gap-2");
+  const line = el("div", "inspector-row");
   line.appendChild(el("span", "shrink-0 font-mono text-outline", label));
   const valueNode = el("span", "font-mono text-on-surface text-right break-all", value);
   valueNode.dataset.qualification = key;
@@ -231,14 +234,14 @@ export function createDetails({ elements }) {
       // text. A reader that does not return one (an older Catalog) leaves no
       // summary in the served document, and the slot says which package owns
       // that gap rather than sitting empty.
-      const prose = el("p", "text-[10.5px] text-on-surface-variant leading-snug break-words", statement.summary ?? NOT_PUBLISHED);
+      const prose = el("p", "inspector-prose text-[11px] text-on-surface-variant", statement.summary ?? NOT_PUBLISHED);
       if (statement.summary === null || statement.summary === undefined) prose.title = EVIDENCE_SUMMARY_ABSENT;
       box.appendChild(prose);
       const meta = el("div", "font-mono text-[9.5px] text-outline space-y-0.5");
       row(meta, "attestor", statement.attestor);
       row(meta, "format", statement.format);
-      row(meta, "sha256", statement.sha256);
-      row(meta, "path", statement.path);
+      codeRow(meta, "sha256", statement.sha256);
+      codeRow(meta, "path", statement.path);
       box.appendChild(meta);
       elements.securityStatements.appendChild(box);
     }
@@ -281,7 +284,7 @@ export function createDetails({ elements }) {
       elements.detailsDesc.textContent = description ?? NOT_PUBLISHED;
       elements.detailsDesc.className = description === null
         ? "text-outline leading-relaxed text-[11px]"
-        : "text-on-surface-variant leading-relaxed text-[11px] whitespace-pre-line break-words";
+        : "inspector-prose text-on-surface-variant text-[11px]";
       elements.detailsDesc.title = provenanceNote(record, "description", "Publisher description", publisher);
 
       // ---------------------------------------------- Declared Capabilities
@@ -307,7 +310,7 @@ export function createDetails({ elements }) {
       row(elements.detailsSource, "Origin", originOf(source));
       if (source.type === "github") {
         row(elements.detailsSource, "Pinned Commit", source.commit === null ? null : source.commit.slice(0, 12), source.commit ?? undefined);
-        row(elements.detailsSource, "Path", source.path);
+        codeRow(elements.detailsSource, "Path", source.path);
       } else if (source.type === "npm") {
         row(elements.detailsSource, "Version", source.version);
         row(elements.detailsSource, "Integrity", shortDigest(source.integrity), source.integrity ?? undefined);
@@ -333,22 +336,22 @@ export function createDetails({ elements }) {
       );
 
       // --------------------------- identity and artifacts, behind disclosure
-      row(elements.detailsIdentity, "Entry id", id.entryId);
-      row(elements.detailsIdentity, "Subject id", subject.id);
+      codeRow(elements.detailsIdentity, "Entry id", id.entryId);
+      codeRow(elements.detailsIdentity, "Subject id", subject.id);
       row(elements.detailsIdentity, "Subject kind", id.kind);
-      row(elements.detailsIdentity, "Subject digest", subject.subjectDigest);
-      row(elements.detailsIdentity, "Source digest", subject.sourceDigest);
+      codeRow(elements.detailsIdentity, "Subject digest", subject.subjectDigest);
+      codeRow(elements.detailsIdentity, "Source digest", subject.sourceDigest);
       row(elements.detailsIdentity, "Source type", source.type);
       // Every published source field in full, in the order that type publishes them.
-      for (const [label, value] of sourceDetailRows(source)) row(elements.detailsIdentity, label, value);
+      for (const [label, value] of sourceDetailRows(source)) codeRow(elements.detailsIdentity, label, value);
       row(elements.detailsIdentity, "Platforms", Array.isArray(entry.platforms) && entry.platforms.length
         ? entry.platforms.map((platform) => `${text(platform?.os) ?? "?"}/${text(platform?.architecture) ?? "?"}`).join(", ")
         : null);
 
       // Where the publisher text came from, so every value can be traced.
       if (record?.source) {
-        row(elements.detailsArtifacts, "Publisher text file", record.source.path);
-        row(elements.detailsArtifacts, "Publisher text sha256", record.source.sha256);
+        codeRow(elements.detailsArtifacts, "Publisher text file", record.source.path);
+        codeRow(elements.detailsArtifacts, "Publisher text sha256", record.source.sha256);
       } else {
         row(elements.detailsArtifacts, "Publisher text file", null, provenanceNote(record, "description", "Publisher text", publisher));
       }
@@ -358,10 +361,10 @@ export function createDetails({ elements }) {
         elements.detailsArtifacts, "Upstream category", publishedText(record, "category"),
         provenanceNote(record, "category", "Upstream category", publisher),
       );
-      row(elements.detailsArtifacts, "Seed path", entry.seed?.path);
-      row(elements.detailsArtifacts, "Seed sha256", entry.seed?.sha256);
+      codeRow(elements.detailsArtifacts, "Seed path", entry.seed?.path);
+      codeRow(elements.detailsArtifacts, "Seed sha256", entry.seed?.sha256);
       for (const [name, artifact] of Object.entries(entry.artifacts ?? {})) {
-        row(elements.detailsArtifacts, `${name} path`, artifact?.path);
+        codeRow(elements.detailsArtifacts, `${name} path`, artifact?.path);
       }
 
       // ----------------------------------------------------------- Security
@@ -369,6 +372,7 @@ export function createDetails({ elements }) {
       const report = statements.find((statement) => statement.kind === "report");
       const reportSummary = text(report?.summary);
       elements.scannerReportStatement.textContent = reportSummary ?? NOT_PUBLISHED;
+      elements.scannerReportStatement.classList.add("inspector-prose");
       elements.scannerReportStatement.title = reportSummary === null
         ? EVIDENCE_SUMMARY_ABSENT
         : "The evidence record's own summary, as Catalog published it.";

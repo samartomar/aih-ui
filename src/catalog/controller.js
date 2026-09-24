@@ -68,13 +68,22 @@ export function createCatalog({ onSelectEntry, onReselectEntry = () => {}, onSum
   });
   const navigation = createNavigation({
     elements: elements.navigation,
-    onSelectSource: (source) => changeView({ source, sourceType: null }),
+    onSelectSource: (source) => changeView({ source, sourceType: null, category: null }),
+    onToggleCategory: (category) => changeView({
+      category: state.view.category !== null && state.view.category.id === category.id ? null : category,
+    }),
   });
   const toolbar = createToolbar({
     elements: elements.toolbar,
     onQuery: (query) => changeView({ query }),
     onToggleKind: (kind) => changeView({ kind: kind === null || state.view.kind === kind ? null : kind }),
-    onSourceType: (sourceType) => changeView({ sourceType, source: null }),
+    onSourceType: (sourceType) => {
+      const scope = selectedScope(state.counts, state.view);
+      // A compatible source-type choice can narrow alongside the category.
+      // Moving to another type leaves this source and its category together.
+      const keepsScope = sourceType === null || scope?.type === sourceType;
+      changeView({ sourceType, ...(keepsScope ? {} : { source: null, category: null }) });
+    },
     onSort: (sort) => changeView({ sort }),
   });
   const cards = createCards({ elements: elements.cards, onSelect: (entryId) => select(entryId) });
@@ -120,6 +129,9 @@ export function createCatalog({ onSelectEntry, onReselectEntry = () => {}, onSum
     const total = state.entries.length;
     const scope = selectedScope(state.counts, state.view);
     const inScope = scopeTotal(state.entries, state.view, state.context.membership);
+    const cardsView = cardsModel();
+    const availableKinds = visibleEntries(state.entries, { ...state.view, kind: null }, state.context.membership, state.publisher, state.categories);
+    const filteredCounts = inventoryCounts(availableKinds);
     provenance.render({
       summary: state.summary,
       total,
@@ -131,13 +143,14 @@ export function createCatalog({ onSelectEntry, onReselectEntry = () => {}, onSum
     metrics.render({ kindCounts: state.counts.kindCounts, total, activeKind: state.view.kind });
     navigation.render(navigationModel());
     toolbar.render({
-      kindCounts: state.counts.kindCounts,
+      // Keep zero-result kinds visible so an active kind can still be cleared.
+      kindCounts: new Map([...state.counts.kindCounts.keys()].map((kind) => [kind, filteredCounts.kindCounts.get(kind) ?? 0])),
       sourceTypeCounts: state.counts.sourceTypeCounts,
-      total,
-      scopeTotal: inScope,
+      total: availableKinds.length,
+      visibleTotal: cardsView.entries.length,
       view: state.view,
     });
-    cards.render(cardsModel());
+    cards.render(cardsView);
     details.render(detailsModel(selectedEntry()));
   }
 
@@ -181,7 +194,7 @@ export function createCatalog({ onSelectEntry, onReselectEntry = () => {}, onSum
       // Counts first: restoreView validates every saved filter against them, so
       // restoring before they exist silently discards the saved kind and source.
       state.counts = inventoryCounts(state.entries, state.context);
-      restoreView(state.view, state.counts);
+      restoreView(state.view, state.counts, state.categories, state.entries);
       toolbar.setQuery(state.view.query);
       render();
     },
