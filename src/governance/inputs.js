@@ -17,7 +17,7 @@ import { row } from "./rows.js";
 
 function section(box, label) {
   box.appendChild(
-    el("div", "pt-1 mt-1 border-t border-surface-container-high/40 text-[9px] font-mono uppercase tracking-wider text-outline", label),
+    el("div", "pt-1 mt-1 border-t border-wb-border text-[9px] font-mono uppercase tracking-wider text-outline", label),
   );
 }
 

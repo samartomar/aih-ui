@@ -29,7 +29,7 @@
 
 import { el } from "../app/dom.js";
 import { NOT_PUBLISHED } from "../app/absence.js";
-import { KIND_ICON, KIND_PRIMITIVE, identity } from "./entry.js";
+import { KIND_ICON, KIND_TONE, identity } from "./entry.js";
 import { provenanceNote, publishedText, publisherOf } from "./publisher.js";
 import { categoryBadge } from "./categories.js";
 
@@ -54,7 +54,7 @@ function card(entry, selectedId, onSelect, publisher, categories) {
   const badge = badgeOf(entry, record, categories, publisher);
   const isSelected = selectedId === id.entryId;
 
-  const node = el("div", `group rounded border p-3 flex flex-col justify-between hover:border-primary transition-all cursor-pointer shadow-xs ${isSelected ? "border-primary" : "border-surface-container-high/60"}`);
+  const node = el("div", "wb-card group rounded border p-3 flex flex-col justify-between cursor-pointer");
   node.dataset.cardId = id.entryId;
   node.dataset.categoryLabel = badge.text;
   node.dataset.categoryExplanation = badge.title ?? badge.text;
@@ -68,21 +68,20 @@ function card(entry, selectedId, onSelect, publisher, categories) {
   const top = el("div");
   const head = el("div", "flex items-start justify-between gap-2");
   const name = el("div", "flex items-center gap-1.5 min-w-0");
-  const primitive = KIND_PRIMITIVE[id.kind];
   name.appendChild(
     el(
       "span",
-      `material-symbols-outlined text-[15px] shrink-0 ${primitive ?? "text-[#ffb95f]"}`,
+      `material-symbols-outlined text-[15px] shrink-0 ${KIND_TONE[id.kind] ?? "text-metadata-emphasis"}`,
       KIND_ICON[id.kind] ?? "extension",
     ),
   );
   // The publisher's own name when Catalog publishes one; otherwise the item's id.
-  name.appendChild(el("span", "font-mono font-bold text-white text-[13px] tracking-tight truncate", title ?? id.name));
+  name.appendChild(el("span", "wb-card-title text-wb-body font-mono font-bold text-wb-title tracking-tight truncate", title ?? id.name));
   head.appendChild(name);
   const badges = el("div", "flex items-center gap-1 shrink-0");
   const category = el(
     "span",
-    `px-1.5 py-0.5 rounded bg-surface-container-low border border-surface-container-high/40 text-[8.5px] font-mono text-outline/90${badge.value ? " uppercase" : ""}`,
+    `px-1.5 py-0.5 rounded bg-wb-meta-bg border border-wb-border text-[8.5px] font-mono text-wb-meta${badge.value ? " uppercase" : ""}`,
     badge.text,
   );
   category.title = badge.title;
@@ -93,22 +92,22 @@ function card(entry, selectedId, onSelect, publisher, categories) {
   // The description slot keeps its three lines even when it has one word to
   // show: an unavailable state holds the component's dimensions, so the grid
   // keeps the design source's card proportions instead of closing up.
-  const body = el("p", "text-[11px] text-outline/70 mt-2 leading-relaxed line-clamp-3 min-h-[4.875em] break-words", description ?? NOT_PUBLISHED);
+  const body = el("p", "wb-card-description text-wb-body text-on-surface-variant mt-2 leading-relaxed line-clamp-3 min-h-[4.875em] break-words", description ?? NOT_PUBLISHED);
   body.title = provenanceNote(record, "description", "Description", publisher);
   top.appendChild(body);
   node.appendChild(top);
 
-  const foot = el("div", "pt-2.5 mt-2.5 border-t border-surface-container-high/40 flex items-center justify-between text-[10px]");
+  const foot = el("div", "pt-2.5 mt-2.5 border-t border-wb-border flex items-center justify-between text-[10px]");
   const left = el("div", "flex items-center gap-2 min-w-0");
 
-  const status = el("span", "px-1.5 py-0.5 rounded bg-surface-container-low border border-surface-container-high/40 text-outline font-mono font-medium flex items-center gap-1 shrink-0");
+  const status = el("span", "px-1.5 py-0.5 rounded bg-wb-meta-bg border border-wb-border text-wb-meta font-mono font-medium flex items-center gap-1 shrink-0");
   status.appendChild(el("span", "w-1 h-1 rounded-full bg-outline"));
   status.appendChild(el("span", "", NOT_PUBLISHED));
   status.title = "Scan status: not published. The index carries no scan result for this item.";
   left.appendChild(status);
 
-  const tokens = el("span", "px-1.5 py-0.5 rounded bg-surface-container-low border border-surface-container-high/40 text-outline font-mono hidden sm:inline-flex items-center gap-1 shrink-0");
-  tokens.appendChild(el("span", "material-symbols-outlined text-[13px] primitive-token", "toll"));
+  const tokens = el("span", "px-1.5 py-0.5 rounded bg-wb-meta-bg border border-wb-border text-wb-meta font-mono hidden sm:inline-flex items-center gap-1 shrink-0");
+  tokens.appendChild(el("span", "material-symbols-outlined text-[13px] text-kind-token", "toll"));
   tokens.appendChild(el("span", "", NOT_PUBLISHED));
   tokens.title = "Token estimate: not published.";
   left.appendChild(tokens);
@@ -151,7 +150,7 @@ export function createCards({ elements, onSelect }) {
       elements.cardsGrid.replaceChildren();
       elements.categoryContext.textContent = "";
       if (!model.entries.length) {
-        const empty = el("div", "p-4 rounded border border-surface-container-high/60 text-on-surface-variant text-[12px]", "No catalog entry matches this view. Published entries: ");
+        const empty = el("div", "p-4 rounded border border-wb-border text-on-surface-variant text-[12px]", "No catalog entry matches this view. Published entries: ");
         empty.appendChild(el("span", "font-mono text-on-surface", String(model.total)));
         elements.cardsGrid.appendChild(empty);
       } else {
@@ -182,8 +181,6 @@ export function createCards({ elements, onSelect }) {
         const node = elements.cardsGrid.querySelector(`[data-card-id="${CSS.escape(entryId)}"]`);
         if (node === null) continue;
         node.setAttribute("aria-pressed", String(selected));
-        node.classList.toggle("border-primary", selected);
-        node.classList.toggle("border-surface-container-high/60", !selected);
       }
     },
   };

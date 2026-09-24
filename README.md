@@ -5,7 +5,7 @@ The Policy Workbench user interface for AIH, built as an independent application
 ## What this repo owns
 
 - The screens, interaction and presentation of the Policy Workbench.
-- `prototype/` is the design source. Open `prototype/index.html` in a browser to see it. Build what it shows.
+- `src/` owns the live screens, design tokens, and presentation. Tailwind utilities are compiled locally from the classes used in `src/`.
 
 ## What it must never contain
 
@@ -35,7 +35,12 @@ src/
     elements.js         the shell's own element ids
     dom.js              el / text / collectIds, shared by both features
     absence.js          Not published / Not supplied / Not connected
-    workbench.css       what this page adds to the design source's stylesheets
+    workbench.css       interaction-specific presentation rules
+    mode.js             theme preference and toggle
+  styles/               Workbench design tokens and presentation rules
+    tokens.css          dark and light colour roles
+    workbench.css       compact layout and component styling
+    tailwind.input.css  Tailwind build input (generated output is ignored)
   catalog/              Sources & Catalogs: it presents published data only
     controller.js       the ONE owner of selection and filter state
     entry.js            pure readers over a published entry
@@ -112,26 +117,36 @@ No entry, count or label comes from a hardcoded total: every number on the page 
 counted from the installed index at run time. Absence markers are never counted as
 release labels or as source identities.
 
-## Layout parity with the design source
+## Workbench presentation
 
-`prototype/screens/admin-sources.html` is the design authority. The preview serves
-it from the same origin so the two can be compared at one viewport and one zoom:
+`src/index.html` and the components under `src/` are the screen. `src/styles/tokens.css`
+defines the two colour modes; `src/styles/workbench.css` owns the compact layout;
+`src/app/workbench.css` holds interaction-specific rules. `tailwind.config.cjs` maps
+the same tokens to utilities and scans `src/` for used classes. Install the pinned
+build dependencies with `npm ci`; `npm run build:css` writes the ignored
+`src/styles/tailwind.css`. The preview runs that build on startup. The live page
+uses no Tailwind browser script.
 
-```
-http://127.0.0.1:4173/compare.html
-```
+Theme colors are defined once at the root in `tokens.css`: canvas, panel, card,
+subtle surfaces; text and metadata; separators and control borders. Kind icons,
+metric bars and metadata retain their distinct accents, with mode-specific values
+for light and dark backgrounds. Components use these roles through Tailwind
+utilities, and shadows follow the same light/dark tokens.
 
-Side by side or as a difference overlay, with a live table that reads the geometry
-out of both documents at their true 1600x1000 layout size, before scaling. At
-1600x1000 the left rail, metric tiles, split row, main column, inspector and first
-card all agree exactly on x, y, width and height, in light and dark.
+The neutral palette pairs black and graphite dark surfaces with white light
+surfaces. Dark cards and the header use a restrained sheen and edge highlights;
+light cards stay solid white over a cool pale canvas with soft shadows. Separate
+chrome, card-edge and control roles keep the layers distinct. These treatments
+live in the root theme tokens, following Carbon's surface-layering approach.
 
-The composition the design source specifies: the metric tiles span the full width
+Typography sizes for the body, source heading, card text, and metric counts live
+in `src/styles/tokens.css` as `--type-*` tokens. Components use semantic classes
+for these roles so changing the dense scale does not require editing card markup.
+
+The metric tiles span the full width
 above the split, and the inspector is a **sibling of `<main>`** inside
 `#workspace-split-row` -- so it runs the full height alongside the source header,
-the source policy controls, the filters and the cards. Nesting it inside the card
-row instead puts it 179px too low and stretches the main column by 390px; that is
-what a parity check catches and a screenshot comparison of colours does not.
+the source policy controls, the filters and the cards.
 
 ### The rail lists published sources and current collections
 
@@ -148,7 +163,7 @@ release.
 
 Selecting a row scopes the grid, the "All Items" count and the masthead to that
 source; selecting it again shows every source. The selected row opens to where the
-design source lists categories: see "Curated categories" below. The organization's
+Workbench design lists categories: see "Curated categories" below. The organization's
 own additions come last and read **Not supplied** until something is actually
 imported.
 
@@ -213,7 +228,7 @@ content, so the preview does not start: it says which Catalog it needs.
 
 ### The package strip and the AI tools control
 
-The strip under the header is the design source's compact line:
+The strip under the header is the Workbench design's compact line:
 `@aihq/core <version> • @aihq/scan <version> • @aihq/catalog <version>`. Each
 version is the one npm recorded installing in the throwaway consumer
 (`node_modules/.package-lock.json`), cross-checked against the installed manifest
@@ -232,7 +247,7 @@ selected and connected are kept apart:
 - selected is the user's draft, kept in this browser -- not a policy;
 - installed or connected is **Not connected**: nothing here checks a tool.
 
-The design source's `3 of 11` was sample data and is not restored as state.
+The Workbench design's `3 of 11` was sample data and is not restored as state.
 
 The Governance pane's **Target** field reads that same list and keeps no copy
 either: its options are Core's targets in Core's own order, so a Core listing
@@ -244,20 +259,20 @@ leaves the field disabled reading **Not connected**, and nothing can be prepared
 
 The theme button holds ONE icon naming the destination: a sun on a dark page
 ("Switch to light mode"), a moon on a light page ("Switch to dark mode"), in the
-design source's size and colours. `mode.js` owns the theme state and sets the icon
+Workbench design's size and colours. `mode.js` owns the theme state and sets the icon
 and the label; the colour follows the same `html.dark` class, so nothing can
 disagree with it. Repaint settling (`app/theme.js`) and the saved preference are
 unchanged.
 
 ### The source header keeps its composition
 
-The source header is the design source's: the context line and the source title;
+The source header is the Workbench design's: the context line and the source title;
 the Source Policy label with its three controls (Allow all / Allow with exceptions /
 Hold back) in the same row, right-aligned; then ONE source status line, then the
 filter row. At 1600x1000, fonts loaded, the selected ECC header matches the design
 source's positions in dark and light.
 
-The status line holds the design source's slots, filled only from real state:
+The status line holds the Workbench design's slots, filled only from real state:
 
 - `ENABLED` -- organization and Core state: **Not connected**;
 - `recorded <commit>` -- the commit Catalog recorded. It is not this
@@ -271,11 +286,11 @@ label or enabled state is invented.
 
 ### Cards keep each slot's meaning
 
-A card's slots mean what the design source says they mean: the category badge,
+A card's slots mean what the Workbench design says they mean: the category badge,
 the publisher's description, the scan status and the token estimate. Where a slot
 has no published value it keeps its place, its look and its size and reads
 **Not published**. The description slot keeps its three lines, so the grid keeps
-the design source's card proportions.
+the Workbench design's card proportions.
 
 ### Publisher titles and descriptions come from Catalog
 
@@ -313,10 +328,10 @@ than once -- the same agent ships in several aih releases -- and the full entry 
 is on the tooltip and in the inspector. Scoping the grid to one source removes the
 repetition.
 
-The skill icon is `bolt` in the skill primitive's colour, as the design source
+The skill icon is `bolt` in the skill primitive's colour, as the Workbench design
 renders it; agents and MCP servers use their own primitive colours.
 
-### The toolbar keeps the design source's task
+### The toolbar keeps the Workbench design's task
 
 The primary toolbar is **All Items**, **Needs Review**, **Egress Out**, with the
 "need review" and "send data out" summaries on the right, in their original
@@ -328,7 +343,7 @@ items in scope. The other two keep their purpose but are unavailable, with no co
 - no item declares egress, and an empty declaration is not a measurement of none.
 
 The technical filters that ARE available -- kind, source type and sort -- are in the
-grid header, where the design source puts its sort control.
+grid header, where the Workbench design puts its sort control.
 
 ### Four words for four kinds of absence
 
@@ -342,7 +357,7 @@ grid header, where the design source puts its sort control.
 ### Your organization
 
 The header's organization control is always enabled: organization details are the
-user's input, not missing Catalog data. It opens the design source's setup popup
+user's input, not missing Catalog data. It opens the Workbench design's setup popup
 -- name, short id, policy repository, the people who answer for it, and the
 Vibe / Enterprise preference -- with the same layout and labels, and none of its
 sample values.
@@ -383,7 +398,7 @@ moves the operator's focus or state without their asking:
   tiles and the toolbar selects included.
 - Text is selectable inside the inspector and the provenance panel, so a
   digest, a commit or an entry id can be copied; the shell chrome around them
-  stays `select-none` as the design source draws it.
+  stays `select-none` as the Workbench design draws it.
 
 ### Unavailable states keep their component's size
 
@@ -811,8 +826,8 @@ classification lives in `tools/preview-request.mjs`.
 `tools/tests/` holds the offline regressions described under "One verdict, one
 set of inputs", run with `node --test "tools/tests/*.test.mjs"`.
 
-`tools/check-page-contract.mjs` runs three offline regressions with no install and
-no server — that every element id the page modules collect exists in `index.html`
+After `npm ci`, `tools/check-page-contract.mjs` builds CSS and runs three offline
+regressions with no server — that every element id the page modules collect exists in `index.html`
 exactly once, that the module graph resolves and every asset the page references
 is one the preview copies, and that request paths classify as above. The required
 id set is derived by reading EVERY module under `src/` rather than restated, so
@@ -835,7 +850,7 @@ reason rather than a crash. One line per check, non-zero exit on any failure:
 node tools/acceptance-sweep.mjs http://127.0.0.1:4173/
 ```
 
-Where the prototype showed a field the index does not publish, the page keeps the
+Where the Workbench design showed a field the index does not publish, the page keeps the
 layout, shows **Not published**, **Not supplied** or **Not connected** as above, and
 disables the control. The current list:
 organization scope; Vibe/Enterprise and the AI tools counter; Review Changes count,

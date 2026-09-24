@@ -18,8 +18,7 @@
  *   - an API (tools/server/) that runs tools/service/ inside the consumer. Every Node-only
  *     package API and every filesystem access lives on that side.
  *
- * The generated run directory lives outside every repository. Nothing is copied back into
- * the UI repository.
+ * The generated run directory lives under the configured temp directory.
  *
  * Usage: node tools/preview.mjs [--port 4173] [--quiet]
  *
@@ -33,10 +32,11 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { EXPECTED_FORMAT, EXPECTED_VERSION, contractViolations } from "./catalog-index-contract.mjs";
+import { buildCss } from "./build-css.mjs";
 import { installConsumer, resolvePackage } from "./packages.mjs";
 import { createApi } from "./server/api.mjs";
 import { callService } from "./server/service-client.mjs";
-import { assertReadable, pageAssets, presentationAssets, serviceAssets } from "./server/assets.mjs";
+import { assertReadable, pageAssets, serviceAssets } from "./server/assets.mjs";
 import { createStaticServer, listen } from "./server/static.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -136,6 +136,13 @@ function sidecarSummary(fact, key, url) {
 /* ----------------------------------------------------------------------- main */
 
 async function main() {
+  // Generate only the utilities used by the checked-in page and components.
+  // This keeps Tailwind out of the browser and rebuilds CSS for each preview.
+  try {
+    await buildCss(REPO_ROOT);
+  } catch (error) {
+    fatal(error.message);
+  }
   const repos = {
     core: process.env.CORE_REPO ?? resolve(REPO_ROOT, "..", "ai-harness"),
     scan: process.env.SCAN_REPO ?? resolve(REPO_ROOT, "..", "aih-scan"),
@@ -147,12 +154,10 @@ async function main() {
   // browser. Each file keeps its path - nothing is flattened.
   let page;
   let service;
-  let presentation;
   try {
     page = pageAssets(REPO_ROOT);
     service = serviceAssets(REPO_ROOT);
-    presentation = presentationAssets();
-    assertReadable(REPO_ROOT, [...page, ...service, ...presentation]);
+    assertReadable(REPO_ROOT, [...page, ...service]);
   } catch (error) {
     fatal(error.message);
   }
@@ -160,7 +165,7 @@ async function main() {
   const runDir = mkdtempSync(join(tmpdir(), "aih-ui-preview-"));
   const consumerDir = join(runDir, "consumer");
   mkdirSync(consumerDir, { recursive: true });
-  log(`run: new temp folder outside every repo -> ${runDir}`);
+  log(`run: new temp folder -> ${runDir}`);
 
   // --- 1. the three packages, as tarballs -----------------------------------
   //
@@ -267,7 +272,7 @@ async function main() {
   );
 
   // --- 4. page files into the run directory ---------------------------------
-  for (const asset of [...page, ...presentation]) {
+  for (const asset of page) {
     const target = join(runDir, asset.to);
     mkdirSync(dirname(target), { recursive: true });
     await copyFile(join(REPO_ROOT, asset.from), target);
@@ -287,7 +292,7 @@ async function main() {
   // The URL is unchanged; the bytes are the reader's projection.
   writeFileSync(join(runDir, "catalog-index.json"), `${JSON.stringify(index)}
 `);
-  log(`page: ${page.length} page files, ${presentation.length} presentation files and the served catalog document`);
+  log(`page: ${page.length} page files and the served catalog document`);
 
   // Provenance shown in the page's strip: what was ACTUALLY installed, by
   // tarball hash and commit, never the index's own package block alone.

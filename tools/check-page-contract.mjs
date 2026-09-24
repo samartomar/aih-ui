@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /*
- * Two offline regressions for the Sources & Catalogs preview, runnable without a package
- * install or a running server:
+ * Three offline regressions for the Sources & Catalogs preview, runnable after
+ * npm ci and without a running server:
  *
  *   node tools/check-page-contract.mjs
  *
@@ -20,6 +20,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { classifyRequestPath } from "./preview-request.mjs";
+import { buildCss } from "./build-css.mjs";
 import { pageAssets } from "./server/assets.mjs";
 // The page's own constant, imported rather than restated: a copy here would be
 // the thing that drifts. These selector helpers are pure and touch no DOM at
@@ -27,6 +28,7 @@ import { pageAssets } from "./server/assets.mjs";
 import { SORT_KEYS } from "../src/catalog/selectors.js";
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
+await buildCss(REPO_ROOT);
 let failures = 0;
 
 function check(description, condition, detail = "") {
@@ -132,13 +134,10 @@ for (const module of MODULES) {
 }
 check(`every relative import resolves (${edges} checked)`, brokenImports.length === 0, brokenImports.join(", "));
 
-// What the page loads, against what the preview would actually copy. The
-// design source brings its own flat assets (tokens.css, wb.css, mode.js and
-// friends), so the page references checked here are the ones src/ owns: a path
-// with a directory in it, or the module entry point.
+// What the page loads, against what the preview copies from src/.
 const copied = new Set(pageAssets(REPO_ROOT).map((asset) => asset.to));
 const referenced = [...html.matchAll(/(?:src|href)="(?!https?:)([^"]+)"/g)].map((match) => match[1]);
-const ownReferences = referenced.filter((href) => href.includes("/") || href === "main.js");
+const ownReferences = referenced.filter((href) => !href.startsWith("#"));
 const notCopied = ownReferences.filter((href) => !copied.has(href.replace(/^\.\//, "")));
 check(
   `the preview copies every page asset index.html references (${ownReferences.length} checked)`,
@@ -155,7 +154,7 @@ const cases = [
   ["/catalog-index.json", 200, "the served index"],
   ["/main.js", 200, "the page entry module"],
   ["/catalog/cards.js", 200, "a page module in a subdirectory"],
-  ["/wb.css", 200, "a presentation file"],
+  ["/styles/workbench.css", 200, "the Workbench stylesheet"],
   ["/%", 400, "a truncated percent escape"],
   ["/%zz", 400, "a non-hex percent escape"],
   ["/%e0%a4%a", 400, "a truncated multi-byte escape"],

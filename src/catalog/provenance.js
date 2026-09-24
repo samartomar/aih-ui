@@ -31,7 +31,7 @@ const STRIP_SEPARATOR = "•";
 const STATUS_SEPARATOR = "·";
 
 function dot(separator = STATUS_SEPARATOR) {
-  return el("span", "text-outline/40", separator);
+  return el("span", "text-outline", separator);
 }
 
 export function createProvenance({ elements }) {
@@ -70,21 +70,21 @@ export function createProvenance({ elements }) {
       const group = el("span", "flex items-center gap-1 shrink-0");
       const label = el("span", "text-on-surface font-medium", `${name} `);
       const version = text(pkg?.version);
-      label.appendChild(el("span", "text-outline/80", version ?? NOT_PUBLISHED));
+      label.appendChild(el("span", "text-outline", version ?? NOT_PUBLISHED));
       label.title = version === null
         ? `${name}: no installed version was recorded`
         : `${name} ${version}, as npm recorded installing it in this preview`;
       group.appendChild(label);
       const commit = text(pkg?.commit);
       if (commit !== null && /^[0-9a-f]{7,40}$/.test(commit)) {
-        const chip = el("span", "px-1.5 py-0.5 rounded bg-surface-container-high/80 text-secondary font-mono text-[10px]", commit.slice(0, 7));
+        const chip = el("span", "px-1.5 py-0.5 rounded bg-surface-container-high/80 text-metadata-revision font-mono text-[10px]", commit.slice(0, 7));
         chip.title = `Local package packed from checkpoint ${commit}. Not a registry release.`;
         group.appendChild(chip);
       }
       // Catalog indexes a different content release from the installed one.
       // Said here, beside the running version, and never relabelled away.
       if (mismatches.has(name)) {
-        const note = el("span", "px-1.5 py-0.5 rounded bg-tertiary-container/20 border border-tertiary/40 text-tertiary font-mono text-[10px]", `content ${mismatches.get(name)}`);
+        const note = el("span", "px-1.5 py-0.5 rounded bg-tertiary-container border border-tertiary/40 text-tertiary font-mono text-[10px]", `content ${mismatches.get(name)}`);
         note.title = `The Catalog content indexed for ${name} is release ${mismatches.get(name)}; the installed ${name} is ${version}.`;
         group.appendChild(note);
       }
@@ -103,7 +103,7 @@ export function createProvenance({ elements }) {
     summaryNode.title = "Package hashes, commits, index metadata and the collection view";
     details.appendChild(summaryNode);
 
-    const panel = el("div", "absolute left-0 top-[18px] z-40 w-[460px] max-w-[90vw] max-h-[70vh] overflow-y-auto p-2 rounded bg-surface-container-lowest border border-surface-container-high/60 shadow-2xl space-y-1 text-[10px] font-mono select-text");
+    const panel = el("div", "absolute left-0 top-[18px] z-40 w-[460px] max-w-[90vw] max-h-[70vh] overflow-y-auto p-2 rounded bg-surface-container-lowest border border-wb-border shadow-panel space-y-1 text-[10px] font-mono select-text");
     const line = (label, value, tone) => {
       const node = el("div", "flex items-start justify-between gap-2");
       node.appendChild(el("span", "text-outline shrink-0", label));
@@ -111,7 +111,7 @@ export function createProvenance({ elements }) {
       panel.appendChild(node);
     };
     const heading = (value) =>
-      panel.appendChild(el("div", "pt-1 mt-1 border-t border-surface-container-high/40 text-on-surface font-semibold", value));
+      panel.appendChild(el("div", "pt-1 mt-1 border-t border-wb-border text-on-surface font-semibold", value));
 
     line("index format", `${text(summary.format) ?? NOT_PUBLISHED} v${text(summary.version) ?? NOT_PUBLISHED}`);
     line("index sha256", text(summary.indexSha256) ?? NOT_PUBLISHED);
@@ -149,7 +149,7 @@ export function createProvenance({ elements }) {
       }
       line("version", text(pkg.version) ?? NOT_PUBLISHED);
       line("tarball", text(pkg.tarball) ?? NOT_PUBLISHED);
-      line("sha256", text(pkg.sha256) ?? NOT_PUBLISHED, "text-secondary");
+      line("sha256", text(pkg.sha256) ?? NOT_PUBLISHED, "text-metadata-revision");
       line("commit", text(pkg.commit) ?? NOT_PUBLISHED);
       line("built from", text(pkg.source) ?? NOT_PUBLISHED, "text-outline");
     }
@@ -217,7 +217,7 @@ export function createProvenance({ elements }) {
     line.replaceChildren();
 
     // The design source's ENABLED slot: organization / Core state, not Catalog's.
-    const enabled = el("span", "px-2 py-0.5 rounded bg-surface-container border border-surface-container-high/40 text-outline font-semibold flex items-center gap-1.5 text-[10.5px]");
+    const enabled = el("span", "px-2 py-0.5 rounded bg-surface-container border border-wb-border text-outline font-semibold flex items-center gap-1.5 text-[10.5px]");
     enabled.appendChild(el("span", "w-1.5 h-1.5 rounded-full bg-outline"));
     enabled.appendChild(document.createTextNode(`ENABLED · ${NOT_CONNECTED}`));
     enabled.title = `Whether this source is enabled is organization and Core state. ${NOT_CONNECTED}: nothing supplies it yet.`;

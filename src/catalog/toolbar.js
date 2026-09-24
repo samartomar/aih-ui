@@ -56,10 +56,10 @@ function reviewPill(label, count, active, onClick) {
 }
 
 function summaryChip(icon, label, title) {
-  const chip = el("span", "px-2 py-1 rounded bg-surface-container border border-surface-container-high/40 text-outline flex items-center gap-1 shrink-0 opacity-70 whitespace-nowrap");
+  const chip = el("span", "px-2 py-1 rounded bg-surface-container border border-wb-border text-outline flex items-center gap-1 shrink-0 whitespace-nowrap");
   chip.appendChild(el("span", "material-symbols-outlined text-[12px] text-outline", icon));
   chip.appendChild(el("span", "font-medium", label));
-  chip.appendChild(el("span", "text-outline/80", NOT_PUBLISHED));
+  chip.appendChild(el("span", "text-outline", NOT_PUBLISHED));
   chip.title = title;
   return chip;
 }

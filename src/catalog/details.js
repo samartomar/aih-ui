@@ -59,7 +59,7 @@ function row(parent, label, value, title) {
   const line = el("div", "flex justify-between gap-2");
   line.appendChild(el("span", "shrink-0", label));
   const shown = text(value) ?? NOT_PUBLISHED;
-  const valueNode = el("span", shown === NOT_PUBLISHED ? "text-outline/70 text-right" : "text-on-surface text-right break-all", shown);
+  const valueNode = el("span", shown === NOT_PUBLISHED ? "text-outline text-right" : "text-on-surface text-right break-all", shown);
   if (title) valueNode.title = title;
   line.appendChild(valueNode);
   parent.appendChild(line);
@@ -78,13 +78,14 @@ function countRow(parent, label, value) {
 
 /** One capability row in the design source's own layout. */
 function capability(container, label, icon, tone, value, title) {
-  const line = el("div", "p-2 rounded bg-surface-container-low border border-surface-container-high/30 flex items-center justify-between gap-2");
+  const toneClass = { tertiary: "text-tertiary", secondary: "text-secondary", outline: "text-outline" }[tone];
+  const line = el("div", "p-2 rounded bg-surface-container-low border border-wb-border flex items-center justify-between gap-2");
   const left = el("div", "flex items-center gap-1.5 text-on-surface");
-  left.appendChild(el("span", `material-symbols-outlined text-[14px] text-${tone}`, icon));
+  left.appendChild(el("span", `material-symbols-outlined text-[14px] ${toneClass}`, icon));
   left.appendChild(el("span", "", label));
   line.appendChild(left);
   const known = value !== NOT_PUBLISHED && value !== NOT_DECLARED;
-  const valueNode = el("span", `font-mono text-[10px] text-right ${known ? `text-${tone}` : "text-outline/70"}`, value);
+  const valueNode = el("span", `font-mono text-[10px] text-right ${known ? toneClass : "text-outline"}`, value);
   if (title) valueNode.title = title;
   line.appendChild(valueNode);
   container.appendChild(line);
@@ -146,7 +147,7 @@ function renderQualification(elements, view, entry) {
         ? QUALIFICATION_NOT_COVERED
         : null;
   if (reason !== null) {
-    box.className = "p-2 rounded bg-surface-container-low border border-surface-container-high/40 space-y-1 text-[10.5px] text-outline";
+    box.className = "p-2 rounded bg-surface-container-low border border-wb-border space-y-1 text-[10.5px] text-outline";
     box.dataset.absence = "qualification";
     box.textContent = NOT_PUBLISHED;
     box.title = reason;
@@ -154,7 +155,7 @@ function renderQualification(elements, view, entry) {
   }
   delete box.dataset.absence;
   box.title = "";
-  box.className = "p-2 rounded bg-surface-container-low border border-surface-container-high/40 space-y-1 text-[10.5px] text-on-surface-variant";
+  box.className = "p-2 rounded bg-surface-container-low border border-wb-border space-y-1 text-[10.5px] text-on-surface-variant";
   const record = qualificationOf(view, entry);
   qualificationLine(
     box, "state", record.state,
@@ -209,7 +210,7 @@ export function createDetails({ elements }) {
     capability(elements.detailsCapabilities, "Required Secrets", "vpn_key", "outline", NOT_PUBLISHED);
     row(elements.detailsSource, "Origin", null);
     row(elements.detailsIdentity, "Entry id", null);
-    elements.detailsArtifacts.appendChild(el("div", "text-outline/70", NOT_PUBLISHED));
+    elements.detailsArtifacts.appendChild(el("div", "text-outline", NOT_PUBLISHED));
     elements.scannerReportStatement.textContent = NOT_PUBLISHED;
     // Nothing is selected yet, so this slot is not Catalog's gap. Say which.
     elements.scannerReportStatement.title = "No entry is selected, so there is no evidence record to summarise.";
@@ -218,10 +219,10 @@ export function createDetails({ elements }) {
 
   function renderStatements(statements) {
     if (!statements.length) {
-      elements.securityStatements.appendChild(el("div", "p-2 rounded bg-surface-container-low border border-surface-container-high/40 text-outline", "No evidence statement published for this entry"));
+      elements.securityStatements.appendChild(el("div", "p-2 rounded bg-surface-container-low border border-wb-border text-outline", "No evidence statement published for this entry"));
     }
     for (const statement of statements) {
-      const box = el("div", "p-2 rounded bg-surface-container-low border border-surface-container-high/40 space-y-1");
+      const box = el("div", "p-2 rounded bg-surface-container-low border border-wb-border space-y-1");
       const head = el("div", "flex items-center justify-between gap-2");
       head.appendChild(el("span", "font-mono text-[10px] uppercase tracking-wider text-outline", statement.kind));
       head.appendChild(el("span", "font-mono text-[10px] text-on-surface break-all text-right", statement.id ?? NOT_PUBLISHED));
@@ -279,7 +280,7 @@ export function createDetails({ elements }) {
       // Upstream text, set as text: never markup, never an instruction.
       elements.detailsDesc.textContent = description ?? NOT_PUBLISHED;
       elements.detailsDesc.className = description === null
-        ? "text-outline/70 leading-relaxed text-[11px]"
+        ? "text-outline leading-relaxed text-[11px]"
         : "text-on-surface-variant leading-relaxed text-[11px] whitespace-pre-line break-words";
       elements.detailsDesc.title = provenanceNote(record, "description", "Publisher description", publisher);
 

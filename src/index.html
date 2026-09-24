@@ -4,30 +4,27 @@
 <meta charset="utf-8">
 <meta content="width=device-width, initial-scale=1.0" name="viewport">
 <title>aih Policy - Workbench</title>
-<!-- Presentation only, carried over from prototype/screens/admin-sources.html. Network required for
-     Tailwind, Inter, JetBrains Mono and Material Symbols, exactly as the prototype requires them. -->
+<!-- Geist and Material Symbols load from Google Fonts; Tailwind is compiled locally. -->
 <link href="https://fonts.googleapis.com" rel="preconnect">
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-<link rel="stylesheet" href="tokens.css">
-<script src="mode.js"></script>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<script src="tw-config.js"></script>
-<link rel="stylesheet" href="wb.css">
-<!-- What this page adds on top of the design source's stylesheets. -->
+<link rel="stylesheet" href="styles/tailwind.css">
+<link rel="stylesheet" href="styles/tokens.css">
+<script src="app/mode.js"></script>
+<link rel="stylesheet" href="styles/workbench.css">
 <link rel="stylesheet" href="app/workbench.css">
 </head>
-<body class="bg-background font-body text-on-surface text-[13px] leading-normal antialiased select-none">
+<body class="wb-page bg-background font-body text-on-surface leading-normal antialiased select-none">
 <!-- TOP HEADER (Compact, fixed 44px) -->
-<header class="h-11 w-full bg-surface-container-lowest border-b border-surface-container-high/60 px-3 flex items-center justify-between z-50 shrink-0">
+<header class="wb-chrome h-11 w-full bg-wb-chrome border-b border-wb-border px-3 flex items-center justify-between z-50 shrink-0">
 <div class="flex items-center gap-2.5 shrink-0">
 <!-- App Identity -->
 <div class="flex items-center gap-2 pr-1">
-<div class="w-5 h-5 rounded bg-primary flex items-center justify-center shadow-sm">
-<span class="material-symbols-outlined text-white text-[14px]">shield_with_house</span>
+<div class="w-5 h-5 rounded bg-primary-container flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-on-primary text-[14px]">shield_with_house</span>
 </div>
-<span class="font-semibold text-[13px] tracking-tight text-on-surface">aih Policy</span>
+<span class="font-semibold text-[11px] tracking-tight text-on-surface">aih Policy</span>
 <span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-medium">Admin</span>
 </div>
 <div class="h-3.5 w-px bg-surface-container-high mx-0.5"></div>
@@ -37,7 +34,7 @@
 <span class="material-symbols-outlined text-[13px] text-outline">expand_more</span>
 </button>
 <!-- Mode Toggle: presentation mode; the tool inventory behind it is not published -->
-<div class="flex items-center bg-surface-container-lowest p-0.5 rounded border border-surface-container-high/40">
+<div class="flex items-center bg-surface-container-lowest p-0.5 rounded border border-wb-border">
 <button class="px-2 py-0.5 rounded text-[11px] text-on-surface-variant opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not published: tool inventory needs a Core/host contract">Vibe</button>
 <button class="px-2 py-0.5 rounded bg-surface-container text-[11px] text-on-surface-variant opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not published: tool inventory needs a Core/host contract">Enterprise</button>
 </div>
@@ -52,10 +49,10 @@
 <span class="text-outline">AI tools</span>
 <span class="material-symbols-outlined text-[13px] text-outline">arrow_drop_down</span>
 </button>
-<div class="hidden absolute left-0 top-7 w-64 p-2 rounded bg-surface-container-lowest border border-surface-container-high/60 shadow-2xl space-y-1 text-[11.5px] z-50" id="ai-tools-pop" role="group" aria-label="AI tools">
+<div class="hidden absolute left-0 top-7 w-64 p-2 rounded bg-surface-container-lowest border border-wb-border shadow-panel space-y-1 text-[11.5px] z-50" id="ai-tools-pop" role="group" aria-label="AI tools">
 <div class="px-1 pb-1 text-[10px] font-mono uppercase tracking-wider text-outline font-semibold">Set up for</div>
 <div class="space-y-0.5 max-h-[360px] overflow-y-auto" id="ai-tools-list"></div>
-<div class="px-1 pt-1 space-y-0.5 text-[10px] text-outline leading-snug border-t border-surface-container-high/40" id="ai-tools-note"></div>
+<div class="px-1 pt-1 space-y-0.5 text-[10px] text-outline leading-snug border-t border-wb-border" id="ai-tools-note"></div>
 </div>
 </div>
 </div>
@@ -76,16 +73,16 @@
 <!-- Theme Toggle Button: ONE icon naming the destination theme. mode.js owns
      the theme state and sets this icon's text and the button's label; the
      colour follows the same html.dark class, so nothing else can disagree. -->
-<button aria-label="Switch to light mode" class="p-1 rounded bg-surface-container-low hover:bg-surface-container border border-surface-container-high/60 text-on-surface-variant hover:text-on-surface transition-colors flex items-center justify-center cursor-pointer shadow-xs mr-0.5" id="theme-toggle-btn" type="button" data-mode-toggle>
-<span class="material-symbols-outlined text-[15px] text-primary dark:text-[#ffb95f]" id="theme-icon">light_mode</span>
+<button aria-label="Switch to light mode" class="p-1 rounded bg-surface-container-low hover:bg-surface-container border border-wb-border text-on-surface-variant hover:text-on-surface transition-colors flex items-center justify-center cursor-pointer shadow-xs mr-0.5" id="theme-toggle-btn" type="button" data-mode-toggle>
+<span class="material-symbols-outlined text-[15px] text-primary dark:text-metadata-emphasis" id="theme-icon">light_mode</span>
 </button>
-<div class="w-6 h-6 rounded-full bg-surface-container-highest border border-surface-container-high flex items-center justify-center text-on-surface-variant cursor-pointer hover:text-on-surface">
+<div class="w-6 h-6 rounded-full bg-surface-container-highest border border-wb-border flex items-center justify-center text-on-surface-variant cursor-pointer hover:text-on-surface">
 <span class="material-symbols-outlined text-[15px]">person</span>
 </div>
 </div>
 </header>
 <!-- WORKBENCH SUB-HEADER (Provenance & Panel Sliders) -->
-<div class="h-8 bg-surface-container-lowest/90 border-b border-surface-container-high/40 px-3 flex items-center justify-between text-[11px] shrink-0">
+<div class="h-8 bg-surface-container-lowest/90 border-b border-wb-border px-3 flex items-center justify-between text-[11px] shrink-0">
 <div class="flex items-center gap-2 min-w-0">
 <div class="flex items-center gap-2 font-mono text-[11px] text-on-surface-variant min-w-0" id="provenance-strip">
 <span class="material-symbols-outlined text-[14px] text-primary shrink-0">inventory_2</span>
@@ -94,16 +91,16 @@
 </div>
 <div class="flex items-center gap-2.5 shrink-0">
 <!-- Dock / Panel Controls -->
-<div class="flex items-center rounded bg-surface-container-low border border-surface-container-high/60 p-0.5 gap-0.5">
+<div class="flex items-center rounded bg-surface-container-low border border-wb-border p-0.5 gap-0.5">
 <button class="p-1 rounded hover:bg-surface-container transition-colors flex items-center justify-center cursor-pointer text-primary" id="toggle-nav-btn" title="Toggle Sidebar Nav (Left)" type="button"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><rect height="18" rx="2" width="18" x="3" y="3"></rect><line x1="9" x2="9" y1="3" y2="21"></line><polyline points="13 9 16 12 13 15"></polyline></svg></button>
-<button class="p-1 rounded hover:bg-surface-container hover:text-white transition-colors flex items-center justify-center cursor-pointer text-primary" id="toggle-inspector-btn" title="Toggle right inspector panel (hide/expand)" aria-label="Toggle right panel" type="button"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><rect height="18" rx="2" width="18" x="3" y="3"></rect><line x1="15" x2="15" y1="3" y2="21"></line><polyline points="11 9 8 12 11 15"></polyline></svg></button>
+<button class="p-1 rounded hover:bg-surface-container hover:text-wb-title transition-colors flex items-center justify-center cursor-pointer text-primary" id="toggle-inspector-btn" title="Toggle right inspector panel (hide/expand)" aria-label="Toggle right panel" type="button"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><rect height="18" rx="2" width="18" x="3" y="3"></rect><line x1="15" x2="15" y1="3" y2="21"></line><polyline points="11 9 8 12 11 15"></polyline></svg></button>
 </div>
 </div>
 </div>
 <!-- MAIN 3-PANEL RESPONSIVE CONTAINER (100vh - 76px) -->
 <div class="flex w-full h-[calc(100vh-4.75rem)] overflow-hidden relative">
 <!-- LEFT COLUMN 1: Main Nav Rail (Collapsible) -->
-<aside class="rail-transition shrink-0 bg-[#0a0e15] border-r border-surface-container-high/60 flex flex-col justify-between overflow-hidden w-60" id="nav-rail">
+<aside class="rail-transition shrink-0 bg-wb-nav border-r border-wb-border flex flex-col justify-between overflow-hidden w-60" id="nav-rail">
 <div class="flex flex-col h-full justify-between overflow-y-auto">
 <div class="p-2 space-y-3">
 <!-- WORKBENCH / VIEW SELECTOR (Compact) -->
@@ -137,7 +134,7 @@
 </nav>
 </div>
 <!-- CATALOG SCOPES: one row per published source identity -->
-<div class="space-y-1 pt-1 border-t border-surface-container-high/40">
+<div class="space-y-1 pt-1 border-t border-wb-border">
 <div class="px-2 py-0.5 text-[10px] font-mono tracking-wider text-outline uppercase font-semibold flex items-center justify-between">
 <span class="">CATALOG SCOPES</span>
 <span class="material-symbols-outlined text-[12px] text-outline">account_tree</span>
@@ -145,7 +142,7 @@
 <div class="space-y-0.5 text-[11px]" id="rail-scope-list"></div>
 </div>
 <!-- GOVERNANCE & TELEMETRY -->
-<div class="space-y-1 pt-1 border-t border-surface-container-high/40">
+<div class="space-y-1 pt-1 border-t border-wb-border">
 <div class="px-2 py-0.5 text-[10px] font-mono tracking-wider text-outline uppercase font-semibold">
 <span class="">TELEMETRY</span>
 </div>
@@ -162,7 +159,7 @@
 </div>
 </div>
 <!-- Bottom Status & Guard widget -->
-<div class="p-2 m-2 rounded bg-surface-container-low border border-surface-container-high/40 text-[10px] space-y-1.5 shrink-0 opacity-60">
+<div class="p-2 m-2 rounded bg-surface-container-low border border-wb-border text-[10px] space-y-1.5 shrink-0 opacity-60">
 <div class="flex items-center justify-between">
 <span class="flex items-center gap-1.5 text-on-surface-variant font-medium">
 <span class="w-1.5 h-1.5 rounded-full bg-outline"></span>Egress Guard</span>
@@ -178,46 +175,46 @@
 </aside>
 <!-- CENTER WORKSPACE: Six-kind ledger + Control Strip + Fluid Grid -->
 <div class="flex-1 flex flex-col min-w-0 overflow-hidden" id="workbench-body-wrapper">
-<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 divide-x divide-surface-container-high/40 border-b border-surface-container-high/50 bg-[#121622] shrink-0 select-none w-full" id="framework-matrix-tabs"></div>
+<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 divide-x divide-wb-border border-b border-wb-border bg-wb-matrix shrink-0 select-none w-full" id="framework-matrix-tabs"></div>
 <div class="flex-1 flex w-full overflow-hidden relative" id="workspace-split-row">
-<main class="flex-1 flex flex-col min-w-0 bg-[#0f131b] overflow-hidden" id="main-content">
-<div class="flex-1 flex flex-col overflow-y-auto min-w-0 bg-[#0c1017]">
-<div class="px-5 pt-4 pb-3 border-b border-surface-container-high/40 bg-[#0e131d]/90 flex flex-col gap-2 shrink-0">
+<main class="flex-1 flex flex-col min-w-0 bg-background overflow-hidden" id="main-content">
+<div class="flex-1 flex flex-col overflow-y-auto min-w-0 bg-wb-center">
+<div class="px-5 pt-4 pb-3 border-b border-wb-border bg-wb-subhead flex flex-col gap-2 shrink-0">
 <div class="flex items-center justify-between flex-wrap gap-2">
 <div>
-<div class="text-[10px] font-mono tracking-wider uppercase text-outline/80 font-semibold mb-0.5">CATALOG INDEX · READ-ONLY MIRROR</div>
-<h1 class="text-[22px] font-bold text-white tracking-tight flex items-center gap-2 font-mono min-w-0">
+<div class="text-[10px] font-mono tracking-wider uppercase text-outline font-semibold mb-0.5">CATALOG INDEX · READ-ONLY MIRROR</div>
+<h1 class="wb-source-heading text-wb-heading font-bold text-wb-title tracking-tight flex items-center gap-2 font-mono min-w-0">
 <span class="truncate" id="masthead-name">-</span>
-<span class="text-outline/60 font-light">—</span>
-<span class="text-[#ffb95f]" id="masthead-version">-</span>
+<span class="text-outline font-light">—</span>
+<span class="text-metadata-emphasis" id="masthead-version">-</span>
 </h1>
 </div>
 <div class="flex items-center gap-2">
 <span class="text-[10.5px] font-mono text-outline uppercase tracking-wider hidden sm:inline-block">Source Policy:</span>
-<div class="flex items-center bg-surface-container-lowest p-0.5 rounded border border-surface-container-high/60 text-[11px]" title="Not published: needs a Core source-policy resolution contract">
+<div class="flex items-center bg-surface-container-lowest p-0.5 rounded border border-wb-border text-[11px]" title="Not published: needs a Core source-policy resolution contract">
 <button class="px-2.5 py-1 rounded text-on-surface-variant opacity-50 cursor-not-allowed" id="source-btn-allow-all" type="button" disabled aria-disabled="true">Allow all</button>
 <button class="px-2.5 py-1 rounded text-on-surface-variant opacity-50 cursor-not-allowed" id="source-btn-allow-exceptions" type="button" disabled aria-disabled="true">Allow with exceptions</button>
 <button class="px-2.5 py-1 rounded text-on-surface-variant opacity-50 cursor-not-allowed" id="source-btn-hold-back" type="button" disabled aria-disabled="true">Hold back</button>
 </div>
 </div>
 </div>
-<div class="flex flex-wrap items-center gap-2 text-[11px] font-mono text-outline/90 pt-0.5" id="masthead-status"></div>
+<div class="flex flex-wrap items-center gap-2 text-[11px] font-mono text-outline pt-0.5" id="masthead-status"></div>
 </div>
-<div class="px-5 py-2 border-b border-surface-container-high/40 bg-[#0e131d] flex flex-nowrap items-center justify-between gap-2 shrink-0 text-[11.5px]" id="workbench-toolbar">
+<div class="px-5 py-2 border-b border-wb-border bg-wb-subhead flex flex-nowrap items-center justify-between gap-2 shrink-0 text-[11.5px]" id="workbench-toolbar">
 <div class="flex items-center gap-2 flex-1 min-w-0">
-<label class="w-8 h-8 rounded border border-surface-container-high/60 bg-[#141822] hover:bg-surface-container text-outline hover:text-on-surface flex items-center justify-center shrink-0 transition-colors cursor-pointer" for="catalog-search" title="Search published identities">
+<label class="w-8 h-8 rounded border border-wb-border bg-wb-input hover:bg-surface-container text-outline hover:text-on-surface flex items-center justify-center shrink-0 transition-colors cursor-pointer" for="catalog-search" title="Search published identities">
 <span class="material-symbols-outlined text-[15px]">search</span>
 </label>
-<input class="flex-1 min-w-[96px] max-w-[260px] h-8 px-2 py-1 rounded bg-[#141822] border border-surface-container-high/60 text-on-surface text-[11.5px] font-mono placeholder:text-outline/70 focus:border-primary focus:outline-none" id="catalog-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search" title="Search entry id, subject id, repository, package, path, commit or revision" aria-label="Search published entry and source identities">
+<input class="flex-1 min-w-[96px] max-w-[260px] h-8 px-2 py-1 rounded bg-wb-input border border-wb-control-border text-on-surface text-[11.5px] font-mono placeholder:text-outline focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" id="catalog-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search" title="Search entry id, subject id, repository, package, path, commit or revision" aria-label="Search published entry and source identities">
 <div class="flex items-center gap-2 shrink-0" id="review-filters" role="group" aria-label="Filter by review state"></div>
 </div>
 <details class="relative shrink-0 text-[11px]" id="review-signals"><summary class="cursor-pointer text-on-surface-variant hover:text-on-surface">Signals</summary><div class="flex items-center gap-2 font-mono text-[10.5px]" id="review-summary"></div></details>
 </div>
 <div class="flex-1 flex overflow-hidden">
-<div class="flex-1 overflow-y-auto p-4 bg-[#0d111a] flex flex-col gap-3">
+<div class="flex-1 overflow-y-auto p-4 bg-wb-cards flex flex-col gap-3">
 <div class="flex items-center justify-between gap-4 text-[11px] font-mono text-outline pb-1" id="results-controls">
 <div class="shrink-0 whitespace-nowrap">
-<strong class="text-white font-bold" id="visible-count" title="Inventory count. Not an approval.">0</strong> <span id="visible-caption">of 0 catalog entries</span></div>
+<strong class="text-wb-title font-bold" id="visible-count" title="Inventory count. Not an approval.">0</strong> <span id="visible-caption">of 0 catalog entries</span></div>
 <div class="flex items-center gap-2 min-w-0">
 <div class="flex flex-nowrap items-center gap-1.5 overflow-x-auto no-scrollbar min-w-0" id="kind-filters" role="group" aria-label="Filter by kind"></div>
 <label class="flex items-center gap-1 shrink-0" title="Filter by published source type">
@@ -241,13 +238,13 @@
 </div>
 </main>
 <!-- RIGHT COLUMN: Interactive Multi-Inspector (Collapsible Drawer) -->
-<aside class="inspector-transition shrink-0 bg-[#12161f] border-l border-surface-container-high/60 flex flex-col justify-between overflow-hidden shadow-2xl z-20 w-[390px] select-text" id="inspector-rail">
-<div class="p-3 border-b border-surface-container-high/60 space-y-2 shrink-0">
+<aside class="inspector-transition shrink-0 bg-wb-inspector border-l border-wb-border flex flex-col justify-between overflow-hidden shadow-panel z-20 w-[390px] select-text" id="inspector-rail">
+<div class="p-3 border-b border-wb-border space-y-2 shrink-0">
 <div class="flex items-start justify-between gap-2">
 <div class="min-w-0">
 <div class="flex items-center gap-1.5">
-<span class="material-symbols-outlined text-[15px] text-[#ffb95f] primitive-skill" id="inspector-icon">extension</span>
-<span class="font-mono font-bold text-white text-[13px] tracking-tight truncate" id="inspector-name">No entry selected</span>
+<span class="material-symbols-outlined text-[15px] text-kind-skill" id="inspector-icon">extension</span>
+<span class="font-mono font-bold text-wb-title text-[11px] tracking-tight truncate" id="inspector-name">No entry selected</span>
 </div>
 <div class="flex items-center gap-2 mt-1">
 <span class="text-[10px] font-mono px-1 rounded bg-surface-container-highest text-on-surface-variant" id="inspector-kind">-</span>
@@ -262,7 +259,7 @@
 <span class="text-outline" id="inspector-subtitle">Select a card to read its published identities and evidence</span>
 <span class="font-mono text-on-surface-variant font-semibold" id="inspector-flags">Not published</span>
 </div>
-<div class="flex items-center p-0.5 rounded bg-surface-container-low border border-surface-container-high/40 text-[11px] gap-0.5" role="tablist">
+<div class="flex items-center p-0.5 rounded bg-surface-container-low border border-wb-border text-[11px] gap-0.5" role="tablist">
 <button class="flex-1 py-1 px-1 rounded text-center transition-colors inspector-tab-btn bg-surface-container text-primary font-semibold shadow-xs" data-tab="details" type="button" role="tab" id="tab-details" aria-controls="pane-details" aria-selected="true" tabindex="0">Details</button>
 <button class="flex-1 py-1 px-1 rounded text-center transition-colors inspector-tab-btn text-on-surface-variant hover:text-on-surface" data-tab="security" type="button" role="tab" id="tab-security" aria-controls="pane-security" aria-selected="false" tabindex="-1">Security Scan</button>
 <button class="flex-1 py-1 px-1 rounded text-center transition-colors inspector-tab-btn text-on-surface-variant hover:text-on-surface" data-tab="governance" type="button" role="tab" id="tab-governance" aria-controls="pane-governance" aria-selected="false" tabindex="-1">Governance</button>
@@ -284,7 +281,7 @@
 </div>
 <div class="space-y-1.5 pt-1">
 <span class="text-[10px] font-mono uppercase tracking-wider text-outline">Upstream Provenance</span>
-<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="details-source"></div>
+<div class="p-2 rounded bg-surface-container-low border border-wb-border font-mono text-[10px] space-y-1 text-on-surface-variant" id="details-source"></div>
 </div>
 <details class="group/ids pt-1" id="details-disclosure">
 <summary class="cursor-pointer list-none flex items-center gap-1 text-[10px] font-mono uppercase tracking-wider text-outline hover:text-on-surface select-none">
@@ -292,8 +289,8 @@
 <span>Identity and artifact references</span>
 </summary>
 <div class="space-y-2 pt-1.5">
-<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="details-identity"></div>
-<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="details-artifacts"></div>
+<div class="p-2 rounded bg-surface-container-low border border-wb-border font-mono text-[10px] space-y-1 text-on-surface-variant" id="details-identity"></div>
+<div class="p-2 rounded bg-surface-container-low border border-wb-border font-mono text-[10px] space-y-1 text-on-surface-variant" id="details-artifacts"></div>
 </div>
 </details>
 </div>
@@ -303,15 +300,15 @@
 <!-- Two slots the design source fills from a scan result. Scan publishes
      neither, so each keeps its place and states why; catalog/details.js sets
      the reasons, so the wording lives beside its siblings. -->
-<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/40 flex items-center justify-between text-[11px]" id="detector-run-state">
+<div class="p-2 rounded bg-surface-container-low border border-wb-border flex items-center justify-between text-[11px]" id="detector-run-state">
 <span class="text-on-surface-variant">Detector identities and per-engine run state</span>
 <span class="font-mono text-outline text-[10px] font-semibold">Not published</span>
 </div>
-<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/40 flex items-center justify-between text-[11px]" id="detector-finding-detail">
+<div class="p-2 rounded bg-surface-container-low border border-wb-border flex items-center justify-between text-[11px]" id="detector-finding-detail">
 <span class="text-on-surface-variant">Finding rule, severity, message and location</span>
 <span class="font-mono text-outline text-[10px] font-semibold">Not published</span>
 </div>
-<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/40 text-[10.5px] text-outline break-words" id="scanner-report-statement">Not published</div>
+<div class="p-2 rounded bg-surface-container-low border border-wb-border text-[10.5px] text-outline break-words" id="scanner-report-statement">Not published</div>
 </div>
 <div class="space-y-1.5">
 <!-- Catalog's publisher qualification for the selected entry, as its
@@ -321,7 +318,7 @@
 <span class="">Qualification</span>
 <span class="text-on-surface-variant font-mono text-[10px] normal-case tracking-normal font-normal" id="qualification-evaluated">-</span>
 </div>
-<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/40 space-y-1 text-[10.5px] text-outline" id="security-qualification">Not published</div>
+<div class="p-2 rounded bg-surface-container-low border border-wb-border space-y-1 text-[10.5px] text-outline" id="security-qualification">Not published</div>
 <div class="text-[10px] text-outline leading-snug" id="qualification-footer">Publisher qualification is not organizational authorization.</div>
 </div>
 <div class="space-y-1.5">
@@ -333,23 +330,23 @@
 </div>
 <div class="space-y-1.5 pt-1">
 <span class="text-[10px] font-mono uppercase tracking-wider text-outline font-semibold">Policy Determination</span>
-<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/40 text-[10.5px] text-outline">Not published: needs a Core determination contract. This page reads evidence and never records a decision.</div>
+<div class="p-2 rounded bg-surface-container-low border border-wb-border text-[10.5px] text-outline">Not published: needs a Core determination contract. This page reads evidence and never records a decision.</div>
 <div class="space-y-1 text-[11px] opacity-50">
-<label class="flex items-start gap-2 p-2 rounded bg-surface-container-low border border-surface-container-high/40 cursor-not-allowed">
+<label class="flex items-start gap-2 p-2 rounded bg-surface-container-low border border-wb-border cursor-not-allowed">
 <input class="mt-0.5 accent-primary" name="policy-choice" type="radio" value="hold" disabled>
 <div>
 <span class="text-on-surface-variant font-medium block leading-none mb-1">Keep held back (Recommended)</span>
 <span class="text-outline text-[10px] leading-tight block">Not published</span>
 </div>
 </label>
-<label class="flex items-start gap-2 p-2 rounded bg-surface-container-low border border-surface-container-high/40 cursor-not-allowed">
+<label class="flex items-start gap-2 p-2 rounded bg-surface-container-low border border-wb-border cursor-not-allowed">
 <input class="mt-0.5 accent-primary" name="policy-choice" type="radio" value="false_alarm" disabled>
 <div>
 <span class="text-on-surface-variant font-medium block leading-none mb-1">Not a real problem (False alarm)</span>
 <span class="text-outline text-[10px] leading-tight block">Not published</span>
 </div>
 </label>
-<label class="flex items-start gap-2 p-2 rounded bg-surface-container-low border border-surface-container-high/40 cursor-not-allowed">
+<label class="flex items-start gap-2 p-2 rounded bg-surface-container-low border border-wb-border cursor-not-allowed">
 <input class="mt-0.5 accent-primary" name="policy-choice" type="radio" value="allow_risk" disabled>
 <div>
 <span class="text-on-surface-variant font-medium block leading-none mb-1">Accept the risk and allow</span>
@@ -361,7 +358,7 @@
 </div>
 <div class="space-y-3 hidden" id="pane-governance" role="tabpanel" aria-labelledby="tab-governance">
 
-<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/40 text-[10.5px] text-on-surface-variant leading-snug">
+<div class="p-2 rounded bg-surface-container-low border border-wb-border text-[10.5px] text-on-surface-variant leading-snug">
 <span class="font-semibold text-on-surface">Operator inputs only.</span> This page never
 manufactures a decision, an approval, verifier trust or a signing key. What you do not supply
 is reported as <span class="font-mono text-outline">Not supplied</span> and refused.
@@ -369,17 +366,17 @@ is reported as <span class="font-mono text-outline">Not supplied</span> and refu
 
 <div class="space-y-1">
 <span class="text-[10px] font-mono uppercase tracking-wider text-outline">1 &middot; Subject identity (Core-derived)</span>
-<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-subject"></div>
+<div class="p-2 rounded bg-surface-container-low border border-wb-border font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-subject"></div>
 </div>
 
 <div class="space-y-1">
 <span class="text-[10px] font-mono uppercase tracking-wider text-outline">2 &middot; Import evidence</span>
-<label class="flex items-center gap-2 p-2 rounded bg-surface-container-low border border-surface-container-high/40 cursor-pointer hover:border-primary/40 transition-colors">
+<label class="flex items-center gap-2 p-2 rounded bg-surface-container-low border border-wb-border cursor-pointer hover:border-primary/40 transition-colors">
 <span class="material-symbols-outlined text-[14px] text-primary">upload_file</span>
 <span class="text-[11px] text-on-surface-variant">Choose an organization evidence envelope</span>
 <input class="hidden" id="gov-evidence-file" type="file" accept=".json,application/json">
 </label>
-<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-evidence"></div>
+<div class="p-2 rounded bg-surface-container-low border border-wb-border font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-evidence"></div>
 </div>
 
 <div class="space-y-1">
@@ -387,11 +384,11 @@ is reported as <span class="font-mono text-outline">Not supplied</span> and refu
 <div class="space-y-1.5">
 <label class="block">
 <span class="text-[10px] text-outline font-mono">Decision id</span>
-<input class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-surface-container-high/50 font-mono text-[10.5px] text-on-surface focus:border-primary/60 focus:outline-none" id="gov-decision-id" type="text" placeholder="Not supplied" autocomplete="off">
+<input class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-wb-control-border font-mono text-[10.5px] text-on-surface focus:border-primary focus:outline-none" id="gov-decision-id" type="text" placeholder="Not supplied" autocomplete="off">
 </label>
 <label class="block">
 <span class="text-[10px] text-outline font-mono">Decision digest</span>
-<input class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-surface-container-high/50 font-mono text-[10.5px] text-on-surface focus:border-primary/60 focus:outline-none" id="gov-decision-digest" type="text" placeholder="sha256:..." autocomplete="off">
+<input class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-wb-control-border font-mono text-[10.5px] text-on-surface focus:border-primary focus:outline-none" id="gov-decision-digest" type="text" placeholder="sha256:..." autocomplete="off">
 </label>
 <div class="flex gap-1.5">
 <label class="flex-1">
@@ -400,11 +397,11 @@ is reported as <span class="font-mono text-outline">Not supplied</span> and refu
      by governance/inputs.js. The page keeps no list of its own: a Core listing
      different targets changes this field with no UI edit, and a Core that
      publishes no list leaves it disabled, reading Not connected. -->
-<select class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-surface-container-high/50 font-mono text-[10.5px] text-on-surface focus:border-primary/60 focus:outline-none" id="gov-target"></select>
+<select class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-wb-control-border font-mono text-[10.5px] text-on-surface focus:border-primary focus:outline-none" id="gov-target"></select>
 </label>
 <label class="flex-1">
 <span class="text-[10px] text-outline font-mono">Effect</span>
-<select class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-surface-container-high/50 font-mono text-[10.5px] text-on-surface focus:border-primary/60 focus:outline-none" id="gov-effect">
+<select class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-wb-control-border font-mono text-[10.5px] text-on-surface focus:border-primary focus:outline-none" id="gov-effect">
 <option value="observe">observe</option>
 <option value="configure">configure</option>
 <option value="install">install</option>
@@ -415,7 +412,7 @@ is reported as <span class="font-mono text-outline">Not supplied</span> and refu
 <div class="flex gap-1.5">
 <label class="flex-1">
 <span class="text-[10px] text-outline font-mono">Route (descriptive only)</span>
-<select class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-surface-container-high/50 font-mono text-[10.5px] text-on-surface focus:border-primary/60 focus:outline-none" id="gov-route">
+<select class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-wb-control-border font-mono text-[10.5px] text-on-surface focus:border-primary focus:outline-none" id="gov-route">
 <option value="catalog">catalog</option>
 <option value="organization">organization</option>
 </select>
@@ -426,29 +423,29 @@ is reported as <span class="font-mono text-outline">Not supplied</span> and refu
 
 <div class="space-y-1">
 <span class="text-[10px] font-mono uppercase tracking-wider text-outline">3b &middot; Operator configuration</span>
-<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/40 text-[10.5px] text-on-surface-variant leading-snug">
+<div class="p-2 rounded bg-surface-container-low border border-wb-border text-[10.5px] text-on-surface-variant leading-snug">
 Your authority and your verifier trust, supplied separately from the evidence. They are held
 beside the session, never inside the imported material: material that carries its own
 <span class="font-mono text-outline">roots</span> or keys is refused.
 </div>
 <div class="space-y-1">
-<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-surface-container-high/40 cursor-pointer hover:border-primary/40 transition-colors">
+<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-wb-border cursor-pointer hover:border-primary/40 transition-colors">
 <span class="material-symbols-outlined text-[14px] text-secondary">gavel</span>
 <span class="text-[10.5px] text-on-surface-variant">Authority bundle (policy bundle JSON)</span>
 <input class="hidden" id="gov-authority-file" type="file" accept=".json,application/json">
 </label>
-<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-surface-container-high/40 cursor-pointer hover:border-primary/40 transition-colors">
+<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-wb-border cursor-pointer hover:border-primary/40 transition-colors">
 <span class="material-symbols-outlined text-[14px] text-secondary">key</span>
 <span class="text-[10.5px] text-on-surface-variant">Verifier trust (roots and expected)</span>
 <input class="hidden" id="gov-trust-file" type="file" accept=".json,application/json">
 </label>
-<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-surface-container-high/40 cursor-pointer hover:border-primary/40 transition-colors">
+<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-wb-border cursor-pointer hover:border-primary/40 transition-colors">
 <span class="material-symbols-outlined text-[14px] text-secondary">inventory_2</span>
 <span class="text-[10.5px] text-on-surface-variant">Scan attestation material</span>
 <input class="hidden" id="gov-material-file" type="file" accept=".json,application/json">
 </label>
 </div>
-<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-operator-files"></div>
+<div class="p-2 rounded bg-surface-container-low border border-wb-border font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-operator-files"></div>
 </div>
 
 <div class="space-y-1">
@@ -457,7 +454,7 @@ beside the session, never inside the imported material: material that carries it
 <span class="material-symbols-outlined text-[14px]">build</span>
 <span class="">Prepare through Core</span>
 </button>
-<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-prepared"></div>
+<div class="p-2 rounded bg-surface-container-low border border-wb-border font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-prepared"></div>
 <div class="flex gap-1.5">
 <button class="flex-1 text-[10px] font-mono px-1.5 py-1 rounded bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-40 disabled:cursor-not-allowed" id="gov-download-input" type="button" disabled>Download governance-input.json</button>
 <button class="flex-1 text-[10px] font-mono px-1.5 py-1 rounded bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-40 disabled:cursor-not-allowed" id="gov-download-evidence" type="button" disabled>Download evidence</button>
@@ -466,7 +463,7 @@ beside the session, never inside the imported material: material that carries it
 
 <div class="space-y-1">
 <span class="text-[10px] font-mono uppercase tracking-wider text-outline">4b &middot; Observe installed files &middot; optional</span>
-<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/40 text-[10.5px] text-on-surface-variant leading-snug">
+<div class="p-2 rounded bg-surface-container-low border border-wb-border text-[10.5px] text-on-surface-variant leading-snug">
 Supply the upstream artifact manifest, the root the files sit under, and the folder itself.
 They are uploaded into this session's temporary workspace, where <span class="font-mono text-outline">@aihq/core</span>
 checks the uploaded copies one to one against the verified scan, at their exact paths. That proves the
@@ -475,22 +472,22 @@ on your own machine. Nothing here installs, applies or executes anything, and no
 outside the session.
 </div>
 <div class="space-y-1">
-<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-surface-container-high/40 cursor-pointer hover:border-primary/40 transition-colors">
+<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-wb-border cursor-pointer hover:border-primary/40 transition-colors">
 <span class="material-symbols-outlined text-[14px] text-secondary">receipt_long</span>
 <span class="text-[10.5px] text-on-surface-variant">Upstream artifact manifest (manifest.json)</span>
 <input class="hidden" id="gov-observation-manifest-file" type="file" accept=".json,application/json">
 </label>
 <label class="block">
 <span class="text-[10px] text-outline font-mono">Install root (root-relative directory)</span>
-<input class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-surface-container-high/50 font-mono text-[10.5px] text-on-surface focus:border-primary/60 focus:outline-none" id="gov-observation-root" type="text" placeholder="packs/governance-quality/aih-gov-doctor" autocomplete="off">
+<input class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-wb-control-border font-mono text-[10.5px] text-on-surface focus:border-primary focus:outline-none" id="gov-observation-root" type="text" placeholder="packs/governance-quality/aih-gov-doctor" autocomplete="off">
 </label>
-<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-surface-container-high/40 cursor-pointer hover:border-primary/40 transition-colors">
+<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-wb-border cursor-pointer hover:border-primary/40 transition-colors">
 <span class="material-symbols-outlined text-[14px] text-secondary">folder_open</span>
 <span class="text-[10.5px] text-on-surface-variant">The folder that root names</span>
 <input class="hidden" id="gov-observation-files" type="file" webkitdirectory multiple>
 </label>
 </div>
-<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-observation"></div>
+<div class="p-2 rounded bg-surface-container-low border border-wb-border font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-observation"></div>
 </div>
 
 <div class="space-y-1">
@@ -500,22 +497,22 @@ outside the session.
 <span class="">Reopen saved bytes and consume</span>
 </button>
 <div class="grid grid-cols-2 gap-1" id="gov-statuses"></div>
-<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 text-[10.5px] space-y-1 text-on-surface-variant" id="gov-verdict"></div>
+<div class="p-2 rounded bg-surface-container-low border border-wb-border text-[10.5px] space-y-1 text-on-surface-variant" id="gov-verdict"></div>
 </div>
 
 <div class="space-y-1">
 <span class="text-[10px] font-mono uppercase tracking-wider text-outline">6 &middot; Reopen downloaded files in a fresh session</span>
-<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/40 text-[10.5px] text-on-surface-variant leading-snug">
+<div class="p-2 rounded bg-surface-container-low border border-wb-border text-[10.5px] text-on-surface-variant leading-snug">
 Load the exact bytes you downloaded back into a new session that knows nothing about the one
 that produced them. Consumption then re-derives the whole verdict from those bytes alone.
 </div>
 <div class="space-y-1">
-<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-surface-container-high/40 cursor-pointer hover:border-primary/40 transition-colors">
+<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-wb-border cursor-pointer hover:border-primary/40 transition-colors">
 <span class="material-symbols-outlined text-[14px] text-primary">description</span>
 <span class="text-[10.5px] text-on-surface-variant">governance-input.json</span>
 <input class="hidden" id="gov-reopen-input-file" type="file" accept=".json,application/json">
 </label>
-<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-surface-container-high/40 cursor-pointer hover:border-primary/40 transition-colors">
+<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-wb-border cursor-pointer hover:border-primary/40 transition-colors">
 <span class="material-symbols-outlined text-[14px] text-primary">description</span>
 <span class="text-[10.5px] text-on-surface-variant">organization-evidence.json</span>
 <input class="hidden" id="gov-reopen-evidence-file" type="file" accept=".json,application/json">
@@ -525,10 +522,10 @@ that produced them. Consumption then re-derives the whole verdict from those byt
 <span class="material-symbols-outlined text-[14px]">restore_page</span>
 <span class="">Open these bytes in a fresh session</span>
 </button>
-<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-reopen"></div>
+<div class="p-2 rounded bg-surface-container-low border border-wb-border font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-reopen"></div>
 </div>
 
-<div class="space-y-1 pt-1 border-t border-surface-container-high/40">
+<div class="space-y-1 pt-1 border-t border-wb-border">
 <span class="text-[10px] font-mono uppercase tracking-wider text-outline">Validation mode</span>
 <div class="p-2 rounded bg-tertiary/10 border border-tertiary/30 text-[10.5px] text-on-surface-variant leading-snug" id="gov-fixture-note">
 Generates a <span class="font-semibold text-tertiary">signed test fixture</span> and its matching
@@ -539,7 +536,7 @@ authenticates a statement; it never establishes that the claimed measurements oc
 <span class="material-symbols-outlined text-[14px]">science</span>
 <span class="">Load labelled validation fixture</span>
 </button>
-<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-detector"></div>
+<div class="p-2 rounded bg-surface-container-low border border-wb-border font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-detector"></div>
 </div>
 
 </div>
@@ -551,14 +548,14 @@ authenticates a statement; it never establishes that the claimed measurements oc
 <button class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-container text-outline cursor-not-allowed" id="download-json-btn" type="button" disabled aria-disabled="true">Download</button>
 </div>
 </div>
-<div class="p-2.5 rounded bg-surface-container-lowest border border-surface-container-high/60 font-mono text-[10.5px] leading-snug space-y-0.5 text-outline overflow-x-auto" id="live-json-viewer">Not published: no policy compiler or template contract. This page does not export a policy.</div>
-<div class="p-2 rounded bg-surface-container-low border border-surface-container-high/30 text-[10px] text-outline flex items-center gap-1.5">
+<div class="p-2.5 rounded bg-surface-container-lowest border border-wb-border font-mono text-[10.5px] leading-snug space-y-0.5 text-outline overflow-x-auto" id="live-json-viewer">Not published: no policy compiler or template contract. This page does not export a policy.</div>
+<div class="p-2 rounded bg-surface-container-low border border-wb-border text-[10px] text-outline flex items-center gap-1.5">
 <span class="material-symbols-outlined text-[13px] text-primary">sync</span>
 <span class="">Policy JSON stays unavailable until Core publishes the contract.</span>
 </div>
 </div>
 </div>
-<div class="p-2 bg-surface-container-lowest border-t border-surface-container-high/60 flex items-center justify-between gap-2 shrink-0">
+<div class="p-2 bg-surface-container-lowest border-t border-wb-border flex items-center justify-between gap-2 shrink-0">
 <button class="px-2.5 py-1.5 rounded text-on-surface-variant text-[11px] opacity-50 cursor-not-allowed" id="reset-item-btn" type="button" disabled aria-disabled="true" title="Not published: needs a Core template contract">Reset Item</button>
 <button class="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-surface-container text-on-surface-variant text-[12px] font-medium opacity-50 cursor-not-allowed" id="apply-staging-btn" type="button" disabled aria-disabled="true" title="Not published: needs a Core compile/apply contract">
 <span class="material-symbols-outlined text-[14px]">done_all</span>
@@ -568,14 +565,14 @@ authenticates a statement; it never establishes that the claimed measurements oc
 </aside>
 </div>
 </div>
-<div id="org-modal-overlay" class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs transition-opacity duration-200 hidden" role="dialog" aria-modal="true" aria-labelledby="org-modal-title">
-<div class="relative w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col rounded bg-surface-container-lowest border border-surface-container-high/60 shadow-2xl overflow-hidden" id="org-modal-card">
-<div class="flex items-start justify-between p-4 border-b border-surface-container-high/40 bg-surface-container-low/50">
+<div id="org-modal-overlay" class="fixed inset-0 z-50 flex items-center justify-center bg-wb-scrim backdrop-blur-xs transition-opacity duration-200 hidden" role="dialog" aria-modal="true" aria-labelledby="org-modal-title">
+<div class="relative w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col rounded bg-surface-container-lowest border border-wb-border shadow-panel overflow-hidden" id="org-modal-card">
+<div class="flex items-start justify-between p-4 border-b border-wb-border bg-surface-container-low/50">
 <div class="space-y-1">
 <div class="flex items-center gap-2">
 <span class="material-symbols-outlined text-primary text-[18px]">domain</span>
-<h2 class="text-[16px] font-semibold text-white tracking-tight" id="org-modal-title">Your organization</h2>
-<span class="px-1.5 py-0.5 rounded bg-surface-container-highest font-mono text-[10px] text-secondary font-medium">enterprise policy</span>
+<h2 class="text-wb-heading font-semibold text-wb-title tracking-tight" id="org-modal-title">Your organization</h2>
+<span class="px-1.5 py-0.5 rounded bg-surface-container-highest font-mono text-[10px] text-metadata-revision font-medium">enterprise policy</span>
 </div>
 <p class="text-[11.5px] text-on-surface-variant leading-relaxed max-w-xl">Entered by you and kept in this browser as a draft. Nothing here is read from git, and saving it does not create policy authority.</p>
 </div>
@@ -586,24 +583,24 @@ authenticates a statement; it never establishes that the claimed measurements oc
 <form class="p-5 overflow-y-auto space-y-4 text-[12px]" id="org-form" novalidate>
 <div class="space-y-1">
 <label class="block font-mono text-[10.5px] uppercase tracking-wider text-outline font-semibold" for="org-input-name">NAME</label>
-<input type="text" id="org-input-name" autocomplete="organization" maxlength="120" class="w-full px-3 py-1.5 rounded bg-[#141822] border border-surface-container-high/60 text-on-surface text-[12px] font-medium focus:border-primary focus:outline-none">
-<p class="text-[10.5px] text-outline/80 leading-normal">Shown at the top of the page, and as the name of your own source.</p>
+<input type="text" id="org-input-name" autocomplete="organization" maxlength="120" class="w-full px-3 py-1.5 rounded bg-wb-input border border-wb-control-border text-on-surface text-[12px] font-medium focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+<p class="text-[10.5px] text-outline leading-normal">Shown at the top of the page, and as the name of your own source.</p>
 <p class="text-[10.5px] text-error leading-normal hidden" id="org-error-name" role="alert"></p>
 </div>
 <div class="space-y-1">
 <div class="flex items-center gap-1.5">
 <label class="block font-mono text-[10.5px] uppercase tracking-wider text-outline font-semibold" for="org-input-id">SHORT ID</label>
 </div>
-<input type="text" id="org-input-id" autocomplete="off" spellcheck="false" maxlength="40" class="w-60 font-mono px-3 py-1.5 rounded bg-[#141822] border border-surface-container-high/60 text-on-surface text-[12px] font-medium focus:border-primary focus:outline-none">
-<p class="text-[10.5px] text-outline/80 leading-normal">Lower case, no spaces. Used in file names and as the issuer of every policy. Hard to change later.</p>
+<input type="text" id="org-input-id" autocomplete="off" spellcheck="false" maxlength="40" class="w-60 font-mono px-3 py-1.5 rounded bg-wb-input border border-wb-control-border text-on-surface text-[12px] font-medium focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+<p class="text-[10.5px] text-outline leading-normal">Lower case, no spaces. Used in file names and as the issuer of every policy. Hard to change later.</p>
 <p class="text-[10.5px] text-error leading-normal hidden" id="org-error-id" role="alert"></p>
 </div>
 <div class="space-y-1">
 <div class="flex items-center gap-1.5">
 <label class="block font-mono text-[10.5px] uppercase tracking-wider text-outline font-semibold" for="org-input-repo">POLICY REPO</label>
 </div>
-<input type="text" id="org-input-repo" autocomplete="off" spellcheck="false" maxlength="200" placeholder="github.com/your-org/ai-policies" class="w-full font-mono text-primary px-3 py-1.5 rounded bg-[#141822] border border-surface-container-high/60 text-on-surface text-[12px] font-medium focus:border-primary focus:outline-none">
-<p class="text-[10.5px] text-outline/80 leading-normal">Where your policy file lives. Everyone gets read access; who can write is decided in GitHub, not here. One organization per repo. This page does not read or write that repository.</p>
+<input type="text" id="org-input-repo" autocomplete="off" spellcheck="false" maxlength="200" placeholder="github.com/your-org/ai-policies" class="w-full font-mono text-primary px-3 py-1.5 rounded bg-wb-input border border-wb-control-border text-on-surface text-[12px] font-medium focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+<p class="text-[10.5px] text-outline leading-normal">Where your policy file lives. Everyone gets read access; who can write is decided in GitHub, not here. One organization per repo. This page does not read or write that repository.</p>
 <p class="text-[10.5px] text-error leading-normal hidden" id="org-error-repo" role="alert"></p>
 </div>
 <div class="space-y-1.5">
@@ -612,28 +609,28 @@ authenticates a statement; it never establishes that the claimed measurements oc
 </div>
 <div class="flex flex-wrap items-center gap-2" id="org-email-list"></div>
 <div class="flex items-center gap-2">
-<input type="email" id="org-input-email" autocomplete="email" spellcheck="false" maxlength="254" placeholder="name@your-org.example" class="w-64 font-mono px-3 py-1.5 rounded bg-[#141822] border border-surface-container-high/60 text-on-surface text-[12px] font-medium focus:border-primary focus:outline-none">
-<button type="button" id="org-add-email-btn" class="flex items-center gap-1 px-2.5 py-1 rounded border border-dashed border-surface-container-high hover:border-primary text-primary text-[11px] font-medium transition-colors cursor-pointer">
+<input type="email" id="org-input-email" autocomplete="email" spellcheck="false" maxlength="254" placeholder="name@your-org.example" class="w-64 font-mono px-3 py-1.5 rounded bg-wb-input border border-wb-control-border text-on-surface text-[12px] font-medium focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+<button type="button" id="org-add-email-btn" class="flex items-center gap-1 px-2.5 py-1 rounded border border-dashed border-wb-border hover:border-primary text-primary text-[11px] font-medium transition-colors cursor-pointer">
 <span class="material-symbols-outlined text-[13px]">add</span>
 <span class="">Add email</span>
 </button>
 </div>
-<p class="text-[10.5px] text-outline/80 leading-normal">Work emails, recorded as attribution on decisions you make. They are not logins.</p>
+<p class="text-[10.5px] text-outline leading-normal">Work emails, recorded as attribution on decisions you make. They are not logins.</p>
 <p class="text-[10.5px] text-error leading-normal hidden" id="org-error-email" role="alert"></p>
 </div>
-<div class="space-y-1.5 pt-1 border-t border-surface-container-high/30">
+<div class="space-y-1.5 pt-1 border-t border-wb-border">
 <div class="flex items-center gap-1.5">
 <span class="block font-mono text-[10.5px] uppercase tracking-wider text-outline font-semibold">HOW USERS KNOW A POLICY IS REALLY YOURS</span>
 <span class="px-1 py-0.2 rounded bg-surface-container text-outline font-mono text-[9px]">later</span>
 </div>
 <div class="grid grid-cols-2 gap-2 max-w-md" role="radiogroup" aria-label="Posture preference" id="org-posture"></div>
-<p class="text-[10.5px] text-outline/80 leading-normal">A preference only. Signing and verifying policies is not implemented in this page, and choosing one does not enable it.</p>
+<p class="text-[10.5px] text-outline leading-normal">A preference only. Signing and verifying policies is not implemented in this page, and choosing one does not enable it.</p>
 </div>
 </form>
-<div class="p-3 px-5 border-t border-surface-container-high/40 bg-surface-container-lowest flex items-center justify-between gap-2 shrink-0">
+<div class="p-3 px-5 border-t border-wb-border bg-surface-container-lowest flex items-center justify-between gap-2 shrink-0">
 <button type="button" id="cancel-org-modal-btn" class="px-3 py-1.5 rounded hover:bg-surface-container text-on-surface-variant hover:text-on-surface text-[12px] font-medium transition-colors cursor-pointer">Cancel</button>
 <div class="flex items-center gap-2">
-<button type="submit" form="org-form" id="save-org-modal-btn" class="flex items-center gap-1.5 px-4 py-1.5 rounded bg-primary hover:bg-primary-bright text-white text-[12px] font-medium transition-colors shadow-xs cursor-pointer">
+<button type="submit" form="org-form" id="save-org-modal-btn" class="flex items-center gap-1.5 px-4 py-1.5 rounded bg-primary-container hover:bg-primary-bright text-on-primary text-[12px] font-medium transition-colors shadow-xs cursor-pointer">
 <span class="material-symbols-outlined text-[14px]">check</span>
 <span class="">Save changes</span>
 </button>

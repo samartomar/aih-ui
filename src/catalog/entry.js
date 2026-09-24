@@ -15,11 +15,7 @@
 import { text } from "../app/dom.js";
 import { NOT_PUBLISHED } from "../app/absence.js";
 
-/*
- * Icon and colour per kind, as the design source renders them at run time: a
- * skill card shows `bolt` in the skill primitive's colour. Kinds the design
- * tokens give no primitive colour to keep the neutral card accent.
- */
+/* Kind icons and accents use the theme's per-kind color roles. */
 export const KIND_ICON = {
   skill: "bolt",
   agent: "smart_toy",
@@ -29,10 +25,10 @@ export const KIND_ICON = {
   tool: "handyman",
 };
 
-export const KIND_PRIMITIVE = {
-  skill: "primitive-skill",
-  agent: "primitive-agent",
-  mcp: "primitive-mcp",
+export const KIND_TONE = {
+  skill: "text-kind-skill",
+  agent: "text-kind-agent",
+  mcp: "text-kind-mcp",
 };
 
 /* A published revision, shortened for display. Raw revision digests keep their "sha256:"

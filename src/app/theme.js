@@ -1,31 +1,6 @@
-/*
- * Making a theme change take effect on elements that are already on screen.
- *
- * THE PROBLEM
- *
- * The design source delivers both themes as CSS custom properties: tokens.css
- * defines `--card-bg`, `--card-title` and the rest under `html.dark` and
- * `html.light`, and wb.css applies them. Flipping the class on <html> therefore
- * changes every variable at once, which is the right design.
- *
- * But an element carrying a colour transition - `transition-all` on a card,
- * `transition-colors` on a filter pill or a rail row - does not repaint when
- * the variable behind its colour changes. It keeps painting the value from
- * before the flip, and keeps it indefinitely: the transition never completes,
- * so a card stays white on a dark page with white text on it, unreadable.
- * Elements built after the flip are correct, which is why reloading or
- * filtering "fixed" it and hid the cause.
- *
- * THE FIX
- *
- * Suppress transitions for the frame in which the theme changes. With no
- * transition to hold the old value, every element recomputes against the new
- * variables immediately; restoring transitions afterwards leaves them at their
- * new values, so nothing animates and nothing is stale.
- *
- * This is application theme handling. The design source is not modified: the
- * one rule it needs lives in app/workbench.css.
- */
+/* Keep a root theme change visually atomic by briefly suppressing transitions.
+ * mode.js owns the preference; tokens.css owns every color in both modes.
+ * The transition override lives in app/workbench.css. */
 
 /** The class that turns transitions off. Defined in app/workbench.css. */
 const SWITCHING = "theme-switching";
@@ -33,7 +8,7 @@ const SWITCHING = "theme-switching";
 /**
  * Watches <html> for a theme change and settles the page when one happens.
  *
- * `mode.js` from the design source owns the toggle itself - the button, the
+ * `mode.js` owns the toggle itself - the button, the
  * stored preference and the `?mode=` override. This only reacts to the result,
  * so the two cannot disagree about which theme is current.
  */

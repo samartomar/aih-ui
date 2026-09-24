@@ -1,0 +1,152 @@
+/* Workbench theme: only these root roles contain palette values.
+ * Custom graphite / white surfaces use explicit layers and restrained sheen.
+ * Layering reference: https://carbondesignsystem.com/elements/color/overview/
+ * mode.js switches html.dark / html.light; components never invert colors. */
+:root {
+  color-scheme: dark;
+  --color-canvas: #08090a;
+  --color-chrome: #0d0e10;
+  --color-panel: #121315;
+  --color-card: #181a1d;
+  --color-card-hover: #202226;
+  --color-card-sheen: #27292e;
+  --color-card-base: #111214;
+  --color-chrome-sheen: #1c1e22;
+  --color-field: #0d0e10;
+  --color-subtle: #202226;
+  --color-hover: #292c31;
+  --color-border: #2c2e33;
+  --color-card-border: #393c42;
+  --color-control-border: #767b85;
+  --color-text: #f3f4f6;
+  --color-muted: #a1a5ae;
+  --color-meta: #bec1c9;
+  --card-surface: linear-gradient(155deg, var(--color-card-sheen), var(--color-card) 38%, var(--color-card-base));
+  --card-surface-hover: linear-gradient(155deg, var(--color-hover), var(--color-card-hover) 38%, var(--color-card));
+  --card-highlight: inset 0 1px 0 rgb(255 255 255 / 0.09);
+  --chrome-surface: linear-gradient(180deg, var(--color-chrome-sheen), var(--color-chrome));
+  --chrome-highlight: inset 0 1px 0 rgb(255 255 255 / 0.07);
+  --color-metadata-emphasis: #ffb95f;
+  --color-metadata-revision: #4edea3;
+  --color-metric-selected: rgb(255 185 95 / 0.07);
+  --color-kind-skill: #f59e0b;
+  --color-kind-command: #06b6d4;
+  --color-kind-agent: #a855f7;
+  --color-kind-mcp: #3b82f6;
+  --color-kind-hook: #10b981;
+  --color-kind-token: #f97316;
+  --color-ledger-command: #38bdf8;
+  --color-ledger-agent: #c084fc;
+  --color-ledger-mcp: #60a5fa;
+  --color-ledger-hook: #34d399;
+  --color-primary: #7db7ff;
+  --color-primary-container: #2563eb;
+  --color-primary-bright: #1d4ed8;
+  --color-on-primary: #ffffff;
+  --color-success: #71d7aa;
+  --color-success-bg: #163c2d;
+  --color-warning: #e6bd7b;
+  --color-warning-bg: #3e3020;
+  --color-error: #ffa6a2;
+  --color-error-container: #482426;
+  --color-scrim: rgb(0 0 0 / 0.65);
+  --shadow-xs: 0 2px 4px rgb(0 0 0 / 0.4);
+  --shadow-sm: 0 5px 14px rgb(0 0 0 / 0.5);
+  --panel-shadow: 0 12px 32px rgb(0 0 0 / 0.55);
+}
+
+html.light {
+  color-scheme: light;
+  --color-canvas: #f1f3f6;
+  --color-chrome: #ffffff;
+  --color-panel: #ffffff;
+  --color-card: #ffffff;
+  --color-card-hover: #ffffff;
+  --color-card-sheen: #ffffff;
+  --color-card-base: #ffffff;
+  --color-chrome-sheen: #ffffff;
+  --color-field: #ffffff;
+  --color-subtle: #f3f5f8;
+  --color-hover: #e9edf3;
+  --color-border: #e1e5eb;
+  --color-card-border: #d9dfe7;
+  --color-control-border: #7c8593;
+  --color-text: #181c24;
+  --color-muted: #626b7a;
+  --color-meta: #4c5667;
+  --card-surface: none;
+  --card-surface-hover: none;
+  --card-highlight: inset 0 1px 0 rgb(255 255 255 / 0.8);
+  --chrome-surface: none;
+  --chrome-highlight: inset 0 -1px 0 rgb(255 255 255 / 0.8);
+  --color-metadata-emphasis: #b45309;
+  --color-metadata-revision: #1a7f37;
+  --color-metric-selected: rgb(180 83 9 / 0.07);
+  --color-kind-skill: #a15c00;
+  --color-kind-command: #0e7490;
+  --color-kind-agent: #7e22ce;
+  --color-kind-mcp: #1d4ed8;
+  --color-kind-hook: #047857;
+  --color-kind-token: #c2410c;
+  --color-ledger-command: var(--color-kind-command);
+  --color-ledger-agent: var(--color-kind-agent);
+  --color-ledger-mcp: var(--color-kind-mcp);
+  --color-ledger-hook: var(--color-kind-hook);
+  --color-primary: #185db6;
+  --color-primary-container: #185db6;
+  --color-primary-bright: #124b96;
+  --color-on-primary: #ffffff;
+  --color-success: #17663f;
+  --color-success-bg: #e8f5ee;
+  --color-warning: #8c4b11;
+  --color-warning-bg: #fff4e3;
+  --color-error: #b42328;
+  --color-error-container: #fff0ef;
+  --color-scrim: rgb(0 0 0 / 0.3);
+  --shadow-xs: 0 2px 4px rgb(24 39 61 / 0.07);
+  --shadow-sm: 0 5px 14px rgb(24 39 61 / 0.12);
+  --panel-shadow: 0 12px 32px rgb(24 39 61 / 0.16);
+}
+
+/* Existing utility names share the same roles. No separate component palettes. */
+:root {
+  --color-secondary: var(--color-success);
+  --color-secondary-container: var(--color-success-bg);
+  --color-tertiary: var(--color-warning);
+  --color-tertiary-container: var(--color-warning-bg);
+  --color-background: var(--color-canvas);
+  --color-on-background: var(--color-text);
+  --color-surface: var(--color-canvas);
+  --color-surface-dim: var(--color-canvas);
+  --color-surface-container-lowest: var(--color-panel);
+  --color-surface-container-low: var(--color-subtle);
+  --color-surface-container: var(--color-subtle);
+  --color-surface-container-high: var(--color-hover);
+  --color-surface-container-highest: var(--color-hover);
+  --color-surface-card: var(--color-card);
+  --color-surface-variant: var(--color-subtle);
+  --color-surface-bright: var(--color-card);
+  --color-on-surface: var(--color-text);
+  --color-on-surface-variant: var(--color-meta);
+  --color-outline: var(--color-muted);
+  --color-outline-variant: var(--color-border);
+  --color-scrollbar-thumb: var(--color-border);
+  --color-scrollbar-thumb-hover: var(--color-control-border);
+  --border-hairline: var(--color-border);
+}
+
+/* Type, shape and motion. */
+:root {
+  --type-body: 11px;
+  --type-heading: 16px;
+  --type-metric: 18px;
+  --font: "Geist", sans-serif;
+  --mono: "Geist Mono", monospace;
+  --fw-regular: 400; --fw-medium: 500; --fw-strong: 600; --fw-title: 700;
+  --track-title: -0.01em;
+  --font-title: var(--mono); --font-lab: var(--mono);
+  --r-sm: 2px; --r: 4px; --r-lg: 6px; --r-full: 8px;
+  --ease: 180ms ease;
+  --ease-rail: 240ms cubic-bezier(0.2, 0, 0, 1);
+  --ease-panel: 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}

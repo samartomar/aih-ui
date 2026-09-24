@@ -1,11 +1,10 @@
 /*
  * Local presentation rules for the Workbench page.
  *
- * Everything the design source already defines stays in the prototype's own
- * stylesheets (tokens.css, wb.css). Only what this page adds lives here.
+ * Interaction-specific styling layered over styles/workbench.css.
  */
 
-/* The Material Symbols axis the prototype renders its icons with. */
+/* The Material Symbols axis used by the Workbench icons. */
 .material-symbols-outlined {
   font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
 }
@@ -27,14 +26,8 @@
 /* The provenance disclosure's marker would sit inside the compact strip. */
 #provenance-strip summary::-webkit-details-marker { display: none; }
 
-/* The frame in which the theme changes.
- *
- * Both themes are CSS custom properties, so flipping the class on <html>
- * changes every colour at once. An element with a colour transition does not
- * repaint when the variable behind its colour changes - it holds the value
- * from before the flip, which left cards white on a dark page. Turning
- * transitions off for that one frame makes every element recompute against the
- * new variables; app/theme.js adds and removes this class. */
+/* Suppress color interpolation during a root theme change so foregrounds and
+ * surfaces switch together. app/theme.js adds and removes this class. */
 html.theme-switching,
 html.theme-switching *,
 html.theme-switching *::before,

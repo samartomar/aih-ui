@@ -1,4 +1,5 @@
 node_modules/
+src/styles/tailwind.css
 dist/
 *.tgz
 .tmp/

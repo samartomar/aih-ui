@@ -19,9 +19,7 @@
  *   - signing. The Vibe / Enterprise choice is recorded as a preference only.
  *     Signing and verifying policies is not implemented here.
  *
- * Layout and labels come from prototype/screens/admin-sources.html. Its Acme
- * sample values are not carried over: fields start empty or hold what the user
- * saved.
+ * Fields start empty or hold what the user saved.
  */
 
 import { el } from "./dom.js";
@@ -151,7 +149,7 @@ export function createOrganization({ elements, onChange }) {
       return;
     }
     working.emails.forEach((email, index) => {
-      const chip = el("div", "flex items-center gap-1 px-2.5 py-1 rounded bg-[#141822] border border-surface-container-high/60 text-[11.5px] font-mono text-on-surface");
+      const chip = el("div", "flex items-center gap-1 px-2.5 py-1 rounded bg-wb-card border border-wb-border text-[11.5px] font-mono text-on-surface");
       chip.appendChild(el("span", "material-symbols-outlined text-[13px] text-outline", "mail"));
       chip.appendChild(el("span", "", email));
       const remove = el("button", "ml-0.5 p-0.5 rounded hover:bg-surface-container-high text-outline hover:text-on-surface flex items-center cursor-pointer");
@@ -176,13 +174,13 @@ export function createOrganization({ elements, onChange }) {
         "button",
         selected
           ? "p-2.5 rounded bg-surface-container border border-primary text-primary cursor-pointer flex flex-col justify-between shadow-xs text-left"
-          : "p-2.5 rounded bg-[#141822] border border-surface-container-high/50 cursor-pointer hover:border-surface-container-high flex flex-col justify-between text-left",
+          : "p-2.5 rounded bg-wb-card border border-wb-border cursor-pointer hover:border-wb-border flex flex-col justify-between text-left",
       );
       tile.type = "button";
       tile.setAttribute("role", "radio");
       tile.setAttribute("aria-checked", String(selected));
       const head = el("div", "flex items-center justify-between");
-      const title = el("span", `text-[12px] font-semibold ${selected ? "text-white" : "text-on-surface-variant"} flex items-center gap-1`);
+      const title = el("span", `text-[12px] font-semibold ${selected ? "text-wb-title" : "text-on-surface-variant"} flex items-center gap-1`);
       if (selected) title.appendChild(el("span", "w-1.5 h-1.5 rounded-full bg-secondary"));
       title.appendChild(document.createTextNode(posture.title));
       head.appendChild(title);

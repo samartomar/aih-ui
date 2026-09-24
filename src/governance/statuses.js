@@ -21,7 +21,7 @@ export function createStatuses({ elements }) {
         const value = view[axis];
         const cell = el(
           "div",
-          "p-1.5 rounded bg-surface-container-low border border-surface-container-high/30 space-y-0.5",
+          "p-1.5 rounded bg-surface-container-low border border-wb-border space-y-0.5",
         );
         cell.appendChild(el("div", "text-[9px] font-mono uppercase tracking-wider text-outline", axis));
         cell.appendChild(

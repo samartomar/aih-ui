@@ -84,7 +84,7 @@ export function createVerdict({ elements, onConsume }) {
       box.appendChild(
         el(
           "div",
-          "pt-1 mt-1 border-t border-surface-container-high/40 text-[10.5px] text-outline leading-snug",
+          "pt-1 mt-1 border-t border-wb-border text-[10.5px] text-outline leading-snug",
           executionSentence(view),
         ),
       );

@@ -22,23 +22,6 @@ const SERVICE = new Set([".mjs"]);
 /** Entry points the page cannot start without. */
 const REQUIRED_PAGE_ASSETS = ["index.html", "main.js"];
 
-/* Presentation-only assets carried over from the design source, unmodified.
-   These stay flat: both the prototype screen and the page reference them by
-   plain name, exactly as the design source does. */
-const PRESENTATION_FILES = [
-  // The design authority, served from the SAME origin so it can be compared at
-  // identical viewport, fonts and zoom. Screenshots taken at different origins
-  // or zoom levels are not a comparison.
-  "prototype/screens/admin-sources.html",
-  // The side-by-side / difference comparison page, at /compare.html.
-  "tools/compare.html",
-  "prototype/screens/tokens.css",
-  "prototype/screens/fonts.css",
-  "prototype/screens/wb.css",
-  "prototype/screens/mode.js",
-  "prototype/screens/tw-config.js",
-];
-
 function walk(root, extensions, prefix = "", found = []) {
   for (const item of readdirSync(join(root, prefix), { withFileTypes: true })) {
     const next = prefix ? posix.join(prefix, item.name) : item.name;
@@ -74,13 +57,6 @@ export function serviceAssets(repoRoot) {
   return served.map((relative) => ({
     from: posix.join("tools/service", relative),
     to: posix.join("service", relative),
-  }));
-}
-
-export function presentationAssets() {
-  return PRESENTATION_FILES.map((relative) => ({
-    from: relative,
-    to: relative.slice(relative.lastIndexOf("/") + 1),
   }));
 }
 
