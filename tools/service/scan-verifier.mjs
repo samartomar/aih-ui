@@ -42,6 +42,7 @@ import {
   parseScanAttestationEnvelopeV2Json,
   parseScanCandidateV2Json,
   projectVerifiedScanAttestationToCoreEvidenceEnvelopeV1,
+  readScanFindingsV1,
   readScanResultRecordV1,
   readScanResultSubjectBindingV1,
   verifyScanAttestationV2,
@@ -132,6 +133,23 @@ function attributeSigner(signer, roots) {
 function presentationFacts(verified, annexArtifacts, envelopeBytes, roots) {
   const binding = readScanResultSubjectBindingV1({ verified });
   const read = readScanResultRecordV1({ verified, annexArtifacts, envelopeBytes });
+  // Scan owns this projection. It reads typed detail only from the value its
+  // verifier minted and checks supplied annex bytes against that value. Keep a
+  // refusal local to presentation so it cannot replace Core's six-axis result.
+  let findingDetail;
+  try {
+    const findingRead = readScanFindingsV1({ verified, annexArtifacts });
+    findingDetail = findingRead.status === "available"
+      ? {
+          status: "available",
+          source: findingRead.findings.source,
+          findings: findingRead.findings.findings,
+          gaps: findingRead.findings.gaps,
+        }
+      : { status: findingRead.status, reason: findingRead.reason ?? null };
+  } catch (error) {
+    findingDetail = { status: "invalid-input", reason: error?.message ?? String(error) };
+  }
   const scannedTree =
     binding.status === "bound"
       ? {
@@ -151,6 +169,7 @@ function presentationFacts(verified, annexArtifacts, envelopeBytes, roots) {
       recordStatus: read.status,
       reason: read.reason ?? null,
       scannedTree,
+      findingDetail,
       // Nothing was read, so nothing is attributed to any configured root.
       attribution: attributeSigner(null, roots),
     };
@@ -163,6 +182,7 @@ function presentationFacts(verified, annexArtifacts, envelopeBytes, roots) {
     version: result.version,
     formatExpected: `${SCAN_RESULT_RECORD_FORMAT_V1} v${SCAN_RESULT_RECORD_VERSION_V1}`,
     scannedTree,
+    findingDetail,
     signer: result.signer,
     // Which configured trust entry this signer is, if exactly one of them is.
     attribution: attributeSigner(result.signer, roots),
@@ -182,9 +202,9 @@ function presentationFacts(verified, annexArtifacts, envelopeBytes, roots) {
     },
     observationCount: result.observations.length,
     findingCount: result.findings.length,
-    // Occurrence fingerprint and multiplicity are ALL a finding record carries.
-    // Message, location and severity are not in the attestation; the gaps below
-    // say so, and nothing here invents them.
+    // The result record carries only occurrence facts. The separate typed
+    // reader above may recover rule, level, message and location from verified
+    // annex bytes; neither reader invents missing fields.
     findings: result.findings.map((finding) => ({
       rawOccurrenceFingerprint: finding.rawOccurrenceFingerprint,
       multiplicity: finding.multiplicity,

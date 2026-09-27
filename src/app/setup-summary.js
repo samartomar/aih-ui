@@ -11,10 +11,12 @@ export function setupSummary(settings, location) {
     list.append(group);
   };
   row("Experience", experienceLabel(settings));
-  if (settings.organization) {
+  if (settings.role === "admin" && settings.organization) {
     row("Organization", `${settings.organization.name} · ${settings.organization.shortId}`);
-    row(settings.role === "developer" ? "Policy repository supplied by your admin" : "Policy repository", settings.organization.policyRepo);
+    row("Policy repository", settings.organization.policyRepo);
     row("Organization contacts", settings.organization.emails.join(", ") || "Not supplied");
+  } else if (settings.role === "developer") {
+    row("Organization policy", "Open the admin-supplied policy in the Policy workspace");
   }
   row("Optional AIH requests", CAPABILITIES.filter((item) => settings.capabilities.includes(item.id)).map((item) => item.title).join(", ") || "None selected");
   row("AI clients", settings.clients.join(", ") || "None selected");

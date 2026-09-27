@@ -6,6 +6,7 @@ The Policy Workbench user interface for AIH, built as an independent application
 
 - The screens, interaction and presentation of the Policy Workbench.
 - `src/` owns the live screens, design tokens, and presentation. Tailwind utilities are compiled locally from the classes used in `src/`.
+- `prototype/` is retained as a separate design reference. The running page does not import it.
 - Local onboarding preferences (experience, organization context, requested assistance and explicit AI clients). These are UI settings, not policy artifacts or enterprise authorization.
 
 ## What it must never contain
@@ -42,6 +43,9 @@ src/
     setup-model.js      versioned UI settings shape and input validation
     settings-client.js  local setup API transport
     setup-summary.js    read-only review of saved preferences
+    policy-import.js    read-only local PolicyBundle structure review
+    decision-import.js  read-only local Decision V2 structure review
+    policy-workspace.js role-specific policy workspace presentation
   styles/               Workbench design tokens and presentation rules
     tokens.css          dark and light colour roles
     workbench.css       compact layout and component styling
@@ -162,6 +166,12 @@ The inspector width is controlled by `--inspector-width` (340px), capped by the
 viewport when shown as an overlay. Its Policy JSON icon retains a named keyboard
 tab. Published prose stays plain text; identifiers, paths and digests use
 selectable, wrapping code blocks with theme-aware surface and text roles.
+The inspector starts collapsed and cannot open without a selected entry; closed
+content is inert. Its header shows the name and a kind icon with a hover/focus
+hint. Full source fields appear once in Upstream Provenance, and each evidence
+summary appears once with its record in Security. Core-derived identities and
+verification states remain separately labeled in Governance. Unavailable policy
+Apply/Reset actions live with Policy JSON.
 The current public presentation contract supplies extracted descriptions, not
 full Markdown bodies. Policy JSON remains an unavailable placeholder until a
 public compiler/template contract exists. Governance downloads keep the original
@@ -318,7 +328,9 @@ label or enabled state is invented.
 A card's slots mean what the Workbench design says they mean: the category badge,
 the publisher's description, the scan status and the token estimate. Where a slot
 has no published value it keeps its place, its look and its size and reads
-**Not published**. The description slot keeps its three lines, so the grid keeps
+**Not published**. Card descriptions use the dedicated 10.5px type token and a
+1.5 line height, reserving three lines even for unavailable text. The inspector
+retains the fuller description. This keeps
 the Workbench design's card proportions.
 
 ### Publisher titles and descriptions come from Catalog
@@ -343,9 +355,18 @@ nothing.
   reason: not declared upstream, not in the source file, and so on.
 - Search matches published titles, descriptions and categories too.
 
-Publisher text is not a scan result or a policy decision. Scan status, the allow
-toggle and the policy slots are unchanged. Updating only `@aihq/catalog` changes
+Publisher text is not a scan result or a policy decision. Scan status, the local
+preference control and the policy slots are independent. Updating only `@aihq/catalog` changes
 this text with no UI or Core edit.
+
+The card's local preference control remains unavailable. Core's public authoring
+selections identify assets with `assetId`, `sourceId`, `sourceRevisionId` and
+`contentDigest`; displayed Catalog entries use `entryId` and `subjectDigest`.
+The installed Catalog does not publish a complete, exact mapping between these
+identities, and its authoring bundle covers different sources/revisions. A
+future preference store needs that published mapping, including explicit
+unavailability for entries that cannot be selected. No saved preference or
+policy decision is inferred from the disabled control.
 
 Nothing is borrowed into an empty slot. The Catalog's own evidence statements are on
 the inspector's Security tab, labelled as statements; the source identity is in
@@ -389,9 +410,11 @@ kind selection itself. Kinds with no matches stay visible and can be cleared.
 
 Without valid saved setup, the page opens a wizard: Vibe coder or Enterprise;
 Enterprise then chooses Admin or Developer. Admin records organization name,
-short ID, policy repository and contact emails. Developer records the organization
-and repository supplied by their admin, with optional contact emails. Vibe does
-not require enterprise details. No repository is read or verified by setup.
+short ID, policy repository and contact emails. Developer setup does not ask for
+organization details; the developer opens the admin-supplied policy in the Policy
+workspace after setup. Existing Developer settings with organization details remain
+readable but those details do not select or approve a policy. Vibe does not require
+enterprise details. No repository is read or verified by setup.
 
 Optional assistance requests (code review, codebase memory, workspace help,
 Headroom, Serena and context/token optimization) start selected in new setups.
@@ -416,8 +439,8 @@ On reopening, valid saved settings enter the saved experience. The existing
 catalog and governance remain available; a self-declared Admin/Developer role
 does not enforce permissions. The header shows the saved role and a setup summary
 with the full, copyable settings path returned by the server. **Update my Workbench
-information** opens a draft of the saved organization details, assistance choices
-and AI clients. Cancel (or Escape) discards the draft; **Save changes** validates
+information** opens a draft of the saved Admin organization details (when applicable),
+assistance choices and AI clients. Cancel (or Escape) discards the draft; **Save changes** validates
 and atomically replaces the same local file. Experience and enterprise role are
 fixed in both the edit UI and its server endpoint. To change either, delete the
 settings file at the displayed path and restart the Workbench. AI client choices
@@ -431,6 +454,13 @@ assistance cards await an appropriate published presentation contract.
 This local file is not proof of enterprise authorization or an approval shared
 with developers on other machines. Those workflows require future public
 interfaces; policy artifacts continue to go through Core independently.
+
+Enterprise users can open a local PolicyBundle or Decision V2 for read-only
+structure review. The preview sends at most 1 MiB of chosen UTF-8 JSON to its
+same-origin local API, which uses Core's public `parsePolicyBundle` or
+`parseGovernanceDecisionV2`. The original text stays visible in the dialog.
+Neither parser verifies a signature, organizational authority, effective
+approval or CLI file handling, and neither action saves or publishes the file.
 
 `node --test tools/tests/settings.test.mjs` checks validation, atomic replacement,
 reopening, editing, immutable experience/role, new-draft defaults and deleting
@@ -685,9 +715,9 @@ supplies the key that validates it, nothing has been verified.
   validation signature expires 2026-09-22T19:50:20.085Z, after which that lane
   reports an honest refusal.
 
-These slots are empty when a **package** does not publish the field, not because
-this page has not been built. Each names its owner on screen,
-so a reader can tell a UI gap from a package gap:
+These Catalog inspector slots keep their place and explain which upstream input
+is missing. Governance can also inspect operator-supplied scan material after
+verification, independently of the selected Catalog entry:
 
 | Slot | Owner | What is missing |
 | --- | --- | --- |
@@ -695,10 +725,9 @@ so a reader can tell a UI gap from a package gap:
 | Inspector evidence statement text | `@aihq/catalog` older than the reader's `summary` | the evidence `summary`: that reader validates it and then drops it, so the slot reads **Not published** with that reason. A Catalog whose reader returns `summary` fills it, verbatim. |
 | Security pane Qualification block | `@aihq/catalog` older than the qualification sidecar | publisher qualification. The block reads "Not published: the installed Catalog publishes no qualification sidecar." |
 | Security pane per-detector rows | `@aihq/scan` | a `detectors[]` array with a per-detector run state. A record carries one detector object, so "4 of 4 scanners ran" cannot be stated. |
-| Security pane finding detail | `@aihq/scan` | a typed per-finding record, or an exported parser for the annex bytes. A finding is an occurrence fingerprint and a multiplicity: no rule id, severity, message or location. |
+| Security pane finding detail | `@aihq/catalog` | a verified per-entry scan result and its annex bytes. Scan 0.5.0 now exports `readScanFindingsV1`; Governance uses it for operator-supplied, verified material, but the Catalog inspector has no per-entry verified result to read. |
 
-Until each package publishes its field, the slot keeps its place, its size and
-its reason. When one does, the wording lookup is what changes — not the layout.
+The slot keeps its place, size and reason until its owner supplies the input.
 
 ## Running it
 
@@ -714,6 +743,22 @@ verifier trust, the provenance declaration - it is the session-relative name the
 file was stored under (`operator/authority-bundle.json`), the same string
 `/api/operator-file` answered with, never the run directory's location on this
 machine (`tools/tests/session-relative.test.mjs`).
+
+For the supplied candidate tarballs on Windows, run this in PowerShell from the
+repository root and open the HTTP URL it prints:
+
+```powershell
+$env:CORE_TGZ = 'D:\dev\aih-ui\packages\aihq-core-0.6.2.tgz'
+$env:SCAN_TGZ = 'D:\dev\aih-ui\packages\aihq-scan-0.5.0.tgz'
+$env:CATALOG_TGZ = 'D:\dev\aih-ui\packages\aihq-catalog-0.3.0.tgz'
+node tools/preview.mjs
+```
+
+`aih-policy-workbench.html` is the retiring standalone snapshot. Opening it as a
+local file does not install or read these tarballs. The live `src/` page is the
+HTTP preview; its package strip reports the installed versions and its
+provenance disclosure reports the exact tarball hashes. The Catalog inventory
+line distinguishes current entries from older entries retained in the index.
 
 ```
 tools/
@@ -836,14 +881,16 @@ approval. An entry the sidecar does not cover reads **Not published** with that
 reason; against an older Catalog without the export the block reads "Not
 published: the installed Catalog publishes no qualification sidecar."
 
-`@aihq/scan` publishes `readScanResultRecordV1` and
-`readScanResultSubjectBindingV1`. Both accept only a value
+`@aihq/scan` publishes `readScanResultRecordV1`,
+`readScanResultSubjectBindingV1` and `readScanFindingsV1`. They accept only a value
 `verifyScanAttestationV2` produced, so a cloned or hand-written object is
 refused. They provide **presentation facts, not proof of execution**:
 
-- a finding record is an occurrence fingerprint and a multiplicity. Message,
-  location and severity are not in the attestation, and the record's own `gaps`
-  say so. The pane shows those gaps verbatim rather than filling anything in.
+- the result record carries occurrence fingerprints and multiplicities. The
+  typed findings reader can additionally return detector, rule, SARIF level,
+  message, location and supporting annex from digest-verified annex bytes.
+  Each unavailable field and gap remains explicit; nothing is inferred from
+  the attestation alone.
 - `run.state` and `signer.class` are values the attestation declares. The pane
   labels them "(declared)". An ephemeral test key reports
   `signer.class: "organization"` too.
@@ -853,9 +900,8 @@ refused. They provide **presentation facts, not proof of execution**:
   check and evidence reprojection remain the only things that do, and they are
   unchanged.
 
-**Installing @aihq/catalog@0.2.0 or @aihq/scan@0.4.0 from npm does not provide
-these APIs.** They come from the reproducible test checkpoints
-`88d7e652` (Catalog) and `4d1ebb9d` (Scan), which are not version pins.
+This preview consumes the supplied Core 0.6.2, Catalog 0.3.0 and Scan 0.5.0
+tarballs through their public export maps while their releases are pending.
 
 ### Six results, six owners
 

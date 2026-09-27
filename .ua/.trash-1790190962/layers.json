@@ -1,0 +1,158 @@
+[
+  {
+    "id": "layer:app-shell",
+    "name": "App Shell",
+    "description": "Browser entry page and composition root (src/index.html, src/main.js) plus the shared src/app modules for DOM helpers, absence vocabulary, theming, organization setup, AI-tools control and workbench styles that the catalog and governance features build on.",
+    "nodeIds": [
+      "file:src/app/dom.js",
+      "file:src/app/absence.js",
+      "file:src/app/ai-tools.js",
+      "file:src/app/elements.js",
+      "file:src/app/organization.js",
+      "file:src/app/shell.js",
+      "file:src/app/theme.js",
+      "file:src/main.js",
+      "file:src/app/workbench.css",
+      "file:src/index.html"
+    ]
+  },
+  {
+    "id": "layer:catalog-feature",
+    "name": "Catalog Feature",
+    "description": "The src/catalog screen: controller, view state, selectors and data models over the served catalog index, plus cards, toolbar, navigation, metrics, provenance and details renderers.",
+    "nodeIds": [
+      "file:src/catalog/cards.js",
+      "file:src/catalog/categories.js",
+      "file:src/catalog/collections.js",
+      "file:src/catalog/controller.js",
+      "file:src/catalog/details.js",
+      "file:src/catalog/elements.js",
+      "file:src/catalog/entry.js",
+      "file:src/catalog/index-source.js",
+      "file:src/catalog/metrics.js",
+      "file:src/catalog/navigation.js",
+      "file:src/catalog/provenance.js",
+      "file:src/catalog/publisher.js",
+      "file:src/catalog/qualification.js",
+      "file:src/catalog/selectors.js",
+      "file:src/catalog/toolbar.js",
+      "file:src/catalog/view-state.js"
+    ]
+  },
+  {
+    "id": "layer:governance-feature",
+    "name": "Governance Feature",
+    "description": "The src/governance workflow: controller, HTTP transport to the preview service, revision tracking, operator file inputs, and renderers for detector, statuses, verdicts and prepared downloads.",
+    "nodeIds": [
+      "file:src/governance/bytes.js",
+      "file:src/governance/controller.js",
+      "file:src/governance/detector.js",
+      "file:src/governance/elements.js",
+      "file:src/governance/inputs.js",
+      "file:src/governance/observation.js",
+      "file:src/governance/operator-files.js",
+      "file:src/governance/prepared.js",
+      "file:src/governance/reopen.js",
+      "file:src/governance/revisions.js",
+      "file:src/governance/rows.js",
+      "file:src/governance/statuses.js",
+      "file:src/governance/transport.js",
+      "file:src/governance/verdict.js",
+      "file:src/governance/vocabulary.js"
+    ]
+  },
+  {
+    "id": "layer:preview-server",
+    "name": "Preview Server",
+    "description": "Local dev server (tools/preview.mjs and tools/server) that serves the page and assets, validates requests, manages operator sessions, and routes API calls to the service child process.",
+    "nodeIds": [
+      "file:tools/packages.mjs",
+      "file:tools/preview-request.mjs",
+      "file:tools/preview.mjs",
+      "file:tools/server/api.mjs",
+      "file:tools/server/assets.mjs",
+      "file:tools/server/service-client.mjs",
+      "file:tools/server/sessions.mjs",
+      "file:tools/server/static.mjs"
+    ]
+  },
+  {
+    "id": "layer:service-adapters",
+    "name": "Service Adapters",
+    "description": "tools/service modules that wrap the public @aihq/core, @aihq/catalog and @aihq/scan packages: catalog access and served projections, core targets and adapter, scan verification, signed fixtures and artifact I/O.",
+    "nodeIds": [
+      "file:tools/service/artifacts.mjs",
+      "file:tools/service/catalog-access.mjs",
+      "file:tools/service/catalog-assessment.mjs",
+      "file:tools/service/catalog-categories.mjs",
+      "file:tools/service/catalog-collections.mjs",
+      "file:tools/service/catalog-publisher.mjs",
+      "file:tools/service/catalog-qualification.mjs",
+      "file:tools/service/catalog-served.mjs",
+      "file:tools/service/core-adapter.mjs",
+      "file:tools/service/core-service.mjs",
+      "file:tools/service/fixture-candidate.mjs",
+      "file:tools/service/scan-verifier.mjs",
+      "file:tools/service/validation-fixture.mjs",
+      "file:tools/service/core-targets.mjs"
+    ]
+  },
+  {
+    "id": "layer:checks-tooling",
+    "name": "Checks and Diagnostics",
+    "description": "Unit tests, page and catalog-index contract checks, scan-attribution and acceptance sweeps, plus ad-hoc HTTP/DOM/shell probes and the visual comparison page used to verify the workbench.",
+    "nodeIds": [
+      "file:tools/tests/publisher-refusal.test.mjs",
+      "file:tools/tests/revisions.test.mjs",
+      "file:tools/scan-attribution-cases.mjs",
+      "file:tools/tests/catalog-served.test.mjs",
+      "file:tools/tests/session-relative.test.mjs",
+      "file:tools/catalog-index-contract.mjs",
+      "file:tools/check-page-contract.mjs",
+      "file:tools/check-scan-attribution.mjs",
+      "file:tools/tests/sessions-observation.test.mjs",
+      "file:tools/acceptance-sweep.mjs",
+      "file:tools/compare.html",
+      "file:tools/inspect-dom.mjs",
+      "file:tools/probe-http.mjs",
+      "file:tools/probe-old-handler.mjs",
+      "file:tools/probe-shell-quoting.mjs"
+    ]
+  },
+  {
+    "id": "layer:prototype",
+    "name": "Prototype Design Source",
+    "description": "The HTML/CSS/JS prototype screens, design tokens, fonts and Tailwind config shim that define what the workbench must look like.",
+    "nodeIds": [
+      "file:prototype/screens/admin-acme.html",
+      "file:prototype/screens/admin-changes.html",
+      "file:prototype/screens/admin-item.html",
+      "file:prototype/screens/admin-org.html",
+      "file:prototype/screens/admin-scan.html",
+      "file:prototype/screens/admin-sources.html",
+      "file:prototype/screens/entry.html",
+      "file:prototype/screens/fonts.css",
+      "file:prototype/screens/overview.html",
+      "file:prototype/screens/system.html",
+      "file:prototype/screens/tokens.css",
+      "file:prototype/screens/user-start.html",
+      "file:prototype/screens/user-trim.html",
+      "file:prototype/screens/wb.css",
+      "file:prototype/index.html",
+      "file:prototype/screens/mode.js",
+      "file:prototype/screens/shell.js",
+      "file:prototype/screens/tw-config.js",
+      "file:prototype/screens/user-shell.js"
+    ]
+  },
+  {
+    "id": "layer:documentation",
+    "name": "Documentation",
+    "description": "Repository README defining what the repo owns and the agent instructions (AGENTS.md, CLAUDE.md) governing how work is done here.",
+    "nodeIds": [
+      "document:AGENTS.md",
+      "document:CLAUDE.md",
+      "document:README.md"
+    ]
+  }
+]

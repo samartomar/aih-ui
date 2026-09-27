@@ -1,0 +1,847 @@
+{
+ "nodes": [
+  {
+   "id": "file:prototype/screens/admin-acme.html",
+   "type": "file",
+   "name": "admin-acme.html",
+   "filePath": "prototype/screens/admin-acme.html",
+   "summary": "Admin prototype screen for \"Acme additions\": the organization's own source listing internal MCP servers, skills and tools with their scan status, and the only place an admin runs a scan themselves.",
+   "tags": [
+    "prototype",
+    "admin-screen",
+    "html-page",
+    "design-source"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:prototype/screens/admin-changes.html",
+   "type": "file",
+   "name": "admin-changes.html",
+   "filePath": "prototype/screens/admin-changes.html",
+   "summary": "Admin prototype screen showing the staged policy delta (acme.policy.json) as a colorized JSON diff against the template, with reset, copy, download and publish actions.",
+   "tags": [
+    "prototype",
+    "admin-screen",
+    "policy-diff",
+    "design-source"
+   ],
+   "complexity": "moderate",
+   "languageNotes": "Renders the diff from an inline LINES array with a tiny esc/paint JSON highlighter instead of a library."
+  },
+  {
+   "id": "file:prototype/screens/admin-item.html",
+   "type": "file",
+   "name": "admin-item.html",
+   "filePath": "prototype/screens/admin-item.html",
+   "summary": "Admin prototype screen for a single catalog item's security view (fal-ai-media), showing findings, per-scanner results and source evidence behind a needs-review hold.",
+   "tags": [
+    "prototype",
+    "admin-screen",
+    "security-scan",
+    "design-source"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:prototype/screens/admin-org.html",
+   "type": "file",
+   "name": "admin-org.html",
+   "filePath": "prototype/screens/admin-org.html",
+   "summary": "Admin prototype first-run screen where the organization identifies itself (name, id, policy repo, owners prefilled from git) alongside the five-step onboarding path.",
+   "tags": [
+    "prototype",
+    "admin-screen",
+    "onboarding",
+    "design-source"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:prototype/screens/admin-scan.html",
+   "type": "file",
+   "name": "admin-scan.html",
+   "filePath": "prototype/screens/admin-scan.html",
+   "summary": "Admin prototype scan-review screen summarizing scan results across every aih-shipped source (passed, needs review, not scanned) with grouping and an explanation of what each result means.",
+   "tags": [
+    "prototype",
+    "admin-screen",
+    "security-scan",
+    "design-source"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:prototype/screens/admin-sources.html",
+   "type": "file",
+   "name": "admin-sources.html",
+   "filePath": "prototype/screens/admin-sources.html",
+   "summary": "The owner's final, self-contained admin Sources prototype: a full workbench layout with a collapsible nav rail, source card grid, item inspector drawer (details, security scan, policy JSON tabs), organization modal and theme toggle; the origin of the shared tokens and base styles.",
+   "tags": [
+    "prototype",
+    "admin-screen",
+    "design-source",
+    "design-system",
+    "interactive-mock"
+   ],
+   "complexity": "complex",
+   "languageNotes": "Embeds its own inline Tailwind CDN config mapping Material-style colour roles to CSS variables from tokens.css, and wires interactions with IIFE scripts exposing window.* handlers."
+  },
+  {
+   "id": "file:prototype/screens/entry.html",
+   "type": "file",
+   "name": "entry.html",
+   "filePath": "prototype/screens/entry.html",
+   "summary": "Prototype landing screen shown when the workbench command runs in a folder that is neither a policy repo nor a project, letting the operator choose the admin page or the user page.",
+   "tags": [
+    "prototype",
+    "entry-point",
+    "design-source",
+    "html-page"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:prototype/screens/fonts.css",
+   "type": "file",
+   "name": "fonts.css",
+   "filePath": "prototype/screens/fonts.css",
+   "summary": "Imports the Inter, JetBrains Mono and Material Symbols Outlined web fonts from Google Fonts for every prototype screen.",
+   "tags": [
+    "stylesheet",
+    "typography",
+    "fonts",
+    "design-system"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:prototype/screens/overview.html",
+   "type": "file",
+   "name": "overview.html",
+   "filePath": "prototype/screens/overview.html",
+   "summary": "Prototype overview explaining who uses the workbench: the two doors (admin and user), what aih ships, and the two plain policy files that travel between organization and project repos.",
+   "tags": [
+    "prototype",
+    "documentation",
+    "design-source",
+    "overview"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:prototype/screens/system.html",
+   "type": "file",
+   "name": "system.html",
+   "filePath": "prototype/screens/system.html",
+   "summary": "Design-system reference screen showcasing the shared tokens and components: colour roles, type, actions and controls, labels/status/filters, navigation and cards.",
+   "tags": [
+    "prototype",
+    "design-system",
+    "style-guide",
+    "design-source"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:prototype/screens/tokens.css",
+   "type": "file",
+   "name": "tokens.css",
+   "filePath": "prototype/screens/tokens.css",
+   "summary": "Design tokens for the Policy Workbench extracted from admin-sources.html: colour-role CSS custom properties for dark (default) and light modes plus typography conventions.",
+   "tags": [
+    "design-tokens",
+    "stylesheet",
+    "theming",
+    "design-system"
+   ],
+   "complexity": "moderate",
+   "languageNotes": "CSS custom properties keyed on html.dark/html.light and [data-mode] selectors provide theme switching without separate stylesheets."
+  },
+  {
+   "id": "file:prototype/screens/user-start.html",
+   "type": "file",
+   "name": "user-start.html",
+   "filePath": "prototype/screens/user-start.html",
+   "summary": "User-side prototype screen for picking a starting policy for a project (payments-api) and explaining how a trimmed aih-project-policy.json is shared with teammates via aih init --apply.",
+   "tags": [
+    "prototype",
+    "user-screen",
+    "onboarding",
+    "design-source"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:prototype/screens/user-trim.html",
+   "type": "file",
+   "name": "user-trim.html",
+   "filePath": "prototype/screens/user-trim.html",
+   "summary": "Interactive user-side prototype for trimming an organization policy: users toggle sources and items by kind, see ledger counts, overlap and broken-link warnings, and a change log before saving the project policy.",
+   "tags": [
+    "prototype",
+    "user-screen",
+    "interactive-mock",
+    "design-source"
+   ],
+   "complexity": "complex",
+   "languageNotes": "Single inline IIFE with a mutable state object and full re-render functions (renderLedger/renderRail/renderMain/renderSide) that build HTML strings."
+  },
+  {
+   "id": "file:prototype/screens/wb.css",
+   "type": "file",
+   "name": "wb.css",
+   "filePath": "prototype/screens/wb.css",
+   "summary": "Shared base styles for every prototype screen, lifted from admin-sources.html: full-height layout, thin scrollbars, collapsible panel transitions and small utility classes driven by tokens.css variables.",
+   "tags": [
+    "stylesheet",
+    "base-styles",
+    "layout",
+    "design-system"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:prototype/screens/user-trim.html:renderLedger",
+   "type": "function",
+   "name": "renderLedger",
+   "filePath": "prototype/screens/user-trim.html",
+   "lineRange": [
+    167,
+    194
+   ],
+   "summary": "Renders the ledger tiles summarizing kept versus offered counts per kind, flashing counts that just changed.",
+   "tags": [
+    "rendering",
+    "ui",
+    "prototype"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:prototype/screens/user-trim.html:renderRail",
+   "type": "function",
+   "name": "renderRail",
+   "filePath": "prototype/screens/user-trim.html",
+   "lineRange": [
+    196,
+    209
+   ],
+   "summary": "Renders the left rail listing the sources in the policy with their kept/offered counts.",
+   "tags": [
+    "rendering",
+    "navigation",
+    "prototype"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:prototype/screens/user-trim.html:renderMain",
+   "type": "function",
+   "name": "renderMain",
+   "filePath": "prototype/screens/user-trim.html",
+   "lineRange": [
+    211,
+    228
+   ],
+   "summary": "Renders the main panel of item cards for the selected source, filtered by the active kind.",
+   "tags": [
+    "rendering",
+    "ui",
+    "prototype"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:prototype/screens/user-trim.html:card",
+   "type": "function",
+   "name": "card",
+   "filePath": "prototype/screens/user-trim.html",
+   "lineRange": [
+    230,
+    241
+   ],
+   "summary": "Builds the HTML card for one catalog item with its toggle state and warnings.",
+   "tags": [
+    "rendering",
+    "component",
+    "prototype"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:prototype/screens/user-trim.html:renderSide",
+   "type": "function",
+   "name": "renderSide",
+   "filePath": "prototype/screens/user-trim.html",
+   "lineRange": [
+    243,
+    264
+   ],
+   "summary": "Renders the side panel of warnings (overlaps, broken links) and the recent change log.",
+   "tags": [
+    "rendering",
+    "validation",
+    "prototype"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:prototype/screens/admin-sources.html:toggleLeftNav",
+   "type": "function",
+   "name": "toggleLeftNav",
+   "filePath": "prototype/screens/admin-sources.html",
+   "lineRange": [
+    287,
+    299
+   ],
+   "summary": "Collapses or expands the left navigation rail by swapping width classes.",
+   "tags": [
+    "event-handler",
+    "layout",
+    "prototype"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:prototype/screens/admin-sources.html:toggleInspector",
+   "type": "function",
+   "name": "toggleInspector",
+   "filePath": "prototype/screens/admin-sources.html",
+   "lineRange": [
+    304,
+    316
+   ],
+   "summary": "Opens or closes the item inspector rail on the right side.",
+   "tags": [
+    "event-handler",
+    "layout",
+    "prototype"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:prototype/screens/admin-sources.html:applyTheme",
+   "type": "function",
+   "name": "applyTheme",
+   "filePath": "prototype/screens/admin-sources.html",
+   "lineRange": [
+    520,
+    544
+   ],
+   "summary": "Switches the page between dark and light mode by toggling html classes and the theme button icon.",
+   "tags": [
+    "theming",
+    "event-handler",
+    "prototype"
+   ],
+   "complexity": "moderate"
+  }
+ ],
+ "edges": [
+  {
+   "source": "file:prototype/screens/user-trim.html",
+   "target": "function:prototype/screens/user-trim.html:renderLedger",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:prototype/screens/user-trim.html",
+   "target": "function:prototype/screens/user-trim.html:renderRail",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:prototype/screens/user-trim.html",
+   "target": "function:prototype/screens/user-trim.html:renderMain",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:prototype/screens/user-trim.html",
+   "target": "function:prototype/screens/user-trim.html:card",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:prototype/screens/user-trim.html",
+   "target": "function:prototype/screens/user-trim.html:renderSide",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:prototype/screens/admin-sources.html",
+   "target": "function:prototype/screens/admin-sources.html:toggleLeftNav",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:prototype/screens/admin-sources.html",
+   "target": "function:prototype/screens/admin-sources.html:toggleInspector",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:prototype/screens/admin-sources.html",
+   "target": "function:prototype/screens/admin-sources.html:applyTheme",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:prototype/screens/admin-acme.html",
+   "target": "file:prototype/screens/fonts.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-acme.html",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-acme.html",
+   "target": "file:prototype/screens/wb.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-acme.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-acme.html",
+   "target": "file:prototype/screens/tw-config.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-changes.html",
+   "target": "file:prototype/screens/fonts.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-changes.html",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-changes.html",
+   "target": "file:prototype/screens/wb.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-changes.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-changes.html",
+   "target": "file:prototype/screens/tw-config.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-item.html",
+   "target": "file:prototype/screens/fonts.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-item.html",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-item.html",
+   "target": "file:prototype/screens/wb.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-item.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-item.html",
+   "target": "file:prototype/screens/tw-config.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-org.html",
+   "target": "file:prototype/screens/fonts.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-org.html",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-org.html",
+   "target": "file:prototype/screens/wb.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-org.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-org.html",
+   "target": "file:prototype/screens/tw-config.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-scan.html",
+   "target": "file:prototype/screens/fonts.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-scan.html",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-scan.html",
+   "target": "file:prototype/screens/wb.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-scan.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-scan.html",
+   "target": "file:prototype/screens/tw-config.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/entry.html",
+   "target": "file:prototype/screens/fonts.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/entry.html",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/entry.html",
+   "target": "file:prototype/screens/wb.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/entry.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/entry.html",
+   "target": "file:prototype/screens/tw-config.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/overview.html",
+   "target": "file:prototype/screens/fonts.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/overview.html",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/overview.html",
+   "target": "file:prototype/screens/wb.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/overview.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/overview.html",
+   "target": "file:prototype/screens/tw-config.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/system.html",
+   "target": "file:prototype/screens/fonts.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/system.html",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/system.html",
+   "target": "file:prototype/screens/wb.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/system.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/system.html",
+   "target": "file:prototype/screens/tw-config.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-start.html",
+   "target": "file:prototype/screens/fonts.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-start.html",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-start.html",
+   "target": "file:prototype/screens/wb.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-start.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-start.html",
+   "target": "file:prototype/screens/tw-config.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-trim.html",
+   "target": "file:prototype/screens/fonts.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-trim.html",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-trim.html",
+   "target": "file:prototype/screens/wb.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-trim.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-trim.html",
+   "target": "file:prototype/screens/tw-config.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-sources.html",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-sources.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-acme.html",
+   "target": "file:prototype/screens/shell.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-changes.html",
+   "target": "file:prototype/screens/shell.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-item.html",
+   "target": "file:prototype/screens/shell.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-scan.html",
+   "target": "file:prototype/screens/shell.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-org.html",
+   "target": "file:prototype/screens/shell.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-start.html",
+   "target": "file:prototype/screens/user-shell.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-trim.html",
+   "target": "file:prototype/screens/user-shell.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/tokens.css",
+   "target": "file:prototype/screens/admin-sources.html",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:prototype/screens/wb.css",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/system.html",
+   "target": "file:prototype/screens/admin-sources.html",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:prototype/screens/user-start.html",
+   "target": "file:prototype/screens/user-trim.html",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:prototype/screens/entry.html",
+   "target": "file:prototype/screens/overview.html",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  }
+ ]
+}

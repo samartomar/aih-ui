@@ -5,7 +5,7 @@
  *
  *   header   kind icon, the item's name, its CATEGORY badge when categories vary
  *   body     the publisher's PRODUCT DESCRIPTION
- *   footer   the SCAN STATUS pill, the TOKEN ESTIMATE chip, the allow toggle
+ *   footer   the SCAN STATUS pill, the TOKEN ESTIMATE chip, local preference
  *
  * The title and description come from Catalog's publisher metadata: the
  * upstream publisher's own text, verbatim, where Catalog publishes it. The
@@ -24,7 +24,8 @@
  *
  * When every visible entry shares a category, its label is shown once above the
  * grid; each card retains its own provenance and rationale in its tooltip.
- * The toggle stays disabled: there is no source-posture contract to drive it.
+ * Local preferences stay unavailable until Catalog publishes an exact mapping
+ * from every displayed entry to its authoring asset identity.
  */
 
 import { el } from "../app/dom.js";
@@ -92,7 +93,7 @@ function card(entry, selectedId, onSelect, publisher, categories) {
   // The description slot keeps its three lines even when it has one word to
   // show: an unavailable state holds the component's dimensions, so the grid
   // keeps the design source's card proportions instead of closing up.
-  const body = el("p", "wb-card-description text-wb-body text-on-surface-variant mt-2 leading-relaxed line-clamp-3 min-h-[4.875em] break-words", description ?? NOT_PUBLISHED);
+  const body = el("p", "wb-card-description text-wb-card-description text-on-surface-variant mt-2 line-clamp-3 break-words", description ?? NOT_PUBLISHED);
   body.title = provenanceNote(record, "description", "Description", publisher);
   top.appendChild(body);
   node.appendChild(top);
@@ -118,8 +119,8 @@ function card(entry, selectedId, onSelect, publisher, categories) {
   button.type = "button";
   button.disabled = true;
   button.setAttribute("aria-disabled", "true");
-  button.dataset.active = "false";
-  button.title = `${NOT_PUBLISHED}: no source-posture or allow-list contract`;
+  button.setAttribute("aria-label", `Local preference unavailable for ${title ?? id.name}`);
+  button.title = "Local preference not saved. This control is unavailable in this version and does not change tool access.";
   button.appendChild(el("div", "w-2.5 h-2.5 rounded-full bg-outline"));
   toggle.appendChild(button);
   foot.appendChild(toggle);
@@ -167,7 +168,8 @@ export function createCards({ elements, onSelect }) {
         elements.cardsGrid.append(...nodes);
       }
       elements.visibleCount.textContent = String(model.entries.length);
-      elements.visibleCaption.textContent = `of ${model.total} ${model.noun ?? "catalog entries"}`;
+      elements.visibleCaption.textContent = model.entries.length === 1 ? "entry" : "entries";
+      elements.visibleCaption.title = `Showing ${model.entries.length} of ${model.total} ${model.noun ?? "catalog entries"}.`;
     },
 
     /**

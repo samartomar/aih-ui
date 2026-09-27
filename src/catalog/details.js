@@ -17,11 +17,9 @@
  *   - capabilities it DOES carry, as empty lists: "Not declared". An empty
  *     declaration is not a measurement, so it is never shown as "none".
  *
- * The header's flags slot is where the design source reports scan flags. No
- * scan result is published per item, so it says so rather than showing a count
- * of the Catalog's own evidence statements in that place. Those statements are
- * on the Security tab, labelled as statements, with each one's summary as
- * Catalog's public reader returns it.
+ * The compact header identifies the item and its kind. Source fields appear
+ * once in Upstream Provenance; evidence summaries appear once in Security's
+ * evidence statements, exactly as Catalog's public reader returns them.
  *
  * The Security tab's Qualification block shows Catalog's publisher
  * qualification for the entry - the reader's state word, the receipt window,
@@ -38,17 +36,14 @@ import {
   NOT_PUBLISHED,
   QUALIFICATION_IS_NOT_AUTHORIZATION,
 } from "../app/absence.js";
-import { KIND_ICON, identity, shortDigest, sourceDetailRows, sourceIdentity, sourceLabelOf, statementsOf } from "./entry.js";
+import { KIND_ICON, KIND_TONE, identity, sourceDetailRows, sourceIdentity, statementsOf } from "./entry.js";
 import { collectionOf, scopeCountOf } from "./selectors.js";
 import { provenanceNote, publishedText, publisherOf } from "./publisher.js";
 import { QUALIFICATION_STATE_MEANING, attestationSentence, qualificationOf } from "./qualification.js";
 
-/*
- * Why each Scanner Telemetry slot is empty. Each names the package that owns
- * the missing field, so a reader can tell a gap in this page from a gap in a
- * package. When Scan publishes them, these lookups are what change - the slots
- * and their geometry stay as they are.
- */
+/* These Catalog inspector slots have no verified per-entry scan input. Scan
+ * 0.5.0's typed finding reader is used in Governance after operator verification;
+ * Catalog still cannot populate this slot from its index alone. */
 const DETECTOR_RUN_STATE_ABSENT =
   `${NOT_PUBLISHED}: Scan publishes one detector per record and no per-detector run state.`;
 /** An entry the installed Catalog's qualification sidecar does not name. */
@@ -84,7 +79,9 @@ function capability(container, label, icon, tone, value, title) {
   const toneClass = { tertiary: "text-tertiary", secondary: "text-secondary", outline: "text-outline" }[tone];
   const line = el("div", "p-2 rounded bg-surface-container-low border border-wb-border flex items-center justify-between gap-2");
   const left = el("div", "flex items-center gap-1.5 text-on-surface");
-  left.appendChild(el("span", `material-symbols-outlined text-[14px] ${toneClass}`, icon));
+  const glyph = el("span", `material-symbols-outlined text-[14px] ${toneClass}`, icon);
+  glyph.setAttribute("aria-hidden", "true");
+  left.appendChild(glyph);
   left.appendChild(el("span", "", label));
   line.appendChild(left);
   const known = value !== NOT_PUBLISHED && value !== NOT_DECLARED;
@@ -97,25 +94,6 @@ function capability(container, label, icon, tone, value, title) {
 /** The capability list the index declares, or "Not declared" when it is empty. */
 function declared(list) {
   return Array.isArray(list) && list.length > 0 ? list.join(", ") : NOT_DECLARED;
-}
-
-/** The version / release slot of the header: only ever a real version or release. */
-function versionOf(source) {
-  if (source.type === "npm") return source.version;
-  if (source.type === "aih") return source.release;
-  // A github source publishes a commit, not a release. A commit is shown in
-  // Upstream Provenance and is never passed off as a version.
-  return null;
-}
-
-/** The origin line of Upstream Provenance, from published fields only. */
-function originOf(source) {
-  if (source.type === "github") return source.repository;
-  if (source.type === "npm") {
-    return source.packageName === null ? null : `${source.registry ? `${source.registry} ` : ""}${source.packageName}`.trim();
-  }
-  if (source.type === "aih") return source.release === null ? null : `aih release ${source.release}`;
-  return sourceLabelOf(source);
 }
 
 /** A "label value" line of the Qualification block; the value is the reader's word, as text. */
@@ -201,12 +179,10 @@ export function createDetails({ elements }) {
   }
 
   function renderEmpty() {
-    elements.inspectorName.textContent = "No entry selected";
-    elements.inspectorKind.textContent = "-";
-    elements.inspectorVersion.textContent = "-";
-    elements.inspectorSubtitle.textContent = "Select a card to read its published identities and evidence";
-    elements.inspectorFlags.textContent = NOT_PUBLISHED;
-    elements.inspectorFlags.className = "font-mono text-outline font-medium";
+    elements.inspectorName.textContent = "";
+    elements.inspectorName.title = "";
+    elements.inspectorKind.removeAttribute("aria-label");
+    delete elements.inspectorKind.dataset.label;
     elements.detailsDesc.textContent = NOT_PUBLISHED;
     capability(elements.detailsCapabilities, "Network Egress", "wifi", "tertiary", NOT_PUBLISHED);
     capability(elements.detailsCapabilities, "Execution Sandbox", "terminal", "secondary", NOT_PUBLISHED);
@@ -214,9 +190,6 @@ export function createDetails({ elements }) {
     row(elements.detailsSource, "Origin", null);
     row(elements.detailsIdentity, "Entry id", null);
     elements.detailsArtifacts.appendChild(el("div", "text-outline", NOT_PUBLISHED));
-    elements.scannerReportStatement.textContent = NOT_PUBLISHED;
-    // Nothing is selected yet, so this slot is not Catalog's gap. Say which.
-    elements.scannerReportStatement.title = "No entry is selected, so there is no evidence record to summarise.";
     elements.statementCount.textContent = "0 statements";
   }
 
@@ -267,17 +240,10 @@ export function createDetails({ elements }) {
       // ------------------------------------------------------------ header
       elements.inspectorName.textContent = publishedText(record, "title") ?? id.name;
       elements.inspectorName.title = id.entryId;
-      elements.inspectorKind.textContent = id.kind;
-      const version = versionOf(source);
-      elements.inspectorVersion.textContent = version ?? NOT_PUBLISHED;
-      elements.inspectorVersion.title = version === null
-        ? `Version: ${NOT_PUBLISHED}. This ${source.type} source publishes no release label.`
-        : `${source.type === "aih" ? "Release" : "Version"} ${version}`;
-      elements.inspectorSubtitle.textContent = `${id.kind} · ${originOf(source) ?? source.type}`;
+      elements.inspectorKind.setAttribute("aria-label", `Kind: ${id.kind}`);
+      elements.inspectorKind.dataset.label = `Kind: ${id.kind}`;
       elements.inspectorIcon.textContent = KIND_ICON[id.kind] ?? "extension";
-      elements.inspectorFlags.textContent = NOT_PUBLISHED;
-      elements.inspectorFlags.className = "font-mono text-outline font-medium";
-      elements.inspectorFlags.title = "Scan flags: not published. No scan result is published for this item.";
+      elements.inspectorIcon.className = `material-symbols-outlined text-[15px] ${KIND_TONE[id.kind] ?? "text-outline"}`;
 
       // --------------------------------------------- Publisher Overview
       // Upstream text, set as text: never markup, never an instruction.
@@ -307,16 +273,8 @@ export function createDetails({ elements }) {
       );
 
       // ------------------------------------------------ Upstream Provenance
-      row(elements.detailsSource, "Origin", originOf(source));
-      if (source.type === "github") {
-        row(elements.detailsSource, "Pinned Commit", source.commit === null ? null : source.commit.slice(0, 12), source.commit ?? undefined);
-        codeRow(elements.detailsSource, "Path", source.path);
-      } else if (source.type === "npm") {
-        row(elements.detailsSource, "Version", source.version);
-        row(elements.detailsSource, "Integrity", shortDigest(source.integrity), source.integrity ?? undefined);
-      } else if (source.type === "aih") {
-        row(elements.detailsSource, "Content revision", shortDigest(source.revision), source.revision ?? undefined);
-      }
+      // Full source values live here, without an abbreviated second copy.
+      for (const [label, value] of sourceDetailRows(source)) codeRow(elements.detailsSource, label, value);
       row(elements.detailsSource, "License", null, "The index carries no license field.");
       const collection = collectionOf(entry, counts);
       if (collection !== null) {
@@ -342,8 +300,6 @@ export function createDetails({ elements }) {
       codeRow(elements.detailsIdentity, "Subject digest", subject.subjectDigest);
       codeRow(elements.detailsIdentity, "Source digest", subject.sourceDigest);
       row(elements.detailsIdentity, "Source type", source.type);
-      // Every published source field in full, in the order that type publishes them.
-      for (const [label, value] of sourceDetailRows(source)) codeRow(elements.detailsIdentity, label, value);
       row(elements.detailsIdentity, "Platforms", Array.isArray(entry.platforms) && entry.platforms.length
         ? entry.platforms.map((platform) => `${text(platform?.os) ?? "?"}/${text(platform?.architecture) ?? "?"}`).join(", ")
         : null);
@@ -369,13 +325,6 @@ export function createDetails({ elements }) {
 
       // ----------------------------------------------------------- Security
       const statements = statementsOf(entry);
-      const report = statements.find((statement) => statement.kind === "report");
-      const reportSummary = text(report?.summary);
-      elements.scannerReportStatement.textContent = reportSummary ?? NOT_PUBLISHED;
-      elements.scannerReportStatement.classList.add("inspector-prose");
-      elements.scannerReportStatement.title = reportSummary === null
-        ? EVIDENCE_SUMMARY_ABSENT
-        : "The evidence record's own summary, as Catalog published it.";
       elements.statementCount.textContent = `${statements.length} statements · envelope counts, not raw findings`;
       renderStatements(statements);
     },

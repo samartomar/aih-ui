@@ -13,11 +13,10 @@ export function catalogElements() {
     "review-filters", "review-summary",
     "kind-filters", "catalog-search", "source-filter", "sort-select",
     "visible-count", "visible-caption", "category-context", "cards-grid",
-    "inspector-name", "inspector-kind", "inspector-version", "inspector-subtitle",
-    "inspector-flags", "inspector-icon",
+    "inspector-name", "inspector-kind", "inspector-icon",
     "details-identity", "details-source", "details-desc", "details-capabilities",
     "details-artifacts", "detector-run-state", "detector-finding-detail",
-    "scanner-report-statement", "statement-count", "security-statements",
+    "statement-count", "security-statements",
     "qualification-evaluated", "security-qualification", "qualification-footer",
   ];
   const found = collectIds(ids);
@@ -50,9 +49,6 @@ export function catalogElements() {
     details: {
       inspectorName: found.inspectorName,
       inspectorKind: found.inspectorKind,
-      inspectorVersion: found.inspectorVersion,
-      inspectorSubtitle: found.inspectorSubtitle,
-      inspectorFlags: found.inspectorFlags,
       inspectorIcon: found.inspectorIcon,
       detailsIdentity: found.detailsIdentity,
       detailsSource: found.detailsSource,
@@ -61,7 +57,6 @@ export function catalogElements() {
       detailsArtifacts: found.detailsArtifacts,
       detectorRunState: found.detectorRunState,
       detectorFindingDetail: found.detectorFindingDetail,
-      scannerReportStatement: found.scannerReportStatement,
       statementCount: found.statementCount,
       securityStatements: found.securityStatements,
       qualificationEvaluated: found.qualificationEvaluated,

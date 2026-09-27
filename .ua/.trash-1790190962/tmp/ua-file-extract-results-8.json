@@ -1,0 +1,654 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 10,
+  "filesSkipped": [
+    "prototype/index.html",
+    "src/app/workbench.css",
+    "src/index.html",
+    "tools/compare.html"
+  ],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 10,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 10,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "results": [
+    {
+      "path": "prototype/screens/mode.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 21,
+      "nonEmptyLines": 21,
+      "callGraph": [
+        {
+          "caller": "set",
+          "callee": "d.classList.toggle",
+          "lineNumber": 7
+        },
+        {
+          "caller": "set",
+          "callee": "d.classList.toggle",
+          "lineNumber": 7
+        },
+        {
+          "caller": "set",
+          "callee": "document.querySelectorAll(\"[data-mode-toggle], button[aria-label^='Switch to']\").forEach",
+          "lineNumber": 8
+        },
+        {
+          "caller": "set",
+          "callee": "document.querySelectorAll",
+          "lineNumber": 8
+        },
+        {
+          "caller": "set",
+          "callee": "b.setAttribute",
+          "lineNumber": 9
+        },
+        {
+          "caller": "set",
+          "callee": "b.querySelector",
+          "lineNumber": 10
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "prototype/screens/shell.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 38,
+      "nonEmptyLines": 37,
+      "callGraph": [
+        {
+          "caller": "top",
+          "callee": "document.write",
+          "lineNumber": 6
+        },
+        {
+          "caller": "nav",
+          "callee": "document.write",
+          "lineNumber": 8
+        },
+        {
+          "caller": "nav",
+          "callee": "NAV.replace",
+          "lineNumber": 8
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "prototype/screens/tw-config.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 70,
+      "nonEmptyLines": 70,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "prototype/screens/user-shell.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 127,
+      "nonEmptyLines": 122,
+      "callGraph": [
+        {
+          "caller": "lookup",
+          "callee": "ORDER.map(function (o, i) {\r\n        var hit = i === S.step, skipped = i < S.step;\r\n        return '<div class=\"flex items-center justify-between gap-2 px-2.5 py-1.5 ' + (hit ? \"bg-surface-container\" : \"\") + '\"><span class=\"flex items-center gap-1.5 min-w-0\"><span class=\"font-mono text-[10px] text-outline w-3\">' + (i + 1) + '</span><span class=\"min-w-0\"><span class=\"block font-mono text-[10.5px] ' + (hit ? \"text-on-surface font-semibold\" : \"text-on-surface-variant\") + '\">' + o[0] + '</span><span class=\"block text-[10px] text-outline\">' + o[1] + '</span></span></span>' +\r\n          '<span class=\"font-mono text-[10px] shrink-0 ' + (hit ? S.tone + \" font-semibold\" : \"text-outline\") + '\">' + (hit ? \"used\" : skipped ? \"not set\" : \"—\") + '</span></div>';\r\n      }).join",
+          "lineNumber": 23
+        },
+        {
+          "caller": "lookup",
+          "callee": "ORDER.map",
+          "lineNumber": 23
+        },
+        {
+          "caller": "top",
+          "callee": "document.write",
+          "lineNumber": 38
+        },
+        {
+          "caller": "top",
+          "callee": "lookup",
+          "lineNumber": 50
+        },
+        {
+          "caller": "top",
+          "callee": "files",
+          "lineNumber": 52
+        },
+        {
+          "caller": "top",
+          "callee": "[[\"Claude Code\", true], [\"Codex CLI\", true], [\"Cursor\", false]].map(function (t) {\r\n        return '<label class=\"flex items-center gap-2 px-1.5 py-1 rounded hover:bg-surface-container cursor-pointer text-on-surface\"><input ' + (t[1] ? \"checked \" : \"\") + 'class=\"rounded-sm w-3.5 h-3.5 accent-primary\" type=\"checkbox\" data-tool=\"' + t[0] + '\">' + t[0] + '</label>';\r\n      }).join",
+          "lineNumber": 63
+        },
+        {
+          "caller": "top",
+          "callee": "[[\"Claude Code\", true], [\"Codex CLI\", true], [\"Cursor\", false]].map",
+          "lineNumber": 63
+        },
+        {
+          "caller": "popover",
+          "callee": "document.addEventListener",
+          "lineNumber": 102
+        },
+        {
+          "caller": "popover",
+          "callee": "document.querySelector",
+          "lineNumber": 103
+        },
+        {
+          "caller": "popover",
+          "callee": "e.target.closest",
+          "lineNumber": 104
+        },
+        {
+          "caller": "popover",
+          "callee": "p.classList.toggle",
+          "lineNumber": 104
+        },
+        {
+          "caller": "popover",
+          "callee": "e.target.closest",
+          "lineNumber": 105
+        },
+        {
+          "caller": "popover",
+          "callee": "p.classList.add",
+          "lineNumber": 105
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tools/acceptance-sweep.mjs",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 142,
+      "nonEmptyLines": 126,
+      "functions": [
+        {
+          "name": "check",
+          "startLine": 30,
+          "endLine": 33,
+          "params": [
+            "name",
+            "ok"
+          ]
+        },
+        {
+          "name": "post",
+          "startLine": 36,
+          "endLine": 50,
+          "params": [
+            "path",
+            "body"
+          ]
+        },
+        {
+          "name": "firstEntryWithContent",
+          "startLine": 53,
+          "endLine": 61,
+          "params": []
+        },
+        {
+          "name": "remember",
+          "startLine": 64,
+          "endLine": 67,
+          "params": [
+            "name",
+            "answer"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "check",
+          "callee": "console.log",
+          "lineNumber": 31
+        },
+        {
+          "caller": "check",
+          "callee": "failures.push",
+          "lineNumber": 32
+        },
+        {
+          "caller": "post",
+          "callee": "fetch",
+          "lineNumber": 37
+        },
+        {
+          "caller": "post",
+          "callee": "JSON.stringify",
+          "lineNumber": 40
+        },
+        {
+          "caller": "post",
+          "callee": "response.text",
+          "lineNumber": 42
+        },
+        {
+          "caller": "post",
+          "callee": "JSON.parse",
+          "lineNumber": 45
+        },
+        {
+          "caller": "firstEntryWithContent",
+          "callee": "await (await fetch(new URL(\"catalog-index.json\", base))).json",
+          "lineNumber": 54
+        },
+        {
+          "caller": "firstEntryWithContent",
+          "callee": "await",
+          "lineNumber": 54
+        },
+        {
+          "caller": "firstEntryWithContent",
+          "callee": "fetch",
+          "lineNumber": 54
+        },
+        {
+          "caller": "firstEntryWithContent",
+          "callee": "post",
+          "lineNumber": 57
+        },
+        {
+          "caller": "remember",
+          "callee": "bodies.push",
+          "lineNumber": 65
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tools/inspect-dom.mjs",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 43,
+      "nonEmptyLines": 40,
+      "functions": [
+        {
+          "name": "idMatch",
+          "startLine": 12,
+          "endLine": 15,
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "text64",
+          "startLine": 16,
+          "endLine": 20,
+          "params": [
+            "id"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "idMatch",
+          "callee": "dom.match",
+          "lineNumber": 14
+        },
+        {
+          "caller": "text64",
+          "callee": "dom.match",
+          "lineNumber": 18
+        },
+        {
+          "caller": "text64",
+          "callee": "body.replace(/<[^>]+>/g, \"\\u00b7\").replace(/\\s+/g, \" \").trim",
+          "lineNumber": 19
+        },
+        {
+          "caller": "text64",
+          "callee": "body.replace(/<[^>]+>/g, \"\\u00b7\").replace",
+          "lineNumber": 19
+        },
+        {
+          "caller": "text64",
+          "callee": "body.replace",
+          "lineNumber": 19
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tools/probe-http.mjs",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 30,
+      "nonEmptyLines": 27,
+      "functions": [
+        {
+          "name": "request",
+          "startLine": 8,
+          "endLine": 23,
+          "params": [
+            "path"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "request",
+          "callee": "connect",
+          "lineNumber": 10
+        },
+        {
+          "caller": "request",
+          "callee": "socket.write",
+          "lineNumber": 11
+        },
+        {
+          "caller": "request",
+          "callee": "socket.setTimeout",
+          "lineNumber": 14
+        },
+        {
+          "caller": "request",
+          "callee": "socket.destroy",
+          "lineNumber": 14
+        },
+        {
+          "caller": "request",
+          "callee": "socket.on",
+          "lineNumber": 15
+        },
+        {
+          "caller": "request",
+          "callee": "chunk.toString",
+          "lineNumber": 15
+        },
+        {
+          "caller": "request",
+          "callee": "socket.on",
+          "lineNumber": 16
+        },
+        {
+          "caller": "request",
+          "callee": "resolvePromise",
+          "lineNumber": 16
+        },
+        {
+          "caller": "request",
+          "callee": "socket.on",
+          "lineNumber": 17
+        },
+        {
+          "caller": "request",
+          "callee": "data.split",
+          "lineNumber": 18
+        },
+        {
+          "caller": "request",
+          "callee": "statusLine.match",
+          "lineNumber": 19
+        },
+        {
+          "caller": "request",
+          "callee": "resolvePromise",
+          "lineNumber": 20
+        },
+        {
+          "caller": "request",
+          "callee": "Number",
+          "lineNumber": 20
+        },
+        {
+          "caller": "request",
+          "callee": "JSON.stringify",
+          "lineNumber": 20
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tools/probe-old-handler.mjs",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 58,
+      "nonEmptyLines": 52,
+      "functions": [
+        {
+          "name": "oldServer",
+          "startLine": 13,
+          "endLine": 31,
+          "params": []
+        },
+        {
+          "name": "raw",
+          "startLine": 36,
+          "endLine": 45,
+          "params": [
+            "path"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "oldServer",
+          "callee": "createServer",
+          "lineNumber": 14
+        },
+        {
+          "caller": "oldServer",
+          "callee": "resolve",
+          "lineNumber": 17
+        },
+        {
+          "caller": "oldServer",
+          "callee": "decodeURIComponent",
+          "lineNumber": 17
+        },
+        {
+          "caller": "oldServer",
+          "callee": "file.startsWith",
+          "lineNumber": 18
+        },
+        {
+          "caller": "oldServer",
+          "callee": "response.writeHead(403).end",
+          "lineNumber": 19
+        },
+        {
+          "caller": "oldServer",
+          "callee": "response.writeHead",
+          "lineNumber": 19
+        },
+        {
+          "caller": "oldServer",
+          "callee": "readFileSync",
+          "lineNumber": 24
+        },
+        {
+          "caller": "oldServer",
+          "callee": "response.writeHead(404, { \"content-type\": \"text/plain; charset=utf-8\" }).end",
+          "lineNumber": 26
+        },
+        {
+          "caller": "oldServer",
+          "callee": "response.writeHead",
+          "lineNumber": 26
+        },
+        {
+          "caller": "oldServer",
+          "callee": "response.writeHead(200, { \"content-type\": MIME[extname(file)] ?? \"application/octet-stream\" }).end",
+          "lineNumber": 29
+        },
+        {
+          "caller": "oldServer",
+          "callee": "response.writeHead",
+          "lineNumber": 29
+        },
+        {
+          "caller": "oldServer",
+          "callee": "extname",
+          "lineNumber": 29
+        },
+        {
+          "caller": "raw",
+          "callee": "connect",
+          "lineNumber": 38
+        },
+        {
+          "caller": "raw",
+          "callee": "socket.write",
+          "lineNumber": 38
+        },
+        {
+          "caller": "raw",
+          "callee": "socket.setTimeout",
+          "lineNumber": 40
+        },
+        {
+          "caller": "raw",
+          "callee": "socket.destroy",
+          "lineNumber": 40
+        },
+        {
+          "caller": "raw",
+          "callee": "socket.on",
+          "lineNumber": 41
+        },
+        {
+          "caller": "raw",
+          "callee": "chunk.toString",
+          "lineNumber": 41
+        },
+        {
+          "caller": "raw",
+          "callee": "socket.on",
+          "lineNumber": 42
+        },
+        {
+          "caller": "raw",
+          "callee": "done",
+          "lineNumber": 42
+        },
+        {
+          "caller": "raw",
+          "callee": "socket.on",
+          "lineNumber": 43
+        },
+        {
+          "caller": "raw",
+          "callee": "done",
+          "lineNumber": 43
+        },
+        {
+          "caller": "raw",
+          "callee": "data.split",
+          "lineNumber": 43
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tools/probe-shell-quoting.mjs",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 7,
+      "nonEmptyLines": 7,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tools/service/core-targets.mjs",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 30,
+      "nonEmptyLines": 28,
+      "functions": [
+        {
+          "name": "coreTargets",
+          "startLine": 17,
+          "endLine": 30,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "coreTargets",
+          "line": 17,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "coreTargets",
+          "callee": "Array.isArray",
+          "lineNumber": 18
+        },
+        {
+          "caller": "coreTargets",
+          "callee": "TARGET.test",
+          "lineNumber": 22
+        },
+        {
+          "caller": "coreTargets",
+          "callee": "JSON.stringify",
+          "lineNumber": 23
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    }
+  ]
+}

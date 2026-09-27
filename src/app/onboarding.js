@@ -22,7 +22,7 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
   const fields = new Map();
   const steps = () => [
     ...(!editing ? ["experience", ...(draft.experience === "enterprise" ? ["role"] : [])] : []),
-    ...(draft.experience === "enterprise" ? ["organization"] : []),
+    ...(draft.experience === "enterprise" && draft.role === "admin" ? ["organization"] : []),
     "capabilities", "clients", "review",
   ];
   const current = () => steps()[step];
@@ -76,14 +76,13 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
     return wrapper;
   }
   function renderOrganization() {
-    const developer = draft.role === "developer";
-    elements.setupDescription.textContent = developer ? "Use the organization details and policy repository supplied by your admin. This records where policy is expected; it does not verify or import it." : "Record your organization's details for this local Workbench. Choosing Admin does not grant permissions or create authoritative policy.";
+    elements.setupDescription.textContent = "Record your organization's details for this local Workbench. Choosing Admin does not grant permissions or create authoritative policy.";
     const group = el("div", "space-y-4");
     group.append(
       field("name", "Organization name", "Shown in the Workbench header.", { maxLength: 120, autocomplete: "organization" }),
-      field("shortId", "Organization short ID", developer ? "Use the identifier supplied by your organization." : "A local label using lowercase letters, digits and hyphens.", { maxLength: 40 }),
-      field("policyRepo", developer ? "Policy repository supplied by your admin" : "Policy repository", "A repository reference only. This version does not read, sync or verify the repository.", { placeholder: "github.com/your-org/ai-policies" }),
-      field("emails", developer ? "Organization contacts (optional)" : "Organization contact emails", "Separate addresses with commas or new lines. Contacts are recorded locally, not invited or notified.", { multiline: true, maxLength: 5100 }),
+      field("shortId", "Organization short ID", "A local label using lowercase letters, digits and hyphens.", { maxLength: 40 }),
+      field("policyRepo", "Policy repository", "A repository reference only. This version does not read, sync or verify the repository.", { placeholder: "github.com/your-org/ai-policies" }),
+      field("emails", "Organization contact emails", "Separate addresses with commas or new lines. Contacts are recorded locally, not invited or notified.", { multiline: true, maxLength: 5100 }),
     );
     elements.setupContent.append(group);
   }
@@ -166,25 +165,30 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
       elements.setupDescription.textContent = "Choose a starting experience. This setup is saved locally and reopened next time.";
       elements.setupContent.append(radioCards("experience", [
         { value: "vibe", title: "Vibe coder", description: "A personal starting point for exploring the catalog and choosing optional assistance. No enterprise organization is required." },
-        { value: "enterprise", title: "Enterprise", description: "Set up an organization context as an Admin or Developer, with the policy repository your team uses." },
+        { value: "enterprise", title: "Enterprise", description: "Choose Admin or Developer. Admins record organization details; Developers open the admin-supplied policy in the Workbench." },
       ], draft.experience, (value) => {
         draft.experience = value;
         draft.role = null;
-        draft.organization = value === "enterprise" ? { name: "", shortId: "", policyRepo: "", emails: [] } : null;
+        draft.organization = null;
       }));
     } else if (current() === "role") {
       elements.setupDescription.textContent = "Your choice determines the setup questions and the saved experience. A self-declared role is not verified enterprise access.";
       elements.setupContent.append(radioCards("role", [
         { value: "admin", title: "Admin", description: "Record organization details, its policy repository and contact people for this local setup." },
-        { value: "developer", title: "Developer", description: "Use organization information and the policy repository supplied by your enterprise admin." },
-      ], draft.role, (value) => { draft.role = value; }));
+        { value: "developer", title: "Developer", description: "Open the policy supplied by your admin after setup, then prepare a separate project policy." },
+      ], draft.role, (value) => {
+        draft.role = value;
+        draft.organization = value === "admin" ? { name: "", shortId: "", policyRepo: "", emails: [] } : null;
+      }));
     } else if (current() === "organization") renderOrganization();
     else if (current() === "capabilities") renderCapabilities();
     else if (current() === "clients") renderClients();
     else {
       elements.setupDescription.textContent = draft.experience === "vibe"
         ? "Your personal setup opens the existing catalog and governance tools. Vibe-specific automation and connected assistance are not available in this version. Your choices persist across restarts."
-        : "These choices persist across restarts. Both enterprise roles use the existing catalog and governance tools; shared approvals and connected assistance are follow-on work.";
+        : draft.role === "developer"
+          ? "Your role and assistance preferences persist. Open the admin-supplied organization policy in the Policy workspace after setup; it is not chosen or approved by this profile."
+          : "Your organization details and preferences persist. Policy authority and connected assistance are follow-on work.";
       elements.setupContent.append(setupSummary(draft, location));
     }
     elements.setupTitle.focus();
@@ -236,7 +240,10 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
       if (sequence !== loadSequence) return;
       location = result.location ?? null;
       if (result.state === "saved") {
-        if (editing) draft = structuredClone(result.settings);
+        if (editing) {
+          draft = structuredClone(result.settings);
+          if (draft.experience === "enterprise" && draft.role === "developer") draft.organization = null;
+        }
         else {
           onComplete(result.settings, location);
           elements.setupDialog.close();

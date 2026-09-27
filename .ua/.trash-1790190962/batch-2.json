@@ -1,0 +1,1583 @@
+{
+ "nodes": [
+  {
+   "id": "file:src/app/absence.js",
+   "type": "file",
+   "name": "absence.js",
+   "filePath": "src/app/absence.js",
+   "summary": "Defines the shared absence vocabulary (Not published, Not declared, Not supplied, Not connected) and related reason strings so the UI never conflates missing package data with missing operator input.",
+   "tags": [
+    "constants",
+    "vocabulary",
+    "ui-copy",
+    "shared"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:src/governance/bytes.js",
+   "type": "file",
+   "name": "bytes.js",
+   "filePath": "src/governance/bytes.js",
+   "summary": "Moves exact artifact bytes between files, the backend and browser downloads via Base64 without re-serializing, preserving the canonical bytes Core's parsers require.",
+   "tags": [
+    "utility",
+    "serialization",
+    "base64",
+    "download"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/governance/bytes.js:bytesToBase64",
+   "type": "function",
+   "name": "bytesToBase64",
+   "filePath": "src/governance/bytes.js",
+   "lineRange": [
+    10,
+    14
+   ],
+   "summary": "Encodes a byte array to a Base64 string without re-serialization.",
+   "tags": [
+    "utility",
+    "serialization",
+    "base64"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/governance/bytes.js:base64ToBytes",
+   "type": "function",
+   "name": "base64ToBytes",
+   "filePath": "src/governance/bytes.js",
+   "lineRange": [
+    16,
+    21
+   ],
+   "summary": "Decodes a Base64 string back into the exact original bytes.",
+   "tags": [
+    "utility",
+    "serialization",
+    "base64"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/governance/bytes.js:downloadBase64",
+   "type": "function",
+   "name": "downloadBase64",
+   "filePath": "src/governance/bytes.js",
+   "lineRange": [
+    24,
+    31
+   ],
+   "summary": "Triggers a browser download of Base64-encoded bytes under a given filename.",
+   "tags": [
+    "utility",
+    "serialization",
+    "base64"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:src/governance/controller.js",
+   "type": "file",
+   "name": "controller.js",
+   "filePath": "src/governance/controller.js",
+   "summary": "Governance workflow controller that wires all pane components and transport calls into one vertical slice (select, inspect, import evidence, prepare, save, reopen, consume) while guarding every async answer with revision tokens so verdicts only reflect current inputs.",
+   "tags": [
+    "controller",
+    "state-management",
+    "workflow",
+    "entry-point",
+    "async"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:src/governance/controller.js:createGovernance",
+   "type": "function",
+   "name": "createGovernance",
+   "filePath": "src/governance/controller.js",
+   "lineRange": [
+    70,
+    603
+   ],
+   "summary": "Builds the Governance pane: instantiates all components, holds workflow state, and orchestrates prepare, store, reopen and consume calls with revision-guarded async handling.",
+   "tags": [
+    "controller",
+    "state-management",
+    "workflow"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "file:src/governance/detector.js",
+   "type": "file",
+   "name": "detector.js",
+   "filePath": "src/governance/detector.js",
+   "summary": "Renders scanner attestation, scanner result facts and detector provenance as three distinct statements in the Governance pane.",
+   "tags": [
+    "component",
+    "rendering",
+    "scanner",
+    "attestation"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/governance/detector.js:renderScanResult",
+   "type": "function",
+   "name": "renderScanResult",
+   "filePath": "src/governance/detector.js",
+   "lineRange": [
+    35,
+    93
+   ],
+   "summary": "Renders the scanner attestation, scan result facts and detector provenance sections for a scan result.",
+   "tags": [
+    "component",
+    "rendering",
+    "scanner"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/governance/detector.js:createDetector",
+   "type": "function",
+   "name": "createDetector",
+   "filePath": "src/governance/detector.js",
+   "lineRange": [
+    99,
+    171
+   ],
+   "summary": "Creates the detector component that displays scanner attestation and provenance state.",
+   "tags": [
+    "component",
+    "rendering",
+    "scanner"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:src/governance/elements.js",
+   "type": "file",
+   "name": "elements.js",
+   "filePath": "src/governance/elements.js",
+   "summary": "Collects the Governance pane's DOM elements by id and groups them by the component that owns each one.",
+   "tags": [
+    "dom",
+    "configuration",
+    "component-wiring",
+    "utility"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/governance/elements.js:governanceElements",
+   "type": "function",
+   "name": "governanceElements",
+   "filePath": "src/governance/elements.js",
+   "lineRange": [
+    7,
+    57
+   ],
+   "summary": "Looks up all Governance pane element ids and returns them grouped per owning component.",
+   "tags": [
+    "dom",
+    "configuration",
+    "component-wiring"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:src/governance/inputs.js",
+   "type": "file",
+   "name": "inputs.js",
+   "filePath": "src/governance/inputs.js",
+   "summary": "Component owning the subject readout, catalog details, evidence file input and decision/target/effect/route fields; exposes operator-supplied values without ever inventing missing ones.",
+   "tags": [
+    "component",
+    "form",
+    "validation",
+    "operator-input"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:src/governance/inputs.js:renderCatalog",
+   "type": "function",
+   "name": "renderCatalog",
+   "filePath": "src/governance/inputs.js",
+   "lineRange": [
+    34,
+    68
+   ],
+   "summary": "Renders published catalog information about the selected subject.",
+   "tags": [
+    "component",
+    "form",
+    "validation"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/governance/inputs.js:setTargetOptions",
+   "type": "function",
+   "name": "setTargetOptions",
+   "filePath": "src/governance/inputs.js",
+   "lineRange": [
+    83,
+    117
+   ],
+   "summary": "Populates the target select options from the subject's available targets.",
+   "tags": [
+    "component",
+    "form",
+    "validation"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/governance/inputs.js:createInputs",
+   "type": "function",
+   "name": "createInputs",
+   "filePath": "src/governance/inputs.js",
+   "lineRange": [
+    125,
+    259
+   ],
+   "summary": "Creates the inputs component managing subject readout, evidence file and decision fields, exposing values().",
+   "tags": [
+    "component",
+    "form",
+    "validation"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:src/governance/observation.js",
+   "type": "file",
+   "name": "observation.js",
+   "filePath": "src/governance/observation.js",
+   "summary": "Component collecting the operator's observation inputs (artifact manifest, install root and folder) and handing the bytes to the backend by path without parsing or hashing them.",
+   "tags": [
+    "component",
+    "file-input",
+    "observation",
+    "operator-input"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/governance/observation.js:createObservation",
+   "type": "function",
+   "name": "createObservation",
+   "filePath": "src/governance/observation.js",
+   "lineRange": [
+    29,
+    100
+   ],
+   "summary": "Creates the observation component collecting manifest, install root and folder inputs.",
+   "tags": [
+    "component",
+    "file-input",
+    "observation"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:src/governance/operator-files.js",
+   "type": "file",
+   "name": "operator-files.js",
+   "filePath": "src/governance/operator-files.js",
+   "summary": "Component for the operator's own authority, verifier trust and attestation material files, stored separately and never derived from imported evidence.",
+   "tags": [
+    "component",
+    "file-input",
+    "security",
+    "trust"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/governance/operator-files.js:createOperatorFiles",
+   "type": "function",
+   "name": "createOperatorFiles",
+   "filePath": "src/governance/operator-files.js",
+   "lineRange": [
+    45,
+    96
+   ],
+   "summary": "Creates the component handling authority, verifier trust and attestation file inputs.",
+   "tags": [
+    "component",
+    "file-input",
+    "security"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:src/governance/prepared.js",
+   "type": "file",
+   "name": "prepared.js",
+   "filePath": "src/governance/prepared.js",
+   "summary": "Component owning the Prepare button, the prepared-artifact readout and exact-byte downloads, showing binding only as a claim until independent consumption.",
+   "tags": [
+    "component",
+    "rendering",
+    "download",
+    "prepare-step"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/governance/prepared.js:createPrepared",
+   "type": "function",
+   "name": "createPrepared",
+   "filePath": "src/governance/prepared.js",
+   "lineRange": [
+    22,
+    73
+   ],
+   "summary": "Creates the prepared-artifact component with Prepare button, readout and download buttons.",
+   "tags": [
+    "component",
+    "rendering",
+    "download"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:src/governance/reopen.js",
+   "type": "file",
+   "name": "reopen.js",
+   "filePath": "src/governance/reopen.js",
+   "summary": "Component that reopens the two downloaded files in a fresh session so consumption re-derives the verdict independently from the exact bytes.",
+   "tags": [
+    "component",
+    "file-input",
+    "reopen",
+    "verification"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/governance/reopen.js:createReopen",
+   "type": "function",
+   "name": "createReopen",
+   "filePath": "src/governance/reopen.js",
+   "lineRange": [
+    25,
+    82
+   ],
+   "summary": "Creates the reopen component that accepts the downloaded files for a fresh independent session.",
+   "tags": [
+    "component",
+    "file-input",
+    "reopen"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:src/governance/revisions.js",
+   "type": "file",
+   "name": "revisions.js",
+   "filePath": "src/governance/revisions.js",
+   "summary": "Revision tracker that assigns a revision per verification input slot and session so asynchronous answers minted under stale inputs are discarded.",
+   "tags": [
+    "state-management",
+    "concurrency",
+    "utility",
+    "revision-tracking"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/governance/revisions.js:createRevisionTracker",
+   "type": "function",
+   "name": "createRevisionTracker",
+   "filePath": "src/governance/revisions.js",
+   "lineRange": [
+    31,
+    93
+   ],
+   "summary": "Creates a per-slot revision tracker issuing tokens and checking whether an answer's token is still current.",
+   "tags": [
+    "state-management",
+    "concurrency",
+    "utility"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:src/governance/rows.js",
+   "type": "file",
+   "name": "rows.js",
+   "filePath": "src/governance/rows.js",
+   "summary": "Provides the single label/value row renderer used across Governance displays, rendering null values as an explicit absence word.",
+   "tags": [
+    "utility",
+    "rendering",
+    "dom",
+    "component"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/governance/rows.js:row",
+   "type": "function",
+   "name": "row",
+   "filePath": "src/governance/rows.js",
+   "lineRange": [
+    12,
+    24
+   ],
+   "summary": "Appends a label/value row to a parent element, showing the given absence word when the value is null.",
+   "tags": [
+    "utility",
+    "rendering",
+    "dom"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:src/governance/statuses.js",
+   "type": "file",
+   "name": "statuses.js",
+   "filePath": "src/governance/statuses.js",
+   "summary": "Renders the six verification status axes as six separate cells in contract order, never collapsing them into one badge.",
+   "tags": [
+    "component",
+    "rendering",
+    "status",
+    "verification"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/governance/statuses.js:createStatuses",
+   "type": "function",
+   "name": "createStatuses",
+   "filePath": "src/governance/statuses.js",
+   "lineRange": [
+    13,
+    34
+   ],
+   "summary": "Creates the statuses component rendering all six verification axes as separate cells.",
+   "tags": [
+    "component",
+    "rendering",
+    "status"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:src/governance/transport.js",
+   "type": "file",
+   "name": "transport.js",
+   "filePath": "src/governance/transport.js",
+   "summary": "HTTP transport layer for every Governance call to the preview backend's /api endpoints, passing operator input through unchanged and returning Core's answers.",
+   "tags": [
+    "api-client",
+    "transport",
+    "http",
+    "service"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/governance/transport.js:api",
+   "type": "function",
+   "name": "api",
+   "filePath": "src/governance/transport.js",
+   "lineRange": [
+    10,
+    31
+   ],
+   "summary": "Posts a JSON body to a backend /api path and normalizes network and error responses.",
+   "tags": [
+    "api-client",
+    "transport",
+    "http"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/governance/transport.js:fetchSubject",
+   "type": "function",
+   "name": "fetchSubject",
+   "filePath": "src/governance/transport.js",
+   "lineRange": [
+    34,
+    36
+   ],
+   "summary": "Requests the published subject information for a catalog selection.",
+   "tags": [
+    "api-client",
+    "transport",
+    "http"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/governance/transport.js:fetchCatalogIntegrity",
+   "type": "function",
+   "name": "fetchCatalogIntegrity",
+   "filePath": "src/governance/transport.js",
+   "lineRange": [
+    43,
+    45
+   ],
+   "summary": "Requests catalog integrity information from the backend.",
+   "tags": [
+    "api-client",
+    "transport",
+    "http"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/governance/transport.js:parseEvidence",
+   "type": "function",
+   "name": "parseEvidence",
+   "filePath": "src/governance/transport.js",
+   "lineRange": [
+    48,
+    50
+   ],
+   "summary": "Sends evidence bytes to the backend for parsing by Core.",
+   "tags": [
+    "api-client",
+    "transport",
+    "http"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/governance/transport.js:prepare",
+   "type": "function",
+   "name": "prepare",
+   "filePath": "src/governance/transport.js",
+   "lineRange": [
+    53,
+    55
+   ],
+   "summary": "Asks the backend to prepare an artifact through Core from operator inputs.",
+   "tags": [
+    "api-client",
+    "transport",
+    "http"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/governance/transport.js:storeOperatorFile",
+   "type": "function",
+   "name": "storeOperatorFile",
+   "filePath": "src/governance/transport.js",
+   "lineRange": [
+    65,
+    67
+   ],
+   "summary": "Stores one operator file (authority, trust or attestation) in the session.",
+   "tags": [
+    "api-client",
+    "transport",
+    "http"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/governance/transport.js:storeObservation",
+   "type": "function",
+   "name": "storeObservation",
+   "filePath": "src/governance/transport.js",
+   "lineRange": [
+    78,
+    80
+   ],
+   "summary": "Stores the operator's observation manifest and files in the session.",
+   "tags": [
+    "api-client",
+    "transport",
+    "http"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/governance/transport.js:reopenFromFiles",
+   "type": "function",
+   "name": "reopenFromFiles",
+   "filePath": "src/governance/transport.js",
+   "lineRange": [
+    83,
+    85
+   ],
+   "summary": "Opens a fresh session from the downloaded files.",
+   "tags": [
+    "api-client",
+    "transport",
+    "http"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/governance/transport.js:consume",
+   "type": "function",
+   "name": "consume",
+   "filePath": "src/governance/transport.js",
+   "lineRange": [
+    88,
+    90
+   ],
+   "summary": "Requests independent consumption of the saved artifact and returns the verdict.",
+   "tags": [
+    "api-client",
+    "transport",
+    "http"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/governance/transport.js:loadValidationFixture",
+   "type": "function",
+   "name": "loadValidationFixture",
+   "filePath": "src/governance/transport.js",
+   "lineRange": [
+    93,
+    95
+   ],
+   "summary": "Loads the explicitly labelled validation fixture.",
+   "tags": [
+    "api-client",
+    "transport",
+    "http"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/governance/transport.js:fetchSaved",
+   "type": "function",
+   "name": "fetchSaved",
+   "filePath": "src/governance/transport.js",
+   "lineRange": [
+    98,
+    100
+   ],
+   "summary": "Fetches the exact saved bytes for download.",
+   "tags": [
+    "api-client",
+    "transport",
+    "http"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:src/governance/verdict.js",
+   "type": "file",
+   "name": "verdict.js",
+   "filePath": "src/governance/verdict.js",
+   "summary": "Component owning the Consume button and verdict readout, including assessment binding, observation results and the mandatory execution sentence.",
+   "tags": [
+    "component",
+    "rendering",
+    "verdict",
+    "verification"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/governance/verdict.js:createVerdict",
+   "type": "function",
+   "name": "createVerdict",
+   "filePath": "src/governance/verdict.js",
+   "lineRange": [
+    22,
+    93
+   ],
+   "summary": "Creates the verdict component with the Consume button and verdict readout.",
+   "tags": [
+    "component",
+    "rendering",
+    "verdict"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/governance/verdict.js:executionSentence",
+   "type": "function",
+   "name": "executionSentence",
+   "filePath": "src/governance/verdict.js",
+   "lineRange": [
+    104,
+    118
+   ],
+   "summary": "Chooses the execution sentence for not-attempted, observed or refused execution values.",
+   "tags": [
+    "component",
+    "rendering",
+    "verdict"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/governance/verdict.js:renderAssessmentBinding",
+   "type": "function",
+   "name": "renderAssessmentBinding",
+   "filePath": "src/governance/verdict.js",
+   "lineRange": [
+    128,
+    155
+   ],
+   "summary": "Renders the assessment binding details of a verdict.",
+   "tags": [
+    "component",
+    "rendering",
+    "verdict"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/governance/verdict.js:renderObservation",
+   "type": "function",
+   "name": "renderObservation",
+   "filePath": "src/governance/verdict.js",
+   "lineRange": [
+    164,
+    181
+   ],
+   "summary": "Renders the observation result details of a verdict.",
+   "tags": [
+    "component",
+    "rendering",
+    "verdict"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:src/governance/vocabulary.js",
+   "type": "file",
+   "name": "vocabulary.js",
+   "filePath": "src/governance/vocabulary.js",
+   "summary": "Defines the words the Governance pane may use: the six status axes, tone mappings and refusal wording, with rules forbidding Applied/Installed/Executed language.",
+   "tags": [
+    "constants",
+    "vocabulary",
+    "ui-copy",
+    "type-definition"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/governance/vocabulary.js:refusalWording",
+   "type": "function",
+   "name": "refusalWording",
+   "filePath": "src/governance/vocabulary.js",
+   "lineRange": [
+    101,
+    108
+   ],
+   "summary": "Maps a refusal code to the permitted user-facing wording.",
+   "tags": [
+    "constants",
+    "vocabulary",
+    "ui-copy"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:tools/tests/revisions.test.mjs",
+   "type": "file",
+   "name": "revisions.test.mjs",
+   "filePath": "tools/tests/revisions.test.mjs",
+   "summary": "Unit tests for the revision tracker covering slot tokens, session changes, selection changes and undefined-slot errors.",
+   "tags": [
+    "test",
+    "unit-test",
+    "revision-tracking",
+    "concurrency"
+   ],
+   "complexity": "moderate"
+  }
+ ],
+ "edges": [
+  {
+   "source": "file:src/governance/bytes.js",
+   "target": "function:src/governance/bytes.js:bytesToBase64",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/bytes.js",
+   "target": "function:src/governance/bytes.js:bytesToBase64",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/bytes.js",
+   "target": "function:src/governance/bytes.js:base64ToBytes",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/bytes.js",
+   "target": "function:src/governance/bytes.js:base64ToBytes",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/bytes.js",
+   "target": "function:src/governance/bytes.js:downloadBase64",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/bytes.js",
+   "target": "function:src/governance/bytes.js:downloadBase64",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "function:src/governance/controller.js:createGovernance",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "function:src/governance/controller.js:createGovernance",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/bytes.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/detector.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/elements.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/inputs.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/observation.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/operator-files.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/prepared.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/reopen.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/revisions.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/statuses.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/transport.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/verdict.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/detector.js",
+   "target": "function:src/governance/detector.js:renderScanResult",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/detector.js",
+   "target": "function:src/governance/detector.js:createDetector",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/detector.js",
+   "target": "function:src/governance/detector.js:createDetector",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/detector.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/detector.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/detector.js",
+   "target": "file:src/governance/rows.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/elements.js",
+   "target": "function:src/governance/elements.js:governanceElements",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/elements.js",
+   "target": "function:src/governance/elements.js:governanceElements",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/elements.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/inputs.js",
+   "target": "function:src/governance/inputs.js:renderCatalog",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/inputs.js",
+   "target": "function:src/governance/inputs.js:setTargetOptions",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/inputs.js",
+   "target": "function:src/governance/inputs.js:createInputs",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/inputs.js",
+   "target": "function:src/governance/inputs.js:createInputs",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/inputs.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/inputs.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/inputs.js",
+   "target": "file:src/governance/rows.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/observation.js",
+   "target": "function:src/governance/observation.js:createObservation",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/observation.js",
+   "target": "function:src/governance/observation.js:createObservation",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/observation.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/observation.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/observation.js",
+   "target": "file:src/governance/rows.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/operator-files.js",
+   "target": "function:src/governance/operator-files.js:createOperatorFiles",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/operator-files.js",
+   "target": "function:src/governance/operator-files.js:createOperatorFiles",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/operator-files.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/operator-files.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/operator-files.js",
+   "target": "file:src/governance/rows.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/prepared.js",
+   "target": "function:src/governance/prepared.js:createPrepared",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/prepared.js",
+   "target": "function:src/governance/prepared.js:createPrepared",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/prepared.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/prepared.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/prepared.js",
+   "target": "file:src/governance/rows.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/prepared.js",
+   "target": "file:src/governance/vocabulary.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/reopen.js",
+   "target": "function:src/governance/reopen.js:createReopen",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/reopen.js",
+   "target": "function:src/governance/reopen.js:createReopen",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/reopen.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/reopen.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/reopen.js",
+   "target": "file:src/governance/rows.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/revisions.js",
+   "target": "function:src/governance/revisions.js:createRevisionTracker",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/revisions.js",
+   "target": "function:src/governance/revisions.js:createRevisionTracker",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/rows.js",
+   "target": "function:src/governance/rows.js:row",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/rows.js",
+   "target": "function:src/governance/rows.js:row",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/rows.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/rows.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/statuses.js",
+   "target": "function:src/governance/statuses.js:createStatuses",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/statuses.js",
+   "target": "function:src/governance/statuses.js:createStatuses",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/statuses.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/statuses.js",
+   "target": "file:src/governance/vocabulary.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:api",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:fetchSubject",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:fetchSubject",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:fetchCatalogIntegrity",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:fetchCatalogIntegrity",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:parseEvidence",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:parseEvidence",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:prepare",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:prepare",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:storeOperatorFile",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:storeOperatorFile",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:storeObservation",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:storeObservation",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:reopenFromFiles",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:reopenFromFiles",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:consume",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:consume",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:loadValidationFixture",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:loadValidationFixture",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:fetchSaved",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:fetchSaved",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/verdict.js",
+   "target": "function:src/governance/verdict.js:createVerdict",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/verdict.js",
+   "target": "function:src/governance/verdict.js:createVerdict",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/verdict.js",
+   "target": "function:src/governance/verdict.js:executionSentence",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/verdict.js",
+   "target": "function:src/governance/verdict.js:renderAssessmentBinding",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/verdict.js",
+   "target": "function:src/governance/verdict.js:renderObservation",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/verdict.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/verdict.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/verdict.js",
+   "target": "file:src/governance/rows.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/verdict.js",
+   "target": "file:src/governance/vocabulary.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/vocabulary.js",
+   "target": "function:src/governance/vocabulary.js:refusalWording",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/vocabulary.js",
+   "target": "function:src/governance/vocabulary.js:refusalWording",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/tests/revisions.test.mjs",
+   "target": "file:src/governance/revisions.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "function:src/governance/controller.js:createGovernance",
+   "target": "function:src/governance/elements.js:governanceElements",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/governance/controller.js:createGovernance",
+   "target": "function:src/governance/detector.js:createDetector",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/governance/controller.js:createGovernance",
+   "target": "function:src/governance/inputs.js:createInputs",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/governance/controller.js:createGovernance",
+   "target": "function:src/governance/observation.js:createObservation",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/governance/controller.js:createGovernance",
+   "target": "function:src/governance/operator-files.js:createOperatorFiles",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/governance/controller.js:createGovernance",
+   "target": "function:src/governance/prepared.js:createPrepared",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/governance/controller.js:createGovernance",
+   "target": "function:src/governance/reopen.js:createReopen",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/governance/controller.js:createGovernance",
+   "target": "function:src/governance/revisions.js:createRevisionTracker",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/governance/controller.js:createGovernance",
+   "target": "function:src/governance/statuses.js:createStatuses",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/governance/controller.js:createGovernance",
+   "target": "function:src/governance/verdict.js:createVerdict",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/revisions.js",
+   "target": "file:tools/tests/revisions.test.mjs",
+   "type": "tested_by",
+   "direction": "forward",
+   "weight": 0.5
+  }
+ ]
+}

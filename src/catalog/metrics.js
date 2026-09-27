@@ -8,11 +8,12 @@
 
 import { el } from "../app/dom.js";
 import { NOT_PUBLISHED } from "../app/absence.js";
+import { KIND_ICON } from "./entry.js";
 
 /* Display order of the six-kind ledger. Kinds the index carries are counted; the rest keep
    the layout and say Not published. */
 const LEDGER = [
-  { key: "skill", label: "Skills", icon: "extension", iconTone: "text-kind-skill", barTone: "bg-kind-skill" },
+  { key: "skill", label: "Skills", icon: KIND_ICON.skill, iconTone: "text-kind-skill", barTone: "bg-kind-skill" },
   { key: null, label: "Commands", icon: "terminal", iconTone: "text-ledger-command", barTone: "bg-ledger-command" },
   { key: "agent", label: "Agents", icon: "smart_toy", iconTone: "text-ledger-agent", barTone: "bg-ledger-agent" },
   { key: "mcp", label: "MCP Servers", icon: "dns", iconTone: "text-ledger-mcp", barTone: "bg-ledger-mcp" },

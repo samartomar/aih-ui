@@ -1,0 +1,17 @@
+{
+  "fixedSectionOk": true,
+  "nodesRecovered": 0,
+  "edgesRestored": 0,
+  "crossBatchEdgesAdded": 0,
+  "typesRemapped": 0,
+  "complexityRemapped": 0,
+  "notes": [
+    "Fixed section only reported 2 dropped tested_by edges; no ID or complexity normalization was needed (0% of nodes corrected).",
+    "All 286 nodes have ids and valid types (file 97, function 186, document 3); all complexity values are simple/moderate/complex (150/104/32).",
+    "No dangling edges in the assembled graph.",
+    "All importMap entries in scan-result.json have a matching file->file imports edge (0 missing).",
+    "Cross-batch edges flagged by batch analyzers (src/index.html->src/main.js, core-service->core-targets, probe-http/probe-old-handler->preview-request, acceptance-sweep->preview, prototype screens->prototype/screens/*.js) are all present.",
+    "Dropped tested_by edges: tools/service/scan-verifier.mjs -> tools/scan-attribution-cases.mjs and tools/preview-request.mjs -> tools/check-page-contract.mjs. Both test scripts are in tools/ and are not named like tests, so the linker read them as production<->production pairs and dropped them. The relationships are still in the graph as imports and calls edges, so they were not restored, which keeps the linker's rules intact.",
+    "Only 5 tested_by edges exist; the repo's test/acceptance scripts live in tools/ and don't follow a test-path naming convention, so test coverage links are sparse."
+  ]
+}

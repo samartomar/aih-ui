@@ -225,7 +225,14 @@ export function createProvenance({ elements }) {
 
     if (model.scope === null) {
       line.appendChild(dot());
-      line.appendChild(fact("", `${sourceScopes(model.counts).length} sources`, "Current published sources"));
+      const indexed = Number.isInteger(model.summary?.entryCount) ? model.summary.entryCount : null;
+      line.appendChild(fact(
+        "Catalog inventory",
+        indexed === null ? `${model.total} current` : `${model.total} current / ${indexed} indexed`,
+        indexed === null
+          ? "Current entries selected by Catalog's published collection view."
+          : `${model.inventory?.notCurrent ?? indexed - model.total} older entries remain in the installed index for reference. Current membership comes from Catalog's published collection view.`,
+      ));
     } else {
       const scope = describeScope(model.scope);
       line.appendChild(dot());

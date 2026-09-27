@@ -92,6 +92,14 @@ const OPS = {
     const { catalogCategories } = await import("./catalog-categories.mjs");
     return catalogCategories();
   },
+  async policyBundleStructure({ base64 }) {
+    const { reviewPolicyBundle } = await import("./policy-review.mjs");
+    return reviewPolicyBundle({ base64 });
+  },
+  async governanceDecisionStructure({ base64 }) {
+    const { reviewGovernanceDecision } = await import("./policy-review.mjs");
+    return reviewGovernanceDecision({ base64 });
+  },
 };
 
 async function main() {

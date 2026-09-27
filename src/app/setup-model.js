@@ -52,7 +52,11 @@ export function settingsErrors(value) {
   if (!["vibe", "enterprise"].includes(value.experience)) errors.experience = "Choose Vibe coder or Enterprise.";
   if (value.experience === "enterprise") {
     if (!["admin", "developer"].includes(value.role)) errors.role = "Choose Admin or Developer.";
-    Object.assign(errors, organizationErrors(value.organization, value.role));
+    if (value.role === "admin" || (value.role === "developer" && value.organization !== null)) {
+      // Older Developer settings carried organization details. Keep them readable
+      // without making those local preferences a required policy source.
+      Object.assign(errors, organizationErrors(value.organization, value.role));
+    }
   } else if (value.role !== null || value.organization !== null) errors.organization = "Vibe setup does not carry enterprise organization details.";
   if (!listOfStrings(value.capabilities, CAPABILITIES.length) || value.capabilities.some((id) => !CAPABILITIES.some((item) => item.id === id))) errors.capabilities = "Choose only the listed optional capabilities.";
   if (!listOfStrings(value.clients, 100)) errors.clients = "AI client choices must be a list of distinct supported identifiers.";

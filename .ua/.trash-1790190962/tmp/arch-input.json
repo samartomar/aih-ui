@@ -1,0 +1,7099 @@
+{
+ "fileNodes": [
+  {
+   "id": "file:src/app/dom.js",
+   "type": "file",
+   "name": "dom.js",
+   "filePath": "src/app/dom.js",
+   "summary": "Shared DOM primitives (text normalization, element creation via textContent, and fail-loud id lookup) used by every UI component so package data is never parsed as HTML.",
+   "tags": [
+    "utility",
+    "dom",
+    "security",
+    "shared"
+   ]
+  },
+  {
+   "id": "file:src/catalog/cards.js",
+   "type": "file",
+   "name": "cards.js",
+   "filePath": "src/catalog/cards.js",
+   "summary": "Renders the catalog grid: one card per visible entry with kind icon, publisher title and description, curated or declared category badge, and placeholder scan/token slots that say Not published.",
+   "tags": [
+    "component",
+    "rendering",
+    "catalog",
+    "ui"
+   ]
+  },
+  {
+   "id": "file:src/catalog/categories.js",
+   "type": "file",
+   "name": "categories.js",
+   "filePath": "src/catalog/categories.js",
+   "summary": "Rebinds Catalog's curated category records to served index entries and exposes badge, note and count helpers, never inferring categories that Catalog did not curate.",
+   "tags": [
+    "data-model",
+    "catalog",
+    "curation",
+    "utility"
+   ]
+  },
+  {
+   "id": "file:src/catalog/collections.js",
+   "type": "file",
+   "name": "collections.js",
+   "filePath": "src/catalog/collections.js",
+   "summary": "Applies Catalog's published collection view to the index to decide which entries are current inventory, counting older entries only as diagnostics.",
+   "tags": [
+    "data-model",
+    "catalog",
+    "filtering",
+    "inventory"
+   ]
+  },
+  {
+   "id": "file:src/catalog/controller.js",
+   "type": "file",
+   "name": "controller.js",
+   "filePath": "src/catalog/controller.js",
+   "summary": "Sources & Catalogs feature controller that owns the single selection/filter state, loads the catalog, and wires all catalog components through models and callbacks.",
+   "tags": [
+    "controller",
+    "entry-point",
+    "state-management",
+    "catalog"
+   ]
+  },
+  {
+   "id": "file:src/catalog/details.js",
+   "type": "file",
+   "name": "details.js",
+   "filePath": "src/catalog/details.js",
+   "summary": "Renders the inspector's Details and Security tabs: publisher overview, declared capabilities, upstream provenance, evidence statements and Catalog qualification, with explicit absence wording.",
+   "tags": [
+    "component",
+    "inspector",
+    "rendering",
+    "catalog",
+    "security"
+   ]
+  },
+  {
+   "id": "file:src/catalog/elements.js",
+   "type": "file",
+   "name": "elements.js",
+   "filePath": "src/catalog/elements.js",
+   "summary": "Looks up all Sources & Catalogs DOM elements once and groups them per owning component so no component queries the DOM itself.",
+   "tags": [
+    "dom",
+    "configuration",
+    "catalog",
+    "ui"
+   ]
+  },
+  {
+   "id": "file:src/catalog/entry.js",
+   "type": "file",
+   "name": "entry.js",
+   "filePath": "src/catalog/entry.js",
+   "summary": "Pure readers over a single published catalog entry: source identity by source type, digests, labels, evidence statements, kind icons and search text.",
+   "tags": [
+    "utility",
+    "data-model",
+    "catalog",
+    "pure-functions"
+   ]
+  },
+  {
+   "id": "file:src/catalog/index-source.js",
+   "type": "file",
+   "name": "index-source.js",
+   "filePath": "src/catalog/index-source.js",
+   "summary": "Loads the served @aihq/catalog index and preview summary, enforces the index format/version contract, and applies collections, publisher, qualification and category sidecars.",
+   "tags": [
+    "data-loading",
+    "validation",
+    "catalog",
+    "service"
+   ]
+  },
+  {
+   "id": "file:src/catalog/metrics.js",
+   "type": "file",
+   "name": "metrics.js",
+   "filePath": "src/catalog/metrics.js",
+   "summary": "Renders the six-kind ledger metric tiles above the split, counting only kinds the index carries and showing Not published for the rest.",
+   "tags": [
+    "component",
+    "metrics",
+    "catalog",
+    "ui"
+   ]
+  },
+  {
+   "id": "file:src/catalog/navigation.js",
+   "type": "file",
+   "name": "navigation.js",
+   "filePath": "src/catalog/navigation.js",
+   "summary": "Renders the left-rail Catalog Scopes: one row per published source identity or Catalog collection, with revision markers, curated category breakdown and organization additions.",
+   "tags": [
+    "component",
+    "navigation",
+    "catalog",
+    "ui"
+   ]
+  },
+  {
+   "id": "file:src/catalog/provenance.js",
+   "type": "file",
+   "name": "provenance.js",
+   "filePath": "src/catalog/provenance.js",
+   "summary": "Renders the installed-package provenance strip, the masthead naming the selected source, and the source status line, stating unconnected organization/Core state explicitly.",
+   "tags": [
+    "component",
+    "provenance",
+    "catalog",
+    "ui"
+   ]
+  },
+  {
+   "id": "file:src/catalog/publisher.js",
+   "type": "file",
+   "name": "publisher.js",
+   "filePath": "src/catalog/publisher.js",
+   "summary": "Rebinds Catalog's publisher presentation metadata (titles, descriptions, categories) to index entries and reads it back with Catalog's own unavailability reasons.",
+   "tags": [
+    "data-model",
+    "catalog",
+    "publisher-metadata",
+    "utility",
+    "tested"
+   ]
+  },
+  {
+   "id": "file:src/catalog/qualification.js",
+   "type": "file",
+   "name": "qualification.js",
+   "filePath": "src/catalog/qualification.js",
+   "summary": "Rebinds Catalog's publisher qualification reader results to index entries, with tooltips for each state word and attestation sentences, never treating qualified as approval.",
+   "tags": [
+    "data-model",
+    "catalog",
+    "qualification",
+    "security"
+   ]
+  },
+  {
+   "id": "file:src/catalog/selectors.js",
+   "type": "file",
+   "name": "selectors.js",
+   "filePath": "src/catalog/selectors.js",
+   "summary": "Pure presentation selectors for search, filtering, sorting, inventory counts and source scopes, computing every displayed number from the installed index at run time.",
+   "tags": [
+    "selectors",
+    "filtering",
+    "pure-functions",
+    "catalog"
+   ]
+  },
+  {
+   "id": "file:src/catalog/toolbar.js",
+   "type": "file",
+   "name": "toolbar.js",
+   "filePath": "src/catalog/toolbar.js",
+   "summary": "Renders the filter toolbar: the primary review pills (with unavailable Needs Review/Egress Out) and secondary kind, source-type and sort controls with scroll affordance.",
+   "tags": [
+    "component",
+    "filtering",
+    "toolbar",
+    "ui"
+   ]
+  },
+  {
+   "id": "file:src/catalog/view-state.js",
+   "type": "file",
+   "name": "view-state.js",
+   "filePath": "src/catalog/view-state.js",
+   "summary": "Persists the catalog view (query, filters, sort) in sessionStorage and restores it validated against the installed index counts.",
+   "tags": [
+    "state-management",
+    "persistence",
+    "utility",
+    "catalog"
+   ]
+  },
+  {
+   "id": "file:tools/tests/publisher-refusal.test.mjs",
+   "type": "file",
+   "name": "publisher-refusal.test.mjs",
+   "filePath": "tools/tests/publisher-refusal.test.mjs",
+   "summary": "Node test suite verifying that a refused publisher-metadata sidecar is reported with the reader's reason rather than as Catalog publishing nothing.",
+   "tags": [
+    "test",
+    "publisher-metadata",
+    "regression",
+    "catalog"
+   ]
+  },
+  {
+   "id": "file:src/app/absence.js",
+   "type": "file",
+   "name": "absence.js",
+   "filePath": "src/app/absence.js",
+   "summary": "Defines the shared absence vocabulary (Not published, Not declared, Not supplied, Not connected) and related reason strings so the UI never conflates missing package data with missing operator input.",
+   "tags": [
+    "constants",
+    "vocabulary",
+    "ui-copy",
+    "shared"
+   ]
+  },
+  {
+   "id": "file:src/governance/bytes.js",
+   "type": "file",
+   "name": "bytes.js",
+   "filePath": "src/governance/bytes.js",
+   "summary": "Moves exact artifact bytes between files, the backend and browser downloads via Base64 without re-serializing, preserving the canonical bytes Core's parsers require.",
+   "tags": [
+    "utility",
+    "serialization",
+    "base64",
+    "download"
+   ]
+  },
+  {
+   "id": "file:src/governance/controller.js",
+   "type": "file",
+   "name": "controller.js",
+   "filePath": "src/governance/controller.js",
+   "summary": "Governance workflow controller that wires all pane components and transport calls into one vertical slice (select, inspect, import evidence, prepare, save, reopen, consume) while guarding every async answer with revision tokens so verdicts only reflect current inputs.",
+   "tags": [
+    "controller",
+    "state-management",
+    "workflow",
+    "entry-point",
+    "async"
+   ]
+  },
+  {
+   "id": "file:src/governance/detector.js",
+   "type": "file",
+   "name": "detector.js",
+   "filePath": "src/governance/detector.js",
+   "summary": "Renders scanner attestation, scanner result facts and detector provenance as three distinct statements in the Governance pane.",
+   "tags": [
+    "component",
+    "rendering",
+    "scanner",
+    "attestation"
+   ]
+  },
+  {
+   "id": "file:src/governance/elements.js",
+   "type": "file",
+   "name": "elements.js",
+   "filePath": "src/governance/elements.js",
+   "summary": "Collects the Governance pane's DOM elements by id and groups them by the component that owns each one.",
+   "tags": [
+    "dom",
+    "configuration",
+    "component-wiring",
+    "utility"
+   ]
+  },
+  {
+   "id": "file:src/governance/inputs.js",
+   "type": "file",
+   "name": "inputs.js",
+   "filePath": "src/governance/inputs.js",
+   "summary": "Component owning the subject readout, catalog details, evidence file input and decision/target/effect/route fields; exposes operator-supplied values without ever inventing missing ones.",
+   "tags": [
+    "component",
+    "form",
+    "validation",
+    "operator-input"
+   ]
+  },
+  {
+   "id": "file:src/governance/observation.js",
+   "type": "file",
+   "name": "observation.js",
+   "filePath": "src/governance/observation.js",
+   "summary": "Component collecting the operator's observation inputs (artifact manifest, install root and folder) and handing the bytes to the backend by path without parsing or hashing them.",
+   "tags": [
+    "component",
+    "file-input",
+    "observation",
+    "operator-input"
+   ]
+  },
+  {
+   "id": "file:src/governance/operator-files.js",
+   "type": "file",
+   "name": "operator-files.js",
+   "filePath": "src/governance/operator-files.js",
+   "summary": "Component for the operator's own authority, verifier trust and attestation material files, stored separately and never derived from imported evidence.",
+   "tags": [
+    "component",
+    "file-input",
+    "security",
+    "trust"
+   ]
+  },
+  {
+   "id": "file:src/governance/prepared.js",
+   "type": "file",
+   "name": "prepared.js",
+   "filePath": "src/governance/prepared.js",
+   "summary": "Component owning the Prepare button, the prepared-artifact readout and exact-byte downloads, showing binding only as a claim until independent consumption.",
+   "tags": [
+    "component",
+    "rendering",
+    "download",
+    "prepare-step"
+   ]
+  },
+  {
+   "id": "file:src/governance/reopen.js",
+   "type": "file",
+   "name": "reopen.js",
+   "filePath": "src/governance/reopen.js",
+   "summary": "Component that reopens the two downloaded files in a fresh session so consumption re-derives the verdict independently from the exact bytes.",
+   "tags": [
+    "component",
+    "file-input",
+    "reopen",
+    "verification"
+   ]
+  },
+  {
+   "id": "file:src/governance/revisions.js",
+   "type": "file",
+   "name": "revisions.js",
+   "filePath": "src/governance/revisions.js",
+   "summary": "Revision tracker that assigns a revision per verification input slot and session so asynchronous answers minted under stale inputs are discarded.",
+   "tags": [
+    "state-management",
+    "concurrency",
+    "utility",
+    "revision-tracking",
+    "tested"
+   ]
+  },
+  {
+   "id": "file:src/governance/rows.js",
+   "type": "file",
+   "name": "rows.js",
+   "filePath": "src/governance/rows.js",
+   "summary": "Provides the single label/value row renderer used across Governance displays, rendering null values as an explicit absence word.",
+   "tags": [
+    "utility",
+    "rendering",
+    "dom",
+    "component"
+   ]
+  },
+  {
+   "id": "file:src/governance/statuses.js",
+   "type": "file",
+   "name": "statuses.js",
+   "filePath": "src/governance/statuses.js",
+   "summary": "Renders the six verification status axes as six separate cells in contract order, never collapsing them into one badge.",
+   "tags": [
+    "component",
+    "rendering",
+    "status",
+    "verification"
+   ]
+  },
+  {
+   "id": "file:src/governance/transport.js",
+   "type": "file",
+   "name": "transport.js",
+   "filePath": "src/governance/transport.js",
+   "summary": "HTTP transport layer for every Governance call to the preview backend's /api endpoints, passing operator input through unchanged and returning Core's answers.",
+   "tags": [
+    "api-client",
+    "transport",
+    "http",
+    "service"
+   ]
+  },
+  {
+   "id": "file:src/governance/verdict.js",
+   "type": "file",
+   "name": "verdict.js",
+   "filePath": "src/governance/verdict.js",
+   "summary": "Component owning the Consume button and verdict readout, including assessment binding, observation results and the mandatory execution sentence.",
+   "tags": [
+    "component",
+    "rendering",
+    "verdict",
+    "verification"
+   ]
+  },
+  {
+   "id": "file:src/governance/vocabulary.js",
+   "type": "file",
+   "name": "vocabulary.js",
+   "filePath": "src/governance/vocabulary.js",
+   "summary": "Defines the words the Governance pane may use: the six status axes, tone mappings and refusal wording, with rules forbidding Applied/Installed/Executed language.",
+   "tags": [
+    "constants",
+    "vocabulary",
+    "ui-copy",
+    "type-definition"
+   ]
+  },
+  {
+   "id": "file:tools/tests/revisions.test.mjs",
+   "type": "file",
+   "name": "revisions.test.mjs",
+   "filePath": "tools/tests/revisions.test.mjs",
+   "summary": "Unit tests for the revision tracker covering slot tokens, session changes, selection changes and undefined-slot errors.",
+   "tags": [
+    "test",
+    "unit-test",
+    "revision-tracking",
+    "concurrency"
+   ]
+  },
+  {
+   "id": "file:tools/scan-attribution-cases.mjs",
+   "type": "file",
+   "name": "scan-attribution-cases.mjs",
+   "filePath": "tools/scan-attribution-cases.mjs",
+   "summary": "Acceptance cases for Scan signer attribution: signs a fixture with the second of two trusted keys carrying different operator declarations, reorders roots, and asserts the verifier attributes the declaration of the actual signer.",
+   "tags": [
+    "test",
+    "acceptance",
+    "scan-attribution",
+    "trust-boundary"
+   ]
+  },
+  {
+   "id": "file:tools/service/artifacts.mjs",
+   "type": "file",
+   "name": "artifacts.mjs",
+   "filePath": "tools/service/artifacts.mjs",
+   "summary": "Exact-byte artifact I/O for the backend worker: base64 helpers, byte-exact read/write/copy of files and trees, JSON file helpers, and session-relative path naming so the page never sees machine paths.",
+   "tags": [
+    "utility",
+    "file-io",
+    "artifacts",
+    "serialization",
+    "tested"
+   ]
+  },
+  {
+   "id": "file:tools/service/catalog-access.mjs",
+   "type": "file",
+   "name": "catalog-access.mjs",
+   "filePath": "tools/service/catalog-access.mjs",
+   "summary": "Reads the installed @aihq/catalog through Catalog's published content reader, resolving the package root, looking up entries, joining descriptor paths safely, and reporting Catalog's own integrity result.",
+   "tags": [
+    "service",
+    "catalog",
+    "adapter",
+    "integrity"
+   ]
+  },
+  {
+   "id": "file:tools/service/catalog-assessment.mjs",
+   "type": "file",
+   "name": "catalog-assessment.mjs",
+   "filePath": "tools/service/catalog-assessment.mjs",
+   "summary": "Builds the optional assessment resolver handed to Core, supplying only the published Catalog assessment artifact bytes for the identity Core derived.",
+   "tags": [
+    "service",
+    "catalog",
+    "adapter",
+    "resolver"
+   ]
+  },
+  {
+   "id": "file:tools/service/catalog-categories.mjs",
+   "type": "file",
+   "name": "catalog-categories.mjs",
+   "filePath": "tools/service/catalog-categories.mjs",
+   "summary": "Serves Catalog's curated per-entry categories through readCatalogCategoriesV1, reporting refusals rather than assigning or inferring categories.",
+   "tags": [
+    "service",
+    "catalog",
+    "adapter",
+    "categories"
+   ]
+  },
+  {
+   "id": "file:tools/service/catalog-collections.mjs",
+   "type": "file",
+   "name": "catalog-collections.mjs",
+   "filePath": "tools/service/catalog-collections.mjs",
+   "summary": "Serves Catalog's current collection view through readCatalogCollectionsV1, bound to the exact index bytes; loaded on demand by the worker.",
+   "tags": [
+    "service",
+    "catalog",
+    "adapter",
+    "collections"
+   ]
+  },
+  {
+   "id": "file:tools/service/catalog-publisher.mjs",
+   "type": "file",
+   "name": "catalog-publisher.mjs",
+   "filePath": "tools/service/catalog-publisher.mjs",
+   "summary": "Serves publisher titles, descriptions and categories from Catalog's display-only presentation sidecar via readCatalogPresentationV1, reporting unavailable values with Catalog's reason.",
+   "tags": [
+    "service",
+    "catalog",
+    "adapter",
+    "presentation"
+   ]
+  },
+  {
+   "id": "file:tools/service/catalog-qualification.mjs",
+   "type": "file",
+   "name": "catalog-qualification.mjs",
+   "filePath": "tools/service/catalog-qualification.mjs",
+   "summary": "Serves Catalog's publisher qualification states via readCatalogQualificationV1, which re-verifies the shipped signed head and receipts, stamped with the instant they hold at.",
+   "tags": [
+    "service",
+    "catalog",
+    "adapter",
+    "qualification"
+   ]
+  },
+  {
+   "id": "file:tools/service/catalog-served.mjs",
+   "type": "file",
+   "name": "catalog-served.mjs",
+   "filePath": "tools/service/catalog-served.mjs",
+   "summary": "Projects the output of Catalog's public content reader member by member into the document served to the page, so no field the reader drops can reach the UI.",
+   "tags": [
+    "service",
+    "catalog",
+    "projection",
+    "serialization",
+    "validation",
+    "tested"
+   ]
+  },
+  {
+   "id": "file:tools/service/core-adapter.mjs",
+   "type": "file",
+   "name": "core-adapter.mjs",
+   "filePath": "tools/service/core-adapter.mjs",
+   "summary": "Calls @aihq/core's public API for subject derivation, evidence parsing, preparation and independent consumption of governance input, wiring in the Catalog assessment resolver and Scan verification without reproducing Core logic.",
+   "tags": [
+    "service",
+    "adapter",
+    "core",
+    "governance"
+   ]
+  },
+  {
+   "id": "file:tools/service/core-service.mjs",
+   "type": "file",
+   "name": "core-service.mjs",
+   "filePath": "tools/service/core-service.mjs",
+   "summary": "Backend worker entry point and operation dispatcher: reads one JSON request on stdin, routes it to catalog, Core or validation operations (some lazily imported), and writes one JSON response.",
+   "tags": [
+    "entry-point",
+    "service",
+    "dispatcher",
+    "ipc"
+   ]
+  },
+  {
+   "id": "file:tools/service/fixture-candidate.mjs",
+   "type": "file",
+   "name": "fixture-candidate.mjs",
+   "filePath": "tools/service/fixture-candidate.mjs",
+   "summary": "Validation-only builder that assembles a ScanCandidateV2 over the installed Catalog content and signs it with an ephemeral key; no detector runs and nothing is a measurement.",
+   "tags": [
+    "validation",
+    "fixture",
+    "scan",
+    "signing"
+   ]
+  },
+  {
+   "id": "file:tools/service/scan-verifier.mjs",
+   "type": "file",
+   "name": "scan-verifier.mjs",
+   "filePath": "tools/service/scan-verifier.mjs",
+   "summary": "Builds the Scan verifier adapter injected into Core consumption from @aihq/scan's public exports and the operator's own trust file, enforcing the trust boundary and attributing operator declarations to the verified signer.",
+   "tags": [
+    "service",
+    "verification",
+    "trust-boundary",
+    "scan",
+    "security"
+   ]
+  },
+  {
+   "id": "file:tools/service/validation-fixture.mjs",
+   "type": "file",
+   "name": "validation-fixture.mjs",
+   "filePath": "tools/service/validation-fixture.mjs",
+   "summary": "Explicitly labelled validation mode: the only module that manufactures anything, producing an ephemeral signed scan candidate, example authority bundle and operator trust file for a Catalog entry.",
+   "tags": [
+    "validation",
+    "fixture",
+    "governance",
+    "signing"
+   ]
+  },
+  {
+   "id": "file:tools/tests/catalog-served.test.mjs",
+   "type": "file",
+   "name": "catalog-served.test.mjs",
+   "filePath": "tools/tests/catalog-served.test.mjs",
+   "summary": "node:test cases asserting the served catalog document carries only members of the public reader's result types and serves the evidence summary exactly when the reader returned it.",
+   "tags": [
+    "test",
+    "catalog",
+    "projection",
+    "contract"
+   ]
+  },
+  {
+   "id": "file:tools/tests/session-relative.test.mjs",
+   "type": "file",
+   "name": "session-relative.test.mjs",
+   "filePath": "tools/tests/session-relative.test.mjs",
+   "summary": "node:test cases pinning that operator-side files are named by session-relative path for both path styles, and never by machine location.",
+   "tags": [
+    "test",
+    "paths",
+    "privacy",
+    "artifacts"
+   ]
+  },
+  {
+   "id": "file:tools/catalog-index-contract.mjs",
+   "type": "file",
+   "name": "catalog-index-contract.mjs",
+   "filePath": "tools/catalog-index-contract.mjs",
+   "summary": "Defines the published catalog-index contract (format name and version) that the preview enforces before serving a resolved catalog index.",
+   "tags": [
+    "validation",
+    "contract",
+    "catalog",
+    "utility"
+   ]
+  },
+  {
+   "id": "file:tools/check-page-contract.mjs",
+   "type": "file",
+   "name": "check-page-contract.mjs",
+   "filePath": "tools/check-page-contract.mjs",
+   "summary": "Offline regression script verifying that every element id the page modules collect exists exactly once in src/index.html, that the relative module graph and page assets resolve to copied files, and that request paths classify correctly (200/400/403).",
+   "tags": [
+    "test",
+    "validation",
+    "contract",
+    "script",
+    "regression"
+   ]
+  },
+  {
+   "id": "file:tools/check-scan-attribution.mjs",
+   "type": "file",
+   "name": "check-scan-attribution.mjs",
+   "filePath": "tools/check-scan-attribution.mjs",
+   "summary": "Integration check that installs the three local package tarballs into a throwaway consumer, copies the backend service in, and asserts signer attribution rules (declaration follows the actual signer, ordering independence, unattributed and ambiguous trust cases).",
+   "tags": [
+    "test",
+    "integration",
+    "security",
+    "attribution",
+    "script"
+   ]
+  },
+  {
+   "id": "file:tools/packages.mjs",
+   "type": "file",
+   "name": "packages.mjs",
+   "filePath": "tools/packages.mjs",
+   "summary": "Resolves @aihq/core, @aihq/scan and @aihq/catalog into tarballs, either from supplied *_TGZ files or by git-archiving a committed checkpoint into an external workspace, building, packing and caching by commit, then installs them into a throwaway consumer.",
+   "tags": [
+    "service",
+    "build-system",
+    "packaging",
+    "utility"
+   ]
+  },
+  {
+   "id": "file:tools/preview-request.mjs",
+   "type": "file",
+   "name": "preview-request.mjs",
+   "filePath": "tools/preview-request.mjs",
+   "summary": "Classifies a raw preview request URL into a served file path or a 400/403 refusal, kept separate from the server so malformed-URL and traversal behavior can be tested without starting a preview.",
+   "tags": [
+    "security",
+    "validation",
+    "http",
+    "utility"
+   ]
+  },
+  {
+   "id": "file:tools/preview.mjs",
+   "type": "file",
+   "name": "preview.mjs",
+   "filePath": "tools/preview.mjs",
+   "summary": "Entry point that builds a throwaway Policy Workbench preview: resolves and installs the three packages into a consumer, copies page, service and presentation assets into an external run directory, validates the catalog index contract, and serves the static page plus API on 127.0.0.1.",
+   "tags": [
+    "entry-point",
+    "dev-server",
+    "build-system",
+    "orchestration",
+    "cli"
+   ]
+  },
+  {
+   "id": "file:tools/server/api.mjs",
+   "type": "file",
+   "name": "api.mjs",
+   "filePath": "tools/server/api.mjs",
+   "summary": "HTTP API routing for the preview: maps GET/POST /api/* routes (packages, subject, catalog-integrity, evidence, validation-fixture, operator-file, observation, reopen, prepare, consume, saved) to service calls and session storage, keeping filesystem paths server-side.",
+   "tags": [
+    "api-handler",
+    "router",
+    "http",
+    "service"
+   ]
+  },
+  {
+   "id": "file:tools/server/assets.mjs",
+   "type": "file",
+   "name": "assets.mjs",
+   "filePath": "tools/server/assets.mjs",
+   "summary": "Determines which files the preview copies where: discovers served page assets by walking src/, lists service modules and flat presentation assets, and asserts required entry points are readable.",
+   "tags": [
+    "utility",
+    "build-system",
+    "assets",
+    "configuration"
+   ]
+  },
+  {
+   "id": "file:tools/server/service-client.mjs",
+   "type": "file",
+   "name": "service-client.mjs",
+   "filePath": "tools/server/service-client.mjs",
+   "summary": "Seam between the preview server and the installed packages: runs the service worker as a child process inside the consumer and exchanges one JSON request for one JSON response.",
+   "tags": [
+    "service",
+    "ipc",
+    "adapter",
+    "child-process"
+   ]
+  },
+  {
+   "id": "file:tools/server/sessions.mjs",
+   "type": "file",
+   "name": "sessions.mjs",
+   "filePath": "tools/server/sessions.mjs",
+   "summary": "Server-owned session store deriving every filesystem location from an opaque uuid, holding operator-supplied files (authority bundle, trust, attestation material) and revision-guarded observation uploads outside the consume root.",
+   "tags": [
+    "session",
+    "security",
+    "storage",
+    "service",
+    "validation",
+    "tested"
+   ]
+  },
+  {
+   "id": "file:tools/server/static.mjs",
+   "type": "file",
+   "name": "static.mjs",
+   "filePath": "tools/server/static.mjs",
+   "summary": "Static half of the preview server: lets the API handler claim /api paths first, then serves run-directory files via classifyRequestPath with MIME types and 400/403/404 answers.",
+   "tags": [
+    "http",
+    "dev-server",
+    "static-files",
+    "security"
+   ]
+  },
+  {
+   "id": "file:tools/tests/sessions-observation.test.mjs",
+   "type": "file",
+   "name": "sessions-observation.test.mjs",
+   "filePath": "tools/tests/sessions-observation.test.mjs",
+   "summary": "node:test suite for the session store's observation revision guard: older or equal revisions are refused without touching bytes, missing revisions are refused, inputs and sessions are counted independently, and unknown sessions are rejected first.",
+   "tags": [
+    "test",
+    "session",
+    "revision-guard",
+    "concurrency"
+   ]
+  },
+  {
+   "id": "file:src/app/ai-tools.js",
+   "type": "file",
+   "name": "ai-tools.js",
+   "filePath": "src/app/ai-tools.js",
+   "summary": "Header AI tools control that lists the AI CLI targets @aihq/core publishes as supported, keeps the user's selection as a browser-local draft, and never implies installation or connection status.",
+   "tags": [
+    "component",
+    "ui-control",
+    "local-storage",
+    "state-management"
+   ]
+  },
+  {
+   "id": "file:src/app/elements.js",
+   "type": "file",
+   "name": "elements.js",
+   "filePath": "src/app/elements.js",
+   "summary": "Looks up the DOM nodes owned by the application shell, the organization setup popup and the AI tools control by element id.",
+   "tags": [
+    "utility",
+    "dom",
+    "element-lookup"
+   ]
+  },
+  {
+   "id": "file:src/app/organization.js",
+   "type": "file",
+   "name": "organization.js",
+   "filePath": "src/app/organization.js",
+   "summary": "Organization setup popup in the header: a user-entered draft (name, short id, policy repo, emails, signing posture) persisted in localStorage, validated on save and discarded on cancel, with no claim of policy authority.",
+   "tags": [
+    "component",
+    "form",
+    "validation",
+    "local-storage",
+    "modal"
+   ]
+  },
+  {
+   "id": "file:src/app/shell.js",
+   "type": "file",
+   "name": "shell.js",
+   "filePath": "src/app/shell.js",
+   "summary": "Application shell controller owning the collapsible navigation and inspector rails, keyboard-accessible inspector tabs and the error banner, exposing openInspector and showError to features.",
+   "tags": [
+    "component",
+    "layout",
+    "accessibility",
+    "event-handler"
+   ]
+  },
+  {
+   "id": "file:src/app/theme.js",
+   "type": "file",
+   "name": "theme.js",
+   "filePath": "src/app/theme.js",
+   "summary": "Observes theme changes on <html> and briefly suppresses CSS transitions so already-rendered elements repaint against the new theme variables instead of keeping stale colours.",
+   "tags": [
+    "utility",
+    "theming",
+    "css",
+    "mutation-observer"
+   ]
+  },
+  {
+   "id": "file:src/main.js",
+   "type": "file",
+   "name": "main.js",
+   "filePath": "src/main.js",
+   "summary": "Policy Workbench page entry point that composes the shell, theme, AI tools, organization, catalog and governance features and wires their callbacks together without holding state.",
+   "tags": [
+    "entry-point",
+    "composition-root",
+    "bootstrap"
+   ]
+  },
+  {
+   "id": "document:AGENTS.md",
+   "type": "document",
+   "name": "AGENTS.md",
+   "filePath": "AGENTS.md",
+   "summary": "Six working rules for agents in this repo: own only the Policy Workbench screens, build from prototype/ without redesigning it, use only the public interfaces of @aihq/core, @aihq/catalog and @aihq/scan, ship a clickable page first, keep no plan documents, and never publish or force-push without the owner's approval.",
+   "tags": [
+    "documentation",
+    "development",
+    "agent-instructions",
+    "guidelines"
+   ]
+  },
+  {
+   "id": "document:CLAUDE.md",
+   "type": "document",
+   "name": "CLAUDE.md",
+   "filePath": "CLAUDE.md",
+   "summary": "One-line Claude Code instruction file that pulls in AGENTS.md by reference, so both agent tools follow the same repo rules.",
+   "tags": [
+    "documentation",
+    "agent-instructions",
+    "configuration"
+   ]
+  },
+  {
+   "id": "document:README.md",
+   "type": "document",
+   "name": "README.md",
+   "filePath": "README.md",
+   "summary": "The authoritative project README. It states what the repo owns and must never contain, how the page is composed (app shell, catalog, governance), layout parity with the prototype, the Governance pane's slice through Core, how to run the preview, and the rules for reading published packages.",
+   "tags": [
+    "documentation",
+    "entry-point",
+    "architecture",
+    "overview",
+    "design-contract"
+   ]
+  },
+  {
+   "id": "file:prototype/screens/admin-acme.html",
+   "type": "file",
+   "name": "admin-acme.html",
+   "filePath": "prototype/screens/admin-acme.html",
+   "summary": "Admin prototype screen for \"Acme additions\": the organization's own source listing internal MCP servers, skills and tools with their scan status, and the only place an admin runs a scan themselves.",
+   "tags": [
+    "prototype",
+    "admin-screen",
+    "html-page",
+    "design-source"
+   ]
+  },
+  {
+   "id": "file:prototype/screens/admin-changes.html",
+   "type": "file",
+   "name": "admin-changes.html",
+   "filePath": "prototype/screens/admin-changes.html",
+   "summary": "Admin prototype screen showing the staged policy delta (acme.policy.json) as a colorized JSON diff against the template, with reset, copy, download and publish actions.",
+   "tags": [
+    "prototype",
+    "admin-screen",
+    "policy-diff",
+    "design-source"
+   ]
+  },
+  {
+   "id": "file:prototype/screens/admin-item.html",
+   "type": "file",
+   "name": "admin-item.html",
+   "filePath": "prototype/screens/admin-item.html",
+   "summary": "Admin prototype screen for a single catalog item's security view (fal-ai-media), showing findings, per-scanner results and source evidence behind a needs-review hold.",
+   "tags": [
+    "prototype",
+    "admin-screen",
+    "security-scan",
+    "design-source"
+   ]
+  },
+  {
+   "id": "file:prototype/screens/admin-org.html",
+   "type": "file",
+   "name": "admin-org.html",
+   "filePath": "prototype/screens/admin-org.html",
+   "summary": "Admin prototype first-run screen where the organization identifies itself (name, id, policy repo, owners prefilled from git) alongside the five-step onboarding path.",
+   "tags": [
+    "prototype",
+    "admin-screen",
+    "onboarding",
+    "design-source"
+   ]
+  },
+  {
+   "id": "file:prototype/screens/admin-scan.html",
+   "type": "file",
+   "name": "admin-scan.html",
+   "filePath": "prototype/screens/admin-scan.html",
+   "summary": "Admin prototype scan-review screen summarizing scan results across every aih-shipped source (passed, needs review, not scanned) with grouping and an explanation of what each result means.",
+   "tags": [
+    "prototype",
+    "admin-screen",
+    "security-scan",
+    "design-source"
+   ]
+  },
+  {
+   "id": "file:prototype/screens/admin-sources.html",
+   "type": "file",
+   "name": "admin-sources.html",
+   "filePath": "prototype/screens/admin-sources.html",
+   "summary": "The owner's final, self-contained admin Sources prototype: a full workbench layout with a collapsible nav rail, source card grid, item inspector drawer (details, security scan, policy JSON tabs), organization modal and theme toggle; the origin of the shared tokens and base styles.",
+   "tags": [
+    "prototype",
+    "admin-screen",
+    "design-source",
+    "design-system",
+    "interactive-mock"
+   ]
+  },
+  {
+   "id": "file:prototype/screens/entry.html",
+   "type": "file",
+   "name": "entry.html",
+   "filePath": "prototype/screens/entry.html",
+   "summary": "Prototype landing screen shown when the workbench command runs in a folder that is neither a policy repo nor a project, letting the operator choose the admin page or the user page.",
+   "tags": [
+    "prototype",
+    "entry-point",
+    "design-source",
+    "html-page"
+   ]
+  },
+  {
+   "id": "file:prototype/screens/fonts.css",
+   "type": "file",
+   "name": "fonts.css",
+   "filePath": "prototype/screens/fonts.css",
+   "summary": "Imports the Inter, JetBrains Mono and Material Symbols Outlined web fonts from Google Fonts for every prototype screen.",
+   "tags": [
+    "stylesheet",
+    "typography",
+    "fonts",
+    "design-system"
+   ]
+  },
+  {
+   "id": "file:prototype/screens/overview.html",
+   "type": "file",
+   "name": "overview.html",
+   "filePath": "prototype/screens/overview.html",
+   "summary": "Prototype overview explaining who uses the workbench: the two doors (admin and user), what aih ships, and the two plain policy files that travel between organization and project repos.",
+   "tags": [
+    "prototype",
+    "documentation",
+    "design-source",
+    "overview"
+   ]
+  },
+  {
+   "id": "file:prototype/screens/system.html",
+   "type": "file",
+   "name": "system.html",
+   "filePath": "prototype/screens/system.html",
+   "summary": "Design-system reference screen showcasing the shared tokens and components: colour roles, type, actions and controls, labels/status/filters, navigation and cards.",
+   "tags": [
+    "prototype",
+    "design-system",
+    "style-guide",
+    "design-source"
+   ]
+  },
+  {
+   "id": "file:prototype/screens/tokens.css",
+   "type": "file",
+   "name": "tokens.css",
+   "filePath": "prototype/screens/tokens.css",
+   "summary": "Design tokens for the Policy Workbench extracted from admin-sources.html: colour-role CSS custom properties for dark (default) and light modes plus typography conventions.",
+   "tags": [
+    "design-tokens",
+    "stylesheet",
+    "theming",
+    "design-system"
+   ]
+  },
+  {
+   "id": "file:prototype/screens/user-start.html",
+   "type": "file",
+   "name": "user-start.html",
+   "filePath": "prototype/screens/user-start.html",
+   "summary": "User-side prototype screen for picking a starting policy for a project (payments-api) and explaining how a trimmed aih-project-policy.json is shared with teammates via aih init --apply.",
+   "tags": [
+    "prototype",
+    "user-screen",
+    "onboarding",
+    "design-source"
+   ]
+  },
+  {
+   "id": "file:prototype/screens/user-trim.html",
+   "type": "file",
+   "name": "user-trim.html",
+   "filePath": "prototype/screens/user-trim.html",
+   "summary": "Interactive user-side prototype for trimming an organization policy: users toggle sources and items by kind, see ledger counts, overlap and broken-link warnings, and a change log before saving the project policy.",
+   "tags": [
+    "prototype",
+    "user-screen",
+    "interactive-mock",
+    "design-source"
+   ]
+  },
+  {
+   "id": "file:prototype/screens/wb.css",
+   "type": "file",
+   "name": "wb.css",
+   "filePath": "prototype/screens/wb.css",
+   "summary": "Shared base styles for every prototype screen, lifted from admin-sources.html: full-height layout, thin scrollbars, collapsible panel transitions and small utility classes driven by tokens.css variables.",
+   "tags": [
+    "stylesheet",
+    "base-styles",
+    "layout",
+    "design-system"
+   ]
+  },
+  {
+   "id": "file:prototype/index.html",
+   "type": "file",
+   "name": "index.html",
+   "filePath": "prototype/index.html",
+   "summary": "Design-source index of the Policy Workbench prototype: a navigable deck that frames each prototype screen in an iframe with Back/Next controls, notes on the single design system, and a light/dark mode switch.",
+   "tags": [
+    "prototype",
+    "design-source",
+    "navigation",
+    "entry-point",
+    "markup"
+   ]
+  },
+  {
+   "id": "file:prototype/screens/mode.js",
+   "type": "file",
+   "name": "mode.js",
+   "filePath": "prototype/screens/mode.js",
+   "summary": "Light/dark mode switcher shared by prototype screens: picks the mode from ?mode, then localStorage, then dark, and toggles the html class and any mode-toggle button labels and icons.",
+   "tags": [
+    "theme",
+    "utility",
+    "prototype",
+    "event-handler"
+   ]
+  },
+  {
+   "id": "file:prototype/screens/shell.js",
+   "type": "file",
+   "name": "shell.js",
+   "filePath": "prototype/screens/shell.js",
+   "summary": "Defines the global WB object that injects the shared admin chrome (header, sub-header, nav rail) from admin-sources.html into prototype admin screens via WB.top() and WB.nav().",
+   "tags": [
+    "prototype",
+    "component",
+    "layout",
+    "admin-shell"
+   ]
+  },
+  {
+   "id": "file:prototype/screens/tw-config.js",
+   "type": "file",
+   "name": "tw-config.js",
+   "filePath": "prototype/screens/tw-config.js",
+   "summary": "Tailwind CDN configuration shared by every prototype screen and the Workbench page: class-based dark mode and a Material-style color palette mapped to tokens.css custom properties.",
+   "tags": [
+    "configuration",
+    "tailwind",
+    "design-tokens",
+    "theme"
+   ]
+  },
+  {
+   "id": "file:prototype/screens/user-shell.js",
+   "type": "file",
+   "name": "user-shell.js",
+   "filePath": "prototype/screens/user-shell.js",
+   "summary": "Defines the global WBU object rendering the user-facing page chrome, including the organization-policy strip that illustrates the policy lookup order (--policy, AIH_ORG_POLICY, aih-org-policy.json) selectable via ?source.",
+   "tags": [
+    "prototype",
+    "component",
+    "layout",
+    "policy-source"
+   ]
+  },
+  {
+   "id": "file:src/app/workbench.css",
+   "type": "file",
+   "name": "workbench.css",
+   "filePath": "src/app/workbench.css",
+   "summary": "Local presentation rules the Workbench page adds on top of the prototype stylesheets: Material Symbols axes, a hidden-scrollbar fading kind-filter strip, provenance marker hiding, and theme-change transition handling.",
+   "tags": [
+    "styles",
+    "theme",
+    "layout",
+    "markup"
+   ]
+  },
+  {
+   "id": "file:src/index.html",
+   "type": "file",
+   "name": "index.html",
+   "filePath": "src/index.html",
+   "summary": "Main HTML page of the Policy Workbench: loads fonts, tokens, mode and Tailwind config, prototype and local stylesheets, and defines every element (masthead, source rails, catalog ledger, governance pane, organization modal) that main.js wires up.",
+   "tags": [
+    "entry-point",
+    "page",
+    "markup",
+    "workbench",
+    "layout"
+   ]
+  },
+  {
+   "id": "file:tools/acceptance-sweep.mjs",
+   "type": "file",
+   "name": "acceptance-sweep.mjs",
+   "filePath": "tools/acceptance-sweep.mjs",
+   "summary": "Browserless acceptance sweep against a running preview's /api/* endpoints, replaying the Governance pane's call order to check no filesystem paths leak, session sharing, reopen round-trips, and refusal of bad sessions or bodies.",
+   "tags": [
+    "test",
+    "acceptance",
+    "api",
+    "cli",
+    "security"
+   ]
+  },
+  {
+   "id": "file:tools/compare.html",
+   "type": "file",
+   "name": "compare.html",
+   "filePath": "tools/compare.html",
+   "summary": "Layout-parity tool that renders the prototype and the implementation side by side or overlaid (difference blend) at the same 1600x1000 viewport to compare element geometry.",
+   "tags": [
+    "tooling",
+    "visual-regression",
+    "markup",
+    "comparison"
+   ]
+  },
+  {
+   "id": "file:tools/inspect-dom.mjs",
+   "type": "file",
+   "name": "inspect-dom.mjs",
+   "filePath": "tools/inspect-dom.mjs",
+   "summary": "Reads a headless-rendered DOM dump of the preview page and prints acceptance facts such as the catalog error element, masthead, provenance strip, counts, and source rails.",
+   "tags": [
+    "tooling",
+    "diagnostics",
+    "cli",
+    "dom"
+   ]
+  },
+  {
+   "id": "file:tools/probe-http.mjs",
+   "type": "file",
+   "name": "probe-http.mjs",
+   "filePath": "tools/probe-http.mjs",
+   "summary": "Sends raw byte-exact HTTP requests over a socket to the preview server with malformed and traversal paths, then confirms the server still serves the catalog index afterwards.",
+   "tags": [
+    "tooling",
+    "http",
+    "probe",
+    "security"
+   ]
+  },
+  {
+   "id": "file:tools/probe-old-handler.mjs",
+   "type": "file",
+   "name": "probe-old-handler.mjs",
+   "filePath": "tools/probe-old-handler.mjs",
+   "summary": "Reproduces the malformed-URL bug by running the pre-fix static server handler (unguarded decodeURIComponent) on a throwaway port and sending raw requests to it.",
+   "tags": [
+    "tooling",
+    "bug-reproduction",
+    "http",
+    "probe"
+   ]
+  },
+  {
+   "id": "file:tools/probe-shell-quoting.mjs",
+   "type": "file",
+   "name": "probe-shell-quoting.mjs",
+   "filePath": "tools/probe-shell-quoting.mjs",
+   "summary": "Throwaway probe checking how spawnSync with and without shell:true quotes a JavaScript expression argument on the current platform.",
+   "tags": [
+    "tooling",
+    "probe",
+    "child-process",
+    "platform"
+   ]
+  },
+  {
+   "id": "file:tools/service/core-targets.mjs",
+   "type": "file",
+   "name": "core-targets.mjs",
+   "filePath": "tools/service/core-targets.mjs",
+   "summary": "Service module exposing the AI CLI targets Core supports, read from @aihq/core's public SUPPORTED_CLIS export and validated; loaded on demand by core-service.mjs.",
+   "tags": [
+    "service",
+    "adapter",
+    "validation",
+    "core"
+   ]
+  }
+ ],
+ "importEdges": [
+  {
+   "source": "file:src/catalog/cards.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/cards.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/cards.js",
+   "target": "file:src/catalog/categories.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/cards.js",
+   "target": "file:src/catalog/entry.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/cards.js",
+   "target": "file:src/catalog/publisher.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/collections.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/cards.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/categories.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/details.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/elements.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/index-source.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/metrics.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/navigation.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/provenance.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/publisher.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/selectors.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/toolbar.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/view-state.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "file:src/catalog/entry.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "file:src/catalog/publisher.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "file:src/catalog/qualification.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "file:src/catalog/selectors.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/elements.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/index-source.js",
+   "target": "file:src/catalog/categories.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/index-source.js",
+   "target": "file:src/catalog/collections.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/index-source.js",
+   "target": "file:src/catalog/publisher.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/index-source.js",
+   "target": "file:src/catalog/qualification.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/metrics.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/metrics.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "file:src/catalog/categories.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "file:src/catalog/selectors.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/provenance.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/provenance.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/provenance.js",
+   "target": "file:src/catalog/selectors.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/qualification.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/qualification.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "file:src/catalog/categories.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "file:src/catalog/entry.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "file:src/catalog/publisher.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/toolbar.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/toolbar.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/toolbar.js",
+   "target": "file:src/catalog/selectors.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/view-state.js",
+   "target": "file:src/catalog/selectors.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/tests/publisher-refusal.test.mjs",
+   "target": "file:src/catalog/publisher.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/bytes.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/detector.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/elements.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/inputs.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/observation.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/operator-files.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/prepared.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/reopen.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/revisions.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/statuses.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/transport.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/verdict.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/detector.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/detector.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/detector.js",
+   "target": "file:src/governance/rows.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/elements.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/inputs.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/inputs.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/inputs.js",
+   "target": "file:src/governance/rows.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/observation.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/observation.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/observation.js",
+   "target": "file:src/governance/rows.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/operator-files.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/operator-files.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/operator-files.js",
+   "target": "file:src/governance/rows.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/prepared.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/prepared.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/prepared.js",
+   "target": "file:src/governance/rows.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/prepared.js",
+   "target": "file:src/governance/vocabulary.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/reopen.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/reopen.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/reopen.js",
+   "target": "file:src/governance/rows.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/rows.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/rows.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/statuses.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/statuses.js",
+   "target": "file:src/governance/vocabulary.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/verdict.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/verdict.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/verdict.js",
+   "target": "file:src/governance/rows.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/verdict.js",
+   "target": "file:src/governance/vocabulary.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/tests/revisions.test.mjs",
+   "target": "file:src/governance/revisions.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/scan-attribution-cases.mjs",
+   "target": "file:tools/service/fixture-candidate.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/scan-attribution-cases.mjs",
+   "target": "file:tools/service/scan-verifier.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/catalog-assessment.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/catalog-categories.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/catalog-collections.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/catalog-publisher.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/catalog-qualification.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "file:tools/service/artifacts.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "file:tools/service/catalog-assessment.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "file:tools/service/scan-verifier.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "file:tools/service/catalog-served.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "file:tools/service/core-adapter.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "file:tools/service/validation-fixture.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/scan-verifier.mjs",
+   "target": "file:tools/service/artifacts.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/validation-fixture.mjs",
+   "target": "file:tools/service/artifacts.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/validation-fixture.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/validation-fixture.mjs",
+   "target": "file:tools/service/core-adapter.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/validation-fixture.mjs",
+   "target": "file:tools/service/fixture-candidate.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/tests/catalog-served.test.mjs",
+   "target": "file:tools/service/catalog-served.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/tests/session-relative.test.mjs",
+   "target": "file:tools/service/artifacts.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/check-page-contract.mjs",
+   "target": "file:src/catalog/selectors.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/check-page-contract.mjs",
+   "target": "file:tools/preview-request.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/check-page-contract.mjs",
+   "target": "file:tools/server/assets.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/check-scan-attribution.mjs",
+   "target": "file:tools/packages.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/check-scan-attribution.mjs",
+   "target": "file:tools/server/assets.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "file:tools/catalog-index-contract.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "file:tools/packages.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "file:tools/server/api.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "file:tools/server/assets.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "file:tools/server/service-client.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "file:tools/server/static.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/server/api.mjs",
+   "target": "file:tools/server/service-client.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/server/api.mjs",
+   "target": "file:tools/server/sessions.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/server/static.mjs",
+   "target": "file:tools/preview-request.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/tests/sessions-observation.test.mjs",
+   "target": "file:tools/server/sessions.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/app/ai-tools.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/app/ai-tools.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/app/elements.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/app/organization.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/app/organization.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/main.js",
+   "target": "file:src/app/ai-tools.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/main.js",
+   "target": "file:src/app/elements.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/main.js",
+   "target": "file:src/app/organization.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/main.js",
+   "target": "file:src/app/shell.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/main.js",
+   "target": "file:src/app/theme.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/main.js",
+   "target": "file:src/catalog/controller.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/main.js",
+   "target": "file:src/governance/controller.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  }
+ ],
+ "allEdges": [
+  {
+   "source": "file:src/app/dom.js",
+   "target": "function:src/app/dom.js:text",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/app/dom.js",
+   "target": "function:src/app/dom.js:text",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/app/dom.js",
+   "target": "function:src/app/dom.js:el",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/app/dom.js",
+   "target": "function:src/app/dom.js:el",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/app/dom.js",
+   "target": "function:src/app/dom.js:collectIds",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/app/dom.js",
+   "target": "function:src/app/dom.js:collectIds",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/cards.js",
+   "target": "function:src/catalog/cards.js:badgeOf",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/cards.js",
+   "target": "function:src/catalog/cards.js:card",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/cards.js",
+   "target": "function:src/catalog/cards.js:createCards",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/cards.js",
+   "target": "function:src/catalog/cards.js:createCards",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/cards.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/cards.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/cards.js",
+   "target": "file:src/catalog/categories.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/cards.js",
+   "target": "file:src/catalog/entry.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/cards.js",
+   "target": "file:src/catalog/publisher.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "function:src/catalog/categories.js:applyCategories",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "function:src/catalog/categories.js:applyCategories",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "function:src/catalog/categories.js:curatedCategoryOf",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "function:src/catalog/categories.js:curatedCategoryOf",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "function:src/catalog/categories.js:curationNote",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "function:src/catalog/categories.js:curationNote",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "function:src/catalog/categories.js:categoryBadge",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "function:src/catalog/categories.js:categoryBadge",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "function:src/catalog/categories.js:categoryRows",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "function:src/catalog/categories.js:categoryRows",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/collections.js",
+   "target": "function:src/catalog/collections.js:applyCollections",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/collections.js",
+   "target": "function:src/catalog/collections.js:applyCollections",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/collections.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "function:src/catalog/controller.js:createCatalog",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "function:src/catalog/controller.js:createCatalog",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/cards.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/categories.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/details.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/elements.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/index-source.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/metrics.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/navigation.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/provenance.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/publisher.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/selectors.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/toolbar.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/view-state.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "function:src/catalog/details.js:row",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "function:src/catalog/details.js:capability",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "function:src/catalog/details.js:renderQualification",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "function:src/catalog/details.js:createDetails",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "function:src/catalog/details.js:createDetails",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "file:src/catalog/entry.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "file:src/catalog/publisher.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "file:src/catalog/qualification.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "file:src/catalog/selectors.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/elements.js",
+   "target": "function:src/catalog/elements.js:catalogElements",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/elements.js",
+   "target": "function:src/catalog/elements.js:catalogElements",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/elements.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:shortDigest",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:shortDigest",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:sourceIdentity",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:sourceIdentity",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:sourceLabelOf",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:sourceLabelOf",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:sourceLabelTitle",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:sourceLabelTitle",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:sourceDetailRows",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:sourceDetailRows",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:identity",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:identity",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:statement",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:statementsOf",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:statementsOf",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:firstSummary",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:firstSummary",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:searchText",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:searchText",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/index-source.js",
+   "target": "function:src/catalog/index-source.js:loadJson",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/index-source.js",
+   "target": "function:src/catalog/index-source.js:loadCatalog",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/index-source.js",
+   "target": "function:src/catalog/index-source.js:loadCatalog",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/index-source.js",
+   "target": "file:src/catalog/categories.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/index-source.js",
+   "target": "file:src/catalog/collections.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/index-source.js",
+   "target": "file:src/catalog/publisher.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/index-source.js",
+   "target": "file:src/catalog/qualification.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/cards.js:createCards",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/details.js:createDetails",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/metrics.js:createMetrics",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/navigation.js:createNavigation",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/provenance.js:createProvenance",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/toolbar.js:createToolbar",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/elements.js:catalogElements",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/index-source.js:loadCatalog",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/publisher.js:categoryCoverage",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/categories.js:categoryRows",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/selectors.js:inventoryCounts",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/selectors.js:scopeEntries",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/selectors.js:scopeTotal",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/selectors.js:selectedScope",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/selectors.js:visibleEntries",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/view-state.js:emptyView",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/view-state.js:restoreView",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/view-state.js:saveView",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/index-source.js:loadCatalog",
+   "target": "function:src/catalog/collections.js:applyCollections",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/index-source.js:loadCatalog",
+   "target": "function:src/catalog/publisher.js:applyPublisher",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/index-source.js:loadCatalog",
+   "target": "function:src/catalog/qualification.js:applyQualification",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/index-source.js:loadCatalog",
+   "target": "function:src/catalog/categories.js:applyCategories",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/cards.js:card",
+   "target": "function:src/catalog/categories.js:categoryBadge",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/cards.js:card",
+   "target": "function:src/catalog/publisher.js:publishedText",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/cards.js:card",
+   "target": "function:src/catalog/publisher.js:publisherOf",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/cards.js:card",
+   "target": "function:src/catalog/publisher.js:provenanceNote",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/cards.js:card",
+   "target": "function:src/catalog/entry.js:identity",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/details.js:renderQualification",
+   "target": "function:src/catalog/qualification.js:qualificationOf",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/details.js:renderQualification",
+   "target": "function:src/catalog/qualification.js:attestationSentence",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/details.js:createDetails",
+   "target": "function:src/catalog/publisher.js:publisherOf",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/details.js:createDetails",
+   "target": "function:src/catalog/publisher.js:publishedText",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/details.js:createDetails",
+   "target": "function:src/catalog/entry.js:statementsOf",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/details.js:createDetails",
+   "target": "function:src/catalog/entry.js:sourceDetailRows",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/details.js:createDetails",
+   "target": "function:src/catalog/entry.js:identity",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/details.js:createDetails",
+   "target": "function:src/catalog/selectors.js:collectionOf",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/elements.js:catalogElements",
+   "target": "function:src/app/dom.js:collectIds",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/metrics.js",
+   "target": "function:src/catalog/metrics.js:tile",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/metrics.js",
+   "target": "function:src/catalog/metrics.js:createMetrics",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/metrics.js",
+   "target": "function:src/catalog/metrics.js:createMetrics",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/metrics.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/metrics.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "function:src/catalog/navigation.js:badgeNode",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "function:src/catalog/navigation.js:categoriesReason",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "function:src/catalog/navigation.js:curatedCategories",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "function:src/catalog/navigation.js:scopeRow",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "function:src/catalog/navigation.js:additionsRow",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "function:src/catalog/navigation.js:createNavigation",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "function:src/catalog/navigation.js:createNavigation",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "file:src/catalog/categories.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "file:src/catalog/selectors.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/provenance.js",
+   "target": "function:src/catalog/provenance.js:createProvenance",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/provenance.js",
+   "target": "function:src/catalog/provenance.js:createProvenance",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/provenance.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/provenance.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/provenance.js",
+   "target": "file:src/catalog/selectors.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "function:src/catalog/publisher.js:applyPublisher",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "function:src/catalog/publisher.js:applyPublisher",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "function:src/catalog/publisher.js:publisherOf",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "function:src/catalog/publisher.js:publisherOf",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "function:src/catalog/publisher.js:categoryCoverage",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "function:src/catalog/publisher.js:categoryCoverage",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "function:src/catalog/publisher.js:publishedText",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "function:src/catalog/publisher.js:publishedText",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "function:src/catalog/publisher.js:provenanceNote",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "function:src/catalog/publisher.js:provenanceNote",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/qualification.js",
+   "target": "function:src/catalog/qualification.js:attestationSentence",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/qualification.js",
+   "target": "function:src/catalog/qualification.js:attestationSentence",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/qualification.js",
+   "target": "function:src/catalog/qualification.js:applyQualification",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/qualification.js",
+   "target": "function:src/catalog/qualification.js:applyQualification",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/qualification.js",
+   "target": "function:src/catalog/qualification.js:qualificationOf",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/qualification.js",
+   "target": "function:src/catalog/qualification.js:qualificationOf",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/qualification.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/qualification.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:sourceFilterValue",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:sourceFilterValue",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:matchesSourceFilter",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:matchesSourceFilter",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:visibleEntries",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:visibleEntries",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:sortedCounts",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:sortedCounts",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:inventoryCounts",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:inventoryCounts",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:sourceScopes",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:sourceScopes",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:scopeCountOf",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:scopeCountOf",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:collectionOf",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:collectionOf",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:selectedScope",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:selectedScope",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:scopeEntries",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:scopeEntries",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:scopeTotal",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:scopeTotal",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:describeCollection",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:describeScope",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:describeScope",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "file:src/catalog/categories.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "file:src/catalog/entry.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "file:src/catalog/publisher.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/toolbar.js",
+   "target": "function:src/catalog/toolbar.js:reviewPill",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/toolbar.js",
+   "target": "function:src/catalog/toolbar.js:kindPill",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/toolbar.js",
+   "target": "function:src/catalog/toolbar.js:createToolbar",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/toolbar.js",
+   "target": "function:src/catalog/toolbar.js:createToolbar",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/toolbar.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/toolbar.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/toolbar.js",
+   "target": "file:src/catalog/selectors.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/view-state.js",
+   "target": "function:src/catalog/view-state.js:emptyView",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/view-state.js",
+   "target": "function:src/catalog/view-state.js:emptyView",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/view-state.js",
+   "target": "function:src/catalog/view-state.js:saveView",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/view-state.js",
+   "target": "function:src/catalog/view-state.js:saveView",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/view-state.js",
+   "target": "function:src/catalog/view-state.js:restoreView",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/catalog/view-state.js",
+   "target": "function:src/catalog/view-state.js:restoreView",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/view-state.js",
+   "target": "file:src/catalog/selectors.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/tests/publisher-refusal.test.mjs",
+   "target": "file:src/catalog/publisher.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "function:src/catalog/navigation.js:createNavigation",
+   "target": "function:src/catalog/selectors.js:describeScope",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/provenance.js:createProvenance",
+   "target": "function:src/catalog/selectors.js:describeScope",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/navigation.js:createNavigation",
+   "target": "function:src/catalog/selectors.js:sourceScopes",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/provenance.js:createProvenance",
+   "target": "function:src/catalog/selectors.js:sourceScopes",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/navigation.js:curatedCategories",
+   "target": "function:src/catalog/categories.js:curationNote",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/toolbar.js:createToolbar",
+   "target": "function:src/catalog/selectors.js:sortedCounts",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/tests/publisher-refusal.test.mjs",
+   "target": "function:src/catalog/publisher.js:applyPublisher",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/tests/publisher-refusal.test.mjs",
+   "target": "function:src/catalog/publisher.js:provenanceNote",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/tests/publisher-refusal.test.mjs",
+   "target": "function:src/catalog/publisher.js:publisherOf",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "file:tools/tests/publisher-refusal.test.mjs",
+   "type": "tested_by",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:src/governance/bytes.js",
+   "target": "function:src/governance/bytes.js:bytesToBase64",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/bytes.js",
+   "target": "function:src/governance/bytes.js:bytesToBase64",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/bytes.js",
+   "target": "function:src/governance/bytes.js:base64ToBytes",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/bytes.js",
+   "target": "function:src/governance/bytes.js:base64ToBytes",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/bytes.js",
+   "target": "function:src/governance/bytes.js:downloadBase64",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/bytes.js",
+   "target": "function:src/governance/bytes.js:downloadBase64",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "function:src/governance/controller.js:createGovernance",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "function:src/governance/controller.js:createGovernance",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/bytes.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/detector.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/elements.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/inputs.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/observation.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/operator-files.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/prepared.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/reopen.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/revisions.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/statuses.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/transport.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/controller.js",
+   "target": "file:src/governance/verdict.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/detector.js",
+   "target": "function:src/governance/detector.js:renderScanResult",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/detector.js",
+   "target": "function:src/governance/detector.js:createDetector",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/detector.js",
+   "target": "function:src/governance/detector.js:createDetector",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/detector.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/detector.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/detector.js",
+   "target": "file:src/governance/rows.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/elements.js",
+   "target": "function:src/governance/elements.js:governanceElements",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/elements.js",
+   "target": "function:src/governance/elements.js:governanceElements",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/elements.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/inputs.js",
+   "target": "function:src/governance/inputs.js:renderCatalog",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/inputs.js",
+   "target": "function:src/governance/inputs.js:setTargetOptions",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/inputs.js",
+   "target": "function:src/governance/inputs.js:createInputs",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/inputs.js",
+   "target": "function:src/governance/inputs.js:createInputs",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/inputs.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/inputs.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/inputs.js",
+   "target": "file:src/governance/rows.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/observation.js",
+   "target": "function:src/governance/observation.js:createObservation",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/observation.js",
+   "target": "function:src/governance/observation.js:createObservation",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/observation.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/observation.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/observation.js",
+   "target": "file:src/governance/rows.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/operator-files.js",
+   "target": "function:src/governance/operator-files.js:createOperatorFiles",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/operator-files.js",
+   "target": "function:src/governance/operator-files.js:createOperatorFiles",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/operator-files.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/operator-files.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/operator-files.js",
+   "target": "file:src/governance/rows.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/prepared.js",
+   "target": "function:src/governance/prepared.js:createPrepared",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/prepared.js",
+   "target": "function:src/governance/prepared.js:createPrepared",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/prepared.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/prepared.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/prepared.js",
+   "target": "file:src/governance/rows.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/prepared.js",
+   "target": "file:src/governance/vocabulary.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/reopen.js",
+   "target": "function:src/governance/reopen.js:createReopen",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/reopen.js",
+   "target": "function:src/governance/reopen.js:createReopen",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/reopen.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/reopen.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/reopen.js",
+   "target": "file:src/governance/rows.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/revisions.js",
+   "target": "function:src/governance/revisions.js:createRevisionTracker",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/revisions.js",
+   "target": "function:src/governance/revisions.js:createRevisionTracker",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/rows.js",
+   "target": "function:src/governance/rows.js:row",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/rows.js",
+   "target": "function:src/governance/rows.js:row",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/rows.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/rows.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/statuses.js",
+   "target": "function:src/governance/statuses.js:createStatuses",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/statuses.js",
+   "target": "function:src/governance/statuses.js:createStatuses",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/statuses.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/statuses.js",
+   "target": "file:src/governance/vocabulary.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:api",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:fetchSubject",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:fetchSubject",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:fetchCatalogIntegrity",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:fetchCatalogIntegrity",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:parseEvidence",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:parseEvidence",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:prepare",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:prepare",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:storeOperatorFile",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:storeOperatorFile",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:storeObservation",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:storeObservation",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:reopenFromFiles",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:reopenFromFiles",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:consume",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:consume",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:loadValidationFixture",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:loadValidationFixture",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:fetchSaved",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/transport.js",
+   "target": "function:src/governance/transport.js:fetchSaved",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/verdict.js",
+   "target": "function:src/governance/verdict.js:createVerdict",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/verdict.js",
+   "target": "function:src/governance/verdict.js:createVerdict",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/verdict.js",
+   "target": "function:src/governance/verdict.js:executionSentence",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/verdict.js",
+   "target": "function:src/governance/verdict.js:renderAssessmentBinding",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/verdict.js",
+   "target": "function:src/governance/verdict.js:renderObservation",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/verdict.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/verdict.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/verdict.js",
+   "target": "file:src/governance/rows.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/verdict.js",
+   "target": "file:src/governance/vocabulary.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/governance/vocabulary.js",
+   "target": "function:src/governance/vocabulary.js:refusalWording",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/governance/vocabulary.js",
+   "target": "function:src/governance/vocabulary.js:refusalWording",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/tests/revisions.test.mjs",
+   "target": "file:src/governance/revisions.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "function:src/governance/controller.js:createGovernance",
+   "target": "function:src/governance/elements.js:governanceElements",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/governance/controller.js:createGovernance",
+   "target": "function:src/governance/detector.js:createDetector",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/governance/controller.js:createGovernance",
+   "target": "function:src/governance/inputs.js:createInputs",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/governance/controller.js:createGovernance",
+   "target": "function:src/governance/observation.js:createObservation",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/governance/controller.js:createGovernance",
+   "target": "function:src/governance/operator-files.js:createOperatorFiles",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/governance/controller.js:createGovernance",
+   "target": "function:src/governance/prepared.js:createPrepared",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/governance/controller.js:createGovernance",
+   "target": "function:src/governance/reopen.js:createReopen",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/governance/controller.js:createGovernance",
+   "target": "function:src/governance/revisions.js:createRevisionTracker",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/governance/controller.js:createGovernance",
+   "target": "function:src/governance/statuses.js:createStatuses",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/governance/controller.js:createGovernance",
+   "target": "function:src/governance/verdict.js:createVerdict",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/governance/revisions.js",
+   "target": "file:tools/tests/revisions.test.mjs",
+   "type": "tested_by",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:tools/scan-attribution-cases.mjs",
+   "target": "function:tools/scan-attribution-cases.mjs:makeSigner",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/scan-attribution-cases.mjs",
+   "target": "function:tools/scan-attribution-cases.mjs:writeTrust",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/scan-attribution-cases.mjs",
+   "target": "function:tools/scan-attribution-cases.mjs:consumeWith",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:b64",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:b64",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:fromB64",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:fromB64",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:sessionRelativePath",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:sessionRelativePath",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:writeExactBytes",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:writeExactBytes",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:readExactBytes",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:readExactBytes",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:recreateDirectory",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:recreateDirectory",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:copyExactTree",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:copyExactTree",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:readJsonFile",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:readJsonFile",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:writeJsonFile",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:writeJsonFile",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:catalogRoot",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:catalogRoot",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:readCatalog",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:readCatalog",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:catalogEntry",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:catalogEntry",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:artifactPath",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:artifactPath",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:entryContentDir",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:entryContentDir",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:catalogIntegrity",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:catalogIntegrity",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/catalog-assessment.mjs",
+   "target": "function:tools/service/catalog-assessment.mjs:createCatalogAssessmentResolver",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-assessment.mjs",
+   "target": "function:tools/service/catalog-assessment.mjs:createCatalogAssessmentResolver",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/catalog-categories.mjs",
+   "target": "function:tools/service/catalog-categories.mjs:catalogCategories",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-categories.mjs",
+   "target": "function:tools/service/catalog-categories.mjs:catalogCategories",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/catalog-collections.mjs",
+   "target": "function:tools/service/catalog-collections.mjs:catalogCollections",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-collections.mjs",
+   "target": "function:tools/service/catalog-collections.mjs:catalogCollections",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/catalog-publisher.mjs",
+   "target": "function:tools/service/catalog-publisher.mjs:catalogPublisher",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-publisher.mjs",
+   "target": "function:tools/service/catalog-publisher.mjs:catalogPublisher",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/catalog-qualification.mjs",
+   "target": "function:tools/service/catalog-qualification.mjs:catalogQualification",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-qualification.mjs",
+   "target": "function:tools/service/catalog-qualification.mjs:catalogQualification",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/scan-attribution-cases.mjs",
+   "target": "file:tools/service/fixture-candidate.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/scan-attribution-cases.mjs",
+   "target": "file:tools/service/scan-verifier.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/catalog-assessment.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/catalog-categories.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/catalog-collections.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/catalog-publisher.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/catalog-qualification.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "function:tools/service/catalog-assessment.mjs:createCatalogAssessmentResolver",
+   "target": "function:tools/service/catalog-access.mjs:readCatalog",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/catalog-assessment.mjs:createCatalogAssessmentResolver",
+   "target": "function:tools/service/catalog-access.mjs:artifactPath",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/catalog-categories.mjs:catalogCategories",
+   "target": "function:tools/service/catalog-access.mjs:readCatalog",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/catalog-collections.mjs:catalogCollections",
+   "target": "function:tools/service/catalog-access.mjs:readCatalog",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/catalog-publisher.mjs:catalogPublisher",
+   "target": "function:tools/service/catalog-access.mjs:readCatalog",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/catalog-qualification.mjs:catalogQualification",
+   "target": "function:tools/service/catalog-access.mjs:readCatalog",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/catalog-qualification.mjs:catalogQualification",
+   "target": "function:tools/service/catalog-access.mjs:catalogRoot",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/scan-attribution-cases.mjs:consumeWith",
+   "target": "function:tools/service/scan-verifier.mjs:buildScanVerification",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "file:tools/tests/session-relative.test.mjs",
+   "type": "tested_by",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:tools/service/catalog-served.mjs",
+   "target": "function:tools/service/catalog-served.mjs:evidence",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-served.mjs",
+   "target": "function:tools/service/catalog-served.mjs:subject",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-served.mjs",
+   "target": "function:tools/service/catalog-served.mjs:entry",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-served.mjs",
+   "target": "function:tools/service/catalog-served.mjs:servedCatalogDocument",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-served.mjs",
+   "target": "function:tools/service/catalog-served.mjs:servedCatalogDocument",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "function:tools/service/core-adapter.mjs:deriveSubject",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "function:tools/service/core-adapter.mjs:deriveSubject",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "function:tools/service/core-adapter.mjs:subject",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "function:tools/service/core-adapter.mjs:subject",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "function:tools/service/core-adapter.mjs:parseEvidence",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "function:tools/service/core-adapter.mjs:parseEvidence",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "function:tools/service/core-adapter.mjs:prepare",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "function:tools/service/core-adapter.mjs:prepare",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "function:tools/service/core-adapter.mjs:consume",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "function:tools/service/core-adapter.mjs:consume",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "function:tools/service/core-service.mjs:main",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/fixture-candidate.mjs",
+   "target": "function:tools/service/fixture-candidate.mjs:stableJson",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/fixture-candidate.mjs",
+   "target": "function:tools/service/fixture-candidate.mjs:buildSignedFixture",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/fixture-candidate.mjs",
+   "target": "function:tools/service/fixture-candidate.mjs:buildSignedFixture",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/scan-verifier.mjs",
+   "target": "function:tools/service/scan-verifier.mjs:attributeSigner",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/scan-verifier.mjs",
+   "target": "function:tools/service/scan-verifier.mjs:presentationFacts",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/scan-verifier.mjs",
+   "target": "function:tools/service/scan-verifier.mjs:buildScanVerification",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/scan-verifier.mjs",
+   "target": "function:tools/service/scan-verifier.mjs:buildScanVerification",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/validation-fixture.mjs",
+   "target": "function:tools/service/validation-fixture.mjs:closurePaths",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/validation-fixture.mjs",
+   "target": "function:tools/service/validation-fixture.mjs:matchedPathOf",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/validation-fixture.mjs",
+   "target": "function:tools/service/validation-fixture.mjs:exampleAuthority",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/validation-fixture.mjs",
+   "target": "function:tools/service/validation-fixture.mjs:buildValidationFixture",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/validation-fixture.mjs",
+   "target": "function:tools/service/validation-fixture.mjs:buildValidationFixture",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/tests/catalog-served.test.mjs",
+   "target": "function:tools/tests/catalog-served.test.mjs:record",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/tests/catalog-served.test.mjs",
+   "target": "function:tools/tests/catalog-served.test.mjs:readerResult",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/tests/catalog-served.test.mjs",
+   "target": "function:tools/tests/catalog-served.test.mjs:undeclared",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "file:tools/service/artifacts.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "file:tools/service/catalog-assessment.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "file:tools/service/scan-verifier.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "file:tools/service/catalog-served.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "file:tools/service/core-adapter.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "file:tools/service/validation-fixture.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/scan-verifier.mjs",
+   "target": "file:tools/service/artifacts.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/validation-fixture.mjs",
+   "target": "file:tools/service/artifacts.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/validation-fixture.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/validation-fixture.mjs",
+   "target": "file:tools/service/core-adapter.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/validation-fixture.mjs",
+   "target": "file:tools/service/fixture-candidate.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/tests/catalog-served.test.mjs",
+   "target": "file:tools/service/catalog-served.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/tests/session-relative.test.mjs",
+   "target": "file:tools/service/artifacts.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "function:tools/service/core-adapter.mjs:parseEvidence",
+   "target": "function:tools/service/artifacts.mjs:fromB64",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/core-adapter.mjs:prepare",
+   "target": "function:tools/service/catalog-access.mjs:catalogEntry",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/core-adapter.mjs:prepare",
+   "target": "function:tools/service/artifacts.mjs:writeExactBytes",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/core-adapter.mjs:consume",
+   "target": "function:tools/service/artifacts.mjs:readExactBytes",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/core-adapter.mjs:consume",
+   "target": "function:tools/service/artifacts.mjs:recreateDirectory",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/core-adapter.mjs:consume",
+   "target": "function:tools/service/artifacts.mjs:sessionRelativePath",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/core-adapter.mjs:consume",
+   "target": "function:tools/service/scan-verifier.mjs:buildScanVerification",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/core-adapter.mjs:consume",
+   "target": "function:tools/service/catalog-assessment.mjs:createCatalogAssessmentResolver",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/scan-verifier.mjs:buildScanVerification",
+   "target": "function:tools/service/artifacts.mjs:readJsonFile",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/scan-verifier.mjs:buildScanVerification",
+   "target": "function:tools/service/artifacts.mjs:fromB64",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/validation-fixture.mjs:buildValidationFixture",
+   "target": "function:tools/service/catalog-access.mjs:catalogEntry",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/validation-fixture.mjs:buildValidationFixture",
+   "target": "function:tools/service/catalog-access.mjs:entryContentDir",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/validation-fixture.mjs:buildValidationFixture",
+   "target": "function:tools/service/core-adapter.mjs:deriveSubject",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/validation-fixture.mjs:buildValidationFixture",
+   "target": "function:tools/service/fixture-candidate.mjs:buildSignedFixture",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/validation-fixture.mjs:buildValidationFixture",
+   "target": "function:tools/service/artifacts.mjs:writeJsonFile",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/validation-fixture.mjs:matchedPathOf",
+   "target": "function:tools/service/catalog-access.mjs:artifactPath",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "file:tools/service/catalog-collections.mjs",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "file:tools/service/catalog-publisher.mjs",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "file:tools/service/catalog-qualification.mjs",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "file:tools/service/catalog-categories.mjs",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "file:tools/service/core-targets.mjs",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:tools/service/catalog-served.mjs",
+   "target": "file:tools/tests/catalog-served.test.mjs",
+   "type": "tested_by",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:tools/catalog-index-contract.mjs",
+   "target": "function:tools/catalog-index-contract.mjs:contractViolations",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/catalog-index-contract.mjs",
+   "target": "function:tools/catalog-index-contract.mjs:contractViolations",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/packages.mjs",
+   "target": "function:tools/packages.mjs:npm",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/packages.mjs",
+   "target": "function:tools/packages.mjs:resolvePackage",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/packages.mjs",
+   "target": "function:tools/packages.mjs:resolvePackage",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/packages.mjs",
+   "target": "function:tools/packages.mjs:installConsumer",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/packages.mjs",
+   "target": "function:tools/packages.mjs:installConsumer",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/preview-request.mjs",
+   "target": "function:tools/preview-request.mjs:classifyRequestPath",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/preview-request.mjs",
+   "target": "function:tools/preview-request.mjs:classifyRequestPath",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "function:tools/preview.mjs:readInstalledPackages",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "function:tools/preview.mjs:main",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/api.mjs",
+   "target": "function:tools/server/api.mjs:readBody",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/api.mjs",
+   "target": "function:tools/server/api.mjs:createApi",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/api.mjs",
+   "target": "function:tools/server/api.mjs:createApi",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/server/assets.mjs",
+   "target": "function:tools/server/assets.mjs:walk",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/assets.mjs",
+   "target": "function:tools/server/assets.mjs:pageAssets",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/assets.mjs",
+   "target": "function:tools/server/assets.mjs:pageAssets",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/server/assets.mjs",
+   "target": "function:tools/server/assets.mjs:serviceAssets",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/assets.mjs",
+   "target": "function:tools/server/assets.mjs:serviceAssets",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/server/assets.mjs",
+   "target": "function:tools/server/assets.mjs:presentationAssets",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/assets.mjs",
+   "target": "function:tools/server/assets.mjs:presentationAssets",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/server/assets.mjs",
+   "target": "function:tools/server/assets.mjs:assertReadable",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/assets.mjs",
+   "target": "function:tools/server/assets.mjs:assertReadable",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/server/service-client.mjs",
+   "target": "function:tools/server/service-client.mjs:callService",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/service-client.mjs",
+   "target": "function:tools/server/service-client.mjs:callService",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/server/sessions.mjs",
+   "target": "function:tools/server/sessions.mjs:isBoundedRelativePath",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/sessions.mjs",
+   "target": "function:tools/server/sessions.mjs:createSessions",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/sessions.mjs",
+   "target": "function:tools/server/sessions.mjs:createSessions",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/server/static.mjs",
+   "target": "function:tools/server/static.mjs:createStaticServer",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/static.mjs",
+   "target": "function:tools/server/static.mjs:createStaticServer",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/server/static.mjs",
+   "target": "function:tools/server/static.mjs:listen",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/static.mjs",
+   "target": "function:tools/server/static.mjs:listen",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/check-page-contract.mjs",
+   "target": "file:src/catalog/selectors.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/check-page-contract.mjs",
+   "target": "file:tools/preview-request.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/check-page-contract.mjs",
+   "target": "file:tools/server/assets.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/check-scan-attribution.mjs",
+   "target": "file:tools/packages.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/check-scan-attribution.mjs",
+   "target": "file:tools/server/assets.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "file:tools/catalog-index-contract.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "file:tools/packages.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "file:tools/server/api.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "file:tools/server/assets.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "file:tools/server/service-client.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "file:tools/server/static.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/server/api.mjs",
+   "target": "file:tools/server/service-client.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/server/api.mjs",
+   "target": "file:tools/server/sessions.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/server/static.mjs",
+   "target": "file:tools/preview-request.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/tests/sessions-observation.test.mjs",
+   "target": "file:tools/server/sessions.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "function:tools/preview.mjs:main",
+   "target": "function:tools/catalog-index-contract.mjs:contractViolations",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/preview.mjs:main",
+   "target": "function:tools/packages.mjs:resolvePackage",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/preview.mjs:main",
+   "target": "function:tools/packages.mjs:installConsumer",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/preview.mjs:main",
+   "target": "function:tools/server/api.mjs:createApi",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/preview.mjs:main",
+   "target": "function:tools/server/assets.mjs:pageAssets",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/preview.mjs:main",
+   "target": "function:tools/server/assets.mjs:serviceAssets",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/preview.mjs:main",
+   "target": "function:tools/server/assets.mjs:presentationAssets",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/preview.mjs:main",
+   "target": "function:tools/server/assets.mjs:assertReadable",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/preview.mjs:main",
+   "target": "function:tools/server/static.mjs:createStaticServer",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/preview.mjs:main",
+   "target": "function:tools/server/static.mjs:listen",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "function:tools/server/service-client.mjs:callService",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/server/api.mjs:createApi",
+   "target": "function:tools/server/service-client.mjs:callService",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/server/api.mjs:createApi",
+   "target": "function:tools/server/sessions.mjs:createSessions",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/server/static.mjs:createStaticServer",
+   "target": "function:tools/preview-request.mjs:classifyRequestPath",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/packages.mjs:resolvePackage",
+   "target": "function:tools/packages.mjs:npm",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/server/assets.mjs:pageAssets",
+   "target": "function:tools/server/assets.mjs:walk",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/check-page-contract.mjs",
+   "target": "function:tools/preview-request.mjs:classifyRequestPath",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/check-page-contract.mjs",
+   "target": "function:tools/server/assets.mjs:pageAssets",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/check-scan-attribution.mjs",
+   "target": "function:tools/packages.mjs:resolvePackage",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/check-scan-attribution.mjs",
+   "target": "function:tools/packages.mjs:installConsumer",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/check-scan-attribution.mjs",
+   "target": "function:tools/server/assets.mjs:serviceAssets",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/tests/sessions-observation.test.mjs",
+   "target": "function:tools/server/sessions.mjs:createSessions",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/server/sessions.mjs",
+   "target": "file:tools/tests/sessions-observation.test.mjs",
+   "type": "tested_by",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:src/app/ai-tools.js",
+   "target": "function:src/app/ai-tools.js:createAiTools",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/app/ai-tools.js",
+   "target": "function:src/app/ai-tools.js:createAiTools",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/app/elements.js",
+   "target": "function:src/app/elements.js:shellElements",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/app/elements.js",
+   "target": "function:src/app/elements.js:shellElements",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/app/elements.js",
+   "target": "function:src/app/elements.js:organizationElements",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/app/elements.js",
+   "target": "function:src/app/elements.js:organizationElements",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/app/elements.js",
+   "target": "function:src/app/elements.js:aiToolsElements",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/app/elements.js",
+   "target": "function:src/app/elements.js:aiToolsElements",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/app/organization.js",
+   "target": "function:src/app/organization.js:loadDraft",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/app/organization.js",
+   "target": "function:src/app/organization.js:validateDraft",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/app/organization.js",
+   "target": "function:src/app/organization.js:validateDraft",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/app/organization.js",
+   "target": "function:src/app/organization.js:createOrganization",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/app/organization.js",
+   "target": "function:src/app/organization.js:createOrganization",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/app/shell.js",
+   "target": "function:src/app/shell.js:createShell",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/app/shell.js",
+   "target": "function:src/app/shell.js:createShell",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/app/theme.js",
+   "target": "function:src/app/theme.js:createTheme",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/app/theme.js",
+   "target": "function:src/app/theme.js:createTheme",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/main.js",
+   "target": "function:src/main.js:main",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:src/app/ai-tools.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/app/ai-tools.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/app/elements.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/app/organization.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/app/organization.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/main.js",
+   "target": "file:src/app/ai-tools.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/main.js",
+   "target": "file:src/app/elements.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/main.js",
+   "target": "file:src/app/organization.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/main.js",
+   "target": "file:src/app/shell.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/main.js",
+   "target": "file:src/app/theme.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/main.js",
+   "target": "file:src/catalog/controller.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/main.js",
+   "target": "file:src/governance/controller.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "function:src/main.js:main",
+   "target": "function:src/app/shell.js:createShell",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/main.js:main",
+   "target": "function:src/app/elements.js:shellElements",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/main.js:main",
+   "target": "function:src/app/elements.js:organizationElements",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/main.js:main",
+   "target": "function:src/app/elements.js:aiToolsElements",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/main.js:main",
+   "target": "function:src/app/ai-tools.js:createAiTools",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/main.js:main",
+   "target": "function:src/app/organization.js:createOrganization",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/main.js:main",
+   "target": "function:src/app/theme.js:createTheme",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/main.js:main",
+   "target": "function:src/catalog/controller.js:createCatalog",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/main.js:main",
+   "target": "function:src/governance/controller.js:createGovernance",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/app/elements.js:shellElements",
+   "target": "function:src/app/dom.js:collectIds",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/app/elements.js:organizationElements",
+   "target": "function:src/app/dom.js:collectIds",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/app/elements.js:aiToolsElements",
+   "target": "function:src/app/dom.js:collectIds",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/app/ai-tools.js:createAiTools",
+   "target": "function:src/app/dom.js:el",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/app/organization.js:createOrganization",
+   "target": "function:src/app/dom.js:el",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/app/organization.js:createOrganization",
+   "target": "function:src/app/organization.js:loadDraft",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/app/organization.js:createOrganization",
+   "target": "function:src/app/organization.js:validateDraft",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "document:CLAUDE.md",
+   "target": "document:AGENTS.md",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:AGENTS.md",
+   "target": "document:README.md",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:AGENTS.md",
+   "target": "file:prototype/index.html",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README.md",
+   "target": "file:src/main.js",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README.md",
+   "target": "file:src/index.html",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README.md",
+   "target": "file:prototype/index.html",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README.md",
+   "target": "file:prototype/screens/admin-sources.html",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README.md",
+   "target": "file:src/catalog/cards.js",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README.md",
+   "target": "file:src/governance/revisions.js",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README.md",
+   "target": "file:tools/preview.mjs",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README.md",
+   "target": "file:tools/preview-request.mjs",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README.md",
+   "target": "file:tools/packages.mjs",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README.md",
+   "target": "file:tools/check-page-contract.mjs",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README.md",
+   "target": "file:tools/acceptance-sweep.mjs",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README.md",
+   "target": "file:tools/service/catalog-served.mjs",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README.md",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README.md",
+   "target": "file:tools/tests/catalog-served.test.mjs",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "document:README.md",
+   "target": "file:tools/tests/session-relative.test.mjs",
+   "type": "documents",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:prototype/screens/user-trim.html",
+   "target": "function:prototype/screens/user-trim.html:renderLedger",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:prototype/screens/user-trim.html",
+   "target": "function:prototype/screens/user-trim.html:renderRail",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:prototype/screens/user-trim.html",
+   "target": "function:prototype/screens/user-trim.html:renderMain",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:prototype/screens/user-trim.html",
+   "target": "function:prototype/screens/user-trim.html:card",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:prototype/screens/user-trim.html",
+   "target": "function:prototype/screens/user-trim.html:renderSide",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:prototype/screens/admin-sources.html",
+   "target": "function:prototype/screens/admin-sources.html:toggleLeftNav",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:prototype/screens/admin-sources.html",
+   "target": "function:prototype/screens/admin-sources.html:toggleInspector",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:prototype/screens/admin-sources.html",
+   "target": "function:prototype/screens/admin-sources.html:applyTheme",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:prototype/screens/admin-acme.html",
+   "target": "file:prototype/screens/fonts.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-acme.html",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-acme.html",
+   "target": "file:prototype/screens/wb.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-acme.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-acme.html",
+   "target": "file:prototype/screens/tw-config.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-changes.html",
+   "target": "file:prototype/screens/fonts.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-changes.html",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-changes.html",
+   "target": "file:prototype/screens/wb.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-changes.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-changes.html",
+   "target": "file:prototype/screens/tw-config.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-item.html",
+   "target": "file:prototype/screens/fonts.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-item.html",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-item.html",
+   "target": "file:prototype/screens/wb.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-item.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-item.html",
+   "target": "file:prototype/screens/tw-config.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-org.html",
+   "target": "file:prototype/screens/fonts.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-org.html",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-org.html",
+   "target": "file:prototype/screens/wb.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-org.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-org.html",
+   "target": "file:prototype/screens/tw-config.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-scan.html",
+   "target": "file:prototype/screens/fonts.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-scan.html",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-scan.html",
+   "target": "file:prototype/screens/wb.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-scan.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-scan.html",
+   "target": "file:prototype/screens/tw-config.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/entry.html",
+   "target": "file:prototype/screens/fonts.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/entry.html",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/entry.html",
+   "target": "file:prototype/screens/wb.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/entry.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/entry.html",
+   "target": "file:prototype/screens/tw-config.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/overview.html",
+   "target": "file:prototype/screens/fonts.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/overview.html",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/overview.html",
+   "target": "file:prototype/screens/wb.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/overview.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/overview.html",
+   "target": "file:prototype/screens/tw-config.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/system.html",
+   "target": "file:prototype/screens/fonts.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/system.html",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/system.html",
+   "target": "file:prototype/screens/wb.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/system.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/system.html",
+   "target": "file:prototype/screens/tw-config.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-start.html",
+   "target": "file:prototype/screens/fonts.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-start.html",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-start.html",
+   "target": "file:prototype/screens/wb.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-start.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-start.html",
+   "target": "file:prototype/screens/tw-config.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-trim.html",
+   "target": "file:prototype/screens/fonts.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-trim.html",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-trim.html",
+   "target": "file:prototype/screens/wb.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-trim.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-trim.html",
+   "target": "file:prototype/screens/tw-config.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-sources.html",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-sources.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-acme.html",
+   "target": "file:prototype/screens/shell.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-changes.html",
+   "target": "file:prototype/screens/shell.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-item.html",
+   "target": "file:prototype/screens/shell.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-scan.html",
+   "target": "file:prototype/screens/shell.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/admin-org.html",
+   "target": "file:prototype/screens/shell.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-start.html",
+   "target": "file:prototype/screens/user-shell.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/user-trim.html",
+   "target": "file:prototype/screens/user-shell.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/tokens.css",
+   "target": "file:prototype/screens/admin-sources.html",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:prototype/screens/wb.css",
+   "target": "file:prototype/screens/tokens.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:prototype/screens/system.html",
+   "target": "file:prototype/screens/admin-sources.html",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:prototype/screens/user-start.html",
+   "target": "file:prototype/screens/user-trim.html",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:prototype/screens/entry.html",
+   "target": "file:prototype/screens/overview.html",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:tools/acceptance-sweep.mjs",
+   "target": "function:tools/acceptance-sweep.mjs:post",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/probe-http.mjs",
+   "target": "function:tools/probe-http.mjs:request",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/probe-old-handler.mjs",
+   "target": "function:tools/probe-old-handler.mjs:oldServer",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/probe-old-handler.mjs",
+   "target": "function:tools/probe-old-handler.mjs:raw",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/core-targets.mjs",
+   "target": "function:tools/service/core-targets.mjs:coreTargets",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/core-targets.mjs",
+   "target": "function:tools/service/core-targets.mjs:coreTargets",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:prototype/index.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:src/index.html",
+   "target": "file:prototype/screens/mode.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:src/index.html",
+   "target": "file:prototype/screens/tw-config.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:src/index.html",
+   "target": "file:src/app/workbench.css",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:src/index.html",
+   "target": "file:src/main.js",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:tools/compare.html",
+   "target": "file:prototype/index.html",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:tools/compare.html",
+   "target": "file:src/index.html",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:tools/inspect-dom.mjs",
+   "target": "file:src/index.html",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:tools/probe-http.mjs",
+   "target": "file:tools/preview-request.mjs",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:tools/probe-old-handler.mjs",
+   "target": "file:tools/preview-request.mjs",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:tools/acceptance-sweep.mjs",
+   "target": "file:tools/preview.mjs",
+   "type": "related",
+   "direction": "forward",
+   "weight": 0.5
+  }
+ ]
+}

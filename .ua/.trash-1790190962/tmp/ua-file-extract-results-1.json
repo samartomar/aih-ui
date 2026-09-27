@@ -1,0 +1,5163 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 18,
+  "filesSkipped": [],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 18,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 18,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "results": [
+    {
+      "path": "src/app/dom.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 36,
+      "nonEmptyLines": 33,
+      "functions": [
+        {
+          "name": "text",
+          "startLine": 9,
+          "endLine": 11,
+          "params": [
+            "value"
+          ]
+        },
+        {
+          "name": "el",
+          "startLine": 13,
+          "endLine": 18,
+          "params": [
+            "tag",
+            "className",
+            "value"
+          ]
+        },
+        {
+          "name": "collectIds",
+          "startLine": 28,
+          "endLine": 36,
+          "params": [
+            "ids"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "text",
+          "line": 9,
+          "isDefault": false
+        },
+        {
+          "name": "el",
+          "line": 13,
+          "isDefault": false
+        },
+        {
+          "name": "collectIds",
+          "line": 28,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "text",
+          "callee": "String",
+          "lineNumber": 10
+        },
+        {
+          "caller": "el",
+          "callee": "document.createElement",
+          "lineNumber": 14
+        },
+        {
+          "caller": "el",
+          "callee": "String",
+          "lineNumber": 16
+        },
+        {
+          "caller": "collectIds",
+          "callee": "document.getElementById",
+          "lineNumber": 31
+        },
+        {
+          "caller": "collectIds",
+          "callee": "id.replace",
+          "lineNumber": 33
+        },
+        {
+          "caller": "collectIds",
+          "callee": "letter.toUpperCase",
+          "lineNumber": 33
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/catalog/cards.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 173,
+      "nonEmptyLines": 160,
+      "functions": [
+        {
+          "name": "badgeOf",
+          "startLine": 35,
+          "endLine": 44,
+          "params": [
+            "entry",
+            "record",
+            "categories",
+            "publisher"
+          ]
+        },
+        {
+          "name": "card",
+          "startLine": 46,
+          "endLine": 135,
+          "params": [
+            "entry",
+            "selectedId",
+            "onSelect",
+            "publisher",
+            "categories"
+          ]
+        },
+        {
+          "name": "createCards",
+          "startLine": 141,
+          "endLine": 173,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "createCards",
+          "line": 141,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "badgeOf",
+          "callee": "categoryBadge",
+          "lineNumber": 36
+        },
+        {
+          "caller": "badgeOf",
+          "callee": "publishedText",
+          "lineNumber": 38
+        },
+        {
+          "caller": "badgeOf",
+          "callee": "provenanceNote",
+          "lineNumber": 42
+        },
+        {
+          "caller": "card",
+          "callee": "identity",
+          "lineNumber": 47
+        },
+        {
+          "caller": "card",
+          "callee": "publisherOf",
+          "lineNumber": 48
+        },
+        {
+          "caller": "card",
+          "callee": "publishedText",
+          "lineNumber": 49
+        },
+        {
+          "caller": "card",
+          "callee": "publishedText",
+          "lineNumber": 50
+        },
+        {
+          "caller": "card",
+          "callee": "badgeOf",
+          "lineNumber": 51
+        },
+        {
+          "caller": "card",
+          "callee": "el",
+          "lineNumber": 54
+        },
+        {
+          "caller": "card",
+          "callee": "node.setAttribute",
+          "lineNumber": 57
+        },
+        {
+          "caller": "card",
+          "callee": "node.setAttribute",
+          "lineNumber": 58
+        },
+        {
+          "caller": "card",
+          "callee": "String",
+          "lineNumber": 58
+        },
+        {
+          "caller": "card",
+          "callee": "el",
+          "lineNumber": 62
+        },
+        {
+          "caller": "card",
+          "callee": "el",
+          "lineNumber": 63
+        },
+        {
+          "caller": "card",
+          "callee": "el",
+          "lineNumber": 64
+        },
+        {
+          "caller": "card",
+          "callee": "name.appendChild",
+          "lineNumber": 66
+        },
+        {
+          "caller": "card",
+          "callee": "el",
+          "lineNumber": 67
+        },
+        {
+          "caller": "card",
+          "callee": "name.appendChild",
+          "lineNumber": 74
+        },
+        {
+          "caller": "card",
+          "callee": "el",
+          "lineNumber": 74
+        },
+        {
+          "caller": "card",
+          "callee": "head.appendChild",
+          "lineNumber": 75
+        },
+        {
+          "caller": "card",
+          "callee": "el",
+          "lineNumber": 76
+        },
+        {
+          "caller": "card",
+          "callee": "el",
+          "lineNumber": 77
+        },
+        {
+          "caller": "card",
+          "callee": "badges.appendChild",
+          "lineNumber": 83
+        },
+        {
+          "caller": "card",
+          "callee": "head.appendChild",
+          "lineNumber": 84
+        },
+        {
+          "caller": "card",
+          "callee": "top.appendChild",
+          "lineNumber": 85
+        },
+        {
+          "caller": "card",
+          "callee": "el",
+          "lineNumber": 90
+        },
+        {
+          "caller": "card",
+          "callee": "provenanceNote",
+          "lineNumber": 91
+        },
+        {
+          "caller": "card",
+          "callee": "top.appendChild",
+          "lineNumber": 92
+        },
+        {
+          "caller": "card",
+          "callee": "node.appendChild",
+          "lineNumber": 93
+        },
+        {
+          "caller": "card",
+          "callee": "el",
+          "lineNumber": 95
+        },
+        {
+          "caller": "card",
+          "callee": "el",
+          "lineNumber": 96
+        },
+        {
+          "caller": "card",
+          "callee": "el",
+          "lineNumber": 98
+        },
+        {
+          "caller": "card",
+          "callee": "status.appendChild",
+          "lineNumber": 99
+        },
+        {
+          "caller": "card",
+          "callee": "el",
+          "lineNumber": 99
+        },
+        {
+          "caller": "card",
+          "callee": "status.appendChild",
+          "lineNumber": 100
+        },
+        {
+          "caller": "card",
+          "callee": "el",
+          "lineNumber": 100
+        },
+        {
+          "caller": "card",
+          "callee": "left.appendChild",
+          "lineNumber": 102
+        },
+        {
+          "caller": "card",
+          "callee": "el",
+          "lineNumber": 104
+        },
+        {
+          "caller": "card",
+          "callee": "tokens.appendChild",
+          "lineNumber": 105
+        },
+        {
+          "caller": "card",
+          "callee": "el",
+          "lineNumber": 105
+        },
+        {
+          "caller": "card",
+          "callee": "tokens.appendChild",
+          "lineNumber": 106
+        },
+        {
+          "caller": "card",
+          "callee": "el",
+          "lineNumber": 106
+        },
+        {
+          "caller": "card",
+          "callee": "left.appendChild",
+          "lineNumber": 108
+        },
+        {
+          "caller": "card",
+          "callee": "foot.appendChild",
+          "lineNumber": 109
+        },
+        {
+          "caller": "card",
+          "callee": "el",
+          "lineNumber": 111
+        },
+        {
+          "caller": "card",
+          "callee": "el",
+          "lineNumber": 112
+        },
+        {
+          "caller": "card",
+          "callee": "button.setAttribute",
+          "lineNumber": 115
+        },
+        {
+          "caller": "card",
+          "callee": "button.appendChild",
+          "lineNumber": 118
+        },
+        {
+          "caller": "card",
+          "callee": "el",
+          "lineNumber": 118
+        },
+        {
+          "caller": "card",
+          "callee": "toggle.appendChild",
+          "lineNumber": 119
+        },
+        {
+          "caller": "card",
+          "callee": "foot.appendChild",
+          "lineNumber": 120
+        },
+        {
+          "caller": "card",
+          "callee": "node.appendChild",
+          "lineNumber": 121
+        },
+        {
+          "caller": "select",
+          "callee": "onSelect",
+          "lineNumber": 123
+        },
+        {
+          "caller": "card",
+          "callee": "node.addEventListener",
+          "lineNumber": 124
+        },
+        {
+          "caller": "card",
+          "callee": "event.target.closest",
+          "lineNumber": 125
+        },
+        {
+          "caller": "card",
+          "callee": "select",
+          "lineNumber": 126
+        },
+        {
+          "caller": "card",
+          "callee": "node.addEventListener",
+          "lineNumber": 128
+        },
+        {
+          "caller": "card",
+          "callee": "event.preventDefault",
+          "lineNumber": 130
+        },
+        {
+          "caller": "card",
+          "callee": "select",
+          "lineNumber": 131
+        },
+        {
+          "caller": "render",
+          "callee": "elements.cardsGrid.replaceChildren",
+          "lineNumber": 145
+        },
+        {
+          "caller": "render",
+          "callee": "el",
+          "lineNumber": 147
+        },
+        {
+          "caller": "render",
+          "callee": "empty.appendChild",
+          "lineNumber": 148
+        },
+        {
+          "caller": "render",
+          "callee": "el",
+          "lineNumber": 148
+        },
+        {
+          "caller": "render",
+          "callee": "String",
+          "lineNumber": 148
+        },
+        {
+          "caller": "render",
+          "callee": "elements.cardsGrid.appendChild",
+          "lineNumber": 149
+        },
+        {
+          "caller": "render",
+          "callee": "elements.cardsGrid.append",
+          "lineNumber": 151
+        },
+        {
+          "caller": "render",
+          "callee": "model.entries.map",
+          "lineNumber": 151
+        },
+        {
+          "caller": "render",
+          "callee": "card",
+          "lineNumber": 151
+        },
+        {
+          "caller": "render",
+          "callee": "String",
+          "lineNumber": 153
+        },
+        {
+          "caller": "setSelected",
+          "callee": "elements.cardsGrid.querySelector",
+          "lineNumber": 165
+        },
+        {
+          "caller": "setSelected",
+          "callee": "CSS.escape",
+          "lineNumber": 165
+        },
+        {
+          "caller": "setSelected",
+          "callee": "node.setAttribute",
+          "lineNumber": 167
+        },
+        {
+          "caller": "setSelected",
+          "callee": "String",
+          "lineNumber": 167
+        },
+        {
+          "caller": "setSelected",
+          "callee": "node.classList.toggle",
+          "lineNumber": 168
+        },
+        {
+          "caller": "setSelected",
+          "callee": "node.classList.toggle",
+          "lineNumber": 169
+        }
+      ],
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/catalog/categories.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 114,
+      "nonEmptyLines": 108,
+      "functions": [
+        {
+          "name": "applyCategories",
+          "startLine": 23,
+          "endLine": 55,
+          "params": [
+            "facts",
+            "data",
+            "entries"
+          ]
+        },
+        {
+          "name": "curatedCategoryOf",
+          "startLine": 63,
+          "endLine": 70,
+          "params": [
+            "view",
+            "entry"
+          ]
+        },
+        {
+          "name": "curationNote",
+          "startLine": 73,
+          "endLine": 76,
+          "params": [
+            "view"
+          ]
+        },
+        {
+          "name": "categoryBadge",
+          "startLine": 79,
+          "endLine": 94,
+          "params": [
+            "view",
+            "entry"
+          ]
+        },
+        {
+          "name": "categoryRows",
+          "startLine": 101,
+          "endLine": 114,
+          "params": [
+            "view",
+            "entries"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "applyCategories",
+          "line": 23,
+          "isDefault": false
+        },
+        {
+          "name": "curatedCategoryOf",
+          "line": 63,
+          "isDefault": false
+        },
+        {
+          "name": "curationNote",
+          "line": 73,
+          "isDefault": false
+        },
+        {
+          "name": "categoryBadge",
+          "line": 79,
+          "isDefault": false
+        },
+        {
+          "name": "categoryRows",
+          "line": 101,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "applyCategories",
+          "callee": "text",
+          "lineNumber": 27
+        },
+        {
+          "caller": "applyCategories",
+          "callee": "(Array.isArray(data.taxonomy) ? data.taxonomy : []).map",
+          "lineNumber": 31
+        },
+        {
+          "caller": "applyCategories",
+          "callee": "Array.isArray",
+          "lineNumber": 31
+        },
+        {
+          "caller": "applyCategories",
+          "callee": "entries.map",
+          "lineNumber": 32
+        },
+        {
+          "caller": "applyCategories",
+          "callee": "text",
+          "lineNumber": 32
+        },
+        {
+          "caller": "applyCategories",
+          "callee": "Array.isArray",
+          "lineNumber": 34
+        },
+        {
+          "caller": "applyCategories",
+          "callee": "byId.get",
+          "lineNumber": 35
+        },
+        {
+          "caller": "applyCategories",
+          "callee": "taxonomy.has",
+          "lineNumber": 41
+        },
+        {
+          "caller": "applyCategories",
+          "callee": "byEntryId.set",
+          "lineNumber": 44
+        },
+        {
+          "caller": "applyCategories",
+          "callee": "text",
+          "lineNumber": 49
+        },
+        {
+          "caller": "applyCategories",
+          "callee": "text",
+          "lineNumber": 50
+        },
+        {
+          "caller": "applyCategories",
+          "callee": "text",
+          "lineNumber": 51
+        },
+        {
+          "caller": "curatedCategoryOf",
+          "callee": "view.byEntryId.get",
+          "lineNumber": 65
+        },
+        {
+          "caller": "curatedCategoryOf",
+          "callee": "text",
+          "lineNumber": 65
+        },
+        {
+          "caller": "curatedCategoryOf",
+          "callee": "view.taxonomy.get",
+          "lineNumber": 68
+        },
+        {
+          "caller": "categoryBadge",
+          "callee": "curatedCategoryOf",
+          "lineNumber": 80
+        },
+        {
+          "caller": "categoryRows",
+          "callee": "curatedCategoryOf",
+          "lineNumber": 105
+        },
+        {
+          "caller": "categoryRows",
+          "callee": "counts.set",
+          "lineNumber": 108
+        },
+        {
+          "caller": "categoryRows",
+          "callee": "counts.get",
+          "lineNumber": 108
+        },
+        {
+          "caller": "categoryRows",
+          "callee": "[...counts.entries()]\n    .map(([id, count]) => ({ ...view.taxonomy.get(id), count }))\n    .sort",
+          "lineNumber": 110
+        },
+        {
+          "caller": "categoryRows",
+          "callee": "[...counts.entries()]\n    .map",
+          "lineNumber": 110
+        },
+        {
+          "caller": "categoryRows",
+          "callee": "counts.entries",
+          "lineNumber": 110
+        },
+        {
+          "caller": "categoryRows",
+          "callee": "view.taxonomy.get",
+          "lineNumber": 111
+        },
+        {
+          "caller": "categoryRows",
+          "callee": "a.label.localeCompare",
+          "lineNumber": 112
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 5,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/catalog/collections.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 56,
+      "nonEmptyLines": 54,
+      "functions": [
+        {
+          "name": "applyCollections",
+          "startLine": 28,
+          "endLine": 56,
+          "params": [
+            "view",
+            "entries"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "applyCollections",
+          "line": 28,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "applyCollections",
+          "callee": "Array.isArray",
+          "lineNumber": 29
+        },
+        {
+          "caller": "applyCollections",
+          "callee": "entries.map",
+          "lineNumber": 33
+        },
+        {
+          "caller": "applyCollections",
+          "callee": "text",
+          "lineNumber": 33
+        },
+        {
+          "caller": "applyCollections",
+          "callee": "byId.get",
+          "lineNumber": 37
+        },
+        {
+          "caller": "applyCollections",
+          "callee": "membership.set",
+          "lineNumber": 43
+        },
+        {
+          "caller": "applyCollections",
+          "callee": "entries.filter",
+          "lineNumber": 46
+        },
+        {
+          "caller": "applyCollections",
+          "callee": "collected.has",
+          "lineNumber": 47
+        },
+        {
+          "caller": "applyCollections",
+          "callee": "text",
+          "lineNumber": 47
+        },
+        {
+          "caller": "applyCollections",
+          "callee": "membership.has",
+          "lineNumber": 47
+        },
+        {
+          "caller": "applyCollections",
+          "callee": "text",
+          "lineNumber": 47
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/catalog/controller.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 195,
+      "nonEmptyLines": 183,
+      "functions": [
+        {
+          "name": "createCatalog",
+          "startLine": 35,
+          "endLine": 195,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "createCatalog",
+          "line": 35,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "createCatalog",
+          "callee": "catalogElements",
+          "lineNumber": 36
+        },
+        {
+          "caller": "createCatalog",
+          "callee": "inventoryCounts",
+          "lineNumber": 40
+        },
+        {
+          "caller": "createCatalog",
+          "callee": "emptyView",
+          "lineNumber": 51
+        },
+        {
+          "caller": "changeView",
+          "callee": "Object.assign",
+          "lineNumber": 59
+        },
+        {
+          "caller": "changeView",
+          "callee": "saveView",
+          "lineNumber": 60
+        },
+        {
+          "caller": "changeView",
+          "callee": "render",
+          "lineNumber": 61
+        },
+        {
+          "caller": "createCatalog",
+          "callee": "createProvenance",
+          "lineNumber": 64
+        },
+        {
+          "caller": "createCatalog",
+          "callee": "createMetrics",
+          "lineNumber": 65
+        },
+        {
+          "caller": "createCatalog",
+          "callee": "changeView",
+          "lineNumber": 67
+        },
+        {
+          "caller": "createCatalog",
+          "callee": "createNavigation",
+          "lineNumber": 69
+        },
+        {
+          "caller": "createCatalog",
+          "callee": "changeView",
+          "lineNumber": 71
+        },
+        {
+          "caller": "createCatalog",
+          "callee": "createToolbar",
+          "lineNumber": 73
+        },
+        {
+          "caller": "createCatalog",
+          "callee": "changeView",
+          "lineNumber": 75
+        },
+        {
+          "caller": "createCatalog",
+          "callee": "changeView",
+          "lineNumber": 76
+        },
+        {
+          "caller": "createCatalog",
+          "callee": "changeView",
+          "lineNumber": 77
+        },
+        {
+          "caller": "createCatalog",
+          "callee": "changeView",
+          "lineNumber": 78
+        },
+        {
+          "caller": "createCatalog",
+          "callee": "createCards",
+          "lineNumber": 80
+        },
+        {
+          "caller": "createCatalog",
+          "callee": "select",
+          "lineNumber": 80
+        },
+        {
+          "caller": "createCatalog",
+          "callee": "createDetails",
+          "lineNumber": 81
+        },
+        {
+          "caller": "selectedEntry",
+          "callee": "state.entries.find",
+          "lineNumber": 84
+        },
+        {
+          "caller": "selectedEntry",
+          "callee": "text",
+          "lineNumber": 84
+        },
+        {
+          "caller": "cardsModel",
+          "callee": "selectedScope",
+          "lineNumber": 88
+        },
+        {
+          "caller": "cardsModel",
+          "callee": "visibleEntries",
+          "lineNumber": 90
+        },
+        {
+          "caller": "cardsModel",
+          "callee": "scopeTotal",
+          "lineNumber": 91
+        },
+        {
+          "caller": "navigationModel",
+          "callee": "categoryRows",
+          "lineNumber": 102
+        },
+        {
+          "caller": "navigationModel",
+          "callee": "scopeEntries",
+          "lineNumber": 102
+        },
+        {
+          "caller": "navigationModel",
+          "callee": "categoryCoverage",
+          "lineNumber": 109
+        },
+        {
+          "caller": "render",
+          "callee": "inventoryCounts",
+          "lineNumber": 119
+        },
+        {
+          "caller": "render",
+          "callee": "selectedScope",
+          "lineNumber": 121
+        },
+        {
+          "caller": "render",
+          "callee": "scopeTotal",
+          "lineNumber": 122
+        },
+        {
+          "caller": "render",
+          "callee": "provenance.render",
+          "lineNumber": 123
+        },
+        {
+          "caller": "render",
+          "callee": "metrics.render",
+          "lineNumber": 131
+        },
+        {
+          "caller": "render",
+          "callee": "navigation.render",
+          "lineNumber": 132
+        },
+        {
+          "caller": "render",
+          "callee": "navigationModel",
+          "lineNumber": 132
+        },
+        {
+          "caller": "render",
+          "callee": "toolbar.render",
+          "lineNumber": 133
+        },
+        {
+          "caller": "render",
+          "callee": "cards.render",
+          "lineNumber": 140
+        },
+        {
+          "caller": "render",
+          "callee": "cardsModel",
+          "lineNumber": 140
+        },
+        {
+          "caller": "render",
+          "callee": "details.render",
+          "lineNumber": 141
+        },
+        {
+          "caller": "render",
+          "callee": "detailsModel",
+          "lineNumber": 141
+        },
+        {
+          "caller": "render",
+          "callee": "selectedEntry",
+          "lineNumber": 141
+        },
+        {
+          "caller": "select",
+          "callee": "onReselectEntry",
+          "lineNumber": 149
+        },
+        {
+          "caller": "select",
+          "callee": "selectedEntry",
+          "lineNumber": 154
+        },
+        {
+          "caller": "select",
+          "callee": "cards.setSelected",
+          "lineNumber": 157
+        },
+        {
+          "caller": "select",
+          "callee": "details.render",
+          "lineNumber": 158
+        },
+        {
+          "caller": "select",
+          "callee": "detailsModel",
+          "lineNumber": 158
+        },
+        {
+          "caller": "select",
+          "callee": "onSelectEntry",
+          "lineNumber": 159
+        },
+        {
+          "caller": "start",
+          "callee": "loadCatalog",
+          "lineNumber": 164
+        },
+        {
+          "caller": "start",
+          "callee": "onSummary",
+          "lineNumber": 171
+        },
+        {
+          "caller": "start",
+          "callee": "(summary?.packages ?? [])\r\n            .filter((pkg) => typeof pkg?.packageName === \"string\" && typeof pkg?.version === \"string\")\r\n            .map",
+          "lineNumber": 176
+        },
+        {
+          "caller": "start",
+          "callee": "(summary?.packages ?? [])\r\n            .filter",
+          "lineNumber": 176
+        },
+        {
+          "caller": "start",
+          "callee": "inventoryCounts",
+          "lineNumber": 183
+        },
+        {
+          "caller": "start",
+          "callee": "restoreView",
+          "lineNumber": 184
+        },
+        {
+          "caller": "start",
+          "callee": "toolbar.setQuery",
+          "lineNumber": 185
+        },
+        {
+          "caller": "start",
+          "callee": "render",
+          "lineNumber": 186
+        },
+        {
+          "caller": "setOrganizationName",
+          "callee": "navigation.render",
+          "lineNumber": 192
+        },
+        {
+          "caller": "setOrganizationName",
+          "callee": "navigationModel",
+          "lineNumber": 192
+        }
+      ],
+      "metrics": {
+        "importCount": 13,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/catalog/details.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 378,
+      "nonEmptyLines": 354,
+      "functions": [
+        {
+          "name": "row",
+          "startLine": 58,
+          "endLine": 67,
+          "params": [
+            "parent",
+            "label",
+            "value",
+            "title"
+          ]
+        },
+        {
+          "name": "countRow",
+          "startLine": 71,
+          "endLine": 77,
+          "params": [
+            "parent",
+            "label",
+            "value"
+          ]
+        },
+        {
+          "name": "capability",
+          "startLine": 80,
+          "endLine": 91,
+          "params": [
+            "container",
+            "label",
+            "icon",
+            "tone",
+            "value",
+            "title"
+          ]
+        },
+        {
+          "name": "declared",
+          "startLine": 94,
+          "endLine": 96,
+          "params": [
+            "list"
+          ]
+        },
+        {
+          "name": "versionOf",
+          "startLine": 99,
+          "endLine": 105,
+          "params": [
+            "source"
+          ]
+        },
+        {
+          "name": "originOf",
+          "startLine": 108,
+          "endLine": 115,
+          "params": [
+            "source"
+          ]
+        },
+        {
+          "name": "qualificationLine",
+          "startLine": 118,
+          "endLine": 126,
+          "params": [
+            "parent",
+            "label",
+            "value",
+            "title",
+            "key"
+          ]
+        },
+        {
+          "name": "renderQualification",
+          "startLine": 133,
+          "endLine": 181,
+          "params": [
+            "elements",
+            "view",
+            "entry"
+          ]
+        },
+        {
+          "name": "createDetails",
+          "startLine": 184,
+          "endLine": 378,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "createDetails",
+          "line": 184,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "row",
+          "callee": "el",
+          "lineNumber": 59
+        },
+        {
+          "caller": "row",
+          "callee": "line.appendChild",
+          "lineNumber": 60
+        },
+        {
+          "caller": "row",
+          "callee": "el",
+          "lineNumber": 60
+        },
+        {
+          "caller": "row",
+          "callee": "text",
+          "lineNumber": 61
+        },
+        {
+          "caller": "row",
+          "callee": "el",
+          "lineNumber": 62
+        },
+        {
+          "caller": "row",
+          "callee": "line.appendChild",
+          "lineNumber": 64
+        },
+        {
+          "caller": "row",
+          "callee": "parent.appendChild",
+          "lineNumber": 65
+        },
+        {
+          "caller": "countRow",
+          "callee": "el",
+          "lineNumber": 72
+        },
+        {
+          "caller": "countRow",
+          "callee": "line.appendChild",
+          "lineNumber": 73
+        },
+        {
+          "caller": "countRow",
+          "callee": "el",
+          "lineNumber": 73
+        },
+        {
+          "caller": "countRow",
+          "callee": "line.appendChild",
+          "lineNumber": 74
+        },
+        {
+          "caller": "countRow",
+          "callee": "el",
+          "lineNumber": 74
+        },
+        {
+          "caller": "countRow",
+          "callee": "String",
+          "lineNumber": 74
+        },
+        {
+          "caller": "countRow",
+          "callee": "parent.appendChild",
+          "lineNumber": 75
+        },
+        {
+          "caller": "capability",
+          "callee": "el",
+          "lineNumber": 81
+        },
+        {
+          "caller": "capability",
+          "callee": "el",
+          "lineNumber": 82
+        },
+        {
+          "caller": "capability",
+          "callee": "left.appendChild",
+          "lineNumber": 83
+        },
+        {
+          "caller": "capability",
+          "callee": "el",
+          "lineNumber": 83
+        },
+        {
+          "caller": "capability",
+          "callee": "left.appendChild",
+          "lineNumber": 84
+        },
+        {
+          "caller": "capability",
+          "callee": "el",
+          "lineNumber": 84
+        },
+        {
+          "caller": "capability",
+          "callee": "line.appendChild",
+          "lineNumber": 85
+        },
+        {
+          "caller": "capability",
+          "callee": "el",
+          "lineNumber": 87
+        },
+        {
+          "caller": "capability",
+          "callee": "line.appendChild",
+          "lineNumber": 89
+        },
+        {
+          "caller": "capability",
+          "callee": "container.appendChild",
+          "lineNumber": 90
+        },
+        {
+          "caller": "declared",
+          "callee": "Array.isArray",
+          "lineNumber": 95
+        },
+        {
+          "caller": "declared",
+          "callee": "list.join",
+          "lineNumber": 95
+        },
+        {
+          "caller": "originOf",
+          "callee": "`${source.registry ? `${source.registry} ` : \"\"}${source.packageName}`.trim",
+          "lineNumber": 111
+        },
+        {
+          "caller": "originOf",
+          "callee": "sourceLabelOf",
+          "lineNumber": 114
+        },
+        {
+          "caller": "qualificationLine",
+          "callee": "el",
+          "lineNumber": 119
+        },
+        {
+          "caller": "qualificationLine",
+          "callee": "line.appendChild",
+          "lineNumber": 120
+        },
+        {
+          "caller": "qualificationLine",
+          "callee": "el",
+          "lineNumber": 120
+        },
+        {
+          "caller": "qualificationLine",
+          "callee": "el",
+          "lineNumber": 121
+        },
+        {
+          "caller": "qualificationLine",
+          "callee": "line.appendChild",
+          "lineNumber": 124
+        },
+        {
+          "caller": "qualificationLine",
+          "callee": "parent.appendChild",
+          "lineNumber": 125
+        },
+        {
+          "caller": "renderQualification",
+          "callee": "box.replaceChildren",
+          "lineNumber": 135
+        },
+        {
+          "caller": "renderQualification",
+          "callee": "qualificationOf",
+          "lineNumber": 145
+        },
+        {
+          "caller": "renderQualification",
+          "callee": "qualificationOf",
+          "lineNumber": 158
+        },
+        {
+          "caller": "renderQualification",
+          "callee": "qualificationLine",
+          "lineNumber": 159
+        },
+        {
+          "caller": "renderQualification",
+          "callee": "qualificationLine",
+          "lineNumber": 165
+        },
+        {
+          "caller": "renderQualification",
+          "callee": "qualificationLine",
+          "lineNumber": 166
+        },
+        {
+          "caller": "renderQualification",
+          "callee": "qualificationLine",
+          "lineNumber": 167
+        },
+        {
+          "caller": "renderQualification",
+          "callee": "qualificationLine",
+          "lineNumber": 173
+        },
+        {
+          "caller": "renderQualification",
+          "callee": "el",
+          "lineNumber": 178
+        },
+        {
+          "caller": "renderQualification",
+          "callee": "attestationSentence",
+          "lineNumber": 178
+        },
+        {
+          "caller": "renderQualification",
+          "callee": "box.appendChild",
+          "lineNumber": 180
+        },
+        {
+          "caller": "reset",
+          "callee": "elements.detailsIdentity.replaceChildren",
+          "lineNumber": 192
+        },
+        {
+          "caller": "reset",
+          "callee": "elements.detailsSource.replaceChildren",
+          "lineNumber": 193
+        },
+        {
+          "caller": "reset",
+          "callee": "elements.detailsCapabilities.replaceChildren",
+          "lineNumber": 194
+        },
+        {
+          "caller": "reset",
+          "callee": "elements.detailsArtifacts.replaceChildren",
+          "lineNumber": 195
+        },
+        {
+          "caller": "reset",
+          "callee": "elements.securityStatements.replaceChildren",
+          "lineNumber": 196
+        },
+        {
+          "caller": "renderEmpty",
+          "callee": "capability",
+          "lineNumber": 207
+        },
+        {
+          "caller": "renderEmpty",
+          "callee": "capability",
+          "lineNumber": 208
+        },
+        {
+          "caller": "renderEmpty",
+          "callee": "capability",
+          "lineNumber": 209
+        },
+        {
+          "caller": "renderEmpty",
+          "callee": "row",
+          "lineNumber": 210
+        },
+        {
+          "caller": "renderEmpty",
+          "callee": "row",
+          "lineNumber": 211
+        },
+        {
+          "caller": "renderEmpty",
+          "callee": "elements.detailsArtifacts.appendChild",
+          "lineNumber": 212
+        },
+        {
+          "caller": "renderEmpty",
+          "callee": "el",
+          "lineNumber": 212
+        },
+        {
+          "caller": "renderStatements",
+          "callee": "elements.securityStatements.appendChild",
+          "lineNumber": 221
+        },
+        {
+          "caller": "renderStatements",
+          "callee": "el",
+          "lineNumber": 221
+        },
+        {
+          "caller": "renderStatements",
+          "callee": "el",
+          "lineNumber": 224
+        },
+        {
+          "caller": "renderStatements",
+          "callee": "el",
+          "lineNumber": 225
+        },
+        {
+          "caller": "renderStatements",
+          "callee": "head.appendChild",
+          "lineNumber": 226
+        },
+        {
+          "caller": "renderStatements",
+          "callee": "el",
+          "lineNumber": 226
+        },
+        {
+          "caller": "renderStatements",
+          "callee": "head.appendChild",
+          "lineNumber": 227
+        },
+        {
+          "caller": "renderStatements",
+          "callee": "el",
+          "lineNumber": 227
+        },
+        {
+          "caller": "renderStatements",
+          "callee": "box.appendChild",
+          "lineNumber": 228
+        },
+        {
+          "caller": "renderStatements",
+          "callee": "el",
+          "lineNumber": 233
+        },
+        {
+          "caller": "renderStatements",
+          "callee": "box.appendChild",
+          "lineNumber": 235
+        },
+        {
+          "caller": "renderStatements",
+          "callee": "el",
+          "lineNumber": 236
+        },
+        {
+          "caller": "renderStatements",
+          "callee": "row",
+          "lineNumber": 237
+        },
+        {
+          "caller": "renderStatements",
+          "callee": "row",
+          "lineNumber": 238
+        },
+        {
+          "caller": "renderStatements",
+          "callee": "row",
+          "lineNumber": 239
+        },
+        {
+          "caller": "renderStatements",
+          "callee": "row",
+          "lineNumber": 240
+        },
+        {
+          "caller": "renderStatements",
+          "callee": "box.appendChild",
+          "lineNumber": 241
+        },
+        {
+          "caller": "renderStatements",
+          "callee": "elements.securityStatements.appendChild",
+          "lineNumber": 242
+        },
+        {
+          "caller": "render",
+          "callee": "reset",
+          "lineNumber": 249
+        },
+        {
+          "caller": "render",
+          "callee": "renderQualification",
+          "lineNumber": 250
+        },
+        {
+          "caller": "render",
+          "callee": "renderEmpty",
+          "lineNumber": 252
+        },
+        {
+          "caller": "render",
+          "callee": "identity",
+          "lineNumber": 256
+        },
+        {
+          "caller": "render",
+          "callee": "sourceIdentity",
+          "lineNumber": 258
+        },
+        {
+          "caller": "render",
+          "callee": "publisherOf",
+          "lineNumber": 260
+        },
+        {
+          "caller": "render",
+          "callee": "publishedText",
+          "lineNumber": 261
+        },
+        {
+          "caller": "render",
+          "callee": "publishedText",
+          "lineNumber": 264
+        },
+        {
+          "caller": "render",
+          "callee": "versionOf",
+          "lineNumber": 267
+        },
+        {
+          "caller": "render",
+          "callee": "originOf",
+          "lineNumber": 272
+        },
+        {
+          "caller": "render",
+          "callee": "provenanceNote",
+          "lineNumber": 284
+        },
+        {
+          "caller": "render",
+          "callee": "declared",
+          "lineNumber": 291
+        },
+        {
+          "caller": "render",
+          "callee": "capability",
+          "lineNumber": 292
+        },
+        {
+          "caller": "render",
+          "callee": "capability",
+          "lineNumber": 296
+        },
+        {
+          "caller": "render",
+          "callee": "capability",
+          "lineNumber": 300
+        },
+        {
+          "caller": "render",
+          "callee": "row",
+          "lineNumber": 306
+        },
+        {
+          "caller": "render",
+          "callee": "originOf",
+          "lineNumber": 306
+        },
+        {
+          "caller": "render",
+          "callee": "row",
+          "lineNumber": 308
+        },
+        {
+          "caller": "render",
+          "callee": "source.commit.slice",
+          "lineNumber": 308
+        },
+        {
+          "caller": "render",
+          "callee": "row",
+          "lineNumber": 309
+        },
+        {
+          "caller": "render",
+          "callee": "row",
+          "lineNumber": 311
+        },
+        {
+          "caller": "render",
+          "callee": "row",
+          "lineNumber": 312
+        },
+        {
+          "caller": "render",
+          "callee": "shortDigest",
+          "lineNumber": 312
+        },
+        {
+          "caller": "render",
+          "callee": "row",
+          "lineNumber": 314
+        },
+        {
+          "caller": "render",
+          "callee": "shortDigest",
+          "lineNumber": 314
+        },
+        {
+          "caller": "render",
+          "callee": "row",
+          "lineNumber": 316
+        },
+        {
+          "caller": "render",
+          "callee": "collectionOf",
+          "lineNumber": 317
+        },
+        {
+          "caller": "render",
+          "callee": "row",
+          "lineNumber": 321
+        },
+        {
+          "caller": "render",
+          "callee": "countRow",
+          "lineNumber": 328
+        },
+        {
+          "caller": "render",
+          "callee": "scopeCountOf",
+          "lineNumber": 331
+        },
+        {
+          "caller": "render",
+          "callee": "row",
+          "lineNumber": 335
+        },
+        {
+          "caller": "render",
+          "callee": "row",
+          "lineNumber": 336
+        },
+        {
+          "caller": "render",
+          "callee": "row",
+          "lineNumber": 337
+        },
+        {
+          "caller": "render",
+          "callee": "row",
+          "lineNumber": 338
+        },
+        {
+          "caller": "render",
+          "callee": "row",
+          "lineNumber": 339
+        },
+        {
+          "caller": "render",
+          "callee": "row",
+          "lineNumber": 340
+        },
+        {
+          "caller": "render",
+          "callee": "sourceDetailRows",
+          "lineNumber": 342
+        },
+        {
+          "caller": "render",
+          "callee": "row",
+          "lineNumber": 342
+        },
+        {
+          "caller": "render",
+          "callee": "row",
+          "lineNumber": 343
+        },
+        {
+          "caller": "render",
+          "callee": "Array.isArray",
+          "lineNumber": 343
+        },
+        {
+          "caller": "render",
+          "callee": "entry.platforms.map((platform) => `${text(platform?.os) ?? \"?\"}/${text(platform?.architecture) ?? \"?\"}`).join",
+          "lineNumber": 344
+        },
+        {
+          "caller": "render",
+          "callee": "entry.platforms.map",
+          "lineNumber": 344
+        },
+        {
+          "caller": "render",
+          "callee": "text",
+          "lineNumber": 344
+        },
+        {
+          "caller": "render",
+          "callee": "text",
+          "lineNumber": 344
+        },
+        {
+          "caller": "render",
+          "callee": "row",
+          "lineNumber": 349
+        },
+        {
+          "caller": "render",
+          "callee": "row",
+          "lineNumber": 350
+        },
+        {
+          "caller": "render",
+          "callee": "row",
+          "lineNumber": 352
+        },
+        {
+          "caller": "render",
+          "callee": "provenanceNote",
+          "lineNumber": 352
+        },
+        {
+          "caller": "render",
+          "callee": "row",
+          "lineNumber": 356
+        },
+        {
+          "caller": "render",
+          "callee": "publishedText",
+          "lineNumber": 357
+        },
+        {
+          "caller": "render",
+          "callee": "provenanceNote",
+          "lineNumber": 358
+        },
+        {
+          "caller": "render",
+          "callee": "row",
+          "lineNumber": 360
+        },
+        {
+          "caller": "render",
+          "callee": "row",
+          "lineNumber": 361
+        },
+        {
+          "caller": "render",
+          "callee": "Object.entries",
+          "lineNumber": 362
+        },
+        {
+          "caller": "render",
+          "callee": "row",
+          "lineNumber": 363
+        },
+        {
+          "caller": "render",
+          "callee": "statementsOf",
+          "lineNumber": 367
+        },
+        {
+          "caller": "render",
+          "callee": "statements.find",
+          "lineNumber": 368
+        },
+        {
+          "caller": "render",
+          "callee": "text",
+          "lineNumber": 369
+        },
+        {
+          "caller": "render",
+          "callee": "renderStatements",
+          "lineNumber": 375
+        }
+      ],
+      "metrics": {
+        "importCount": 6,
+        "exportCount": 1,
+        "functionCount": 9,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/catalog/elements.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 71,
+      "nonEmptyLines": 69,
+      "functions": [
+        {
+          "name": "catalogElements",
+          "startLine": 9,
+          "endLine": 71,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "catalogElements",
+          "line": 9,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "catalogElements",
+          "callee": "collectIds",
+          "lineNumber": 23
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/catalog/entry.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 196,
+      "nonEmptyLines": 183,
+      "functions": [
+        {
+          "name": "shortDigest",
+          "startLine": 41,
+          "endLine": 46,
+          "params": [
+            "value"
+          ]
+        },
+        {
+          "name": "sourceIdentity",
+          "startLine": 51,
+          "endLine": 67,
+          "params": [
+            "entry"
+          ]
+        },
+        {
+          "name": "sourceLabelOf",
+          "startLine": 70,
+          "endLine": 75,
+          "params": [
+            "source"
+          ]
+        },
+        {
+          "name": "sourceLabelTitle",
+          "startLine": 77,
+          "endLine": 82,
+          "params": [
+            "source",
+            "label"
+          ]
+        },
+        {
+          "name": "sourceDetailRows",
+          "startLine": 85,
+          "endLine": 112,
+          "params": [
+            "source"
+          ]
+        },
+        {
+          "name": "identity",
+          "startLine": 114,
+          "endLine": 130,
+          "params": [
+            "entry"
+          ]
+        },
+        {
+          "name": "statement",
+          "startLine": 139,
+          "endLine": 149,
+          "params": [
+            "kind",
+            "item"
+          ]
+        },
+        {
+          "name": "statementsOf",
+          "startLine": 151,
+          "endLine": 161,
+          "params": [
+            "entry"
+          ]
+        },
+        {
+          "name": "firstSummary",
+          "startLine": 163,
+          "endLine": 166,
+          "params": [
+            "entry",
+            "kinds"
+          ]
+        },
+        {
+          "name": "searchText",
+          "startLine": 171,
+          "endLine": 196,
+          "params": [
+            "entry"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "KIND_ICON",
+          "line": 23,
+          "isDefault": false
+        },
+        {
+          "name": "KIND_PRIMITIVE",
+          "line": 32,
+          "isDefault": false
+        },
+        {
+          "name": "shortDigest",
+          "line": 41,
+          "isDefault": false
+        },
+        {
+          "name": "sourceIdentity",
+          "line": 51,
+          "isDefault": false
+        },
+        {
+          "name": "sourceLabelOf",
+          "line": 70,
+          "isDefault": false
+        },
+        {
+          "name": "sourceLabelTitle",
+          "line": 77,
+          "isDefault": false
+        },
+        {
+          "name": "sourceDetailRows",
+          "line": 85,
+          "isDefault": false
+        },
+        {
+          "name": "identity",
+          "line": 114,
+          "isDefault": false
+        },
+        {
+          "name": "statementsOf",
+          "line": 151,
+          "isDefault": false
+        },
+        {
+          "name": "firstSummary",
+          "line": 163,
+          "isDefault": false
+        },
+        {
+          "name": "searchText",
+          "line": 171,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "shortDigest",
+          "callee": "text",
+          "lineNumber": 42
+        },
+        {
+          "caller": "shortDigest",
+          "callee": "digest.replace",
+          "lineNumber": 44
+        },
+        {
+          "caller": "shortDigest",
+          "callee": "hex.slice",
+          "lineNumber": 45
+        },
+        {
+          "caller": "sourceIdentity",
+          "callee": "text",
+          "lineNumber": 56
+        },
+        {
+          "caller": "sourceIdentity",
+          "callee": "text",
+          "lineNumber": 57
+        },
+        {
+          "caller": "sourceIdentity",
+          "callee": "text",
+          "lineNumber": 58
+        },
+        {
+          "caller": "sourceIdentity",
+          "callee": "text",
+          "lineNumber": 59
+        },
+        {
+          "caller": "sourceIdentity",
+          "callee": "text",
+          "lineNumber": 60
+        },
+        {
+          "caller": "sourceIdentity",
+          "callee": "text",
+          "lineNumber": 61
+        },
+        {
+          "caller": "sourceIdentity",
+          "callee": "text",
+          "lineNumber": 62
+        },
+        {
+          "caller": "sourceIdentity",
+          "callee": "text",
+          "lineNumber": 63
+        },
+        {
+          "caller": "sourceIdentity",
+          "callee": "text",
+          "lineNumber": 64
+        },
+        {
+          "caller": "sourceIdentity",
+          "callee": "text",
+          "lineNumber": 65
+        },
+        {
+          "caller": "sourceLabelTitle",
+          "callee": "`npm source: ${source.packageName ?? \"package not published\"} ${source.version ?? \"version not published\"}`.trim",
+          "lineNumber": 79
+        },
+        {
+          "caller": "identity",
+          "callee": "sourceIdentity",
+          "lineNumber": 115
+        },
+        {
+          "caller": "identity",
+          "callee": "sourceLabelOf",
+          "lineNumber": 116
+        },
+        {
+          "caller": "identity",
+          "callee": "text",
+          "lineNumber": 117
+        },
+        {
+          "caller": "identity",
+          "callee": "text",
+          "lineNumber": 122
+        },
+        {
+          "caller": "identity",
+          "callee": "text",
+          "lineNumber": 123
+        },
+        {
+          "caller": "identity",
+          "callee": "text",
+          "lineNumber": 124
+        },
+        {
+          "caller": "statement",
+          "callee": "text",
+          "lineNumber": 142
+        },
+        {
+          "caller": "statement",
+          "callee": "text",
+          "lineNumber": 143
+        },
+        {
+          "caller": "statement",
+          "callee": "text",
+          "lineNumber": 144
+        },
+        {
+          "caller": "statement",
+          "callee": "text",
+          "lineNumber": 145
+        },
+        {
+          "caller": "statement",
+          "callee": "text",
+          "lineNumber": 146
+        },
+        {
+          "caller": "statement",
+          "callee": "text",
+          "lineNumber": 147
+        },
+        {
+          "caller": "statementsOf",
+          "callee": "Array.isArray",
+          "lineNumber": 156
+        },
+        {
+          "caller": "statementsOf",
+          "callee": "statements.push",
+          "lineNumber": 156
+        },
+        {
+          "caller": "statementsOf",
+          "callee": "statement",
+          "lineNumber": 156
+        },
+        {
+          "caller": "statementsOf",
+          "callee": "statements.push",
+          "lineNumber": 159
+        },
+        {
+          "caller": "statementsOf",
+          "callee": "statement",
+          "lineNumber": 159
+        },
+        {
+          "caller": "firstSummary",
+          "callee": "statementsOf(entry).find",
+          "lineNumber": 164
+        },
+        {
+          "caller": "firstSummary",
+          "callee": "statementsOf",
+          "lineNumber": 164
+        },
+        {
+          "caller": "firstSummary",
+          "callee": "kinds.includes",
+          "lineNumber": 164
+        },
+        {
+          "caller": "searchText",
+          "callee": "identity",
+          "lineNumber": 172
+        },
+        {
+          "caller": "searchText",
+          "callee": "sourceIdentity",
+          "lineNumber": 173
+        },
+        {
+          "caller": "published",
+          "callee": "text",
+          "lineNumber": 175
+        },
+        {
+          "caller": "searchText",
+          "callee": "[\n    published(\"title\"),\n    published(\"description\"),\n    published(\"category\"),\n    curatedLabel,\n    id.entryId,\n    id.subjectId,\n    id.kind,\n    id.sourceType,\n    id.sourceLabel,\n    id.revision,\n    source.repository,\n    source.commit,\n    source.path,\n    source.packageName,\n    source.registry,\n    source.version,\n    source.integrity,\n    source.release,\n  ].filter((part) => part !== null).join",
+          "lineNumber": 176
+        },
+        {
+          "caller": "searchText",
+          "callee": "[\n    published(\"title\"),\n    published(\"description\"),\n    published(\"category\"),\n    curatedLabel,\n    id.entryId,\n    id.subjectId,\n    id.kind,\n    id.sourceType,\n    id.sourceLabel,\n    id.revision,\n    source.repository,\n    source.commit,\n    source.path,\n    source.packageName,\n    source.registry,\n    source.version,\n    source.integrity,\n    source.release,\n  ].filter",
+          "lineNumber": 176
+        },
+        {
+          "caller": "searchText",
+          "callee": "published",
+          "lineNumber": 177
+        },
+        {
+          "caller": "searchText",
+          "callee": "published",
+          "lineNumber": 178
+        },
+        {
+          "caller": "searchText",
+          "callee": "published",
+          "lineNumber": 179
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 11,
+        "functionCount": 10,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/catalog/index-source.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 87,
+      "nonEmptyLines": 82,
+      "functions": [
+        {
+          "name": "loadJson",
+          "startLine": 29,
+          "endLine": 42,
+          "params": [
+            "url",
+            "what"
+          ]
+        },
+        {
+          "name": "assertIndexContract",
+          "startLine": 44,
+          "endLine": 52,
+          "params": [
+            "index"
+          ]
+        },
+        {
+          "name": "loadCatalog",
+          "startLine": 62,
+          "endLine": 87,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "loadCatalog",
+          "line": 62,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "loadJson",
+          "callee": "fetch",
+          "lineNumber": 32
+        },
+        {
+          "caller": "loadJson",
+          "callee": "response.json",
+          "lineNumber": 38
+        },
+        {
+          "caller": "assertIndexContract",
+          "callee": "JSON.stringify",
+          "lineNumber": 46
+        },
+        {
+          "caller": "assertIndexContract",
+          "callee": "JSON.stringify",
+          "lineNumber": 49
+        },
+        {
+          "caller": "assertIndexContract",
+          "callee": "Array.isArray",
+          "lineNumber": 51
+        },
+        {
+          "caller": "loadCatalog",
+          "callee": "loadJson",
+          "lineNumber": 63
+        },
+        {
+          "caller": "loadCatalog",
+          "callee": "assertIndexContract",
+          "lineNumber": 64
+        },
+        {
+          "caller": "loadCatalog",
+          "callee": "loadJson",
+          "lineNumber": 65
+        },
+        {
+          "caller": "loadCatalog",
+          "callee": "applyCollections",
+          "lineNumber": 66
+        },
+        {
+          "caller": "loadCatalog",
+          "callee": "loadJson",
+          "lineNumber": 70
+        },
+        {
+          "caller": "loadCatalog",
+          "callee": "applyPublisher",
+          "lineNumber": 72
+        },
+        {
+          "caller": "sidecar",
+          "callee": "loadJson",
+          "lineNumber": 75
+        },
+        {
+          "caller": "loadCatalog",
+          "callee": "applyQualification",
+          "lineNumber": 76
+        },
+        {
+          "caller": "loadCatalog",
+          "callee": "sidecar",
+          "lineNumber": 78
+        },
+        {
+          "caller": "loadCatalog",
+          "callee": "applyCategories",
+          "lineNumber": 81
+        },
+        {
+          "caller": "loadCatalog",
+          "callee": "sidecar",
+          "lineNumber": 83
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/catalog/metrics.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 78,
+      "nonEmptyLines": 70,
+      "functions": [
+        {
+          "name": "tile",
+          "startLine": 23,
+          "endLine": 65,
+          "params": [
+            "kind",
+            "model",
+            "onToggleKind"
+          ]
+        },
+        {
+          "name": "createMetrics",
+          "startLine": 71,
+          "endLine": 78,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "createMetrics",
+          "line": 71,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "tile",
+          "callee": "model.kindCounts.get",
+          "lineNumber": 24
+        },
+        {
+          "caller": "tile",
+          "callee": "el",
+          "lineNumber": 26
+        },
+        {
+          "caller": "tile",
+          "callee": "button.setAttribute",
+          "lineNumber": 28
+        },
+        {
+          "caller": "tile",
+          "callee": "String",
+          "lineNumber": 28
+        },
+        {
+          "caller": "tile",
+          "callee": "button.setAttribute",
+          "lineNumber": 31
+        },
+        {
+          "caller": "tile",
+          "callee": "kind.label.toLowerCase",
+          "lineNumber": 32
+        },
+        {
+          "caller": "tile",
+          "callee": "el",
+          "lineNumber": 35
+        },
+        {
+          "caller": "tile",
+          "callee": "el",
+          "lineNumber": 36
+        },
+        {
+          "caller": "tile",
+          "callee": "name.appendChild",
+          "lineNumber": 37
+        },
+        {
+          "caller": "tile",
+          "callee": "el",
+          "lineNumber": 37
+        },
+        {
+          "caller": "tile",
+          "callee": "name.appendChild",
+          "lineNumber": 38
+        },
+        {
+          "caller": "tile",
+          "callee": "el",
+          "lineNumber": 38
+        },
+        {
+          "caller": "tile",
+          "callee": "head.appendChild",
+          "lineNumber": 39
+        },
+        {
+          "caller": "tile",
+          "callee": "head.appendChild",
+          "lineNumber": 40
+        },
+        {
+          "caller": "tile",
+          "callee": "el",
+          "lineNumber": 40
+        },
+        {
+          "caller": "tile",
+          "callee": "button.appendChild",
+          "lineNumber": 41
+        },
+        {
+          "caller": "tile",
+          "callee": "el",
+          "lineNumber": 43
+        },
+        {
+          "caller": "tile",
+          "callee": "metrics.appendChild",
+          "lineNumber": 45
+        },
+        {
+          "caller": "tile",
+          "callee": "el",
+          "lineNumber": 45
+        },
+        {
+          "caller": "tile",
+          "callee": "el",
+          "lineNumber": 47
+        },
+        {
+          "caller": "tile",
+          "callee": "numbers.appendChild",
+          "lineNumber": 48
+        },
+        {
+          "caller": "tile",
+          "callee": "el",
+          "lineNumber": 48
+        },
+        {
+          "caller": "tile",
+          "callee": "String",
+          "lineNumber": 48
+        },
+        {
+          "caller": "tile",
+          "callee": "metrics.appendChild",
+          "lineNumber": 49
+        },
+        {
+          "caller": "tile",
+          "callee": "metrics.appendChild",
+          "lineNumber": 50
+        },
+        {
+          "caller": "tile",
+          "callee": "el",
+          "lineNumber": 50
+        },
+        {
+          "caller": "tile",
+          "callee": "button.appendChild",
+          "lineNumber": 52
+        },
+        {
+          "caller": "tile",
+          "callee": "el",
+          "lineNumber": 54
+        },
+        {
+          "caller": "tile",
+          "callee": "el",
+          "lineNumber": 56
+        },
+        {
+          "caller": "tile",
+          "callee": "Math.round",
+          "lineNumber": 57
+        },
+        {
+          "caller": "tile",
+          "callee": "track.appendChild",
+          "lineNumber": 59
+        },
+        {
+          "caller": "tile",
+          "callee": "button.appendChild",
+          "lineNumber": 61
+        },
+        {
+          "caller": "tile",
+          "callee": "button.addEventListener",
+          "lineNumber": 63
+        },
+        {
+          "caller": "tile",
+          "callee": "onToggleKind",
+          "lineNumber": 63
+        },
+        {
+          "caller": "render",
+          "callee": "container.replaceChildren",
+          "lineNumber": 75
+        },
+        {
+          "caller": "render",
+          "callee": "LEDGER.map",
+          "lineNumber": 75
+        },
+        {
+          "caller": "render",
+          "callee": "tile",
+          "lineNumber": 75
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/catalog/navigation.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 197,
+      "nonEmptyLines": 188,
+      "functions": [
+        {
+          "name": "badgeNode",
+          "startLine": 32,
+          "endLine": 47,
+          "params": [
+            "scope",
+            "selected"
+          ]
+        },
+        {
+          "name": "categoriesReason",
+          "startLine": 55,
+          "endLine": 65,
+          "params": [
+            "coverage",
+            "curated"
+          ]
+        },
+        {
+          "name": "categoryLine",
+          "startLine": 68,
+          "endLine": 75,
+          "params": [
+            "label",
+            "count",
+            "title",
+            "key"
+          ]
+        },
+        {
+          "name": "curatedCategories",
+          "startLine": 82,
+          "endLine": 99,
+          "params": [
+            "curated"
+          ]
+        },
+        {
+          "name": "scopeRow",
+          "startLine": 101,
+          "endLine": 161,
+          "params": [
+            "row",
+            "selected",
+            "onSelect",
+            "coverage",
+            "curated"
+          ]
+        },
+        {
+          "name": "additionsRow",
+          "startLine": 164,
+          "endLine": 177,
+          "params": [
+            "organizationName"
+          ]
+        },
+        {
+          "name": "createNavigation",
+          "startLine": 183,
+          "endLine": 197,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "createNavigation",
+          "line": 183,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "badgeNode",
+          "callee": "el",
+          "lineNumber": 37
+        },
+        {
+          "caller": "badgeNode",
+          "callee": "el",
+          "lineNumber": 37
+        },
+        {
+          "caller": "badgeNode",
+          "callee": "node.addEventListener",
+          "lineNumber": 43
+        },
+        {
+          "caller": "badgeNode",
+          "callee": "event.stopPropagation",
+          "lineNumber": 43
+        },
+        {
+          "caller": "categoryLine",
+          "callee": "el",
+          "lineNumber": 69
+        },
+        {
+          "caller": "categoryLine",
+          "callee": "line.appendChild",
+          "lineNumber": 72
+        },
+        {
+          "caller": "categoryLine",
+          "callee": "el",
+          "lineNumber": 72
+        },
+        {
+          "caller": "categoryLine",
+          "callee": "line.appendChild",
+          "lineNumber": 73
+        },
+        {
+          "caller": "categoryLine",
+          "callee": "el",
+          "lineNumber": 73
+        },
+        {
+          "caller": "categoryLine",
+          "callee": "String",
+          "lineNumber": 73
+        },
+        {
+          "caller": "curatedCategories",
+          "callee": "el",
+          "lineNumber": 83
+        },
+        {
+          "caller": "curatedCategories",
+          "callee": "curationNote",
+          "lineNumber": 85
+        },
+        {
+          "caller": "curatedCategories",
+          "callee": "el",
+          "lineNumber": 87
+        },
+        {
+          "caller": "curatedCategories",
+          "callee": "categories.appendChild",
+          "lineNumber": 89
+        },
+        {
+          "caller": "curatedCategories",
+          "callee": "categories.appendChild",
+          "lineNumber": 91
+        },
+        {
+          "caller": "curatedCategories",
+          "callee": "categoryLine",
+          "lineNumber": 91
+        },
+        {
+          "caller": "curatedCategories",
+          "callee": "categories.appendChild",
+          "lineNumber": 94
+        },
+        {
+          "caller": "curatedCategories",
+          "callee": "categoryLine",
+          "lineNumber": 95
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "describeScope",
+          "lineNumber": 102
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "el",
+          "lineNumber": 103
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "el",
+          "lineNumber": 109
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "head.setAttribute",
+          "lineNumber": 111
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "String",
+          "lineNumber": 111
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "el",
+          "lineNumber": 115
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "left.appendChild",
+          "lineNumber": 116
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "el",
+          "lineNumber": 117
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "left.appendChild",
+          "lineNumber": 119
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "el",
+          "lineNumber": 120
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "badgeNode",
+          "lineNumber": 122
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "left.appendChild",
+          "lineNumber": 123
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "el",
+          "lineNumber": 127
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "marker.setAttribute",
+          "lineNumber": 129
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "left.appendChild",
+          "lineNumber": 130
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "head.appendChild",
+          "lineNumber": 132
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "head.appendChild",
+          "lineNumber": 133
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "el",
+          "lineNumber": 134
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "String",
+          "lineNumber": 139
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "head.addEventListener",
+          "lineNumber": 142
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "onSelect",
+          "lineNumber": 142
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "panel.appendChild",
+          "lineNumber": 143
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "panel.appendChild",
+          "lineNumber": 147
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "curatedCategories",
+          "lineNumber": 147
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "el",
+          "lineNumber": 151
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "el",
+          "lineNumber": 152
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "categoriesReason",
+          "lineNumber": 154
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "missing.appendChild",
+          "lineNumber": 155
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "el",
+          "lineNumber": 155
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "missing.appendChild",
+          "lineNumber": 156
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "el",
+          "lineNumber": 156
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "categories.appendChild",
+          "lineNumber": 157
+        },
+        {
+          "caller": "scopeRow",
+          "callee": "panel.appendChild",
+          "lineNumber": 158
+        },
+        {
+          "caller": "additionsRow",
+          "callee": "el",
+          "lineNumber": 165
+        },
+        {
+          "caller": "additionsRow",
+          "callee": "el",
+          "lineNumber": 167
+        },
+        {
+          "caller": "additionsRow",
+          "callee": "el",
+          "lineNumber": 168
+        },
+        {
+          "caller": "additionsRow",
+          "callee": "left.appendChild",
+          "lineNumber": 169
+        },
+        {
+          "caller": "additionsRow",
+          "callee": "el",
+          "lineNumber": 169
+        },
+        {
+          "caller": "additionsRow",
+          "callee": "left.appendChild",
+          "lineNumber": 170
+        },
+        {
+          "caller": "additionsRow",
+          "callee": "el",
+          "lineNumber": 171
+        },
+        {
+          "caller": "additionsRow",
+          "callee": "head.appendChild",
+          "lineNumber": 173
+        },
+        {
+          "caller": "additionsRow",
+          "callee": "head.appendChild",
+          "lineNumber": 174
+        },
+        {
+          "caller": "additionsRow",
+          "callee": "el",
+          "lineNumber": 174
+        },
+        {
+          "caller": "additionsRow",
+          "callee": "panel.appendChild",
+          "lineNumber": 175
+        },
+        {
+          "caller": "render",
+          "callee": "String",
+          "lineNumber": 187
+        },
+        {
+          "caller": "render",
+          "callee": "elements.scopeList.replaceChildren",
+          "lineNumber": 188
+        },
+        {
+          "caller": "render",
+          "callee": "sourceScopes",
+          "lineNumber": 189
+        },
+        {
+          "caller": "render",
+          "callee": "elements.scopeList.appendChild",
+          "lineNumber": 190
+        },
+        {
+          "caller": "render",
+          "callee": "scopeRow",
+          "lineNumber": 191
+        },
+        {
+          "caller": "render",
+          "callee": "elements.scopeList.appendChild",
+          "lineNumber": 194
+        },
+        {
+          "caller": "render",
+          "callee": "additionsRow",
+          "lineNumber": 194
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 1,
+        "functionCount": 7,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/catalog/provenance.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 250,
+      "nonEmptyLines": 228,
+      "functions": [
+        {
+          "name": "dot",
+          "startLine": 33,
+          "endLine": 35,
+          "params": []
+        },
+        {
+          "name": "createProvenance",
+          "startLine": 37,
+          "endLine": 250,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "createProvenance",
+          "line": 37,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "dot",
+          "callee": "el",
+          "lineNumber": 34
+        },
+        {
+          "caller": "packagesInOrder",
+          "callee": "(summary.packages ?? []).map",
+          "lineNumber": 40
+        },
+        {
+          "caller": "packagesInOrder",
+          "callee": "text",
+          "lineNumber": 40
+        },
+        {
+          "caller": "packagesInOrder",
+          "callee": "text",
+          "lineNumber": 40
+        },
+        {
+          "caller": "packagesInOrder",
+          "callee": "PACKAGE_ORDER.map",
+          "lineNumber": 42
+        },
+        {
+          "caller": "packagesInOrder",
+          "callee": "installed.get",
+          "lineNumber": 42
+        },
+        {
+          "caller": "contentMismatches",
+          "callee": "model.counts.installed.get",
+          "lineNumber": 53
+        },
+        {
+          "caller": "contentMismatches",
+          "callee": "out.set",
+          "lineNumber": 55
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "strip.replaceChildren",
+          "lineNumber": 63
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "contentMismatches",
+          "lineNumber": 65
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "strip.appendChild",
+          "lineNumber": 67
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "el",
+          "lineNumber": 67
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "packagesInOrder(summary).forEach",
+          "lineNumber": 68
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "packagesInOrder",
+          "lineNumber": 68
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "strip.appendChild",
+          "lineNumber": 69
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "dot",
+          "lineNumber": 69
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "el",
+          "lineNumber": 70
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "el",
+          "lineNumber": 71
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "text",
+          "lineNumber": 72
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "label.appendChild",
+          "lineNumber": 73
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "el",
+          "lineNumber": 73
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "group.appendChild",
+          "lineNumber": 77
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "text",
+          "lineNumber": 78
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "/^[0-9a-f]{7,40}$/.test",
+          "lineNumber": 79
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "el",
+          "lineNumber": 80
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "commit.slice",
+          "lineNumber": 80
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "group.appendChild",
+          "lineNumber": 82
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "mismatches.has",
+          "lineNumber": 86
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "el",
+          "lineNumber": 87
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "mismatches.get",
+          "lineNumber": 87
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "mismatches.get",
+          "lineNumber": 88
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "group.appendChild",
+          "lineNumber": 89
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "strip.appendChild",
+          "lineNumber": 91
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "strip.appendChild",
+          "lineNumber": 93
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "el",
+          "lineNumber": 93
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "strip.appendChild",
+          "lineNumber": 94
+        },
+        {
+          "caller": "renderStrip",
+          "callee": "diagnostics",
+          "lineNumber": 94
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "el",
+          "lineNumber": 101
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "el",
+          "lineNumber": 102
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "details.appendChild",
+          "lineNumber": 104
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "el",
+          "lineNumber": 106
+        },
+        {
+          "caller": "line",
+          "callee": "el",
+          "lineNumber": 108
+        },
+        {
+          "caller": "line",
+          "callee": "node.appendChild",
+          "lineNumber": 109
+        },
+        {
+          "caller": "line",
+          "callee": "el",
+          "lineNumber": 109
+        },
+        {
+          "caller": "line",
+          "callee": "node.appendChild",
+          "lineNumber": 110
+        },
+        {
+          "caller": "line",
+          "callee": "el",
+          "lineNumber": 110
+        },
+        {
+          "caller": "line",
+          "callee": "panel.appendChild",
+          "lineNumber": 111
+        },
+        {
+          "caller": "heading",
+          "callee": "panel.appendChild",
+          "lineNumber": 114
+        },
+        {
+          "caller": "heading",
+          "callee": "el",
+          "lineNumber": 114
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "line",
+          "lineNumber": 116
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "text",
+          "lineNumber": 116
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "text",
+          "lineNumber": 116
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "line",
+          "lineNumber": 117
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "text",
+          "lineNumber": 117
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "line",
+          "lineNumber": 118
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "String",
+          "lineNumber": 118
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "line",
+          "lineNumber": 119
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "String",
+          "lineNumber": 119
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "line",
+          "lineNumber": 120
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "String",
+          "lineNumber": 120
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "line",
+          "lineNumber": 121
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "text",
+          "lineNumber": 121
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "heading",
+          "lineNumber": 123
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "line",
+          "lineNumber": 124
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "text",
+          "lineNumber": 124
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "line",
+          "lineNumber": 125
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "(summary.collections?.collectedSourceTypes ?? []).join",
+          "lineNumber": 125
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "line",
+          "lineNumber": 128
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "heading",
+          "lineNumber": 134
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "line",
+          "lineNumber": 136
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "text",
+          "lineNumber": 140
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "packagesInOrder",
+          "lineNumber": 144
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "heading",
+          "lineNumber": 145
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "line",
+          "lineNumber": 147
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "line",
+          "lineNumber": 150
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "text",
+          "lineNumber": 150
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "line",
+          "lineNumber": 151
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "text",
+          "lineNumber": 151
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "line",
+          "lineNumber": 152
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "text",
+          "lineNumber": 152
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "line",
+          "lineNumber": 153
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "text",
+          "lineNumber": 153
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "line",
+          "lineNumber": 154
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "text",
+          "lineNumber": 154
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "packagesInOrder(summary).find",
+          "lineNumber": 156
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "packagesInOrder",
+          "lineNumber": 156
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "heading",
+          "lineNumber": 158
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "line",
+          "lineNumber": 159
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "text",
+          "lineNumber": 159
+        },
+        {
+          "caller": "diagnostics",
+          "callee": "details.appendChild",
+          "lineNumber": 161
+        },
+        {
+          "caller": "renderMasthead",
+          "callee": "describeScope",
+          "lineNumber": 166
+        },
+        {
+          "caller": "renderMasthead",
+          "callee": "sourceScopes",
+          "lineNumber": 167
+        },
+        {
+          "caller": "fact",
+          "callee": "el",
+          "lineNumber": 180
+        },
+        {
+          "caller": "fact",
+          "callee": "node.appendChild",
+          "lineNumber": 181
+        },
+        {
+          "caller": "fact",
+          "callee": "document.createTextNode",
+          "lineNumber": 181
+        },
+        {
+          "caller": "fact",
+          "callee": "node.appendChild",
+          "lineNumber": 183
+        },
+        {
+          "caller": "fact",
+          "callee": "el",
+          "lineNumber": 183
+        },
+        {
+          "caller": "identityNode",
+          "callee": "GITHUB_REPOSITORY.test",
+          "lineNumber": 191
+        },
+        {
+          "caller": "identityNode",
+          "callee": "el",
+          "lineNumber": 192
+        },
+        {
+          "caller": "identityNode",
+          "callee": "el",
+          "lineNumber": 199
+        },
+        {
+          "caller": "recordedNode",
+          "callee": "fact",
+          "lineNumber": 206
+        },
+        {
+          "caller": "recordedNode",
+          "callee": "fact",
+          "lineNumber": 209
+        },
+        {
+          "caller": "recordedNode",
+          "callee": "fact",
+          "lineNumber": 210
+        },
+        {
+          "caller": "recordedNode",
+          "callee": "fact",
+          "lineNumber": 212
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "line.replaceChildren",
+          "lineNumber": 217
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "el",
+          "lineNumber": 220
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "enabled.appendChild",
+          "lineNumber": 221
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "el",
+          "lineNumber": 221
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "enabled.appendChild",
+          "lineNumber": 222
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "document.createTextNode",
+          "lineNumber": 222
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "line.appendChild",
+          "lineNumber": 224
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "line.appendChild",
+          "lineNumber": 227
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "dot",
+          "lineNumber": 227
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "line.appendChild",
+          "lineNumber": 228
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "fact",
+          "lineNumber": 228
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "sourceScopes",
+          "lineNumber": 228
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "describeScope",
+          "lineNumber": 230
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "line.appendChild",
+          "lineNumber": 231
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "dot",
+          "lineNumber": 231
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "line.appendChild",
+          "lineNumber": 232
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "recordedNode",
+          "lineNumber": 232
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "line.appendChild",
+          "lineNumber": 233
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "dot",
+          "lineNumber": 233
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "line.appendChild",
+          "lineNumber": 234
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "identityNode",
+          "lineNumber": 234
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "line.appendChild",
+          "lineNumber": 236
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "dot",
+          "lineNumber": 236
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "line.appendChild",
+          "lineNumber": 237
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "fact",
+          "lineNumber": 237
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "line.appendChild",
+          "lineNumber": 238
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "dot",
+          "lineNumber": 238
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "line.appendChild",
+          "lineNumber": 239
+        },
+        {
+          "caller": "renderStatus",
+          "callee": "fact",
+          "lineNumber": 239
+        },
+        {
+          "caller": "render",
+          "callee": "renderMasthead",
+          "lineNumber": 245
+        },
+        {
+          "caller": "render",
+          "callee": "renderStatus",
+          "lineNumber": 246
+        },
+        {
+          "caller": "render",
+          "callee": "renderStrip",
+          "lineNumber": 247
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 1,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/catalog/publisher.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 108,
+      "nonEmptyLines": 101,
+      "functions": [
+        {
+          "name": "applyPublisher",
+          "startLine": 31,
+          "endLine": 53,
+          "params": [
+            "facts",
+            "data",
+            "entries"
+          ]
+        },
+        {
+          "name": "publisherOf",
+          "startLine": 56,
+          "endLine": 58,
+          "params": [
+            "publisher",
+            "entry"
+          ]
+        },
+        {
+          "name": "categoryCoverage",
+          "startLine": 71,
+          "endLine": 78,
+          "params": [
+            "publisher",
+            "entryCount"
+          ]
+        },
+        {
+          "name": "publishedText",
+          "startLine": 81,
+          "endLine": 84,
+          "params": [
+            "record",
+            "field"
+          ]
+        },
+        {
+          "name": "provenanceNote",
+          "startLine": 94,
+          "endLine": 108,
+          "params": [
+            "record",
+            "field",
+            "label"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "UNAVAILABLE_REASON",
+          "line": 18,
+          "isDefault": false
+        },
+        {
+          "name": "applyPublisher",
+          "line": 31,
+          "isDefault": false
+        },
+        {
+          "name": "publisherOf",
+          "line": 56,
+          "isDefault": false
+        },
+        {
+          "name": "categoryCoverage",
+          "line": 71,
+          "isDefault": false
+        },
+        {
+          "name": "publishedText",
+          "line": 81,
+          "isDefault": false
+        },
+        {
+          "name": "provenanceNote",
+          "line": 94,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "applyPublisher",
+          "callee": "text",
+          "lineNumber": 33
+        },
+        {
+          "caller": "applyPublisher",
+          "callee": "entries.map",
+          "lineNumber": 35
+        },
+        {
+          "caller": "applyPublisher",
+          "callee": "text",
+          "lineNumber": 35
+        },
+        {
+          "caller": "applyPublisher",
+          "callee": "Array.isArray",
+          "lineNumber": 37
+        },
+        {
+          "caller": "applyPublisher",
+          "callee": "byId.get",
+          "lineNumber": 38
+        },
+        {
+          "caller": "applyPublisher",
+          "callee": "byEntryId.set",
+          "lineNumber": 44
+        },
+        {
+          "caller": "applyPublisher",
+          "callee": "text",
+          "lineNumber": 48
+        },
+        {
+          "caller": "applyPublisher",
+          "callee": "Array.isArray",
+          "lineNumber": 49
+        },
+        {
+          "caller": "publisherOf",
+          "callee": "publisher?.byEntryId?.get",
+          "lineNumber": 57
+        },
+        {
+          "caller": "publisherOf",
+          "callee": "text",
+          "lineNumber": 57
+        },
+        {
+          "caller": "categoryCoverage",
+          "callee": "publisher.byEntryId.values",
+          "lineNumber": 74
+        },
+        {
+          "caller": "categoryCoverage",
+          "callee": "Number.isInteger",
+          "lineNumber": 77
+        },
+        {
+          "caller": "publishedText",
+          "callee": "text",
+          "lineNumber": 83
+        },
+        {
+          "caller": "provenanceNote",
+          "callee": "text",
+          "lineNumber": 105
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 6,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/catalog/qualification.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 82,
+      "nonEmptyLines": 77,
+      "functions": [
+        {
+          "name": "attestationSentence",
+          "startLine": 32,
+          "endLine": 47,
+          "params": [
+            "qualification"
+          ]
+        },
+        {
+          "name": "applyQualification",
+          "startLine": 55,
+          "endLine": 77,
+          "params": [
+            "facts",
+            "data",
+            "entries"
+          ]
+        },
+        {
+          "name": "qualificationOf",
+          "startLine": 80,
+          "endLine": 82,
+          "params": [
+            "view",
+            "entry"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "QUALIFICATION_STATE_MEANING",
+          "line": 17,
+          "isDefault": false
+        },
+        {
+          "name": "attestationSentence",
+          "line": 32,
+          "isDefault": false
+        },
+        {
+          "name": "applyQualification",
+          "line": 55,
+          "isDefault": false
+        },
+        {
+          "name": "qualificationOf",
+          "line": 80,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "attestationSentence",
+          "callee": "text",
+          "lineNumber": 33
+        },
+        {
+          "caller": "attestationSentence",
+          "callee": "text",
+          "lineNumber": 36
+        },
+        {
+          "caller": "applyQualification",
+          "callee": "text",
+          "lineNumber": 60
+        },
+        {
+          "caller": "applyQualification",
+          "callee": "entries.map",
+          "lineNumber": 65
+        },
+        {
+          "caller": "applyQualification",
+          "callee": "text",
+          "lineNumber": 65
+        },
+        {
+          "caller": "applyQualification",
+          "callee": "Array.isArray",
+          "lineNumber": 67
+        },
+        {
+          "caller": "applyQualification",
+          "callee": "byId.get",
+          "lineNumber": 68
+        },
+        {
+          "caller": "applyQualification",
+          "callee": "byEntryId.set",
+          "lineNumber": 74
+        },
+        {
+          "caller": "qualificationOf",
+          "callee": "view?.byEntryId?.get",
+          "lineNumber": 81
+        },
+        {
+          "caller": "qualificationOf",
+          "callee": "text",
+          "lineNumber": 81
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 4,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/catalog/selectors.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 301,
+      "nonEmptyLines": 281,
+      "functions": [
+        {
+          "name": "scopeLabelOf",
+          "startLine": 29,
+          "endLine": 33,
+          "params": [
+            "entry",
+            "membership"
+          ]
+        },
+        {
+          "name": "sourceFilterValue",
+          "startLine": 35,
+          "endLine": 37,
+          "params": [
+            "type",
+            "label",
+            "revision"
+          ]
+        },
+        {
+          "name": "revisionOf",
+          "startLine": 40,
+          "endLine": 42,
+          "params": [
+            "entry"
+          ]
+        },
+        {
+          "name": "matchesSourceFilter",
+          "startLine": 44,
+          "endLine": 55,
+          "params": [
+            "entry",
+            "value",
+            "membership"
+          ]
+        },
+        {
+          "name": "visibleEntries",
+          "startLine": 58,
+          "endLine": 79,
+          "params": [
+            "entries",
+            "view",
+            "membership"
+          ]
+        },
+        {
+          "name": "countBy",
+          "startLine": 81,
+          "endLine": 88,
+          "params": [
+            "entries",
+            "selector"
+          ]
+        },
+        {
+          "name": "sortedCounts",
+          "startLine": 90,
+          "endLine": 92,
+          "params": [
+            "counts"
+          ]
+        },
+        {
+          "name": "inventoryCounts",
+          "startLine": 109,
+          "endLine": 135,
+          "params": [
+            "entries"
+          ]
+        },
+        {
+          "name": "sourceScopes",
+          "startLine": 146,
+          "endLine": 166,
+          "params": [
+            "counts"
+          ]
+        },
+        {
+          "name": "scopeCountOf",
+          "startLine": 169,
+          "endLine": 172,
+          "params": [
+            "entry",
+            "counts"
+          ]
+        },
+        {
+          "name": "collectionOf",
+          "startLine": 175,
+          "endLine": 177,
+          "params": [
+            "entry",
+            "counts"
+          ]
+        },
+        {
+          "name": "selectedScope",
+          "startLine": 180,
+          "endLine": 183,
+          "params": [
+            "counts",
+            "view"
+          ]
+        },
+        {
+          "name": "scopeEntries",
+          "startLine": 189,
+          "endLine": 195,
+          "params": [
+            "entries",
+            "view",
+            "membership"
+          ]
+        },
+        {
+          "name": "scopeTotal",
+          "startLine": 198,
+          "endLine": 200,
+          "params": [
+            "entries",
+            "view",
+            "membership"
+          ]
+        },
+        {
+          "name": "describeCollection",
+          "startLine": 219,
+          "endLine": 253,
+          "params": [
+            "row",
+            "transportPackage"
+          ]
+        },
+        {
+          "name": "describeScope",
+          "startLine": 256,
+          "endLine": 301,
+          "params": [
+            "row"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "DISTINCT_SOURCES",
+          "line": 18,
+          "isDefault": false
+        },
+        {
+          "name": "FILTER_SEPARATOR",
+          "line": 20,
+          "isDefault": false
+        },
+        {
+          "name": "SORT_KEYS",
+          "line": 22,
+          "isDefault": false
+        },
+        {
+          "name": "sourceFilterValue",
+          "line": 35,
+          "isDefault": false
+        },
+        {
+          "name": "matchesSourceFilter",
+          "line": 44,
+          "isDefault": false
+        },
+        {
+          "name": "visibleEntries",
+          "line": 58,
+          "isDefault": false
+        },
+        {
+          "name": "sortedCounts",
+          "line": 90,
+          "isDefault": false
+        },
+        {
+          "name": "inventoryCounts",
+          "line": 109,
+          "isDefault": false
+        },
+        {
+          "name": "sourceScopes",
+          "line": 146,
+          "isDefault": false
+        },
+        {
+          "name": "scopeCountOf",
+          "line": 169,
+          "isDefault": false
+        },
+        {
+          "name": "collectionOf",
+          "line": 175,
+          "isDefault": false
+        },
+        {
+          "name": "selectedScope",
+          "line": 180,
+          "isDefault": false
+        },
+        {
+          "name": "scopeEntries",
+          "line": 189,
+          "isDefault": false
+        },
+        {
+          "name": "scopeTotal",
+          "line": 198,
+          "isDefault": false
+        },
+        {
+          "name": "describeScope",
+          "line": 256,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "scopeLabelOf",
+          "callee": "membership?.get",
+          "lineNumber": 30
+        },
+        {
+          "caller": "scopeLabelOf",
+          "callee": "text",
+          "lineNumber": 30
+        },
+        {
+          "caller": "scopeLabelOf",
+          "callee": "sourceLabelOf",
+          "lineNumber": 32
+        },
+        {
+          "caller": "scopeLabelOf",
+          "callee": "sourceIdentity",
+          "lineNumber": 32
+        },
+        {
+          "caller": "revisionOf",
+          "callee": "sourceIdentity",
+          "lineNumber": 41
+        },
+        {
+          "caller": "matchesSourceFilter",
+          "callee": "value.split",
+          "lineNumber": 45
+        },
+        {
+          "caller": "matchesSourceFilter",
+          "callee": "sourceIdentity",
+          "lineNumber": 46
+        },
+        {
+          "caller": "matchesSourceFilter",
+          "callee": "label.startsWith",
+          "lineNumber": 49
+        },
+        {
+          "caller": "matchesSourceFilter",
+          "callee": "scopeLabelOf",
+          "lineNumber": 49
+        },
+        {
+          "caller": "matchesSourceFilter",
+          "callee": "sourceLabelOf",
+          "lineNumber": 50
+        },
+        {
+          "caller": "matchesSourceFilter",
+          "callee": "revisionOf",
+          "lineNumber": 54
+        },
+        {
+          "caller": "visibleEntries",
+          "callee": "view.query.trim().toLocaleLowerCase",
+          "lineNumber": 59
+        },
+        {
+          "caller": "visibleEntries",
+          "callee": "view.query.trim",
+          "lineNumber": 59
+        },
+        {
+          "caller": "visibleEntries",
+          "callee": "entries.filter",
+          "lineNumber": 60
+        },
+        {
+          "caller": "visibleEntries",
+          "callee": "sourceIdentity",
+          "lineNumber": 61
+        },
+        {
+          "caller": "visibleEntries",
+          "callee": "text",
+          "lineNumber": 62
+        },
+        {
+          "caller": "visibleEntries",
+          "callee": "matchesSourceFilter",
+          "lineNumber": 64
+        },
+        {
+          "caller": "visibleEntries",
+          "callee": "curatedCategoryOf",
+          "lineNumber": 66
+        },
+        {
+          "caller": "visibleEntries",
+          "callee": "searchText(entry, publisherOf(publisher, entry), label).toLocaleLowerCase().includes",
+          "lineNumber": 68
+        },
+        {
+          "caller": "visibleEntries",
+          "callee": "searchText(entry, publisherOf(publisher, entry), label).toLocaleLowerCase",
+          "lineNumber": 68
+        },
+        {
+          "caller": "visibleEntries",
+          "callee": "searchText",
+          "lineNumber": 68
+        },
+        {
+          "caller": "visibleEntries",
+          "callee": "publisherOf",
+          "lineNumber": 68
+        },
+        {
+          "caller": "visibleEntries",
+          "callee": "view.sort.endsWith",
+          "lineNumber": 72
+        },
+        {
+          "caller": "visibleEntries",
+          "callee": "view.sort.replace",
+          "lineNumber": 73
+        },
+        {
+          "caller": "visibleEntries",
+          "callee": "rows.sort",
+          "lineNumber": 74
+        },
+        {
+          "caller": "visibleEntries",
+          "callee": "identity",
+          "lineNumber": 75
+        },
+        {
+          "caller": "visibleEntries",
+          "callee": "identity",
+          "lineNumber": 76
+        },
+        {
+          "caller": "visibleEntries",
+          "callee": "left.localeCompare",
+          "lineNumber": 77
+        },
+        {
+          "caller": "visibleEntries",
+          "callee": "identity(a).entryId.localeCompare",
+          "lineNumber": 77
+        },
+        {
+          "caller": "visibleEntries",
+          "callee": "identity",
+          "lineNumber": 77
+        },
+        {
+          "caller": "visibleEntries",
+          "callee": "identity",
+          "lineNumber": 77
+        },
+        {
+          "caller": "countBy",
+          "callee": "selector",
+          "lineNumber": 84
+        },
+        {
+          "caller": "countBy",
+          "callee": "counts.set",
+          "lineNumber": 85
+        },
+        {
+          "caller": "countBy",
+          "callee": "counts.get",
+          "lineNumber": 85
+        },
+        {
+          "caller": "sortedCounts",
+          "callee": "[...counts.entries()].sort",
+          "lineNumber": 91
+        },
+        {
+          "caller": "sortedCounts",
+          "callee": "counts.entries",
+          "lineNumber": 91
+        },
+        {
+          "caller": "sortedCounts",
+          "callee": "String(a[0]).localeCompare",
+          "lineNumber": 91
+        },
+        {
+          "caller": "sortedCounts",
+          "callee": "String",
+          "lineNumber": 91
+        },
+        {
+          "caller": "sortedCounts",
+          "callee": "String",
+          "lineNumber": 91
+        },
+        {
+          "caller": "inventoryCounts",
+          "callee": "sourceIdentity",
+          "lineNumber": 113
+        },
+        {
+          "caller": "inventoryCounts",
+          "callee": "sourceIdentities.has",
+          "lineNumber": 114
+        },
+        {
+          "caller": "inventoryCounts",
+          "callee": "sourceIdentities.set",
+          "lineNumber": 114
+        },
+        {
+          "caller": "inventoryCounts",
+          "callee": "sourceIdentities.get",
+          "lineNumber": 115
+        },
+        {
+          "caller": "inventoryCounts",
+          "callee": "scopeLabelOf",
+          "lineNumber": 116
+        },
+        {
+          "caller": "inventoryCounts",
+          "callee": "identities.has",
+          "lineNumber": 120
+        },
+        {
+          "caller": "inventoryCounts",
+          "callee": "identities.set",
+          "lineNumber": 121
+        },
+        {
+          "caller": "inventoryCounts",
+          "callee": "membership.get",
+          "lineNumber": 121
+        },
+        {
+          "caller": "inventoryCounts",
+          "callee": "text",
+          "lineNumber": 121
+        },
+        {
+          "caller": "inventoryCounts",
+          "callee": "identities.get",
+          "lineNumber": 123
+        },
+        {
+          "caller": "inventoryCounts",
+          "callee": "group.revisions.set",
+          "lineNumber": 126
+        },
+        {
+          "caller": "inventoryCounts",
+          "callee": "group.revisions.get",
+          "lineNumber": 126
+        },
+        {
+          "caller": "inventoryCounts",
+          "callee": "countBy",
+          "lineNumber": 129
+        },
+        {
+          "caller": "inventoryCounts",
+          "callee": "text",
+          "lineNumber": 129
+        },
+        {
+          "caller": "inventoryCounts",
+          "callee": "countBy",
+          "lineNumber": 130
+        },
+        {
+          "caller": "inventoryCounts",
+          "callee": "sourceIdentity",
+          "lineNumber": 130
+        },
+        {
+          "caller": "sourceScopes",
+          "callee": "[...group.revisions.keys()].filter",
+          "lineNumber": 150
+        },
+        {
+          "caller": "sourceScopes",
+          "callee": "group.revisions.keys",
+          "lineNumber": 150
+        },
+        {
+          "caller": "sourceScopes",
+          "callee": "rows.push",
+          "lineNumber": 152
+        },
+        {
+          "caller": "sourceScopes",
+          "callee": "counts.installed.get",
+          "lineNumber": 160
+        },
+        {
+          "caller": "sourceScopes",
+          "callee": "sourceFilterValue",
+          "lineNumber": 161
+        },
+        {
+          "caller": "sourceScopes",
+          "callee": "rows.sort",
+          "lineNumber": 165
+        },
+        {
+          "caller": "sourceScopes",
+          "callee": "a.identityKey.localeCompare",
+          "lineNumber": 165
+        },
+        {
+          "caller": "scopeCountOf",
+          "callee": "sourceIdentity",
+          "lineNumber": 170
+        },
+        {
+          "caller": "scopeCountOf",
+          "callee": "counts.sourceIdentities.get(type)?.get",
+          "lineNumber": 171
+        },
+        {
+          "caller": "scopeCountOf",
+          "callee": "counts.sourceIdentities.get",
+          "lineNumber": 171
+        },
+        {
+          "caller": "scopeCountOf",
+          "callee": "scopeLabelOf",
+          "lineNumber": 171
+        },
+        {
+          "caller": "collectionOf",
+          "callee": "counts.membership?.get",
+          "lineNumber": 176
+        },
+        {
+          "caller": "collectionOf",
+          "callee": "text",
+          "lineNumber": 176
+        },
+        {
+          "caller": "selectedScope",
+          "callee": "sourceScopes(counts).find",
+          "lineNumber": 182
+        },
+        {
+          "caller": "selectedScope",
+          "callee": "sourceScopes",
+          "lineNumber": 182
+        },
+        {
+          "caller": "scopeEntries",
+          "callee": "entries.filter",
+          "lineNumber": 190
+        },
+        {
+          "caller": "scopeEntries",
+          "callee": "sourceIdentity",
+          "lineNumber": 191
+        },
+        {
+          "caller": "scopeEntries",
+          "callee": "matchesSourceFilter",
+          "lineNumber": 192
+        },
+        {
+          "caller": "scopeTotal",
+          "callee": "scopeEntries",
+          "lineNumber": 199
+        },
+        {
+          "caller": "describeCollection",
+          "callee": "lines.join",
+          "lineNumber": 245
+        },
+        {
+          "caller": "describeScope",
+          "callee": "describeCollection",
+          "lineNumber": 257
+        },
+        {
+          "caller": "describeScope",
+          "callee": "commit.slice",
+          "lineNumber": 263
+        },
+        {
+          "caller": "describeScope",
+          "callee": "GITHUB_REPOSITORY.test",
+          "lineNumber": 269
+        },
+        {
+          "caller": "describeScope",
+          "callee": "GITHUB_COMMIT.test",
+          "lineNumber": 269
+        }
+      ],
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 15,
+        "functionCount": 16,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/catalog/toolbar.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 143,
+      "nonEmptyLines": 131,
+      "functions": [
+        {
+          "name": "reviewPill",
+          "startLine": 39,
+          "endLine": 53,
+          "params": [
+            "label",
+            "count",
+            "active",
+            "onClick"
+          ]
+        },
+        {
+          "name": "summaryChip",
+          "startLine": 55,
+          "endLine": 62,
+          "params": [
+            "icon",
+            "label",
+            "title"
+          ]
+        },
+        {
+          "name": "kindPill",
+          "startLine": 64,
+          "endLine": 73,
+          "params": [
+            "label",
+            "count",
+            "active",
+            "onClick"
+          ]
+        },
+        {
+          "name": "createToolbar",
+          "startLine": 79,
+          "endLine": 143,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "createToolbar",
+          "line": 79,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "reviewPill",
+          "callee": "el",
+          "lineNumber": 41
+        },
+        {
+          "caller": "reviewPill",
+          "callee": "button.setAttribute",
+          "lineNumber": 44
+        },
+        {
+          "caller": "reviewPill",
+          "callee": "String",
+          "lineNumber": 44
+        },
+        {
+          "caller": "reviewPill",
+          "callee": "button.addEventListener",
+          "lineNumber": 46
+        },
+        {
+          "caller": "reviewPill",
+          "callee": "button.setAttribute",
+          "lineNumber": 49
+        },
+        {
+          "caller": "summaryChip",
+          "callee": "el",
+          "lineNumber": 56
+        },
+        {
+          "caller": "summaryChip",
+          "callee": "chip.appendChild",
+          "lineNumber": 57
+        },
+        {
+          "caller": "summaryChip",
+          "callee": "el",
+          "lineNumber": 57
+        },
+        {
+          "caller": "summaryChip",
+          "callee": "chip.appendChild",
+          "lineNumber": 58
+        },
+        {
+          "caller": "summaryChip",
+          "callee": "el",
+          "lineNumber": 58
+        },
+        {
+          "caller": "summaryChip",
+          "callee": "chip.appendChild",
+          "lineNumber": 59
+        },
+        {
+          "caller": "summaryChip",
+          "callee": "el",
+          "lineNumber": 59
+        },
+        {
+          "caller": "kindPill",
+          "callee": "el",
+          "lineNumber": 67
+        },
+        {
+          "caller": "kindPill",
+          "callee": "button.setAttribute",
+          "lineNumber": 69
+        },
+        {
+          "caller": "kindPill",
+          "callee": "String",
+          "lineNumber": 69
+        },
+        {
+          "caller": "kindPill",
+          "callee": "button.addEventListener",
+          "lineNumber": 71
+        },
+        {
+          "caller": "markPillOverflow",
+          "callee": "String",
+          "lineNumber": 83
+        },
+        {
+          "caller": "createToolbar",
+          "callee": "elements.search.addEventListener",
+          "lineNumber": 86
+        },
+        {
+          "caller": "createToolbar",
+          "callee": "onQuery",
+          "lineNumber": 86
+        },
+        {
+          "caller": "createToolbar",
+          "callee": "elements.sourceFilter.addEventListener",
+          "lineNumber": 87
+        },
+        {
+          "caller": "createToolbar",
+          "callee": "onSourceType",
+          "lineNumber": 87
+        },
+        {
+          "caller": "createToolbar",
+          "callee": "elements.sortSelect.addEventListener",
+          "lineNumber": 88
+        },
+        {
+          "caller": "createToolbar",
+          "callee": "onSort",
+          "lineNumber": 88
+        },
+        {
+          "caller": "createToolbar",
+          "callee": "elements.kindFilters.addEventListener",
+          "lineNumber": 89
+        },
+        {
+          "caller": "render",
+          "callee": "elements.reviewFilters.replaceChildren",
+          "lineNumber": 102
+        },
+        {
+          "caller": "render",
+          "callee": "reviewPill",
+          "lineNumber": 103
+        },
+        {
+          "caller": "render",
+          "callee": "reviewPill",
+          "lineNumber": 104
+        },
+        {
+          "caller": "render",
+          "callee": "reviewPill",
+          "lineNumber": 105
+        },
+        {
+          "caller": "render",
+          "callee": "elements.reviewSummary.replaceChildren",
+          "lineNumber": 107
+        },
+        {
+          "caller": "render",
+          "callee": "summaryChip",
+          "lineNumber": 108
+        },
+        {
+          "caller": "render",
+          "callee": "summaryChip",
+          "lineNumber": 109
+        },
+        {
+          "caller": "render",
+          "callee": "elements.kindFilters.replaceChildren",
+          "lineNumber": 113
+        },
+        {
+          "caller": "render",
+          "callee": "elements.kindFilters.appendChild",
+          "lineNumber": 114
+        },
+        {
+          "caller": "render",
+          "callee": "kindPill",
+          "lineNumber": 115
+        },
+        {
+          "caller": "render",
+          "callee": "onToggleKind",
+          "lineNumber": 115
+        },
+        {
+          "caller": "render",
+          "callee": "sortedCounts",
+          "lineNumber": 117
+        },
+        {
+          "caller": "render",
+          "callee": "elements.kindFilters.appendChild",
+          "lineNumber": 118
+        },
+        {
+          "caller": "render",
+          "callee": "kindPill",
+          "lineNumber": 119
+        },
+        {
+          "caller": "render",
+          "callee": "model.kindCounts.get",
+          "lineNumber": 119
+        },
+        {
+          "caller": "render",
+          "callee": "onToggleKind",
+          "lineNumber": 119
+        },
+        {
+          "caller": "render",
+          "callee": "[...model.sourceTypeCounts.keys()].join",
+          "lineNumber": 125
+        },
+        {
+          "caller": "render",
+          "callee": "model.sourceTypeCounts.keys",
+          "lineNumber": 125
+        },
+        {
+          "caller": "render",
+          "callee": "elements.sourceFilter.replaceChildren",
+          "lineNumber": 127
+        },
+        {
+          "caller": "render",
+          "callee": "el",
+          "lineNumber": 128
+        },
+        {
+          "caller": "render",
+          "callee": "elements.sourceFilter.appendChild",
+          "lineNumber": 130
+        },
+        {
+          "caller": "render",
+          "callee": "sortedCounts",
+          "lineNumber": 131
+        },
+        {
+          "caller": "render",
+          "callee": "el",
+          "lineNumber": 132
+        },
+        {
+          "caller": "render",
+          "callee": "sourceType.toUpperCase",
+          "lineNumber": 132
+        },
+        {
+          "caller": "render",
+          "callee": "elements.sourceFilter.appendChild",
+          "lineNumber": 134
+        },
+        {
+          "caller": "render",
+          "callee": "markPillOverflow",
+          "lineNumber": 140
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 1,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/catalog/view-state.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 50,
+      "nonEmptyLines": 45,
+      "functions": [
+        {
+          "name": "emptyView",
+          "startLine": 13,
+          "endLine": 15,
+          "params": []
+        },
+        {
+          "name": "saveView",
+          "startLine": 17,
+          "endLine": 23,
+          "params": [
+            "view"
+          ]
+        },
+        {
+          "name": "restoreView",
+          "startLine": 31,
+          "endLine": 50,
+          "params": [
+            "view",
+            "counts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "emptyView",
+          "line": 13,
+          "isDefault": false
+        },
+        {
+          "name": "saveView",
+          "line": 17,
+          "isDefault": false
+        },
+        {
+          "name": "restoreView",
+          "line": 31,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "saveView",
+          "callee": "sessionStorage.setItem",
+          "lineNumber": 19
+        },
+        {
+          "caller": "saveView",
+          "callee": "JSON.stringify",
+          "lineNumber": 19
+        },
+        {
+          "caller": "restoreView",
+          "callee": "JSON.parse",
+          "lineNumber": 34
+        },
+        {
+          "caller": "restoreView",
+          "callee": "sessionStorage.getItem",
+          "lineNumber": 34
+        },
+        {
+          "caller": "restoreView",
+          "callee": "counts.kindCounts.has",
+          "lineNumber": 40
+        },
+        {
+          "caller": "restoreView",
+          "callee": "counts.sourceTypeCounts.has",
+          "lineNumber": 41
+        },
+        {
+          "caller": "restoreView",
+          "callee": "saved.source.split",
+          "lineNumber": 45
+        },
+        {
+          "caller": "restoreView",
+          "callee": "counts.sourceTypeCounts.has",
+          "lineNumber": 46
+        },
+        {
+          "caller": "restoreView",
+          "callee": "SORT_KEYS.includes",
+          "lineNumber": 48
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 3,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tools/tests/publisher-refusal.test.mjs",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 79,
+      "nonEmptyLines": 72,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

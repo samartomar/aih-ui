@@ -22,13 +22,54 @@
  */
 
 import { el } from "../app/dom.js";
-import { FINDING_DETAIL_ABSENT, NOT_SUPPLIED } from "../app/absence.js";
+import { NOT_SUPPLIED } from "../app/absence.js";
 import { row, codeRow } from "./rows.js";
 
 function section(box, label) {
   box.appendChild(
     el("div", "pt-1 mt-1 border-t border-wb-border text-[9px] font-mono uppercase tracking-wider text-outline", label),
   );
+}
+
+function findingField(parent, label, field, format = (value) => String(value)) {
+  if (field?.state === "present") {
+    row(parent, label, format(field.value));
+    return;
+  }
+  const line = row(parent, label, `Unavailable · ${field?.reason ?? "not stated"}`, NOT_SUPPLIED, "text-outline");
+  line.title = field?.detail ?? field?.reason ?? "Scan did not publish this field for this finding.";
+}
+
+function renderFindingDetail(box, detail) {
+  section(box, "Finding detail (Scan)");
+  if (detail?.status !== "available") {
+    row(box, "Detail", detail?.status ?? "Unavailable", NOT_SUPPLIED, "text-outline");
+    if (detail?.reason) box.appendChild(el("div", "text-outline leading-snug", detail.reason));
+    return false;
+  }
+
+  row(box, "Detail source", detail.source, NOT_SUPPLIED, "text-tertiary");
+  if (detail.findings.length === 0) {
+    row(box, "Typed findings", "0 declared");
+  }
+  for (const finding of detail.findings) {
+    const disclosure = el("details", "p-2 rounded bg-surface-container-low border border-wb-border");
+    disclosure.appendChild(el("summary", "cursor-pointer font-mono break-all", `${finding.rawOccurrenceFingerprint} ×${finding.multiplicity}`));
+    const facts = el("div", "pt-2 space-y-1");
+    findingField(facts, "Detector", finding.detector, (value) => `${value.id} · ${value.analyzerIdentity}`);
+    findingField(facts, "Rule", finding.rule, (value) => value.name ? `${value.nativeRuleId} · ${value.name}` : value.nativeRuleId);
+    findingField(facts, "SARIF level", finding.severity, (value) => value.level);
+    findingField(facts, "Message", finding.message);
+    findingField(facts, "Location", finding.location, (value) => `${value.path}${value.startLine === undefined ? "" : `:${value.startLine}`}`);
+    findingField(facts, "Supporting annex", finding.supportingEvidence, (value) => `${value.annexDescriptorId} · ${value.annexSha256}`);
+    disclosure.appendChild(facts);
+    box.appendChild(disclosure);
+  }
+  if (detail.gaps.length > 0) {
+    section(box, "Typed finding gaps");
+    for (const gap of detail.gaps) box.appendChild(el("div", "text-outline leading-snug", `${gap.kind}: ${gap.detail}`));
+  }
+  return true;
 }
 
 /** Facts Scan verified. Declared values are labelled as declared. */
@@ -58,14 +99,13 @@ function renderScanResult(box, scan) {
   row(box, "Observations", String(scan.observationCount ?? 0));
   row(box, "Findings", String(scan.findingCount ?? 0));
 
-  // A finding record carries an occurrence fingerprint and a multiplicity and
-  // nothing else. Message, location and severity are NOT in the attestation;
-  // they are listed as missing below rather than filled in with a guess.
-  for (const finding of scan.findings ?? []) {
-    codeRow(box, "finding", `${finding.rawOccurrenceFingerprint} x${finding.multiplicity}`);
-  }
-  if ((scan.findingCount ?? 0) > 0) {
-    box.appendChild(el("div", "text-outline leading-snug", FINDING_DETAIL_ABSENT));
+  // The record's occurrence facts remain visible if the typed reader refuses.
+  // When it succeeds, the disclosure repeats those identities with whatever
+  // details Scan could actually bind to verified annex bytes.
+  if (!renderFindingDetail(box, scan.findingDetail)) {
+    for (const finding of scan.findings ?? []) {
+      codeRow(box, "finding", `${finding.rawOccurrenceFingerprint} ×${finding.multiplicity}`);
+    }
   }
   row(box, "SARIF", scan.sarifState, NOT_SUPPLIED, "text-tertiary");
 
@@ -83,9 +123,9 @@ function renderScanResult(box, scan) {
     );
   }
 
-  // What Scan declines to say, in Scan's own words.
+  // The record reader's gaps are distinct from the typed finding reader's.
   if ((scan.gaps ?? []).length > 0) {
-    section(box, "What this result does not state");
+    section(box, "Result record gaps");
     for (const gap of scan.gaps) {
       box.appendChild(el("div", "text-outline leading-snug", `${gap.kind}: ${gap.detail}`));
     }

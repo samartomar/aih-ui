@@ -1,0 +1,625 @@
+{
+ "scriptCompleted": true,
+ "directoryGroups": {
+  "src/app": [
+   "file:src/app/dom.js",
+   "file:src/app/absence.js",
+   "file:src/app/ai-tools.js",
+   "file:src/app/elements.js",
+   "file:src/app/organization.js",
+   "file:src/app/shell.js",
+   "file:src/app/theme.js",
+   "file:src/app/workbench.css"
+  ],
+  "src/catalog": [
+   "file:src/catalog/cards.js",
+   "file:src/catalog/categories.js",
+   "file:src/catalog/collections.js",
+   "file:src/catalog/controller.js",
+   "file:src/catalog/details.js",
+   "file:src/catalog/elements.js",
+   "file:src/catalog/entry.js",
+   "file:src/catalog/index-source.js",
+   "file:src/catalog/metrics.js",
+   "file:src/catalog/navigation.js",
+   "file:src/catalog/provenance.js",
+   "file:src/catalog/publisher.js",
+   "file:src/catalog/qualification.js",
+   "file:src/catalog/selectors.js",
+   "file:src/catalog/toolbar.js",
+   "file:src/catalog/view-state.js"
+  ],
+  "tools/tests": [
+   "file:tools/tests/publisher-refusal.test.mjs",
+   "file:tools/tests/revisions.test.mjs",
+   "file:tools/tests/catalog-served.test.mjs",
+   "file:tools/tests/session-relative.test.mjs",
+   "file:tools/tests/sessions-observation.test.mjs"
+  ],
+  "src/governance": [
+   "file:src/governance/bytes.js",
+   "file:src/governance/controller.js",
+   "file:src/governance/detector.js",
+   "file:src/governance/elements.js",
+   "file:src/governance/inputs.js",
+   "file:src/governance/observation.js",
+   "file:src/governance/operator-files.js",
+   "file:src/governance/prepared.js",
+   "file:src/governance/reopen.js",
+   "file:src/governance/revisions.js",
+   "file:src/governance/rows.js",
+   "file:src/governance/statuses.js",
+   "file:src/governance/transport.js",
+   "file:src/governance/verdict.js",
+   "file:src/governance/vocabulary.js"
+  ],
+  "tools": [
+   "file:tools/scan-attribution-cases.mjs",
+   "file:tools/catalog-index-contract.mjs",
+   "file:tools/check-page-contract.mjs",
+   "file:tools/check-scan-attribution.mjs",
+   "file:tools/packages.mjs",
+   "file:tools/preview-request.mjs",
+   "file:tools/preview.mjs",
+   "file:tools/acceptance-sweep.mjs",
+   "file:tools/compare.html",
+   "file:tools/inspect-dom.mjs",
+   "file:tools/probe-http.mjs",
+   "file:tools/probe-old-handler.mjs",
+   "file:tools/probe-shell-quoting.mjs"
+  ],
+  "tools/service": [
+   "file:tools/service/artifacts.mjs",
+   "file:tools/service/catalog-access.mjs",
+   "file:tools/service/catalog-assessment.mjs",
+   "file:tools/service/catalog-categories.mjs",
+   "file:tools/service/catalog-collections.mjs",
+   "file:tools/service/catalog-publisher.mjs",
+   "file:tools/service/catalog-qualification.mjs",
+   "file:tools/service/catalog-served.mjs",
+   "file:tools/service/core-adapter.mjs",
+   "file:tools/service/core-service.mjs",
+   "file:tools/service/fixture-candidate.mjs",
+   "file:tools/service/scan-verifier.mjs",
+   "file:tools/service/validation-fixture.mjs",
+   "file:tools/service/core-targets.mjs"
+  ],
+  "tools/server": [
+   "file:tools/server/api.mjs",
+   "file:tools/server/assets.mjs",
+   "file:tools/server/service-client.mjs",
+   "file:tools/server/sessions.mjs",
+   "file:tools/server/static.mjs"
+  ],
+  "src": [
+   "file:src/main.js",
+   "file:src/index.html"
+  ],
+  "root": [
+   "document:AGENTS.md",
+   "document:CLAUDE.md",
+   "document:README.md"
+  ],
+  "prototype/screens": [
+   "file:prototype/screens/admin-acme.html",
+   "file:prototype/screens/admin-changes.html",
+   "file:prototype/screens/admin-item.html",
+   "file:prototype/screens/admin-org.html",
+   "file:prototype/screens/admin-scan.html",
+   "file:prototype/screens/admin-sources.html",
+   "file:prototype/screens/entry.html",
+   "file:prototype/screens/fonts.css",
+   "file:prototype/screens/overview.html",
+   "file:prototype/screens/system.html",
+   "file:prototype/screens/tokens.css",
+   "file:prototype/screens/user-start.html",
+   "file:prototype/screens/user-trim.html",
+   "file:prototype/screens/wb.css",
+   "file:prototype/screens/mode.js",
+   "file:prototype/screens/shell.js",
+   "file:prototype/screens/tw-config.js",
+   "file:prototype/screens/user-shell.js"
+  ],
+  "prototype": [
+   "file:prototype/index.html"
+  ]
+ },
+ "nodeTypeGroups": {
+  "file": [
+   "file:src/app/dom.js",
+   "file:src/catalog/cards.js",
+   "file:src/catalog/categories.js",
+   "file:src/catalog/collections.js",
+   "file:src/catalog/controller.js",
+   "file:src/catalog/details.js",
+   "file:src/catalog/elements.js",
+   "file:src/catalog/entry.js",
+   "file:src/catalog/index-source.js",
+   "file:src/catalog/metrics.js",
+   "file:src/catalog/navigation.js",
+   "file:src/catalog/provenance.js",
+   "file:src/catalog/publisher.js",
+   "file:src/catalog/qualification.js",
+   "file:src/catalog/selectors.js",
+   "file:src/catalog/toolbar.js",
+   "file:src/catalog/view-state.js",
+   "file:tools/tests/publisher-refusal.test.mjs",
+   "file:src/app/absence.js",
+   "file:src/governance/bytes.js",
+   "file:src/governance/controller.js",
+   "file:src/governance/detector.js",
+   "file:src/governance/elements.js",
+   "file:src/governance/inputs.js",
+   "file:src/governance/observation.js",
+   "file:src/governance/operator-files.js",
+   "file:src/governance/prepared.js",
+   "file:src/governance/reopen.js",
+   "file:src/governance/revisions.js",
+   "file:src/governance/rows.js",
+   "file:src/governance/statuses.js",
+   "file:src/governance/transport.js",
+   "file:src/governance/verdict.js",
+   "file:src/governance/vocabulary.js",
+   "file:tools/tests/revisions.test.mjs",
+   "file:tools/scan-attribution-cases.mjs",
+   "file:tools/service/artifacts.mjs",
+   "file:tools/service/catalog-access.mjs",
+   "file:tools/service/catalog-assessment.mjs",
+   "file:tools/service/catalog-categories.mjs",
+   "file:tools/service/catalog-collections.mjs",
+   "file:tools/service/catalog-publisher.mjs",
+   "file:tools/service/catalog-qualification.mjs",
+   "file:tools/service/catalog-served.mjs",
+   "file:tools/service/core-adapter.mjs",
+   "file:tools/service/core-service.mjs",
+   "file:tools/service/fixture-candidate.mjs",
+   "file:tools/service/scan-verifier.mjs",
+   "file:tools/service/validation-fixture.mjs",
+   "file:tools/tests/catalog-served.test.mjs",
+   "file:tools/tests/session-relative.test.mjs",
+   "file:tools/catalog-index-contract.mjs",
+   "file:tools/check-page-contract.mjs",
+   "file:tools/check-scan-attribution.mjs",
+   "file:tools/packages.mjs",
+   "file:tools/preview-request.mjs",
+   "file:tools/preview.mjs",
+   "file:tools/server/api.mjs",
+   "file:tools/server/assets.mjs",
+   "file:tools/server/service-client.mjs",
+   "file:tools/server/sessions.mjs",
+   "file:tools/server/static.mjs",
+   "file:tools/tests/sessions-observation.test.mjs",
+   "file:src/app/ai-tools.js",
+   "file:src/app/elements.js",
+   "file:src/app/organization.js",
+   "file:src/app/shell.js",
+   "file:src/app/theme.js",
+   "file:src/main.js",
+   "file:prototype/screens/admin-acme.html",
+   "file:prototype/screens/admin-changes.html",
+   "file:prototype/screens/admin-item.html",
+   "file:prototype/screens/admin-org.html",
+   "file:prototype/screens/admin-scan.html",
+   "file:prototype/screens/admin-sources.html",
+   "file:prototype/screens/entry.html",
+   "file:prototype/screens/fonts.css",
+   "file:prototype/screens/overview.html",
+   "file:prototype/screens/system.html",
+   "file:prototype/screens/tokens.css",
+   "file:prototype/screens/user-start.html",
+   "file:prototype/screens/user-trim.html",
+   "file:prototype/screens/wb.css",
+   "file:prototype/index.html",
+   "file:prototype/screens/mode.js",
+   "file:prototype/screens/shell.js",
+   "file:prototype/screens/tw-config.js",
+   "file:prototype/screens/user-shell.js",
+   "file:src/app/workbench.css",
+   "file:src/index.html",
+   "file:tools/acceptance-sweep.mjs",
+   "file:tools/compare.html",
+   "file:tools/inspect-dom.mjs",
+   "file:tools/probe-http.mjs",
+   "file:tools/probe-old-handler.mjs",
+   "file:tools/probe-shell-quoting.mjs",
+   "file:tools/service/core-targets.mjs"
+  ],
+  "document": [
+   "document:AGENTS.md",
+   "document:CLAUDE.md",
+   "document:README.md"
+  ]
+ },
+ "crossCategoryEdges": [
+  {
+   "fromType": "file",
+   "toType": "undefined",
+   "edgeType": "contains",
+   "count": 186
+  },
+  {
+   "fromType": "file",
+   "toType": "undefined",
+   "edgeType": "exports",
+   "count": 127
+  },
+  {
+   "fromType": "file",
+   "toType": "file",
+   "edgeType": "imports",
+   "count": 146
+  },
+  {
+   "fromType": "undefined",
+   "toType": "undefined",
+   "edgeType": "calls",
+   "count": 107
+  },
+  {
+   "fromType": "file",
+   "toType": "undefined",
+   "edgeType": "calls",
+   "count": 10
+  },
+  {
+   "fromType": "file",
+   "toType": "file",
+   "edgeType": "tested_by",
+   "count": 5
+  },
+  {
+   "fromType": "file",
+   "toType": "file",
+   "edgeType": "depends_on",
+   "count": 70
+  },
+  {
+   "fromType": "document",
+   "toType": "document",
+   "edgeType": "related",
+   "count": 2
+  },
+  {
+   "fromType": "document",
+   "toType": "file",
+   "edgeType": "documents",
+   "count": 16
+  },
+  {
+   "fromType": "file",
+   "toType": "file",
+   "edgeType": "related",
+   "count": 10
+  }
+ ],
+ "interGroupImports": [
+  {
+   "from": "src/catalog",
+   "to": "src/app",
+   "count": 24
+  },
+  {
+   "from": "src/governance",
+   "to": "src/app",
+   "count": 18
+  },
+  {
+   "from": "tools",
+   "to": "tools/server",
+   "count": 6
+  },
+  {
+   "from": "src",
+   "to": "src/app",
+   "count": 5
+  },
+  {
+   "from": "tools",
+   "to": "tools/service",
+   "count": 2
+  },
+  {
+   "from": "tools/tests",
+   "to": "tools/service",
+   "count": 2
+  },
+  {
+   "from": "tools/tests",
+   "to": "src/catalog",
+   "count": 1
+  },
+  {
+   "from": "tools/tests",
+   "to": "src/governance",
+   "count": 1
+  },
+  {
+   "from": "tools",
+   "to": "src/catalog",
+   "count": 1
+  },
+  {
+   "from": "tools/server",
+   "to": "tools",
+   "count": 1
+  },
+  {
+   "from": "tools/tests",
+   "to": "tools/server",
+   "count": 1
+  },
+  {
+   "from": "src",
+   "to": "src/catalog",
+   "count": 1
+  },
+  {
+   "from": "src",
+   "to": "src/governance",
+   "count": 1
+  }
+ ],
+ "intraGroupDensity": {
+  "src/catalog": {
+   "internalEdges": 31,
+   "totalEdges": 58,
+   "density": 0.53
+  },
+  "src/app": {
+   "internalEdges": 5,
+   "totalEdges": 52,
+   "density": 0.1
+  },
+  "tools/tests": {
+   "internalEdges": 0,
+   "totalEdges": 5,
+   "density": 0
+  },
+  "src/governance": {
+   "internalEdges": 22,
+   "totalEdges": 42,
+   "density": 0.52
+  },
+  "tools": {
+   "internalEdges": 4,
+   "totalEdges": 14,
+   "density": 0.29
+  },
+  "tools/service": {
+   "internalEdges": 18,
+   "totalEdges": 22,
+   "density": 0.82
+  },
+  "tools/server": {
+   "internalEdges": 2,
+   "totalEdges": 10,
+   "density": 0.2
+  },
+  "src": {
+   "internalEdges": 0,
+   "totalEdges": 7,
+   "density": 0
+  }
+ },
+ "patternMatches": {
+  "src/app": "ui",
+  "src/catalog": "ui",
+  "src/governance": "ui",
+  "tools/server": "service",
+  "tools/service": "service",
+  "tools/tests": "test",
+  "prototype": "ui"
+ },
+ "deploymentTopology": {
+  "hasDockerfile": false,
+  "hasCompose": false,
+  "hasK8s": false,
+  "hasTerraform": false,
+  "hasCI": false,
+  "infraFiles": []
+ },
+ "dataPipeline": {
+  "schemaFiles": [],
+  "migrationFiles": [],
+  "dataModelFiles": [],
+  "apiHandlerFiles": [
+   "file:tools/server/api.mjs"
+  ]
+ },
+ "docCoverage": {
+  "groupsWithDocs": 1,
+  "totalGroups": 11,
+  "coverageRatio": 0.09,
+  "undocumentedGroups": [
+   "src/app",
+   "src/catalog",
+   "tools/tests",
+   "src/governance",
+   "tools",
+   "tools/service",
+   "tools/server",
+   "src",
+   "prototype/screens",
+   "prototype"
+  ]
+ },
+ "dependencyDirection": [
+  {
+   "dependent": "src/catalog",
+   "dependsOn": "src/app"
+  },
+  {
+   "dependent": "src/governance",
+   "dependsOn": "src/app"
+  },
+  {
+   "dependent": "tools",
+   "dependsOn": "tools/server"
+  },
+  {
+   "dependent": "src",
+   "dependsOn": "src/app"
+  },
+  {
+   "dependent": "tools",
+   "dependsOn": "tools/service"
+  },
+  {
+   "dependent": "tools/tests",
+   "dependsOn": "tools/service"
+  },
+  {
+   "dependent": "tools/tests",
+   "dependsOn": "src/catalog"
+  },
+  {
+   "dependent": "tools/tests",
+   "dependsOn": "src/governance"
+  },
+  {
+   "dependent": "tools",
+   "dependsOn": "src/catalog"
+  },
+  {
+   "dependent": "tools/tests",
+   "dependsOn": "tools/server"
+  },
+  {
+   "dependent": "src",
+   "dependsOn": "src/catalog"
+  },
+  {
+   "dependent": "src",
+   "dependsOn": "src/governance"
+  }
+ ],
+ "fileStats": {
+  "totalFileNodes": 100,
+  "filesPerGroup": {
+   "src/app": 8,
+   "src/catalog": 16,
+   "tools/tests": 5,
+   "src/governance": 15,
+   "tools": 13,
+   "tools/service": 14,
+   "tools/server": 5,
+   "src": 2,
+   "root": 3,
+   "prototype/screens": 18,
+   "prototype": 1
+  },
+  "nodeTypeCounts": {
+   "file": 97,
+   "document": 3
+  }
+ },
+ "fileFanIn": {
+  "file:src/app/absence.js": 20,
+  "file:src/app/dom.js": 27,
+  "file:src/catalog/categories.js": 5,
+  "file:src/catalog/entry.js": 3,
+  "file:src/catalog/publisher.js": 6,
+  "file:src/catalog/cards.js": 1,
+  "file:src/catalog/details.js": 1,
+  "file:src/catalog/elements.js": 1,
+  "file:src/catalog/index-source.js": 1,
+  "file:src/catalog/metrics.js": 1,
+  "file:src/catalog/navigation.js": 1,
+  "file:src/catalog/provenance.js": 1,
+  "file:src/catalog/selectors.js": 7,
+  "file:src/catalog/toolbar.js": 1,
+  "file:src/catalog/view-state.js": 1,
+  "file:src/catalog/qualification.js": 2,
+  "file:src/catalog/collections.js": 1,
+  "file:src/governance/bytes.js": 1,
+  "file:src/governance/detector.js": 1,
+  "file:src/governance/elements.js": 1,
+  "file:src/governance/inputs.js": 1,
+  "file:src/governance/observation.js": 1,
+  "file:src/governance/operator-files.js": 1,
+  "file:src/governance/prepared.js": 1,
+  "file:src/governance/reopen.js": 1,
+  "file:src/governance/revisions.js": 2,
+  "file:src/governance/statuses.js": 1,
+  "file:src/governance/transport.js": 1,
+  "file:src/governance/verdict.js": 1,
+  "file:src/governance/rows.js": 7,
+  "file:src/governance/vocabulary.js": 3,
+  "file:tools/service/fixture-candidate.mjs": 2,
+  "file:tools/service/scan-verifier.mjs": 2,
+  "file:tools/service/catalog-access.mjs": 8,
+  "file:tools/service/artifacts.mjs": 4,
+  "file:tools/service/catalog-assessment.mjs": 1,
+  "file:tools/service/catalog-served.mjs": 2,
+  "file:tools/service/core-adapter.mjs": 2,
+  "file:tools/service/validation-fixture.mjs": 1,
+  "file:tools/preview-request.mjs": 2,
+  "file:tools/server/assets.mjs": 3,
+  "file:tools/packages.mjs": 2,
+  "file:tools/catalog-index-contract.mjs": 1,
+  "file:tools/server/api.mjs": 1,
+  "file:tools/server/service-client.mjs": 2,
+  "file:tools/server/static.mjs": 1,
+  "file:tools/server/sessions.mjs": 2,
+  "file:src/app/ai-tools.js": 1,
+  "file:src/app/elements.js": 1,
+  "file:src/app/organization.js": 1,
+  "file:src/app/shell.js": 1,
+  "file:src/app/theme.js": 1,
+  "file:src/catalog/controller.js": 1,
+  "file:src/governance/controller.js": 1
+ },
+ "fileFanOut": {
+  "file:src/catalog/cards.js": 5,
+  "file:src/catalog/categories.js": 2,
+  "file:src/catalog/collections.js": 1,
+  "file:src/catalog/controller.js": 13,
+  "file:src/catalog/details.js": 6,
+  "file:src/catalog/elements.js": 1,
+  "file:src/catalog/entry.js": 2,
+  "file:src/catalog/index-source.js": 4,
+  "file:src/catalog/metrics.js": 2,
+  "file:src/catalog/navigation.js": 4,
+  "file:src/catalog/provenance.js": 3,
+  "file:src/catalog/publisher.js": 1,
+  "file:src/catalog/qualification.js": 2,
+  "file:src/catalog/selectors.js": 5,
+  "file:src/catalog/toolbar.js": 3,
+  "file:src/catalog/view-state.js": 1,
+  "file:tools/tests/publisher-refusal.test.mjs": 1,
+  "file:src/governance/controller.js": 12,
+  "file:src/governance/detector.js": 3,
+  "file:src/governance/elements.js": 1,
+  "file:src/governance/inputs.js": 3,
+  "file:src/governance/observation.js": 3,
+  "file:src/governance/operator-files.js": 3,
+  "file:src/governance/prepared.js": 4,
+  "file:src/governance/reopen.js": 3,
+  "file:src/governance/rows.js": 2,
+  "file:src/governance/statuses.js": 2,
+  "file:src/governance/verdict.js": 4,
+  "file:tools/tests/revisions.test.mjs": 1,
+  "file:tools/scan-attribution-cases.mjs": 2,
+  "file:tools/service/catalog-assessment.mjs": 1,
+  "file:tools/service/catalog-categories.mjs": 1,
+  "file:tools/service/catalog-collections.mjs": 1,
+  "file:tools/service/catalog-publisher.mjs": 1,
+  "file:tools/service/catalog-qualification.mjs": 1,
+  "file:tools/service/core-adapter.mjs": 4,
+  "file:tools/service/core-service.mjs": 4,
+  "file:tools/service/scan-verifier.mjs": 1,
+  "file:tools/service/validation-fixture.mjs": 4,
+  "file:tools/tests/catalog-served.test.mjs": 1,
+  "file:tools/tests/session-relative.test.mjs": 1,
+  "file:tools/check-page-contract.mjs": 3,
+  "file:tools/check-scan-attribution.mjs": 2,
+  "file:tools/preview.mjs": 6,
+  "file:tools/server/api.mjs": 2,
+  "file:tools/server/static.mjs": 1,
+  "file:tools/tests/sessions-observation.test.mjs": 1,
+  "file:src/app/ai-tools.js": 2,
+  "file:src/app/elements.js": 1,
+  "file:src/app/organization.js": 2,
+  "file:src/main.js": 7
+ }
+}

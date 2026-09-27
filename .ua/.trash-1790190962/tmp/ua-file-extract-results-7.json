@@ -1,0 +1,33 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 0,
+  "filesSkipped": [
+    "prototype/screens/admin-acme.html",
+    "prototype/screens/admin-changes.html",
+    "prototype/screens/admin-item.html",
+    "prototype/screens/admin-org.html",
+    "prototype/screens/admin-scan.html",
+    "prototype/screens/admin-sources.html",
+    "prototype/screens/entry.html",
+    "prototype/screens/fonts.css",
+    "prototype/screens/overview.html",
+    "prototype/screens/system.html",
+    "prototype/screens/tokens.css",
+    "prototype/screens/user-start.html",
+    "prototype/screens/user-trim.html",
+    "prototype/screens/wb.css"
+  ],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 0,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "results": []
+}

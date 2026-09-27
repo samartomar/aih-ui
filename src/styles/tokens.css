@@ -138,6 +138,8 @@ html.light {
 /* Type, shape and motion. */
 :root {
   --type-body: 11px;
+  --type-card-description: 10.5px;
+  --leading-card-description: 1.5;
   --type-heading: 16px;
   --type-metric: 18px;
   --inspector-width: 340px;

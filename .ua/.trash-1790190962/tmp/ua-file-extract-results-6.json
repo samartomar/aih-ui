@@ -1,0 +1,240 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 3,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 3
+    }
+  },
+  "results": [
+    {
+      "path": "AGENTS.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 8,
+      "nonEmptyLines": 7,
+      "sections": [
+        {
+          "heading": "Working in this repo",
+          "level": 1,
+          "line": 1
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "path": "CLAUDE.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 0
+      }
+    },
+    {
+      "path": "README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 847,
+      "nonEmptyLines": 697,
+      "sections": [
+        {
+          "heading": "aih-ui",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "What this repo owns",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "What it must never contain",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "Done means",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Testing against unpublished packages",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "How the page is put together",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "What the page shows",
+          "level": 3,
+          "line": 76
+        },
+        {
+          "heading": "Layout parity with the design source",
+          "level": 2,
+          "line": 115
+        },
+        {
+          "heading": "The rail lists published sources and current collections",
+          "level": 3,
+          "line": 136
+        },
+        {
+          "heading": "Curated categories",
+          "level": 3,
+          "line": 155
+        },
+        {
+          "heading": "One current collection per owner",
+          "level": 3,
+          "line": 182
+        },
+        {
+          "heading": "The package strip and the AI tools control",
+          "level": 3,
+          "line": 214
+        },
+        {
+          "heading": "One theme icon",
+          "level": 3,
+          "line": 243
+        },
+        {
+          "heading": "The source header keeps its composition",
+          "level": 3,
+          "line": 252
+        },
+        {
+          "heading": "Cards keep each slot's meaning",
+          "level": 3,
+          "line": 272
+        },
+        {
+          "heading": "Publisher titles and descriptions come from Catalog",
+          "level": 3,
+          "line": 280
+        },
+        {
+          "heading": "The toolbar keeps the design source's task",
+          "level": 3,
+          "line": 319
+        },
+        {
+          "heading": "Four words for four kinds of absence",
+          "level": 3,
+          "line": 333
+        },
+        {
+          "heading": "Your organization",
+          "level": 3,
+          "line": 342
+        },
+        {
+          "heading": "Keyboard and focus",
+          "level": 3,
+          "line": 361
+        },
+        {
+          "heading": "Unavailable states keep their component's size",
+          "level": 3,
+          "line": 388
+        },
+        {
+          "heading": "The Governance pane: one vertical slice through Core",
+          "level": 2,
+          "line": 394
+        },
+        {
+          "heading": "Operator-supplied inputs",
+          "level": 3,
+          "line": 404
+        },
+        {
+          "heading": "Reopening downloaded files in a fresh session",
+          "level": 3,
+          "line": 426
+        },
+        {
+          "heading": "Observation inputs: what the operator supplies, what Core checks",
+          "level": 3,
+          "line": 457
+        },
+        {
+          "heading": "One verdict, one set of inputs",
+          "level": 3,
+          "line": 500
+        },
+        {
+          "heading": "What the pane will not do",
+          "level": 3,
+          "line": 552
+        },
+        {
+          "heading": "Six statuses, six fields",
+          "level": 3,
+          "line": 561
+        },
+        {
+          "heading": "Verification is about a signature, never a measurement",
+          "level": 3,
+          "line": 574
+        },
+        {
+          "heading": "Known blocked states, rendered honestly",
+          "level": 3,
+          "line": 585
+        },
+        {
+          "heading": "Running it",
+          "level": 2,
+          "line": 624
+        },
+        {
+          "heading": "Reading the packages through what they publish",
+          "level": 3,
+          "line": 698
+        },
+        {
+          "heading": "Publisher qualification",
+          "level": 3,
+          "line": 734
+        },
+        {
+          "heading": "Six results, six owners",
+          "level": 3,
+          "line": 781
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 34
+      }
+    }
+  ]
+}

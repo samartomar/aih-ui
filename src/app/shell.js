@@ -4,14 +4,16 @@
  *
  * It owns those elements and their listeners and nothing else. It never reads a
  * catalog entry or a Core answer - a feature that needs the inspector open asks
- * for it through `openInspector()`.
+ * for it through `setInspectorSelection()` and `openInspector()`.
  */
 
 /**
  * @param elements  the shell's own nodes, from shellElements()
- * @returns { openInspector, showError }
+ * @returns { setInspectorSelection, openInspector, showError }
  */
 export function createShell(elements) {
+  let hasInspectorSelection = false;
+  let currentView = "catalog";
   const panes = {
     details: elements.paneDetails,
     security: elements.paneSecurity,
@@ -25,17 +27,14 @@ export function createShell(elements) {
       button.setAttribute("aria-selected", String(active));
       // One tab stop for the whole list; the arrow keys move between tabs.
       button.tabIndex = active ? 0 : -1;
-      button.classList.toggle("bg-surface-container", active);
       button.classList.toggle("text-primary", active);
-      button.classList.toggle("font-medium", active);
-      button.classList.toggle("shadow-xs", active);
       button.classList.toggle("text-on-surface-variant", !active);
     }
     for (const [name, pane] of Object.entries(panes)) pane.classList.toggle("hidden", name !== tab);
   }
 
   function toggleNav() {
-    if (window.innerWidth <= 760 && elements.navRail.classList.contains("w-0") && !elements.inspectorRail.classList.contains("w-0")) {
+    if (currentView === "catalog" && window.innerWidth <= 760 && elements.navRail.classList.contains("w-0") && !elements.inspectorRail.classList.contains("w-0")) {
       toggleInspector();
     }
     const collapsed = elements.navRail.classList.toggle("w-0");
@@ -45,20 +44,71 @@ export function createShell(elements) {
     elements.toggleNavBtn.classList.toggle("text-on-surface-variant", collapsed);
   }
 
-  function toggleInspector() {
-    if (window.innerWidth <= 760 && elements.inspectorRail.classList.contains("w-0") && !elements.navRail.classList.contains("w-0")) {
-      toggleNav();
+  function setInspectorOpen(open) {
+    const collapsed = !open || !hasInspectorSelection;
+    if (collapsed && elements.inspectorRail.contains(document.activeElement)) {
+      (hasInspectorSelection ? elements.toggleInspectorBtn : elements.toggleNavBtn).focus();
     }
-    const collapsed = elements.inspectorRail.classList.toggle("w-0");
+    elements.inspectorRail.classList.toggle("w-0", collapsed);
     elements.inspectorRail.classList.toggle("w-[var(--inspector-width)]", !collapsed);
     elements.inspectorRail.classList.toggle("border-l-0", collapsed);
+    const visible = !collapsed && currentView === "catalog";
+    elements.inspectorRail.inert = !visible;
+    elements.inspectorRail.setAttribute("aria-hidden", String(!visible));
+    elements.toggleInspectorBtn.setAttribute("aria-expanded", String(visible));
     elements.toggleInspectorBtn.classList.toggle("text-primary", !collapsed);
     elements.toggleInspectorBtn.classList.toggle("text-on-surface-variant", collapsed);
   }
 
+  function toggleInspector() {
+    if (!hasInspectorSelection || currentView !== "catalog") return;
+    if (window.innerWidth <= 760 && elements.inspectorRail.classList.contains("w-0") && !elements.navRail.classList.contains("w-0")) {
+      toggleNav();
+    }
+    setInspectorOpen(elements.inspectorRail.classList.contains("w-0"));
+  }
+
+  function activeNavigation(node, active) {
+    node.classList.toggle("bg-surface-container", active);
+    node.classList.toggle("text-primary", active);
+    node.classList.toggle("font-medium", active);
+    node.classList.toggle("text-on-surface-variant", !active);
+    node.classList.toggle("hover:bg-surface-container", !active);
+    node.classList.toggle("hover:text-on-surface", !active);
+    if (active) node.setAttribute("aria-current", "page");
+    else node.removeAttribute("aria-current");
+  }
+
+  function setView(view) {
+    const policy = view === "policy";
+    currentView = policy ? "policy" : "catalog";
+    elements.catalogWorkspace.hidden = policy;
+    elements.policyWorkspace.hidden = !policy;
+    elements.frameworkMatrixTabs.hidden = policy;
+    elements.catalogScopesSection.hidden = policy;
+    elements.inspectorRail.hidden = policy;
+    elements.toggleInspectorBtn.hidden = policy;
+    activeNavigation(elements.navSources, !policy);
+    activeNavigation(elements.navPolicy, policy);
+    if (policy) {
+      elements.inspectorRail.inert = true;
+      elements.inspectorRail.setAttribute("aria-hidden", "true");
+      elements.toggleInspectorBtn.setAttribute("aria-expanded", "false");
+    } else {
+      setInspectorOpen(!elements.inspectorRail.classList.contains("w-0") && window.innerWidth > 1100);
+    }
+    if (window.innerWidth <= 760 && !elements.navRail.classList.contains("w-0")) toggleNav();
+    if (policy) elements.policyWorkspaceTitle.focus();
+    else elements.catalogWorkspace.querySelector("h1")?.focus();
+  }
+
+  setInspectorOpen(false);
+
   elements.toggleNavBtn.addEventListener("click", toggleNav);
   elements.toggleInspectorBtn.addEventListener("click", toggleInspector);
   elements.closeInspectorBtn.addEventListener("click", toggleInspector);
+  elements.navSources.addEventListener("click", () => setView("catalog"));
+  elements.navPolicy.addEventListener("click", () => setView("policy"));
   const narrowInspector = window.matchMedia("(max-width: 1100px)");
   const narrowNav = window.matchMedia("(max-width: 760px)");
   function fitRails() {
@@ -93,9 +143,18 @@ export function createShell(elements) {
   }
 
   return {
+    /** Selection availability comes from Catalog; an empty rail cannot open. */
+    setInspectorSelection(selected) {
+      hasInspectorSelection = selected;
+      if (!selected) setInspectorOpen(false);
+      elements.toggleInspectorBtn.disabled = !selected;
+      elements.toggleInspectorBtn.title = selected ? "Show or hide entry inspector" : "Select a card to open the inspector";
+      elements.toggleInspectorBtn.setAttribute("aria-disabled", String(!selected));
+      if (selected && currentView === "catalog" && elements.inspectorRail.classList.contains("w-0")) toggleInspector();
+    },
     /** Called when a selection needs the inspector visible. Already-open stays open. */
     openInspector() {
-      if (elements.inspectorRail.classList.contains("w-0")) toggleInspector();
+      if (currentView === "catalog" && elements.inspectorRail.classList.contains("w-0")) toggleInspector();
     },
     showError(message) {
       elements.catalogError.textContent = message;

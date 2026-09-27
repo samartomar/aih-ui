@@ -1,0 +1,911 @@
+{
+ "nodes": [
+  {
+   "id": "file:tools/scan-attribution-cases.mjs",
+   "type": "file",
+   "name": "scan-attribution-cases.mjs",
+   "filePath": "tools/scan-attribution-cases.mjs",
+   "summary": "Acceptance cases for Scan signer attribution: signs a fixture with the second of two trusted keys carrying different operator declarations, reorders roots, and asserts the verifier attributes the declaration of the actual signer.",
+   "tags": [
+    "test",
+    "acceptance",
+    "scan-attribution",
+    "trust-boundary"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "file:tools/service/artifacts.mjs",
+   "type": "file",
+   "name": "artifacts.mjs",
+   "filePath": "tools/service/artifacts.mjs",
+   "summary": "Exact-byte artifact I/O for the backend worker: base64 helpers, byte-exact read/write/copy of files and trees, JSON file helpers, and session-relative path naming so the page never sees machine paths.",
+   "tags": [
+    "utility",
+    "file-io",
+    "artifacts",
+    "serialization"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:tools/service/catalog-access.mjs",
+   "type": "file",
+   "name": "catalog-access.mjs",
+   "filePath": "tools/service/catalog-access.mjs",
+   "summary": "Reads the installed @aihq/catalog through Catalog's published content reader, resolving the package root, looking up entries, joining descriptor paths safely, and reporting Catalog's own integrity result.",
+   "tags": [
+    "service",
+    "catalog",
+    "adapter",
+    "integrity"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:tools/service/catalog-assessment.mjs",
+   "type": "file",
+   "name": "catalog-assessment.mjs",
+   "filePath": "tools/service/catalog-assessment.mjs",
+   "summary": "Builds the optional assessment resolver handed to Core, supplying only the published Catalog assessment artifact bytes for the identity Core derived.",
+   "tags": [
+    "service",
+    "catalog",
+    "adapter",
+    "resolver"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:tools/service/catalog-categories.mjs",
+   "type": "file",
+   "name": "catalog-categories.mjs",
+   "filePath": "tools/service/catalog-categories.mjs",
+   "summary": "Serves Catalog's curated per-entry categories through readCatalogCategoriesV1, reporting refusals rather than assigning or inferring categories.",
+   "tags": [
+    "service",
+    "catalog",
+    "adapter",
+    "categories"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:tools/service/catalog-collections.mjs",
+   "type": "file",
+   "name": "catalog-collections.mjs",
+   "filePath": "tools/service/catalog-collections.mjs",
+   "summary": "Serves Catalog's current collection view through readCatalogCollectionsV1, bound to the exact index bytes; loaded on demand by the worker.",
+   "tags": [
+    "service",
+    "catalog",
+    "adapter",
+    "collections"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:tools/service/catalog-publisher.mjs",
+   "type": "file",
+   "name": "catalog-publisher.mjs",
+   "filePath": "tools/service/catalog-publisher.mjs",
+   "summary": "Serves publisher titles, descriptions and categories from Catalog's display-only presentation sidecar via readCatalogPresentationV1, reporting unavailable values with Catalog's reason.",
+   "tags": [
+    "service",
+    "catalog",
+    "adapter",
+    "presentation"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:tools/service/catalog-qualification.mjs",
+   "type": "file",
+   "name": "catalog-qualification.mjs",
+   "filePath": "tools/service/catalog-qualification.mjs",
+   "summary": "Serves Catalog's publisher qualification states via readCatalogQualificationV1, which re-verifies the shipped signed head and receipts, stamped with the instant they hold at.",
+   "tags": [
+    "service",
+    "catalog",
+    "adapter",
+    "qualification"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:tools/scan-attribution-cases.mjs:makeSigner",
+   "type": "function",
+   "name": "makeSigner",
+   "filePath": "tools/scan-attribution-cases.mjs",
+   "lineRange": [
+    45,
+    62
+   ],
+   "summary": "Generates an Ed25519 key pair and returns a signer with its Scan key id and public key for a test case.",
+   "tags": [
+    "test-helper",
+    "signing",
+    "crypto"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/scan-attribution-cases.mjs:writeTrust",
+   "type": "function",
+   "name": "writeTrust",
+   "filePath": "tools/scan-attribution-cases.mjs",
+   "lineRange": [
+    118,
+    130
+   ],
+   "summary": "Writes an operator trust file with the given roots and expectations into the case directory.",
+   "tags": [
+    "test-helper",
+    "trust",
+    "file-io"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/scan-attribution-cases.mjs:consumeWith",
+   "type": "function",
+   "name": "consumeWith",
+   "filePath": "tools/scan-attribution-cases.mjs",
+   "lineRange": [
+    136,
+    160
+   ],
+   "summary": "Runs buildScanVerification against scan material and a trust file and returns the attributed operator provenance.",
+   "tags": [
+    "test-helper",
+    "verification",
+    "scan"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/artifacts.mjs:b64",
+   "type": "function",
+   "name": "b64",
+   "filePath": "tools/service/artifacts.mjs",
+   "lineRange": [
+    12,
+    12
+   ],
+   "summary": "Encodes bytes as base64.",
+   "tags": [
+    "utility",
+    "encoding"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/artifacts.mjs:fromB64",
+   "type": "function",
+   "name": "fromB64",
+   "filePath": "tools/service/artifacts.mjs",
+   "lineRange": [
+    13,
+    13
+   ],
+   "summary": "Decodes a base64 string into a Buffer.",
+   "tags": [
+    "utility",
+    "encoding"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/artifacts.mjs:sessionRelativePath",
+   "type": "function",
+   "name": "sessionRelativePath",
+   "filePath": "tools/service/artifacts.mjs",
+   "lineRange": [
+    24,
+    30
+   ],
+   "summary": "Returns a POSIX session-relative name for a file inside a session directory, or undefined when it has none.",
+   "tags": [
+    "utility",
+    "paths",
+    "privacy"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/artifacts.mjs:writeExactBytes",
+   "type": "function",
+   "name": "writeExactBytes",
+   "filePath": "tools/service/artifacts.mjs",
+   "lineRange": [
+    33,
+    36
+   ],
+   "summary": "Writes bytes exactly as given, creating parent directories.",
+   "tags": [
+    "utility",
+    "file-io"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/artifacts.mjs:readExactBytes",
+   "type": "function",
+   "name": "readExactBytes",
+   "filePath": "tools/service/artifacts.mjs",
+   "lineRange": [
+    38,
+    40
+   ],
+   "summary": "Reads a file's exact bytes without re-serialization.",
+   "tags": [
+    "utility",
+    "file-io"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/artifacts.mjs:recreateDirectory",
+   "type": "function",
+   "name": "recreateDirectory",
+   "filePath": "tools/service/artifacts.mjs",
+   "lineRange": [
+    49,
+    52
+   ],
+   "summary": "Removes and recreates a directory to get a clean root.",
+   "tags": [
+    "utility",
+    "file-io"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/artifacts.mjs:copyExactTree",
+   "type": "function",
+   "name": "copyExactTree",
+   "filePath": "tools/service/artifacts.mjs",
+   "lineRange": [
+    61,
+    78
+   ],
+   "summary": "Recursively copies a directory tree byte for byte.",
+   "tags": [
+    "utility",
+    "file-io"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/artifacts.mjs:readJsonFile",
+   "type": "function",
+   "name": "readJsonFile",
+   "filePath": "tools/service/artifacts.mjs",
+   "lineRange": [
+    85,
+    87
+   ],
+   "summary": "Reads and parses a JSON file.",
+   "tags": [
+    "utility",
+    "serialization"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/artifacts.mjs:writeJsonFile",
+   "type": "function",
+   "name": "writeJsonFile",
+   "filePath": "tools/service/artifacts.mjs",
+   "lineRange": [
+    90,
+    92
+   ],
+   "summary": "Serializes a value to a JSON file (used for non-artifact operator files).",
+   "tags": [
+    "utility",
+    "serialization"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/catalog-access.mjs:catalogRoot",
+   "type": "function",
+   "name": "catalogRoot",
+   "filePath": "tools/service/catalog-access.mjs",
+   "lineRange": [
+    40,
+    51
+   ],
+   "summary": "Resolves the installed @aihq/catalog package root through package resolution.",
+   "tags": [
+    "catalog",
+    "resolution"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/catalog-access.mjs:readCatalog",
+   "type": "function",
+   "name": "readCatalog",
+   "filePath": "tools/service/catalog-access.mjs",
+   "lineRange": [
+    60,
+    88
+   ],
+   "summary": "Reads and validates the content index through readCatalogContentV1, optionally verifying artifact hashes.",
+   "tags": [
+    "catalog",
+    "reader",
+    "validation"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:tools/service/catalog-access.mjs:catalogEntry",
+   "type": "function",
+   "name": "catalogEntry",
+   "filePath": "tools/service/catalog-access.mjs",
+   "lineRange": [
+    90,
+    95
+   ],
+   "summary": "Looks up one catalog entry by id, refusing when it is absent.",
+   "tags": [
+    "catalog",
+    "lookup"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/catalog-access.mjs:artifactPath",
+   "type": "function",
+   "name": "artifactPath",
+   "filePath": "tools/service/catalog-access.mjs",
+   "lineRange": [
+    98,
+    101
+   ],
+   "summary": "Joins a descriptor path under the Catalog root through resolveCatalogContentPathV1.",
+   "tags": [
+    "catalog",
+    "paths",
+    "security"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/catalog-access.mjs:entryContentDir",
+   "type": "function",
+   "name": "entryContentDir",
+   "filePath": "tools/service/catalog-access.mjs",
+   "lineRange": [
+    112,
+    119
+   ],
+   "summary": "Resolves the content directory of an entry within the Catalog package.",
+   "tags": [
+    "catalog",
+    "paths"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/catalog-access.mjs:catalogIntegrity",
+   "type": "function",
+   "name": "catalogIntegrity",
+   "filePath": "tools/service/catalog-access.mjs",
+   "lineRange": [
+    125,
+    167
+   ],
+   "summary": "Reports Catalog's own artifact integrity result for an entry without restating its rules.",
+   "tags": [
+    "catalog",
+    "integrity",
+    "verification"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:tools/service/catalog-assessment.mjs:createCatalogAssessmentResolver",
+   "type": "function",
+   "name": "createCatalogAssessmentResolver",
+   "filePath": "tools/service/catalog-assessment.mjs",
+   "lineRange": [
+    27,
+    49
+   ],
+   "summary": "Returns a resolver that supplies the published assessment artifact bytes for exactly one matching aih entry, or nothing.",
+   "tags": [
+    "factory",
+    "resolver",
+    "catalog"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/catalog-categories.mjs:catalogCategories",
+   "type": "function",
+   "name": "catalogCategories",
+   "filePath": "tools/service/catalog-categories.mjs",
+   "lineRange": [
+    23,
+    65
+   ],
+   "summary": "Reads curated categories through Catalog's reader and returns them or the refusal.",
+   "tags": [
+    "catalog",
+    "reader",
+    "categories"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:tools/service/catalog-collections.mjs:catalogCollections",
+   "type": "function",
+   "name": "catalogCollections",
+   "filePath": "tools/service/catalog-collections.mjs",
+   "lineRange": [
+    26,
+    52
+   ],
+   "summary": "Reads the current collection view through Catalog's reader against the index bytes.",
+   "tags": [
+    "catalog",
+    "reader",
+    "collections"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:tools/service/catalog-publisher.mjs:catalogPublisher",
+   "type": "function",
+   "name": "catalogPublisher",
+   "filePath": "tools/service/catalog-publisher.mjs",
+   "lineRange": [
+    21,
+    57
+   ],
+   "summary": "Reads publisher presentation records through Catalog's reader, reporting unavailability when the contract is missing.",
+   "tags": [
+    "catalog",
+    "reader",
+    "presentation"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:tools/service/catalog-qualification.mjs:catalogQualification",
+   "type": "function",
+   "name": "catalogQualification",
+   "filePath": "tools/service/catalog-qualification.mjs",
+   "lineRange": [
+    33,
+    111
+   ],
+   "summary": "Reads per-entry qualification through Catalog's qualification reader at the current instant and serves its words verbatim.",
+   "tags": [
+    "catalog",
+    "reader",
+    "qualification"
+   ],
+   "complexity": "moderate"
+  }
+ ],
+ "edges": [
+  {
+   "source": "file:tools/scan-attribution-cases.mjs",
+   "target": "function:tools/scan-attribution-cases.mjs:makeSigner",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/scan-attribution-cases.mjs",
+   "target": "function:tools/scan-attribution-cases.mjs:writeTrust",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/scan-attribution-cases.mjs",
+   "target": "function:tools/scan-attribution-cases.mjs:consumeWith",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:b64",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:b64",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:fromB64",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:fromB64",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:sessionRelativePath",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:sessionRelativePath",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:writeExactBytes",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:writeExactBytes",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:readExactBytes",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:readExactBytes",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:recreateDirectory",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:recreateDirectory",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:copyExactTree",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:copyExactTree",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:readJsonFile",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:readJsonFile",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:writeJsonFile",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "function:tools/service/artifacts.mjs:writeJsonFile",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:catalogRoot",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:catalogRoot",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:readCatalog",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:readCatalog",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:catalogEntry",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:catalogEntry",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:artifactPath",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:artifactPath",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:entryContentDir",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:entryContentDir",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:catalogIntegrity",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-access.mjs",
+   "target": "function:tools/service/catalog-access.mjs:catalogIntegrity",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/catalog-assessment.mjs",
+   "target": "function:tools/service/catalog-assessment.mjs:createCatalogAssessmentResolver",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-assessment.mjs",
+   "target": "function:tools/service/catalog-assessment.mjs:createCatalogAssessmentResolver",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/catalog-categories.mjs",
+   "target": "function:tools/service/catalog-categories.mjs:catalogCategories",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-categories.mjs",
+   "target": "function:tools/service/catalog-categories.mjs:catalogCategories",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/catalog-collections.mjs",
+   "target": "function:tools/service/catalog-collections.mjs:catalogCollections",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-collections.mjs",
+   "target": "function:tools/service/catalog-collections.mjs:catalogCollections",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/catalog-publisher.mjs",
+   "target": "function:tools/service/catalog-publisher.mjs:catalogPublisher",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-publisher.mjs",
+   "target": "function:tools/service/catalog-publisher.mjs:catalogPublisher",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/catalog-qualification.mjs",
+   "target": "function:tools/service/catalog-qualification.mjs:catalogQualification",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-qualification.mjs",
+   "target": "function:tools/service/catalog-qualification.mjs:catalogQualification",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/scan-attribution-cases.mjs",
+   "target": "file:tools/service/fixture-candidate.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/scan-attribution-cases.mjs",
+   "target": "file:tools/service/scan-verifier.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/catalog-assessment.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/catalog-categories.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/catalog-collections.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/catalog-publisher.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/catalog-qualification.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "function:tools/service/catalog-assessment.mjs:createCatalogAssessmentResolver",
+   "target": "function:tools/service/catalog-access.mjs:readCatalog",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/catalog-assessment.mjs:createCatalogAssessmentResolver",
+   "target": "function:tools/service/catalog-access.mjs:artifactPath",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/catalog-categories.mjs:catalogCategories",
+   "target": "function:tools/service/catalog-access.mjs:readCatalog",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/catalog-collections.mjs:catalogCollections",
+   "target": "function:tools/service/catalog-access.mjs:readCatalog",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/catalog-publisher.mjs:catalogPublisher",
+   "target": "function:tools/service/catalog-access.mjs:readCatalog",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/catalog-qualification.mjs:catalogQualification",
+   "target": "function:tools/service/catalog-access.mjs:readCatalog",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/catalog-qualification.mjs:catalogQualification",
+   "target": "function:tools/service/catalog-access.mjs:catalogRoot",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/scan-attribution-cases.mjs:consumeWith",
+   "target": "function:tools/service/scan-verifier.mjs:buildScanVerification",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/artifacts.mjs",
+   "target": "file:tools/tests/session-relative.test.mjs",
+   "type": "tested_by",
+   "direction": "forward",
+   "weight": 0.5
+  }
+ ]
+}

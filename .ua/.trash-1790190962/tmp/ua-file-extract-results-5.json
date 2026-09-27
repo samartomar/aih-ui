@@ -1,0 +1,1548 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 6,
+  "filesSkipped": [],
+  "filesUnreadable": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 6,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 6,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "results": [
+    {
+      "path": "src/app/ai-tools.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 135,
+      "nonEmptyLines": 120,
+      "functions": [
+        {
+          "name": "loadSelection",
+          "startLine": 24,
+          "endLine": 32,
+          "params": []
+        },
+        {
+          "name": "saveSelection",
+          "startLine": 34,
+          "endLine": 41,
+          "params": [
+            "selected"
+          ]
+        },
+        {
+          "name": "createAiTools",
+          "startLine": 44,
+          "endLine": 135,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "createAiTools",
+          "line": 44,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "loadSelection",
+          "callee": "JSON.parse",
+          "lineNumber": 26
+        },
+        {
+          "caller": "loadSelection",
+          "callee": "localStorage.getItem",
+          "lineNumber": 26
+        },
+        {
+          "caller": "loadSelection",
+          "callee": "Array.isArray",
+          "lineNumber": 28
+        },
+        {
+          "caller": "loadSelection",
+          "callee": "value.selected.filter",
+          "lineNumber": 28
+        },
+        {
+          "caller": "saveSelection",
+          "callee": "localStorage.setItem",
+          "lineNumber": 36
+        },
+        {
+          "caller": "saveSelection",
+          "callee": "JSON.stringify",
+          "lineNumber": 36
+        },
+        {
+          "caller": "createAiTools",
+          "callee": "loadSelection",
+          "lineNumber": 47
+        },
+        {
+          "caller": "isOpen",
+          "callee": "elements.aiToolsPop.classList.contains",
+          "lineNumber": 49
+        },
+        {
+          "caller": "setOpen",
+          "callee": "elements.aiToolsPop.classList.toggle",
+          "lineNumber": 51
+        },
+        {
+          "caller": "setOpen",
+          "callee": "elements.aiToolsTrigger.setAttribute",
+          "lineNumber": 52
+        },
+        {
+          "caller": "setOpen",
+          "callee": "String",
+          "lineNumber": 52
+        },
+        {
+          "caller": "note",
+          "callee": "elements.aiToolsNote.appendChild",
+          "lineNumber": 56
+        },
+        {
+          "caller": "note",
+          "callee": "el",
+          "lineNumber": 56
+        },
+        {
+          "caller": "render",
+          "callee": "elements.aiToolsList.replaceChildren",
+          "lineNumber": 60
+        },
+        {
+          "caller": "render",
+          "callee": "elements.aiToolsNote.replaceChildren",
+          "lineNumber": 61
+        },
+        {
+          "caller": "render",
+          "callee": "elements.aiToolsList.appendChild",
+          "lineNumber": 67
+        },
+        {
+          "caller": "render",
+          "callee": "el",
+          "lineNumber": 67
+        },
+        {
+          "caller": "render",
+          "callee": "note",
+          "lineNumber": 68
+        },
+        {
+          "caller": "render",
+          "callee": "supported.filter",
+          "lineNumber": 72
+        },
+        {
+          "caller": "render",
+          "callee": "selected.includes",
+          "lineNumber": 72
+        },
+        {
+          "caller": "render",
+          "callee": "el",
+          "lineNumber": 79
+        },
+        {
+          "caller": "render",
+          "callee": "el",
+          "lineNumber": 80
+        },
+        {
+          "caller": "render",
+          "callee": "selected.includes",
+          "lineNumber": 82
+        },
+        {
+          "caller": "render",
+          "callee": "box.addEventListener",
+          "lineNumber": 84
+        },
+        {
+          "caller": "render",
+          "callee": "selected.filter",
+          "lineNumber": 86
+        },
+        {
+          "caller": "render",
+          "callee": "selected.filter",
+          "lineNumber": 87
+        },
+        {
+          "caller": "render",
+          "callee": "saveSelection",
+          "lineNumber": 88
+        },
+        {
+          "caller": "render",
+          "callee": "render",
+          "lineNumber": 89
+        },
+        {
+          "caller": "render",
+          "callee": "elements.aiToolsList.querySelector(`input[data-target=\"${CSS.escape(target)}\"]`)?.focus",
+          "lineNumber": 90
+        },
+        {
+          "caller": "render",
+          "callee": "elements.aiToolsList.querySelector",
+          "lineNumber": 90
+        },
+        {
+          "caller": "render",
+          "callee": "CSS.escape",
+          "lineNumber": 90
+        },
+        {
+          "caller": "render",
+          "callee": "row.appendChild",
+          "lineNumber": 92
+        },
+        {
+          "caller": "render",
+          "callee": "row.appendChild",
+          "lineNumber": 93
+        },
+        {
+          "caller": "render",
+          "callee": "el",
+          "lineNumber": 93
+        },
+        {
+          "caller": "render",
+          "callee": "elements.aiToolsList.appendChild",
+          "lineNumber": 94
+        },
+        {
+          "caller": "render",
+          "callee": "note",
+          "lineNumber": 97
+        },
+        {
+          "caller": "render",
+          "callee": "note",
+          "lineNumber": 98
+        },
+        {
+          "caller": "render",
+          "callee": "note",
+          "lineNumber": 99
+        },
+        {
+          "caller": "render",
+          "callee": "selected.filter",
+          "lineNumber": 101
+        },
+        {
+          "caller": "render",
+          "callee": "supported.includes",
+          "lineNumber": 101
+        },
+        {
+          "caller": "render",
+          "callee": "note",
+          "lineNumber": 103
+        },
+        {
+          "caller": "render",
+          "callee": "unknown.join",
+          "lineNumber": 103
+        },
+        {
+          "caller": "createAiTools",
+          "callee": "elements.aiToolsTrigger.addEventListener",
+          "lineNumber": 107
+        },
+        {
+          "caller": "createAiTools",
+          "callee": "setOpen",
+          "lineNumber": 107
+        },
+        {
+          "caller": "createAiTools",
+          "callee": "isOpen",
+          "lineNumber": 107
+        },
+        {
+          "caller": "createAiTools",
+          "callee": "document.addEventListener",
+          "lineNumber": 108
+        },
+        {
+          "caller": "createAiTools",
+          "callee": "isOpen",
+          "lineNumber": 109
+        },
+        {
+          "caller": "createAiTools",
+          "callee": "elements.aiToolsPop.contains",
+          "lineNumber": 110
+        },
+        {
+          "caller": "createAiTools",
+          "callee": "elements.aiToolsTrigger.contains",
+          "lineNumber": 110
+        },
+        {
+          "caller": "createAiTools",
+          "callee": "setOpen",
+          "lineNumber": 111
+        },
+        {
+          "caller": "createAiTools",
+          "callee": "document.addEventListener",
+          "lineNumber": 113
+        },
+        {
+          "caller": "createAiTools",
+          "callee": "isOpen",
+          "lineNumber": 114
+        },
+        {
+          "caller": "createAiTools",
+          "callee": "setOpen",
+          "lineNumber": 115
+        },
+        {
+          "caller": "createAiTools",
+          "callee": "elements.aiToolsTrigger.focus",
+          "lineNumber": 116
+        },
+        {
+          "caller": "createAiTools",
+          "callee": "render",
+          "lineNumber": 120
+        },
+        {
+          "caller": "setTargets",
+          "callee": "Array.isArray",
+          "lineNumber": 125
+        },
+        {
+          "caller": "setTargets",
+          "callee": "coreTargets.targets.filter",
+          "lineNumber": 126
+        },
+        {
+          "caller": "setTargets",
+          "callee": "text",
+          "lineNumber": 130
+        },
+        {
+          "caller": "setTargets",
+          "callee": "render",
+          "lineNumber": 132
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/app/elements.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 33,
+      "nonEmptyLines": 29,
+      "functions": [
+        {
+          "name": "shellElements",
+          "startLine": 8,
+          "endLine": 16,
+          "params": []
+        },
+        {
+          "name": "organizationElements",
+          "startLine": 19,
+          "endLine": 28,
+          "params": []
+        },
+        {
+          "name": "aiToolsElements",
+          "startLine": 31,
+          "endLine": 33,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "shellElements",
+          "line": 8,
+          "isDefault": false
+        },
+        {
+          "name": "organizationElements",
+          "line": 19,
+          "isDefault": false
+        },
+        {
+          "name": "aiToolsElements",
+          "line": 31,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "shellElements",
+          "callee": "collectIds",
+          "lineNumber": 13
+        },
+        {
+          "caller": "shellElements",
+          "callee": "document.querySelectorAll",
+          "lineNumber": 14
+        },
+        {
+          "caller": "organizationElements",
+          "callee": "collectIds",
+          "lineNumber": 27
+        },
+        {
+          "caller": "aiToolsElements",
+          "callee": "collectIds",
+          "lineNumber": 32
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 3,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/app/organization.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 359,
+      "nonEmptyLines": 331,
+      "functions": [
+        {
+          "name": "emptyDraft",
+          "startLine": 54,
+          "endLine": 56,
+          "params": []
+        },
+        {
+          "name": "loadDraft",
+          "startLine": 59,
+          "endLine": 81,
+          "params": []
+        },
+        {
+          "name": "saveDraft",
+          "startLine": 83,
+          "endLine": 90,
+          "params": [
+            "draft"
+          ]
+        },
+        {
+          "name": "validateDraft",
+          "startLine": 93,
+          "endLine": 113,
+          "params": [
+            "draft"
+          ]
+        },
+        {
+          "name": "createOrganization",
+          "startLine": 119,
+          "endLine": 359,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "validateDraft",
+          "line": 93,
+          "isDefault": false
+        },
+        {
+          "name": "createOrganization",
+          "line": 119,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "loadDraft",
+          "callee": "localStorage.getItem",
+          "lineNumber": 62
+        },
+        {
+          "caller": "loadDraft",
+          "callee": "JSON.parse",
+          "lineNumber": 68
+        },
+        {
+          "caller": "loadDraft",
+          "callee": "Array.isArray",
+          "lineNumber": 75
+        },
+        {
+          "caller": "loadDraft",
+          "callee": "value.emails.filter",
+          "lineNumber": 75
+        },
+        {
+          "caller": "loadDraft",
+          "callee": "POSTURES.some",
+          "lineNumber": 76
+        },
+        {
+          "caller": "saveDraft",
+          "callee": "localStorage.setItem",
+          "lineNumber": 85
+        },
+        {
+          "caller": "saveDraft",
+          "callee": "JSON.stringify",
+          "lineNumber": 85
+        },
+        {
+          "caller": "validateDraft",
+          "callee": "draft.name.trim",
+          "lineNumber": 95
+        },
+        {
+          "caller": "validateDraft",
+          "callee": "draft.shortId.trim",
+          "lineNumber": 99
+        },
+        {
+          "caller": "validateDraft",
+          "callee": "SHORT_ID.test",
+          "lineNumber": 102
+        },
+        {
+          "caller": "validateDraft",
+          "callee": "draft.policyRepo.trim",
+          "lineNumber": 106
+        },
+        {
+          "caller": "validateDraft",
+          "callee": "POLICY_REPO.test",
+          "lineNumber": 107
+        },
+        {
+          "caller": "createOrganization",
+          "callee": "loadDraft",
+          "lineNumber": 120
+        },
+        {
+          "caller": "renderTrigger",
+          "callee": "saved?.name?.trim",
+          "lineNumber": 125
+        },
+        {
+          "caller": "showError",
+          "callee": "node.classList.toggle",
+          "lineNumber": 140
+        },
+        {
+          "caller": "clearErrors",
+          "callee": "showError",
+          "lineNumber": 144
+        },
+        {
+          "caller": "renderEmails",
+          "callee": "elements.orgEmailList.replaceChildren",
+          "lineNumber": 148
+        },
+        {
+          "caller": "renderEmails",
+          "callee": "elements.orgEmailList.appendChild",
+          "lineNumber": 150
+        },
+        {
+          "caller": "renderEmails",
+          "callee": "el",
+          "lineNumber": 150
+        },
+        {
+          "caller": "renderEmails",
+          "callee": "working.emails.forEach",
+          "lineNumber": 153
+        },
+        {
+          "caller": "renderEmails",
+          "callee": "el",
+          "lineNumber": 154
+        },
+        {
+          "caller": "renderEmails",
+          "callee": "chip.appendChild",
+          "lineNumber": 155
+        },
+        {
+          "caller": "renderEmails",
+          "callee": "el",
+          "lineNumber": 155
+        },
+        {
+          "caller": "renderEmails",
+          "callee": "chip.appendChild",
+          "lineNumber": 156
+        },
+        {
+          "caller": "renderEmails",
+          "callee": "el",
+          "lineNumber": 156
+        },
+        {
+          "caller": "renderEmails",
+          "callee": "el",
+          "lineNumber": 157
+        },
+        {
+          "caller": "renderEmails",
+          "callee": "remove.setAttribute",
+          "lineNumber": 160
+        },
+        {
+          "caller": "renderEmails",
+          "callee": "remove.appendChild",
+          "lineNumber": 161
+        },
+        {
+          "caller": "renderEmails",
+          "callee": "el",
+          "lineNumber": 161
+        },
+        {
+          "caller": "renderEmails",
+          "callee": "remove.addEventListener",
+          "lineNumber": 162
+        },
+        {
+          "caller": "renderEmails",
+          "callee": "working.emails.splice",
+          "lineNumber": 163
+        },
+        {
+          "caller": "renderEmails",
+          "callee": "renderEmails",
+          "lineNumber": 164
+        },
+        {
+          "caller": "renderEmails",
+          "callee": "chip.appendChild",
+          "lineNumber": 166
+        },
+        {
+          "caller": "renderEmails",
+          "callee": "elements.orgEmailList.appendChild",
+          "lineNumber": 167
+        },
+        {
+          "caller": "renderPosture",
+          "callee": "elements.orgPosture.replaceChildren",
+          "lineNumber": 172
+        },
+        {
+          "caller": "renderPosture",
+          "callee": "el",
+          "lineNumber": 175
+        },
+        {
+          "caller": "renderPosture",
+          "callee": "tile.setAttribute",
+          "lineNumber": 182
+        },
+        {
+          "caller": "renderPosture",
+          "callee": "tile.setAttribute",
+          "lineNumber": 183
+        },
+        {
+          "caller": "renderPosture",
+          "callee": "String",
+          "lineNumber": 183
+        },
+        {
+          "caller": "renderPosture",
+          "callee": "el",
+          "lineNumber": 184
+        },
+        {
+          "caller": "renderPosture",
+          "callee": "el",
+          "lineNumber": 185
+        },
+        {
+          "caller": "renderPosture",
+          "callee": "title.appendChild",
+          "lineNumber": 186
+        },
+        {
+          "caller": "renderPosture",
+          "callee": "el",
+          "lineNumber": 186
+        },
+        {
+          "caller": "renderPosture",
+          "callee": "title.appendChild",
+          "lineNumber": 187
+        },
+        {
+          "caller": "renderPosture",
+          "callee": "document.createTextNode",
+          "lineNumber": 187
+        },
+        {
+          "caller": "renderPosture",
+          "callee": "head.appendChild",
+          "lineNumber": 188
+        },
+        {
+          "caller": "renderPosture",
+          "callee": "head.appendChild",
+          "lineNumber": 189
+        },
+        {
+          "caller": "renderPosture",
+          "callee": "el",
+          "lineNumber": 191
+        },
+        {
+          "caller": "renderPosture",
+          "callee": "el",
+          "lineNumber": 192
+        },
+        {
+          "caller": "renderPosture",
+          "callee": "tile.appendChild",
+          "lineNumber": 194
+        },
+        {
+          "caller": "renderPosture",
+          "callee": "tile.appendChild",
+          "lineNumber": 195
+        },
+        {
+          "caller": "renderPosture",
+          "callee": "el",
+          "lineNumber": 195
+        },
+        {
+          "caller": "renderPosture",
+          "callee": "tile.addEventListener",
+          "lineNumber": 196
+        },
+        {
+          "caller": "renderPosture",
+          "callee": "renderPosture",
+          "lineNumber": 199
+        },
+        {
+          "caller": "renderPosture",
+          "callee": "elements.orgPosture.appendChild",
+          "lineNumber": 201
+        },
+        {
+          "caller": "addEmail",
+          "callee": "elements.orgInputEmail.value.trim",
+          "lineNumber": 212
+        },
+        {
+          "caller": "addEmail",
+          "callee": "showError",
+          "lineNumber": 214
+        },
+        {
+          "caller": "addEmail",
+          "callee": "EMAIL.test",
+          "lineNumber": 217
+        },
+        {
+          "caller": "addEmail",
+          "callee": "showError",
+          "lineNumber": 218
+        },
+        {
+          "caller": "addEmail",
+          "callee": "working.emails.some",
+          "lineNumber": 221
+        },
+        {
+          "caller": "addEmail",
+          "callee": "existing.toLowerCase",
+          "lineNumber": 221
+        },
+        {
+          "caller": "addEmail",
+          "callee": "email.toLowerCase",
+          "lineNumber": 221
+        },
+        {
+          "caller": "addEmail",
+          "callee": "showError",
+          "lineNumber": 222
+        },
+        {
+          "caller": "addEmail",
+          "callee": "showError",
+          "lineNumber": 226
+        },
+        {
+          "caller": "addEmail",
+          "callee": "working.emails.push",
+          "lineNumber": 229
+        },
+        {
+          "caller": "addEmail",
+          "callee": "showError",
+          "lineNumber": 231
+        },
+        {
+          "caller": "addEmail",
+          "callee": "renderEmails",
+          "lineNumber": 232
+        },
+        {
+          "caller": "open",
+          "callee": "structuredClone",
+          "lineNumber": 237
+        },
+        {
+          "caller": "open",
+          "callee": "emptyDraft",
+          "lineNumber": 237
+        },
+        {
+          "caller": "open",
+          "callee": "clearErrors",
+          "lineNumber": 242
+        },
+        {
+          "caller": "open",
+          "callee": "renderEmails",
+          "lineNumber": 243
+        },
+        {
+          "caller": "open",
+          "callee": "renderPosture",
+          "lineNumber": 244
+        },
+        {
+          "caller": "open",
+          "callee": "setPageInert",
+          "lineNumber": 246
+        },
+        {
+          "caller": "open",
+          "callee": "elements.orgModalOverlay.classList.remove",
+          "lineNumber": 247
+        },
+        {
+          "caller": "open",
+          "callee": "elements.orgInputName.focus",
+          "lineNumber": 248
+        },
+        {
+          "caller": "close",
+          "callee": "elements.orgModalOverlay.classList.add",
+          "lineNumber": 253
+        },
+        {
+          "caller": "close",
+          "callee": "setPageInert",
+          "lineNumber": 255
+        },
+        {
+          "caller": "close",
+          "callee": "restoreFocus.focus",
+          "lineNumber": 256
+        },
+        {
+          "caller": "focusableInDialog",
+          "callee": "[...elements.orgModalOverlay.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex=\"-1\"])')]\r\n      .filter",
+          "lineNumber": 277
+        },
+        {
+          "caller": "focusableInDialog",
+          "callee": "elements.orgModalOverlay.querySelectorAll",
+          "lineNumber": 277
+        },
+        {
+          "caller": "focusableInDialog",
+          "callee": "node.getClientRects",
+          "lineNumber": 278
+        },
+        {
+          "caller": "isOpen",
+          "callee": "elements.orgModalOverlay.classList.contains",
+          "lineNumber": 282
+        },
+        {
+          "caller": "save",
+          "callee": "readInputs",
+          "lineNumber": 286
+        },
+        {
+          "caller": "save",
+          "callee": "working.name.trim",
+          "lineNumber": 289
+        },
+        {
+          "caller": "save",
+          "callee": "working.shortId.trim",
+          "lineNumber": 290
+        },
+        {
+          "caller": "save",
+          "callee": "working.policyRepo.trim",
+          "lineNumber": 291
+        },
+        {
+          "caller": "save",
+          "callee": "clearErrors",
+          "lineNumber": 295
+        },
+        {
+          "caller": "save",
+          "callee": "validateDraft",
+          "lineNumber": 296
+        },
+        {
+          "caller": "save",
+          "callee": "Object.entries",
+          "lineNumber": 297
+        },
+        {
+          "caller": "save",
+          "callee": "showError",
+          "lineNumber": 297
+        },
+        {
+          "caller": "save",
+          "callee": "Object.keys",
+          "lineNumber": 298
+        },
+        {
+          "caller": "save",
+          "callee": "Object.keys",
+          "lineNumber": 299
+        },
+        {
+          "caller": "save",
+          "callee": "first?.focus",
+          "lineNumber": 300
+        },
+        {
+          "caller": "save",
+          "callee": "saveDraft",
+          "lineNumber": 303
+        },
+        {
+          "caller": "save",
+          "callee": "showError",
+          "lineNumber": 304
+        },
+        {
+          "caller": "save",
+          "callee": "renderTrigger",
+          "lineNumber": 308
+        },
+        {
+          "caller": "save",
+          "callee": "onChange",
+          "lineNumber": 309
+        },
+        {
+          "caller": "save",
+          "callee": "close",
+          "lineNumber": 310
+        },
+        {
+          "caller": "createOrganization",
+          "callee": "elements.orgModalTrigger.addEventListener",
+          "lineNumber": 314
+        },
+        {
+          "caller": "createOrganization",
+          "callee": "elements.closeOrgModalBtn.addEventListener",
+          "lineNumber": 315
+        },
+        {
+          "caller": "createOrganization",
+          "callee": "elements.cancelOrgModalBtn.addEventListener",
+          "lineNumber": 316
+        },
+        {
+          "caller": "createOrganization",
+          "callee": "elements.orgModalOverlay.addEventListener",
+          "lineNumber": 317
+        },
+        {
+          "caller": "createOrganization",
+          "callee": "close",
+          "lineNumber": 318
+        },
+        {
+          "caller": "createOrganization",
+          "callee": "elements.orgForm.addEventListener",
+          "lineNumber": 320
+        },
+        {
+          "caller": "createOrganization",
+          "callee": "event.preventDefault",
+          "lineNumber": 321
+        },
+        {
+          "caller": "createOrganization",
+          "callee": "save",
+          "lineNumber": 322
+        },
+        {
+          "caller": "createOrganization",
+          "callee": "elements.orgAddEmailBtn.addEventListener",
+          "lineNumber": 324
+        },
+        {
+          "caller": "createOrganization",
+          "callee": "elements.orgInputEmail.addEventListener",
+          "lineNumber": 325
+        },
+        {
+          "caller": "createOrganization",
+          "callee": "event.preventDefault",
+          "lineNumber": 328
+        },
+        {
+          "caller": "createOrganization",
+          "callee": "addEmail",
+          "lineNumber": 329
+        },
+        {
+          "caller": "createOrganization",
+          "callee": "document.addEventListener",
+          "lineNumber": 332
+        },
+        {
+          "caller": "createOrganization",
+          "callee": "isOpen",
+          "lineNumber": 333
+        },
+        {
+          "caller": "createOrganization",
+          "callee": "close",
+          "lineNumber": 333
+        },
+        {
+          "caller": "createOrganization",
+          "callee": "elements.orgModalOverlay.addEventListener",
+          "lineNumber": 336
+        },
+        {
+          "caller": "createOrganization",
+          "callee": "focusableInDialog",
+          "lineNumber": 338
+        },
+        {
+          "caller": "createOrganization",
+          "callee": "event.preventDefault",
+          "lineNumber": 343
+        },
+        {
+          "caller": "createOrganization",
+          "callee": "last.focus",
+          "lineNumber": 344
+        },
+        {
+          "caller": "createOrganization",
+          "callee": "event.preventDefault",
+          "lineNumber": 346
+        },
+        {
+          "caller": "createOrganization",
+          "callee": "first.focus",
+          "lineNumber": 347
+        },
+        {
+          "caller": "createOrganization",
+          "callee": "renderTrigger",
+          "lineNumber": 351
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 2,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/app/shell.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 91,
+      "nonEmptyLines": 85,
+      "functions": [
+        {
+          "name": "createShell",
+          "startLine": 14,
+          "endLine": 91,
+          "params": [
+            "elements"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "createShell",
+          "line": 14,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "switchTab",
+          "callee": "button.setAttribute",
+          "lineNumber": 25
+        },
+        {
+          "caller": "switchTab",
+          "callee": "String",
+          "lineNumber": 25
+        },
+        {
+          "caller": "switchTab",
+          "callee": "button.classList.toggle",
+          "lineNumber": 28
+        },
+        {
+          "caller": "switchTab",
+          "callee": "button.classList.toggle",
+          "lineNumber": 29
+        },
+        {
+          "caller": "switchTab",
+          "callee": "button.classList.toggle",
+          "lineNumber": 30
+        },
+        {
+          "caller": "switchTab",
+          "callee": "button.classList.toggle",
+          "lineNumber": 31
+        },
+        {
+          "caller": "switchTab",
+          "callee": "button.classList.toggle",
+          "lineNumber": 32
+        },
+        {
+          "caller": "switchTab",
+          "callee": "Object.entries",
+          "lineNumber": 34
+        },
+        {
+          "caller": "switchTab",
+          "callee": "pane.classList.toggle",
+          "lineNumber": 34
+        },
+        {
+          "caller": "toggleNav",
+          "callee": "elements.navRail.classList.toggle",
+          "lineNumber": 38
+        },
+        {
+          "caller": "toggleNav",
+          "callee": "elements.navRail.classList.toggle",
+          "lineNumber": 39
+        },
+        {
+          "caller": "toggleNav",
+          "callee": "elements.navRail.classList.toggle",
+          "lineNumber": 40
+        },
+        {
+          "caller": "toggleNav",
+          "callee": "elements.toggleNavBtn.classList.toggle",
+          "lineNumber": 41
+        },
+        {
+          "caller": "toggleNav",
+          "callee": "elements.toggleNavBtn.classList.toggle",
+          "lineNumber": 42
+        },
+        {
+          "caller": "toggleInspector",
+          "callee": "elements.inspectorRail.classList.toggle",
+          "lineNumber": 46
+        },
+        {
+          "caller": "toggleInspector",
+          "callee": "elements.inspectorRail.classList.toggle",
+          "lineNumber": 47
+        },
+        {
+          "caller": "toggleInspector",
+          "callee": "elements.inspectorRail.classList.toggle",
+          "lineNumber": 48
+        },
+        {
+          "caller": "toggleInspector",
+          "callee": "elements.toggleInspectorBtn.classList.toggle",
+          "lineNumber": 49
+        },
+        {
+          "caller": "toggleInspector",
+          "callee": "elements.toggleInspectorBtn.classList.toggle",
+          "lineNumber": 50
+        },
+        {
+          "caller": "createShell",
+          "callee": "elements.toggleNavBtn.addEventListener",
+          "lineNumber": 53
+        },
+        {
+          "caller": "createShell",
+          "callee": "elements.toggleInspectorBtn.addEventListener",
+          "lineNumber": 54
+        },
+        {
+          "caller": "createShell",
+          "callee": "elements.closeInspectorBtn.addEventListener",
+          "lineNumber": 55
+        },
+        {
+          "caller": "createShell",
+          "callee": "button.addEventListener",
+          "lineNumber": 57
+        },
+        {
+          "caller": "createShell",
+          "callee": "switchTab",
+          "lineNumber": 57
+        },
+        {
+          "caller": "createShell",
+          "callee": "button.addEventListener",
+          "lineNumber": 61
+        },
+        {
+          "caller": "createShell",
+          "callee": "event.preventDefault",
+          "lineNumber": 64
+        },
+        {
+          "caller": "createShell",
+          "callee": "tabs.indexOf",
+          "lineNumber": 66
+        },
+        {
+          "caller": "createShell",
+          "callee": "switchTab",
+          "lineNumber": 68
+        },
+        {
+          "caller": "createShell",
+          "callee": "tabs[there].focus",
+          "lineNumber": 69
+        },
+        {
+          "caller": "createShell",
+          "callee": "elements.navRail.querySelectorAll",
+          "lineNumber": 75
+        },
+        {
+          "caller": "createShell",
+          "callee": "link.addEventListener",
+          "lineNumber": 76
+        },
+        {
+          "caller": "createShell",
+          "callee": "event.preventDefault",
+          "lineNumber": 76
+        },
+        {
+          "caller": "createShell",
+          "callee": "link.getAttribute",
+          "lineNumber": 77
+        },
+        {
+          "caller": "openInspector",
+          "callee": "elements.inspectorRail.classList.contains",
+          "lineNumber": 83
+        },
+        {
+          "caller": "openInspector",
+          "callee": "toggleInspector",
+          "lineNumber": 83
+        },
+        {
+          "caller": "showError",
+          "callee": "elements.catalogError.classList.remove",
+          "lineNumber": 87
+        },
+        {
+          "caller": "showError",
+          "callee": "console.error",
+          "lineNumber": 88
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/app/theme.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 92,
+      "nonEmptyLines": 84,
+      "functions": [
+        {
+          "name": "createTheme",
+          "startLine": 40,
+          "endLine": 92,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "createTheme",
+          "line": 40,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "themeKey",
+          "callee": "root.classList.contains",
+          "lineNumber": 45
+        },
+        {
+          "caller": "createTheme",
+          "callee": "themeKey",
+          "lineNumber": 46
+        },
+        {
+          "caller": "restore",
+          "callee": "cancelAnimationFrame",
+          "lineNumber": 52
+        },
+        {
+          "caller": "restore",
+          "callee": "clearTimeout",
+          "lineNumber": 53
+        },
+        {
+          "caller": "restore",
+          "callee": "root.classList.remove",
+          "lineNumber": 56
+        },
+        {
+          "caller": "settle",
+          "callee": "root.classList.add",
+          "lineNumber": 60
+        },
+        {
+          "caller": "settle",
+          "callee": "cancelAnimationFrame",
+          "lineNumber": 68
+        },
+        {
+          "caller": "settle",
+          "callee": "clearTimeout",
+          "lineNumber": 69
+        },
+        {
+          "caller": "settle",
+          "callee": "requestAnimationFrame",
+          "lineNumber": 70
+        },
+        {
+          "caller": "settle",
+          "callee": "requestAnimationFrame",
+          "lineNumber": 71
+        },
+        {
+          "caller": "settle",
+          "callee": "setTimeout",
+          "lineNumber": 73
+        },
+        {
+          "caller": "createTheme",
+          "callee": "themeKey",
+          "lineNumber": 77
+        },
+        {
+          "caller": "createTheme",
+          "callee": "settle",
+          "lineNumber": 80
+        },
+        {
+          "caller": "createTheme",
+          "callee": "observer.observe",
+          "lineNumber": 82
+        },
+        {
+          "caller": "stop",
+          "callee": "observer.disconnect",
+          "lineNumber": 88
+        },
+        {
+          "caller": "stop",
+          "callee": "restore",
+          "lineNumber": 89
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/main.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 75,
+      "nonEmptyLines": 68,
+      "functions": [
+        {
+          "name": "main",
+          "startLine": 24,
+          "endLine": 65,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "main",
+          "callee": "createTheme",
+          "lineNumber": 27
+        },
+        {
+          "caller": "main",
+          "callee": "createShell",
+          "lineNumber": 28
+        },
+        {
+          "caller": "main",
+          "callee": "shellElements",
+          "lineNumber": 28
+        },
+        {
+          "caller": "main",
+          "callee": "createGovernance",
+          "lineNumber": 30
+        },
+        {
+          "caller": "main",
+          "callee": "governance.mount",
+          "lineNumber": 31
+        },
+        {
+          "caller": "main",
+          "callee": "createAiTools",
+          "lineNumber": 36
+        },
+        {
+          "caller": "main",
+          "callee": "aiToolsElements",
+          "lineNumber": 36
+        },
+        {
+          "caller": "main",
+          "callee": "createCatalog",
+          "lineNumber": 38
+        },
+        {
+          "caller": "main",
+          "callee": "shell.openInspector",
+          "lineNumber": 40
+        },
+        {
+          "caller": "main",
+          "callee": "governance.select",
+          "lineNumber": 41
+        },
+        {
+          "caller": "main",
+          "callee": "shell.openInspector",
+          "lineNumber": 45
+        },
+        {
+          "caller": "main",
+          "callee": "aiTools.setTargets",
+          "lineNumber": 48
+        },
+        {
+          "caller": "main",
+          "callee": "governance.setTargets",
+          "lineNumber": 49
+        },
+        {
+          "caller": "main",
+          "callee": "createOrganization",
+          "lineNumber": 55
+        },
+        {
+          "caller": "main",
+          "callee": "organizationElements",
+          "lineNumber": 56
+        },
+        {
+          "caller": "main",
+          "callee": "catalog.setOrganizationName",
+          "lineNumber": 57
+        },
+        {
+          "caller": "main",
+          "callee": "catalog.setOrganizationName",
+          "lineNumber": 59
+        },
+        {
+          "caller": "main",
+          "callee": "organization.current",
+          "lineNumber": 59
+        },
+        {
+          "caller": "main",
+          "callee": "catalog.start",
+          "lineNumber": 61
+        },
+        {
+          "caller": "main",
+          "callee": "shell.showError",
+          "lineNumber": 63
+        },
+        {
+          "caller": "main",
+          "callee": "String",
+          "lineNumber": 63
+        }
+      ],
+      "metrics": {
+        "importCount": 7,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    }
+  ]
+}

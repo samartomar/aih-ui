@@ -9,6 +9,8 @@ export function shellElements() {
   const ids = [
     "nav-rail", "toggle-nav-btn", "inspector-rail", "toggle-inspector-btn", "close-inspector-btn",
     "pane-details", "pane-security", "pane-governance", "pane-json", "catalog-error",
+    "nav-sources", "nav-policy", "catalog-scopes-section", "framework-matrix-tabs",
+    "catalog-workspace", "policy-workspace", "policy-workspace-title",
   ];
   const found = collectIds(ids);
   found.tabButtons = [...document.querySelectorAll(".inspector-tab-btn")];

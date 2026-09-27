@@ -1,0 +1,179 @@
+{
+ "projectRoot": "D:/dev/aih-ui",
+ "batchFiles": [
+  {
+   "path": "src/app/absence.js",
+   "language": "javascript",
+   "sizeLines": 50,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/governance/bytes.js",
+   "language": "javascript",
+   "sizeLines": 31,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/governance/controller.js",
+   "language": "javascript",
+   "sizeLines": 603,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/governance/detector.js",
+   "language": "javascript",
+   "sizeLines": 171,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/governance/elements.js",
+   "language": "javascript",
+   "sizeLines": 57,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/governance/inputs.js",
+   "language": "javascript",
+   "sizeLines": 259,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/governance/observation.js",
+   "language": "javascript",
+   "sizeLines": 100,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/governance/operator-files.js",
+   "language": "javascript",
+   "sizeLines": 96,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/governance/prepared.js",
+   "language": "javascript",
+   "sizeLines": 73,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/governance/reopen.js",
+   "language": "javascript",
+   "sizeLines": 82,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/governance/revisions.js",
+   "language": "javascript",
+   "sizeLines": 93,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/governance/rows.js",
+   "language": "javascript",
+   "sizeLines": 24,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/governance/statuses.js",
+   "language": "javascript",
+   "sizeLines": 34,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/governance/transport.js",
+   "language": "javascript",
+   "sizeLines": 100,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/governance/verdict.js",
+   "language": "javascript",
+   "sizeLines": 181,
+   "fileCategory": "code"
+  },
+  {
+   "path": "src/governance/vocabulary.js",
+   "language": "javascript",
+   "sizeLines": 108,
+   "fileCategory": "code"
+  },
+  {
+   "path": "tools/tests/revisions.test.mjs",
+   "language": "javascript",
+   "sizeLines": 116,
+   "fileCategory": "code"
+  }
+ ],
+ "batchImportData": {
+  "src/app/absence.js": [],
+  "src/governance/bytes.js": [],
+  "src/governance/controller.js": [
+   "src/governance/bytes.js",
+   "src/governance/detector.js",
+   "src/governance/elements.js",
+   "src/governance/inputs.js",
+   "src/governance/observation.js",
+   "src/governance/operator-files.js",
+   "src/governance/prepared.js",
+   "src/governance/reopen.js",
+   "src/governance/revisions.js",
+   "src/governance/statuses.js",
+   "src/governance/transport.js",
+   "src/governance/verdict.js"
+  ],
+  "src/governance/detector.js": [
+   "src/app/absence.js",
+   "src/app/dom.js",
+   "src/governance/rows.js"
+  ],
+  "src/governance/elements.js": [
+   "src/app/dom.js"
+  ],
+  "src/governance/inputs.js": [
+   "src/app/absence.js",
+   "src/app/dom.js",
+   "src/governance/rows.js"
+  ],
+  "src/governance/observation.js": [
+   "src/app/absence.js",
+   "src/app/dom.js",
+   "src/governance/rows.js"
+  ],
+  "src/governance/operator-files.js": [
+   "src/app/absence.js",
+   "src/app/dom.js",
+   "src/governance/rows.js"
+  ],
+  "src/governance/prepared.js": [
+   "src/app/absence.js",
+   "src/app/dom.js",
+   "src/governance/rows.js",
+   "src/governance/vocabulary.js"
+  ],
+  "src/governance/reopen.js": [
+   "src/app/absence.js",
+   "src/app/dom.js",
+   "src/governance/rows.js"
+  ],
+  "src/governance/revisions.js": [],
+  "src/governance/rows.js": [
+   "src/app/absence.js",
+   "src/app/dom.js"
+  ],
+  "src/governance/statuses.js": [
+   "src/app/dom.js",
+   "src/governance/vocabulary.js"
+  ],
+  "src/governance/transport.js": [],
+  "src/governance/verdict.js": [
+   "src/app/absence.js",
+   "src/app/dom.js",
+   "src/governance/rows.js",
+   "src/governance/vocabulary.js"
+  ],
+  "src/governance/vocabulary.js": [],
+  "tools/tests/revisions.test.mjs": [
+   "src/governance/revisions.js"
+  ]
+ }
+}

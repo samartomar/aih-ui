@@ -54,6 +54,7 @@ module.exports = {
       borderRadius: { DEFAULT: "0.125rem", lg: "0.25rem", xl: "0.375rem", full: "0.5rem" },
       fontSize: {
         "wb-body": "var(--type-body)",
+        "wb-card-description": "var(--type-card-description)",
         "wb-heading": "var(--type-heading)",
         "wb-metric": "var(--type-metric)",
       },

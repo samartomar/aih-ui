@@ -1,0 +1,586 @@
+{
+ "nodes": [
+  {
+   "id": "file:src/app/ai-tools.js",
+   "type": "file",
+   "name": "ai-tools.js",
+   "filePath": "src/app/ai-tools.js",
+   "summary": "Header AI tools control that lists the AI CLI targets @aihq/core publishes as supported, keeps the user's selection as a browser-local draft, and never implies installation or connection status.",
+   "tags": [
+    "component",
+    "ui-control",
+    "local-storage",
+    "state-management"
+   ],
+   "complexity": "moderate",
+   "languageNotes": "Deliberately separates three facts (supported, selected, connected) and renders explicit absence markers instead of sample data."
+  },
+  {
+   "id": "file:src/app/elements.js",
+   "type": "file",
+   "name": "elements.js",
+   "filePath": "src/app/elements.js",
+   "summary": "Looks up the DOM nodes owned by the application shell, the organization setup popup and the AI tools control by element id.",
+   "tags": [
+    "utility",
+    "dom",
+    "element-lookup"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:src/app/organization.js",
+   "type": "file",
+   "name": "organization.js",
+   "filePath": "src/app/organization.js",
+   "summary": "Organization setup popup in the header: a user-entered draft (name, short id, policy repo, emails, signing posture) persisted in localStorage, validated on save and discarded on cancel, with no claim of policy authority.",
+   "tags": [
+    "component",
+    "form",
+    "validation",
+    "local-storage",
+    "modal"
+   ],
+   "complexity": "complex",
+   "languageNotes": "Uses regex validators for short ids, emails and policy repository references, with a versioned localStorage draft format."
+  },
+  {
+   "id": "file:src/app/shell.js",
+   "type": "file",
+   "name": "shell.js",
+   "filePath": "src/app/shell.js",
+   "summary": "Application shell controller owning the collapsible navigation and inspector rails, keyboard-accessible inspector tabs and the error banner, exposing openInspector and showError to features.",
+   "tags": [
+    "component",
+    "layout",
+    "accessibility",
+    "event-handler"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:src/app/theme.js",
+   "type": "file",
+   "name": "theme.js",
+   "filePath": "src/app/theme.js",
+   "summary": "Observes theme changes on <html> and briefly suppresses CSS transitions so already-rendered elements repaint against the new theme variables instead of keeping stale colours.",
+   "tags": [
+    "utility",
+    "theming",
+    "css",
+    "mutation-observer"
+   ],
+   "complexity": "moderate",
+   "languageNotes": "Uses a MutationObserver plus a double requestAnimationFrame with a setTimeout fallback, so transitions are restored even in tabs that are not painting."
+  },
+  {
+   "id": "file:src/main.js",
+   "type": "file",
+   "name": "main.js",
+   "filePath": "src/main.js",
+   "summary": "Policy Workbench page entry point that composes the shell, theme, AI tools, organization, catalog and governance features and wires their callbacks together without holding state.",
+   "tags": [
+    "entry-point",
+    "composition-root",
+    "bootstrap"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/app/ai-tools.js:createAiTools",
+   "type": "function",
+   "name": "createAiTools",
+   "filePath": "src/app/ai-tools.js",
+   "summary": "Builds the AI tools popup controller: renders supported targets from Core with checkboxes, persists the selection draft, and shows not-published/not-connected notices; exposes setTargets.",
+   "tags": [
+    "factory",
+    "component",
+    "ui-control"
+   ],
+   "complexity": "moderate",
+   "lineRange": [
+    44,
+    135
+   ]
+  },
+  {
+   "id": "function:src/app/elements.js:shellElements",
+   "type": "function",
+   "name": "shellElements",
+   "filePath": "src/app/elements.js",
+   "summary": "Collects the shell's rail, toggle, inspector pane and error banner elements plus the inspector tab buttons.",
+   "tags": [
+    "utility",
+    "dom",
+    "element-lookup"
+   ],
+   "complexity": "simple",
+   "lineRange": [
+    8,
+    16
+   ]
+  },
+  {
+   "id": "function:src/app/elements.js:organizationElements",
+   "type": "function",
+   "name": "organizationElements",
+   "filePath": "src/app/elements.js",
+   "summary": "Collects every element id of the header organization control and its setup popup form.",
+   "tags": [
+    "utility",
+    "dom",
+    "element-lookup"
+   ],
+   "complexity": "simple",
+   "lineRange": [
+    19,
+    28
+   ]
+  },
+  {
+   "id": "function:src/app/elements.js:aiToolsElements",
+   "type": "function",
+   "name": "aiToolsElements",
+   "filePath": "src/app/elements.js",
+   "summary": "Collects the header AI tools trigger, count, popup, list and note elements.",
+   "tags": [
+    "utility",
+    "dom",
+    "element-lookup"
+   ],
+   "complexity": "simple",
+   "lineRange": [
+    31,
+    33
+   ]
+  },
+  {
+   "id": "function:src/app/organization.js:loadDraft",
+   "type": "function",
+   "name": "loadDraft",
+   "filePath": "src/app/organization.js",
+   "summary": "Reads and sanitizes the versioned organization draft from localStorage, falling back to an empty draft on missing or malformed data.",
+   "tags": [
+    "local-storage",
+    "serialization",
+    "utility"
+   ],
+   "complexity": "simple",
+   "lineRange": [
+    59,
+    81
+   ]
+  },
+  {
+   "id": "function:src/app/organization.js:validateDraft",
+   "type": "function",
+   "name": "validateDraft",
+   "filePath": "src/app/organization.js",
+   "summary": "Validates an organization draft's name, short id, policy repository reference and email list, returning per-field error messages.",
+   "tags": [
+    "validation",
+    "form",
+    "utility"
+   ],
+   "complexity": "simple",
+   "lineRange": [
+    93,
+    113
+   ]
+  },
+  {
+   "id": "function:src/app/organization.js:createOrganization",
+   "type": "function",
+   "name": "createOrganization",
+   "filePath": "src/app/organization.js",
+   "summary": "Builds the organization setup popup controller: open/close handling, email list editing, posture choice, validation on save and change notification; exposes current().",
+   "tags": [
+    "factory",
+    "component",
+    "modal",
+    "form"
+   ],
+   "complexity": "complex",
+   "lineRange": [
+    119,
+    359
+   ]
+  },
+  {
+   "id": "function:src/app/shell.js:createShell",
+   "type": "function",
+   "name": "createShell",
+   "filePath": "src/app/shell.js",
+   "summary": "Wires rail toggles, inspector tab switching with arrow/Home/End keys and disabled nav links, returning openInspector and showError.",
+   "tags": [
+    "factory",
+    "layout",
+    "accessibility",
+    "event-handler"
+   ],
+   "complexity": "moderate",
+   "lineRange": [
+    14,
+    91
+   ]
+  },
+  {
+   "id": "function:src/app/theme.js:createTheme",
+   "type": "function",
+   "name": "createTheme",
+   "filePath": "src/app/theme.js",
+   "summary": "Starts a MutationObserver on <html> that settles theme switches by suppressing transitions for a frame; returns settle and stop.",
+   "tags": [
+    "factory",
+    "theming",
+    "mutation-observer"
+   ],
+   "complexity": "moderate",
+   "lineRange": [
+    40,
+    92
+   ]
+  },
+  {
+   "id": "function:src/main.js:main",
+   "type": "function",
+   "name": "main",
+   "filePath": "src/main.js",
+   "summary": "Async bootstrap that creates theme, shell, governance, AI tools, catalog and organization controllers, connects selection and summary callbacks, and starts the catalog, surfacing errors in the shell banner.",
+   "tags": [
+    "entry-point",
+    "bootstrap",
+    "composition-root"
+   ],
+   "complexity": "moderate",
+   "lineRange": [
+    24,
+    65
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "source": "file:src/app/ai-tools.js",
+   "target": "function:src/app/ai-tools.js:createAiTools",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/app/ai-tools.js",
+   "target": "function:src/app/ai-tools.js:createAiTools",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/app/elements.js",
+   "target": "function:src/app/elements.js:shellElements",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/app/elements.js",
+   "target": "function:src/app/elements.js:shellElements",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/app/elements.js",
+   "target": "function:src/app/elements.js:organizationElements",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/app/elements.js",
+   "target": "function:src/app/elements.js:organizationElements",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/app/elements.js",
+   "target": "function:src/app/elements.js:aiToolsElements",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/app/elements.js",
+   "target": "function:src/app/elements.js:aiToolsElements",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/app/organization.js",
+   "target": "function:src/app/organization.js:loadDraft",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/app/organization.js",
+   "target": "function:src/app/organization.js:validateDraft",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/app/organization.js",
+   "target": "function:src/app/organization.js:validateDraft",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/app/organization.js",
+   "target": "function:src/app/organization.js:createOrganization",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/app/organization.js",
+   "target": "function:src/app/organization.js:createOrganization",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/app/shell.js",
+   "target": "function:src/app/shell.js:createShell",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/app/shell.js",
+   "target": "function:src/app/shell.js:createShell",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/app/theme.js",
+   "target": "function:src/app/theme.js:createTheme",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/app/theme.js",
+   "target": "function:src/app/theme.js:createTheme",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/main.js",
+   "target": "function:src/main.js:main",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/app/ai-tools.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/app/ai-tools.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/app/elements.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/app/organization.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/app/organization.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/main.js",
+   "target": "file:src/app/ai-tools.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/main.js",
+   "target": "file:src/app/elements.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/main.js",
+   "target": "file:src/app/organization.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/main.js",
+   "target": "file:src/app/shell.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/main.js",
+   "target": "file:src/app/theme.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/main.js",
+   "target": "file:src/catalog/controller.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/main.js",
+   "target": "file:src/governance/controller.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "function:src/main.js:main",
+   "target": "function:src/app/shell.js:createShell",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/main.js:main",
+   "target": "function:src/app/elements.js:shellElements",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/main.js:main",
+   "target": "function:src/app/elements.js:organizationElements",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/main.js:main",
+   "target": "function:src/app/elements.js:aiToolsElements",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/main.js:main",
+   "target": "function:src/app/ai-tools.js:createAiTools",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/main.js:main",
+   "target": "function:src/app/organization.js:createOrganization",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/main.js:main",
+   "target": "function:src/app/theme.js:createTheme",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/main.js:main",
+   "target": "function:src/catalog/controller.js:createCatalog",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/main.js:main",
+   "target": "function:src/governance/controller.js:createGovernance",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/app/elements.js:shellElements",
+   "target": "function:src/app/dom.js:collectIds",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/app/elements.js:organizationElements",
+   "target": "function:src/app/dom.js:collectIds",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/app/elements.js:aiToolsElements",
+   "target": "function:src/app/dom.js:collectIds",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/app/ai-tools.js:createAiTools",
+   "target": "function:src/app/dom.js:el",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/app/organization.js:createOrganization",
+   "target": "function:src/app/dom.js:el",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/app/organization.js:createOrganization",
+   "target": "function:src/app/organization.js:loadDraft",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/app/organization.js:createOrganization",
+   "target": "function:src/app/organization.js:validateDraft",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  }
+ ]
+}

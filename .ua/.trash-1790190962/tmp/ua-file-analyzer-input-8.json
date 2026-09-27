@@ -1,0 +1,16 @@
+{"projectRoot":"D:/dev/aih-ui","batchFiles":[
+{"path":"prototype/index.html","language":"html","sizeLines":311,"fileCategory":"markup"},
+{"path":"prototype/screens/mode.js","language":"javascript","sizeLines":21,"fileCategory":"code"},
+{"path":"prototype/screens/shell.js","language":"javascript","sizeLines":38,"fileCategory":"code"},
+{"path":"prototype/screens/tw-config.js","language":"javascript","sizeLines":70,"fileCategory":"code"},
+{"path":"prototype/screens/user-shell.js","language":"javascript","sizeLines":127,"fileCategory":"code"},
+{"path":"src/app/workbench.css","language":"css","sizeLines":46,"fileCategory":"markup"},
+{"path":"src/index.html","language":"html","sizeLines":646,"fileCategory":"markup"},
+{"path":"tools/acceptance-sweep.mjs","language":"javascript","sizeLines":142,"fileCategory":"code"},
+{"path":"tools/compare.html","language":"html","sizeLines":154,"fileCategory":"markup"},
+{"path":"tools/inspect-dom.mjs","language":"javascript","sizeLines":43,"fileCategory":"code"},
+{"path":"tools/probe-http.mjs","language":"javascript","sizeLines":30,"fileCategory":"code"},
+{"path":"tools/probe-old-handler.mjs","language":"javascript","sizeLines":58,"fileCategory":"code"},
+{"path":"tools/probe-shell-quoting.mjs","language":"javascript","sizeLines":7,"fileCategory":"code"},
+{"path":"tools/service/core-targets.mjs","language":"javascript","sizeLines":30,"fileCategory":"code"}],
+"batchImportData":{}}

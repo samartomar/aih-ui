@@ -1,0 +1,24 @@
+{"nodes":[
+{"id":"document:AGENTS.md","type":"document","name":"AGENTS.md","filePath":"AGENTS.md","summary":"Six working rules for agents in this repo: own only the Policy Workbench screens, build from prototype/ without redesigning it, use only the public interfaces of @aihq/core, @aihq/catalog and @aihq/scan, ship a clickable page first, keep no plan documents, and never publish or force-push without the owner's approval.","tags":["documentation","development","agent-instructions","guidelines"],"complexity":"simple"},
+{"id":"document:CLAUDE.md","type":"document","name":"CLAUDE.md","filePath":"CLAUDE.md","summary":"One-line Claude Code instruction file that pulls in AGENTS.md by reference, so both agent tools follow the same repo rules.","tags":["documentation","agent-instructions","configuration"],"complexity":"simple"},
+{"id":"document:README.md","type":"document","name":"README.md","filePath":"README.md","summary":"The authoritative project README. It states what the repo owns and must never contain, how the page is composed (app shell, catalog, governance), layout parity with the prototype, the Governance pane's slice through Core, how to run the preview, and the rules for reading published packages.","tags":["documentation","entry-point","architecture","overview","design-contract"],"complexity":"complex"}
+],"edges":[
+{"source":"document:CLAUDE.md","target":"document:AGENTS.md","type":"related","direction":"forward","weight":0.5},
+{"source":"document:AGENTS.md","target":"document:README.md","type":"related","direction":"forward","weight":0.5},
+{"source":"document:AGENTS.md","target":"file:prototype/index.html","type":"documents","direction":"forward","weight":0.5},
+{"source":"document:README.md","target":"file:src/main.js","type":"documents","direction":"forward","weight":0.5},
+{"source":"document:README.md","target":"file:src/index.html","type":"documents","direction":"forward","weight":0.5},
+{"source":"document:README.md","target":"file:prototype/index.html","type":"documents","direction":"forward","weight":0.5},
+{"source":"document:README.md","target":"file:prototype/screens/admin-sources.html","type":"documents","direction":"forward","weight":0.5},
+{"source":"document:README.md","target":"file:src/catalog/cards.js","type":"documents","direction":"forward","weight":0.5},
+{"source":"document:README.md","target":"file:src/governance/revisions.js","type":"documents","direction":"forward","weight":0.5},
+{"source":"document:README.md","target":"file:tools/preview.mjs","type":"documents","direction":"forward","weight":0.5},
+{"source":"document:README.md","target":"file:tools/preview-request.mjs","type":"documents","direction":"forward","weight":0.5},
+{"source":"document:README.md","target":"file:tools/packages.mjs","type":"documents","direction":"forward","weight":0.5},
+{"source":"document:README.md","target":"file:tools/check-page-contract.mjs","type":"documents","direction":"forward","weight":0.5},
+{"source":"document:README.md","target":"file:tools/acceptance-sweep.mjs","type":"documents","direction":"forward","weight":0.5},
+{"source":"document:README.md","target":"file:tools/service/catalog-served.mjs","type":"documents","direction":"forward","weight":0.5},
+{"source":"document:README.md","target":"file:tools/service/catalog-access.mjs","type":"documents","direction":"forward","weight":0.5},
+{"source":"document:README.md","target":"file:tools/tests/catalog-served.test.mjs","type":"documents","direction":"forward","weight":0.5},
+{"source":"document:README.md","target":"file:tools/tests/session-relative.test.mjs","type":"documents","direction":"forward","weight":0.5}
+]}

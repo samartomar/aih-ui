@@ -18,17 +18,11 @@ export const NOT_DECLARED = "Not declared";
 export const NOT_SUPPLIED = "Not supplied";
 export const NOT_CONNECTED = "Not connected";
 
-/**
- * What a Scan finding record carries, and what it does not.
- *
- * The Governance pane says this under the finding list it read from a verified
- * attestation; the inspector's Security pane says it in the slot where the
- * design source shows a rule id, a severity, a message and a file location.
- * One sentence, one place, so the two panes cannot drift apart.
- */
+/** Why the Catalog inspector cannot show a per-entry finding. Governance can
+ * show typed detail after an operator supplies a verified Scan attestation. */
 export const FINDING_DETAIL_ABSENT =
-  "Each finding is an occurrence fingerprint and a multiplicity. " +
-  "The attestation carries no message, location or severity for it.";
+  "Catalog does not supply a verified per-entry Scan result and annex bytes. " +
+  "Open Governance to verify operator-supplied scan material and inspect typed findings.";
 
 /**
  * The evidence summary slot when the installed Catalog's public reader does

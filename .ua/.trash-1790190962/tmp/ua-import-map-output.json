@@ -1,0 +1,309 @@
+{
+  "scriptCompleted": true,
+  "stats": {
+    "filesScanned": 101,
+    "filesWithImports": 51,
+    "totalEdges": 146
+  },
+  "failures": [],
+  "importMap": {
+    ".ua/config.json": [],
+    "AGENTS.md": [],
+    "CLAUDE.md": [],
+    "README.md": [],
+    "prototype/index.html": [],
+    "prototype/screens/admin-acme.html": [],
+    "prototype/screens/admin-changes.html": [],
+    "prototype/screens/admin-item.html": [],
+    "prototype/screens/admin-org.html": [],
+    "prototype/screens/admin-scan.html": [],
+    "prototype/screens/admin-sources.html": [],
+    "prototype/screens/entry.html": [],
+    "prototype/screens/fonts.css": [],
+    "prototype/screens/mode.js": [],
+    "prototype/screens/overview.html": [],
+    "prototype/screens/shell.js": [],
+    "prototype/screens/system.html": [],
+    "prototype/screens/tokens.css": [],
+    "prototype/screens/tw-config.js": [],
+    "prototype/screens/user-shell.js": [],
+    "prototype/screens/user-start.html": [],
+    "prototype/screens/user-trim.html": [],
+    "prototype/screens/wb.css": [],
+    "src/app/absence.js": [],
+    "src/app/ai-tools.js": [
+      "src/app/absence.js",
+      "src/app/dom.js"
+    ],
+    "src/app/dom.js": [],
+    "src/app/elements.js": [
+      "src/app/dom.js"
+    ],
+    "src/app/organization.js": [
+      "src/app/absence.js",
+      "src/app/dom.js"
+    ],
+    "src/app/shell.js": [],
+    "src/app/theme.js": [],
+    "src/app/workbench.css": [],
+    "src/catalog/cards.js": [
+      "src/app/absence.js",
+      "src/app/dom.js",
+      "src/catalog/categories.js",
+      "src/catalog/entry.js",
+      "src/catalog/publisher.js"
+    ],
+    "src/catalog/categories.js": [
+      "src/app/absence.js",
+      "src/app/dom.js"
+    ],
+    "src/catalog/collections.js": [
+      "src/app/dom.js"
+    ],
+    "src/catalog/controller.js": [
+      "src/app/dom.js",
+      "src/catalog/cards.js",
+      "src/catalog/categories.js",
+      "src/catalog/details.js",
+      "src/catalog/elements.js",
+      "src/catalog/index-source.js",
+      "src/catalog/metrics.js",
+      "src/catalog/navigation.js",
+      "src/catalog/provenance.js",
+      "src/catalog/publisher.js",
+      "src/catalog/selectors.js",
+      "src/catalog/toolbar.js",
+      "src/catalog/view-state.js"
+    ],
+    "src/catalog/details.js": [
+      "src/app/absence.js",
+      "src/app/dom.js",
+      "src/catalog/entry.js",
+      "src/catalog/publisher.js",
+      "src/catalog/qualification.js",
+      "src/catalog/selectors.js"
+    ],
+    "src/catalog/elements.js": [
+      "src/app/dom.js"
+    ],
+    "src/catalog/entry.js": [
+      "src/app/absence.js",
+      "src/app/dom.js"
+    ],
+    "src/catalog/index-source.js": [
+      "src/catalog/categories.js",
+      "src/catalog/collections.js",
+      "src/catalog/publisher.js",
+      "src/catalog/qualification.js"
+    ],
+    "src/catalog/metrics.js": [
+      "src/app/absence.js",
+      "src/app/dom.js"
+    ],
+    "src/catalog/navigation.js": [
+      "src/app/absence.js",
+      "src/app/dom.js",
+      "src/catalog/categories.js",
+      "src/catalog/selectors.js"
+    ],
+    "src/catalog/provenance.js": [
+      "src/app/absence.js",
+      "src/app/dom.js",
+      "src/catalog/selectors.js"
+    ],
+    "src/catalog/publisher.js": [
+      "src/app/dom.js"
+    ],
+    "src/catalog/qualification.js": [
+      "src/app/absence.js",
+      "src/app/dom.js"
+    ],
+    "src/catalog/selectors.js": [
+      "src/app/absence.js",
+      "src/app/dom.js",
+      "src/catalog/categories.js",
+      "src/catalog/entry.js",
+      "src/catalog/publisher.js"
+    ],
+    "src/catalog/toolbar.js": [
+      "src/app/absence.js",
+      "src/app/dom.js",
+      "src/catalog/selectors.js"
+    ],
+    "src/catalog/view-state.js": [
+      "src/catalog/selectors.js"
+    ],
+    "src/governance/bytes.js": [],
+    "src/governance/controller.js": [
+      "src/governance/bytes.js",
+      "src/governance/detector.js",
+      "src/governance/elements.js",
+      "src/governance/inputs.js",
+      "src/governance/observation.js",
+      "src/governance/operator-files.js",
+      "src/governance/prepared.js",
+      "src/governance/reopen.js",
+      "src/governance/revisions.js",
+      "src/governance/statuses.js",
+      "src/governance/transport.js",
+      "src/governance/verdict.js"
+    ],
+    "src/governance/detector.js": [
+      "src/app/absence.js",
+      "src/app/dom.js",
+      "src/governance/rows.js"
+    ],
+    "src/governance/elements.js": [
+      "src/app/dom.js"
+    ],
+    "src/governance/inputs.js": [
+      "src/app/absence.js",
+      "src/app/dom.js",
+      "src/governance/rows.js"
+    ],
+    "src/governance/observation.js": [
+      "src/app/absence.js",
+      "src/app/dom.js",
+      "src/governance/rows.js"
+    ],
+    "src/governance/operator-files.js": [
+      "src/app/absence.js",
+      "src/app/dom.js",
+      "src/governance/rows.js"
+    ],
+    "src/governance/prepared.js": [
+      "src/app/absence.js",
+      "src/app/dom.js",
+      "src/governance/rows.js",
+      "src/governance/vocabulary.js"
+    ],
+    "src/governance/reopen.js": [
+      "src/app/absence.js",
+      "src/app/dom.js",
+      "src/governance/rows.js"
+    ],
+    "src/governance/revisions.js": [],
+    "src/governance/rows.js": [
+      "src/app/absence.js",
+      "src/app/dom.js"
+    ],
+    "src/governance/statuses.js": [
+      "src/app/dom.js",
+      "src/governance/vocabulary.js"
+    ],
+    "src/governance/transport.js": [],
+    "src/governance/verdict.js": [
+      "src/app/absence.js",
+      "src/app/dom.js",
+      "src/governance/rows.js",
+      "src/governance/vocabulary.js"
+    ],
+    "src/governance/vocabulary.js": [],
+    "src/index.html": [],
+    "src/main.js": [
+      "src/app/ai-tools.js",
+      "src/app/elements.js",
+      "src/app/organization.js",
+      "src/app/shell.js",
+      "src/app/theme.js",
+      "src/catalog/controller.js",
+      "src/governance/controller.js"
+    ],
+    "tools/acceptance-sweep.mjs": [],
+    "tools/catalog-index-contract.mjs": [],
+    "tools/check-page-contract.mjs": [
+      "src/catalog/selectors.js",
+      "tools/preview-request.mjs",
+      "tools/server/assets.mjs"
+    ],
+    "tools/check-scan-attribution.mjs": [
+      "tools/packages.mjs",
+      "tools/server/assets.mjs"
+    ],
+    "tools/compare.html": [],
+    "tools/inspect-dom.mjs": [],
+    "tools/packages.mjs": [],
+    "tools/preview-request.mjs": [],
+    "tools/preview.mjs": [
+      "tools/catalog-index-contract.mjs",
+      "tools/packages.mjs",
+      "tools/server/api.mjs",
+      "tools/server/assets.mjs",
+      "tools/server/service-client.mjs",
+      "tools/server/static.mjs"
+    ],
+    "tools/probe-http.mjs": [],
+    "tools/probe-old-handler.mjs": [],
+    "tools/probe-shell-quoting.mjs": [],
+    "tools/scan-attribution-cases.mjs": [
+      "tools/service/fixture-candidate.mjs",
+      "tools/service/scan-verifier.mjs"
+    ],
+    "tools/server/api.mjs": [
+      "tools/server/service-client.mjs",
+      "tools/server/sessions.mjs"
+    ],
+    "tools/server/assets.mjs": [],
+    "tools/server/service-client.mjs": [],
+    "tools/server/sessions.mjs": [],
+    "tools/server/static.mjs": [
+      "tools/preview-request.mjs"
+    ],
+    "tools/service/artifacts.mjs": [],
+    "tools/service/catalog-access.mjs": [],
+    "tools/service/catalog-assessment.mjs": [
+      "tools/service/catalog-access.mjs"
+    ],
+    "tools/service/catalog-categories.mjs": [
+      "tools/service/catalog-access.mjs"
+    ],
+    "tools/service/catalog-collections.mjs": [
+      "tools/service/catalog-access.mjs"
+    ],
+    "tools/service/catalog-publisher.mjs": [
+      "tools/service/catalog-access.mjs"
+    ],
+    "tools/service/catalog-qualification.mjs": [
+      "tools/service/catalog-access.mjs"
+    ],
+    "tools/service/catalog-served.mjs": [],
+    "tools/service/core-adapter.mjs": [
+      "tools/service/artifacts.mjs",
+      "tools/service/catalog-access.mjs",
+      "tools/service/catalog-assessment.mjs",
+      "tools/service/scan-verifier.mjs"
+    ],
+    "tools/service/core-service.mjs": [
+      "tools/service/catalog-access.mjs",
+      "tools/service/catalog-served.mjs",
+      "tools/service/core-adapter.mjs",
+      "tools/service/validation-fixture.mjs"
+    ],
+    "tools/service/core-targets.mjs": [],
+    "tools/service/fixture-candidate.mjs": [],
+    "tools/service/scan-verifier.mjs": [
+      "tools/service/artifacts.mjs"
+    ],
+    "tools/service/validation-fixture.mjs": [
+      "tools/service/artifacts.mjs",
+      "tools/service/catalog-access.mjs",
+      "tools/service/core-adapter.mjs",
+      "tools/service/fixture-candidate.mjs"
+    ],
+    "tools/tests/catalog-served.test.mjs": [
+      "tools/service/catalog-served.mjs"
+    ],
+    "tools/tests/publisher-refusal.test.mjs": [
+      "src/catalog/publisher.js"
+    ],
+    "tools/tests/revisions.test.mjs": [
+      "src/governance/revisions.js"
+    ],
+    "tools/tests/session-relative.test.mjs": [
+      "tools/service/artifacts.mjs"
+    ],
+    "tools/tests/sessions-observation.test.mjs": [
+      "tools/server/sessions.mjs"
+    ]
+  }
+}

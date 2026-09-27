@@ -1,0 +1,968 @@
+{
+ "nodes": [
+  {
+   "id": "file:tools/service/catalog-served.mjs",
+   "type": "file",
+   "name": "catalog-served.mjs",
+   "filePath": "tools/service/catalog-served.mjs",
+   "summary": "Projects the output of Catalog's public content reader member by member into the document served to the page, so no field the reader drops can reach the UI.",
+   "tags": [
+    "service",
+    "catalog",
+    "projection",
+    "serialization",
+    "validation"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:tools/service/core-adapter.mjs",
+   "type": "file",
+   "name": "core-adapter.mjs",
+   "filePath": "tools/service/core-adapter.mjs",
+   "summary": "Calls @aihq/core's public API for subject derivation, evidence parsing, preparation and independent consumption of governance input, wiring in the Catalog assessment resolver and Scan verification without reproducing Core logic.",
+   "tags": [
+    "service",
+    "adapter",
+    "core",
+    "governance"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "file:tools/service/core-service.mjs",
+   "type": "file",
+   "name": "core-service.mjs",
+   "filePath": "tools/service/core-service.mjs",
+   "summary": "Backend worker entry point and operation dispatcher: reads one JSON request on stdin, routes it to catalog, Core or validation operations (some lazily imported), and writes one JSON response.",
+   "tags": [
+    "entry-point",
+    "service",
+    "dispatcher",
+    "ipc"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:tools/service/fixture-candidate.mjs",
+   "type": "file",
+   "name": "fixture-candidate.mjs",
+   "filePath": "tools/service/fixture-candidate.mjs",
+   "summary": "Validation-only builder that assembles a ScanCandidateV2 over the installed Catalog content and signs it with an ephemeral key; no detector runs and nothing is a measurement.",
+   "tags": [
+    "validation",
+    "fixture",
+    "scan",
+    "signing"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "file:tools/service/scan-verifier.mjs",
+   "type": "file",
+   "name": "scan-verifier.mjs",
+   "filePath": "tools/service/scan-verifier.mjs",
+   "summary": "Builds the Scan verifier adapter injected into Core consumption from @aihq/scan's public exports and the operator's own trust file, enforcing the trust boundary and attributing operator declarations to the verified signer.",
+   "tags": [
+    "service",
+    "verification",
+    "trust-boundary",
+    "scan",
+    "security"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "file:tools/service/validation-fixture.mjs",
+   "type": "file",
+   "name": "validation-fixture.mjs",
+   "filePath": "tools/service/validation-fixture.mjs",
+   "summary": "Explicitly labelled validation mode: the only module that manufactures anything, producing an ephemeral signed scan candidate, example authority bundle and operator trust file for a Catalog entry.",
+   "tags": [
+    "validation",
+    "fixture",
+    "governance",
+    "signing"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "file:tools/tests/catalog-served.test.mjs",
+   "type": "file",
+   "name": "catalog-served.test.mjs",
+   "filePath": "tools/tests/catalog-served.test.mjs",
+   "summary": "node:test cases asserting the served catalog document carries only members of the public reader's result types and serves the evidence summary exactly when the reader returned it.",
+   "tags": [
+    "test",
+    "catalog",
+    "projection",
+    "contract"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:tools/tests/session-relative.test.mjs",
+   "type": "file",
+   "name": "session-relative.test.mjs",
+   "filePath": "tools/tests/session-relative.test.mjs",
+   "summary": "node:test cases pinning that operator-side files are named by session-relative path for both path styles, and never by machine location.",
+   "tags": [
+    "test",
+    "paths",
+    "privacy",
+    "artifacts"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/catalog-served.mjs:evidence",
+   "type": "function",
+   "name": "evidence",
+   "filePath": "tools/service/catalog-served.mjs",
+   "lineRange": [
+    49,
+    61
+   ],
+   "summary": "Projects one reader evidence record, copying the optional summary only when present.",
+   "tags": [
+    "projection",
+    "catalog"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/catalog-served.mjs:subject",
+   "type": "function",
+   "name": "subject",
+   "filePath": "tools/service/catalog-served.mjs",
+   "lineRange": [
+    74,
+    88
+   ],
+   "summary": "Projects an entry's subject member by member.",
+   "tags": [
+    "projection",
+    "catalog"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/catalog-served.mjs:entry",
+   "type": "function",
+   "name": "entry",
+   "filePath": "tools/service/catalog-served.mjs",
+   "lineRange": [
+    93,
+    124
+   ],
+   "summary": "Projects a CatalogEntryV1 field by field, including artifacts, evidence and subject.",
+   "tags": [
+    "projection",
+    "catalog"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:tools/service/catalog-served.mjs:servedCatalogDocument",
+   "type": "function",
+   "name": "servedCatalogDocument",
+   "filePath": "tools/service/catalog-served.mjs",
+   "lineRange": [
+    131,
+    144
+   ],
+   "summary": "Builds the catalog document served to the page solely from the reader's CatalogContentV1 result.",
+   "tags": [
+    "projection",
+    "catalog",
+    "serialization"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/core-adapter.mjs:deriveSubject",
+   "type": "function",
+   "name": "deriveSubject",
+   "filePath": "tools/service/core-adapter.mjs",
+   "lineRange": [
+    40,
+    55
+   ],
+   "summary": "Derives a subject identity from a catalog entry through Core's public functions.",
+   "tags": [
+    "core",
+    "identity"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/core-adapter.mjs:subject",
+   "type": "function",
+   "name": "subject",
+   "filePath": "tools/service/core-adapter.mjs",
+   "lineRange": [
+    64,
+    77
+   ],
+   "summary": "Returns the Core-derived subject for an entry and its content directory.",
+   "tags": [
+    "core",
+    "identity",
+    "api-handler"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/core-adapter.mjs:parseEvidence",
+   "type": "function",
+   "name": "parseEvidence",
+   "filePath": "tools/service/core-adapter.mjs",
+   "lineRange": [
+    83,
+    111
+   ],
+   "summary": "Parses operator-imported evidence bytes through Core's public parser, passing refusals through.",
+   "tags": [
+    "core",
+    "parsing",
+    "api-handler"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:tools/service/core-adapter.mjs:prepare",
+   "type": "function",
+   "name": "prepare",
+   "filePath": "tools/service/core-adapter.mjs",
+   "lineRange": [
+    117,
+    167
+   ],
+   "summary": "Prepares governance input with Core and saves the exact artifact bytes into the session directory.",
+   "tags": [
+    "core",
+    "governance",
+    "api-handler"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:tools/service/core-adapter.mjs:consume",
+   "type": "function",
+   "name": "consume",
+   "filePath": "tools/service/core-adapter.mjs",
+   "lineRange": [
+    202,
+    313
+   ],
+   "summary": "Reopens saved bytes and independently re-derives the verdict via Core, injecting Scan verification, observation files and the assessment resolver.",
+   "tags": [
+    "core",
+    "governance",
+    "verification",
+    "api-handler"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:tools/service/core-service.mjs:main",
+   "type": "function",
+   "name": "main",
+   "filePath": "tools/service/core-service.mjs",
+   "lineRange": [
+    97,
+    119
+   ],
+   "summary": "Reads the stdin request, dispatches it to the OPS table and writes an ok or error JSON response.",
+   "tags": [
+    "entry-point",
+    "dispatcher",
+    "ipc"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/fixture-candidate.mjs:stableJson",
+   "type": "function",
+   "name": "stableJson",
+   "filePath": "tools/service/fixture-candidate.mjs",
+   "lineRange": [
+    32,
+    41
+   ],
+   "summary": "Serializes values with sorted keys for stable digests.",
+   "tags": [
+    "utility",
+    "serialization"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/fixture-candidate.mjs:buildSignedFixture",
+   "type": "function",
+   "name": "buildSignedFixture",
+   "filePath": "tools/service/fixture-candidate.mjs",
+   "lineRange": [
+    48,
+    229
+   ],
+   "summary": "Assembles and signs a ScanCandidateV2 and attestation envelope with an ephemeral key over the sealed Catalog source.",
+   "tags": [
+    "validation",
+    "fixture",
+    "signing",
+    "scan"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:tools/service/scan-verifier.mjs:attributeSigner",
+   "type": "function",
+   "name": "attributeSigner",
+   "filePath": "tools/service/scan-verifier.mjs",
+   "lineRange": [
+    81,
+    124
+   ],
+   "summary": "Matches the verified signer against the operator's trusted roots to pick the applicable operator declaration.",
+   "tags": [
+    "verification",
+    "trust-boundary"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:tools/service/scan-verifier.mjs:presentationFacts",
+   "type": "function",
+   "name": "presentationFacts",
+   "filePath": "tools/service/scan-verifier.mjs",
+   "lineRange": [
+    132,
+    201
+   ],
+   "summary": "Extracts presentation facts from verified scan material for display.",
+   "tags": [
+    "verification",
+    "presentation"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:tools/service/scan-verifier.mjs:buildScanVerification",
+   "type": "function",
+   "name": "buildScanVerification",
+   "filePath": "tools/service/scan-verifier.mjs",
+   "lineRange": [
+    212,
+    352
+   ],
+   "summary": "Builds the Scan verifier adapter from scan material and operator trust, refusing material that supplies its own trust.",
+   "tags": [
+    "factory",
+    "verification",
+    "scan",
+    "security"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:tools/service/validation-fixture.mjs:closurePaths",
+   "type": "function",
+   "name": "closurePaths",
+   "filePath": "tools/service/validation-fixture.mjs",
+   "lineRange": [
+    44,
+    55
+   ],
+   "summary": "Lists the file paths in an entry's content closure.",
+   "tags": [
+    "validation",
+    "paths"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/validation-fixture.mjs:matchedPathOf",
+   "type": "function",
+   "name": "matchedPathOf",
+   "filePath": "tools/service/validation-fixture.mjs",
+   "lineRange": [
+    63,
+    74
+   ],
+   "summary": "Finds the path the entry's profile artifact matches within the content closure.",
+   "tags": [
+    "validation",
+    "paths"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/service/validation-fixture.mjs:exampleAuthority",
+   "type": "function",
+   "name": "exampleAuthority",
+   "filePath": "tools/service/validation-fixture.mjs",
+   "lineRange": [
+    77,
+    103
+   ],
+   "summary": "Builds a labelled example authority bundle with an example governance decision.",
+   "tags": [
+    "validation",
+    "fixture",
+    "governance"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:tools/service/validation-fixture.mjs:buildValidationFixture",
+   "type": "function",
+   "name": "buildValidationFixture",
+   "filePath": "tools/service/validation-fixture.mjs",
+   "lineRange": [
+    105,
+    255
+   ],
+   "summary": "Produces the complete validation fixture set (signed scan material, authority bundle, operator trust) for an entry.",
+   "tags": [
+    "validation",
+    "fixture",
+    "factory"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:tools/tests/catalog-served.test.mjs:record",
+   "type": "function",
+   "name": "record",
+   "filePath": "tools/tests/catalog-served.test.mjs",
+   "lineRange": [
+    23,
+    32
+   ],
+   "summary": "Test helper creating an object with extra undeclared members.",
+   "tags": [
+    "test-helper",
+    "fixture"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/tests/catalog-served.test.mjs:readerResult",
+   "type": "function",
+   "name": "readerResult",
+   "filePath": "tools/tests/catalog-served.test.mjs",
+   "lineRange": [
+    39,
+    82
+   ],
+   "summary": "Builds a reader result carrying extra members at every level for projection tests.",
+   "tags": [
+    "test-helper",
+    "fixture"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:tools/tests/catalog-served.test.mjs:undeclared",
+   "type": "function",
+   "name": "undeclared",
+   "filePath": "tools/tests/catalog-served.test.mjs",
+   "lineRange": [
+    104,
+    127
+   ],
+   "summary": "Walks the served document and collects members not declared by the reader result types.",
+   "tags": [
+    "test-helper",
+    "validation"
+   ],
+   "complexity": "simple"
+  }
+ ],
+ "edges": [
+  {
+   "source": "file:tools/service/catalog-served.mjs",
+   "target": "function:tools/service/catalog-served.mjs:evidence",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-served.mjs",
+   "target": "function:tools/service/catalog-served.mjs:subject",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-served.mjs",
+   "target": "function:tools/service/catalog-served.mjs:entry",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-served.mjs",
+   "target": "function:tools/service/catalog-served.mjs:servedCatalogDocument",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/catalog-served.mjs",
+   "target": "function:tools/service/catalog-served.mjs:servedCatalogDocument",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "function:tools/service/core-adapter.mjs:deriveSubject",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "function:tools/service/core-adapter.mjs:deriveSubject",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "function:tools/service/core-adapter.mjs:subject",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "function:tools/service/core-adapter.mjs:subject",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "function:tools/service/core-adapter.mjs:parseEvidence",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "function:tools/service/core-adapter.mjs:parseEvidence",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "function:tools/service/core-adapter.mjs:prepare",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "function:tools/service/core-adapter.mjs:prepare",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "function:tools/service/core-adapter.mjs:consume",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "function:tools/service/core-adapter.mjs:consume",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "function:tools/service/core-service.mjs:main",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/fixture-candidate.mjs",
+   "target": "function:tools/service/fixture-candidate.mjs:stableJson",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/fixture-candidate.mjs",
+   "target": "function:tools/service/fixture-candidate.mjs:buildSignedFixture",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/fixture-candidate.mjs",
+   "target": "function:tools/service/fixture-candidate.mjs:buildSignedFixture",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/scan-verifier.mjs",
+   "target": "function:tools/service/scan-verifier.mjs:attributeSigner",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/scan-verifier.mjs",
+   "target": "function:tools/service/scan-verifier.mjs:presentationFacts",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/scan-verifier.mjs",
+   "target": "function:tools/service/scan-verifier.mjs:buildScanVerification",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/scan-verifier.mjs",
+   "target": "function:tools/service/scan-verifier.mjs:buildScanVerification",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/validation-fixture.mjs",
+   "target": "function:tools/service/validation-fixture.mjs:closurePaths",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/validation-fixture.mjs",
+   "target": "function:tools/service/validation-fixture.mjs:matchedPathOf",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/validation-fixture.mjs",
+   "target": "function:tools/service/validation-fixture.mjs:exampleAuthority",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/validation-fixture.mjs",
+   "target": "function:tools/service/validation-fixture.mjs:buildValidationFixture",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/validation-fixture.mjs",
+   "target": "function:tools/service/validation-fixture.mjs:buildValidationFixture",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/tests/catalog-served.test.mjs",
+   "target": "function:tools/tests/catalog-served.test.mjs:record",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/tests/catalog-served.test.mjs",
+   "target": "function:tools/tests/catalog-served.test.mjs:readerResult",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/tests/catalog-served.test.mjs",
+   "target": "function:tools/tests/catalog-served.test.mjs:undeclared",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "file:tools/service/artifacts.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "file:tools/service/catalog-assessment.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/core-adapter.mjs",
+   "target": "file:tools/service/scan-verifier.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "file:tools/service/catalog-served.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "file:tools/service/core-adapter.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "file:tools/service/validation-fixture.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/scan-verifier.mjs",
+   "target": "file:tools/service/artifacts.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/validation-fixture.mjs",
+   "target": "file:tools/service/artifacts.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/validation-fixture.mjs",
+   "target": "file:tools/service/catalog-access.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/validation-fixture.mjs",
+   "target": "file:tools/service/core-adapter.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/service/validation-fixture.mjs",
+   "target": "file:tools/service/fixture-candidate.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/tests/catalog-served.test.mjs",
+   "target": "file:tools/service/catalog-served.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/tests/session-relative.test.mjs",
+   "target": "file:tools/service/artifacts.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "function:tools/service/core-adapter.mjs:parseEvidence",
+   "target": "function:tools/service/artifacts.mjs:fromB64",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/core-adapter.mjs:prepare",
+   "target": "function:tools/service/catalog-access.mjs:catalogEntry",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/core-adapter.mjs:prepare",
+   "target": "function:tools/service/artifacts.mjs:writeExactBytes",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/core-adapter.mjs:consume",
+   "target": "function:tools/service/artifacts.mjs:readExactBytes",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/core-adapter.mjs:consume",
+   "target": "function:tools/service/artifacts.mjs:recreateDirectory",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/core-adapter.mjs:consume",
+   "target": "function:tools/service/artifacts.mjs:sessionRelativePath",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/core-adapter.mjs:consume",
+   "target": "function:tools/service/scan-verifier.mjs:buildScanVerification",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/core-adapter.mjs:consume",
+   "target": "function:tools/service/catalog-assessment.mjs:createCatalogAssessmentResolver",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/scan-verifier.mjs:buildScanVerification",
+   "target": "function:tools/service/artifacts.mjs:readJsonFile",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/scan-verifier.mjs:buildScanVerification",
+   "target": "function:tools/service/artifacts.mjs:fromB64",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/validation-fixture.mjs:buildValidationFixture",
+   "target": "function:tools/service/catalog-access.mjs:catalogEntry",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/validation-fixture.mjs:buildValidationFixture",
+   "target": "function:tools/service/catalog-access.mjs:entryContentDir",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/validation-fixture.mjs:buildValidationFixture",
+   "target": "function:tools/service/core-adapter.mjs:deriveSubject",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/validation-fixture.mjs:buildValidationFixture",
+   "target": "function:tools/service/fixture-candidate.mjs:buildSignedFixture",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/validation-fixture.mjs:buildValidationFixture",
+   "target": "function:tools/service/artifacts.mjs:writeJsonFile",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/service/validation-fixture.mjs:matchedPathOf",
+   "target": "function:tools/service/catalog-access.mjs:artifactPath",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "file:tools/service/catalog-collections.mjs",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "file:tools/service/catalog-publisher.mjs",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "file:tools/service/catalog-qualification.mjs",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "file:tools/service/catalog-categories.mjs",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:tools/service/core-service.mjs",
+   "target": "file:tools/service/core-targets.mjs",
+   "type": "depends_on",
+   "direction": "forward",
+   "weight": 0.6
+  },
+  {
+   "source": "file:tools/service/catalog-served.mjs",
+   "target": "file:tools/tests/catalog-served.test.mjs",
+   "type": "tested_by",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:tools/service/scan-verifier.mjs",
+   "target": "file:tools/scan-attribution-cases.mjs",
+   "type": "tested_by",
+   "direction": "forward",
+   "weight": 0.5
+  }
+ ]
+}

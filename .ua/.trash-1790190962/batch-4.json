@@ -1,0 +1,1004 @@
+{
+ "nodes": [
+  {
+   "id": "file:tools/catalog-index-contract.mjs",
+   "type": "file",
+   "name": "catalog-index-contract.mjs",
+   "filePath": "tools/catalog-index-contract.mjs",
+   "summary": "Defines the published catalog-index contract (format name and version) that the preview enforces before serving a resolved catalog index.",
+   "tags": [
+    "validation",
+    "contract",
+    "catalog",
+    "utility"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/catalog-index-contract.mjs:contractViolations",
+   "type": "function",
+   "name": "contractViolations",
+   "filePath": "tools/catalog-index-contract.mjs",
+   "lineRange": [
+    16,
+    31
+   ],
+   "summary": "Checks a parsed catalog-index.json for the expected format, version and entries array, returning a list of violation messages (empty means servable).",
+   "tags": [
+    "validation",
+    "contract",
+    "catalog"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:tools/check-page-contract.mjs",
+   "type": "file",
+   "name": "check-page-contract.mjs",
+   "filePath": "tools/check-page-contract.mjs",
+   "summary": "Offline regression script verifying that every element id the page modules collect exists exactly once in src/index.html, that the relative module graph and page assets resolve to copied files, and that request paths classify correctly (200/400/403).",
+   "tags": [
+    "test",
+    "validation",
+    "contract",
+    "script",
+    "regression"
+   ],
+   "complexity": "moderate",
+   "languageNotes": "Imports the page's own SORT_KEYS from src/catalog/selectors.js instead of restating it, so the check cannot drift from the page."
+  },
+  {
+   "id": "file:tools/check-scan-attribution.mjs",
+   "type": "file",
+   "name": "check-scan-attribution.mjs",
+   "filePath": "tools/check-scan-attribution.mjs",
+   "summary": "Integration check that installs the three local package tarballs into a throwaway consumer, copies the backend service in, and asserts signer attribution rules (declaration follows the actual signer, ordering independence, unattributed and ambiguous trust cases).",
+   "tags": [
+    "test",
+    "integration",
+    "security",
+    "attribution",
+    "script"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:tools/packages.mjs",
+   "type": "file",
+   "name": "packages.mjs",
+   "filePath": "tools/packages.mjs",
+   "summary": "Resolves @aihq/core, @aihq/scan and @aihq/catalog into tarballs, either from supplied *_TGZ files or by git-archiving a committed checkpoint into an external workspace, building, packing and caching by commit, then installs them into a throwaway consumer.",
+   "tags": [
+    "service",
+    "build-system",
+    "packaging",
+    "utility"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:tools/packages.mjs:npm",
+   "type": "function",
+   "name": "npm",
+   "filePath": "tools/packages.mjs",
+   "lineRange": [
+    66,
+    86
+   ],
+   "summary": "Runs an npm command synchronously in a given directory and turns any non-zero exit into a reported hard error.",
+   "tags": [
+    "utility",
+    "process",
+    "build-system"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/packages.mjs:resolvePackage",
+   "type": "function",
+   "name": "resolvePackage",
+   "filePath": "tools/packages.mjs",
+   "lineRange": [
+    104,
+    184
+   ],
+   "summary": "Produces a tarball for one package: uses a supplied tarball as delivered, or snapshots the checkout's committed HEAD via git archive, installs, builds and packs it, caching the result by commit.",
+   "tags": [
+    "packaging",
+    "build-system",
+    "git",
+    "caching"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:tools/packages.mjs:installConsumer",
+   "type": "function",
+   "name": "installConsumer",
+   "filePath": "tools/packages.mjs",
+   "lineRange": [
+    187,
+    212
+   ],
+   "summary": "Creates a throwaway consumer project and installs the resolved tarballs into it with --ignore-scripts, copying in the service assets.",
+   "tags": [
+    "packaging",
+    "installation",
+    "factory"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:tools/preview-request.mjs",
+   "type": "file",
+   "name": "preview-request.mjs",
+   "filePath": "tools/preview-request.mjs",
+   "summary": "Classifies a raw preview request URL into a served file path or a 400/403 refusal, kept separate from the server so malformed-URL and traversal behavior can be tested without starting a preview.",
+   "tags": [
+    "security",
+    "validation",
+    "http",
+    "utility"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/preview-request.mjs:classifyRequestPath",
+   "type": "function",
+   "name": "classifyRequestPath",
+   "filePath": "tools/preview-request.mjs",
+   "lineRange": [
+    16,
+    38
+   ],
+   "summary": "Parses and decodes the request path, maps the root to index.html, refuses malformed URLs (400) and NUL, backslash, dot-dot or out-of-root paths (403), and otherwise returns the resolved file.",
+   "tags": [
+    "security",
+    "http",
+    "path-traversal",
+    "validation"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:tools/preview.mjs",
+   "type": "file",
+   "name": "preview.mjs",
+   "filePath": "tools/preview.mjs",
+   "summary": "Entry point that builds a throwaway Policy Workbench preview: resolves and installs the three packages into a consumer, copies page, service and presentation assets into an external run directory, validates the catalog index contract, and serves the static page plus API on 127.0.0.1.",
+   "tags": [
+    "entry-point",
+    "dev-server",
+    "build-system",
+    "orchestration",
+    "cli"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:tools/preview.mjs:readInstalledPackages",
+   "type": "function",
+   "name": "readInstalledPackages",
+   "filePath": "tools/preview.mjs",
+   "lineRange": [
+    83,
+    106
+   ],
+   "summary": "Reads the installed package manifests from the consumer to report provenance (name, version, source) of what is actually installed.",
+   "tags": [
+    "provenance",
+    "packaging",
+    "utility"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/preview.mjs:main",
+   "type": "function",
+   "name": "main",
+   "filePath": "tools/preview.mjs",
+   "lineRange": [
+    138,
+    392
+   ],
+   "summary": "Orchestrates the whole preview run: parses flags, gathers assets, resolves and installs packages, queries the service for the catalog document, checks the index contract, writes the run directory, and starts the static server with the API handler.",
+   "tags": [
+    "entry-point",
+    "orchestration",
+    "dev-server"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "file:tools/server/api.mjs",
+   "type": "file",
+   "name": "api.mjs",
+   "filePath": "tools/server/api.mjs",
+   "summary": "HTTP API routing for the preview: maps GET/POST /api/* routes (packages, subject, catalog-integrity, evidence, validation-fixture, operator-file, observation, reopen, prepare, consume, saved) to service calls and session storage, keeping filesystem paths server-side.",
+   "tags": [
+    "api-handler",
+    "router",
+    "http",
+    "service"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:tools/server/api.mjs:readBody",
+   "type": "function",
+   "name": "readBody",
+   "filePath": "tools/server/api.mjs",
+   "lineRange": [
+    24,
+    46
+   ],
+   "summary": "Reads a request body into a buffer, rejecting it once it exceeds the per-route byte limit.",
+   "tags": [
+    "http",
+    "utility",
+    "validation"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/server/api.mjs:createApi",
+   "type": "function",
+   "name": "createApi",
+   "filePath": "tools/server/api.mjs",
+   "lineRange": [
+    53,
+    248
+   ],
+   "summary": "Builds the API request handler with a route table that dispatches JSON requests to the service worker and session store, hiding operator-side paths behind opaque session ids.",
+   "tags": [
+    "api-handler",
+    "factory",
+    "router",
+    "session"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "file:tools/server/assets.mjs",
+   "type": "file",
+   "name": "assets.mjs",
+   "filePath": "tools/server/assets.mjs",
+   "summary": "Determines which files the preview copies where: discovers served page assets by walking src/, lists service modules and flat presentation assets, and asserts required entry points are readable.",
+   "tags": [
+    "utility",
+    "build-system",
+    "assets",
+    "configuration"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:tools/server/assets.mjs:walk",
+   "type": "function",
+   "name": "walk",
+   "filePath": "tools/server/assets.mjs",
+   "lineRange": [
+    42,
+    53
+   ],
+   "summary": "Recursively lists files under a directory as relative POSIX paths.",
+   "tags": [
+    "utility",
+    "filesystem",
+    "recursion"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/server/assets.mjs:pageAssets",
+   "type": "function",
+   "name": "pageAssets",
+   "filePath": "tools/server/assets.mjs",
+   "lineRange": [
+    60,
+    66
+   ],
+   "summary": "Returns the page asset copy list discovered under src/, preserving the module tree so relative imports keep working.",
+   "tags": [
+    "assets",
+    "build-system",
+    "discovery"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/server/assets.mjs:serviceAssets",
+   "type": "function",
+   "name": "serviceAssets",
+   "filePath": "tools/server/assets.mjs",
+   "lineRange": [
+    69,
+    78
+   ],
+   "summary": "Returns the .mjs backend service modules from tools/service to copy into the consumer's service/ directory.",
+   "tags": [
+    "assets",
+    "service",
+    "build-system"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/server/assets.mjs:presentationAssets",
+   "type": "function",
+   "name": "presentationAssets",
+   "filePath": "tools/server/assets.mjs",
+   "lineRange": [
+    80,
+    85
+   ],
+   "summary": "Returns the presentation-only files carried over unmodified from the design prototype, served flat by name.",
+   "tags": [
+    "assets",
+    "prototype",
+    "presentation"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/server/assets.mjs:assertReadable",
+   "type": "function",
+   "name": "assertReadable",
+   "filePath": "tools/server/assets.mjs",
+   "lineRange": [
+    88,
+    96
+   ],
+   "summary": "Asserts every asset source exists and required page entry points are present, failing fast instead of producing a blank page.",
+   "tags": [
+    "validation",
+    "assets",
+    "fail-fast"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:tools/server/service-client.mjs",
+   "type": "file",
+   "name": "service-client.mjs",
+   "filePath": "tools/server/service-client.mjs",
+   "summary": "Seam between the preview server and the installed packages: runs the service worker as a child process inside the consumer and exchanges one JSON request for one JSON response.",
+   "tags": [
+    "service",
+    "ipc",
+    "adapter",
+    "child-process"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/server/service-client.mjs:callService",
+   "type": "function",
+   "name": "callService",
+   "filePath": "tools/server/service-client.mjs",
+   "lineRange": [
+    16,
+    36
+   ],
+   "summary": "Spawns the consumer's core-service.mjs with a JSON request on stdin and returns the parsed JSON response, or an error object on spawn failure, non-zero exit or unparseable output.",
+   "tags": [
+    "service",
+    "child-process",
+    "ipc",
+    "error-handling"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:tools/server/sessions.mjs",
+   "type": "file",
+   "name": "sessions.mjs",
+   "filePath": "tools/server/sessions.mjs",
+   "summary": "Server-owned session store deriving every filesystem location from an opaque uuid, holding operator-supplied files (authority bundle, trust, attestation material) and revision-guarded observation uploads outside the consume root.",
+   "tags": [
+    "session",
+    "security",
+    "storage",
+    "service",
+    "validation"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:tools/server/sessions.mjs:isBoundedRelativePath",
+   "type": "function",
+   "name": "isBoundedRelativePath",
+   "filePath": "tools/server/sessions.mjs",
+   "lineRange": [
+    69,
+    80
+   ],
+   "summary": "Accepts only bounded relative POSIX paths with no absolute, backslash, empty or dot-dot segments, guarding observation file placement.",
+   "tags": [
+    "security",
+    "validation",
+    "path-traversal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:tools/server/sessions.mjs:createSessions",
+   "type": "function",
+   "name": "createSessions",
+   "filePath": "tools/server/sessions.mjs",
+   "lineRange": [
+    105,
+    368
+   ],
+   "summary": "Creates the session store API (open, create, record, get, dirOf, storeOperatorFile, storeObservation, observationOf, openFromBytes) that writes files only under server-derived session directories and refuses superseded revisions.",
+   "tags": [
+    "factory",
+    "session",
+    "storage",
+    "security"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "file:tools/server/static.mjs",
+   "type": "file",
+   "name": "static.mjs",
+   "filePath": "tools/server/static.mjs",
+   "summary": "Static half of the preview server: lets the API handler claim /api paths first, then serves run-directory files via classifyRequestPath with MIME types and 400/403/404 answers.",
+   "tags": [
+    "http",
+    "dev-server",
+    "static-files",
+    "security"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:tools/server/static.mjs:createStaticServer",
+   "type": "function",
+   "name": "createStaticServer",
+   "filePath": "tools/server/static.mjs",
+   "lineRange": [
+    23,
+    63
+   ],
+   "summary": "Creates the node:http server that delegates to the API handler and otherwise serves classified, in-root files with the proper content type.",
+   "tags": [
+    "http",
+    "factory",
+    "static-files"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:tools/server/static.mjs:listen",
+   "type": "function",
+   "name": "listen",
+   "filePath": "tools/server/static.mjs",
+   "lineRange": [
+    65,
+    70
+   ],
+   "summary": "Starts the server on 127.0.0.1 at the given port and resolves with the bound address.",
+   "tags": [
+    "http",
+    "utility",
+    "network"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:tools/tests/sessions-observation.test.mjs",
+   "type": "file",
+   "name": "sessions-observation.test.mjs",
+   "filePath": "tools/tests/sessions-observation.test.mjs",
+   "summary": "node:test suite for the session store's observation revision guard: older or equal revisions are refused without touching bytes, missing revisions are refused, inputs and sessions are counted independently, and unknown sessions are rejected first.",
+   "tags": [
+    "test",
+    "session",
+    "revision-guard",
+    "concurrency"
+   ],
+   "complexity": "moderate"
+  }
+ ],
+ "edges": [
+  {
+   "source": "file:tools/catalog-index-contract.mjs",
+   "target": "function:tools/catalog-index-contract.mjs:contractViolations",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/catalog-index-contract.mjs",
+   "target": "function:tools/catalog-index-contract.mjs:contractViolations",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/packages.mjs",
+   "target": "function:tools/packages.mjs:npm",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/packages.mjs",
+   "target": "function:tools/packages.mjs:resolvePackage",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/packages.mjs",
+   "target": "function:tools/packages.mjs:resolvePackage",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/packages.mjs",
+   "target": "function:tools/packages.mjs:installConsumer",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/packages.mjs",
+   "target": "function:tools/packages.mjs:installConsumer",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/preview-request.mjs",
+   "target": "function:tools/preview-request.mjs:classifyRequestPath",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/preview-request.mjs",
+   "target": "function:tools/preview-request.mjs:classifyRequestPath",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "function:tools/preview.mjs:readInstalledPackages",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "function:tools/preview.mjs:main",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/api.mjs",
+   "target": "function:tools/server/api.mjs:readBody",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/api.mjs",
+   "target": "function:tools/server/api.mjs:createApi",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/api.mjs",
+   "target": "function:tools/server/api.mjs:createApi",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/server/assets.mjs",
+   "target": "function:tools/server/assets.mjs:walk",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/assets.mjs",
+   "target": "function:tools/server/assets.mjs:pageAssets",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/assets.mjs",
+   "target": "function:tools/server/assets.mjs:pageAssets",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/server/assets.mjs",
+   "target": "function:tools/server/assets.mjs:serviceAssets",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/assets.mjs",
+   "target": "function:tools/server/assets.mjs:serviceAssets",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/server/assets.mjs",
+   "target": "function:tools/server/assets.mjs:presentationAssets",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/assets.mjs",
+   "target": "function:tools/server/assets.mjs:presentationAssets",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/server/assets.mjs",
+   "target": "function:tools/server/assets.mjs:assertReadable",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/assets.mjs",
+   "target": "function:tools/server/assets.mjs:assertReadable",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/server/service-client.mjs",
+   "target": "function:tools/server/service-client.mjs:callService",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/service-client.mjs",
+   "target": "function:tools/server/service-client.mjs:callService",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/server/sessions.mjs",
+   "target": "function:tools/server/sessions.mjs:isBoundedRelativePath",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/sessions.mjs",
+   "target": "function:tools/server/sessions.mjs:createSessions",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/sessions.mjs",
+   "target": "function:tools/server/sessions.mjs:createSessions",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/server/static.mjs",
+   "target": "function:tools/server/static.mjs:createStaticServer",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/static.mjs",
+   "target": "function:tools/server/static.mjs:createStaticServer",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/server/static.mjs",
+   "target": "function:tools/server/static.mjs:listen",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1
+  },
+  {
+   "source": "file:tools/server/static.mjs",
+   "target": "function:tools/server/static.mjs:listen",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/check-page-contract.mjs",
+   "target": "file:src/catalog/selectors.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/check-page-contract.mjs",
+   "target": "file:tools/preview-request.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/check-page-contract.mjs",
+   "target": "file:tools/server/assets.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/check-scan-attribution.mjs",
+   "target": "file:tools/packages.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/check-scan-attribution.mjs",
+   "target": "file:tools/server/assets.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "file:tools/catalog-index-contract.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "file:tools/packages.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "file:tools/server/api.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "file:tools/server/assets.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "file:tools/server/service-client.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "file:tools/server/static.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/server/api.mjs",
+   "target": "file:tools/server/service-client.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/server/api.mjs",
+   "target": "file:tools/server/sessions.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/server/static.mjs",
+   "target": "file:tools/preview-request.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/tests/sessions-observation.test.mjs",
+   "target": "file:tools/server/sessions.mjs",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "function:tools/preview.mjs:main",
+   "target": "function:tools/catalog-index-contract.mjs:contractViolations",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/preview.mjs:main",
+   "target": "function:tools/packages.mjs:resolvePackage",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/preview.mjs:main",
+   "target": "function:tools/packages.mjs:installConsumer",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/preview.mjs:main",
+   "target": "function:tools/server/api.mjs:createApi",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/preview.mjs:main",
+   "target": "function:tools/server/assets.mjs:pageAssets",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/preview.mjs:main",
+   "target": "function:tools/server/assets.mjs:serviceAssets",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/preview.mjs:main",
+   "target": "function:tools/server/assets.mjs:presentationAssets",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/preview.mjs:main",
+   "target": "function:tools/server/assets.mjs:assertReadable",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/preview.mjs:main",
+   "target": "function:tools/server/static.mjs:createStaticServer",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/preview.mjs:main",
+   "target": "function:tools/server/static.mjs:listen",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/preview.mjs",
+   "target": "function:tools/server/service-client.mjs:callService",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/server/api.mjs:createApi",
+   "target": "function:tools/server/service-client.mjs:callService",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/server/api.mjs:createApi",
+   "target": "function:tools/server/sessions.mjs:createSessions",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/server/static.mjs:createStaticServer",
+   "target": "function:tools/preview-request.mjs:classifyRequestPath",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/packages.mjs:resolvePackage",
+   "target": "function:tools/packages.mjs:npm",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:tools/server/assets.mjs:pageAssets",
+   "target": "function:tools/server/assets.mjs:walk",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/check-page-contract.mjs",
+   "target": "function:tools/preview-request.mjs:classifyRequestPath",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/check-page-contract.mjs",
+   "target": "function:tools/server/assets.mjs:pageAssets",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/check-scan-attribution.mjs",
+   "target": "function:tools/packages.mjs:resolvePackage",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/check-scan-attribution.mjs",
+   "target": "function:tools/packages.mjs:installConsumer",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/check-scan-attribution.mjs",
+   "target": "function:tools/server/assets.mjs:serviceAssets",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/tests/sessions-observation.test.mjs",
+   "target": "function:tools/server/sessions.mjs:createSessions",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/server/sessions.mjs",
+   "target": "file:tools/tests/sessions-observation.test.mjs",
+   "type": "tested_by",
+   "direction": "forward",
+   "weight": 0.5
+  },
+  {
+   "source": "file:tools/preview-request.mjs",
+   "target": "file:tools/check-page-contract.mjs",
+   "type": "tested_by",
+   "direction": "forward",
+   "weight": 0.5
+  }
+ ]
+}

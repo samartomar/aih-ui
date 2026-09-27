@@ -1,0 +1,4817 @@
+{
+  "version": "1.0.0",
+  "gitCommitHash": "f2899ca06bee7b44e49cc5781f405ca9027d5483",
+  "generatedAt": "2026-09-23T19:15:56.648Z",
+  "files": {
+    "AGENTS.md": {
+      "filePath": "AGENTS.md",
+      "contentHash": "5e365bd844ac4acd6ed19ba418d2a93c38f824ea90ff040f5670af0eea3d3a25",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 9,
+      "hasStructuralAnalysis": false
+    },
+    "CLAUDE.md": {
+      "filePath": "CLAUDE.md",
+      "contentHash": "d631d88045f74623d568adfb4783b72e3d1b732330d749bc6c72e6648d4581d3",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 2,
+      "hasStructuralAnalysis": false
+    },
+    "README.md": {
+      "filePath": "README.md",
+      "contentHash": "54cee9e6e4269afd62faa159516beab5acd458c4bd3afa0b19182f7914924a49",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 848,
+      "hasStructuralAnalysis": false
+    },
+    "prototype/index.html": {
+      "filePath": "prototype/index.html",
+      "contentHash": "49d4fbe763b498bf43fbceec3470c5470477bcc3e6b360caeab7122558c32a0b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 312,
+      "hasStructuralAnalysis": false
+    },
+    "prototype/screens/admin-acme.html": {
+      "filePath": "prototype/screens/admin-acme.html",
+      "contentHash": "187e700c42c043df1c7eb2a74823722f4d4c9c8625fc61c36cd4737ba88222c9",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 94,
+      "hasStructuralAnalysis": false
+    },
+    "prototype/screens/admin-changes.html": {
+      "filePath": "prototype/screens/admin-changes.html",
+      "contentHash": "8352569d9db28666e843b543df73319b9f8663710156b2a068a2546792f48ce5",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 104,
+      "hasStructuralAnalysis": false
+    },
+    "prototype/screens/admin-item.html": {
+      "filePath": "prototype/screens/admin-item.html",
+      "contentHash": "7a1a1c920858c7a4a415c5cd410ad2b56963f006eb0c13bb680dbe3193c89db2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 98,
+      "hasStructuralAnalysis": false
+    },
+    "prototype/screens/admin-org.html": {
+      "filePath": "prototype/screens/admin-org.html",
+      "contentHash": "c1c52ccd5813e5e51f3f646f3e2d5bcf4318735df432a785416f091c5db3c2a1",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 85,
+      "hasStructuralAnalysis": false
+    },
+    "prototype/screens/admin-scan.html": {
+      "filePath": "prototype/screens/admin-scan.html",
+      "contentHash": "4e5f69401a231c6dc228d1b8607b96f72bb177ff67ffa568559691dde32de42c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 132,
+      "hasStructuralAnalysis": false
+    },
+    "prototype/screens/admin-sources.html": {
+      "filePath": "prototype/screens/admin-sources.html",
+      "contentHash": "f9d83cf1b69e0250e822a3f3bf23e16382f90b4b4a185bf4738ac64db2f3d803",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 554,
+      "hasStructuralAnalysis": false
+    },
+    "prototype/screens/entry.html": {
+      "filePath": "prototype/screens/entry.html",
+      "contentHash": "1d928668077374a9d9d5277fa680a1135be323a69d83fb2f8b9a0a4195a954b9",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 68,
+      "hasStructuralAnalysis": false
+    },
+    "prototype/screens/fonts.css": {
+      "filePath": "prototype/screens/fonts.css",
+      "contentHash": "df2cca6a14f90874962fa8e8d72f099ae708efc4471634512bee6d37cb42af60",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 4,
+      "hasStructuralAnalysis": false
+    },
+    "prototype/screens/mode.js": {
+      "filePath": "prototype/screens/mode.js",
+      "contentHash": "e3411c880dd3370bb3fa8b8de10c80945ad5d87af0b5b85b3bc43fff57435e96",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 22,
+      "hasStructuralAnalysis": true
+    },
+    "prototype/screens/overview.html": {
+      "filePath": "prototype/screens/overview.html",
+      "contentHash": "637f707ccca6ff9f140a246f4cb3cd95946a325f592a04c2bf5b1bd01e8a56e6",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 83,
+      "hasStructuralAnalysis": false
+    },
+    "prototype/screens/shell.js": {
+      "filePath": "prototype/screens/shell.js",
+      "contentHash": "84b9c016da200c3edacf3c889237ae72bc03df8ed90bb08beec96dc80c7173ca",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 39,
+      "hasStructuralAnalysis": true
+    },
+    "prototype/screens/system.html": {
+      "filePath": "prototype/screens/system.html",
+      "contentHash": "8acb39c35d5dc542d7157fbbc096825d340c5574abbd8deb15dc75d859a0c168",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 101,
+      "hasStructuralAnalysis": false
+    },
+    "prototype/screens/tokens.css": {
+      "filePath": "prototype/screens/tokens.css",
+      "contentHash": "6a4710719c7637e999976ce9dbdd39d5e30b22bd0cbb0e0f30358d35a4569f61",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 175,
+      "hasStructuralAnalysis": false
+    },
+    "prototype/screens/tw-config.js": {
+      "filePath": "prototype/screens/tw-config.js",
+      "contentHash": "33d878b241282631d36c97e14fec842407eb367eddccd74763d06efbbb5b45fe",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 71,
+      "hasStructuralAnalysis": true
+    },
+    "prototype/screens/user-shell.js": {
+      "filePath": "prototype/screens/user-shell.js",
+      "contentHash": "3b71cc58faa0c50528b9d5284c7cf6e1d920cd6b9536a32da412d03dc847f1fc",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 128,
+      "hasStructuralAnalysis": true
+    },
+    "prototype/screens/user-start.html": {
+      "filePath": "prototype/screens/user-start.html",
+      "contentHash": "a2dd8b86c27a395bfbd9afc14d4972982793257453f2593c500e82e7eec740c8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 85,
+      "hasStructuralAnalysis": false
+    },
+    "prototype/screens/user-trim.html": {
+      "filePath": "prototype/screens/user-trim.html",
+      "contentHash": "0f2d1470119d62bdcfb7648754faaca57b89009626ee7944d38700cd5ee5ee2e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 310,
+      "hasStructuralAnalysis": false
+    },
+    "prototype/screens/wb.css": {
+      "filePath": "prototype/screens/wb.css",
+      "contentHash": "a59e00b3ecf6b5272691c3b5fe0100a5530ebfce29d972aade35aebac0dec0fa",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 113,
+      "hasStructuralAnalysis": false
+    },
+    "src/app/absence.js": {
+      "filePath": "src/app/absence.js",
+      "contentHash": "afa21e27e68b87518bd9fbc3289d0ad22908c87a99eea03f74e3831cf647c264",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "NOT_PUBLISHED",
+        "NOT_DECLARED",
+        "NOT_SUPPLIED",
+        "NOT_CONNECTED",
+        "FINDING_DETAIL_ABSENT",
+        "EVIDENCE_SUMMARY_ABSENT",
+        "QUALIFICATION_ABSENT",
+        "QUALIFICATION_IS_NOT_AUTHORIZATION",
+        "NOT_CURATED"
+      ],
+      "totalLines": 51,
+      "hasStructuralAnalysis": true
+    },
+    "src/app/ai-tools.js": {
+      "filePath": "src/app/ai-tools.js",
+      "contentHash": "9ae1cfacfc0d6b661b62a728b0fe227488892ca4ce8161eb92e1c088803ca3c0",
+      "functions": [
+        {
+          "name": "loadSelection",
+          "params": [],
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "saveSelection",
+          "params": [
+            "selected"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "createAiTools",
+          "params": [],
+          "exported": true,
+          "lineCount": 92
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "./dom.js",
+          "specifiers": [
+            "el",
+            "text"
+          ]
+        },
+        {
+          "source": "./absence.js",
+          "specifiers": [
+            "NOT_CONNECTED",
+            "NOT_PUBLISHED"
+          ]
+        }
+      ],
+      "exports": [
+        "createAiTools"
+      ],
+      "totalLines": 136,
+      "hasStructuralAnalysis": true
+    },
+    "src/app/dom.js": {
+      "filePath": "src/app/dom.js",
+      "contentHash": "62d4835b4a80eddd70fa7d4a7251161d017e56a869b602a22414915ada48e317",
+      "functions": [
+        {
+          "name": "text",
+          "params": [
+            "value"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "el",
+          "params": [
+            "tag",
+            "className",
+            "value"
+          ],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "collectIds",
+          "params": [
+            "ids"
+          ],
+          "exported": true,
+          "lineCount": 9
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "text",
+        "el",
+        "collectIds"
+      ],
+      "totalLines": 37,
+      "hasStructuralAnalysis": true
+    },
+    "src/app/elements.js": {
+      "filePath": "src/app/elements.js",
+      "contentHash": "ad237dc0f8f1c7aa72bb1530caaa92bf72c85fd1b07fd766cbd40be712f4a698",
+      "functions": [
+        {
+          "name": "shellElements",
+          "params": [],
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "organizationElements",
+          "params": [],
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "aiToolsElements",
+          "params": [],
+          "exported": true,
+          "lineCount": 3
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "./dom.js",
+          "specifiers": [
+            "collectIds"
+          ]
+        }
+      ],
+      "exports": [
+        "shellElements",
+        "organizationElements",
+        "aiToolsElements"
+      ],
+      "totalLines": 34,
+      "hasStructuralAnalysis": true
+    },
+    "src/app/organization.js": {
+      "filePath": "src/app/organization.js",
+      "contentHash": "7adb6228fb5105076c66fa8990694afbb537b2eee2ad7b37de9e73498834af23",
+      "functions": [
+        {
+          "name": "emptyDraft",
+          "params": [],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "loadDraft",
+          "params": [],
+          "exported": false,
+          "lineCount": 23
+        },
+        {
+          "name": "saveDraft",
+          "params": [
+            "draft"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "validateDraft",
+          "params": [
+            "draft"
+          ],
+          "exported": true,
+          "lineCount": 21
+        },
+        {
+          "name": "createOrganization",
+          "params": [],
+          "exported": true,
+          "lineCount": 241
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "./dom.js",
+          "specifiers": [
+            "el"
+          ]
+        },
+        {
+          "source": "./absence.js",
+          "specifiers": [
+            "NOT_SUPPLIED"
+          ]
+        }
+      ],
+      "exports": [
+        "validateDraft",
+        "createOrganization"
+      ],
+      "totalLines": 360,
+      "hasStructuralAnalysis": true
+    },
+    "src/app/shell.js": {
+      "filePath": "src/app/shell.js",
+      "contentHash": "edd1509345ab7b46d188fb3758612c554f720a6b55223f556b69a0e89256bc13",
+      "functions": [
+        {
+          "name": "createShell",
+          "params": [
+            "elements"
+          ],
+          "exported": true,
+          "lineCount": 78
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "createShell"
+      ],
+      "totalLines": 92,
+      "hasStructuralAnalysis": true
+    },
+    "src/app/theme.js": {
+      "filePath": "src/app/theme.js",
+      "contentHash": "9bd0bc87f9b2ad468dc85f7a2159c43b9c8e8905851c60b32547be045ef9a5e4",
+      "functions": [
+        {
+          "name": "createTheme",
+          "params": [],
+          "exported": true,
+          "lineCount": 53
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "createTheme"
+      ],
+      "totalLines": 93,
+      "hasStructuralAnalysis": true
+    },
+    "src/app/workbench.css": {
+      "filePath": "src/app/workbench.css",
+      "contentHash": "daf97c1712b59b6835c87234f377798475144ad9fee062443280eab51c73a958",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 47,
+      "hasStructuralAnalysis": false
+    },
+    "src/catalog/cards.js": {
+      "filePath": "src/catalog/cards.js",
+      "contentHash": "fc43d0c7873b694d3d978cfeab5bea2191bab52692cf74bd579223c0d3dadce6",
+      "functions": [
+        {
+          "name": "badgeOf",
+          "params": [
+            "entry",
+            "record",
+            "categories",
+            "publisher"
+          ],
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "card",
+          "params": [
+            "entry",
+            "selectedId",
+            "onSelect",
+            "publisher",
+            "categories"
+          ],
+          "exported": false,
+          "lineCount": 90
+        },
+        {
+          "name": "createCards",
+          "params": [],
+          "exported": true,
+          "lineCount": 33
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "el"
+          ]
+        },
+        {
+          "source": "../app/absence.js",
+          "specifiers": [
+            "NOT_PUBLISHED"
+          ]
+        },
+        {
+          "source": "./entry.js",
+          "specifiers": [
+            "KIND_ICON",
+            "KIND_PRIMITIVE",
+            "identity"
+          ]
+        },
+        {
+          "source": "./publisher.js",
+          "specifiers": [
+            "provenanceNote",
+            "publishedText",
+            "publisherOf"
+          ]
+        },
+        {
+          "source": "./categories.js",
+          "specifiers": [
+            "categoryBadge"
+          ]
+        }
+      ],
+      "exports": [
+        "createCards"
+      ],
+      "totalLines": 174,
+      "hasStructuralAnalysis": true
+    },
+    "src/catalog/categories.js": {
+      "filePath": "src/catalog/categories.js",
+      "contentHash": "0b6489eb23cd25aac133fba95eb71a13001a2ac27fc230472c377958b2e7f908",
+      "functions": [
+        {
+          "name": "applyCategories",
+          "params": [
+            "facts",
+            "data",
+            "entries"
+          ],
+          "exported": true,
+          "lineCount": 33
+        },
+        {
+          "name": "curatedCategoryOf",
+          "params": [
+            "view",
+            "entry"
+          ],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "curationNote",
+          "params": [
+            "view"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "categoryBadge",
+          "params": [
+            "view",
+            "entry"
+          ],
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "categoryRows",
+          "params": [
+            "view",
+            "entries"
+          ],
+          "exported": true,
+          "lineCount": 14
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "text"
+          ]
+        },
+        {
+          "source": "../app/absence.js",
+          "specifiers": [
+            "NOT_CURATED",
+            "NOT_PUBLISHED"
+          ]
+        }
+      ],
+      "exports": [
+        "applyCategories",
+        "curatedCategoryOf",
+        "curationNote",
+        "categoryBadge",
+        "categoryRows"
+      ],
+      "totalLines": 115,
+      "hasStructuralAnalysis": true
+    },
+    "src/catalog/collections.js": {
+      "filePath": "src/catalog/collections.js",
+      "contentHash": "8462ee21fcc62eb0684981f429c3cd7e59b28600f61e10385c2342b9fb98cbcc",
+      "functions": [
+        {
+          "name": "applyCollections",
+          "params": [
+            "view",
+            "entries"
+          ],
+          "exported": true,
+          "lineCount": 29
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "text"
+          ]
+        }
+      ],
+      "exports": [
+        "applyCollections"
+      ],
+      "totalLines": 57,
+      "hasStructuralAnalysis": true
+    },
+    "src/catalog/controller.js": {
+      "filePath": "src/catalog/controller.js",
+      "contentHash": "6a605c348c00a1c2b993d8f74dd5b38359823c4db109142ec3727128e59c370e",
+      "functions": [
+        {
+          "name": "createCatalog",
+          "params": [],
+          "exported": true,
+          "lineCount": 161
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "./elements.js",
+          "specifiers": [
+            "catalogElements"
+          ]
+        },
+        {
+          "source": "./cards.js",
+          "specifiers": [
+            "createCards"
+          ]
+        },
+        {
+          "source": "./details.js",
+          "specifiers": [
+            "createDetails"
+          ]
+        },
+        {
+          "source": "./metrics.js",
+          "specifiers": [
+            "createMetrics"
+          ]
+        },
+        {
+          "source": "./navigation.js",
+          "specifiers": [
+            "createNavigation"
+          ]
+        },
+        {
+          "source": "./provenance.js",
+          "specifiers": [
+            "createProvenance"
+          ]
+        },
+        {
+          "source": "./toolbar.js",
+          "specifiers": [
+            "createToolbar"
+          ]
+        },
+        {
+          "source": "./publisher.js",
+          "specifiers": [
+            "categoryCoverage"
+          ]
+        },
+        {
+          "source": "./categories.js",
+          "specifiers": [
+            "categoryRows"
+          ]
+        },
+        {
+          "source": "./index-source.js",
+          "specifiers": [
+            "loadCatalog"
+          ]
+        },
+        {
+          "source": "./selectors.js",
+          "specifiers": [
+            "inventoryCounts",
+            "scopeEntries",
+            "scopeTotal",
+            "selectedScope",
+            "visibleEntries"
+          ]
+        },
+        {
+          "source": "./view-state.js",
+          "specifiers": [
+            "emptyView",
+            "restoreView",
+            "saveView"
+          ]
+        },
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "text"
+          ]
+        }
+      ],
+      "exports": [
+        "createCatalog"
+      ],
+      "totalLines": 196,
+      "hasStructuralAnalysis": true
+    },
+    "src/catalog/details.js": {
+      "filePath": "src/catalog/details.js",
+      "contentHash": "3c77c94f473dc8de1f225cb843c72307864a966546bc4572c8e1592f46486f70",
+      "functions": [
+        {
+          "name": "row",
+          "params": [
+            "parent",
+            "label",
+            "value",
+            "title"
+          ],
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "countRow",
+          "params": [
+            "parent",
+            "label",
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "capability",
+          "params": [
+            "container",
+            "label",
+            "icon",
+            "tone",
+            "value",
+            "title"
+          ],
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "declared",
+          "params": [
+            "list"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "versionOf",
+          "params": [
+            "source"
+          ],
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "originOf",
+          "params": [
+            "source"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "qualificationLine",
+          "params": [
+            "parent",
+            "label",
+            "value",
+            "title",
+            "key"
+          ],
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "renderQualification",
+          "params": [
+            "elements",
+            "view",
+            "entry"
+          ],
+          "exported": false,
+          "lineCount": 49
+        },
+        {
+          "name": "createDetails",
+          "params": [],
+          "exported": true,
+          "lineCount": 195
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "el",
+            "text"
+          ]
+        },
+        {
+          "source": "../app/absence.js",
+          "specifiers": [
+            "EVIDENCE_SUMMARY_ABSENT",
+            "FINDING_DETAIL_ABSENT",
+            "NOT_DECLARED",
+            "NOT_PUBLISHED",
+            "QUALIFICATION_IS_NOT_AUTHORIZATION"
+          ]
+        },
+        {
+          "source": "./entry.js",
+          "specifiers": [
+            "KIND_ICON",
+            "identity",
+            "shortDigest",
+            "sourceDetailRows",
+            "sourceIdentity",
+            "sourceLabelOf",
+            "statementsOf"
+          ]
+        },
+        {
+          "source": "./selectors.js",
+          "specifiers": [
+            "collectionOf",
+            "scopeCountOf"
+          ]
+        },
+        {
+          "source": "./publisher.js",
+          "specifiers": [
+            "provenanceNote",
+            "publishedText",
+            "publisherOf"
+          ]
+        },
+        {
+          "source": "./qualification.js",
+          "specifiers": [
+            "QUALIFICATION_STATE_MEANING",
+            "attestationSentence",
+            "qualificationOf"
+          ]
+        }
+      ],
+      "exports": [
+        "createDetails"
+      ],
+      "totalLines": 379,
+      "hasStructuralAnalysis": true
+    },
+    "src/catalog/elements.js": {
+      "filePath": "src/catalog/elements.js",
+      "contentHash": "c2af921bb29d57c277ec056b1b90d29c8c03eae3f9b6aad3fed1d3da33643033",
+      "functions": [
+        {
+          "name": "catalogElements",
+          "params": [],
+          "exported": true,
+          "lineCount": 63
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "collectIds"
+          ]
+        }
+      ],
+      "exports": [
+        "catalogElements"
+      ],
+      "totalLines": 72,
+      "hasStructuralAnalysis": true
+    },
+    "src/catalog/entry.js": {
+      "filePath": "src/catalog/entry.js",
+      "contentHash": "5a6c5286aeefe332a801c5b3ff7740ab689834a05f90cac5936d6fcd1b5df57f",
+      "functions": [
+        {
+          "name": "shortDigest",
+          "params": [
+            "value"
+          ],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "sourceIdentity",
+          "params": [
+            "entry"
+          ],
+          "exported": true,
+          "lineCount": 17
+        },
+        {
+          "name": "sourceLabelOf",
+          "params": [
+            "source"
+          ],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "sourceLabelTitle",
+          "params": [
+            "source",
+            "label"
+          ],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "sourceDetailRows",
+          "params": [
+            "source"
+          ],
+          "exported": true,
+          "lineCount": 28
+        },
+        {
+          "name": "identity",
+          "params": [
+            "entry"
+          ],
+          "exported": true,
+          "lineCount": 17
+        },
+        {
+          "name": "statement",
+          "params": [
+            "kind",
+            "item"
+          ],
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "statementsOf",
+          "params": [
+            "entry"
+          ],
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "firstSummary",
+          "params": [
+            "entry",
+            "kinds"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "searchText",
+          "params": [
+            "entry"
+          ],
+          "exported": true,
+          "lineCount": 26
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "text"
+          ]
+        },
+        {
+          "source": "../app/absence.js",
+          "specifiers": [
+            "NOT_PUBLISHED"
+          ]
+        }
+      ],
+      "exports": [
+        "KIND_ICON",
+        "KIND_PRIMITIVE",
+        "shortDigest",
+        "sourceIdentity",
+        "sourceLabelOf",
+        "sourceLabelTitle",
+        "sourceDetailRows",
+        "identity",
+        "statementsOf",
+        "firstSummary",
+        "searchText"
+      ],
+      "totalLines": 197,
+      "hasStructuralAnalysis": true
+    },
+    "src/catalog/index-source.js": {
+      "filePath": "src/catalog/index-source.js",
+      "contentHash": "ea38cc53f8aad72c9e19923a3e3d3817fd8069194470fcd96da15f57eed96708",
+      "functions": [
+        {
+          "name": "loadJson",
+          "params": [
+            "url",
+            "what"
+          ],
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "assertIndexContract",
+          "params": [
+            "index"
+          ],
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "loadCatalog",
+          "params": [],
+          "exported": true,
+          "lineCount": 26
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "./collections.js",
+          "specifiers": [
+            "applyCollections"
+          ]
+        },
+        {
+          "source": "./publisher.js",
+          "specifiers": [
+            "applyPublisher"
+          ]
+        },
+        {
+          "source": "./qualification.js",
+          "specifiers": [
+            "applyQualification"
+          ]
+        },
+        {
+          "source": "./categories.js",
+          "specifiers": [
+            "applyCategories"
+          ]
+        }
+      ],
+      "exports": [
+        "loadCatalog"
+      ],
+      "totalLines": 88,
+      "hasStructuralAnalysis": true
+    },
+    "src/catalog/metrics.js": {
+      "filePath": "src/catalog/metrics.js",
+      "contentHash": "0384f1a60c5e76507a5feeba08965d98db738fedd1d5735340cda5bb3fbae9e5",
+      "functions": [
+        {
+          "name": "tile",
+          "params": [
+            "kind",
+            "model",
+            "onToggleKind"
+          ],
+          "exported": false,
+          "lineCount": 43
+        },
+        {
+          "name": "createMetrics",
+          "params": [],
+          "exported": true,
+          "lineCount": 8
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "el"
+          ]
+        },
+        {
+          "source": "../app/absence.js",
+          "specifiers": [
+            "NOT_PUBLISHED"
+          ]
+        }
+      ],
+      "exports": [
+        "createMetrics"
+      ],
+      "totalLines": 79,
+      "hasStructuralAnalysis": true
+    },
+    "src/catalog/navigation.js": {
+      "filePath": "src/catalog/navigation.js",
+      "contentHash": "72febb18eae67fe9828442e6cd0c39a7548dd60b3b6c5550198f343bcbe1130e",
+      "functions": [
+        {
+          "name": "badgeNode",
+          "params": [
+            "scope",
+            "selected"
+          ],
+          "exported": false,
+          "lineCount": 16
+        },
+        {
+          "name": "categoriesReason",
+          "params": [
+            "coverage",
+            "curated"
+          ],
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "categoryLine",
+          "params": [
+            "label",
+            "count",
+            "title",
+            "key"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "curatedCategories",
+          "params": [
+            "curated"
+          ],
+          "exported": false,
+          "lineCount": 18
+        },
+        {
+          "name": "scopeRow",
+          "params": [
+            "row",
+            "selected",
+            "onSelect",
+            "coverage",
+            "curated"
+          ],
+          "exported": false,
+          "lineCount": 61
+        },
+        {
+          "name": "additionsRow",
+          "params": [
+            "organizationName"
+          ],
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "createNavigation",
+          "params": [],
+          "exported": true,
+          "lineCount": 15
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "el"
+          ]
+        },
+        {
+          "source": "../app/absence.js",
+          "specifiers": [
+            "NOT_CURATED",
+            "NOT_PUBLISHED",
+            "NOT_SUPPLIED"
+          ]
+        },
+        {
+          "source": "./selectors.js",
+          "specifiers": [
+            "describeScope",
+            "sourceScopes"
+          ]
+        },
+        {
+          "source": "./categories.js",
+          "specifiers": [
+            "curationNote"
+          ]
+        }
+      ],
+      "exports": [
+        "createNavigation"
+      ],
+      "totalLines": 198,
+      "hasStructuralAnalysis": true
+    },
+    "src/catalog/provenance.js": {
+      "filePath": "src/catalog/provenance.js",
+      "contentHash": "6bb24c0be745cf227b759e46d103d6ec99c9daf9dc6bd66cbd25fc3f87535047",
+      "functions": [
+        {
+          "name": "dot",
+          "params": [],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "createProvenance",
+          "params": [],
+          "exported": true,
+          "lineCount": 214
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "el",
+            "text"
+          ]
+        },
+        {
+          "source": "../app/absence.js",
+          "specifiers": [
+            "NOT_CONNECTED",
+            "NOT_PUBLISHED",
+            "NOT_SUPPLIED"
+          ]
+        },
+        {
+          "source": "./selectors.js",
+          "specifiers": [
+            "describeScope",
+            "sourceScopes"
+          ]
+        }
+      ],
+      "exports": [
+        "createProvenance"
+      ],
+      "totalLines": 251,
+      "hasStructuralAnalysis": true
+    },
+    "src/catalog/publisher.js": {
+      "filePath": "src/catalog/publisher.js",
+      "contentHash": "0cce70043274eb81aa630e7fa8c426a63986001d0ac3e93884c6c067e1c92288",
+      "functions": [
+        {
+          "name": "applyPublisher",
+          "params": [
+            "facts",
+            "data",
+            "entries"
+          ],
+          "exported": true,
+          "lineCount": 23
+        },
+        {
+          "name": "publisherOf",
+          "params": [
+            "publisher",
+            "entry"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "categoryCoverage",
+          "params": [
+            "publisher",
+            "entryCount"
+          ],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "publishedText",
+          "params": [
+            "record",
+            "field"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "provenanceNote",
+          "params": [
+            "record",
+            "field",
+            "label"
+          ],
+          "exported": true,
+          "lineCount": 15
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "text"
+          ]
+        }
+      ],
+      "exports": [
+        "UNAVAILABLE_REASON",
+        "applyPublisher",
+        "publisherOf",
+        "categoryCoverage",
+        "publishedText",
+        "provenanceNote"
+      ],
+      "totalLines": 109,
+      "hasStructuralAnalysis": true
+    },
+    "src/catalog/qualification.js": {
+      "filePath": "src/catalog/qualification.js",
+      "contentHash": "56d21377f3ef37c6969a51df3d0b1aa46fb1ff7c65ada40c3db131747caffd92",
+      "functions": [
+        {
+          "name": "attestationSentence",
+          "params": [
+            "qualification"
+          ],
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "applyQualification",
+          "params": [
+            "facts",
+            "data",
+            "entries"
+          ],
+          "exported": true,
+          "lineCount": 23
+        },
+        {
+          "name": "qualificationOf",
+          "params": [
+            "view",
+            "entry"
+          ],
+          "exported": true,
+          "lineCount": 3
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "text"
+          ]
+        },
+        {
+          "source": "../app/absence.js",
+          "specifiers": [
+            "NOT_PUBLISHED",
+            "QUALIFICATION_ABSENT"
+          ]
+        }
+      ],
+      "exports": [
+        "QUALIFICATION_STATE_MEANING",
+        "attestationSentence",
+        "applyQualification",
+        "qualificationOf"
+      ],
+      "totalLines": 83,
+      "hasStructuralAnalysis": true
+    },
+    "src/catalog/selectors.js": {
+      "filePath": "src/catalog/selectors.js",
+      "contentHash": "98593b969c67d0194fe9e89a1ecfc58384bb78412a1047a273db5947b640f7ff",
+      "functions": [
+        {
+          "name": "scopeLabelOf",
+          "params": [
+            "entry",
+            "membership"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "sourceFilterValue",
+          "params": [
+            "type",
+            "label",
+            "revision"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "revisionOf",
+          "params": [
+            "entry"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "matchesSourceFilter",
+          "params": [
+            "entry",
+            "value",
+            "membership"
+          ],
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "visibleEntries",
+          "params": [
+            "entries",
+            "view",
+            "membership"
+          ],
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "countBy",
+          "params": [
+            "entries",
+            "selector"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "sortedCounts",
+          "params": [
+            "counts"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "inventoryCounts",
+          "params": [
+            "entries"
+          ],
+          "exported": true,
+          "lineCount": 27
+        },
+        {
+          "name": "sourceScopes",
+          "params": [
+            "counts"
+          ],
+          "exported": true,
+          "lineCount": 21
+        },
+        {
+          "name": "scopeCountOf",
+          "params": [
+            "entry",
+            "counts"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "collectionOf",
+          "params": [
+            "entry",
+            "counts"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "selectedScope",
+          "params": [
+            "counts",
+            "view"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "scopeEntries",
+          "params": [
+            "entries",
+            "view",
+            "membership"
+          ],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "scopeTotal",
+          "params": [
+            "entries",
+            "view",
+            "membership"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "describeCollection",
+          "params": [
+            "row",
+            "transportPackage"
+          ],
+          "exported": false,
+          "lineCount": 35
+        },
+        {
+          "name": "describeScope",
+          "params": [
+            "row"
+          ],
+          "exported": true,
+          "lineCount": 46
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "text"
+          ]
+        },
+        {
+          "source": "../app/absence.js",
+          "specifiers": [
+            "NOT_PUBLISHED"
+          ]
+        },
+        {
+          "source": "./entry.js",
+          "specifiers": [
+            "identity",
+            "searchText",
+            "sourceIdentity",
+            "sourceLabelOf"
+          ]
+        },
+        {
+          "source": "./publisher.js",
+          "specifiers": [
+            "publisherOf"
+          ]
+        },
+        {
+          "source": "./categories.js",
+          "specifiers": [
+            "curatedCategoryOf"
+          ]
+        }
+      ],
+      "exports": [
+        "DISTINCT_SOURCES",
+        "FILTER_SEPARATOR",
+        "SORT_KEYS",
+        "sourceFilterValue",
+        "matchesSourceFilter",
+        "visibleEntries",
+        "sortedCounts",
+        "inventoryCounts",
+        "sourceScopes",
+        "scopeCountOf",
+        "collectionOf",
+        "selectedScope",
+        "scopeEntries",
+        "scopeTotal",
+        "describeScope"
+      ],
+      "totalLines": 302,
+      "hasStructuralAnalysis": true
+    },
+    "src/catalog/toolbar.js": {
+      "filePath": "src/catalog/toolbar.js",
+      "contentHash": "f95797caa401e9e0d0d55e5b6984b9aef0879fa50730021f654a9d866da4565b",
+      "functions": [
+        {
+          "name": "reviewPill",
+          "params": [
+            "label",
+            "count",
+            "active",
+            "onClick"
+          ],
+          "exported": false,
+          "lineCount": 15
+        },
+        {
+          "name": "summaryChip",
+          "params": [
+            "icon",
+            "label",
+            "title"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "kindPill",
+          "params": [
+            "label",
+            "count",
+            "active",
+            "onClick"
+          ],
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "createToolbar",
+          "params": [],
+          "exported": true,
+          "lineCount": 65
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "el"
+          ]
+        },
+        {
+          "source": "../app/absence.js",
+          "specifiers": [
+            "NOT_PUBLISHED"
+          ]
+        },
+        {
+          "source": "./selectors.js",
+          "specifiers": [
+            "sortedCounts"
+          ]
+        }
+      ],
+      "exports": [
+        "createToolbar"
+      ],
+      "totalLines": 144,
+      "hasStructuralAnalysis": true
+    },
+    "src/catalog/view-state.js": {
+      "filePath": "src/catalog/view-state.js",
+      "contentHash": "c9367e0cfd40c506ce1ae99ad91d7cd6adf8c08a5685ee2b591788fee5a72fce",
+      "functions": [
+        {
+          "name": "emptyView",
+          "params": [],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "saveView",
+          "params": [
+            "view"
+          ],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "restoreView",
+          "params": [
+            "view",
+            "counts"
+          ],
+          "exported": true,
+          "lineCount": 20
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "./selectors.js",
+          "specifiers": [
+            "FILTER_SEPARATOR",
+            "SORT_KEYS"
+          ]
+        }
+      ],
+      "exports": [
+        "emptyView",
+        "saveView",
+        "restoreView"
+      ],
+      "totalLines": 51,
+      "hasStructuralAnalysis": true
+    },
+    "src/governance/bytes.js": {
+      "filePath": "src/governance/bytes.js",
+      "contentHash": "134e68be24f36c378b71c128faccca29ea70eb5e1b1d50c26df455f0ce823b1b",
+      "functions": [
+        {
+          "name": "bytesToBase64",
+          "params": [
+            "bytes"
+          ],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "base64ToBytes",
+          "params": [
+            "base64"
+          ],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "downloadBase64",
+          "params": [
+            "name",
+            "base64"
+          ],
+          "exported": true,
+          "lineCount": 8
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "bytesToBase64",
+        "base64ToBytes",
+        "downloadBase64"
+      ],
+      "totalLines": 32,
+      "hasStructuralAnalysis": true
+    },
+    "src/governance/controller.js": {
+      "filePath": "src/governance/controller.js",
+      "contentHash": "1fda7842acb12887bc75dce0ced7bb7b57bc6ba766114b15de3b58f409d7b2a6",
+      "functions": [
+        {
+          "name": "noObservation",
+          "params": [],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "relativePathOf",
+          "params": [
+            "file"
+          ],
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "createGovernance",
+          "params": [],
+          "exported": true,
+          "lineCount": 534
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "./elements.js",
+          "specifiers": [
+            "governanceElements"
+          ]
+        },
+        {
+          "source": "./detector.js",
+          "specifiers": [
+            "createDetector"
+          ]
+        },
+        {
+          "source": "./inputs.js",
+          "specifiers": [
+            "createInputs"
+          ]
+        },
+        {
+          "source": "./observation.js",
+          "specifiers": [
+            "createObservation"
+          ]
+        },
+        {
+          "source": "./operator-files.js",
+          "specifiers": [
+            "createOperatorFiles"
+          ]
+        },
+        {
+          "source": "./prepared.js",
+          "specifiers": [
+            "createPrepared"
+          ]
+        },
+        {
+          "source": "./reopen.js",
+          "specifiers": [
+            "createReopen"
+          ]
+        },
+        {
+          "source": "./revisions.js",
+          "specifiers": [
+            "createRevisionTracker"
+          ]
+        },
+        {
+          "source": "./statuses.js",
+          "specifiers": [
+            "createStatuses"
+          ]
+        },
+        {
+          "source": "./verdict.js",
+          "specifiers": [
+            "createVerdict"
+          ]
+        },
+        {
+          "source": "./bytes.js",
+          "specifiers": [
+            "bytesToBase64",
+            "downloadBase64"
+          ]
+        },
+        {
+          "source": "./transport.js",
+          "specifiers": [
+            "consume",
+            "fetchCatalogIntegrity",
+            "fetchSaved",
+            "fetchSubject",
+            "loadValidationFixture",
+            "parseEvidence",
+            "prepare",
+            "reopenFromFiles",
+            "storeObservation",
+            "storeOperatorFile"
+          ]
+        }
+      ],
+      "exports": [
+        "createGovernance"
+      ],
+      "totalLines": 604,
+      "hasStructuralAnalysis": true
+    },
+    "src/governance/detector.js": {
+      "filePath": "src/governance/detector.js",
+      "contentHash": "59897bbfba1fea15315a1146a1f7ae6464a3f23aced7faa78df1f1f9bf2c70dd",
+      "functions": [
+        {
+          "name": "section",
+          "params": [
+            "box",
+            "label"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "renderScanResult",
+          "params": [
+            "box",
+            "scan"
+          ],
+          "exported": false,
+          "lineCount": 59
+        },
+        {
+          "name": "createDetector",
+          "params": [],
+          "exported": true,
+          "lineCount": 73
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "el"
+          ]
+        },
+        {
+          "source": "../app/absence.js",
+          "specifiers": [
+            "FINDING_DETAIL_ABSENT",
+            "NOT_SUPPLIED"
+          ]
+        },
+        {
+          "source": "./rows.js",
+          "specifiers": [
+            "row"
+          ]
+        }
+      ],
+      "exports": [
+        "createDetector"
+      ],
+      "totalLines": 172,
+      "hasStructuralAnalysis": true
+    },
+    "src/governance/elements.js": {
+      "filePath": "src/governance/elements.js",
+      "contentHash": "6c671f272363f27d35e34a5356e23cafd17098cbfa55aaec96f471200e1ec804",
+      "functions": [
+        {
+          "name": "governanceElements",
+          "params": [],
+          "exported": true,
+          "lineCount": 51
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "collectIds"
+          ]
+        }
+      ],
+      "exports": [
+        "governanceElements"
+      ],
+      "totalLines": 58,
+      "hasStructuralAnalysis": true
+    },
+    "src/governance/inputs.js": {
+      "filePath": "src/governance/inputs.js",
+      "contentHash": "ba14a09c6c7bd69fa0f7c4740d7072a5d3e2913142d75b3935676ddac1340ca1",
+      "functions": [
+        {
+          "name": "section",
+          "params": [
+            "box",
+            "label"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "renderCatalog",
+          "params": [
+            "box",
+            "catalog"
+          ],
+          "exported": false,
+          "lineCount": 35
+        },
+        {
+          "name": "setTargetOptions",
+          "params": [
+            "select",
+            "coreTargets"
+          ],
+          "exported": false,
+          "lineCount": 35
+        },
+        {
+          "name": "createInputs",
+          "params": [],
+          "exported": true,
+          "lineCount": 135
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "el",
+            "text"
+          ]
+        },
+        {
+          "source": "../app/absence.js",
+          "specifiers": [
+            "NOT_CONNECTED",
+            "NOT_PUBLISHED",
+            "NOT_SUPPLIED"
+          ]
+        },
+        {
+          "source": "./rows.js",
+          "specifiers": [
+            "row"
+          ]
+        }
+      ],
+      "exports": [
+        "createInputs"
+      ],
+      "totalLines": 260,
+      "hasStructuralAnalysis": true
+    },
+    "src/governance/observation.js": {
+      "filePath": "src/governance/observation.js",
+      "contentHash": "668ec28cfeec5c448d8f23070882f970383c3fc43d791cab413b0c666bb47464",
+      "functions": [
+        {
+          "name": "createObservation",
+          "params": [],
+          "exported": true,
+          "lineCount": 72
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "el"
+          ]
+        },
+        {
+          "source": "../app/absence.js",
+          "specifiers": [
+            "NOT_SUPPLIED"
+          ]
+        },
+        {
+          "source": "./rows.js",
+          "specifiers": [
+            "row"
+          ]
+        }
+      ],
+      "exports": [
+        "createObservation"
+      ],
+      "totalLines": 101,
+      "hasStructuralAnalysis": true
+    },
+    "src/governance/operator-files.js": {
+      "filePath": "src/governance/operator-files.js",
+      "contentHash": "1916c3b328e1f5f3a733fd754c7474f0584d78c596eff90770b18c8fb5036907",
+      "functions": [
+        {
+          "name": "createOperatorFiles",
+          "params": [],
+          "exported": true,
+          "lineCount": 52
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "el"
+          ]
+        },
+        {
+          "source": "../app/absence.js",
+          "specifiers": [
+            "NOT_SUPPLIED"
+          ]
+        },
+        {
+          "source": "./rows.js",
+          "specifiers": [
+            "row"
+          ]
+        }
+      ],
+      "exports": [
+        "createOperatorFiles"
+      ],
+      "totalLines": 97,
+      "hasStructuralAnalysis": true
+    },
+    "src/governance/prepared.js": {
+      "filePath": "src/governance/prepared.js",
+      "contentHash": "752601ed6dea045c4e0b92319580db10325229d18ed1779f8c126bfc58c8a6f6",
+      "functions": [
+        {
+          "name": "createPrepared",
+          "params": [],
+          "exported": true,
+          "lineCount": 52
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "el"
+          ]
+        },
+        {
+          "source": "../app/absence.js",
+          "specifiers": [
+            "NOT_SUPPLIED"
+          ]
+        },
+        {
+          "source": "./vocabulary.js",
+          "specifiers": [
+            "TONE",
+            "refusalWording"
+          ]
+        },
+        {
+          "source": "./rows.js",
+          "specifiers": [
+            "row"
+          ]
+        }
+      ],
+      "exports": [
+        "createPrepared"
+      ],
+      "totalLines": 74,
+      "hasStructuralAnalysis": true
+    },
+    "src/governance/reopen.js": {
+      "filePath": "src/governance/reopen.js",
+      "contentHash": "6d32adb7ad2ebd318059f11504e0c6914eb4e8cfd2e69d09854c6291c3eae8b3",
+      "functions": [
+        {
+          "name": "createReopen",
+          "params": [],
+          "exported": true,
+          "lineCount": 58
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "el"
+          ]
+        },
+        {
+          "source": "../app/absence.js",
+          "specifiers": [
+            "NOT_SUPPLIED"
+          ]
+        },
+        {
+          "source": "./rows.js",
+          "specifiers": [
+            "row"
+          ]
+        }
+      ],
+      "exports": [
+        "createReopen"
+      ],
+      "totalLines": 83,
+      "hasStructuralAnalysis": true
+    },
+    "src/governance/revisions.js": {
+      "filePath": "src/governance/revisions.js",
+      "contentHash": "91660c75d5e1eeb294c7c34fcbef2124a565fa985b7e2f67dfaf676b016905c5",
+      "functions": [
+        {
+          "name": "createRevisionTracker",
+          "params": [],
+          "exported": true,
+          "lineCount": 63
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "INPUT_SLOTS",
+        "createRevisionTracker"
+      ],
+      "totalLines": 94,
+      "hasStructuralAnalysis": true
+    },
+    "src/governance/rows.js": {
+      "filePath": "src/governance/rows.js",
+      "contentHash": "a7a5c7be5ea062b528fb4879e4c6a7904c77085f1b176cf0d2d23beb78cbf99a",
+      "functions": [
+        {
+          "name": "row",
+          "params": [
+            "parent",
+            "label",
+            "value",
+            "tone"
+          ],
+          "exported": true,
+          "lineCount": 13
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "el"
+          ]
+        },
+        {
+          "source": "../app/absence.js",
+          "specifiers": [
+            "NOT_SUPPLIED"
+          ]
+        }
+      ],
+      "exports": [
+        "row"
+      ],
+      "totalLines": 25,
+      "hasStructuralAnalysis": true
+    },
+    "src/governance/statuses.js": {
+      "filePath": "src/governance/statuses.js",
+      "contentHash": "85c69a8c0524cf978dd6fd1efeca9d24e2668026f9101cd7ccfa93cd8f8b66b8",
+      "functions": [
+        {
+          "name": "createStatuses",
+          "params": [],
+          "exported": true,
+          "lineCount": 22
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "el"
+          ]
+        },
+        {
+          "source": "./vocabulary.js",
+          "specifiers": [
+            "AXES",
+            "TONE"
+          ]
+        }
+      ],
+      "exports": [
+        "createStatuses"
+      ],
+      "totalLines": 35,
+      "hasStructuralAnalysis": true
+    },
+    "src/governance/transport.js": {
+      "filePath": "src/governance/transport.js",
+      "contentHash": "1a876cbc75abe9bb0ccafecff8c62269757fc614bda4e797e0c27ff6a7637e48",
+      "functions": [
+        {
+          "name": "api",
+          "params": [
+            "path",
+            "body"
+          ],
+          "exported": false,
+          "lineCount": 22
+        },
+        {
+          "name": "fetchSubject",
+          "params": [
+            "entryId"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "fetchCatalogIntegrity",
+          "params": [
+            "entryId"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "parseEvidence",
+          "params": [
+            "evidenceBase64"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "prepare",
+          "params": [
+            "request"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "storeOperatorFile",
+          "params": [],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "storeObservation",
+          "params": [],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "reopenFromFiles",
+          "params": [],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "consume",
+          "params": [
+            "sessionId"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "loadValidationFixture",
+          "params": [
+            "request"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "fetchSaved",
+          "params": [
+            "sessionId",
+            "file"
+          ],
+          "exported": true,
+          "lineCount": 3
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "fetchSubject",
+        "fetchCatalogIntegrity",
+        "parseEvidence",
+        "prepare",
+        "storeOperatorFile",
+        "storeObservation",
+        "reopenFromFiles",
+        "consume",
+        "loadValidationFixture",
+        "fetchSaved"
+      ],
+      "totalLines": 101,
+      "hasStructuralAnalysis": true
+    },
+    "src/governance/verdict.js": {
+      "filePath": "src/governance/verdict.js",
+      "contentHash": "b26baae3db7380b735de422581cef05169db210e2141e93cc8921766d836bbd1",
+      "functions": [
+        {
+          "name": "createVerdict",
+          "params": [],
+          "exported": true,
+          "lineCount": 72
+        },
+        {
+          "name": "executionSentence",
+          "params": [
+            "view"
+          ],
+          "exported": false,
+          "lineCount": 15
+        },
+        {
+          "name": "renderAssessmentBinding",
+          "params": [
+            "box",
+            "binding"
+          ],
+          "exported": false,
+          "lineCount": 28
+        },
+        {
+          "name": "renderObservation",
+          "params": [
+            "box",
+            "observation"
+          ],
+          "exported": false,
+          "lineCount": 18
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../app/dom.js",
+          "specifiers": [
+            "el"
+          ]
+        },
+        {
+          "source": "../app/absence.js",
+          "specifiers": [
+            "NOT_SUPPLIED"
+          ]
+        },
+        {
+          "source": "./vocabulary.js",
+          "specifiers": [
+            "refusalWording"
+          ]
+        },
+        {
+          "source": "./rows.js",
+          "specifiers": [
+            "row"
+          ]
+        }
+      ],
+      "exports": [
+        "createVerdict"
+      ],
+      "totalLines": 182,
+      "hasStructuralAnalysis": true
+    },
+    "src/governance/vocabulary.js": {
+      "filePath": "src/governance/vocabulary.js",
+      "contentHash": "9f2cc9e3f8672e316e4dfbd35c88ed36e1e247a54b19197a0416d4eb5ba9a46c",
+      "functions": [
+        {
+          "name": "refusalWording",
+          "params": [
+            "code"
+          ],
+          "exported": true,
+          "lineCount": 8
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "AXES",
+        "TONE",
+        "REFUSAL",
+        "refusalWording"
+      ],
+      "totalLines": 109,
+      "hasStructuralAnalysis": true
+    },
+    "src/index.html": {
+      "filePath": "src/index.html",
+      "contentHash": "a16e85eed2f01f24d207d547fb7aa606fc7cc90b284258368652ef5cedc00632",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 647,
+      "hasStructuralAnalysis": false
+    },
+    "src/main.js": {
+      "filePath": "src/main.js",
+      "contentHash": "4402e6599cbe0bda53ebbb2cb240d8677fe6e6699304dc910dc66d1dd95adb2c",
+      "functions": [
+        {
+          "name": "main",
+          "params": [],
+          "exported": false,
+          "lineCount": 42
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "./app/shell.js",
+          "specifiers": [
+            "createShell"
+          ]
+        },
+        {
+          "source": "./app/elements.js",
+          "specifiers": [
+            "aiToolsElements",
+            "organizationElements",
+            "shellElements"
+          ]
+        },
+        {
+          "source": "./app/ai-tools.js",
+          "specifiers": [
+            "createAiTools"
+          ]
+        },
+        {
+          "source": "./app/organization.js",
+          "specifiers": [
+            "createOrganization"
+          ]
+        },
+        {
+          "source": "./app/theme.js",
+          "specifiers": [
+            "createTheme"
+          ]
+        },
+        {
+          "source": "./catalog/controller.js",
+          "specifiers": [
+            "createCatalog"
+          ]
+        },
+        {
+          "source": "./governance/controller.js",
+          "specifiers": [
+            "createGovernance"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 76,
+      "hasStructuralAnalysis": true
+    },
+    "tools/acceptance-sweep.mjs": {
+      "filePath": "tools/acceptance-sweep.mjs",
+      "contentHash": "50e059d409d0b0ab0b3bc3ef0e2ecca8060d91341819f07b9ef42e915c0a90ab",
+      "functions": [
+        {
+          "name": "check",
+          "params": [
+            "name",
+            "ok"
+          ],
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "post",
+          "params": [
+            "path",
+            "body"
+          ],
+          "exported": false,
+          "lineCount": 15
+        },
+        {
+          "name": "firstEntryWithContent",
+          "params": [],
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "remember",
+          "params": [
+            "name",
+            "answer"
+          ],
+          "exported": false,
+          "lineCount": 4
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 143,
+      "hasStructuralAnalysis": true
+    },
+    "tools/catalog-index-contract.mjs": {
+      "filePath": "tools/catalog-index-contract.mjs",
+      "contentHash": "589e806331d6001f8d4387c3aff19df0e402f264a744f279288235fd1945c078",
+      "functions": [
+        {
+          "name": "contractViolations",
+          "params": [
+            "index"
+          ],
+          "exported": true,
+          "lineCount": 16
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "EXPECTED_FORMAT",
+        "EXPECTED_VERSION",
+        "contractViolations"
+      ],
+      "totalLines": 32,
+      "hasStructuralAnalysis": true
+    },
+    "tools/check-page-contract.mjs": {
+      "filePath": "tools/check-page-contract.mjs",
+      "contentHash": "9bfb71a5fabedd7755db04d6cb27908b94e7655a0955e5c4abdee2d6d8e872cb",
+      "functions": [
+        {
+          "name": "check",
+          "params": [
+            "description",
+            "condition"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "jsModules",
+          "params": [
+            "dir"
+          ],
+          "exported": false,
+          "lineCount": 8
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "existsSync",
+            "readFileSync",
+            "readdirSync"
+          ]
+        },
+        {
+          "source": "node:path",
+          "specifiers": [
+            "join",
+            "posix",
+            "resolve"
+          ]
+        },
+        {
+          "source": "node:url",
+          "specifiers": [
+            "fileURLToPath"
+          ]
+        },
+        {
+          "source": "./preview-request.mjs",
+          "specifiers": [
+            "classifyRequestPath"
+          ]
+        },
+        {
+          "source": "./server/assets.mjs",
+          "specifiers": [
+            "pageAssets"
+          ]
+        },
+        {
+          "source": "../src/catalog/selectors.js",
+          "specifiers": [
+            "SORT_KEYS"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 194,
+      "hasStructuralAnalysis": true
+    },
+    "tools/check-scan-attribution.mjs": {
+      "filePath": "tools/check-scan-attribution.mjs",
+      "contentHash": "f63986c3e1177f493bb464b93de1b44793cce663bddb33bfbaa221cf2bc3251b",
+      "functions": [
+        {
+          "name": "log",
+          "params": [
+            "message"
+          ],
+          "exported": false,
+          "lineCount": 3
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:child_process",
+          "specifiers": [
+            "spawnSync"
+          ]
+        },
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "mkdirSync",
+            "mkdtempSync",
+            "rmSync"
+          ]
+        },
+        {
+          "source": "node:fs/promises",
+          "specifiers": [
+            "copyFile"
+          ]
+        },
+        {
+          "source": "node:os",
+          "specifiers": [
+            "tmpdir"
+          ]
+        },
+        {
+          "source": "node:path",
+          "specifiers": [
+            "dirname",
+            "join",
+            "resolve"
+          ]
+        },
+        {
+          "source": "node:url",
+          "specifiers": [
+            "fileURLToPath"
+          ]
+        },
+        {
+          "source": "./packages.mjs",
+          "specifiers": [
+            "installConsumer",
+            "resolvePackage"
+          ]
+        },
+        {
+          "source": "./server/assets.mjs",
+          "specifiers": [
+            "serviceAssets"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 86,
+      "hasStructuralAnalysis": true
+    },
+    "tools/compare.html": {
+      "filePath": "tools/compare.html",
+      "contentHash": "954b73791102ed085e8d90c31123999e35114af0e8d1874bef3501b0f827587c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 155,
+      "hasStructuralAnalysis": false
+    },
+    "tools/inspect-dom.mjs": {
+      "filePath": "tools/inspect-dom.mjs",
+      "contentHash": "f74226041836f4531e48b80c52c06537e2b1a37dc79b8086b067f02eacdaf174",
+      "functions": [
+        {
+          "name": "idMatch",
+          "params": [
+            "id"
+          ],
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "text64",
+          "params": [
+            "id"
+          ],
+          "exported": false,
+          "lineCount": 5
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "readFileSync"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 44,
+      "hasStructuralAnalysis": true
+    },
+    "tools/packages.mjs": {
+      "filePath": "tools/packages.mjs",
+      "contentHash": "05d63cc3e43e3f4d190cd2ac4e2409412eafcd559b32b6f8a91001c444693f80",
+      "functions": [
+        {
+          "name": "sha256File",
+          "params": [
+            "path"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "exists",
+          "params": [
+            "path"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "git",
+          "params": [
+            "args",
+            "cwd"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "npm",
+          "params": [
+            "args",
+            "cwd",
+            "label"
+          ],
+          "exported": false,
+          "lineCount": 21
+        },
+        {
+          "name": "packedFilename",
+          "params": [
+            "dir",
+            "name"
+          ],
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "resolvePackage",
+          "params": [],
+          "exported": true,
+          "lineCount": 81
+        },
+        {
+          "name": "installConsumer",
+          "params": [],
+          "exported": true,
+          "lineCount": 26
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:crypto",
+          "specifiers": [
+            "createHash"
+          ]
+        },
+        {
+          "source": "node:child_process",
+          "specifiers": [
+            "spawnSync"
+          ]
+        },
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "copyFileSync",
+            "mkdirSync",
+            "readFileSync",
+            "readdirSync",
+            "rmSync",
+            "statSync",
+            "writeFileSync"
+          ]
+        },
+        {
+          "source": "node:os",
+          "specifiers": [
+            "tmpdir"
+          ]
+        },
+        {
+          "source": "node:path",
+          "specifiers": [
+            "dirname",
+            "join",
+            "resolve"
+          ]
+        }
+      ],
+      "exports": [
+        "resolvePackage",
+        "installConsumer"
+      ],
+      "totalLines": 213,
+      "hasStructuralAnalysis": true
+    },
+    "tools/preview-request.mjs": {
+      "filePath": "tools/preview-request.mjs",
+      "contentHash": "3233f5b105a84bee254565ed05801b39ff5c5ba91b868480e51606d96b7b8a93",
+      "functions": [
+        {
+          "name": "classifyRequestPath",
+          "params": [
+            "requestUrl",
+            "root"
+          ],
+          "exported": true,
+          "lineCount": 23
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:path",
+          "specifiers": [
+            "resolve",
+            "sep"
+          ]
+        }
+      ],
+      "exports": [
+        "classifyRequestPath"
+      ],
+      "totalLines": 39,
+      "hasStructuralAnalysis": true
+    },
+    "tools/preview.mjs": {
+      "filePath": "tools/preview.mjs",
+      "contentHash": "0a3c3eb34d82b72380aa6a5bde14cd290bd3ef7091c47fd27d58bf3b200435e5",
+      "functions": [
+        {
+          "name": "log",
+          "params": [
+            "message"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "fatal",
+          "params": [
+            "message"
+          ],
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "readJson",
+          "params": [
+            "path"
+          ],
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "readInstalledPackages",
+          "params": [
+            "consumerDir",
+            "packages"
+          ],
+          "exported": false,
+          "lineCount": 24
+        },
+        {
+          "name": "startupFact",
+          "params": [
+            "consumerDir",
+            "op"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "sidecarFact",
+          "params": [
+            "consumerDir",
+            "op"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "sidecarSummary",
+          "params": [
+            "fact",
+            "key",
+            "url"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "main",
+          "params": [],
+          "exported": false,
+          "lineCount": 255
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "mkdirSync",
+            "mkdtempSync",
+            "readFileSync",
+            "rmSync",
+            "writeFileSync"
+          ]
+        },
+        {
+          "source": "node:fs/promises",
+          "specifiers": [
+            "copyFile"
+          ]
+        },
+        {
+          "source": "node:os",
+          "specifiers": [
+            "tmpdir"
+          ]
+        },
+        {
+          "source": "node:path",
+          "specifiers": [
+            "basename",
+            "dirname",
+            "join",
+            "resolve"
+          ]
+        },
+        {
+          "source": "node:url",
+          "specifiers": [
+            "fileURLToPath"
+          ]
+        },
+        {
+          "source": "./catalog-index-contract.mjs",
+          "specifiers": [
+            "EXPECTED_FORMAT",
+            "EXPECTED_VERSION",
+            "contractViolations"
+          ]
+        },
+        {
+          "source": "./packages.mjs",
+          "specifiers": [
+            "installConsumer",
+            "resolvePackage"
+          ]
+        },
+        {
+          "source": "./server/api.mjs",
+          "specifiers": [
+            "createApi"
+          ]
+        },
+        {
+          "source": "./server/service-client.mjs",
+          "specifiers": [
+            "callService"
+          ]
+        },
+        {
+          "source": "./server/assets.mjs",
+          "specifiers": [
+            "assertReadable",
+            "pageAssets",
+            "presentationAssets",
+            "serviceAssets"
+          ]
+        },
+        {
+          "source": "./server/static.mjs",
+          "specifiers": [
+            "createStaticServer",
+            "listen"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 397,
+      "hasStructuralAnalysis": true
+    },
+    "tools/probe-http.mjs": {
+      "filePath": "tools/probe-http.mjs",
+      "contentHash": "2b4415e4f45515a207567a2420cc14162b308f9628a71fe953e28745024590cf",
+      "functions": [
+        {
+          "name": "request",
+          "params": [
+            "path"
+          ],
+          "exported": false,
+          "lineCount": 16
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:net",
+          "specifiers": [
+            "connect"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 31,
+      "hasStructuralAnalysis": true
+    },
+    "tools/probe-old-handler.mjs": {
+      "filePath": "tools/probe-old-handler.mjs",
+      "contentHash": "9b0de2e6724bb6b4be555ebc3e43aa2c82a70e58ef24fe2f2ccb92b7c0e3f0ef",
+      "functions": [
+        {
+          "name": "oldServer",
+          "params": [],
+          "exported": false,
+          "lineCount": 19
+        },
+        {
+          "name": "raw",
+          "params": [
+            "path"
+          ],
+          "exported": false,
+          "lineCount": 10
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:net",
+          "specifiers": [
+            "connect"
+          ]
+        },
+        {
+          "source": "node:crypto",
+          "specifiers": [
+            "createHash"
+          ]
+        },
+        {
+          "source": "node:http",
+          "specifiers": [
+            "createServer"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 59,
+      "hasStructuralAnalysis": true
+    },
+    "tools/probe-shell-quoting.mjs": {
+      "filePath": "tools/probe-shell-quoting.mjs",
+      "contentHash": "f3af9a22b2ee82a03137f704e8b260433c3feae14b4e7b3a55f6b9ec1baa656b",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:child_process",
+          "specifiers": [
+            "spawnSync"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    "tools/scan-attribution-cases.mjs": {
+      "filePath": "tools/scan-attribution-cases.mjs",
+      "contentHash": "2ccdc50a79a693992a5a7918e91988f4a0a7c38a5e2cd501fb0f39b223b9fbe9",
+      "functions": [
+        {
+          "name": "check",
+          "params": [
+            "description",
+            "condition"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "makeSigner",
+          "params": [
+            "identity",
+            "signerClass",
+            "evidenceProvenance",
+            "provenanceLabel"
+          ],
+          "exported": false,
+          "lineCount": 18
+        },
+        {
+          "name": "writeTrust",
+          "params": [
+            "roots"
+          ],
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "consumeWith",
+          "params": [
+            "operatorTrustPath"
+          ],
+          "exported": false,
+          "lineCount": 25
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:crypto",
+          "specifiers": [
+            "generateKeyPairSync"
+          ]
+        },
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "mkdirSync",
+            "mkdtempSync",
+            "writeFileSync"
+          ]
+        },
+        {
+          "source": "node:os",
+          "specifiers": [
+            "tmpdir"
+          ]
+        },
+        {
+          "source": "node:path",
+          "specifiers": [
+            "join"
+          ]
+        },
+        {
+          "source": "@aihq/scan",
+          "specifiers": [
+            "canonicalScanAttestationEnvelopeBytesV2",
+            "canonicalScanCandidateBytesV2",
+            "ed25519KeyIdV2",
+            "sealSourceV2"
+          ]
+        },
+        {
+          "source": "./service/fixture-candidate.mjs",
+          "specifiers": [
+            "buildSignedFixture"
+          ]
+        },
+        {
+          "source": "./service/scan-verifier.mjs",
+          "specifiers": [
+            "buildScanVerification"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 324,
+      "hasStructuralAnalysis": true
+    },
+    "tools/server/api.mjs": {
+      "filePath": "tools/server/api.mjs",
+      "contentHash": "d10973b315c0c6bbb511068b314b74623d7e8cb1cf82dc3435dc0b1e293be362",
+      "functions": [
+        {
+          "name": "readBody",
+          "params": [
+            "request",
+            "limit"
+          ],
+          "exported": false,
+          "lineCount": 23
+        },
+        {
+          "name": "createApi",
+          "params": [],
+          "exported": true,
+          "lineCount": 196
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "readFileSync",
+            "statSync"
+          ]
+        },
+        {
+          "source": "node:path",
+          "specifiers": [
+            "join"
+          ]
+        },
+        {
+          "source": "./service-client.mjs",
+          "specifiers": [
+            "callService"
+          ]
+        },
+        {
+          "source": "./sessions.mjs",
+          "specifiers": [
+            "createSessions"
+          ]
+        }
+      ],
+      "exports": [
+        "createApi"
+      ],
+      "totalLines": 249,
+      "hasStructuralAnalysis": true
+    },
+    "tools/server/assets.mjs": {
+      "filePath": "tools/server/assets.mjs",
+      "contentHash": "00ae9af2e6aa89681d2fc2113b462eb9a1fbd92c9d618af058a8fa2069039a02",
+      "functions": [
+        {
+          "name": "walk",
+          "params": [
+            "root",
+            "extensions"
+          ],
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "pageAssets",
+          "params": [
+            "repoRoot"
+          ],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "serviceAssets",
+          "params": [
+            "repoRoot"
+          ],
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "presentationAssets",
+          "params": [],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "assertReadable",
+          "params": [
+            "repoRoot",
+            "assets"
+          ],
+          "exported": true,
+          "lineCount": 9
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "readdirSync",
+            "statSync"
+          ]
+        },
+        {
+          "source": "node:path",
+          "specifiers": [
+            "join",
+            "posix"
+          ]
+        }
+      ],
+      "exports": [
+        "pageAssets",
+        "serviceAssets",
+        "presentationAssets",
+        "assertReadable"
+      ],
+      "totalLines": 97,
+      "hasStructuralAnalysis": true
+    },
+    "tools/server/service-client.mjs": {
+      "filePath": "tools/server/service-client.mjs",
+      "contentHash": "5324c783a43da2f753db039c7adec2006e85ffd4b4350c9367b5afbbfa5bade0",
+      "functions": [
+        {
+          "name": "callService",
+          "params": [
+            "consumerDir",
+            "request"
+          ],
+          "exported": true,
+          "lineCount": 21
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:child_process",
+          "specifiers": [
+            "spawnSync"
+          ]
+        }
+      ],
+      "exports": [
+        "SERVICE_ENTRY",
+        "callService"
+      ],
+      "totalLines": 37,
+      "hasStructuralAnalysis": true
+    },
+    "tools/server/sessions.mjs": {
+      "filePath": "tools/server/sessions.mjs",
+      "contentHash": "b81ac94928d146836570cb1a5d742ff73d2fbfb6527ae50ba81a636b2efe8c73",
+      "functions": [
+        {
+          "name": "isBoundedRelativePath",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "isRevision",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "writeBytes",
+          "params": [
+            "path",
+            "bytes"
+          ],
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "sha256",
+          "params": [
+            "bytes"
+          ],
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "createSessions",
+          "params": [
+            "runDir"
+          ],
+          "exported": true,
+          "lineCount": 264
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:crypto",
+          "specifiers": [
+            "createHash",
+            "randomUUID"
+          ]
+        },
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "mkdirSync",
+            "rmSync",
+            "writeFileSync"
+          ]
+        },
+        {
+          "source": "node:path",
+          "specifiers": [
+            "dirname",
+            "join",
+            "posix"
+          ]
+        }
+      ],
+      "exports": [
+        "createSessions"
+      ],
+      "totalLines": 369,
+      "hasStructuralAnalysis": true
+    },
+    "tools/server/static.mjs": {
+      "filePath": "tools/server/static.mjs",
+      "contentHash": "b8534894cb042be0bfe4dc1bf7de52b940bdbe5fdc96322fed456ad887ae7c16",
+      "functions": [
+        {
+          "name": "createStaticServer",
+          "params": [
+            "root",
+            "handleApi"
+          ],
+          "exported": true,
+          "lineCount": 41
+        },
+        {
+          "name": "listen",
+          "params": [
+            "server",
+            "port"
+          ],
+          "exported": true,
+          "lineCount": 6
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:http",
+          "specifiers": [
+            "createServer"
+          ]
+        },
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "readFileSync"
+          ]
+        },
+        {
+          "source": "node:path",
+          "specifiers": [
+            "extname"
+          ]
+        },
+        {
+          "source": "../preview-request.mjs",
+          "specifiers": [
+            "classifyRequestPath"
+          ]
+        }
+      ],
+      "exports": [
+        "createStaticServer",
+        "listen"
+      ],
+      "totalLines": 71,
+      "hasStructuralAnalysis": true
+    },
+    "tools/service/artifacts.mjs": {
+      "filePath": "tools/service/artifacts.mjs",
+      "contentHash": "97b7ed0c9437089bb3d722e5cca1135e279341f5786ef6c4e1097c37812459ef",
+      "functions": [
+        {
+          "name": "b64",
+          "params": [
+            "bytes"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "fromB64",
+          "params": [
+            "value"
+          ],
+          "exported": true,
+          "lineCount": 1
+        },
+        {
+          "name": "sessionRelativePath",
+          "params": [
+            "sessionDir",
+            "path"
+          ],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "writeExactBytes",
+          "params": [
+            "path",
+            "bytes"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "readExactBytes",
+          "params": [
+            "path"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "recreateDirectory",
+          "params": [
+            "path"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "copyExactTree",
+          "params": [
+            "fromDir",
+            "toDir"
+          ],
+          "exported": true,
+          "lineCount": 18
+        },
+        {
+          "name": "readJsonFile",
+          "params": [
+            "path"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "writeJsonFile",
+          "params": [
+            "path",
+            "value"
+          ],
+          "exported": true,
+          "lineCount": 3
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "mkdirSync",
+            "readFileSync",
+            "readdirSync",
+            "rmSync",
+            "writeFileSync"
+          ]
+        },
+        {
+          "source": "node:path",
+          "specifiers": [
+            "dirname",
+            "join",
+            "posix",
+            "pathRelative",
+            "sep"
+          ]
+        }
+      ],
+      "exports": [
+        "b64",
+        "fromB64",
+        "sessionRelativePath",
+        "writeExactBytes",
+        "readExactBytes",
+        "recreateDirectory",
+        "copyExactTree",
+        "readJsonFile",
+        "writeJsonFile"
+      ],
+      "totalLines": 93,
+      "hasStructuralAnalysis": true
+    },
+    "tools/service/catalog-access.mjs": {
+      "filePath": "tools/service/catalog-access.mjs",
+      "contentHash": "7b316e7f2fff01151bd8205961994eefb143c8aeb05269ae287fc2d180f12df1",
+      "functions": [
+        {
+          "name": "catalogRoot",
+          "params": [],
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "readCatalog",
+          "params": [],
+          "exported": true,
+          "lineCount": 29
+        },
+        {
+          "name": "catalogEntry",
+          "params": [
+            "entryId",
+            "options"
+          ],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "artifactPath",
+          "params": [
+            "root",
+            "artifact"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "entryContentDir",
+          "params": [
+            "entry",
+            "root"
+          ],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "catalogIntegrity",
+          "params": [
+            "content",
+            "entry"
+          ],
+          "exported": true,
+          "lineCount": 43
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "readFileSync"
+          ]
+        },
+        {
+          "source": "node:url",
+          "specifiers": [
+            "fileURLToPath"
+          ]
+        },
+        {
+          "source": "@aihq/catalog",
+          "specifiers": [
+            "CATALOG_CONTENT_INDEX_ROOT_URL",
+            "CATALOG_CONTENT_INDEX_SUBPATH_V1",
+            "readCatalogContentV1",
+            "resolveCatalogContentPathV1"
+          ]
+        }
+      ],
+      "exports": [
+        "catalogRoot",
+        "readCatalog",
+        "catalogEntry",
+        "artifactPath",
+        "entryContentDir",
+        "catalogIntegrity"
+      ],
+      "totalLines": 168,
+      "hasStructuralAnalysis": true
+    },
+    "tools/service/catalog-assessment.mjs": {
+      "filePath": "tools/service/catalog-assessment.mjs",
+      "contentHash": "bd071f429c00e3e3489d6a72c636bfae58dc0399e49de99f01e390e5f3f049d2",
+      "functions": [
+        {
+          "name": "createCatalogAssessmentResolver",
+          "params": [],
+          "exported": true,
+          "lineCount": 23
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "readFileSync"
+          ]
+        },
+        {
+          "source": "./catalog-access.mjs",
+          "specifiers": [
+            "artifactPath",
+            "readCatalog"
+          ]
+        }
+      ],
+      "exports": [
+        "createCatalogAssessmentResolver"
+      ],
+      "totalLines": 50,
+      "hasStructuralAnalysis": true
+    },
+    "tools/service/catalog-categories.mjs": {
+      "filePath": "tools/service/catalog-categories.mjs",
+      "contentHash": "2cb044c5b91c9cd5e17574f7e6f901f9ed9dbe4d39a998fc125c5b15a0811dcb",
+      "functions": [
+        {
+          "name": "catalogCategories",
+          "params": [],
+          "exported": true,
+          "lineCount": 43
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "readFileSync"
+          ]
+        },
+        {
+          "source": "node:url",
+          "specifiers": [
+            "fileURLToPath"
+          ]
+        },
+        {
+          "source": "@aihq/catalog",
+          "specifiers": [
+            "* as catalog"
+          ]
+        },
+        {
+          "source": "./catalog-access.mjs",
+          "specifiers": [
+            "readCatalog"
+          ]
+        }
+      ],
+      "exports": [
+        "catalogCategories"
+      ],
+      "totalLines": 66,
+      "hasStructuralAnalysis": true
+    },
+    "tools/service/catalog-collections.mjs": {
+      "filePath": "tools/service/catalog-collections.mjs",
+      "contentHash": "d18ad1910bc12d8fcd9edaa70dcd6806da70a9d571fe47f2817a31527bbb8c02",
+      "functions": [
+        {
+          "name": "catalogCollections",
+          "params": [],
+          "exported": true,
+          "lineCount": 27
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "readFileSync"
+          ]
+        },
+        {
+          "source": "node:url",
+          "specifiers": [
+            "fileURLToPath"
+          ]
+        },
+        {
+          "source": "@aihq/catalog",
+          "specifiers": [
+            "CATALOG_COLLECTIONS_SUBPATH_V1",
+            "readCatalogCollectionsV1"
+          ]
+        },
+        {
+          "source": "./catalog-access.mjs",
+          "specifiers": [
+            "readCatalog"
+          ]
+        }
+      ],
+      "exports": [
+        "catalogCollections"
+      ],
+      "totalLines": 53,
+      "hasStructuralAnalysis": true
+    },
+    "tools/service/catalog-publisher.mjs": {
+      "filePath": "tools/service/catalog-publisher.mjs",
+      "contentHash": "859d7d1a3bd4a34341d9b0801b47b0e973d52fbea9024632365081d03987d7d0",
+      "functions": [
+        {
+          "name": "catalogPublisher",
+          "params": [],
+          "exported": true,
+          "lineCount": 37
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "readFileSync"
+          ]
+        },
+        {
+          "source": "node:url",
+          "specifiers": [
+            "fileURLToPath"
+          ]
+        },
+        {
+          "source": "@aihq/catalog",
+          "specifiers": [
+            "* as catalog"
+          ]
+        },
+        {
+          "source": "./catalog-access.mjs",
+          "specifiers": [
+            "readCatalog"
+          ]
+        }
+      ],
+      "exports": [
+        "catalogPublisher"
+      ],
+      "totalLines": 58,
+      "hasStructuralAnalysis": true
+    },
+    "tools/service/catalog-qualification.mjs": {
+      "filePath": "tools/service/catalog-qualification.mjs",
+      "contentHash": "c5063c3bc526e003051c232db37a685bb7d10ff3dccc729cca74989bd4084618",
+      "functions": [
+        {
+          "name": "instant",
+          "params": [
+            "date"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "catalogQualification",
+          "params": [],
+          "exported": true,
+          "lineCount": 79
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "readFileSync"
+          ]
+        },
+        {
+          "source": "node:url",
+          "specifiers": [
+            "fileURLToPath"
+          ]
+        },
+        {
+          "source": "@aihq/catalog",
+          "specifiers": [
+            "* as catalog"
+          ]
+        },
+        {
+          "source": "./catalog-access.mjs",
+          "specifiers": [
+            "catalogRoot",
+            "readCatalog"
+          ]
+        }
+      ],
+      "exports": [
+        "catalogQualification"
+      ],
+      "totalLines": 112,
+      "hasStructuralAnalysis": true
+    },
+    "tools/service/catalog-served.mjs": {
+      "filePath": "tools/service/catalog-served.mjs",
+      "contentHash": "a8303343d4328d6ae1518377f51f0f0add96ab374273f57c10b4c41de559cc5a",
+      "functions": [
+        {
+          "name": "isObject",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "textOr",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "refuse",
+          "params": [
+            "where"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "descriptor",
+          "params": [
+            "value",
+            "where"
+          ],
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "artifact",
+          "params": [
+            "value",
+            "where"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "evidence",
+          "params": [
+            "value",
+            "where"
+          ],
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "evidenceList",
+          "params": [
+            "value",
+            "where"
+          ],
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "strings",
+          "params": [
+            "value",
+            "where"
+          ],
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "subject",
+          "params": [
+            "value",
+            "where"
+          ],
+          "exported": false,
+          "lineCount": 15
+        },
+        {
+          "name": "entry",
+          "params": [
+            "value",
+            "where"
+          ],
+          "exported": false,
+          "lineCount": 32
+        },
+        {
+          "name": "servedCatalogDocument",
+          "params": [
+            "content"
+          ],
+          "exported": true,
+          "lineCount": 14
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "servedCatalogDocument"
+      ],
+      "totalLines": 145,
+      "hasStructuralAnalysis": true
+    },
+    "tools/service/core-adapter.mjs": {
+      "filePath": "tools/service/core-adapter.mjs",
+      "contentHash": "46dca65cd16f75f14fc12fd64e6c448d8ea9e4e331cf32d23d8b0f839b1e8843",
+      "functions": [
+        {
+          "name": "deriveSubject",
+          "params": [
+            "entry"
+          ],
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "subject",
+          "params": [],
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "parseEvidence",
+          "params": [],
+          "exported": true,
+          "lineCount": 29
+        },
+        {
+          "name": "prepare",
+          "params": [],
+          "exported": true,
+          "lineCount": 51
+        },
+        {
+          "name": "placeObservation",
+          "params": [
+            "root",
+            "observation"
+          ],
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "consume",
+          "params": [],
+          "exported": true,
+          "lineCount": 112
+        },
+        {
+          "name": "withinSession",
+          "params": [
+            "sessionDir",
+            "provenance"
+          ],
+          "exported": false,
+          "lineCount": 7
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:path",
+          "specifiers": [
+            "join"
+          ]
+        },
+        {
+          "source": "@aihq/core",
+          "specifiers": [
+            "consumeGovernanceInputV1",
+            "governanceDecisionSourceDigestV2",
+            "governanceDecisionSubjectDigestV2",
+            "organizationEvidenceEnvelopeDigestV1",
+            "parseGovernanceInputV1Bytes",
+            "parseOrganizationEvidenceEnvelopeV1Bytes",
+            "prepareGovernanceInputV1"
+          ]
+        },
+        {
+          "source": "./artifacts.mjs",
+          "specifiers": [
+            "b64",
+            "copyExactTree",
+            "fromB64",
+            "readExactBytes",
+            "recreateDirectory",
+            "sessionRelativePath",
+            "writeExactBytes"
+          ]
+        },
+        {
+          "source": "./catalog-access.mjs",
+          "specifiers": [
+            "catalogEntry"
+          ]
+        },
+        {
+          "source": "./catalog-assessment.mjs",
+          "specifiers": [
+            "createCatalogAssessmentResolver"
+          ]
+        },
+        {
+          "source": "./scan-verifier.mjs",
+          "specifiers": [
+            "buildScanVerification"
+          ]
+        }
+      ],
+      "exports": [
+        "deriveSubject",
+        "subject",
+        "parseEvidence",
+        "prepare",
+        "consume"
+      ],
+      "totalLines": 326,
+      "hasStructuralAnalysis": true
+    },
+    "tools/service/core-service.mjs": {
+      "filePath": "tools/service/core-service.mjs",
+      "contentHash": "b3e30e60e01a6aeeef603b1146f621042b48dc8e35b957799276448b7abc33f6",
+      "functions": [
+        {
+          "name": "main",
+          "params": [],
+          "exported": false,
+          "lineCount": 23
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "./catalog-access.mjs",
+          "specifiers": [
+            "catalogEntry",
+            "catalogIntegrity",
+            "entryContentDir",
+            "readCatalog"
+          ]
+        },
+        {
+          "source": "./catalog-served.mjs",
+          "specifiers": [
+            "servedCatalogDocument"
+          ]
+        },
+        {
+          "source": "./core-adapter.mjs",
+          "specifiers": [
+            "consume",
+            "parseEvidence",
+            "prepare",
+            "subject"
+          ]
+        },
+        {
+          "source": "./validation-fixture.mjs",
+          "specifiers": [
+            "buildValidationFixture"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 122,
+      "hasStructuralAnalysis": true
+    },
+    "tools/service/core-targets.mjs": {
+      "filePath": "tools/service/core-targets.mjs",
+      "contentHash": "a5fc65fb567ba0241f8d9066160dc4c42b599a3d8d6fdbcbd3cec2ed0a96c351",
+      "functions": [
+        {
+          "name": "coreTargets",
+          "params": [],
+          "exported": true,
+          "lineCount": 14
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@aihq/core",
+          "specifiers": [
+            "SUPPORTED_CLIS"
+          ]
+        }
+      ],
+      "exports": [
+        "coreTargets"
+      ],
+      "totalLines": 31,
+      "hasStructuralAnalysis": true
+    },
+    "tools/service/fixture-candidate.mjs": {
+      "filePath": "tools/service/fixture-candidate.mjs",
+      "contentHash": "9e5a7a642d006da302cb1978442ec24d8a192bbb9bf64247b5eb0ef25cbc94ac",
+      "functions": [
+        {
+          "name": "sha",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "cmp",
+          "params": [
+            "a",
+            "b"
+          ],
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "stableJson",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "buildSignedFixture",
+          "params": [],
+          "exported": true,
+          "lineCount": 182
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:crypto",
+          "specifiers": [
+            "createHash"
+          ]
+        },
+        {
+          "source": "@aihq/scan",
+          "specifiers": [
+            "AI_HARNESS_DECISION_V2_SCHEMA_SHA256",
+            "AI_HARNESS_STRICT_V2_COMMIT",
+            "createScanCandidateV2",
+            "signScanCandidateV2"
+          ]
+        }
+      ],
+      "exports": [
+        "buildSignedFixture"
+      ],
+      "totalLines": 230,
+      "hasStructuralAnalysis": true
+    },
+    "tools/service/scan-verifier.mjs": {
+      "filePath": "tools/service/scan-verifier.mjs",
+      "contentHash": "d81487a7fef6229c8099d129e8fda1af957035c3e6e0a8c68947d39317c924b6",
+      "functions": [
+        {
+          "name": "attributeSigner",
+          "params": [
+            "signer",
+            "roots"
+          ],
+          "exported": false,
+          "lineCount": 44
+        },
+        {
+          "name": "presentationFacts",
+          "params": [
+            "verified",
+            "annexArtifacts",
+            "envelopeBytes",
+            "roots"
+          ],
+          "exported": false,
+          "lineCount": 70
+        },
+        {
+          "name": "buildScanVerification",
+          "params": [],
+          "exported": true,
+          "lineCount": 141
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:crypto",
+          "specifiers": [
+            "createPublicKey"
+          ]
+        },
+        {
+          "source": "@aihq/scan",
+          "specifiers": [
+            "canonicalCoreOrganizationEvidenceEnvelopeV1Bytes",
+            "SCAN_RESULT_RECORD_FORMAT_V1",
+            "SCAN_RESULT_RECORD_VERSION_V1",
+            "parseScanAttestationEnvelopeV2Json",
+            "parseScanCandidateV2Json",
+            "projectVerifiedScanAttestationToCoreEvidenceEnvelopeV1",
+            "readScanResultRecordV1",
+            "readScanResultSubjectBindingV1",
+            "verifyScanAttestationV2"
+          ]
+        },
+        {
+          "source": "./artifacts.mjs",
+          "specifiers": [
+            "fromB64",
+            "readJsonFile"
+          ]
+        }
+      ],
+      "exports": [
+        "buildScanVerification"
+      ],
+      "totalLines": 353,
+      "hasStructuralAnalysis": true
+    },
+    "tools/service/validation-fixture.mjs": {
+      "filePath": "tools/service/validation-fixture.mjs",
+      "contentHash": "1662fdf36e6b7e4bcec7b3438caebb12ef9467ef03e312d2bc17fc861124a998",
+      "functions": [
+        {
+          "name": "closurePaths",
+          "params": [
+            "contentDir"
+          ],
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "matchedPathOf",
+          "params": [
+            "root",
+            "entry",
+            "contentDir"
+          ],
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "exampleAuthority",
+          "params": [],
+          "exported": false,
+          "lineCount": 27
+        },
+        {
+          "name": "buildValidationFixture",
+          "params": [],
+          "exported": true,
+          "lineCount": 151
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:crypto",
+          "specifiers": [
+            "generateKeyPairSync"
+          ]
+        },
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "readdirSync"
+          ]
+        },
+        {
+          "source": "node:path",
+          "specifiers": [
+            "join"
+          ]
+        },
+        {
+          "source": "@aihq/core",
+          "specifiers": [
+            "organizationEvidenceEnvelopeDigestV1",
+            "governanceDecisionDigestV2"
+          ]
+        },
+        {
+          "source": "@aihq/scan",
+          "specifiers": [
+            "canonicalCoreOrganizationEvidenceEnvelopeV1Bytes",
+            "canonicalScanAttestationEnvelopeBytesV2",
+            "canonicalScanCandidateBytesV2",
+            "ed25519KeyIdV2",
+            "projectVerifiedScanAttestationToCoreEvidenceEnvelopeV1",
+            "sealSourceV2",
+            "verifyScanAttestationV2"
+          ]
+        },
+        {
+          "source": "./artifacts.mjs",
+          "specifiers": [
+            "b64",
+            "writeJsonFile"
+          ]
+        },
+        {
+          "source": "./catalog-access.mjs",
+          "specifiers": [
+            "artifactPath",
+            "catalogEntry",
+            "entryContentDir"
+          ]
+        },
+        {
+          "source": "./core-adapter.mjs",
+          "specifiers": [
+            "deriveSubject"
+          ]
+        },
+        {
+          "source": "./fixture-candidate.mjs",
+          "specifiers": [
+            "buildSignedFixture"
+          ]
+        }
+      ],
+      "exports": [
+        "buildValidationFixture"
+      ],
+      "totalLines": 256,
+      "hasStructuralAnalysis": true
+    },
+    "tools/tests/catalog-served.test.mjs": {
+      "filePath": "tools/tests/catalog-served.test.mjs",
+      "contentHash": "16de2fb1662488e0d7090fec6326dd9dd41fede8066960ef95fc71a76dbe5fc5",
+      "functions": [
+        {
+          "name": "record",
+          "params": [
+            "kind"
+          ],
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "readerResult",
+          "params": [],
+          "exported": false,
+          "lineCount": 44
+        },
+        {
+          "name": "undeclared",
+          "params": [
+            "served"
+          ],
+          "exported": false,
+          "lineCount": 24
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:test",
+          "specifiers": [
+            "test"
+          ]
+        },
+        {
+          "source": "node:assert/strict",
+          "specifiers": [
+            "assert"
+          ]
+        },
+        {
+          "source": "../service/catalog-served.mjs",
+          "specifiers": [
+            "servedCatalogDocument"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 167,
+      "hasStructuralAnalysis": true
+    },
+    "tools/tests/publisher-refusal.test.mjs": {
+      "filePath": "tools/tests/publisher-refusal.test.mjs",
+      "contentHash": "d6b07f2232efdedfd971207921327182d76fb7d667c5d3a153ecc21b894a1d6d",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:test",
+          "specifiers": [
+            "test"
+          ]
+        },
+        {
+          "source": "node:assert/strict",
+          "specifiers": [
+            "assert"
+          ]
+        },
+        {
+          "source": "../../src/catalog/publisher.js",
+          "specifiers": [
+            "applyPublisher",
+            "provenanceNote",
+            "publisherOf"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 80,
+      "hasStructuralAnalysis": true
+    },
+    "tools/tests/revisions.test.mjs": {
+      "filePath": "tools/tests/revisions.test.mjs",
+      "contentHash": "037e847e7bc0daf2263a675afdf40ca2b41cd3959bce2805dd08e1bc8bcf51a3",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:test",
+          "specifiers": [
+            "test"
+          ]
+        },
+        {
+          "source": "node:assert/strict",
+          "specifiers": [
+            "assert"
+          ]
+        },
+        {
+          "source": "../../src/governance/revisions.js",
+          "specifiers": [
+            "INPUT_SLOTS",
+            "createRevisionTracker"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 117,
+      "hasStructuralAnalysis": true
+    },
+    "tools/tests/session-relative.test.mjs": {
+      "filePath": "tools/tests/session-relative.test.mjs",
+      "contentHash": "7eaa2aa28af6775207765003416107a0ef166432da1114e2736454d84f3189ed",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:test",
+          "specifiers": [
+            "test"
+          ]
+        },
+        {
+          "source": "node:assert/strict",
+          "specifiers": [
+            "assert"
+          ]
+        },
+        {
+          "source": "node:path",
+          "specifiers": [
+            "join"
+          ]
+        },
+        {
+          "source": "../service/artifacts.mjs",
+          "specifiers": [
+            "sessionRelativePath"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 54,
+      "hasStructuralAnalysis": true
+    },
+    "tools/tests/sessions-observation.test.mjs": {
+      "filePath": "tools/tests/sessions-observation.test.mjs",
+      "contentHash": "0b9984ca261c897f437a35d8eb5438ec8a82bdc36442aff9b00914725436144c",
+      "functions": [
+        {
+          "name": "b64",
+          "params": [
+            "text"
+          ],
+          "exported": false,
+          "lineCount": 1
+        },
+        {
+          "name": "observation",
+          "params": [
+            "revision",
+            "marker"
+          ],
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "withSessions",
+          "params": [
+            "run"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "storedFile",
+          "params": [
+            "runDir",
+            "sessionId"
+          ],
+          "exported": false,
+          "lineCount": 2
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:test",
+          "specifiers": [
+            "test"
+          ]
+        },
+        {
+          "source": "node:assert/strict",
+          "specifiers": [
+            "assert"
+          ]
+        },
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "mkdtempSync",
+            "readFileSync",
+            "rmSync",
+            "existsSync"
+          ]
+        },
+        {
+          "source": "node:os",
+          "specifiers": [
+            "tmpdir"
+          ]
+        },
+        {
+          "source": "node:path",
+          "specifiers": [
+            "join"
+          ]
+        },
+        {
+          "source": "../server/sessions.mjs",
+          "specifiers": [
+            "createSessions"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 135,
+      "hasStructuralAnalysis": true
+    }
+  }
+}

@@ -1,0 +1,27 @@
+Found 10 batch files (8 logical batches, 2 multi-part):
+  batch-1-part-1.json: 39 nodes, 123 edges
+  batch-1-part-2.json: 45 nodes, 95 edges
+  batch-2.json: 50 nodes, 111 edges
+  batch-3-part-1.json: 31 nodes, 59 edges
+  batch-3-part-2.json: 30 nodes, 69 edges
+  batch-4.json: 31 nodes, 71 edges
+  batch-5.json: 16 nodes, 46 edges
+  batch-6.json: 3 nodes, 18 edges
+  batch-7.json: 22 nodes, 72 edges
+  batch-8.json: 19 nodes, 18 edges
+
+Input: 286 nodes, 682 edges
+
+Fixed (2 corrections):
+     2 × tested_by edges dropped (orphan endpoint or test\u2194test / prod\u2194prod pair)
+
+Tested-by linker:
+     0 × tested_by edges produced (path-convention supplement, production \u2192 test)
+     5 × production nodes tagged "tested"
+
+Output: 286 nodes, 679 edges
+
+Imports edge recovery:
+  Recovered 0 `imports` edges from importMap (100 entries scanned)
+
+Written to D:\dev\aih-ui\.ua\intermediate\assembled-graph.json (278 KB)

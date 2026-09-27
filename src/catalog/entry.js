@@ -17,7 +17,7 @@ import { NOT_PUBLISHED } from "../app/absence.js";
 
 /* Kind icons and accents use the theme's per-kind color roles. */
 export const KIND_ICON = {
-  skill: "bolt",
+  skill: "extension",
   agent: "smart_toy",
   mcp: "dns",
   package: "deployed_code",

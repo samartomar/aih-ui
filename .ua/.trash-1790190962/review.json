@@ -1,0 +1,27 @@
+{
+  "issues": [],
+  "warnings": [
+    "Node 'file:tools/probe-shell-quoting.mjs' has no edges (orphan)"
+  ],
+  "stats": {
+    "totalNodes": 286,
+    "totalEdges": 679,
+    "totalLayers": 8,
+    "tourSteps": 15,
+    "nodeTypes": {
+      "file": 97,
+      "function": 186,
+      "document": 3
+    },
+    "edgeTypes": {
+      "contains": 186,
+      "exports": 127,
+      "imports": 146,
+      "calls": 117,
+      "tested_by": 5,
+      "depends_on": 70,
+      "related": 12,
+      "documents": 16
+    }
+  }
+}

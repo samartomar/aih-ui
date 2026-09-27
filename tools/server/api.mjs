@@ -20,7 +20,7 @@ const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
  * of file bytes sessions.mjs accepts, plus the growth base64 costs and the paths
  * around it. Every other route keeps the smaller bound.
  */
-const MAX_BODY_BYTES = { "/api/observation": 24 * 1024 * 1024, "/api/workbench-settings": 16384, "/api/workbench-settings/update": 16384, "/api/workbench-settings/clients": 16384 };
+const MAX_BODY_BYTES = { "/api/observation": 24 * 1024 * 1024, "/api/policy-bundle-structure": 1500000, "/api/decision-structure": 1500000, "/api/workbench-settings": 16384, "/api/workbench-settings/update": 16384, "/api/workbench-settings/clients": 16384 };
 
 function readBody(request, limit) {
   return new Promise((resolveBody, rejectBody) => {
@@ -61,6 +61,10 @@ export function createApi({ consumerDir, runDir, summary, settingsPath }) {
     "POST /api/workbench-settings": (body) => settings.create(body),
     "POST /api/workbench-settings/update": (body) => settings.update(body),
     "POST /api/workbench-settings/clients": (body) => settings.updateClients(body),
+    "POST /api/policy-bundle-structure": (body) =>
+      callService(consumerDir, { op: "policyBundleStructure", base64: body.base64 }),
+    "POST /api/decision-structure": (body) =>
+      callService(consumerDir, { op: "governanceDecisionStructure", base64: body.base64 }),
     /** Provenance of what is actually installed. */
     "GET /api/packages": () => ({ ok: true, ...summary }),
 
@@ -240,7 +244,7 @@ export function createApi({ consumerDir, runDir, summary, settingsPath }) {
     };
 
     try {
-      if (pathname.startsWith("/api/workbench-settings")) {
+      if (pathname.startsWith("/api/workbench-settings") || pathname === "/api/policy-bundle-structure" || pathname === "/api/decision-structure") {
         const host = request.headers.host;
         const allowedHosts = [`127.0.0.1:${request.socket.localPort}`, `localhost:${request.socket.localPort}`];
         if (!allowedHosts.includes(host) || (request.headers.origin && request.headers.origin !== `http://${host}`) || request.headers["sec-fetch-site"] === "cross-site") {

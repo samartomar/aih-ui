@@ -70,6 +70,15 @@ const summary = await (await fetch(new URL("summary.json", base))).json();
 const target = summary.coreTargets?.state === "published" ? summary.coreTargets.targets[0] : null;
 check("summary publishes at least one Core target", typeof target === "string", target ?? "none");
 
+const invalidDecision = remember("invalid decision inspection", await post("/api/decision-structure", { base64: Buffer.from("{}", "utf8").toString("base64") }));
+check("Core refuses an invalid Decision V2 structure", invalidDecision.status === 200 && invalidDecision.body?.parsed === false && typeof invalidDecision.body.reason === "string", invalidDecision.body?.reason);
+const crossSiteDecision = await fetch(new URL("/api/decision-structure", base), {
+  method: "POST",
+  headers: { "content-type": "application/json", origin: "https://example.invalid" },
+  body: JSON.stringify({ base64: "e30=" }),
+});
+check("local decision inspection refuses a cross-site request", crossSiteDecision.status === 403);
+
 const found = await firstEntryWithContent();
 check("an aih entry with package content exists", found !== null);
 if (found === null || target === null) {
@@ -103,6 +112,14 @@ check("prepare is byte-identical on repeat", prepared.body?.deterministic === tr
 
 const verdict = remember("consume", await post("/api/consume", { sessionId }));
 check("consume answers with six axes", typeof verdict.body?.structure === "string" && verdict.body?.execution === "not-attempted", verdict.body?.error);
+const findingDetail = verdict.body?.scanResult?.findingDetail;
+check(
+  "Scan's typed finding reader returns detail or a named refusal",
+  findingDetail?.status === "available"
+    ? Array.isArray(findingDetail.findings) && Array.isArray(findingDetail.gaps)
+    : findingDetail?.status === "invalid-input" && typeof findingDetail.reason === "string",
+  findingDetail?.reason ?? findingDetail?.status ?? "absent",
+);
 check(
   "the verdict names the operator files by their session-relative names",
   verdict.body?.authoritySource === "operator/authority-bundle.json" && verdict.body?.trustSource === "operator/operator-trust.json",

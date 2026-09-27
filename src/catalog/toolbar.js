@@ -1,11 +1,9 @@
 /*
- * The filter toolbar, in two places.
+ * Two-row toolbar: search and review state, then counts, kinds and selectors.
  *
- * PRIMARY - the design source's own task, in its own position:
+ *   Search                         All   Needs Review   Egress Out   Signals
  *
- *   All Items   Needs Review   Egress Out          need review   send data out
- *
- * "All Items" counts the cards matching the current filters. "Needs Review" and
+ * "All" is the unfiltered review state. "Needs Review" and
  * "Egress Out" keep their purpose and their place but are unavailable, with no
  * count: no per-item scan result or Core disposition is published to derive a
  * review state from, and no item declares egress - an empty declaration is not
@@ -15,9 +13,7 @@
  * The unavailable signal chips remain in the toolbar's Signals disclosure,
  * so their explicit absence wording stays available without repeating a row.
  *
- * SECONDARY - the technical filters that are genuinely available (kind, source
- * type, sort), in the grid header where the design source puts its sort
- * control, so they no longer displace the approved toolbar.
+ * The second row contains the live entry count, kind chips, source type and sort.
  *
  * The kind pills scroll rather than wrap. The fade at their right edge is a
  * scroll affordance and is removed once there is nothing left to scroll to.
@@ -30,6 +26,8 @@ import { sortedCounts } from "./selectors.js";
 const PILL_ACTIVE = "px-2.5 py-1 rounded bg-surface-container-highest text-on-surface font-medium text-[10.5px] font-mono shadow-xs transition-colors shrink-0";
 const PILL_IDLE = "px-2.5 py-1 rounded hover:bg-surface-container text-on-surface-variant text-[10.5px] font-mono transition-colors shrink-0";
 const PILL_UNAVAILABLE = "px-2.5 py-1 rounded text-on-surface-variant text-[10.5px] font-mono shrink-0 opacity-50 cursor-not-allowed";
+const KIND_LABELS = { agent: "Agents", mcp: "MCP", skill: "Skills", package: "Packages", profile: "Profiles" };
+const KIND_ORDER = Object.keys(KIND_LABELS);
 
 /** Why each unavailable review state has nothing to filter on. */
 const UNAVAILABLE = {
@@ -65,14 +63,13 @@ function summaryChip(icon, label, title) {
 }
 
 function kindPill(label, count, active, onClick, key = label) {
-  // Sized to the header's own 16.5px line, so moving the kind filter here
-  // does not make the row taller than the design source's sort line.
+  // Keep the chips compact and non-wrapping within their scrollable strip.
   const button = el("button", `px-2 py-0 leading-[16.5px] rounded text-[10px] font-mono transition-colors shrink-0 ${active ? "bg-surface-container-highest text-on-surface font-medium shadow-xs" : "hover:bg-surface-container text-on-surface-variant"}`, undefined);
   button.type = "button";
   button.dataset.kind = JSON.stringify(key);
   button.setAttribute("aria-pressed", String(active));
   button.title = `${count} items matching this kind and the current source, category and search filters.`;
-  button.textContent = `${label} (${count})`;
+  button.textContent = key === null ? label : `${label} (${count})`;
   button.addEventListener("click", onClick);
   return button;
 }
@@ -92,6 +89,7 @@ export function createToolbar({ elements, onQuery, onToggleKind, onSourceType, o
   elements.sourceFilter.addEventListener("change", () => onSourceType(elements.sourceFilter.value || null));
   elements.sortSelect.addEventListener("change", () => onSort(elements.sortSelect.value));
   elements.kindFilters.addEventListener("scroll", markPillOverflow, { passive: true });
+  new ResizeObserver(markPillOverflow).observe(elements.kindFilters);
 
   return {
     /** The saved query, put into the input before the first render. */
@@ -101,11 +99,11 @@ export function createToolbar({ elements, onQuery, onToggleKind, onSourceType, o
 
     /** @param model { kindCounts, sourceTypeCounts, total, visibleTotal, view } */
     render(model) {
-      // --- primary: the prototype's review task ---------------------------
-      // "All Items" is the only review state that can be derived, so it is the
+      // --- primary: review state -----------------------------------------
+      // "All" is the only review state that can be derived, so it is the
       // selected one; selecting it again changes nothing.
       elements.reviewFilters.replaceChildren(
-        reviewPill("All Items", model.visibleTotal, true, () => {}),
+        reviewPill("All", null, true, () => {}),
         reviewPill("Needs Review", null, false, null),
         reviewPill("Egress Out", null, false, null),
       );
@@ -118,11 +116,16 @@ export function createToolbar({ elements, onQuery, onToggleKind, onSourceType, o
       const focusedKind = elements.kindFilters.contains(document.activeElement) ? document.activeElement.dataset.kind : null;
       elements.kindFilters.replaceChildren();
       elements.kindFilters.appendChild(
-        kindPill("All kinds", model.total, model.view.kind === null, () => onToggleKind(null), null),
+        kindPill("All", model.total, model.view.kind === null, () => onToggleKind(null), null),
       );
-      for (const [kind] of sortedCounts(model.kindCounts)) {
+      const kinds = sortedCounts(model.kindCounts).sort(([a], [b]) =>
+        (KIND_ORDER.indexOf(a) === -1 ? KIND_ORDER.length : KIND_ORDER.indexOf(a)) -
+        (KIND_ORDER.indexOf(b) === -1 ? KIND_ORDER.length : KIND_ORDER.indexOf(b)));
+      for (const [kind] of kinds) {
+        // Retain an active zero-result kind so its filter remains visible.
+        if (model.kindCounts.get(kind) === 0 && model.view.kind !== kind) continue;
         elements.kindFilters.appendChild(
-          kindPill(kind, model.kindCounts.get(kind), model.view.kind === kind, () => onToggleKind(kind)),
+          kindPill(KIND_LABELS[kind] ?? kind, model.kindCounts.get(kind), model.view.kind === kind, () => onToggleKind(kind), kind),
         );
       }
       if (focusedKind) [...elements.kindFilters.querySelectorAll("button[data-kind]")].find((button) => button.dataset.kind === focusedKind)?.focus({ preventScroll: true });

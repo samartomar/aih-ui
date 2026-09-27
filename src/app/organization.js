@@ -22,7 +22,7 @@ export function createOrganization({ elements, onEdit }) {
     setSettings(settings, settingsLocation = location) {
       saved = settings;
       location = settingsLocation;
-      elements.orgTriggerLabel.textContent = settings.organization?.name ?? "Personal workspace";
+      elements.orgTriggerLabel.textContent = settings.role === "developer" ? "Developer workspace" : settings.organization?.name ?? "Personal workspace";
       elements.orgModalTrigger.title = "View saved local setup";
       elements.workbenchRole.textContent = settings.role ?? "personal";
       elements.workbenchExperience.textContent = settings.experience === "enterprise" ? "Enterprise" : "Vibe coder";

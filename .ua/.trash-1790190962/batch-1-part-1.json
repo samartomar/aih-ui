@@ -1,0 +1,1504 @@
+{
+ "nodes": [
+  {
+   "id": "file:src/app/dom.js",
+   "type": "file",
+   "name": "dom.js",
+   "filePath": "src/app/dom.js",
+   "summary": "Shared DOM primitives (text normalization, element creation via textContent, and fail-loud id lookup) used by every UI component so package data is never parsed as HTML.",
+   "tags": [
+    "utility",
+    "dom",
+    "security",
+    "shared"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/app/dom.js:text",
+   "type": "function",
+   "name": "text",
+   "filePath": "src/app/dom.js",
+   "lineRange": [
+    9,
+    11
+   ],
+   "summary": "Normalizes a value to a non-empty string or null, treating empty and undefined as absence.",
+   "tags": [
+    "utility",
+    "dom",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/app/dom.js:el",
+   "type": "function",
+   "name": "el",
+   "filePath": "src/app/dom.js",
+   "lineRange": [
+    13,
+    18
+   ],
+   "summary": "Creates a DOM element with an optional class and text content set safely via textContent.",
+   "tags": [
+    "utility",
+    "dom",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/app/dom.js:collectIds",
+   "type": "function",
+   "name": "collectIds",
+   "filePath": "src/app/dom.js",
+   "lineRange": [
+    28,
+    36
+   ],
+   "summary": "Looks up a list of element ids and returns them camelCase-keyed, throwing on the first missing element.",
+   "tags": [
+    "utility",
+    "dom",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:src/catalog/cards.js",
+   "type": "file",
+   "name": "cards.js",
+   "filePath": "src/catalog/cards.js",
+   "summary": "Renders the catalog grid: one card per visible entry with kind icon, publisher title and description, curated or declared category badge, and placeholder scan/token slots that say Not published.",
+   "tags": [
+    "component",
+    "rendering",
+    "catalog",
+    "ui"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/catalog/cards.js:badgeOf",
+   "type": "function",
+   "name": "badgeOf",
+   "filePath": "src/catalog/cards.js",
+   "lineRange": [
+    35,
+    44
+   ],
+   "summary": "Chooses a card's category badge from Catalog's curated category or the upstream-declared category.",
+   "tags": [
+    "component",
+    "rendering",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/cards.js:card",
+   "type": "function",
+   "name": "card",
+   "filePath": "src/catalog/cards.js",
+   "lineRange": [
+    46,
+    135
+   ],
+   "summary": "Builds one catalog card with header, publisher description and footer slots for scan status, token estimate and a disabled allow toggle.",
+   "tags": [
+    "component",
+    "rendering",
+    "internal"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/catalog/cards.js:createCards",
+   "type": "function",
+   "name": "createCards",
+   "filePath": "src/catalog/cards.js",
+   "lineRange": [
+    141,
+    173
+   ],
+   "summary": "Creates the cards grid component that renders visible entries and the visible count caption.",
+   "tags": [
+    "component",
+    "rendering",
+    "exported"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:src/catalog/categories.js",
+   "type": "file",
+   "name": "categories.js",
+   "filePath": "src/catalog/categories.js",
+   "summary": "Rebinds Catalog's curated category records to served index entries and exposes badge, note and count helpers, never inferring categories that Catalog did not curate.",
+   "tags": [
+    "data-model",
+    "catalog",
+    "curation",
+    "utility"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/catalog/categories.js:applyCategories",
+   "type": "function",
+   "name": "applyCategories",
+   "filePath": "src/catalog/categories.js",
+   "lineRange": [
+    23,
+    55
+   ],
+   "summary": "Binds served curated category records to index entries by entry id and subject digest, returning state, taxonomy and a per-entry map.",
+   "tags": [
+    "data-model",
+    "catalog",
+    "exported"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/catalog/categories.js:curatedCategoryOf",
+   "type": "function",
+   "name": "curatedCategoryOf",
+   "filePath": "src/catalog/categories.js",
+   "lineRange": [
+    63,
+    70
+   ],
+   "summary": "Returns the curated category record for an entry, if any.",
+   "tags": [
+    "data-model",
+    "catalog",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/categories.js:curationNote",
+   "type": "function",
+   "name": "curationNote",
+   "filePath": "src/catalog/categories.js",
+   "lineRange": [
+    73,
+    76
+   ],
+   "summary": "Produces the tooltip note explaining a category is curated by Catalog maintainers.",
+   "tags": [
+    "data-model",
+    "catalog",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/categories.js:categoryBadge",
+   "type": "function",
+   "name": "categoryBadge",
+   "filePath": "src/catalog/categories.js",
+   "lineRange": [
+    79,
+    94
+   ],
+   "summary": "Builds the badge label and title for an entry's curated category or Not curated.",
+   "tags": [
+    "data-model",
+    "catalog",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/categories.js:categoryRows",
+   "type": "function",
+   "name": "categoryRows",
+   "filePath": "src/catalog/categories.js",
+   "lineRange": [
+    101,
+    114
+   ],
+   "summary": "Counts curated categories across entries into sorted rows for display.",
+   "tags": [
+    "data-model",
+    "catalog",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:src/catalog/collections.js",
+   "type": "file",
+   "name": "collections.js",
+   "filePath": "src/catalog/collections.js",
+   "summary": "Applies Catalog's published collection view to the index to decide which entries are current inventory, counting older entries only as diagnostics.",
+   "tags": [
+    "data-model",
+    "catalog",
+    "filtering",
+    "inventory"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/catalog/collections.js:applyCollections",
+   "type": "function",
+   "name": "applyCollections",
+   "filePath": "src/catalog/collections.js",
+   "lineRange": [
+    28,
+    56
+   ],
+   "summary": "Filters index entries to current inventory using Catalog's collection membership and subject digests, reporting non-current entries as diagnostics.",
+   "tags": [
+    "data-model",
+    "catalog",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:src/catalog/controller.js",
+   "type": "file",
+   "name": "controller.js",
+   "filePath": "src/catalog/controller.js",
+   "summary": "Sources & Catalogs feature controller that owns the single selection/filter state, loads the catalog, and wires all catalog components through models and callbacks.",
+   "tags": [
+    "controller",
+    "entry-point",
+    "state-management",
+    "catalog"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/catalog/controller.js:createCatalog",
+   "type": "function",
+   "name": "createCatalog",
+   "filePath": "src/catalog/controller.js",
+   "lineRange": [
+    35,
+    195
+   ],
+   "summary": "Creates the catalog feature: loads data, holds view/selection state, and renders cards, details, metrics, navigation, provenance and toolbar on each change.",
+   "tags": [
+    "controller",
+    "entry-point",
+    "exported"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "file:src/catalog/details.js",
+   "type": "file",
+   "name": "details.js",
+   "filePath": "src/catalog/details.js",
+   "summary": "Renders the inspector's Details and Security tabs: publisher overview, declared capabilities, upstream provenance, evidence statements and Catalog qualification, with explicit absence wording.",
+   "tags": [
+    "component",
+    "inspector",
+    "rendering",
+    "catalog",
+    "security"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:src/catalog/details.js:row",
+   "type": "function",
+   "name": "row",
+   "filePath": "src/catalog/details.js",
+   "lineRange": [
+    58,
+    67
+   ],
+   "summary": "Builds a labelled key/value row for the inspector details panes.",
+   "tags": [
+    "component",
+    "inspector",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/details.js:capability",
+   "type": "function",
+   "name": "capability",
+   "filePath": "src/catalog/details.js",
+   "lineRange": [
+    80,
+    91
+   ],
+   "summary": "Renders one declared-capability row, distinguishing Not declared from Not published.",
+   "tags": [
+    "component",
+    "inspector",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/details.js:renderQualification",
+   "type": "function",
+   "name": "renderQualification",
+   "filePath": "src/catalog/details.js",
+   "lineRange": [
+    133,
+    181
+   ],
+   "summary": "Renders the Security tab's qualification block with state, receipt window, signature and attestation.",
+   "tags": [
+    "component",
+    "inspector",
+    "internal"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/catalog/details.js:createDetails",
+   "type": "function",
+   "name": "createDetails",
+   "filePath": "src/catalog/details.js",
+   "lineRange": [
+    184,
+    378
+   ],
+   "summary": "Creates the inspector component that renders the Details and Security tabs for the selected entry.",
+   "tags": [
+    "component",
+    "inspector",
+    "exported"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "file:src/catalog/elements.js",
+   "type": "file",
+   "name": "elements.js",
+   "filePath": "src/catalog/elements.js",
+   "summary": "Looks up all Sources & Catalogs DOM elements once and groups them per owning component so no component queries the DOM itself.",
+   "tags": [
+    "dom",
+    "configuration",
+    "catalog",
+    "ui"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/catalog/elements.js:catalogElements",
+   "type": "function",
+   "name": "catalogElements",
+   "filePath": "src/catalog/elements.js",
+   "lineRange": [
+    9,
+    71
+   ],
+   "summary": "Collects all catalog DOM ids and groups them by owning component (provenance, navigation, toolbar, grid, inspector).",
+   "tags": [
+    "dom",
+    "configuration",
+    "exported"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:src/catalog/entry.js",
+   "type": "file",
+   "name": "entry.js",
+   "filePath": "src/catalog/entry.js",
+   "summary": "Pure readers over a single published catalog entry: source identity by source type, digests, labels, evidence statements, kind icons and search text.",
+   "tags": [
+    "utility",
+    "data-model",
+    "catalog",
+    "pure-functions"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/catalog/entry.js:shortDigest",
+   "type": "function",
+   "name": "shortDigest",
+   "filePath": "src/catalog/entry.js",
+   "lineRange": [
+    41,
+    46
+   ],
+   "summary": "Shortens a sha256 digest for compact display.",
+   "tags": [
+    "utility",
+    "data-model",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/entry.js:sourceIdentity",
+   "type": "function",
+   "name": "sourceIdentity",
+   "filePath": "src/catalog/entry.js",
+   "lineRange": [
+    51,
+    67
+   ],
+   "summary": "Reads an entry's source identity according to its source.type discriminator (github, npm, aih).",
+   "tags": [
+    "utility",
+    "data-model",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/entry.js:sourceLabelOf",
+   "type": "function",
+   "name": "sourceLabelOf",
+   "filePath": "src/catalog/entry.js",
+   "lineRange": [
+    70,
+    75
+   ],
+   "summary": "Returns a short display label for an entry's source.",
+   "tags": [
+    "utility",
+    "data-model",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/entry.js:sourceLabelTitle",
+   "type": "function",
+   "name": "sourceLabelTitle",
+   "filePath": "src/catalog/entry.js",
+   "lineRange": [
+    77,
+    82
+   ],
+   "summary": "Returns a descriptive tooltip for an entry's source label.",
+   "tags": [
+    "utility",
+    "data-model",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/entry.js:sourceDetailRows",
+   "type": "function",
+   "name": "sourceDetailRows",
+   "filePath": "src/catalog/entry.js",
+   "lineRange": [
+    85,
+    112
+   ],
+   "summary": "Builds the detail rows describing an entry's upstream source per source type.",
+   "tags": [
+    "utility",
+    "data-model",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/entry.js:identity",
+   "type": "function",
+   "name": "identity",
+   "filePath": "src/catalog/entry.js",
+   "lineRange": [
+    114,
+    130
+   ],
+   "summary": "Returns an entry's displayable identity fields (name, kind, ids, digest).",
+   "tags": [
+    "utility",
+    "data-model",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/entry.js:statement",
+   "type": "function",
+   "name": "statement",
+   "filePath": "src/catalog/entry.js",
+   "lineRange": [
+    139,
+    149
+   ],
+   "summary": "Normalizes a single evidence statement from an entry.",
+   "tags": [
+    "utility",
+    "data-model",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/entry.js:statementsOf",
+   "type": "function",
+   "name": "statementsOf",
+   "filePath": "src/catalog/entry.js",
+   "lineRange": [
+    151,
+    161
+   ],
+   "summary": "Lists an entry's evidence statements with summaries as Catalog's reader returns them.",
+   "tags": [
+    "utility",
+    "data-model",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/entry.js:firstSummary",
+   "type": "function",
+   "name": "firstSummary",
+   "filePath": "src/catalog/entry.js",
+   "lineRange": [
+    163,
+    166
+   ],
+   "summary": "Returns the first available statement summary for an entry.",
+   "tags": [
+    "utility",
+    "data-model",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/entry.js:searchText",
+   "type": "function",
+   "name": "searchText",
+   "filePath": "src/catalog/entry.js",
+   "lineRange": [
+    171,
+    196
+   ],
+   "summary": "Builds the lowercase searchable text for an entry from its identity, source and publisher fields.",
+   "tags": [
+    "utility",
+    "data-model",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:src/catalog/index-source.js",
+   "type": "file",
+   "name": "index-source.js",
+   "filePath": "src/catalog/index-source.js",
+   "summary": "Loads the served @aihq/catalog index and preview summary, enforces the index format/version contract, and applies collections, publisher, qualification and category sidecars.",
+   "tags": [
+    "data-loading",
+    "validation",
+    "catalog",
+    "service"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/catalog/index-source.js:loadJson",
+   "type": "function",
+   "name": "loadJson",
+   "filePath": "src/catalog/index-source.js",
+   "lineRange": [
+    29,
+    42
+   ],
+   "summary": "Fetches and parses a served JSON document, raising a descriptive error on failure.",
+   "tags": [
+    "data-loading",
+    "validation",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/index-source.js:loadCatalog",
+   "type": "function",
+   "name": "loadCatalog",
+   "filePath": "src/catalog/index-source.js",
+   "lineRange": [
+    62,
+    87
+   ],
+   "summary": "Loads the catalog index and summary, validates the contract, and applies collections, publisher, qualification and category data.",
+   "tags": [
+    "data-loading",
+    "validation",
+    "exported"
+   ],
+   "complexity": "simple"
+  }
+ ],
+ "edges": [
+  {
+   "source": "file:src/app/dom.js",
+   "target": "function:src/app/dom.js:text",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/app/dom.js",
+   "target": "function:src/app/dom.js:text",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/app/dom.js",
+   "target": "function:src/app/dom.js:el",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/app/dom.js",
+   "target": "function:src/app/dom.js:el",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/app/dom.js",
+   "target": "function:src/app/dom.js:collectIds",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/app/dom.js",
+   "target": "function:src/app/dom.js:collectIds",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/cards.js",
+   "target": "function:src/catalog/cards.js:badgeOf",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/cards.js",
+   "target": "function:src/catalog/cards.js:card",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/cards.js",
+   "target": "function:src/catalog/cards.js:createCards",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/cards.js",
+   "target": "function:src/catalog/cards.js:createCards",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/cards.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/cards.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/cards.js",
+   "target": "file:src/catalog/categories.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/cards.js",
+   "target": "file:src/catalog/entry.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/cards.js",
+   "target": "file:src/catalog/publisher.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "function:src/catalog/categories.js:applyCategories",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "function:src/catalog/categories.js:applyCategories",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "function:src/catalog/categories.js:curatedCategoryOf",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "function:src/catalog/categories.js:curatedCategoryOf",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "function:src/catalog/categories.js:curationNote",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "function:src/catalog/categories.js:curationNote",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "function:src/catalog/categories.js:categoryBadge",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "function:src/catalog/categories.js:categoryBadge",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "function:src/catalog/categories.js:categoryRows",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "function:src/catalog/categories.js:categoryRows",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/categories.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/collections.js",
+   "target": "function:src/catalog/collections.js:applyCollections",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/collections.js",
+   "target": "function:src/catalog/collections.js:applyCollections",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/collections.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "function:src/catalog/controller.js:createCatalog",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "function:src/catalog/controller.js:createCatalog",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/cards.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/categories.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/details.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/elements.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/index-source.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/metrics.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/navigation.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/provenance.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/publisher.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/selectors.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/toolbar.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/controller.js",
+   "target": "file:src/catalog/view-state.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "function:src/catalog/details.js:row",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "function:src/catalog/details.js:capability",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "function:src/catalog/details.js:renderQualification",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "function:src/catalog/details.js:createDetails",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "function:src/catalog/details.js:createDetails",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "file:src/catalog/entry.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "file:src/catalog/publisher.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "file:src/catalog/qualification.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/details.js",
+   "target": "file:src/catalog/selectors.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/elements.js",
+   "target": "function:src/catalog/elements.js:catalogElements",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/elements.js",
+   "target": "function:src/catalog/elements.js:catalogElements",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/elements.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:shortDigest",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:shortDigest",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:sourceIdentity",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:sourceIdentity",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:sourceLabelOf",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:sourceLabelOf",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:sourceLabelTitle",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:sourceLabelTitle",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:sourceDetailRows",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:sourceDetailRows",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:identity",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:identity",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:statement",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:statementsOf",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:statementsOf",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:firstSummary",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:firstSummary",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:searchText",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "function:src/catalog/entry.js:searchText",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/entry.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/index-source.js",
+   "target": "function:src/catalog/index-source.js:loadJson",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/index-source.js",
+   "target": "function:src/catalog/index-source.js:loadCatalog",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/index-source.js",
+   "target": "function:src/catalog/index-source.js:loadCatalog",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/index-source.js",
+   "target": "file:src/catalog/categories.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/index-source.js",
+   "target": "file:src/catalog/collections.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/index-source.js",
+   "target": "file:src/catalog/publisher.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/index-source.js",
+   "target": "file:src/catalog/qualification.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/cards.js:createCards",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/details.js:createDetails",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/metrics.js:createMetrics",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/navigation.js:createNavigation",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/provenance.js:createProvenance",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/toolbar.js:createToolbar",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/elements.js:catalogElements",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/index-source.js:loadCatalog",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/publisher.js:categoryCoverage",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/categories.js:categoryRows",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/selectors.js:inventoryCounts",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/selectors.js:scopeEntries",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/selectors.js:scopeTotal",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/selectors.js:selectedScope",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/selectors.js:visibleEntries",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/view-state.js:emptyView",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/view-state.js:restoreView",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/controller.js:createCatalog",
+   "target": "function:src/catalog/view-state.js:saveView",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/index-source.js:loadCatalog",
+   "target": "function:src/catalog/collections.js:applyCollections",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/index-source.js:loadCatalog",
+   "target": "function:src/catalog/publisher.js:applyPublisher",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/index-source.js:loadCatalog",
+   "target": "function:src/catalog/qualification.js:applyQualification",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/index-source.js:loadCatalog",
+   "target": "function:src/catalog/categories.js:applyCategories",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/cards.js:card",
+   "target": "function:src/catalog/categories.js:categoryBadge",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/cards.js:card",
+   "target": "function:src/catalog/publisher.js:publishedText",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/cards.js:card",
+   "target": "function:src/catalog/publisher.js:publisherOf",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/cards.js:card",
+   "target": "function:src/catalog/publisher.js:provenanceNote",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/cards.js:card",
+   "target": "function:src/catalog/entry.js:identity",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/details.js:renderQualification",
+   "target": "function:src/catalog/qualification.js:qualificationOf",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/details.js:renderQualification",
+   "target": "function:src/catalog/qualification.js:attestationSentence",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/details.js:createDetails",
+   "target": "function:src/catalog/publisher.js:publisherOf",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/details.js:createDetails",
+   "target": "function:src/catalog/publisher.js:publishedText",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/details.js:createDetails",
+   "target": "function:src/catalog/entry.js:statementsOf",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/details.js:createDetails",
+   "target": "function:src/catalog/entry.js:sourceDetailRows",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/details.js:createDetails",
+   "target": "function:src/catalog/entry.js:identity",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/details.js:createDetails",
+   "target": "function:src/catalog/selectors.js:collectionOf",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/elements.js:catalogElements",
+   "target": "function:src/app/dom.js:collectIds",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  }
+ ]
+}

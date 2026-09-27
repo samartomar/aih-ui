@@ -1,0 +1,1409 @@
+{
+ "nodes": [
+  {
+   "id": "file:src/catalog/metrics.js",
+   "type": "file",
+   "name": "metrics.js",
+   "filePath": "src/catalog/metrics.js",
+   "summary": "Renders the six-kind ledger metric tiles above the split, counting only kinds the index carries and showing Not published for the rest.",
+   "tags": [
+    "component",
+    "metrics",
+    "catalog",
+    "ui"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/catalog/metrics.js:tile",
+   "type": "function",
+   "name": "tile",
+   "filePath": "src/catalog/metrics.js",
+   "lineRange": [
+    23,
+    65
+   ],
+   "summary": "Builds one ledger metric tile, clickable only for kinds the index counts.",
+   "tags": [
+    "component",
+    "metrics",
+    "internal"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/catalog/metrics.js:createMetrics",
+   "type": "function",
+   "name": "createMetrics",
+   "filePath": "src/catalog/metrics.js",
+   "lineRange": [
+    71,
+    78
+   ],
+   "summary": "Creates the metric tiles component that renders the six-kind ledger.",
+   "tags": [
+    "component",
+    "metrics",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:src/catalog/navigation.js",
+   "type": "file",
+   "name": "navigation.js",
+   "filePath": "src/catalog/navigation.js",
+   "summary": "Renders the left-rail Catalog Scopes: one row per published source identity or Catalog collection, with revision markers, curated category breakdown and organization additions.",
+   "tags": [
+    "component",
+    "navigation",
+    "catalog",
+    "ui"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/catalog/navigation.js:badgeNode",
+   "type": "function",
+   "name": "badgeNode",
+   "filePath": "src/catalog/navigation.js",
+   "lineRange": [
+    32,
+    47
+   ],
+   "summary": "Builds a small badge element for a scope row.",
+   "tags": [
+    "component",
+    "navigation",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/navigation.js:categoriesReason",
+   "type": "function",
+   "name": "categoriesReason",
+   "filePath": "src/catalog/navigation.js",
+   "lineRange": [
+    55,
+    65
+   ],
+   "summary": "Explains why curated categories are unavailable for a scope.",
+   "tags": [
+    "component",
+    "navigation",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/navigation.js:curatedCategories",
+   "type": "function",
+   "name": "curatedCategories",
+   "filePath": "src/catalog/navigation.js",
+   "lineRange": [
+    82,
+    99
+   ],
+   "summary": "Renders the curated category breakdown under the selected source row.",
+   "tags": [
+    "component",
+    "navigation",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/navigation.js:scopeRow",
+   "type": "function",
+   "name": "scopeRow",
+   "filePath": "src/catalog/navigation.js",
+   "lineRange": [
+    101,
+    161
+   ],
+   "summary": "Renders one source or collection scope row with count, revision and selection state.",
+   "tags": [
+    "component",
+    "navigation",
+    "internal"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/catalog/navigation.js:additionsRow",
+   "type": "function",
+   "name": "additionsRow",
+   "filePath": "src/catalog/navigation.js",
+   "lineRange": [
+    164,
+    177
+   ],
+   "summary": "Renders the organization's own additions row, empty until something is imported.",
+   "tags": [
+    "component",
+    "navigation",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/navigation.js:createNavigation",
+   "type": "function",
+   "name": "createNavigation",
+   "filePath": "src/catalog/navigation.js",
+   "lineRange": [
+    183,
+    197
+   ],
+   "summary": "Creates the left-rail navigation component listing catalog scopes.",
+   "tags": [
+    "component",
+    "navigation",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:src/catalog/provenance.js",
+   "type": "file",
+   "name": "provenance.js",
+   "filePath": "src/catalog/provenance.js",
+   "summary": "Renders the installed-package provenance strip, the masthead naming the selected source, and the source status line, stating unconnected organization/Core state explicitly.",
+   "tags": [
+    "component",
+    "provenance",
+    "catalog",
+    "ui"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:src/catalog/provenance.js:createProvenance",
+   "type": "function",
+   "name": "createProvenance",
+   "filePath": "src/catalog/provenance.js",
+   "lineRange": [
+    37,
+    250
+   ],
+   "summary": "Creates the provenance component rendering the package strip, masthead and source status line with diagnostic details.",
+   "tags": [
+    "component",
+    "provenance",
+    "exported"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "file:src/catalog/publisher.js",
+   "type": "file",
+   "name": "publisher.js",
+   "filePath": "src/catalog/publisher.js",
+   "summary": "Rebinds Catalog's publisher presentation metadata (titles, descriptions, categories) to index entries and reads it back with Catalog's own unavailability reasons.",
+   "tags": [
+    "data-model",
+    "catalog",
+    "publisher-metadata",
+    "utility"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/catalog/publisher.js:applyPublisher",
+   "type": "function",
+   "name": "applyPublisher",
+   "filePath": "src/catalog/publisher.js",
+   "lineRange": [
+    31,
+    53
+   ],
+   "summary": "Binds served publisher metadata records to index entries, keeping the reader's refusal reason when unavailable.",
+   "tags": [
+    "data-model",
+    "catalog",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/publisher.js:publisherOf",
+   "type": "function",
+   "name": "publisherOf",
+   "filePath": "src/catalog/publisher.js",
+   "lineRange": [
+    56,
+    58
+   ],
+   "summary": "Returns the publisher record for an entry, if bound.",
+   "tags": [
+    "data-model",
+    "catalog",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/publisher.js:categoryCoverage",
+   "type": "function",
+   "name": "categoryCoverage",
+   "filePath": "src/catalog/publisher.js",
+   "lineRange": [
+    71,
+    78
+   ],
+   "summary": "Counts how many entries carry an upstream-declared category.",
+   "tags": [
+    "data-model",
+    "catalog",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/publisher.js:publishedText",
+   "type": "function",
+   "name": "publishedText",
+   "filePath": "src/catalog/publisher.js",
+   "lineRange": [
+    81,
+    84
+   ],
+   "summary": "Returns a published publisher value or null, never inventing text.",
+   "tags": [
+    "data-model",
+    "catalog",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/publisher.js:provenanceNote",
+   "type": "function",
+   "name": "provenanceNote",
+   "filePath": "src/catalog/publisher.js",
+   "lineRange": [
+    94,
+    108
+   ],
+   "summary": "Explains where a publisher value came from or why it is missing.",
+   "tags": [
+    "data-model",
+    "catalog",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:src/catalog/qualification.js",
+   "type": "file",
+   "name": "qualification.js",
+   "filePath": "src/catalog/qualification.js",
+   "summary": "Rebinds Catalog's publisher qualification reader results to index entries, with tooltips for each state word and attestation sentences, never treating qualified as approval.",
+   "tags": [
+    "data-model",
+    "catalog",
+    "qualification",
+    "security"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/catalog/qualification.js:attestationSentence",
+   "type": "function",
+   "name": "attestationSentence",
+   "filePath": "src/catalog/qualification.js",
+   "lineRange": [
+    32,
+    47
+   ],
+   "summary": "Describes the attestation state of a qualification in words.",
+   "tags": [
+    "data-model",
+    "catalog",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/qualification.js:applyQualification",
+   "type": "function",
+   "name": "applyQualification",
+   "filePath": "src/catalog/qualification.js",
+   "lineRange": [
+    55,
+    77
+   ],
+   "summary": "Binds qualification reader records to index entries by entry id and subject digest.",
+   "tags": [
+    "data-model",
+    "catalog",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/qualification.js:qualificationOf",
+   "type": "function",
+   "name": "qualificationOf",
+   "filePath": "src/catalog/qualification.js",
+   "lineRange": [
+    80,
+    82
+   ],
+   "summary": "Returns the qualification record for an entry, if bound.",
+   "tags": [
+    "data-model",
+    "catalog",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:src/catalog/selectors.js",
+   "type": "file",
+   "name": "selectors.js",
+   "filePath": "src/catalog/selectors.js",
+   "summary": "Pure presentation selectors for search, filtering, sorting, inventory counts and source scopes, computing every displayed number from the installed index at run time.",
+   "tags": [
+    "selectors",
+    "filtering",
+    "pure-functions",
+    "catalog"
+   ],
+   "complexity": "complex"
+  },
+  {
+   "id": "function:src/catalog/selectors.js:sourceFilterValue",
+   "type": "function",
+   "name": "sourceFilterValue",
+   "filePath": "src/catalog/selectors.js",
+   "lineRange": [
+    35,
+    37
+   ],
+   "summary": "Encodes a source filter value from type, identity and revision.",
+   "tags": [
+    "selectors",
+    "filtering",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/selectors.js:matchesSourceFilter",
+   "type": "function",
+   "name": "matchesSourceFilter",
+   "filePath": "src/catalog/selectors.js",
+   "lineRange": [
+    44,
+    55
+   ],
+   "summary": "Tests whether an entry matches a nested source filter.",
+   "tags": [
+    "selectors",
+    "filtering",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/selectors.js:visibleEntries",
+   "type": "function",
+   "name": "visibleEntries",
+   "filePath": "src/catalog/selectors.js",
+   "lineRange": [
+    58,
+    79
+   ],
+   "summary": "Applies search, kind, source filters and sorting to produce the visible entries.",
+   "tags": [
+    "selectors",
+    "filtering",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/selectors.js:sortedCounts",
+   "type": "function",
+   "name": "sortedCounts",
+   "filePath": "src/catalog/selectors.js",
+   "lineRange": [
+    90,
+    92
+   ],
+   "summary": "Sorts a count map into descending rows.",
+   "tags": [
+    "selectors",
+    "filtering",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/selectors.js:inventoryCounts",
+   "type": "function",
+   "name": "inventoryCounts",
+   "filePath": "src/catalog/selectors.js",
+   "lineRange": [
+    109,
+    135
+   ],
+   "summary": "Computes kind, source-type and scope counts from the installed entries.",
+   "tags": [
+    "selectors",
+    "filtering",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/selectors.js:sourceScopes",
+   "type": "function",
+   "name": "sourceScopes",
+   "filePath": "src/catalog/selectors.js",
+   "lineRange": [
+    146,
+    166
+   ],
+   "summary": "Groups entries into source identity and collection scopes with counts and revisions.",
+   "tags": [
+    "selectors",
+    "filtering",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/selectors.js:scopeCountOf",
+   "type": "function",
+   "name": "scopeCountOf",
+   "filePath": "src/catalog/selectors.js",
+   "lineRange": [
+    169,
+    172
+   ],
+   "summary": "Returns the item count for a scope.",
+   "tags": [
+    "selectors",
+    "filtering",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/selectors.js:collectionOf",
+   "type": "function",
+   "name": "collectionOf",
+   "filePath": "src/catalog/selectors.js",
+   "lineRange": [
+    175,
+    177
+   ],
+   "summary": "Returns the Catalog collection an entry is a current member of.",
+   "tags": [
+    "selectors",
+    "filtering",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/selectors.js:selectedScope",
+   "type": "function",
+   "name": "selectedScope",
+   "filePath": "src/catalog/selectors.js",
+   "lineRange": [
+    180,
+    183
+   ],
+   "summary": "Resolves the currently selected scope from the view.",
+   "tags": [
+    "selectors",
+    "filtering",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/selectors.js:scopeEntries",
+   "type": "function",
+   "name": "scopeEntries",
+   "filePath": "src/catalog/selectors.js",
+   "lineRange": [
+    189,
+    195
+   ],
+   "summary": "Returns entries belonging to the selected scope.",
+   "tags": [
+    "selectors",
+    "filtering",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/selectors.js:scopeTotal",
+   "type": "function",
+   "name": "scopeTotal",
+   "filePath": "src/catalog/selectors.js",
+   "lineRange": [
+    198,
+    200
+   ],
+   "summary": "Returns the item total for the selected scope.",
+   "tags": [
+    "selectors",
+    "filtering",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/selectors.js:describeCollection",
+   "type": "function",
+   "name": "describeCollection",
+   "filePath": "src/catalog/selectors.js",
+   "lineRange": [
+    219,
+    253
+   ],
+   "summary": "Describes a collection scope with owner, release and package-mismatch marker.",
+   "tags": [
+    "selectors",
+    "filtering",
+    "internal"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/catalog/selectors.js:describeScope",
+   "type": "function",
+   "name": "describeScope",
+   "filePath": "src/catalog/selectors.js",
+   "lineRange": [
+    256,
+    301
+   ],
+   "summary": "Describes a source scope's label, revision and details for navigation and masthead.",
+   "tags": [
+    "selectors",
+    "filtering",
+    "exported"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:src/catalog/toolbar.js",
+   "type": "file",
+   "name": "toolbar.js",
+   "filePath": "src/catalog/toolbar.js",
+   "summary": "Renders the filter toolbar: the primary review pills (with unavailable Needs Review/Egress Out) and secondary kind, source-type and sort controls with scroll affordance.",
+   "tags": [
+    "component",
+    "filtering",
+    "toolbar",
+    "ui"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "function:src/catalog/toolbar.js:reviewPill",
+   "type": "function",
+   "name": "reviewPill",
+   "filePath": "src/catalog/toolbar.js",
+   "lineRange": [
+    39,
+    53
+   ],
+   "summary": "Builds a primary review pill, disabled with a reason when no data can back its count.",
+   "tags": [
+    "component",
+    "filtering",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/toolbar.js:kindPill",
+   "type": "function",
+   "name": "kindPill",
+   "filePath": "src/catalog/toolbar.js",
+   "lineRange": [
+    64,
+    73
+   ],
+   "summary": "Builds a kind filter pill with its count and active state.",
+   "tags": [
+    "component",
+    "filtering",
+    "internal"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/toolbar.js:createToolbar",
+   "type": "function",
+   "name": "createToolbar",
+   "filePath": "src/catalog/toolbar.js",
+   "lineRange": [
+    79,
+    143
+   ],
+   "summary": "Creates the toolbar component rendering review pills, kind pills, search, source filter and sort.",
+   "tags": [
+    "component",
+    "filtering",
+    "exported"
+   ],
+   "complexity": "moderate"
+  },
+  {
+   "id": "file:src/catalog/view-state.js",
+   "type": "file",
+   "name": "view-state.js",
+   "filePath": "src/catalog/view-state.js",
+   "summary": "Persists the catalog view (query, filters, sort) in sessionStorage and restores it validated against the installed index counts.",
+   "tags": [
+    "state-management",
+    "persistence",
+    "utility",
+    "catalog"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/view-state.js:emptyView",
+   "type": "function",
+   "name": "emptyView",
+   "filePath": "src/catalog/view-state.js",
+   "lineRange": [
+    13,
+    15
+   ],
+   "summary": "Returns the default empty catalog view.",
+   "tags": [
+    "state-management",
+    "persistence",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/view-state.js:saveView",
+   "type": "function",
+   "name": "saveView",
+   "filePath": "src/catalog/view-state.js",
+   "lineRange": [
+    17,
+    23
+   ],
+   "summary": "Saves the view to sessionStorage, ignoring blocked storage.",
+   "tags": [
+    "state-management",
+    "persistence",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "function:src/catalog/view-state.js:restoreView",
+   "type": "function",
+   "name": "restoreView",
+   "filePath": "src/catalog/view-state.js",
+   "lineRange": [
+    31,
+    50
+   ],
+   "summary": "Restores a saved view, dropping filters and sort keys the installed index does not publish.",
+   "tags": [
+    "state-management",
+    "persistence",
+    "exported"
+   ],
+   "complexity": "simple"
+  },
+  {
+   "id": "file:tools/tests/publisher-refusal.test.mjs",
+   "type": "file",
+   "name": "publisher-refusal.test.mjs",
+   "filePath": "tools/tests/publisher-refusal.test.mjs",
+   "summary": "Node test suite verifying that a refused publisher-metadata sidecar is reported with the reader's reason rather than as Catalog publishing nothing.",
+   "tags": [
+    "test",
+    "publisher-metadata",
+    "regression",
+    "catalog"
+   ],
+   "complexity": "moderate"
+  }
+ ],
+ "edges": [
+  {
+   "source": "file:src/catalog/metrics.js",
+   "target": "function:src/catalog/metrics.js:tile",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/metrics.js",
+   "target": "function:src/catalog/metrics.js:createMetrics",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/metrics.js",
+   "target": "function:src/catalog/metrics.js:createMetrics",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/metrics.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/metrics.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "function:src/catalog/navigation.js:badgeNode",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "function:src/catalog/navigation.js:categoriesReason",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "function:src/catalog/navigation.js:curatedCategories",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "function:src/catalog/navigation.js:scopeRow",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "function:src/catalog/navigation.js:additionsRow",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "function:src/catalog/navigation.js:createNavigation",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "function:src/catalog/navigation.js:createNavigation",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "file:src/catalog/categories.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/navigation.js",
+   "target": "file:src/catalog/selectors.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/provenance.js",
+   "target": "function:src/catalog/provenance.js:createProvenance",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/provenance.js",
+   "target": "function:src/catalog/provenance.js:createProvenance",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/provenance.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/provenance.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/provenance.js",
+   "target": "file:src/catalog/selectors.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "function:src/catalog/publisher.js:applyPublisher",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "function:src/catalog/publisher.js:applyPublisher",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "function:src/catalog/publisher.js:publisherOf",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "function:src/catalog/publisher.js:publisherOf",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "function:src/catalog/publisher.js:categoryCoverage",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "function:src/catalog/publisher.js:categoryCoverage",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "function:src/catalog/publisher.js:publishedText",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "function:src/catalog/publisher.js:publishedText",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "function:src/catalog/publisher.js:provenanceNote",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "function:src/catalog/publisher.js:provenanceNote",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/qualification.js",
+   "target": "function:src/catalog/qualification.js:attestationSentence",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/qualification.js",
+   "target": "function:src/catalog/qualification.js:attestationSentence",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/qualification.js",
+   "target": "function:src/catalog/qualification.js:applyQualification",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/qualification.js",
+   "target": "function:src/catalog/qualification.js:applyQualification",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/qualification.js",
+   "target": "function:src/catalog/qualification.js:qualificationOf",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/qualification.js",
+   "target": "function:src/catalog/qualification.js:qualificationOf",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/qualification.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/qualification.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:sourceFilterValue",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:sourceFilterValue",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:matchesSourceFilter",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:matchesSourceFilter",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:visibleEntries",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:visibleEntries",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:sortedCounts",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:sortedCounts",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:inventoryCounts",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:inventoryCounts",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:sourceScopes",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:sourceScopes",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:scopeCountOf",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:scopeCountOf",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:collectionOf",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:collectionOf",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:selectedScope",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:selectedScope",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:scopeEntries",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:scopeEntries",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:scopeTotal",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:scopeTotal",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:describeCollection",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:describeScope",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "function:src/catalog/selectors.js:describeScope",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "file:src/catalog/categories.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "file:src/catalog/entry.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/selectors.js",
+   "target": "file:src/catalog/publisher.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/toolbar.js",
+   "target": "function:src/catalog/toolbar.js:reviewPill",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/toolbar.js",
+   "target": "function:src/catalog/toolbar.js:kindPill",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/toolbar.js",
+   "target": "function:src/catalog/toolbar.js:createToolbar",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/toolbar.js",
+   "target": "function:src/catalog/toolbar.js:createToolbar",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/toolbar.js",
+   "target": "file:src/app/absence.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/toolbar.js",
+   "target": "file:src/app/dom.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/toolbar.js",
+   "target": "file:src/catalog/selectors.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:src/catalog/view-state.js",
+   "target": "function:src/catalog/view-state.js:emptyView",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/view-state.js",
+   "target": "function:src/catalog/view-state.js:emptyView",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/view-state.js",
+   "target": "function:src/catalog/view-state.js:saveView",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/view-state.js",
+   "target": "function:src/catalog/view-state.js:saveView",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/view-state.js",
+   "target": "function:src/catalog/view-state.js:restoreView",
+   "type": "contains",
+   "direction": "forward",
+   "weight": 1.0
+  },
+  {
+   "source": "file:src/catalog/view-state.js",
+   "target": "function:src/catalog/view-state.js:restoreView",
+   "type": "exports",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/view-state.js",
+   "target": "file:src/catalog/selectors.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "file:tools/tests/publisher-refusal.test.mjs",
+   "target": "file:src/catalog/publisher.js",
+   "type": "imports",
+   "direction": "forward",
+   "weight": 0.7
+  },
+  {
+   "source": "function:src/catalog/navigation.js:createNavigation",
+   "target": "function:src/catalog/selectors.js:describeScope",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/provenance.js:createProvenance",
+   "target": "function:src/catalog/selectors.js:describeScope",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/navigation.js:createNavigation",
+   "target": "function:src/catalog/selectors.js:sourceScopes",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/provenance.js:createProvenance",
+   "target": "function:src/catalog/selectors.js:sourceScopes",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/navigation.js:curatedCategories",
+   "target": "function:src/catalog/categories.js:curationNote",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "function:src/catalog/toolbar.js:createToolbar",
+   "target": "function:src/catalog/selectors.js:sortedCounts",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/tests/publisher-refusal.test.mjs",
+   "target": "function:src/catalog/publisher.js:applyPublisher",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/tests/publisher-refusal.test.mjs",
+   "target": "function:src/catalog/publisher.js:provenanceNote",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:tools/tests/publisher-refusal.test.mjs",
+   "target": "function:src/catalog/publisher.js:publisherOf",
+   "type": "calls",
+   "direction": "forward",
+   "weight": 0.8
+  },
+  {
+   "source": "file:src/catalog/publisher.js",
+   "target": "file:tools/tests/publisher-refusal.test.mjs",
+   "type": "tested_by",
+   "direction": "forward",
+   "weight": 0.5
+  }
+ ]
+}

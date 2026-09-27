@@ -90,7 +90,7 @@
 <!-- Dock / Panel Controls -->
 <div class="flex items-center rounded bg-surface-container-low border border-wb-border p-0.5 gap-0.5">
 <button class="p-1 rounded hover:bg-surface-container transition-colors flex items-center justify-center cursor-pointer text-primary" id="toggle-nav-btn" title="Toggle Sidebar Nav (Left)" type="button"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><rect height="18" rx="2" width="18" x="3" y="3"></rect><line x1="9" x2="9" y1="3" y2="21"></line><polyline points="13 9 16 12 13 15"></polyline></svg></button>
-<button class="p-1 rounded hover:bg-surface-container hover:text-wb-title transition-colors flex items-center justify-center cursor-pointer text-primary" id="toggle-inspector-btn" title="Toggle right inspector panel (hide/expand)" aria-label="Toggle right panel" type="button"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><rect height="18" rx="2" width="18" x="3" y="3"></rect><line x1="15" x2="15" y1="3" y2="21"></line><polyline points="11 9 8 12 11 15"></polyline></svg></button>
+<button class="p-1 rounded hover:bg-surface-container hover:text-wb-title transition-colors flex items-center justify-center cursor-pointer text-on-surface-variant disabled:opacity-40 disabled:cursor-not-allowed" id="toggle-inspector-btn" title="Select a card to open the inspector" aria-label="Toggle right panel" aria-controls="inspector-rail" aria-expanded="false" aria-disabled="true" type="button" disabled><svg class="w-3.5 h-3.5" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><rect height="18" rx="2" width="18" x="3" y="3"></rect><line x1="15" x2="15" y1="3" y2="21"></line><polyline points="11 9 8 12 11 15"></polyline></svg></button>
 </div>
 </div>
 </div>
@@ -121,17 +121,13 @@
 </span>
 <span class="font-mono text-[10px] text-outline">Not connected</span>
 </a>
-<a class="flex items-center justify-between px-2 py-1 rounded text-on-surface-variant opacity-50 cursor-not-allowed" href="#" aria-disabled="true" title="Not connected: needs resolved organization state from Core, which organizations supply">
-<span class="flex items-center gap-1.5">
-<span class="material-symbols-outlined text-[14px] text-outline">policy</span>
-<span class="">Policies &amp; Publish</span>
-</span>
-<span class="font-mono text-[10px] text-outline">Not connected</span>
-</a>
+<button class="flex w-full items-center justify-between px-2 py-1 rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface" id="nav-policy" type="button" aria-controls="policy-workspace">
+<span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[14px] text-outline">policy</span><span>Policy workspace</span></span>
+</button>
 </nav>
 </div>
 <!-- CATALOG SCOPES: one row per published source identity -->
-<div class="space-y-1 pt-1 border-t border-wb-border">
+<div class="space-y-1 pt-1 border-t border-wb-border" id="catalog-scopes-section">
 <div class="px-2 py-0.5 text-[10px] font-mono tracking-wider text-outline uppercase font-medium flex items-center justify-between">
 <span class="">CATALOG SCOPES</span>
 <span class="material-symbols-outlined text-[12px] text-outline">account_tree</span>
@@ -175,12 +171,12 @@
 <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 divide-x divide-wb-border border-b border-wb-border bg-wb-matrix shrink-0 select-none w-full" id="framework-matrix-tabs"></div>
 <div class="flex-1 flex w-full overflow-hidden relative" id="workspace-split-row">
 <main class="flex-1 flex flex-col min-w-0 bg-background overflow-hidden" id="main-content">
-<div class="flex-1 flex flex-col overflow-y-auto min-w-0 bg-wb-center">
+<div class="flex-1 flex flex-col overflow-y-auto min-w-0 bg-wb-center" id="catalog-workspace">
 <div class="px-5 pt-4 pb-3 border-b border-wb-border bg-wb-subhead flex flex-col gap-2 shrink-0">
 <div class="flex items-center justify-between flex-wrap gap-2">
 <div>
 <div class="text-[10px] font-mono tracking-wider uppercase text-outline font-medium mb-0.5">CATALOG INDEX · READ-ONLY MIRROR</div>
-<h1 class="wb-source-heading text-wb-heading font-semibold text-wb-title tracking-tight flex items-center gap-2 font-mono min-w-0">
+<h1 class="wb-source-heading text-wb-heading font-semibold text-wb-title tracking-tight flex items-center gap-2 font-mono min-w-0" tabindex="-1">
 <span class="truncate" id="masthead-name">-</span>
 <span class="text-outline font-light">—</span>
 <span class="text-metadata-emphasis font-light" id="masthead-version">-</span>
@@ -197,23 +193,26 @@
 </div>
 <div class="flex flex-wrap items-center gap-2 text-[11px] font-mono text-outline pt-0.5" id="masthead-status"></div>
 </div>
-<div class="px-5 py-2 border-b border-wb-border bg-wb-subhead flex flex-nowrap items-center justify-between gap-2 shrink-0 text-[11.5px]" id="workbench-toolbar">
-<div class="flex items-center gap-2 flex-1 min-w-0">
+<div class="border-b border-wb-border bg-wb-subhead shrink-0" id="workbench-toolbar">
+<div class="toolbar-search-row flex flex-wrap items-center gap-3">
+<div class="toolbar-search flex items-center gap-2 min-w-0">
 <label class="w-8 h-8 rounded border border-wb-border bg-wb-input hover:bg-surface-container text-outline hover:text-on-surface flex items-center justify-center shrink-0 transition-colors cursor-pointer" for="catalog-search" title="Search published identities">
 <span class="material-symbols-outlined text-[15px]">search</span>
 </label>
-<input class="flex-1 min-w-[96px] max-w-[260px] h-8 px-2 py-1 rounded bg-wb-input border border-wb-control-border text-on-surface text-[11.5px] font-mono placeholder:text-outline focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" id="catalog-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search" title="Search entry id, subject id, repository, package, path, commit or revision" aria-label="Search published entry and source identities">
-<div class="flex items-center gap-2 shrink-0" id="review-filters" role="group" aria-label="Filter by review state"></div>
+<input class="flex-1 min-w-0 h-8 px-2 py-1 rounded bg-wb-input border border-wb-control-border text-on-surface text-[11.5px] font-mono placeholder:text-outline focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" id="catalog-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search" title="Search entry id, subject id, repository, package, path, commit or revision" aria-label="Search published entry and source identities">
 </div>
+<div class="toolbar-review flex items-center justify-between gap-3 ml-auto min-w-0">
+<div class="flex items-center rounded border border-wb-border bg-wb-input p-0.5 shrink-0" id="review-filters" role="group" aria-label="Filter by review state"></div>
 <details class="relative shrink-0 text-[11px]" id="review-signals"><summary class="cursor-pointer text-on-surface-variant hover:text-on-surface">Signals</summary><div class="flex items-center gap-2 font-mono text-[10.5px]" id="review-summary"></div></details>
 </div>
-<div class="flex-1 flex overflow-hidden">
-<div class="flex-1 overflow-y-auto p-4 bg-wb-cards flex flex-col gap-3">
-<div class="flex items-center justify-between gap-4 text-[11px] font-mono text-outline pb-1" id="results-controls">
+</div>
+<div class="flex flex-wrap items-center gap-3 text-[11px] font-mono text-outline" id="results-controls">
+<div class="toolbar-kinds flex items-center gap-3 min-w-0">
 <div class="shrink-0 whitespace-nowrap">
-<strong class="text-wb-title font-semibold" id="visible-count" title="Inventory count. Not an approval.">0</strong> <span id="visible-caption">of 0 catalog entries</span></div>
-<div class="flex items-center gap-2 min-w-0">
-<div class="flex flex-nowrap items-center gap-1.5 overflow-x-auto no-scrollbar min-w-0" id="kind-filters" role="group" aria-label="Filter by kind"></div>
+<strong class="text-wb-title font-semibold" id="visible-count" title="Loading the installed Catalog inventory.">…</strong> <span id="visible-caption">entries</span></div>
+<div class="flex flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto no-scrollbar min-w-0" id="kind-filters" role="group" aria-label="Filter by kind"></div>
+</div>
+<div class="toolbar-selectors flex items-center gap-2 ml-auto shrink-0">
 <label class="flex items-center gap-1 shrink-0" title="Filter by published source type">
 <span class="material-symbols-outlined text-[12px] text-outline">source</span>
 <select class="w-[104px] p-0 border-0 bg-transparent bg-none leading-none text-on-surface text-[10.5px] font-mono focus:outline-none focus:ring-0 focus-visible:ring-1 focus-visible:ring-primary cursor-pointer" id="source-filter" aria-label="Filter by published source type"></select>
@@ -228,42 +227,65 @@
 </select>
 </div>
 </div>
+</div>
+<div class="flex-1 flex overflow-hidden">
+<div class="flex-1 overflow-y-auto p-4 bg-wb-cards flex flex-col gap-3">
 <div id="category-context" aria-live="polite"></div>
 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3" id="cards-grid"></div>
 </div>
 </div>
 </div>
+<section class="policy-workspace flex-1 overflow-y-auto bg-wb-center select-text" id="policy-workspace" aria-labelledby="policy-workspace-title" hidden>
+<div class="px-5 py-4 border-b border-wb-border bg-wb-subhead">
+<div class="font-mono text-[10px] uppercase tracking-wider text-outline font-medium" id="policy-workspace-role">Policy workspace</div>
+<h1 class="text-wb-heading font-semibold text-wb-title mt-1" id="policy-workspace-title" tabindex="-1">Policy workspace</h1>
+<p class="text-on-surface-variant mt-1 max-w-3xl" id="policy-workspace-intro"></p>
+</div>
+<div class="p-4 space-y-3">
+<p class="px-3 py-2 rounded border border-wb-border bg-surface-container-low text-on-surface-variant" id="policy-workspace-boundary">Your saved setup selects this view. It does not create policy authority or a policy draft.</p>
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-3">
+<section class="rounded border border-wb-border bg-surface-container-lowest p-4 space-y-2" aria-labelledby="policy-start-title">
+<div class="font-mono text-[10px] uppercase tracking-wider text-outline">01 / Start</div>
+<h2 class="font-semibold text-on-surface text-[14px]" id="policy-start-title">Start</h2>
+<p class="text-on-surface-variant leading-relaxed" id="policy-start-description"></p>
+  <button class="px-3 py-1.5 rounded bg-primary-container text-on-primary font-medium hover:bg-primary" id="open-org-policy-btn" type="button" hidden>Open local PolicyBundle</button>
+  <button class="px-3 py-1.5 rounded bg-surface-container text-on-surface font-medium hover:bg-surface-container-high" id="open-decision-btn" type="button" hidden>Inspect local Decision V2</button>
+<p class="text-on-surface-variant leading-relaxed" id="policy-file-review" role="status" hidden></p>
+</section>
+<section class="rounded border border-wb-border bg-surface-container-lowest p-4 space-y-2" aria-labelledby="policy-choices-title">
+<div class="font-mono text-[10px] uppercase tracking-wider text-outline">02 / Choices</div>
+<h2 class="font-semibold text-on-surface text-[14px]" id="policy-choices-title">Choices</h2>
+<p class="text-on-surface-variant leading-relaxed" id="policy-choices-description"></p>
+</section>
+<section class="rounded border border-wb-border bg-surface-container-lowest p-4 space-y-2" aria-labelledby="policy-review-title">
+<div class="font-mono text-[10px] uppercase tracking-wider text-outline">03 / Review</div>
+<h2 class="font-semibold text-on-surface text-[14px]" id="policy-review-title">Review</h2>
+<p class="text-on-surface-variant leading-relaxed" id="policy-review-description"></p>
+</section>
+</div>
+</div>
+</section>
 </main>
 <!-- RIGHT COLUMN: Interactive Multi-Inspector (Collapsible Drawer) -->
-<aside class="inspector-transition shrink-0 bg-wb-inspector border-l border-wb-border flex flex-col justify-between overflow-hidden shadow-panel z-20 w-[var(--inspector-width)] select-text" id="inspector-rail">
-<div class="p-3 border-b border-wb-border space-y-2 shrink-0">
-<div class="flex items-start justify-between gap-2">
-<div class="min-w-0">
-<div class="flex items-center gap-1.5">
-<span class="material-symbols-outlined text-[15px] text-kind-skill" id="inspector-icon">extension</span>
-<span class="min-w-0 font-mono font-medium text-wb-title text-[11px] tracking-tight" id="inspector-name">No entry selected</span>
+<aside class="inspector-transition shrink-0 bg-wb-inspector border-l border-l-0 border-wb-border flex flex-col justify-between overflow-hidden shadow-panel z-20 w-0 select-text" id="inspector-rail" aria-label="Entry inspector" aria-hidden="true" inert>
+<div class="inspector-header p-3 border-b border-wb-border flex items-center gap-2 shrink-0">
+<div class="min-w-0 flex-1 flex items-center gap-1.5">
+<span class="inspector-kind shrink-0" id="inspector-kind" role="img" tabindex="0">
+<span class="material-symbols-outlined text-[15px] text-kind-skill" id="inspector-icon" aria-hidden="true">extension</span>
+</span>
+<span class="min-w-0 font-mono font-medium text-wb-title text-[11px] tracking-tight" id="inspector-name"></span>
 </div>
-<div class="flex items-center gap-2 mt-1">
-<span class="text-[10px] font-mono px-1 rounded bg-surface-container-highest text-on-surface-variant" id="inspector-kind">-</span>
-<span class="text-[10px] font-mono px-1 rounded bg-surface-container-highest text-on-surface-variant" id="inspector-version">-</span>
-</div>
-</div>
-<button class="p-1 rounded hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors" id="close-inspector-btn" title="Collapse Inspector Panel" type="button">
-<span class="material-symbols-outlined text-[16px]">chevron_right</span>
-</button>
-</div>
-<div class="inspector-subheading flex items-center justify-between text-[11px]">
-<span class="text-outline" id="inspector-subtitle">Select a card to read its published identities and evidence</span>
-<span class="font-mono text-on-surface-variant font-medium" id="inspector-flags">Not published</span>
-</div>
-<div class="inspector-tabs flex items-center p-0.5 rounded bg-surface-container-low border border-wb-border text-[11px] gap-0.5" role="tablist" aria-label="Entry inspector">
-<button class="flex-1 py-1 px-1 rounded text-center transition-colors inspector-tab-btn bg-surface-container text-primary font-medium shadow-xs" data-tab="details" type="button" role="tab" id="tab-details" aria-controls="pane-details" aria-selected="true" tabindex="0">Details</button>
-<button class="flex-1 py-1 px-1 rounded text-center transition-colors inspector-tab-btn text-on-surface-variant hover:text-on-surface" data-tab="security" type="button" role="tab" id="tab-security" aria-controls="pane-security" aria-selected="false" tabindex="-1">Security Scan</button>
-<button class="flex-1 py-1 px-1 rounded text-center transition-colors inspector-tab-btn text-on-surface-variant hover:text-on-surface" data-tab="governance" type="button" role="tab" id="tab-governance" aria-controls="pane-governance" aria-selected="false" tabindex="-1">Governance</button>
-<button class="inspector-icon-tab shrink-0 py-1 px-1 rounded text-center transition-colors flex items-center justify-center inspector-tab-btn text-on-surface-variant hover:text-on-surface" data-tab="json" type="button" role="tab" id="tab-json" aria-label="Policy JSON" title="Policy JSON · not published" aria-controls="pane-json" aria-selected="false" tabindex="-1">
+<div class="inspector-tabs inline-flex items-center shrink-0 bg-transparent" role="tablist" aria-label="Entry inspector">
+<button class="inspector-tab-btn rounded transition-colors text-primary" data-tab="details" type="button" role="tab" id="tab-details" aria-label="Details" title="Details" aria-controls="pane-details" aria-selected="true" tabindex="0"><span class="material-symbols-outlined" aria-hidden="true">info</span></button>
+<button class="inspector-tab-btn rounded transition-colors text-on-surface-variant hover:text-on-surface" data-tab="security" type="button" role="tab" id="tab-security" aria-label="Security Scan" title="Security Scan" aria-controls="pane-security" aria-selected="false" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">shield</span></button>
+<button class="inspector-tab-btn rounded transition-colors text-on-surface-variant hover:text-on-surface" data-tab="governance" type="button" role="tab" id="tab-governance" aria-label="Governance" title="Governance" aria-controls="pane-governance" aria-selected="false" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">gavel</span></button>
+<button class="inspector-tab-btn rounded transition-colors text-on-surface-variant hover:text-on-surface" data-tab="json" type="button" role="tab" id="tab-json" aria-label="Policy JSON" title="Policy JSON · not published" aria-controls="pane-json" aria-selected="false" tabindex="-1">
 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 4H6v6l-2 2 2 2v6h2M16 4h2v6l2 2-2 2v6h-2"/><circle cx="12" cy="12" r="1"/></svg>
 </button>
 </div>
+<button class="shrink-0 p-1 rounded hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors" id="close-inspector-btn" title="Close inspector" aria-label="Close inspector" type="button">
+<span class="material-symbols-outlined text-[16px]" aria-hidden="true">chevron_right</span>
+</button>
 </div>
 <div class="inspector-content flex-1 overflow-y-auto p-3 text-[12px]">
 <div class="space-y-3" id="pane-details" role="tabpanel" aria-labelledby="tab-details">
@@ -281,7 +303,7 @@
 </div>
 <details class="group/ids pt-1" id="details-disclosure">
 <summary class="cursor-pointer list-none flex items-center gap-1 text-[10px] font-mono uppercase tracking-wider text-outline hover:text-on-surface select-none">
-<span class="material-symbols-outlined text-[13px] transition-transform group-open/ids:rotate-90">chevron_right</span>
+<span class="material-symbols-outlined text-[13px] transition-transform group-open/ids:rotate-90" aria-hidden="true">chevron_right</span>
 <span>Identity and artifact references</span>
 </summary>
 <div class="space-y-2 pt-1.5">
@@ -293,9 +315,9 @@
 <div class="space-y-3 hidden" id="pane-security" role="tabpanel" aria-labelledby="tab-security">
 <div class="space-y-1.5">
 <span class="text-[10px] font-mono uppercase tracking-wider text-outline font-medium">Scanner Telemetry</span>
-<!-- Two slots the design source fills from a scan result. Scan publishes
-     neither, so each keeps its place and states why; catalog/details.js sets
-     the reasons, so the wording lives beside its siblings. -->
+<!-- Catalog does not supply a verified per-entry scan with annex bytes. The
+     Governance pane can display Scan's typed findings after operator verification;
+     these Catalog inspector slots keep their absence reasons. -->
 <div class="p-2 rounded bg-surface-container-low border border-wb-border flex items-center justify-between text-[11px]" id="detector-run-state">
 <span class="text-on-surface-variant">Detector identities and per-engine run state</span>
 <span class="font-mono text-outline text-[10px] font-medium">Not published</span>
@@ -304,7 +326,6 @@
 <span class="text-on-surface-variant">Finding rule, severity, message and location</span>
 <span class="font-mono text-outline text-[10px] font-medium">Not published</span>
 </div>
-<div class="p-2 rounded bg-surface-container-low border border-wb-border text-[10.5px] text-outline break-words" id="scanner-report-statement">Not published</div>
 </div>
 <div class="space-y-1.5">
 <!-- Catalog's publisher qualification for the selected entry, as its
@@ -332,21 +353,18 @@
 <input class="mt-0.5 accent-primary" name="policy-choice" type="radio" value="hold" disabled>
 <div>
 <span class="text-on-surface-variant font-medium block leading-none mb-1">Keep held back (Recommended)</span>
-<span class="text-outline text-[10px] leading-tight block">Not published</span>
 </div>
 </label>
 <label class="flex items-start gap-2 p-2 rounded bg-surface-container-low border border-wb-border cursor-not-allowed">
 <input class="mt-0.5 accent-primary" name="policy-choice" type="radio" value="false_alarm" disabled>
 <div>
 <span class="text-on-surface-variant font-medium block leading-none mb-1">Not a real problem (False alarm)</span>
-<span class="text-outline text-[10px] leading-tight block">Not published</span>
 </div>
 </label>
 <label class="flex items-start gap-2 p-2 rounded bg-surface-container-low border border-wb-border cursor-not-allowed">
 <input class="mt-0.5 accent-primary" name="policy-choice" type="radio" value="allow_risk" disabled>
 <div>
 <span class="text-on-surface-variant font-medium block leading-none mb-1">Accept the risk and allow</span>
-<span class="text-outline text-[10px] leading-tight block">Not published</span>
 </div>
 </label>
 </div>
@@ -545,18 +563,14 @@ authenticates a statement; it never establishes that the claimed measurements oc
 </div>
 </div>
 <div class="p-2.5 rounded bg-surface-container-lowest border border-wb-border font-mono text-[10.5px] leading-snug space-y-0.5 text-outline overflow-x-auto" id="live-json-viewer">Not published: no policy compiler or template contract. This page does not export a policy.</div>
-<div class="p-2 rounded bg-surface-container-low border border-wb-border text-[10px] text-outline flex items-center gap-1.5">
-<span class="material-symbols-outlined text-[13px] text-primary">sync</span>
-<span class="">Policy JSON stays unavailable until Core publishes the contract.</span>
-</div>
-</div>
-</div>
 <div class="p-2 bg-surface-container-lowest border-t border-wb-border flex items-center justify-between gap-2 shrink-0">
 <button class="px-2.5 py-1.5 rounded text-on-surface-variant text-[11px] opacity-50 cursor-not-allowed" id="reset-item-btn" type="button" disabled aria-disabled="true" title="Not published: needs a Core template contract">Reset Item</button>
 <button class="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-surface-container text-on-surface-variant text-[12px] font-medium opacity-50 cursor-not-allowed" id="apply-staging-btn" type="button" disabled aria-disabled="true" title="Not published: needs a Core compile/apply contract">
-<span class="material-symbols-outlined text-[14px]">done_all</span>
+<span class="material-symbols-outlined text-[14px]" aria-hidden="true">done_all</span>
 <span class="">Apply</span>
 </button>
+</div>
+</div>
 </div>
 </aside>
 </div>
@@ -584,7 +598,30 @@ authenticates a statement; it never establishes that the claimed measurements oc
 </div>
 </footer>
 </form>
-</dialog>
+  </dialog>
+  <dialog id="decision-dialog" class="setup-dialog" aria-labelledby="decision-dialog-title" aria-describedby="decision-description">
+  <div class="setup-frame">
+  <header class="setup-header">
+  <div class="font-mono text-outline text-[10px] uppercase tracking-wider">Enterprise · Local decision</div>
+  <h2 id="decision-dialog-title" class="text-wb-heading font-light text-on-surface mt-2">Inspect Governance Decision V2</h2>
+  <p id="decision-description" class="text-on-surface-variant leading-relaxed mt-2">Choose a local decision file. Core checks its decoded structure. This inspection does not verify a signature, evidence, organizational authority or current validity.</p>
+  </header>
+  <div class="setup-content space-y-3">
+  <label class="block text-on-surface font-medium" for="decision-file">Decision JSON</label>
+  <input id="decision-file" class="setup-input" type="file" accept=".json,application/json">
+  <p id="decision-status" class="text-on-surface-variant" role="status" aria-live="polite">Choose a file to begin.</p>
+  <dl id="decision-summary" class="setup-summary" hidden></dl>
+  <div id="decision-source-wrap" hidden>
+  <div class="font-mono text-outline text-[10px] uppercase tracking-wider mb-2">Original file text · review only</div>
+  <pre id="decision-source" class="org-policy-source"></pre>
+  </div>
+  </div>
+  <footer class="setup-footer">
+  <span class="text-outline text-[10px]">No decision is saved or approved.</span>
+  <button id="close-decision-btn" class="setup-button" type="button">Close</button>
+  </footer>
+  </div>
+  </dialog>
 <dialog id="org-modal-overlay" class="setup-dialog" aria-labelledby="org-modal-title">
 <div class="setup-frame">
 <header class="setup-header">
@@ -594,6 +631,29 @@ authenticates a statement; it never establishes that the claimed measurements oc
 <footer class="setup-footer setup-summary-actions">
 <button id="update-org-setup-btn" type="button" class="setup-button setup-primary">Update my Workbench information</button>
 <button id="close-org-modal-btn" type="button" class="setup-button" aria-label="Close saved setup">Close</button>
+</footer>
+</div>
+</dialog>
+<dialog id="org-policy-dialog" class="setup-dialog" aria-labelledby="org-policy-title" aria-describedby="org-policy-description">
+<div class="setup-frame">
+<header class="setup-header">
+<div class="font-mono text-outline text-[10px] uppercase tracking-wider" id="org-policy-context">Enterprise · Local policy</div>
+<h2 id="org-policy-title" class="text-wb-heading font-light text-on-surface mt-2">Open organization PolicyBundle</h2>
+<p id="org-policy-description" class="text-on-surface-variant leading-relaxed mt-2">Choose a local JSON file to review its original text and check its decoded structure with Core. This does not validate CLI file handling or establish policy authority.</p>
+</header>
+<div class="setup-content space-y-3">
+<label class="block text-on-surface font-medium" for="org-policy-file">PolicyBundle JSON</label>
+<input id="org-policy-file" class="setup-input" type="file" accept=".json,application/json">
+<p id="org-policy-status" class="text-on-surface-variant" role="status" aria-live="polite">Choose a file to begin.</p>
+<dl id="org-policy-summary" class="setup-summary" hidden></dl>
+<div id="org-policy-source-wrap" hidden>
+<div class="font-mono text-outline text-[10px] uppercase tracking-wider mb-2">Original file text · review only</div>
+<pre id="org-policy-source" class="org-policy-source"></pre>
+</div>
+</div>
+<footer class="setup-footer">
+<span class="text-outline text-[10px]">No file is saved or published.</span>
+<button id="close-org-policy-btn" class="setup-button" type="button">Close</button>
 </footer>
 </div>
 </dialog>
