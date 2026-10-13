@@ -3,8 +3,9 @@ const $ = id => document.getElementById(id), documentFile = policyFile($('policy
 const show = (id, value) => { $(id).textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2); };
 let catalog, candidate, history, currentIntent, currentOptional = [], revision = 0;
 let evidenceBytes, inspected, evidenceFiles = [];
+let prepared;
 const reviewContext = () => ({ reviewEvidence: evidenceFiles.map(file => [...file.bytes]) });
-const invalidate = () => { revision++; candidate = undefined; $('accept').disabled = true; };
+const invalidate = () => { revision++; candidate = undefined; prepared = undefined; $('accept').disabled = true; $('apply').disabled = true; show('execution', 'Draft or review context changed. Prepare again before Apply.'); };
 const request = async (operation, body = {}) => (await fetch(`/api/authoring-${operation}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ policyBytes: [...documentFile.bytes()], ...reviewContext(), ...body }) })).json();
 const button = (label, action) => { const node = document.createElement('button'); node.textContent = label; node.onclick = action; return node; };
 const key = ref => `${ref.releaseSha256}/${ref.itemId}/${ref.scope}`;
@@ -43,7 +44,7 @@ function render(intent = currentIntent, optional = currentOptional) {
   if (intent.pins.some(pin => `${pin.releaseSha256}/${pin.itemId}` === selected)) $('review-target').value = selected;
   show('review-history', intent.reviews);
 }
-function publish(value) { documentFile.setBytes(Uint8Array.from(value.policyBytes)); currentIntent = value.intent; currentOptional = value.optional ?? []; render(); }
+function publish(value) { documentFile.setBytes(Uint8Array.from(value.policyBytes)); currentIntent = value.intent; currentOptional = value.optional ?? []; render(); void checkAuthority(); }
 async function propose(operation) {
   invalidate(); const attempt = revision;
   try { const result = await request('edit', { operation }); if (attempt !== revision) return; present(result); }
@@ -54,13 +55,13 @@ function present(result) {
   if (result.status === 'ok' && result.value.policyBytes) { candidate = result.value; $('accept').disabled = false; }
 }
 $('accept').onclick = () => { if (!candidate) return; const accepted = candidate; history = documentFile.bytes(); invalidate(); publish(accepted); $('history').disabled = false; show('proposal', 'Candidate accepted. Original artifact retained.'); };
-$('new').onclick = async () => { invalidate(); const attempt = revision, result = await request('new'); if (attempt !== revision) return; if (result.status === 'ok') publish(result.value); else present(result); };
+$('new').onclick = async () => { invalidate(); const attempt = revision, result = await request('new', { mode: $('execution-mode').value }); if (attempt !== revision) return; if (result.status === 'ok') publish(result.value); else present(result); };
 $('search').oninput = () => render(); $('keep').oninput = invalidate; $('policy').addEventListener('input', invalidate);
 $('save').onclick = () => download(documentFile.bytes(), 'policy.json'); $('history').onclick = () => { if (history) download(history, 'policy.original.json'); };
-$('open').onchange = async () => { invalidate(); const attempt = revision, file = $('open').files[0]; if (!file) return; if (file.size > 1_000_000) return show('proposal', 'Policy exceeds the public byte limit.'); const bytes = new Uint8Array(await file.arrayBuffer()); if (attempt !== revision) return; documentFile.setBytes(bytes); history = bytes.slice(); currentIntent = undefined; currentOptional = []; render(); $('history').disabled = false; show('proposal', 'Original bytes retained. Validate and reopen to recover choices.'); };
+$('open').onchange = async () => { invalidate(); const attempt = revision, file = $('open').files[0]; if (!file) return; if (file.size > 1_000_000) return show('proposal', 'Policy exceeds the public byte limit.'); const bytes = new Uint8Array(await file.arrayBuffer()); if (attempt !== revision) return; documentFile.setBytes(bytes); history = bytes.slice(); currentIntent = undefined; currentOptional = []; render(); $('history').disabled = false; show('proposal', 'Original bytes retained. Validate and reopen to recover choices.'); await checkAuthority(); };
 $('reopen').onclick = async () => { invalidate(); const attempt = revision, result = await request('read', { availability: $('candidate-mode').value }); if (attempt !== revision) return;
-  show('proposal', result); if (result.status === 'ok' && result.value.editing === 'available') { currentIntent = result.value.intent; currentOptional = result.value.optional ?? []; render(); } };
-$('candidate-mode').onchange = invalidate;
+  show('proposal', result); if (result.status === 'ok' && result.value.editing === 'available') { currentIntent = result.value.intent; currentOptional = result.value.optional ?? []; render(); } await checkAuthority(); };
+$('candidate-mode').onchange = invalidate; $('execution-mode').onchange = invalidate;
 $('refresh').onclick = async () => { invalidate(); const attempt = revision, result = await request('reconcile', { candidateMode: $('candidate-mode').value }); if (attempt !== revision) return;
   show('changes', result); $('choices').replaceChildren(); if (result.status !== 'ok') return;
   for (const choice of result.value.choices) {
@@ -110,4 +111,48 @@ $('record-review').onclick = async () => {
   const result = await request('record-review', { evidenceIndex: Number($('review-evidence').value), target: inspected.target, finding: binding.finding, decision }); if (attempt === revision) present(result);
 };
 $('reconsider-reviews').onclick = async () => { invalidate(); const attempt = revision, result = await request('reconsider-reviews'); if (attempt === revision) present(result); };
-catalog = await (await fetch('/api/authoring-catalog')).json(); show('source-description', catalog.description); await $('new').onclick();
+async function checkAuthority() {
+  const attempt = revision;
+  if (!catalog.executionAvailable) { show('authority-summary', 'No execution host connected. Portable editing remains available.'); return; }
+  try {
+    const result = await request('authority'); if (attempt !== revision) return;
+    show('authority', result);
+    show('authority-summary', result.status !== 'ok' ? 'Current authority unavailable or invalid. No cached authority or fallback is used; installed state is unchanged.'
+      : result.value.mode === 'vibe' ? 'Vibe: no organization boundary. Core still checks exact material and target state.'
+      : `${result.value.admitted ? 'Advisory preview admits current choices.' : 'Current authority refuses affected choices.'} ${result.value.affectedChoices.length} affected; ${result.value.stillValidChoices.length} still valid. Prepare and Apply independently recheck.`);
+  } catch (error) { if (attempt === revision) show('authority-summary', `Authority check failed: ${error.message}. Prepare again after recovery.`); }
+}
+function presentPreparation(result) {
+  show('execution', result);
+  const preparation = result.preparation ?? result;
+  if (preparation.status === 'ready' && preparation.sessionId) { prepared = preparation; $('apply').disabled = false; }
+}
+$('authority-refresh').onclick = async () => { invalidate(); await checkAuthority(); };
+$('prepare').onclick = async () => {
+  invalidate(); const attempt = revision;
+  try { const result = await request('prepare'); if (attempt !== revision) return; presentPreparation(result); if (result.authority) { show('authority', result.authority); } }
+  catch (error) { if (attempt === revision) show('execution', error.message); }
+};
+$('apply').onclick = async () => {
+  if (!prepared) return;
+  const approved = prepared, attempt = revision; prepared = undefined; $('apply').disabled = true;
+  try { const result = await request('apply', { sessionId: approved.sessionId, reviewDigest: approved.review.reviewDigest });
+    if (attempt !== revision) return; show('execution', result); await checkAuthority();
+  } catch (error) { if (attempt === revision) show('execution', `Apply result unavailable: ${error.message}. Inspect installed state before preparing again.`); }
+};
+$('managed-refresh').onclick = async () => {
+  invalidate(); const attempt = revision;
+  try {
+    const result = await request('managed'); if (attempt !== revision) return;
+    show('execution', result); $('managed').replaceChildren();
+    for (const selection of result.selections ?? []) $('managed').append(button(`Review removal ${selection.managementId}`, async () => {
+      invalidate(); const removalAttempt = revision;
+      try { const mode = JSON.parse(documentFile.text()).mode; const removal = await request('remove', { managementId: selection.managementId, scope: selection.scope, mode });
+        if (removalAttempt === revision) presentPreparation(removal);
+      } catch (error) { if (removalAttempt === revision) show('execution', error.message); }
+    }));
+  } catch (error) { if (attempt === revision) show('execution', error.message); }
+};
+catalog = await (await fetch('/api/authoring-catalog')).json(); show('source-description', catalog.description);
+for (const id of ['prepare', 'authority-refresh', 'managed-refresh']) $(id).disabled = !catalog.executionAvailable;
+await $('new').onclick();
