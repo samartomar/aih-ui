@@ -299,6 +299,10 @@ mixed Vibe/Enterprise lifecycle, original evidence, and actual download/fresh im
 The dedicated test repository and mutation plan are external operator responsibilities.
 Use retained transition evidence when rerunning against immutable scenario refs;
 never imply a new authority change occurred in that rerun.
+`AIH_ORG_TEST_ROOT` optionally selects an independently host-owned disposable target
+directory, separate from the evidence output directory. Record both locations and
+use a short task-owned target on Windows; retain any failed path-dependent runtime
+receipt instead of claiming that a different target validates the failed one.
 
 ## Proof boundaries
 

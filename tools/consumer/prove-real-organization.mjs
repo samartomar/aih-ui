@@ -40,7 +40,8 @@ for (const [index, target] of [
 }
 await writeFile(join(output, 'reviewed-input.json'), policyBytes);
 for (const [i, bytes] of reviewEvidence.entries()) await writeFile(join(output, `original-evidence-${i}.json`), bytes);
-const target = join(output, 'enterprise-project'); await mkdir(target, { recursive: true });
+const testRoot = process.env.AIH_ORG_TEST_ROOT ?? output;
+const target = join(testRoot, 'enterprise-project'); await mkdir(target, { recursive: true });
 await writeFile(join(target, 'unrelated.txt'), 'User-owned unrelated state\n');
 await writeFile(join(target, 'unowned.txt'), 'Unowned state\n');
 const hostFor = (ref, projectRoot = target, auth = controls) => createHost({ projectRoot, organizationSource: source(ref), materialRoots: f.materialRoots, recipeMaterials: f.recipeMaterials, controls: auth });
@@ -171,7 +172,7 @@ try {
   assert.equal((await capture('byo-removal-apply', await recovery.applyApproved({ sessionId: removeNote.preparation.sessionId, reviewDigest: removeNote.preparation.review.reviewDigest }))).completion, 'complete');
   await assert.rejects(readFile(join(target, 'note.md')), { code: 'ENOENT' });
   assert.ok((await recovery.managedInventory()).selections.some(s => s.managementId.includes('domain-modeling'))); cases.push('BYO root trim and actual removal preserve explicitly shared Catalog root');
-  const vibeTarget = join(output, 'vibe-project'); await mkdir(vibeTarget, { recursive: true });
+  const vibeTarget = join(testRoot, 'vibe-project'); await mkdir(vibeTarget, { recursive: true });
   const vibe = createHost({ projectRoot: vibeTarget, materialRoots: f.materialRoots, recipeMaterials: f.recipeMaterials, controls: { logging: 'off' } });
   const vibePolicy = { ...f.policy, mode: 'vibe', selections: f.policy.selections.map(({ organizationSelectionId, ...s }) => s) };
   const vibeReady = await capture('vibe-prepare', await vibe.prepareSession({ policyText: JSON.stringify(vibePolicy) })); assert.equal(vibeReady.status, 'ready');
@@ -185,7 +186,7 @@ try {
   assert.equal((await capture('vibe-byo-removal', await vibe.applyApproved({ sessionId: vibeNote.preparation.sessionId, reviewDigest: vibeNote.preparation.review.reviewDigest }))).completion, 'complete');
   await page.locator('#authority-section').screenshot({ path: join(output, 'authority-browser.png') });
   assert.deepEqual(errors, []);
-  await capture('real-organization-summary', { status: 'passed', repository, transition, node: process.version, elapsedMs: Date.now() - began, cases, errors,
+  await capture('real-organization-summary', { status: 'passed', repository, transition, node: process.version, testRoot, elapsedMs: Date.now() - began, cases, errors,
     downloadSha256: createHash('sha256').update(policyBytes).digest('hex'), initialAuthority: initial.value.authority, withdrawnAuthority: withdrawn.value.authority,
     limits: ['Dedicated private test repository; no production enforcement or native client execution.', 'Advisory preview is separate from current Core Prepare/Apply.', 'Human review records are portable attribution, not organization authorization.'] });
   console.log('REAL_ORGANIZATION_PROOF_PASSED');
