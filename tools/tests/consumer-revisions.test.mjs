@@ -16,6 +16,7 @@ test('a delayed reopen cannot replace newer policy edits or mode', async () => {
   const source = await readFile(new URL('../../src/consumer.js', import.meta.url), 'utf8');
   const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
   await new AsyncFunction('document', 'fetch', source)(document, fetch);
+  document.getElementById('reopen-result').textContent = '';
   const pending = nodes.get('reopen').onclick();
   nodes.get('policy').value = 'newer edit'; nodes.get('policy').listeners.input();
   deliver({ valid: true, editable: true, policy: { mode: 'enterprise' }, intent: { roots: [], excludedItemIds: [] } });

@@ -1,6 +1,6 @@
 // Explicit headless assessment of the exact materials selected in a saved policy.
 // Built-in detectors only; this script does not sign, publish or execute recipes.
-import { readFile, mkdir, copyFile, writeFile } from 'node:fs/promises';
+import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
@@ -32,7 +32,7 @@ for (const [path, member] of files) {
   if (!destination.startsWith(`${source}\\`) && !destination.startsWith(`${source}/`)) throw new Error('Destination path escapes root.');
   const bytes = await readFile(location);
   if (bytes.length !== member.byteLength || createHash('sha256').update(bytes).digest('hex') !== member.sha256) throw new Error(`Material changed: ${path}`);
-  await mkdir(dirname(destination), { recursive: true }); await copyFile(location, destination);
+  await mkdir(dirname(destination), { recursive: true }); await writeFile(destination, bytes);
 }
 const request = { schema: 'urn:aihq:scan:request:1.0.0', source: { kind: 'local', path: source },
   selection: { paths: 'all', excludedPaths: [] }, detectors: [
