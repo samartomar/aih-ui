@@ -56,12 +56,13 @@ const hasAdditionalExecutionAnnotations = policy => Object.keys(policy).some(key
   || policy.selections.some(selection => Object.keys(selection).some(key => !['id', 'managementId', 'scope', 'configuration', 'requires', 'recipe'].includes(key)));
 
 export function editSetup({ basePolicyText, ...choices }) {
-  const original = basePolicyText ? reopenPolicy(basePolicyText) : null;
+  const original = basePolicyText ? reopenSetup({ release: choices.release, materialSource: choices.materialSource, policyText: basePolicyText }) : null;
   if (original && !original.valid) return original;
-  if (original && hasAdditionalExecutionAnnotations(original.document)) return fail('Preserve the original policy: evidence, organization or lifecycle annotations require explicit resolution before reauthoring.');
+  if (original && !original.editable) return fail(`Preserve the original policy. ${original.reason} Start a separate fresh draft to author new intent.`);
+  if (original && hasAdditionalExecutionAnnotations(original.policy)) return fail('Preserve the original policy: evidence, organization or lifecycle annotations require explicit resolution before reauthoring.');
   const candidate = composeSetup(choices);
-  if (candidate.valid && original?.document.metadata) {
-    candidate.policy.metadata = { ...original.document.metadata, 'aih.workbench': candidate.policy.metadata['aih.workbench'] };
+  if (candidate.valid && original?.policy.metadata) {
+    candidate.policy.metadata = { ...original.policy.metadata, 'aih.workbench': candidate.policy.metadata['aih.workbench'] };
     candidate.policyText = exportPolicy(candidate.policy);
   }
   return candidate;

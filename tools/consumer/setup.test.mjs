@@ -4,7 +4,7 @@ import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { listItems } from '@aihq/catalog/reader';
-import { composeSetup, reopenSetup, reviewSetupUpdate } from './setup.mjs';
+import { composeSetup, editSetup, reopenSetup, reviewSetupUpdate } from './setup.mjs';
 const installed = await readInstalledRelease({ root: dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'))), sourceInput: 'catalog' });
 assert.equal(installed.valid, true, JSON.stringify(installed.diagnostics));
 const { release, source: materialSource } = installed;
@@ -53,4 +53,18 @@ test('reviewed same-source update preserves exclusions and original JSON', () =>
   assert.equal(update.originalPolicyText, authored.policyText);
   assert.deepEqual(update.policy.metadata['aih.workbench'].excludedItemIds, [skipped.id]);
   assert.ok(update.changes.every(change => change.state === 'unchanged'));
+});
+
+test('reauthoring never repairs contradictory, unknown or unavailable intent silently', () => {
+  const authored = composeSetup(choices);
+  const base = authored.policy;
+  for (const mutate of [
+    policy => { policy.metadata['aih.workbench'].schema = 'urn:unknown'; },
+    policy => { policy.metadata['aih.workbench'].source.releaseSha256 = '0'.repeat(64); },
+    policy => { policy.metadata['aih.workbench'].excludedItemIds = [root.id]; }
+  ]) {
+    const changed = structuredClone(base); mutate(changed);
+    assert.equal(editSetup({ ...choices, basePolicyText: JSON.stringify(changed) }).valid, false);
+  }
+  assert.equal(editSetup({ ...choices, basePolicyText: authored.policyText }).valid, true);
 });
