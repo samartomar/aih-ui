@@ -92,3 +92,19 @@ test('resolution change while acceptance is pending prevents stale candidate pub
   delay.resolve(data()); await pending;
   assert.equal(nodes.get('policy').value,'original'); assert.equal(nodes.get('accept').disabled,true);
 });
+
+test('reopen adopts the server snapshot stage and rejects a stale catalog response', async () => {
+  const {document,nodes}=documentFixture(), delay=deferred(), catalogStarted=deferred(); let delayed=false; const catalogRequests=[];
+  const fetch=async url=>({json:async()=>{
+    if(url.startsWith('/api/intent-catalog')) { catalogRequests.push(url); if(delayed) { catalogStarted.resolve(); return delay.promise; } return data(url.includes('stage=next') ? 2 : 0); }
+    return url==='/api/intent-reopen' ? {...draft('exact updated JSON'),editable:true,stage:'next'} : draft('original');
+  }});
+  await new AsyncFunction('document','fetch',source)(document,fetch);
+  await nodes.get('reopen').onclick();
+  assert.match(catalogRequests.at(-1),/stage=next/); assert.equal(nodes.get('policy').value,'exact updated JSON'); assert.match(nodes.get('count').textContent,/2 total/);
+  delayed=true; const pending=nodes.get('reopen').onclick();
+  await catalogStarted.promise;
+  nodes.get('policy').value='newer edit'; nodes.get('policy').oninput();
+  delay.resolve(data(5)); await pending;
+  assert.equal(nodes.get('policy').value,'newer edit'); assert.match(nodes.get('count').textContent,/2 total/);
+});

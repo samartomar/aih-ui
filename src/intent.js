@@ -70,7 +70,12 @@ $('policy').oninput = () => { invalidate(); show('summary', 'Validate and reopen
 $('keep').oninput = invalidate;
 $('save').onclick = () => download($('policy').value, 'policy.json'); $('history').onclick = () => { if (history) download(history, 'policy.previous.json'); };
 $('open').onchange = async () => { const file = $('open').files[0]; if (!file) return; invalidate(); const attempt = revision; if (file.size > 1_000_000) return show('proposal', 'Policy exceeds the public Core byte limit.'); const text = await file.text(); if (attempt === revision) { $('policy').value = text; show('proposal', 'File opened. Validate and reopen to restore choices.'); } };
-$('reopen').onclick = async () => { invalidate(); const attempt = revision; const result = await request('reopen'); if (attempt !== revision) return; if (result.valid && result.editable) publish(result); present(result); candidate = null; $('accept').disabled = true; };
+$('reopen').onclick = async () => { invalidate(); const attempt = revision; const result = await request('reopen'); if (attempt !== revision) return;
+  if (result.valid && result.editable) {
+    try { const nextStage = result.stage ?? stage, data = await loadCatalog(nextStage); if (attempt !== revision) return; stage = nextStage; catalog = data; publish(result); }
+    catch (error) { if (attempt === revision) show('proposal', error.message); return; }
+  }
+  present(result); candidate = null; $('accept').disabled = true; };
 async function update(resolutions = {}) {
   invalidate(); const attempt = revision; const result = await request('update', { resolutions }); if (attempt !== revision) return;
   present(result, 'next'); $('decisions').replaceChildren(); decisions.clear();

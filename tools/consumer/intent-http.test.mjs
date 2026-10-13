@@ -30,6 +30,15 @@ test('HTTP authoring journey saves/reopens/skips/removes/updates without executi
     const candidate=okay((await post('intent-update',{inventory:'journey',policyText:original,resolutions})).body);
     assert.equal(candidate.originalPolicyText,original); assert.equal(candidate.requiresAcceptance,true); assert.equal(candidate.intent.exclusions[0].itemId,'shared.optional');
     assert.equal(okay((await post('intent-reopen',{inventory:'journey',stage:'next',policyText:candidate.policyText})).body).editable,true);
+    const freshReopen=okay((await post('intent-reopen',{inventory:'journey',stage:'current',policyText:candidate.policyText})).body);
+    assert.equal(freshReopen.editable,true); assert.equal(freshReopen.stage,'next'); assert.equal(freshReopen.policyText,candidate.policyText);
+    const originalReopen=okay((await post('intent-reopen',{inventory:'journey',stage:'next',policyText:original})).body);
+    assert.equal(originalReopen.stage,'current'); assert.equal(originalReopen.policyText,original);
+    const keepResolutions=Object.fromEntries(review.changes.filter(change=>change.state!=='unchanged').map(change=>[change.key,change.current?'accept':'keep']));
+    const mixed=okay((await post('intent-update',{inventory:'journey',policyText:original,resolutions:keepResolutions})).body);
+    const mixedReopen=okay((await post('intent-reopen',{inventory:'journey',stage:'current',policyText:mixed.policyText})).body);
+    assert.equal(mixedReopen.stage,'next'); assert.equal(mixedReopen.policyText,mixed.policyText);
+    assert.ok(mixedReopen.intent.roots.some(root=>root.itemId==='shared.retired'));
     assert.equal((await post('prepare',{policyText:original})).status,409);
     const foreign=await fetch(`${origin}/api/intent-new`,{method:'POST',headers:{origin:'https://foreign.example','content-type':'application/json'},body:'{}'}); assert.equal(foreign.status,403);
   } finally { await new Promise(resolve=>server.close(resolve)); }
