@@ -50,6 +50,11 @@ The fixture runner measures six inventories of 300 items and adds a seventh as
 data. Inventory size and selected policy size are separate: selecting all 1,800
 illustrative items exceeds the current bounded policy format and is refused.
 
+For the separate 1,800-inventory / 300-selected **functional** proof with actual
+material bytes, installed public validators and an actual browser download/fresh
+import, use [functional composition capacity](docs/functional-scale.md). Its
+synthetic recipes remain execution-disabled; it sets no latency target or item cap.
+
 ## How the page is put together
 
 `src/index.html` carries the markup; `src/main.js` composes three parts and
