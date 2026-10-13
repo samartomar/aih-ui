@@ -1,5 +1,5 @@
 import { intakeDeclaration, digestBytes } from './intake.mjs';
-import { composeAuthoring, readAuthoring, reconcileAuthoring, editAuthoring, freshAuthoring, stable, refuse } from './headless.mjs';
+import { composeAuthoring, readAuthoring, reconcileAuthoring, editAuthoring, freshAuthoring, stable, refuse, inspectReviewEvidence, recordReview, reconsiderReviews } from './headless.mjs';
 import { noteFixture } from './note-fixture.mjs';
 const encode = value => new TextEncoder().encode(value);
 export async function createMixedService(maintained) {
@@ -28,11 +28,16 @@ export async function createMixedService(maintained) {
       templates: notes.templates.map(t => ({ ...t, releaseSha256: notes.release.sha256 })) }; },
     async run(operation, body) {
       const policyBytes = body.policyBytes ? Uint8Array.from(body.policyBytes) : undefined;
+      const reviewEvidence = (body.reviewEvidence ?? []).map(bytes => Uint8Array.from(bytes)), comparisons = body.comparisons ?? [];
+      const reviewContext = { reviewEvidence, comparisons };
       if (operation === 'new') return composeAuthoring({ intent: freshAuthoring(), inventories: all });
-      if (operation === 'read') return readAuthoring({ policyBytes, inventories: body.availability === 'missing' ? [maintained] : all });
-      if (operation === 'compose') return composeAuthoring({ basePolicyBytes: policyBytes, intent: body.intent, inventories: all });
-      if (operation === 'edit') return editAuthoring({ policyBytes, inventories: all, operation: body.operation });
-      if (operation === 'reconcile') return reconcileAuthoring({ savedPolicyBytes: policyBytes, inventories: all, candidateInventories: candidates(body.candidateMode) });
+      if (operation === 'read') return readAuthoring({ policyBytes, inventories: body.availability === 'missing' ? [maintained] : all, ...reviewContext });
+      if (operation === 'compose') return composeAuthoring({ basePolicyBytes: policyBytes, intent: body.intent, inventories: all, ...reviewContext });
+      if (operation === 'edit') return editAuthoring({ policyBytes, inventories: all, operation: body.operation, ...reviewContext });
+      if (operation === 'reconcile') return reconcileAuthoring({ savedPolicyBytes: policyBytes, inventories: all, candidateInventories: candidates(body.candidateMode), ...reviewContext });
+      if (operation === 'inspect-review') return inspectReviewEvidence({ evidenceBytes: Uint8Array.from(body.evidenceBytes ?? []), inventory: all.find(entry => entry.release.sha256 === body.target?.releaseSha256), itemId: body.target?.itemId });
+      if (operation === 'record-review') return recordReview({ policyBytes, inventories: all, evidenceBytes: Uint8Array.from(body.evidenceBytes ?? []), target: body.target, finding: body.finding, decision: body.decision, ...reviewContext });
+      if (operation === 'reconsider-reviews') return reconsiderReviews({ policyBytes, inventories: all, ...reviewContext });
       if (operation === 'intake') {
         const result = await intakeDeclaration({ ...body.snapshot, declarationBytes: Uint8Array.from(body.snapshot.declarationBytes),
           ...(body.snapshot.archiveBytes ? { archiveBytes: Uint8Array.from(body.snapshot.archiveBytes) } : {}),

@@ -4,6 +4,8 @@ const scope = value => ['project', 'user'].includes(value);
 const descriptor = value => only(value, ['path', 'sha256', 'byteLength'], ['id', 'schema']) && typeof value.path === 'string' && hash(value.sha256) && Number.isSafeInteger(value.byteLength) && value.byteLength >= 0;
 const material = value => only(value, ['id', 'sha256', 'byteLength']) && id(value.id) && hash(value.sha256) && Number.isSafeInteger(value.byteLength) && value.byteLength >= 0;
 const identity = value => typeof value === 'string' && value.length > 0 && value.length <= 1000;
+const utc = value => typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(value)
+  && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 19) === value.slice(0, 19);
 const unique = (values, key) => new Set(values.map(key)).size === values.length;
 export const rootKey = value => `${value.releaseSha256}/${value.itemId}/${value.scope}`;
 export const pinKey = value => `${value.releaseSha256}/${value.itemId}`;
@@ -12,7 +14,7 @@ export function checkReview(review) {
   const all = [...review.records, ...review.history];
   return all.length <= 4096 && unique(all, r => r?.id) && all.every(r => only(r, ['id', 'owner', 'actor', 'recordedAt', 'disposition', 'reason', 'subject', 'finding', 'evidence', 'state'], ['supersedes'])
     && id(r.id) && only(r.owner, ['kind', 'id']) && ['individual', 'organization'].includes(r.owner.kind) && identity(r.owner.id)
-    && identity(r.actor) && identity(r.reason) && typeof r.recordedAt === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(r.recordedAt) && !Number.isNaN(Date.parse(r.recordedAt))
+    && identity(r.actor) && identity(r.reason) && utc(r.recordedAt)
     && ['false-alarm', 'accepted-risk'].includes(r.disposition) && ['current', 'reconsider'].includes(r.state)
     && only(r.subject, ['releaseSha256', 'itemId', 'itemSha256', 'recipeIdentity', 'materials']) && hash(r.subject.releaseSha256) && id(r.subject.itemId) && hash(r.subject.itemSha256)
     && identity(r.subject.recipeIdentity) && Array.isArray(r.subject.materials) && r.subject.materials.every(material) && unique(r.subject.materials, m => m.id)

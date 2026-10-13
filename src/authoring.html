@@ -7,4 +7,14 @@
 <section><h2>Save and reopen</h2><textarea id="policy" aria-label="Policy JSON" spellcheck="false"></textarea><button id="save">Download policy.json</button><label>Open saved policy <input id="open" type="file" accept=".json"></label><button id="reopen">Validate and reopen</button><button id="history" disabled>Download original policy</button></section>
 <section><h2>Source reconciliation</h2><label>Available source snapshots <select id="candidate-mode"><option value="current">Original exact snapshots</option><option value="updated">Explicit changed note revision</option><option value="missing">Independent source unavailable</option></select></label><button id="refresh">Review source changes</button><pre id="changes"></pre><div id="choices"></div></section>
 <section><h2>Bring a declaration</h2><p>Choose a snapshot envelope with portable input identity, declaration bytes and source-file byte arrays. Source acquisition and filesystem bindings remain host-owned.</p><input id="intake" type="file" accept=".json"><pre id="intake-result"></pre></section></main>
+<section><h2>Evidence and human review</h2><p>Inspecting a report does not run a scanner. Report support, byte association, producer authentication, coverage and findings are separate facts. Portable decisions do not authenticate the person named.</p>
+<label>Selected review subject <select id="review-target"></select></label>
+<label>Open report or artifact <input id="review-file" type="file" accept=".json"></label><button id="inspect-review">Inspect supplied evidence</button>
+<pre id="review-facts" aria-live="polite">No optional evidence supplied. Authoring and execution policy validity remain independent.</pre>
+<details><summary>Detector outcomes, coverage, failures and findings</summary><pre id="review-report"></pre></details>
+<label>Finding <select id="review-finding"></select></label>
+<label>Decision ID <input id="review-id"></label><label>Owner <select id="review-owner-kind"><option value="individual">Individual</option><option value="organization">Organization</option></select></label><label>Owner identity <input id="review-owner"></label><label>Actor <input id="review-actor"></label>
+<label>Disposition <select id="review-disposition"><option value="false-alarm">False alarm</option><option value="accepted-risk">Accepted risk</option></select></label><label>Reason <textarea id="review-reason" rows="2"></textarea></label><label>Supersedes prior decision ID (optional) <input id="review-supersedes"></label>
+<button id="record-review" disabled>Review decision candidate</button><button id="reconsider-reviews">Preserve history and reconsider unavailable or changed decisions</button>
+<p>UTC time is recorded when proposing the decision. Accept the candidate to save it. Reopening a current decision requires its original checked report/artifact bytes again.</p><pre id="review-history"></pre></section>
 <script type="module" src="/authoring.js"></script></body></html>

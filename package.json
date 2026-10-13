@@ -6,6 +6,7 @@
   "exports": {
     "./authoring": "./tools/consumer/headless.mjs",
     "./intake": "./tools/consumer/intake.mjs",
+    "./review-host": "./tools/consumer/review-host.mjs",
     "./schemas/saved-intent/3.0.0.json": "./schemas/saved-intent-3.0.0.json",
     "./schemas/review-decisions/1.0.0.json": "./schemas/review-decisions-1.0.0.json"
   },
