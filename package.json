@@ -1,7 +1,14 @@
 {
   "name": "aih-ui",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./authoring": "./tools/consumer/headless.mjs",
+    "./intake": "./tools/consumer/intake.mjs",
+    "./schemas/saved-intent/3.0.0.json": "./schemas/saved-intent-3.0.0.json",
+    "./schemas/review-decisions/1.0.0.json": "./schemas/review-decisions-1.0.0.json"
+  },
   "scripts": {
     "build:css": "node tools/build-css.mjs",
     "preview": "node tools/preview.mjs"

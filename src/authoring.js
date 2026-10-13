@@ -1,0 +1,76 @@
+import { policyFile } from './policy-file.js';
+const $ = id => document.getElementById(id), documentFile = policyFile($('policy'));
+const show = (id, value) => { $(id).textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2); };
+let catalog, candidate, history, currentIntent, currentOptional = [], revision = 0;
+const invalidate = () => { revision++; candidate = undefined; $('accept').disabled = true; };
+const request = async (operation, body = {}) => (await fetch(`/api/authoring-${operation}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ policyBytes: [...documentFile.bytes()], ...body }) })).json();
+const button = (label, action) => { const node = document.createElement('button'); node.textContent = label; node.onclick = action; return node; };
+const key = ref => `${ref.releaseSha256}/${ref.itemId}/${ref.scope}`;
+const keep = () => $('keep').value.split('\n').filter(v => v.trim()).map(value => { const [releaseSha256, itemId, scope] = value.trim().split('/'); return { releaseSha256, itemId, scope }; });
+function download(bytes, filename) { const url = URL.createObjectURL(new Blob([bytes], { type: 'application/json' })); const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); URL.revokeObjectURL(url); }
+function render(intent = currentIntent, optional = currentOptional) {
+  $('items').replaceChildren();
+  const query = $('search').value.toLowerCase();
+  for (const item of catalog.items.filter(item => `${item.label} ${item.id} ${item.package.name}`.toLowerCase().includes(query)).slice(0, 40)) {
+    const box = document.createElement('fieldset'), title = document.createElement('legend'); title.textContent = `${item.label} · ${item.package.name}`; box.append(title);
+    const description = document.createElement('p'); description.textContent = item.description ?? ''; box.append(description);
+    const savedRoots = intent?.roots.filter(root => root.releaseSha256 === item.root.releaseSha256 && root.itemId === item.id) ?? [];
+    const savedRoot = savedRoots[0];
+    const config = document.createElement('input'); config.value = JSON.stringify(savedRoot?.configuration ?? {}); config.setAttribute('aria-label', `Configuration for ${item.id}`); config.oninput = invalidate; box.append(config);
+    const scope = document.createElement('select'); scope.setAttribute('aria-label', `Scope for ${item.id}`);
+    for (const value of item.scopes) { const option = document.createElement('option'); option.value = value; option.textContent = value; scope.append(option); }
+    scope.value = savedRoot?.scope ?? item.root.scope;
+    scope.onchange = () => { invalidate(); config.value = JSON.stringify(savedRoots.find(root => root.scope === scope.value)?.configuration ?? {}); }; box.append(scope);
+    box.append(button(`Choose ${item.id}`, () => { try { return propose({ type: 'select', root: { ...item.root, scope: scope.value, configuration: JSON.parse(config.value) } }); } catch (error) { invalidate(); show('proposal', error.message); } })); $('items').append(box);
+  }
+  $('templates').replaceChildren();
+  for (const template of catalog.templates) $('templates').append(button(`Add authored template ${template.id}`, () => propose({ type: 'template', releaseSha256: template.releaseSha256, templateId: template.id, templateSha256: template.sha256, originId: `template-${revision}` })));
+  $('origins').replaceChildren(); $('roots').replaceChildren();
+  $('optional').replaceChildren();
+  if (!intent) { show('summary', 'Validate and reopen to recover choices.'); return; }
+  for (const origin of intent.origins) $('origins').append(button(`Remove origin ${origin.id}`, () => propose({ type: 'remove-origin', originId: origin.id, keep: keep() })));
+  for (const root of intent.roots) $('roots').append(button(`Trim ${root.itemId}`, () => propose({ type: 'remove-root', root, keep: keep() })));
+  for (const suggestion of optional) {
+    const originId = intent.origins.find(o => o.kind === 'direct')?.id ?? intent.origins[0]?.id;
+    const exclusion = { originId, ...suggestion.to };
+    $('optional').append(button(`${suggestion.skipped ? 'Clear skip' : 'Skip optional'} ${suggestion.to.itemId}`, () => propose({ type: suggestion.skipped ? 'unskip' : 'skip', exclusion })));
+  }
+  show('summary', { roots: intent.roots, exclusions: intent.exclusions, pins: intent.pins.map(pin => ({ releaseSha256: pin.releaseSha256, itemId: pin.itemId })), inputs: intent.inputs, reviews: intent.reviews });
+}
+function publish(value) { documentFile.setBytes(Uint8Array.from(value.policyBytes)); currentIntent = value.intent; currentOptional = value.optional ?? []; render(); }
+async function propose(operation) {
+  invalidate(); const attempt = revision;
+  try { const result = await request('edit', { operation }); if (attempt !== revision) return; present(result); }
+  catch (error) { if (attempt === revision) show('proposal', error.message); }
+}
+function present(result) {
+  show('proposal', result.status === 'ok' ? { roots: result.value.intent?.roots, inclusions: result.value.inclusions, optional: result.value.optional } : result);
+  if (result.status === 'ok' && result.value.policyBytes) { candidate = result.value; $('accept').disabled = false; }
+}
+$('accept').onclick = () => { if (!candidate) return; const accepted = candidate; history = documentFile.bytes(); invalidate(); publish(accepted); $('history').disabled = false; show('proposal', 'Candidate accepted. Original artifact retained.'); };
+$('new').onclick = async () => { invalidate(); const attempt = revision, result = await request('new'); if (attempt !== revision) return; if (result.status === 'ok') publish(result.value); else present(result); };
+$('search').oninput = () => render(); $('keep').oninput = invalidate; $('policy').addEventListener('input', invalidate);
+$('save').onclick = () => download(documentFile.bytes(), 'policy.json'); $('history').onclick = () => { if (history) download(history, 'policy.original.json'); };
+$('open').onchange = async () => { invalidate(); const attempt = revision, file = $('open').files[0]; if (!file) return; if (file.size > 1_000_000) return show('proposal', 'Policy exceeds the public byte limit.'); const bytes = new Uint8Array(await file.arrayBuffer()); if (attempt !== revision) return; documentFile.setBytes(bytes); history = bytes.slice(); currentIntent = undefined; currentOptional = []; render(); $('history').disabled = false; show('proposal', 'Original bytes retained. Validate and reopen to recover choices.'); };
+$('reopen').onclick = async () => { invalidate(); const attempt = revision, result = await request('read', { availability: $('candidate-mode').value }); if (attempt !== revision) return;
+  show('proposal', result); if (result.status === 'ok' && result.value.editing === 'available') { currentIntent = result.value.intent; currentOptional = result.value.optional ?? []; render(); } };
+$('candidate-mode').onchange = invalidate;
+$('refresh').onclick = async () => { invalidate(); const attempt = revision, result = await request('reconcile', { candidateMode: $('candidate-mode').value }); if (attempt !== revision) return;
+  show('changes', result); $('choices').replaceChildren(); if (result.status !== 'ok') return;
+  for (const choice of result.value.choices) {
+    if (choice.origin) { $('choices').append(button(`Remove unavailable origin ${choice.origin.id}`, () => propose({ type: 'remove-origin', originId: choice.origin.id }))); continue; }
+    if (choice.exclusion) { $('choices').append(button(`Remove unavailable exclusion ${choice.exclusion.itemId}`, () => propose({ type: 'unskip', exclusion: choice.exclusion }))); continue; }
+    $('choices').append(button(`Keep exact ${choice.root.itemId}`, () => show('proposal', 'Original exact revision retained. Reopen still requires its snapshot.')),
+      button(`Remove ${choice.root.itemId}`, () => propose({ type: 'remove-root', root: choice.root, keep: keep() })));
+    for (const target of choice.candidates) $('choices').append(button(`Review update ${target.itemId}`, async () => {
+      invalidate(); const attempt = revision, read = await request('read'); if (attempt !== revision || read.status !== 'ok' || read.value.editing !== 'available') return show('proposal', read);
+      const intent = structuredClone(read.value.intent); intent.roots = intent.roots.map(root => key(root) === key(choice.root) ? { ...root, ...target } : root);
+      intent.inputs = intent.inputs.filter(input => input.releaseSha256 !== choice.root.releaseSha256);
+      const composed = await request('compose', { intent }); if (attempt === revision) present(composed);
+    }));
+  } };
+$('intake').onchange = async () => { invalidate(); const attempt = revision, file = $('intake').files[0]; if (!file) return;
+  try { if (file.size > 5_000_000) throw new Error('Snapshot exceeds the bounded intake size.'); const snapshot = JSON.parse(await file.text()); const result = await request('intake', { snapshot }); if (attempt !== revision) return;
+    show('intake-result', result.status === 'ok' ? { releaseSha256: result.value.release.sha256, input: result.value.input } : result); if (result.status === 'ok') { catalog = await (await fetch('/api/authoring-catalog')).json(); if (attempt === revision) render(); }
+  } catch (error) { if (attempt === revision) show('intake-result', error.message); } };
+catalog = await (await fetch('/api/authoring-catalog')).json(); show('source-description', catalog.description); await $('new').onclick();

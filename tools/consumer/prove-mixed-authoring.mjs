@@ -1,0 +1,118 @@
+import assert from 'node:assert/strict';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { startConsumer } from './server.mjs';
+import { readAuthoring, composeAuthoring, editAuthoring, freshAuthoring, reconcileAuthoring } from 'aih-ui/authoring';
+import { intakeDeclaration, digestBytes } from 'aih-ui/intake';
+import { readInstalledRelease } from '@aihq/catalog/node';
+import { createMixedService } from './mixed-service.mjs';
+import { noteFixture } from './note-fixture.mjs';
+const output = process.argv[2]; await mkdir(output, { recursive: true });
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE);
+const installed = await readInstalledRelease({ root: dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'))), sourceInput: 'maintained' });
+assert.equal(installed.valid, true);
+const service = await createMixedService({ release: installed.release, materialSource: installed.source });
+const inventories = service.inventories;
+const apiCatalog = service.catalog(), note = apiCatalog.items.find(item => item.id === 'consumer-proof.review-note');
+const started = await startConsumer();
+let browser, evidencePage;
+const errors = [], cases = [];
+try {
+  browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage({ acceptDownloads: true });
+  evidencePage = page; page.setDefaultTimeout(15_000);
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(`${started.origin}/authoring`);
+  await page.locator('#summary').filter({ hasText: '"roots"' }).waitFor();
+  await page.locator('#search').fill('consumer-proof.review-note');
+  const action = async label => {
+    await page.getByRole('button', { name: label, exact: true }).click();
+    await page.locator('#accept:not([disabled])').waitFor();
+    await page.locator('#accept').click();
+  };
+  await action('Choose consumer-proof.review-note');
+  const authored = JSON.parse(await page.locator('#policy').inputValue());
+  assert.equal(authored.selections.length, 4);
+  let headless = await composeAuthoring({ intent: { ...freshAuthoring(), roots: [note.root] }, inventories });
+  assert.equal(headless.status, 'ok');
+  assert.deepEqual(authored, JSON.parse(new TextDecoder().decode(headless.value.policyBytes)));
+  cases.push('real maintained + independent choose agrees with installed public headless entry');
+  const template = apiCatalog.templates[0];
+  await action(`Add authored template ${template.id}`);
+  await action('Remove origin direct');
+  assert.equal(JSON.parse(await page.locator('#policy').inputValue()).selections.length, 4);
+  cases.push('removal of one origin preserves the other and shared closure');
+  // Actual browser download, fresh browser page and file chooser import.
+  const downloadPromise = page.waitForEvent('download'); await page.locator('#save').click();
+  const downloaded = await downloadPromise, savedPath = join(output, 'policy.downloaded.json'); await downloaded.saveAs(savedPath);
+  const savedBytes = new Uint8Array(await readFile(savedPath));
+  const fresh = await browser.newPage({ acceptDownloads: true });
+  evidencePage = fresh; fresh.setDefaultTimeout(15_000);
+  await fresh.goto(`${started.origin}/authoring`); await fresh.locator('#summary').filter({ hasText: '"roots"' }).waitFor();
+  await fresh.locator('#open').setInputFiles(savedPath); await fresh.locator('#proposal').filter({ hasText: 'Original bytes retained' }).waitFor();
+  await fresh.locator('#reopen').click(); await fresh.locator('#proposal').filter({ hasText: '"editing": "available"' }).waitFor();
+  const read = await readAuthoring({ policyBytes: savedBytes, inventories }); assert.equal(read.value.editing, 'available');
+  assert.deepEqual(JSON.parse(await fresh.locator('#policy').inputValue())['metadata']['aih.workbench'], read.value.intent);
+  cases.push('actual downloaded artifact freshly imports and headless intent agrees');
+  await fresh.locator('#candidate-mode').selectOption('missing'); await fresh.locator('#reopen').click();
+  await fresh.locator('#proposal').filter({ hasText: 'SOURCE_REVISION_UNAVAILABLE' }).waitFor();
+  await fresh.locator('#refresh').click(); await fresh.locator('#changes').filter({ hasText: 'needs-decisions' }).waitFor();
+  const missing = await reconcileAuthoring({ savedPolicyBytes: savedBytes, inventories, candidateInventories: [inventories[0]] });
+  assert.equal(missing.value.affectedRoots.length, 1);
+  cases.push('missing revision preserves valid policy/original and requires decisions');
+  await fresh.locator('#candidate-mode').selectOption('updated'); await fresh.locator('#refresh').click();
+  await fresh.locator('#changes').filter({ hasText: 'source-unavailable' }).waitFor();
+  await actionOn(fresh, 'Review update consumer-proof.review-note');
+  const updatedBytes = new TextEncoder().encode(await fresh.locator('#policy').inputValue());
+  const updated = await readAuthoring({ policyBytes: updatedBytes, inventories }); assert.equal(updated.value.editing, 'available', JSON.stringify(updated.value.diagnostics));
+  const expectedUpdateIntent = structuredClone(read.value.intent);
+  const changed = inventories[2], changedItem = changed.release.items[0];
+  expectedUpdateIntent.roots[0] = { ...expectedUpdateIntent.roots[0], releaseSha256: changed.release.sha256, itemSha256: changedItem.itemSha256 };
+  expectedUpdateIntent.inputs = [];
+  const expectedUpdate = await composeAuthoring({ basePolicyBytes: savedBytes, intent: expectedUpdateIntent, inventories });
+  assert.equal(expectedUpdate.status, 'ok');
+  assert.deepEqual(JSON.parse(new TextDecoder().decode(updatedBytes)), JSON.parse(new TextDecoder().decode(expectedUpdate.value.policyBytes)));
+  cases.push('explicit source update agrees with headless and does not repin maintained release');
+  const dependency = inventories[0].release.items.find(item => item.id === 'mattpocock.domain-modeling');
+  await fresh.locator('#keep').fill(`${inventories[0].release.sha256}/${dependency.id}/project`);
+  await actionOn(fresh, 'Trim consumer-proof.review-note');
+  const kept = JSON.parse(await fresh.locator('#policy').inputValue());
+  assert.deepEqual(kept.metadata['aih.workbench'].roots.map(root => root.itemId), ['mattpocock.domain-modeling']);
+  assert.deepEqual(kept.metadata['aih.workbench'].roots[0].originIds, ['direct']);
+  const expectedKeep = await editAuthoring({ policyBytes: expectedUpdate.value.policyBytes, inventories, operation: { type: 'remove-root', root: expectedUpdate.value.intent.roots[0], keep: [{ releaseSha256: inventories[0].release.sha256, itemId: dependency.id, scope: 'project' }] } });
+  assert.deepEqual(kept, JSON.parse(new TextDecoder().decode(expectedKeep.value.policyBytes)));
+  cases.push('trim with Keep becomes direct root and agrees with headless');
+  // One additional compatible independent declaration, ordinary data only.
+  const extra = await noteFixture('additional'), declarationBytes = extra.declarationBytes;
+  const snapshot = { input: { id: 'additional', kind: 'local', locator: { input: 'additional' }, resolvedIdentity: { sha256: await digestBytes(declarationBytes) } }, declarationBytes: [...declarationBytes],
+    sourceFiles: extra.sourceFiles.map(source => ({ ...source, files: Object.fromEntries(Object.entries(source.files).map(([path, bytes]) => [path, [...bytes]])) })), materialSource: { kind: 'local', input: 'additional' } };
+  const snapshotPath = join(output, 'additional.snapshot.json'); await writeFile(snapshotPath, JSON.stringify(snapshot));
+  await fresh.locator('#intake').setInputFiles(snapshotPath); await fresh.locator('#intake-result').filter({ hasText: 'releaseSha256' }).waitFor();
+  await fresh.locator('#search').fill('independent.additional-note'); await actionOn(fresh, 'Choose independent.additional-note');
+  assert.equal(JSON.parse(await fresh.locator('#policy').inputValue()).selections.length, 2);
+  cases.push('compatible additional BYO data works without changing generic UI/Core');
+  // CRLF and unsupported annotation: original download must remain byte exact.
+  const crlfPolicy = JSON.parse(new TextDecoder().decode(savedBytes)); crlfPolicy.metadata['aih.workbench'].schema = 'urn:future';
+  const crlfBytes = new TextEncoder().encode(JSON.stringify(crlfPolicy, null, 2).replaceAll('\n', '\r\n') + '\r\n');
+  const crlfPath = join(output, 'unsupported.crlf.json'); await writeFile(crlfPath, crlfBytes);
+  await fresh.locator('#open').setInputFiles(crlfPath); await fresh.locator('#proposal').filter({ hasText: 'Original bytes retained' }).waitFor();
+  await fresh.locator('#reopen').click(); await fresh.locator('#proposal').filter({ hasText: 'INTENT_VERSION_UNSUPPORTED' }).waitFor();
+  const originalDownload = fresh.waitForEvent('download'); await fresh.locator('#save').click();
+  const originalPath = join(output, 'unsupported.download.json'); await (await originalDownload).saveAs(originalPath);
+  assert.deepEqual(new Uint8Array(await readFile(originalPath)), crlfBytes);
+  cases.push('unsupported CRLF file import/refusal/download preserves exact original bytes');
+  await fresh.screenshot({ path: join(output, 'mixed-authoring.png'), fullPage: true });
+  assert.deepEqual(errors, []);
+  await writeFile(join(output, 'browser-headless.json'), JSON.stringify({ browser: browser.version(), cases, pageErrors: errors, savedSha256: await digestBytes(savedBytes), originalSha256: await digestBytes(crlfBytes), maintainedRelease: installed.release.sha256 }, null, 2));
+  console.log(JSON.stringify({ status: 'ok', cases, output }));
+} catch (error) {
+  await writeFile(join(output, 'browser-failure.json'), JSON.stringify({ message: error.message, cases, pageErrors: errors, body: await evidencePage?.locator('body').innerText().catch(() => '') }, null, 2));
+  throw error;
+} finally {
+  if (browser) await browser.close();
+  await new Promise(resolve => started.server.close(resolve));
+}
+async function actionOn(page, label) {
+  await page.getByRole('button', { name: label, exact: true }).click(); await page.locator('#accept:not([disabled])').waitFor(); await page.locator('#accept').click();
+}

@@ -24,6 +24,7 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
   copyFileSync,
+  cpSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -206,7 +207,8 @@ export function installConsumer({ consumerDir, packages, extraFiles, log }) {
   for (const [target, source] of Object.entries(extraFiles)) {
     const destination = join(consumerDir, target);
     mkdirSync(dirname(destination), { recursive: true });
-    copyFileSync(source, destination);
+    if (statSync(source).isDirectory()) cpSync(source, destination, { recursive: true });
+    else copyFileSync(source, destination);
   }
   log(`consumer: installed ${packages.map((p) => p.name).join(", ")} into ${consumerDir}`);
 }

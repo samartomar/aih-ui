@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-const source = await readFile(new URL('../page/intent.js', import.meta.url), 'utf8');
+const source = (await readFile(new URL('../page/policy-file.js', import.meta.url), 'utf8')).replace('export function', 'function') + '\n' +
+  (await readFile(new URL('../page/intent.js', import.meta.url), 'utf8')).replace("import { policyFile } from './policy-file.js';", '');
 const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
 function documentFixture() {
   const nodes = new Map();
-  const node = () => ({ value: '', textContent: '', disabled: false, children: [], append(...values) { this.children.push(...values); }, replaceChildren() { this.children = []; }, setAttribute() {} });
+  const node = () => ({ value: '', textContent: '', disabled: false, children: [], addEventListener() {}, append(...values) { this.children.push(...values); }, replaceChildren() { this.children = []; }, setAttribute() {} });
   const document = { getElementById(id) { if (!nodes.has(id)) nodes.set(id, node()); return nodes.get(id); }, createElement: node };
   document.getElementById('inventory').value = 'journey'; document.getElementById('mode').value = 'vibe';
   return { document, nodes };
