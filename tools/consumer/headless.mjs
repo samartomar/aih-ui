@@ -135,7 +135,7 @@ export async function reconcileAuthoring({ savedPolicyBytes, inventories, candid
     const origins = missingOrigins.filter(o => root.originIds.includes(o.id));
     const oldEntry = previous.items.get(pinKey(root)).entry;
     const updates = candidateInventories.filter(e => e.release.sha256 !== root.releaseSha256 && e.release.package.name === oldEntry.release.package.name
-      && (oldEntry.input ? e.input?.id === oldEntry.input.id : !e.input)).flatMap(e => e.release.items.filter(i => i.id === root.itemId).map(i => ({ releaseSha256: e.release.sha256, itemId: i.id, itemSha256: i.itemSha256, scope: root.scope })));
+      && (oldEntry.input ? e.input?.kind === oldEntry.input.kind && stable(e.input?.locator) === stable(oldEntry.input.locator) : !e.input)).flatMap(e => e.release.items.filter(i => i.id === root.itemId).map(i => ({ releaseSha256: e.release.sha256, itemId: i.id, itemSha256: i.itemSha256, scope: root.scope })));
     if (unavailable.length || exclusions.length || origins.length || updates.length) {
       affectedRoots.push(root);
       choices.push({ root, reason: unavailable.length || exclusions.length || origins.length ? 'source-unavailable' : 'source-changed', candidates: updates, options: ['keep-exact', 'remove', ...(updates.length ? ['accept-candidate'] : [])], affectedItems: [...unavailable.map(i => i.item), ...exclusions], affectedOrigins: origins });

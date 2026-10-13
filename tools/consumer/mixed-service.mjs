@@ -4,8 +4,8 @@ import { noteFixture } from './note-fixture.mjs';
 const encode = value => new TextEncoder().encode(value);
 export async function createMixedService(maintained) {
   async function supplied(snapshot, id = 'notes') {
-    const input = { id, kind: 'local', locator: { input: id }, resolvedIdentity: { sha256: await digestBytes(snapshot.declarationBytes) } };
-    const result = await intakeDeclaration({ input, ...snapshot, materialSource: { kind: 'local', input: id } });
+    const input = { id, kind: 'local', locator: { input: 'notes' }, resolvedIdentity: { sha256: await digestBytes(snapshot.declarationBytes) } };
+    const result = await intakeDeclaration({ input, ...snapshot, materialSource: { kind: 'local', input: 'notes' } });
     if (result.status !== 'ok') throw new Error(JSON.stringify(result.diagnostics));
     return result.value;
   }
@@ -17,7 +17,7 @@ export async function createMixedService(maintained) {
     return { ...value, sha256: await digestBytes(encode(stable(value))) };
   }
   notes.templates = [await template(notes)];
-  const changed = await supplied(await noteFixture('updated'));
+  const changed = await supplied(await noteFixture('updated'), 'notes-next');
   changed.templates = [await template(changed)];
   const current = [maintained, notes], all = [maintained, notes, changed];
   const candidates = mode => mode === 'missing' ? [maintained] : mode === 'updated' ? [maintained, changed] : current;
