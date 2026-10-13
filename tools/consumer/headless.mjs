@@ -63,8 +63,10 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
     const configured = configureItem({ release: entry.release, itemId: item.id, configuration: selection.configuration, materialSource: entry.materialSource });
     if (!configured.valid) return refuse('INPUT_INVALID', '/roots/configuration', 'Catalog refused item configuration.', undefined, { owner: 'catalog', diagnostics: configured.diagnostics });
     const prior = base?.selections.find(s => s.scope === selection.scope && stable(s.recipe) === stable(configured.selection.recipe));
-    const organizationIds = new Set(resolved.inclusions.filter(i => rootKey(i.item) === rootKey({ ...selection.item, scope: selection.scope }))
-      .flatMap(i => intent.roots.find(r => rootKey(r) === rootKey(i.root))?.originIds ?? [])
+    // An organization's root provenance identifies that exact selection only.
+    // Dependencies retain their own prior/default admission identities.
+    const organizationIds = new Set(intent.roots.filter(r => rootKey(r) === rootKey({ ...selection.item, scope: selection.scope }))
+      .flatMap(r => r.originIds)
       .map(id => intent.origins.find(o => o.id === id)).filter(o => o?.kind === 'organization').map(o => o.organizationSelectionId));
     if (organizationIds.size > 1) return refuse('INTENT_POLICY_CONTRADICTION', '/origins', 'Conflicting organization selection identities.');
     const managementId = prior?.managementId ?? `${selection.scope}--${entry.release.package.name.replace(/^@/, '').replaceAll('/', '.')}--${item.id}`;

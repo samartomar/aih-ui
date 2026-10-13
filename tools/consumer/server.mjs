@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdir, writeFile, mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readInstalledRelease } from '@aihq/catalog/node';
@@ -12,7 +13,7 @@ import { createIntentService } from './intent-service.mjs';
 import { createMixedService } from './mixed-service.mjs';
 import { inspectAuthenticatedReviewEvidence } from './review-host.mjs';
 
-export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, port = 0 } = {}) {
+export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, port = 0 } = {}) {
   const installed = await readInstalledRelease({
     root: dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'))), sourceInput: 'catalog'
   });
@@ -20,7 +21,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   const { release, source: materialSource, materialRoots } = installed;
   const previous = previousCatalogRoot ? await readInstalledRelease({ root: previousCatalogRoot, sourceInput: 'catalog' }) : null;
   if (previous && !previous.valid) throw new Error(JSON.stringify(previous.diagnostics));
-  const host = projectRoot ? createHost({ projectRoot, materialRoots, organizationSource, controls }) : null;
+  const legacyHost = projectRoot ? createHost({ projectRoot, materialRoots, organizationSource, controls }) : null;
   const intentService = createIntentService();
   const catalogRoot = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
   const descriptors = new Map();
@@ -30,7 +31,24 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
     if (!path.startsWith(catalogRoot + sep)) throw new Error('Catalog material path escapes the installed package.');
     return { ...descriptor, bytes: new Uint8Array(await readFile(path)) };
   }));
-  const mixedService = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } });
+  const mixedService = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories });
+  const authoringRoots = { maintained: catalogRoot };
+  if (projectRoot) {
+    const staging = await mkdtemp(join(tmpdir(), 'aih-authoring-materials-'));
+    for (const inventory of mixedService.inventories.slice(1)) {
+      const input = inventory.materialSource.input;
+      // Only host-selected startup inventories acquire execution bindings.
+      const directory = join(staging, `source-${Object.keys(authoringRoots).length}`);
+      authoringRoots[input] = directory;
+      for (const material of inventory.materials) {
+        const path = resolve(directory, material.path);
+        if (!path.startsWith(directory + sep)) throw new Error('Material path escapes host staging.');
+        await mkdir(dirname(path), { recursive: true }); await writeFile(path, material.bytes);
+      }
+    }
+  }
+  const host = projectRoot ? createHost({ projectRoot, materialRoots: authoringRoots, organizationSource,
+    recipeMaterials: mixedService.inventories.flatMap(i => i.materials ?? []), controls }) : null;
   const staticFiles = new Map([['/', ['consumer.html', 'text/html']], ['/intent', ['intent.html', 'text/html']], ['/intent.js', ['intent.js', 'text/javascript']], ['/consumer.js', ['consumer.js', 'text/javascript']], ['/consumer.css', ['consumer.css', 'text/css']], ['/tokens.css', ['tokens.css', 'text/css']]]);
   staticFiles.set('/authoring', ['authoring.html', 'text/html']);
   staticFiles.set('/authoring.js', ['authoring.js', 'text/javascript']);
@@ -58,7 +76,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
         const query = new URL(request.url, origin).searchParams;
         return send(response, 200, intentService.catalog(query.get('inventory') ?? 'journey', query.get('stage') ?? 'current'));
       }
-      if (request.method === 'GET' && pathname === '/api/authoring-catalog') return send(response, 200, mixedService.catalog());
+      if (request.method === 'GET' && pathname === '/api/authoring-catalog') return send(response, 200, { ...mixedService.catalog(), executionAvailable: !!host, organizationConfigured: organizationSource !== undefined });
       if (request.method !== 'POST' || !pathname.startsWith('/api/')) return send(response, 404, { error: 'not-found' });
       if (request.headers.origin !== origin) return send(response, 403, { error: 'foreign-origin' });
       if ((request.headers['content-type'] ?? '').split(';')[0] !== 'application/json') return send(response, 415, { error: 'expected-json' });
@@ -73,6 +91,17 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
       try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
       catch { return send(response, 400, { error: 'invalid-json' }); }
       if (pathname.startsWith('/api/authoring-')) {
+        const operation = pathname.slice('/api/authoring-'.length);
+        if (['authority', 'prepare', 'apply', 'managed', 'remove'].includes(operation)) {
+          if (!host) return send(response, 409, { status: 'unavailable', diagnostics: [{ code: 'HOST_UNAVAILABLE', message: 'No execution target configured by host.' }] });
+          const policyText = new TextDecoder().decode(Uint8Array.from(body.policyBytes ?? []));
+          const result = operation === 'authority' ? await host.inspectAuthority({ policyText })
+            : operation === 'prepare' ? await host.prepareSession({ policyText, resolutions: body.resolutions })
+            : operation === 'apply' ? await host.applyApproved({ sessionId: body.sessionId, reviewDigest: body.reviewDigest })
+            : operation === 'managed' ? await host.managedInventory()
+            : await host.prepareRemovalSession({ managementId: body.managementId, scope: body.scope, mode: body.mode });
+          return send(response, 200, result);
+        }
         const result = pathname === '/api/authoring-inspect-review' && reviewTrust
           ? await inspectAuthenticatedReviewEvidence({ evidenceBytes: Uint8Array.from((Number.isSafeInteger(body.evidenceIndex) ? body.reviewEvidence?.[body.evidenceIndex] : body.evidenceBytes) ?? []), inventory: mixedService.inventories.find(entry => entry.release.sha256 === body.target?.releaseSha256), itemId: body.target?.itemId, trust: reviewTrust })
           : await mixedService.run(pathname.slice('/api/authoring-'.length), body);
@@ -103,9 +132,9 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
             return send(response, 400, { error: 'Imported recipe source is not the host-configured Catalog source.' });
           }
         }
-        return send(response, 200, await host.prepareSession({ policyText: body.policyText }));
+        return send(response, 200, await legacyHost.prepareSession({ policyText: body.policyText }));
       }
-      if (pathname === '/api/apply') return send(response, 200, await host.applyApproved({ sessionId: body.sessionId, reviewDigest: body.reviewDigest }));
+      if (pathname === '/api/apply') return send(response, 200, await legacyHost.applyApproved({ sessionId: body.sessionId, reviewDigest: body.reviewDigest }));
       return send(response, 404, { error: 'not-found' });
     } catch (error) { send(response, 400, { error: error.message }); }
   });
@@ -116,6 +145,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const controls = process.env.AIH_CONSUMER_CONTROLS ? JSON.parse(await readFile(process.env.AIH_CONSUMER_CONTROLS, 'utf8')) : undefined;
   const result = await startConsumer({ projectRoot: process.env.AIH_CONSUMER_PROJECT, controls,
+    organizationSource: process.env.AIH_ORGANIZATION_SOURCE ? JSON.parse(await readFile(process.env.AIH_ORGANIZATION_SOURCE, 'utf8')) : undefined,
     reviewTrust: process.env.AIH_REVIEW_TRUST ? JSON.parse(await readFile(process.env.AIH_REVIEW_TRUST, 'utf8')) : undefined,
     previousCatalogRoot: process.env.AIH_CONSUMER_PREVIOUS_CATALOG,
     port: Number(process.env.AIH_CONSUMER_PORT ?? 4817) });

@@ -2,14 +2,14 @@ import { intakeDeclaration, digestBytes } from './intake.mjs';
 import { composeAuthoring, readAuthoring, reconcileAuthoring, editAuthoring, freshAuthoring, stable, refuse, inspectReviewEvidence, recordReview, reconsiderReviews } from './headless.mjs';
 import { noteFixture } from './note-fixture.mjs';
 const encode = value => new TextEncoder().encode(value);
-export async function createMixedService(maintained) {
+export async function createMixedService(maintained, { suppliedInventories } = {}) {
   async function supplied(snapshot, id = 'notes') {
-    const input = { id, kind: 'local', locator: { input: 'notes' }, resolvedIdentity: { sha256: await digestBytes(snapshot.declarationBytes) } };
-    const result = await intakeDeclaration({ input, ...snapshot, materialSource: { kind: 'local', input: 'notes' } });
+    const input = { id, kind: 'local', locator: { input: id }, resolvedIdentity: { sha256: await digestBytes(snapshot.declarationBytes) } };
+    const result = await intakeDeclaration({ input, ...snapshot, materialSource: { kind: 'local', input: id } });
     if (result.status !== 'ok') throw new Error(JSON.stringify(result.diagnostics));
     return result.value;
   }
-  const notes = await supplied(await noteFixture());
+  const notes = suppliedInventories?.[0] ?? await supplied(await noteFixture());
   // Explicit authored demonstration template, not a maintained Catalog offering.
   const root = (entry, item) => ({ releaseSha256: entry.release.sha256, itemId: item.id, itemSha256: item.itemSha256, scope: item.scopes[0], configuration: {}, originIds: ['direct'] });
   async function template(entry) {
@@ -17,7 +17,7 @@ export async function createMixedService(maintained) {
     return { ...value, sha256: await digestBytes(encode(stable(value))) };
   }
   notes.templates = [await template(notes)];
-  const changed = await supplied(await noteFixture('updated'), 'notes-next');
+  const changed = suppliedInventories?.[1] ?? await supplied(await noteFixture('updated'), 'notes-next');
   changed.templates = [await template(changed)];
   const current = [maintained, notes], all = [maintained, notes, changed];
   const candidates = mode => mode === 'missing' ? [maintained] : mode === 'updated' ? [maintained, changed] : current;
@@ -31,7 +31,8 @@ export async function createMixedService(maintained) {
       const reviewEvidence = (body.reviewEvidence ?? []).map(bytes => Uint8Array.from(bytes)), comparisons = body.comparisons ?? [];
       const reviewContext = { reviewEvidence, comparisons };
       const evidenceBytes = Number.isSafeInteger(body.evidenceIndex) ? reviewEvidence[body.evidenceIndex] : Uint8Array.from(body.evidenceBytes ?? []);
-      if (operation === 'new') return composeAuthoring({ intent: freshAuthoring(), inventories: all });
+      if (operation === 'new') return composeAuthoring({ intent: freshAuthoring(), inventories: all,
+        ...(body.mode === 'enterprise' ? { basePolicyBytes: encode(JSON.stringify({ schema: 'urn:aihq:core:execution-policy:1.3.0', mode: 'enterprise', selections: [], metadata: { 'aih.workbench': freshAuthoring() } })) } : {}) });
       if (operation === 'read') return readAuthoring({ policyBytes, inventories: body.availability === 'missing' ? [maintained] : all, ...reviewContext });
       if (operation === 'compose') return composeAuthoring({ basePolicyBytes: policyBytes, intent: body.intent, inventories: all, ...reviewContext });
       if (operation === 'edit') return editAuthoring({ policyBytes, inventories: all, operation: body.operation, ...reviewContext });
