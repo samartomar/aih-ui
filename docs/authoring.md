@@ -12,7 +12,7 @@ import { freshAuthoring, readAuthoring, composeAuthoring,
 import { intakeDeclaration } from 'aih-ui/intake';
 ```
 
-All operations are deterministic and effect-free. Byte arguments are
+Portable authoring operations are deterministic and effect-free. Byte arguments are
 `Uint8Array`; JSON transport uses arrays of bytes. Inventories are
 `{release, materialSource, input?, materials?, templates?}`: `release` must be
 an actual public Catalog checked reader value, never a JSON clone. `materials`

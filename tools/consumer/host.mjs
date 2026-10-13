@@ -56,8 +56,11 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
     inspectAuthority,
     managedInventory() { return listManagedSelections({ target: { project: projectRoot }, scope: 'project' }); },
     async prepareRemovalSession({ managementId, scope, mode, controls } = {}) {
+      // Removal reads Core's retained custody; it does not acquire recipe material.
+      const { authentication, signal, logging } = controlsFor(controls);
+      const removalControls = { ...(authentication ? { authentication } : {}), ...(signal ? { signal } : {}), ...(logging ? { logging } : {}) };
       const result = await prepareManagedRemoval({ target: { project: projectRoot }, managementId, scope, mode,
-        ...(mode === 'enterprise' ? { organizationSource } : {}) }, controlsFor(controls));
+        ...(mode === 'enterprise' ? { organizationSource } : {}) }, removalControls);
       return { ...result, ...(result.preparation ? { preparation: retain(result.preparation) } : {}) };
     },
     async prepareSession({ policyText, resolutions, controls } = {}) {

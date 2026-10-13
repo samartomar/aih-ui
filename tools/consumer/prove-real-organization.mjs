@@ -12,6 +12,8 @@ import { organizationFixture } from './organization-fixture.mjs';
 import { startConsumer } from './server.mjs';
 const [output, repository, transition = 'wait'] = process.argv.slice(2);
 if (!output || !/^[\w-]+\/[\w.-]+$/.test(repository ?? '')) throw Error('Usage: proof output owner/dedicated-private-repository [wait|retained]');
+if (!['wait', 'retained'].includes(transition)) throw Error('Choose an explicit transition mode.');
+const began = Date.now();
 await mkdir(output, { recursive: true });
 const capture = async (name, value) => { await writeFile(join(output, `${name}.json`), JSON.stringify(value, null, 2) + '\n'); return value; };
 // Explicit test-runner credential acquisition; never printed, persisted or browser supplied.
@@ -85,7 +87,7 @@ try {
   assert.equal(await readFile(join(target, 'unowned.txt'), 'utf8'), 'Unowned state\n'); cases.push('mixed Enterprise actual file Apply preserves unrelated and unowned state');
   if (transition === 'wait') {
     const stalePreparation = await capture('before-authority-advance', await clickResult('prepare', 'prepare')); assert.equal(stalePreparation.status, 'ready');
-    console.log('PREPARED_WAITING_FOR_AUTHORITY_ADVANCE');
+    console.log(`PREPARED_WAITING_FOR_AUTHORITY_ADVANCE ${join(output, 'authority-advanced.signal.json')}`);
     const waitDeadline = Date.now() + 120000;
     while (true) {
       try { await access(join(output, 'authority-advanced.signal.json')); break; } catch {}
@@ -98,19 +100,23 @@ try {
   const withdrawn = await capture('withdrawn-current-authority', await hostFor('main').inspectAuthority({ policyText: new TextDecoder().decode(policyBytes) }));
   assert.equal(withdrawn.value.admitted, false); assert.equal(withdrawn.value.affectedChoices.length, 1); assert.equal(withdrawn.value.stillValidChoices.length, 4);
   const blocked = await capture('blocked-recovery', await hostFor('scenario/blocked').prepareRemovalSession({ managementId: f.withdrawnSelection.managementId, scope: 'project', mode: 'enterprise' }));
-  assert.notEqual(blocked.preparation?.status, 'ready'); cases.push('withdrawal affects exactly code-review; blocked removal requires organization action');
+  assert.notEqual(blocked.disposition, 'invalid');
+  assert.ok([...blocked.diagnostics, ...(blocked.preparation?.diagnostics ?? [])].some(d => d.code === 'AUTHORITY_DENIED' && d.reason === 'lifecycle-remove'), JSON.stringify(blocked));
+  cases.push('withdrawal affects exactly code-review; blocked removal requires organization action');
   const recovery = hostFor('scenario/recovery');
   // Deliberately edit an owned file: Core must report a conflict and preserve it.
   const originalNote = await readFile(join(target, 'note.md')); await writeFile(join(target, 'note.md'), Buffer.concat([originalNote, Buffer.from('\nUser edit\n')]));
   const changed = await capture('changed-owned-removal', await recovery.prepareRemovalSession({ managementId: f.policy.selections.find(s => s.recipe.reference.path.includes('review-note')).managementId, scope: 'project', mode: 'enterprise' }));
-  assert.notEqual(changed.preparation?.status, 'ready'); assert.match(await readFile(join(target, 'note.md'), 'utf8'), /User edit/);
+  assert.notEqual(changed.disposition, 'invalid');
+  assert.ok([...changed.diagnostics, ...(changed.preparation?.diagnostics ?? [])].some(d => d.code === 'STATE_CONFLICT' && d.reason === 'managed-content-changed'), JSON.stringify(changed));
+  assert.match(await readFile(join(target, 'note.md'), 'utf8'), /User edit/);
   // Restore only the exact test-owned edit, then explicitly prepare replacement.
   await writeFile(join(target, 'note.md'), originalNote);
   const currentIntent = structuredClone(headless.value.intent), nextRoot = f.updated.intent.roots.find(r => r.itemId === 'consumer-proof.review-note');
   currentIntent.roots = currentIntent.roots.map(r => r.itemId === nextRoot.itemId ? nextRoot : r);
   currentIntent.origins = f.updated.intent.origins; currentIntent.inputs = currentIntent.inputs.filter(i => i.id !== 'notes');
   const shared = f.inventories[0].release.items.find(i => i.id === 'mattpocock.domain-modeling');
-  currentIntent.roots.push({ releaseSha256: f.inventories[0].release.sha256, itemId: shared.id, itemSha256: shared.itemSha256, scope: 'project', configuration: { agentDirectory: '.claude' }, originIds: ['direct'] });
+  currentIntent.roots.push({ releaseSha256: f.inventories[0].release.sha256, itemId: shared.id, itemSha256: shared.itemSha256, scope: 'project', configuration: {}, originIds: ['direct'] });
   const updated = await composeAuthoring({ basePolicyBytes: policyBytes, intent: currentIntent, inventories: f.inventories, reviewEvidence });
   assert.equal(updated.status, 'ok', JSON.stringify(updated));
   await writeFile(join(output, 'updated-policy.json'), updated.value.policyBytes);
@@ -151,7 +157,7 @@ try {
   assert.equal((await capture('vibe-byo-removal', await vibe.applyApproved({ sessionId: vibeNote.preparation.sessionId, reviewDigest: vibeNote.preparation.review.reviewDigest }))).completion, 'complete');
   await page.locator('#authority-section').screenshot({ path: join(output, 'authority-browser.png') });
   assert.deepEqual(errors, []);
-  await capture('real-organization-summary', { status: 'passed', repository, transition, node: process.version, cases, errors,
+  await capture('real-organization-summary', { status: 'passed', repository, transition, node: process.version, elapsedMs: Date.now() - began, cases, errors,
     downloadSha256: createHash('sha256').update(policyBytes).digest('hex'), initialAuthority: initial.value.authority, withdrawnAuthority: withdrawn.value.authority,
     limits: ['Dedicated private test repository; no production enforcement or native client execution.', 'Advisory preview is separate from current Core Prepare/Apply.', 'Human review records are portable attribution, not organization authorization.'] });
   console.log('REAL_ORGANIZATION_PROOF_PASSED');

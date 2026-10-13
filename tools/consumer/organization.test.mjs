@@ -4,7 +4,7 @@ import { deriveRecipeIdentity } from '@aihq/core/contracts';
 import { previewPolicyAuthority } from './organization.mjs';
 import { createHost } from './host.mjs';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { organizationFixture } from './organization-fixture.mjs';
@@ -26,6 +26,34 @@ test('one changed allowance affects only its selection and keeps advisory outcom
   assert.equal(denied.value.advisory, true);
   assert.ok(denied.value.affectedChoices[0].diagnostics.some(d => d.reason === 'input-value'));
   assert.equal(policy.selections[0].configuration.directory, '.claude');
+});
+
+test('a host with material bindings prepares and applies managed removal through the public wrapper', async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), 'ui6-remove-'));
+  const { organizationSelectionId, ...choice } = selection('a');
+  const host = createHost({ projectRoot, materialRoots: { unused: projectRoot }, controls: { logging: 'off' } });
+  const ready = await host.prepareSession({ policyText: JSON.stringify({ ...policy, mode: 'vibe', selections: [choice] }) });
+  assert.equal(ready.status, 'ready');
+  assert.equal((await host.applyApproved({ sessionId: ready.sessionId, reviewDigest: ready.review.reviewDigest })).completion, 'complete');
+  const removed = await host.prepareRemovalSession({ managementId: 'a', scope: 'project', mode: 'vibe' });
+  assert.equal(removed.disposition, 'prepared', JSON.stringify(removed));
+  assert.equal(removed.preparation.status, 'ready');
+  assert.equal((await host.applyApproved({ sessionId: removed.preparation.sessionId, reviewDigest: removed.preparation.review.reviewDigest })).completion, 'complete');
+  await assert.rejects(readFile(join(projectRoot, 'a.txt')), { code: 'ENOENT' });
+});
+
+test('unowned conflicting content survives preparation and cannot be silently adopted', async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), 'ui6-unowned-'));
+  await writeFile(join(projectRoot, 'a.txt'), 'User-owned existing content');
+  const { organizationSelectionId, ...choice } = selection('a');
+  const host = createHost({ projectRoot, controls: { logging: 'off' } });
+  const prepared = await host.prepareSession({ policyText: JSON.stringify({ ...policy, mode: 'vibe', selections: [choice] }) });
+  assert.ok(prepared.review?.conflicts.length || prepared.diagnostics.length, JSON.stringify(prepared));
+  if (prepared.sessionId) {
+    const refused = await host.applyApproved({ sessionId: prepared.sessionId, reviewDigest: prepared.review.reviewDigest });
+    assert.notEqual(refused.completion, 'complete');
+  }
+  assert.equal(await readFile(join(projectRoot, 'a.txt'), 'utf8'), 'User-owned existing content');
 });
 
 test('changing one organization root identity preserves the separate authority identities of its dependencies', async () => {
