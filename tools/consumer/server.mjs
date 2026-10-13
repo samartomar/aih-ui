@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { listItems } from '@aihq/catalog/reader';
@@ -10,8 +10,9 @@ import { editSetup, reopenSetup, reviewSetupUpdate } from './setup.mjs';
 import { presentReport, readScanBytes } from './report-view.mjs';
 import { createIntentService } from './intent-service.mjs';
 import { createMixedService } from './mixed-service.mjs';
+import { inspectAuthenticatedReviewEvidence } from './review-host.mjs';
 
-export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, port = 0 } = {}) {
+export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, port = 0 } = {}) {
   const installed = await readInstalledRelease({
     root: dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'))), sourceInput: 'catalog'
   });
@@ -21,7 +22,15 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   if (previous && !previous.valid) throw new Error(JSON.stringify(previous.diagnostics));
   const host = projectRoot ? createHost({ projectRoot, materialRoots, organizationSource, controls }) : null;
   const intentService = createIntentService();
-  const mixedService = await createMixedService({ release, materialSource: { kind: 'local', input: 'maintained' } });
+  const catalogRoot = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
+  const descriptors = new Map();
+  for (const item of listItems(release)) descriptors.set(item.recipe.path, item.recipe);
+  const materials = await Promise.all([...descriptors.values()].map(async descriptor => {
+    const path = resolve(catalogRoot, descriptor.path);
+    if (!path.startsWith(catalogRoot + sep)) throw new Error('Catalog material path escapes the installed package.');
+    return { ...descriptor, bytes: new Uint8Array(await readFile(path)) };
+  }));
+  const mixedService = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } });
   const staticFiles = new Map([['/', ['consumer.html', 'text/html']], ['/intent', ['intent.html', 'text/html']], ['/intent.js', ['intent.js', 'text/javascript']], ['/consumer.js', ['consumer.js', 'text/javascript']], ['/consumer.css', ['consumer.css', 'text/css']], ['/tokens.css', ['tokens.css', 'text/css']]]);
   staticFiles.set('/authoring', ['authoring.html', 'text/html']);
   staticFiles.set('/authoring.js', ['authoring.js', 'text/javascript']);
@@ -64,7 +73,9 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
       try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
       catch { return send(response, 400, { error: 'invalid-json' }); }
       if (pathname.startsWith('/api/authoring-')) {
-        const result = await mixedService.run(pathname.slice('/api/authoring-'.length), body);
+        const result = pathname === '/api/authoring-inspect-review' && reviewTrust
+          ? await inspectAuthenticatedReviewEvidence({ evidenceBytes: Uint8Array.from((Number.isSafeInteger(body.evidenceIndex) ? body.reviewEvidence?.[body.evidenceIndex] : body.evidenceBytes) ?? []), inventory: mixedService.inventories.find(entry => entry.release.sha256 === body.target?.releaseSha256), itemId: body.target?.itemId, trust: reviewTrust })
+          : await mixedService.run(pathname.slice('/api/authoring-'.length), body);
         // JSON transport represents bytes as arrays, never serialized handles.
         return send(response, 200, JSON.parse(JSON.stringify(result, (_key, value) => value instanceof Uint8Array ? [...value] : value)));
       }
@@ -105,6 +116,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const controls = process.env.AIH_CONSUMER_CONTROLS ? JSON.parse(await readFile(process.env.AIH_CONSUMER_CONTROLS, 'utf8')) : undefined;
   const result = await startConsumer({ projectRoot: process.env.AIH_CONSUMER_PROJECT, controls,
+    reviewTrust: process.env.AIH_REVIEW_TRUST ? JSON.parse(await readFile(process.env.AIH_REVIEW_TRUST, 'utf8')) : undefined,
     previousCatalogRoot: process.env.AIH_CONSUMER_PREVIOUS_CATALOG,
     port: Number(process.env.AIH_CONSUMER_PORT ?? 4817) });
   console.log(`Policy Workbench: ${result.origin}`);

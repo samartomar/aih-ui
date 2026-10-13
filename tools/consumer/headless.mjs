@@ -3,6 +3,9 @@ import { parsePolicy, deriveRecipeIdentity } from '@aihq/core/contracts';
 import { isCheckedRelease, listItems, configureItem, resolveSelections, validateSelectionSet } from '@aihq/catalog/reader';
 import { checkIntentShape, rootKey, pinKey } from './intent-shape.mjs';
 import { migrateIntent } from './migrate-intent.mjs';
+import { inspectReviewEvidence, compareReviewBindings, reviewDiagnostics } from './review-bindings.mjs';
+import { checkReview } from './intent-shape.mjs';
+export { inspectReviewEvidence, compareReviewBindings } from './review-bindings.mjs';
 export const AUTHORING_SCHEMA = 'urn:aihq:workbench:saved-intent:3.0.0';
 export const REVIEW_SCHEMA = 'urn:aihq:workbench:review-decisions:1.0.0';
 export const stable = value => JSON.stringify(value, (_key, member) => member && typeof member === 'object' && !Array.isArray(member)
@@ -28,6 +31,7 @@ const projected = selections => sorted(selections.map(({ id, managementId, organ
 
 async function build({ intent, inventories, base, capture = false, historicalV2 = false }) {
   if (intent && new TextEncoder().encode(JSON.stringify(intent)).length > 850_000) return refuse('POLICY_BOUND_EXCEEDED', '/metadata/aih.workbench', 'Intent exceeds 850,000 UTF-8 bytes; reduce selected state.');
+  if (intent?.reviews?.schema && intent.reviews.schema !== REVIEW_SCHEMA) return refuse('INTENT_VERSION_UNSUPPORTED', '/metadata/aih.workbench/reviews/schema', 'Unsupported review document version.');
   if (!checkIntentShape(intent)) return refuse('FIELD_SEMANTICS_UNSUPPORTED', '/metadata/aih.workbench', 'Malformed, oversized or unknown authoring semantics.');
   let index;
   try { index = inventoryIndex(inventories); }
@@ -91,7 +95,7 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
   if (!parsed.valid) return refuse('INPUT_INVALID', '', 'Core refused the composed execution policy.', undefined, { owner: 'core', diagnostics: parsed.diagnostics });
   return ok({ policyBytes, intent: next, policy, inclusions: resolved.inclusions, optional: resolved.optional });
 }
-export async function readAuthoring({ policyBytes, inventories }) {
+export async function readAuthoring({ policyBytes, inventories, reviewEvidence = [], comparisons = [] }) {
   if (!(policyBytes instanceof Uint8Array)) return refuse('INPUT_INVALID', '/policyBytes', 'Supply original UTF-8 bytes.');
   const originalBytes = policyBytes.slice();
   let parsed;
@@ -109,13 +113,13 @@ export async function readAuthoring({ policyBytes, inventories }) {
   const rebuilt = await build({ intent, inventories, base: policy, capture: migration?.capture === true, historicalV2: migration?.historicalV2 === true });
   const diagnostics = rebuilt.status === 'refused' ? rebuilt.diagnostics : stable(projected(rebuilt.value.policy.selections)) !== stable(projected(policy.selections))
     ? [{ code: 'INTENT_POLICY_CONTRADICTION', path: '/selections', message: 'Intent contradicts executable selections.' }] : [];
-  if (!diagnostics.length && intent.reviews.records.some(r => r.state === 'current')) diagnostics.push({ code: 'REVIEW_BINDING_UNAVAILABLE', path: '/reviews/records', message: 'Current decision custody must be established by the evidence review workflow; original records remain readable.' });
+  if (!diagnostics.length) diagnostics.push(...await reviewDiagnostics({ intent, inventories, reviewEvidence, comparisons }));
   return ok({ policy, intent: rebuilt.status === 'ok' ? rebuilt.value.intent : intent, editing: diagnostics.length ? 'unavailable' : 'available', originalBytes, diagnostics,
     ...(rebuilt.status === 'ok' ? { inclusions: rebuilt.value.inclusions, optional: rebuilt.value.optional } : {}),
     ...(migration ? { migration: { from: policy.metadata['aih.workbench'].schema, to: AUTHORING_SCHEMA } } : {}) });
 }
-export async function reconcileAuthoring({ savedPolicyBytes, inventories, candidateInventories }) {
-  const read = await readAuthoring({ policyBytes: savedPolicyBytes, inventories });
+export async function reconcileAuthoring({ savedPolicyBytes, inventories, candidateInventories, reviewEvidence = [], comparisons = [] }) {
+  const read = await readAuthoring({ policyBytes: savedPolicyBytes, inventories, reviewEvidence, comparisons });
   if (read.status === 'refused') return read;
   if (read.value.editing !== 'available') return { status: 'refused', diagnostics: read.value.diagnostics, originalBytes: savedPolicyBytes.slice() };
   let candidate, previous;
@@ -149,36 +153,62 @@ export async function reconcileAuthoring({ savedPolicyBytes, inventories, candid
   for (const origin of missingOrigins) if (!intent.roots.some(root => root.originIds.includes(origin.id))) choices.push({ origin, reason: 'source-unavailable', options: ['keep-exact', 'remove-origin'] });
   return { ...ok({ status: choices.length ? 'needs-decisions' : 'unchanged', affectedRoots, retainedRoots, choices }), originalBytes: savedPolicyBytes.slice() };
 }
-export async function composeAuthoring({ basePolicyBytes, intent, inventories }) {
+export async function composeAuthoring(options) { return composeReviewed(options); }
+async function composeReviewed({ basePolicyBytes, intent, inventories, reviewEvidence = [], comparisons = [] }, reviewTransition = false) {
   if (intent && new TextEncoder().encode(JSON.stringify(intent)).length > 850_000) return refuse('POLICY_BOUND_EXCEEDED', '/metadata/aih.workbench', 'Intent exceeds 850,000 UTF-8 bytes; reduce selected state.', basePolicyBytes);
+  if (intent?.reviews?.schema && intent.reviews.schema !== REVIEW_SCHEMA) return refuse('INTENT_VERSION_UNSUPPORTED', '/metadata/aih.workbench/reviews/schema', 'Unsupported review document version.', basePolicyBytes);
   if (!checkIntentShape(intent)) return refuse('FIELD_SEMANTICS_UNSUPPORTED', '/metadata/aih.workbench', 'Malformed or unknown authoring semantics.', basePolicyBytes);
   let base;
   if (basePolicyBytes) {
-    const original = await readAuthoring({ policyBytes: basePolicyBytes, inventories });
+    let original = await readAuthoring({ policyBytes: basePolicyBytes, inventories, reviewEvidence, comparisons });
+    // A comparison may name the proposed new release. Validate the original
+    // against its own still-selected subject before evaluating the candidate.
+    if (original.status === 'ok' && original.value.editing !== 'available' && comparisons.length) {
+      const prior = await readAuthoring({ policyBytes: basePolicyBytes, inventories, reviewEvidence });
+      if (prior.status === 'ok' && prior.value.editing === 'available') original = prior;
+    }
     if (original.status === 'refused') return original;
-    if (original.value.editing !== 'available') return { status: 'refused', diagnostics: original.value.diagnostics, originalBytes: basePolicyBytes.slice() };
+    if (original.value.editing !== 'available' && !(reviewTransition && original.value.diagnostics.every(d => ['REVIEW_BINDING_UNAVAILABLE', 'REVIEW_RECONSIDER_REQUIRED'].includes(d.code)))) return { status: 'refused', diagnostics: original.value.diagnostics, originalBytes: basePolicyBytes.slice() };
     base = original.value.policy;
-    if (stable(intent.reviews) !== stable(original.value.intent.reviews)) return refuse('REVIEW_BINDING_UNAVAILABLE', '/reviews', 'Review records are preserved here; new decisions require the evidence review workflow.', basePolicyBytes);
+    if (!reviewTransition && stable(intent.reviews) !== stable(original.value.intent.reviews)) return refuse('REVIEW_BINDING_UNAVAILABLE', '/reviews', 'Use the checked evidence review workflow to change decisions.', basePolicyBytes);
   }
-  if (intent?.reviews?.records?.some(record => record.state === 'current')) return refuse('REVIEW_BINDING_UNAVAILABLE', '/reviews/records', 'A checked observation binding is required for a current reusable decision.', basePolicyBytes);
-  const result = await build({ intent, inventories, base, capture: true });
+  let result = await build({ intent, inventories, base, capture: true });
+  if (result.status === 'ok') {
+    const compared = await compareReviewBindings({ intent: result.value.intent, inventories, reviewEvidence, comparisons });
+    if (compared.status !== 'ok') return { ...compared, ...(basePolicyBytes ? { originalBytes: basePolicyBytes.slice() } : {}) };
+    const changed = compared.value.filter(comparison => comparison.state === 'changed');
+    if (changed.length && base && !reviewTransition) {
+      const reconsidered = structuredClone(result.value.intent);
+      preserveReconsideration(reconsidered.reviews, changed);
+      result = await build({ intent: reconsidered, inventories, base, capture: true });
+    } else if (compared.value.some(comparison => comparison.state !== 'unchanged')) return { status: 'refused', diagnostics: await reviewDiagnostics({ intent: result.value.intent, inventories, reviewEvidence, comparisons }), ...(basePolicyBytes ? { originalBytes: basePolicyBytes.slice() } : {}) };
+  }
+  // A changed subject can coexist with an unavailable binding on another
+  // record. Revalidate every surviving current decision after rebuilding.
+  if (result.status === 'ok') {
+    const diagnostics = await reviewDiagnostics({ intent: result.value.intent, inventories, reviewEvidence, comparisons });
+    if (diagnostics.length) return { status: 'refused', diagnostics, ...(basePolicyBytes ? { originalBytes: basePolicyBytes.slice() } : {}) };
+  }
   return result.status === 'refused' && basePolicyBytes ? { ...result, originalBytes: basePolicyBytes.slice() } : result;
 }
 // Use Core's public identity semantics for exact supplied recipe snapshots.
 // This describes content, not human approval or observation custody.
 export async function describeAuthoringSubject({ inventory, itemId }) {
+  if (!inventory || !isCheckedRelease(inventory.release)) return refuse('SOURCE_IDENTITY_MISMATCH', '/inventory', 'Supply an actual checked Catalog reader value.');
   const item = listItems(inventory.release).find(item => item.id === itemId);
   if (!item) return refuse('SOURCE_REVISION_UNAVAILABLE', '/itemId', 'Exact item unavailable.');
-  const configured = configureItem({ release: inventory.release, itemId, configuration: {}, materialSource: inventory.materialSource });
-  if (!configured.valid) return refuse('INPUT_INVALID', '/itemId', 'Catalog refused recipe configuration.', undefined, { owner: 'catalog', diagnostics: configured.diagnostics });
   const recipeBytes = inventory.materials?.find(material => material.path === item.recipe.path)?.bytes;
   if (!recipeBytes) return refuse('SOURCE_REVISION_UNAVAILABLE', '/recipeBytes', 'Exact recipe bytes are required for identity derivation.');
-  const identity = await deriveRecipeIdentity({ recipeBytes, reference: configured.selection.recipe.reference });
+  // Identity describes the checked recipe declaration, independent of the
+  // authored values for its required inputs. Core validates this public shape.
+  const reference = { source: inventory.materialSource, path: item.recipe.path, sha256: item.recipe.sha256, byteLength: item.recipe.byteLength,
+    materials: item.materials.map(({ id, path, sha256, byteLength }) => ({ id, path, sha256, byteLength })) };
+  const identity = await deriveRecipeIdentity({ recipeBytes, reference });
   if (identity.status !== 'ok') return identity;
   return ok({ releaseSha256: inventory.release.sha256, itemId, itemSha256: item.itemSha256, recipeIdentity: identity.value.recipeIdentity, materials: identity.value.materials });
 }
-export async function editAuthoring({ policyBytes, inventories, operation }) {
-  const original = await readAuthoring({ policyBytes, inventories });
+export async function editAuthoring({ policyBytes, inventories, operation, reviewEvidence = [], comparisons = [] }) {
+  const original = await readAuthoring({ policyBytes, inventories, reviewEvidence, comparisons });
   if (original.status !== 'ok') return original;
   if (original.value.editing !== 'available') return { status: 'refused', diagnostics: original.value.diagnostics, originalBytes: policyBytes.slice() };
   const intent = structuredClone(original.value.intent), before = intent.roots;
@@ -216,5 +246,50 @@ export async function editAuthoring({ policyBytes, inventories, operation }) {
       add({ ...ref, itemSha256: pin.itemSha256, configuration: selection.configuration, originIds: ['direct'] });
     }
   } catch (error) { return refuse('INTENT_POLICY_CONTRADICTION', '/operation', error.message, policyBytes); }
-  return composeAuthoring({ basePolicyBytes: policyBytes, intent, inventories });
+  return composeAuthoring({ basePolicyBytes: policyBytes, intent, inventories, reviewEvidence, comparisons });
+}
+
+// These are the only mutation paths for reviews on an existing document.
+// Portable human records describe a decision; they do not authenticate a person.
+export async function recordReview({ policyBytes, inventories, evidenceBytes, target, finding, decision, reviewEvidence = [], comparisons = [] }) {
+  if (!Array.isArray(reviewEvidence) || reviewEvidence.length > 32 || reviewEvidence.some(bytes => !(bytes instanceof Uint8Array))) return refuse('REVIEW_BINDING_UNAVAILABLE', '/reviewEvidence', 'Supply at most 32 original evidence byte arrays.', policyBytes);
+  const read = await readAuthoring({ policyBytes, inventories, reviewEvidence, comparisons });
+  if (read.status !== 'ok') return read;
+  if (read.value.diagnostics.some(d => !['REVIEW_BINDING_UNAVAILABLE', 'REVIEW_RECONSIDER_REQUIRED'].includes(d.code))) return { status: 'refused', diagnostics: read.value.diagnostics, originalBytes: policyBytes.slice() };
+  const intent = structuredClone(read.value.intent), inventory = inventories.find(entry => entry.release.sha256 === target?.releaseSha256);
+  if (!inventory || !intent.pins.some(pin => pin.releaseSha256 === target.releaseSha256 && pin.itemId === target.itemId)) return refuse('REVIEW_BINDING_UNAVAILABLE', '/target', 'Review target must be an exact selected item.', policyBytes);
+  const inspected = await inspectReviewEvidence({ evidenceBytes, inventory, itemId: target.itemId });
+  const binding = inspected.status === 'ok' ? inspected.value.bindings.find(binding => stable(binding.finding) === stable(finding)) : undefined;
+  if (!binding) return refuse('REVIEW_BINDING_UNAVAILABLE', '/finding', 'Checked report cannot establish the complete subject/finding/evidence binding.', policyBytes);
+  if (!decision || Object.keys(decision).some(key => !['id', 'owner', 'actor', 'recordedAt', 'disposition', 'reason', 'supersedes'].includes(key))) return refuse('FIELD_SEMANTICS_UNSUPPORTED', '/decision', 'Supply supported review fields only.', policyBytes);
+  if (decision.supersedes) {
+    const prior = intent.reviews.records.find(record => record.id === decision.supersedes);
+    if (prior) { intent.reviews.records = intent.reviews.records.filter(record => record !== prior); intent.reviews.history.push(prior); }
+  }
+  intent.reviews.records.push({ ...structuredClone(decision), subject: inspected.value.subject, finding: binding.finding, evidence: binding.evidence, state: 'current' });
+  if (!checkReview(intent.reviews)) return refuse('FIELD_SEMANTICS_UNSUPPORTED', '/decision', 'Invalid review fields, identity, UTC timestamp or supersession.', policyBytes);
+  const otherEvidence = reviewEvidence.filter(bytes => bytes.length !== evidenceBytes.length || bytes.some((byte, index) => byte !== evidenceBytes[index]));
+  return composeReviewed({ basePolicyBytes: policyBytes, intent, inventories, reviewEvidence: [evidenceBytes, ...otherEvidence], comparisons }, true);
+}
+
+function preserveReconsideration(reviews, changed) {
+  for (const comparison of changed) {
+    const record = reviews.records.find(record => record.id === comparison.recordId);
+    reviews.records = reviews.records.filter(value => value !== record);
+    reviews.history.push(record);
+    let ordinal = 1;
+    while ([...reviews.records, ...reviews.history].some(record => record.id === `reconsider-${ordinal}`)) ordinal++;
+    reviews.records.push({ ...record, id: `reconsider-${ordinal}`, state: 'reconsider', supersedes: record.id });
+  }
+}
+export async function reconsiderReviews({ policyBytes, inventories, reviewEvidence = [], comparisons = [] }) {
+  const read = await readAuthoring({ policyBytes, inventories, reviewEvidence, comparisons });
+  if (read.status !== 'ok') return read;
+  if (read.value.diagnostics.some(d => !['REVIEW_BINDING_UNAVAILABLE', 'REVIEW_RECONSIDER_REQUIRED'].includes(d.code))) return { status: 'refused', diagnostics: read.value.diagnostics, originalBytes: policyBytes.slice() };
+  const intent = structuredClone(read.value.intent);
+  const compared = await compareReviewBindings({ intent, inventories, reviewEvidence, comparisons });
+  if (compared.status !== 'ok') return { ...compared, originalBytes: policyBytes.slice() };
+  preserveReconsideration(intent.reviews, compared.value.filter(result => result.state !== 'unchanged'));
+  const result = await composeReviewed({ basePolicyBytes: policyBytes, intent, inventories, reviewEvidence, comparisons }, true);
+  return result.status === 'ok' ? { ...result, value: { ...result.value, comparisons: compared.value }, originalBytes: policyBytes.slice() } : result;
 }

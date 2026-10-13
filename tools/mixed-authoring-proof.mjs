@@ -35,7 +35,7 @@ const archive = join(output, readdirSync(output).find(name => name.startsWith('a
 run([npm, 'install', '--ignore-scripts', '--no-audit', '--no-fund', archive], consumerDir);
 const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repo, windowsHide: true, encoding: 'utf8' }).stdout.trim();
 writeFileSync(join(output, 'packages.json'), JSON.stringify({ head, packages, uiArchive: archive, uiSha256: createHash('sha256').update(readFileSync(archive)).digest('hex') }, null, 2) + '\n');
-const moduleHashes = Object.fromEntries(['headless.mjs', 'intake.mjs', 'intent-shape.mjs', 'migrate-intent.mjs', 'mixed-service.mjs'].map(name => {
+const moduleHashes = Object.fromEntries(['headless.mjs', 'intake.mjs', 'intent-shape.mjs', 'migrate-intent.mjs', 'mixed-service.mjs', 'review-bindings.mjs', 'review-host.mjs'].map(name => {
   const source = readFileSync(join(repo, 'tools/consumer', name));
   const installed = readFileSync(join(consumerDir, 'node_modules/aih-ui/tools/consumer', name));
   if (!source.equals(installed)) throw new Error(`Installed UI module differs: ${name}`);
@@ -45,4 +45,5 @@ writeFileSync(join(output, 'installed-module-hashes.json'), JSON.stringify(modul
 writeFileSync(join(output, 'source-snapshot.json'), JSON.stringify({ repository: 'samartomar/aih-ui', revision: NOTE_SOURCE_REVISION, files: fixtureHashes }, null, 2) + '\n');
 run(['--test', ...readdirSync(join(consumerDir, 'consumer')).filter(name => name.endsWith('.test.mjs')).map(name => join(consumerDir, 'consumer', name))], consumerDir);
 run([join(consumerDir, 'consumer/prove-mixed-authoring.mjs'), output], consumerDir);
+run([join(consumerDir, 'consumer/prove-reviews.mjs'), output], consumerDir);
 if (sourceStatus()) throw new Error('Qualification changed the committed source tree.');

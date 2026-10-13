@@ -129,7 +129,7 @@ intent to 850,000 UTF-8 bytes, 4,096 entries per choice array and 32 inventories
 Core's independent policy bounds also apply. Reduce selected state after a bound
 refusal; no partial artifact is produced.
 
-## Review preservation
+## Evidence and review lifecycle
 
 Review-v1 records contain id, owner `{kind:"individual"|"organization",id}`,
 actor, recordedAt (UTC), disposition (false-alarm/accepted-risk), reason, subject
@@ -140,15 +140,100 @@ state (current/reconsider) and optional supersedes pointing to prior history.
 Materials are sorted exact Core identities. Every evidence dimension, including
 absent optional dimensions, needs an explicit checked identity.
 
-This authoring boundary preserves review history and reconsider records. It does
-not mint new decisions or prove human authenticity. Imported current reusable
-decisions require checked observation custody and receive
-REVIEW_BINDING_UNAVAILABLE until the evidence review workflow establishes it;
-original report/history and execution validity remain intact. Changing review
-records through composition is refused. Full decision lifecycle belongs to the
-subsequent evidence review workflow. `describeAuthoringSubject` uses Core's
-public identity helper on exact supplied recipe bytes; arbitrary cache JSON hashes
-are never evidence custody.
+The `/authoring` page and `aih-ui/authoring` share these effect-free operations:
+
+```js
+import {
+  inspectReviewEvidence, recordReview, reconsiderReviews, compareReviewBindings
+} from 'aih-ui/authoring';
+const target = { releaseSha256: inventory.release.sha256, itemId };
+const inspected = await inspectReviewEvidence({ evidenceBytes, inventory, itemId });
+const candidate = await recordReview({
+  policyBytes, inventories, evidenceBytes, target,
+  finding: inspected.value.bindings[0].finding,
+  decision: {
+    id: 'license-review', owner: { kind: 'individual', id: 'reviewer' },
+    actor: 'reviewer', recordedAt: '2026-10-13T18:00:00Z',
+    disposition: 'accepted-risk', reason: 'Reviewed for this exact local use.'
+  }
+});
+// Save only a successful candidate after explicit review. Other current
+// decisions can supply their evidence via reviewEvidence: Uint8Array[].
+```
+
+The inventory must be an actual checked Catalog value with exact recipe bytes in
+`materials`. Core's `deriveRecipeIdentity` validates those bytes and describes the
+material identities. Scan's public reader checks the original report/artifact
+bytes and observation digests. Inspection never invokes `runScan`. Source
+association means the checked capture, successful observation input and covered
+paths contain the exact recipe and all item materials. This byte association
+does not claim Core's live source sealing or organization admission.
+
+`value` separates `sourceAssociation`, `reportSupport`, `producerAuthentication`,
+`annexBytes`, the Core-derived `subject`, usable `bindings` and the complete
+report `view`. Failed/refused detectors, incomplete coverage and gaps remain in
+the view even when they cannot support a decision. Missing optional evidence
+affects review availability, never independent Core policy validity. A portable
+reader always reports authentication as `unchecked`, including signed artifacts.
+
+The Node-only `aih-ui/review-host` export supplies
+`inspectAuthenticatedReviewEvidence({evidenceBytes,inventory,itemId,trust,expectedScanId?})`.
+It adds the public Scan `authenticateArtifact` result as `producerAuthentication`.
+Trust comes independently from the host, never the imported report/policy.
+The local server may load it through host-selected `AIH_REVIEW_TRUST` JSON.
+No configured trust leaves portable inspection unchecked; no authentication
+result proves that the human named in a decision acted or that scanning occurred.
+
+Bindings use checked `observationId` with the exact relevant annex descriptors
+(ID, media type, digest and byte length; an empty list explicitly means absent), native rule ID (or explicit
+`absent:rule:<reason>`) and raw occurrence fingerprint. Detector identity is an
+exact `detector:` JSON projection of detector ID/version, adapter digest and
+platform; rules and configuration use their checked `sha256:` identities.
+Profile identity is an exact `profile:` projection of ID/digest. Scope identity
+is `<observationId>#input`, binding the observation's exact scope, targets,
+entries and platform. Coverage identity is `<observationId>#coverage:` plus the
+exact sorted-key JSON projection of checked detector coverage; the observation
+ID additionally binds its coverage and gaps. These projections encode public
+checked values without inventing digests or custody. The `observation:` projection
+binds the observation ID plus its referenced annex closure, so changed annex
+bytes cannot hide behind an unchanged observation ID. Optional unavailable
+location/support fields have explicit `absent:<field>:<reason>` display
+identities and remain bound by the observation. Required missing/incomparable
+dimensions, or projections exceeding the record's 1,000-character bound, cannot
+mint a reusable decision (`REVIEW_BINDING_UNAVAILABLE`).
+
+Supply `reviewEvidence:[originalBytes,...]` when reading, composing, editing or
+reconciling documents containing current decisions. The page retains up to 32
+loaded reports/artifacts, with a 750,000-byte aggregate limit to leave room for
+the policy's byte-array JSON transport, and lets the user select which to inspect.
+Headless readers keep the owning Scan byte bounds. Reopen checks each current
+binding again. A changed report Scan ID alone does not invalidate an unchanged
+relevant observation. Changed detector/rule/configuration/profile/scope/coverage,
+finding or reviewed material requires reconsideration; missing bytes preserve
+the original and return `REVIEW_BINDING_UNAVAILABLE`. Direct edits to review
+records during ordinary composition are refused. `recordReview` creates exact
+current decisions only after checked binding; its optional `decision.supersedes`
+moves an active prior record into history or references retained history.
+
+`reconsiderReviews({policyBytes,inventories,reviewEvidence?,comparisons?})` proposes
+moving changed/unavailable original records unchanged into history and adding
+reconsider records that supersede them. Supported content edits do the same when
+their candidate removes or changes a reviewed subject. History and the original
+reviewed subject remain intact. Unrelated policy metadata, evidence, managed
+selections and removals continue through ordinary Core validation.
+
+For an explicitly selected new release with unchanged relevant item material,
+supply `comparisons:[{recordId,target:{releaseSha256,itemId}}]` to authoring and
+`compareReviewBindings({intent,inventories,reviewEvidence,comparisons})`. The
+comparison returns separate `reviewedSubject` and `comparedSubject`; exact Core
+recipe/material identities and checked finding/evidence must match. The saved
+record is never silently retargeted. The comparison is host-owned context and
+must be supplied again on reopen; it is not an extra field in review-v1.
+
+Existing Scan-managed retained handles and independently authenticated prior
+artifacts retain their owning API semantics. A serialized handle or JSON cache
+copy grants no trusted custody. Human records are portable claims, not human
+authenticity or execution authorization. There is no expiry or zero-findings gate.
 
 ## Proof boundaries
 

@@ -2,8 +2,10 @@ import { policyFile } from './policy-file.js';
 const $ = id => document.getElementById(id), documentFile = policyFile($('policy'));
 const show = (id, value) => { $(id).textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2); };
 let catalog, candidate, history, currentIntent, currentOptional = [], revision = 0;
+let evidenceBytes, inspected, evidenceFiles = [];
+const reviewContext = () => ({ reviewEvidence: evidenceFiles.map(file => [...file.bytes]) });
 const invalidate = () => { revision++; candidate = undefined; $('accept').disabled = true; };
-const request = async (operation, body = {}) => (await fetch(`/api/authoring-${operation}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ policyBytes: [...documentFile.bytes()], ...body }) })).json();
+const request = async (operation, body = {}) => (await fetch(`/api/authoring-${operation}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ policyBytes: [...documentFile.bytes()], ...reviewContext(), ...body }) })).json();
 const button = (label, action) => { const node = document.createElement('button'); node.textContent = label; node.onclick = action; return node; };
 const key = ref => `${ref.releaseSha256}/${ref.itemId}/${ref.scope}`;
 const keep = () => $('keep').value.split('\n').filter(v => v.trim()).map(value => { const [releaseSha256, itemId, scope] = value.trim().split('/'); return { releaseSha256, itemId, scope }; });
@@ -36,6 +38,10 @@ function render(intent = currentIntent, optional = currentOptional) {
     $('optional').append(button(`${suggestion.skipped ? 'Clear skip' : 'Skip optional'} ${suggestion.to.itemId}`, () => propose({ type: suggestion.skipped ? 'unskip' : 'skip', exclusion })));
   }
   show('summary', { roots: intent.roots, exclusions: intent.exclusions, pins: intent.pins.map(pin => ({ releaseSha256: pin.releaseSha256, itemId: pin.itemId })), inputs: intent.inputs, reviews: intent.reviews });
+  const selected = $('review-target').value; $('review-target').replaceChildren();
+  for (const pin of intent.pins) { const option = document.createElement('option'); option.value = `${pin.releaseSha256}/${pin.itemId}`; option.textContent = `${pin.itemId} · ${pin.releaseSha256}`; $('review-target').append(option); }
+  if (intent.pins.some(pin => `${pin.releaseSha256}/${pin.itemId}` === selected)) $('review-target').value = selected;
+  show('review-history', intent.reviews);
 }
 function publish(value) { documentFile.setBytes(Uint8Array.from(value.policyBytes)); currentIntent = value.intent; currentOptional = value.optional ?? []; render(); }
 async function propose(operation) {
@@ -44,7 +50,7 @@ async function propose(operation) {
   catch (error) { if (attempt === revision) show('proposal', error.message); }
 }
 function present(result) {
-  show('proposal', result.status === 'ok' ? { roots: result.value.intent?.roots, inclusions: result.value.inclusions, optional: result.value.optional } : result);
+  show('proposal', result.status === 'ok' ? { roots: result.value.intent?.roots, inclusions: result.value.inclusions, optional: result.value.optional, reviews: result.value.intent?.reviews, comparisons: result.value.comparisons } : result);
   if (result.status === 'ok' && result.value.policyBytes) { candidate = result.value; $('accept').disabled = false; }
 }
 $('accept').onclick = () => { if (!candidate) return; const accepted = candidate; history = documentFile.bytes(); invalidate(); publish(accepted); $('history').disabled = false; show('proposal', 'Candidate accepted. Original artifact retained.'); };
@@ -73,4 +79,35 @@ $('intake').onchange = async () => { invalidate(); const attempt = revision, fil
   try { if (file.size > 5_000_000) throw new Error('Snapshot exceeds the bounded intake size.'); const snapshot = JSON.parse(await file.text()); const result = await request('intake', { snapshot }); if (attempt !== revision) return;
     show('intake-result', result.status === 'ok' ? { releaseSha256: result.value.release.sha256, input: result.value.input } : result); if (result.status === 'ok') { catalog = await (await fetch('/api/authoring-catalog')).json(); if (attempt === revision) render(); }
   } catch (error) { if (attempt === revision) show('intake-result', error.message); } };
+const reviewTarget = () => { const [releaseSha256, itemId] = $('review-target').value.split('/'); return { releaseSha256, itemId }; };
+const clearInspection = () => { inspected = undefined; $('record-review').disabled = true; $('review-finding').replaceChildren(); };
+$('review-target').onchange = () => { invalidate(); clearInspection(); };
+$('review-file').onchange = async () => {
+  invalidate(); clearInspection(); const attempt = revision, files = [...$('review-file').files]; if (!files.length) return;
+  if (files.length + evidenceFiles.length > 32 || files.reduce((sum, file) => sum + file.size, evidenceFiles.reduce((sum, file) => sum + file.bytes.length, 0)) > 750_000) return show('review-facts', 'This page accepts up to 32 reports with 750,000 total bytes. Use the headless reader for larger bounded artifacts.');
+  const loaded = await Promise.all(files.map(async file => ({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) }))); if (attempt !== revision) return;
+  evidenceFiles.push(...loaded); $('review-evidence').replaceChildren();
+  for (const [index, file] of evidenceFiles.entries()) { const option = document.createElement('option'); option.value = index; option.textContent = file.name; $('review-evidence').append(option); }
+  $('review-evidence').value = String(evidenceFiles.length - loaded.length); evidenceBytes = loaded[0].bytes;
+  show('review-facts', 'Original evidence bytes loaded. Inspect for the selected subject.');
+};
+$('review-evidence').onchange = () => { invalidate(); clearInspection(); evidenceBytes = evidenceFiles[Number($('review-evidence').value)]?.bytes; };
+$('forget-evidence').onclick = () => { invalidate(); clearInspection(); evidenceFiles = []; evidenceBytes = undefined; $('review-evidence').replaceChildren(); show('review-facts', 'No optional evidence supplied. Existing policy and review history retained.'); };
+$('inspect-review').onclick = async () => {
+  invalidate(); clearInspection(); const attempt = revision, target = reviewTarget();
+  const result = await request('inspect-review', { evidenceIndex: Number($('review-evidence').value), target }); if (attempt !== revision) return;
+  if (result.status !== 'ok') return show('review-facts', result);
+  inspected = { ...result.value, target }; show('review-facts', { reportSupport: inspected.reportSupport, scanId: inspected.scanId, sourceAssociation: inspected.sourceAssociation, producerAuthentication: inspected.producerAuthentication, annexBytes: inspected.annexBytes, subject: inspected.subject });
+  show('review-report', inspected.view);
+  for (const [index, binding] of inspected.bindings.entries()) { const option = document.createElement('option'); option.value = index; option.textContent = `${binding.finding.detectorId} · ${binding.finding.ruleId} · ${binding.finding.findingId}`; $('review-finding').append(option); }
+  $('record-review').disabled = !inspected.bindings.length;
+};
+for (const id of ['review-id', 'review-owner-kind', 'review-owner', 'review-actor', 'review-disposition', 'review-reason', 'review-supersedes', 'review-finding']) $(id).oninput = invalidate;
+$('record-review').onclick = async () => {
+  invalidate(); const attempt = revision, binding = inspected?.bindings[Number($('review-finding').value)]; if (!binding || !evidenceBytes) return;
+  const supersedes = $('review-supersedes').value;
+  const decision = { id: $('review-id').value, owner: { kind: $('review-owner-kind').value, id: $('review-owner').value }, actor: $('review-actor').value, recordedAt: new Date().toISOString(), disposition: $('review-disposition').value, reason: $('review-reason').value, ...(supersedes ? { supersedes } : {}) };
+  const result = await request('record-review', { evidenceIndex: Number($('review-evidence').value), target: inspected.target, finding: binding.finding, decision }); if (attempt === revision) present(result);
+};
+$('reconsider-reviews').onclick = async () => { invalidate(); const attempt = revision, result = await request('reconsider-reviews'); if (attempt === revision) present(result); };
 catalog = await (await fetch('/api/authoring-catalog')).json(); show('source-description', catalog.description); await $('new').onclick();
