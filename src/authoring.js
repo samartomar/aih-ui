@@ -58,6 +58,7 @@ $('candidate-mode').onchange = invalidate;
 $('refresh').onclick = async () => { invalidate(); const attempt = revision, result = await request('reconcile', { candidateMode: $('candidate-mode').value }); if (attempt !== revision) return;
   show('changes', result); $('choices').replaceChildren(); if (result.status !== 'ok') return;
   for (const choice of result.value.choices) {
+    if (choice.origin) { $('choices').append(button(`Remove unavailable origin ${choice.origin.id}`, () => propose({ type: 'remove-origin', originId: choice.origin.id }))); continue; }
     if (choice.exclusion) { $('choices').append(button(`Remove unavailable exclusion ${choice.exclusion.itemId}`, () => propose({ type: 'unskip', exclusion: choice.exclusion }))); continue; }
     $('choices').append(button(`Keep exact ${choice.root.itemId}`, () => show('proposal', 'Original exact revision retained. Reopen still requires its snapshot.')),
       button(`Remove ${choice.root.itemId}`, () => propose({ type: 'remove-root', root: choice.root, keep: keep() })));

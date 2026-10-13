@@ -227,3 +227,14 @@ test('missing excluded optional source and changed material bindings require rec
   const changed = await reconcileAuthoring({ savedPolicyBytes: saved.value.policyBytes, inventories, candidateInventories: [{ ...main, materialSource: { kind: 'local', input: 'changed-binding' } }, optional] });
   assert.equal(changed.value.status, 'needs-decisions');
 });
+test('trimmed template retains source provenance and rootless missing origin requires a decision', async () => {
+  const entry = fixtureRelease('synthetic-template', [fixtureItem('root')]);
+  entry.templates = [{ id: 'starter', sha256: 'a'.repeat(64), roots: [rootFor(entry, 'root')] }];
+  const intent = freshAuthoring(); intent.origins.push({ id: 'template', kind: 'template', releaseSha256: entry.release.sha256, templateId: 'starter', templateSha256: 'a'.repeat(64) });
+  const saved = await composeAuthoring({ intent, inventories: [entry] }); assert.equal(saved.status, 'ok');
+  assert.equal(saved.value.intent.provenance[0].releaseSha256, entry.release.sha256);
+  const result = await reconcileAuthoring({ savedPolicyBytes: saved.value.policyBytes, inventories: [entry], candidateInventories: [] });
+  assert.equal(result.value.status, 'needs-decisions'); assert.equal(result.value.choices[0].origin.id, 'template');
+  const removed = await editAuthoring({ policyBytes: saved.value.policyBytes, inventories: [entry], operation: { type: 'remove-origin', originId: 'template' } });
+  assert.equal(removed.status, 'ok'); assert.deepEqual(removed.value.intent.provenance, []);
+});
