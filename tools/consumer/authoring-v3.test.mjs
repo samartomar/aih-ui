@@ -3,21 +3,20 @@ import assert from 'node:assert/strict';
 import { readAuthoring, composeAuthoring, reconcileAuthoring, freshAuthoring, editAuthoring, describeAuthoringSubject } from './headless.mjs';
 import { composeIntent, indexReleases, freshIntent } from './saved-intent.mjs';
 import { composeSetup } from './setup.mjs';
-import { fixtureRelease, fixtureItem, rootFor } from './intent-fixtures.mjs';
+import { fixtureRelease, fixtureItem, rootFor, crossRef } from './intent-fixtures.mjs';
+import { noteFixture, NOTE_SOURCE_REVISION } from './note-fixture.mjs';
 import { intakeDeclaration, digestBytes } from './intake.mjs';
 import { readInstalledRelease } from '@aihq/catalog/node';
-import { readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const encode = value => new TextEncoder().encode(value);
 export async function mixedInventories() {
   const maintained = await readInstalledRelease({ root: dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'))), sourceInput: 'maintained' });
   assert.equal(maintained.valid, true);
-  const declarationBytes = new Uint8Array(await readFile(new URL('./fixtures/review-note/declaration.json', import.meta.url)));
-  const files = Object.fromEntries(await Promise.all(['recipe.json', 'note.md', 'LICENSE'].map(async path => [path, new Uint8Array(await readFile(new URL(`./fixtures/review-note/${path}`, import.meta.url)))])));
+  const { declarationBytes, sourceFiles } = await noteFixture();
   const declarationSha = await digestBytes(declarationBytes);
   const input = { id: 'notes', kind: 'local', locator: { input: 'notes' }, resolvedIdentity: { sha256: declarationSha } };
-  const notes = await intakeDeclaration({ input, declarationBytes, sourceFiles: [{ source: 'notes', revision: 'b'.repeat(40), files }], materialSource: { kind: 'local', input: 'notes' } });
+  const notes = await intakeDeclaration({ input, declarationBytes, sourceFiles, materialSource: { kind: 'local', input: 'notes' } });
   assert.equal(notes.status, 'ok', JSON.stringify(notes.diagnostics));
   return [{ release: maintained.release, materialSource: maintained.source }, notes.value];
 }
@@ -119,22 +118,22 @@ test('known policy evidence/lifecycle and metadata survive, unknown intent seman
 test('local, Git, npm and organization snapshots require exact declaration identities and source bytes', async () => {
   const inventories = await mixedInventories(), original = inventories[1];
   const declarationBytes = original.declarationBytes, sha256 = await digestBytes(declarationBytes);
-  const files = Object.fromEntries(await Promise.all(['recipe.json', 'note.md', 'LICENSE'].map(async path => [path, new Uint8Array(await readFile(new URL(`./fixtures/review-note/${path}`, import.meta.url)))])));
+  const { sourceFiles } = await noteFixture();
   const archiveBytes = encode('Synthetic acquired package envelope for integrity refusal/acceptance tests.'), integrity = `sha256-${Buffer.from(await crypto.subtle.digest('SHA-256', archiveBytes)).toString('base64')}`;
   const records = [
     { id: 'local', kind: 'local', locator: { input: 'notes' }, resolvedIdentity: { sha256 } },
-    { id: 'git', kind: 'git', locator: { repository: 'example/review-notes', ref: 'main' }, resolvedIdentity: { revision: 'b'.repeat(40), sha256 } },
+    { id: 'git', kind: 'git', locator: { repository: 'samartomar/aih-ui', ref: 'main' }, resolvedIdentity: { revision: NOTE_SOURCE_REVISION, sha256 } },
     { id: 'npm', kind: 'npm', locator: { name: '@example/notes', range: '^1.0.0' }, resolvedIdentity: { version: '1.0.0', integrity, sha256 } },
-    { id: 'organization', kind: 'organization', locator: { authorityId: 'team', sourceId: 'notes' }, resolvedIdentity: { revision: 'b'.repeat(40), sha256 } }
+    { id: 'organization', kind: 'organization', locator: { authorityId: 'team', sourceId: 'notes' }, resolvedIdentity: { revision: NOTE_SOURCE_REVISION, sha256 } }
   ];
   for (const input of records) {
-    const args = { input, declarationBytes, sourceFiles: [{ source: 'notes', revision: 'b'.repeat(40), files }], materialSource: { kind: 'local', input: 'notes' }, archiveBytes };
+    const args = { input, declarationBytes, sourceFiles, materialSource: { kind: 'local', input: 'notes' }, archiveBytes };
     const accepted = await intakeDeclaration(args);
     assert.equal(accepted.status, 'ok', JSON.stringify(accepted.diagnostics));
     assert.equal(accepted.value.input.releaseSha256, original.release.sha256);
     const mismatch = await intakeDeclaration({ ...args, input: { ...input, resolvedIdentity: { ...input.resolvedIdentity, sha256: '0'.repeat(64) } } });
     assert.equal(mismatch.status, 'refused');
-    const missing = await intakeDeclaration({ ...args, sourceFiles: [{ source: 'notes', revision: 'b'.repeat(40), files: {} }] });
+    const missing = await intakeDeclaration({ ...args, sourceFiles: [{ source: 'notes', revision: NOTE_SOURCE_REVISION, files: {} }] });
     assert.equal(missing.status, 'refused');
   }
   assert.equal((await intakeDeclaration({ input: { ...records[0], locator: { input: 'D:/untrusted' } }, declarationBytes })).status, 'refused');
@@ -201,4 +200,30 @@ test('labelled synthetic required/optional/collision fixtures use public Catalog
   const collision = structuredClone(intent); collision.roots.push(rootFor(entry, 'conflict'));
   assert.equal((await composeAuthoring({ intent: collision, inventories: [entry] })).diagnostics[0].code, 'ITEM_CONFLICT');
   assert.throws(() => fixtureRelease('synthetic-cycle', [fixtureItem('a', { requires: [{ itemId: 'b' }] }), fixtureItem('b', { requires: [{ itemId: 'a' }] })]), /dependency-cycle/);
+});
+test('v2 exclusions with unknown semantics or contradictory item identity refuse migration and preserve originals', async () => {
+  const inventories = await mixedInventories(), entry = inventories[0], oldIntent = freshIntent();
+  oldIntent.roots.push(rootFor(entry, 'mattpocock.grill-with-docs'));
+  const item = entry.release.items.find(i => i.id === 'mattpocock.code-review');
+  oldIntent.exclusions.push({ releaseSha256: entry.release.sha256, itemId: item.id, itemSha256: item.itemSha256, originIds: ['direct'] });
+  const old = composeIntent({ index: indexReleases(inventories), intent: oldIntent, capture: true }); assert.equal(old.valid, true);
+  for (const mutation of [{ futureSemantics: { denyExecution: true } }, { itemSha256: '0'.repeat(64) }]) {
+    const policy = structuredClone(old.policy); Object.assign(policy.metadata['aih.workbench'].exclusions[0], mutation);
+    const policyBytes = encode(JSON.stringify(policy, null, 2).replaceAll('\n', '\r\n'));
+    const read = await readAuthoring({ policyBytes, inventories });
+    assert.equal(read.value.editing, 'unavailable'); assert.deepEqual(read.value.originalBytes, policyBytes);
+    const result = await composeAuthoring({ basePolicyBytes: policyBytes, intent: freshAuthoring(), inventories });
+    assert.equal(result.status, 'refused'); assert.deepEqual(result.originalBytes, policyBytes);
+  }
+});
+test('missing excluded optional source and changed material bindings require reconciliation decisions', async () => {
+  const optional = fixtureRelease('synthetic-optional', [fixtureItem('extra')]);
+  const main = fixtureRelease('synthetic-main', [fixtureItem('root', { optional: [crossRef(optional, 'extra')] })]);
+  const intent = freshAuthoring(); intent.roots.push(rootFor(main, 'root')); intent.exclusions.push({ originId: 'direct', releaseSha256: optional.release.sha256, itemId: 'extra', scope: 'project' });
+  const inventories = [main, optional], saved = await composeAuthoring({ intent, inventories }); assert.equal(saved.status, 'ok');
+  const missing = await reconcileAuthoring({ savedPolicyBytes: saved.value.policyBytes, inventories, candidateInventories: [main] });
+  assert.equal(missing.value.status, 'needs-decisions'); assert.equal(missing.value.affectedRoots.length, 1);
+  assert.equal(missing.value.choices[0].affectedItems[0].itemId, 'extra');
+  const changed = await reconcileAuthoring({ savedPolicyBytes: saved.value.policyBytes, inventories, candidateInventories: [{ ...main, materialSource: { kind: 'local', input: 'changed-binding' } }, optional] });
+  assert.equal(changed.value.status, 'needs-decisions');
 });

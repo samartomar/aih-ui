@@ -4,9 +4,16 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { installConsumer, resolvePackage } from './packages.mjs';
+import { noteFixture, NOTE_SOURCE_REVISION } from './consumer/note-fixture.mjs';
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const sourceStatus = () => spawnSync('git', ['status', '--porcelain'], { cwd: repo, windowsHide: true, encoding: 'utf8' }).stdout.trim();
 if (sourceStatus()) throw new Error('Qualify a clean committed source tree.');
+const fixtureHashes = {};
+for (const variant of ['current', 'updated', 'additional']) for (const source of (await noteFixture(variant)).sourceFiles) for (const [path, bytes] of Object.entries(source.files)) {
+  const blob = spawnSync('git', ['show', `${NOTE_SOURCE_REVISION}:${path}`], { cwd: repo, windowsHide: true });
+  if (blob.status || !Buffer.from(bytes).equals(blob.stdout)) throw new Error(`Fixture differs from committed source: ${path}`);
+  fixtureHashes[path] = createHash('sha256').update(bytes).digest('hex');
+}
 const output = resolve(process.argv[2]);
 mkdirSync(output, { recursive: true });
 function run(args, cwd = repo) {
@@ -35,6 +42,7 @@ const moduleHashes = Object.fromEntries(['headless.mjs', 'intake.mjs', 'intent-s
   return [name, createHash('sha256').update(installed).digest('hex')];
 }));
 writeFileSync(join(output, 'installed-module-hashes.json'), JSON.stringify(moduleHashes, null, 2) + '\n');
+writeFileSync(join(output, 'source-snapshot.json'), JSON.stringify({ repository: 'samartomar/aih-ui', revision: NOTE_SOURCE_REVISION, files: fixtureHashes }, null, 2) + '\n');
 run(['--test', ...readdirSync(join(consumerDir, 'consumer')).filter(name => name.endsWith('.test.mjs')).map(name => join(consumerDir, 'consumer', name))], consumerDir);
 run([join(consumerDir, 'consumer/prove-mixed-authoring.mjs'), output], consumerDir);
 if (sourceStatus()) throw new Error('Qualification changed the committed source tree.');

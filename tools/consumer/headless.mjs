@@ -118,20 +118,29 @@ export async function reconcileAuthoring({ savedPolicyBytes, inventories, candid
   try { candidate = inventoryIndex(candidateInventories); previous = inventoryIndex(inventories); }
   catch (error) { return refuse('SOURCE_IDENTITY_MISMATCH', '/candidateInventories', error.message, savedPolicyBytes); }
   const { intent } = read.value, affectedRoots = [], retainedRoots = [], choices = [];
+  const changedSource = ref => {
+    const before = previous.releases[ref.releaseSha256], after = candidate.releases[ref.releaseSha256];
+    const oldEntry = inventories.find(e => e.release.sha256 === ref.releaseSha256), nextEntry = candidateInventories.find(e => e.release.sha256 === ref.releaseSha256);
+    return !before || !after || !candidate.items.has(pinKey(ref)) || stable(oldEntry?.input) !== stable(nextEntry?.input) || stable(oldEntry?.materialSource) !== stable(nextEntry?.materialSource);
+  };
+  const missingExclusions = intent.exclusions.filter(changedSource);
   const resolution = resolveSelections({ releases: previous.releases, roots: intent.roots.map(({ releaseSha256, itemId, scope, configuration }) => ({ releaseSha256, itemId, scope, configuration })), skips: [] });
   if (resolution.status !== 'ok') return { ...resolution, originalBytes: savedPolicyBytes.slice() };
   for (const root of intent.roots) {
     const closure = resolution.value.inclusions.filter(i => rootKey(i.root) === rootKey(root));
-    const unavailable = closure.filter(i => !candidate.items.has(pinKey(i.item)) || stable(candidate.items.get(pinKey(i.item)).entry.input) !== stable(previous.items.get(pinKey(i.item)).entry.input));
+    const unavailable = closure.filter(i => changedSource(i.item));
+    const exclusions = missingExclusions.filter(e => root.originIds.includes(e.originId));
+    const origins = intent.origins.filter(o => root.originIds.includes(o.id) && o.kind === 'template' && !candidateInventories.some(e => e.release.sha256 === o.releaseSha256 && e.templates?.some(t => t.id === o.templateId && t.sha256 === o.templateSha256)));
     const oldEntry = previous.items.get(pinKey(root)).entry;
     const updates = candidateInventories.filter(e => e.release.sha256 !== root.releaseSha256 && e.release.package.name === oldEntry.release.package.name
       && (oldEntry.input ? e.input?.id === oldEntry.input.id : !e.input)).flatMap(e => e.release.items.filter(i => i.id === root.itemId).map(i => ({ releaseSha256: e.release.sha256, itemId: i.id, itemSha256: i.itemSha256, scope: root.scope })));
-    if (unavailable.length || updates.length) {
+    if (unavailable.length || exclusions.length || origins.length || updates.length) {
       affectedRoots.push(root);
-      choices.push({ root, reason: unavailable.length ? 'source-unavailable' : 'source-changed', candidates: updates, options: ['keep-exact', 'remove', ...(updates.length ? ['accept-candidate'] : [])], affectedItems: unavailable.map(i => i.item) });
+      choices.push({ root, reason: unavailable.length || exclusions.length || origins.length ? 'source-unavailable' : 'source-changed', candidates: updates, options: ['keep-exact', 'remove', ...(updates.length ? ['accept-candidate'] : [])], affectedItems: [...unavailable.map(i => i.item), ...exclusions], affectedOrigins: origins });
     } else retainedRoots.push(root);
   }
-  return { ...ok({ status: affectedRoots.length ? 'needs-decisions' : 'unchanged', affectedRoots, retainedRoots, choices }), originalBytes: savedPolicyBytes.slice() };
+  for (const exclusion of missingExclusions) if (!intent.roots.some(root => root.originIds.includes(exclusion.originId))) choices.push({ exclusion, reason: 'source-unavailable', options: ['keep-exact', 'remove-exclusion'] });
+  return { ...ok({ status: choices.length ? 'needs-decisions' : 'unchanged', affectedRoots, retainedRoots, choices }), originalBytes: savedPolicyBytes.slice() };
 }
 export async function composeAuthoring({ basePolicyBytes, intent, inventories }) {
   if (intent && new TextEncoder().encode(JSON.stringify(intent)).length > 850_000) return refuse('POLICY_BOUND_EXCEEDED', '/metadata/aih.workbench', 'Intent exceeds 850,000 UTF-8 bytes; reduce selected state.', basePolicyBytes);

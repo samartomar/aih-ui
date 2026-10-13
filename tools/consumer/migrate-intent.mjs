@@ -1,6 +1,5 @@
 import { freshAuthoring, ok, refuse } from './headless.mjs';
-import { only } from './intake.mjs';
-import { pinKey } from './intent-shape.mjs';
+import { only, hash } from './intake.mjs';
 export function migrateIntent(old, inventories) {
   const next = freshAuthoring();
   const find = ref => inventories.find(e => e.release.sha256 === ref.releaseSha256)?.release.items.find(i => i.id === ref.itemId);
@@ -16,8 +15,12 @@ export function migrateIntent(old, inventories) {
       origin.releaseSha256 = entries[0].release.sha256;
     }
     for (const exclusion of old.exclusions) {
+      if (!only(exclusion, ['releaseSha256', 'itemId', 'itemSha256', 'originIds']) || !hash(exclusion.itemSha256)
+        || !Array.isArray(exclusion.originIds) || !exclusion.originIds.length || new Set(exclusion.originIds).size !== exclusion.originIds.length
+        || exclusion.originIds.some(id => !next.origins.some(origin => origin.id === id))) return refuse('FIELD_SEMANTICS_UNSUPPORTED', '/exclusions', 'Unknown or malformed historical exclusion semantics.');
       const item = find(exclusion);
       if (!item || item.scopes.length !== 1) return refuse('SOURCE_REVISION_UNAVAILABLE', '/exclusions', 'Historical exclusion scope is unresolved.');
+      if (item.itemSha256 !== exclusion.itemSha256) return refuse('INTENT_POLICY_CONTRADICTION', '/exclusions', 'Historical exclusion identity contradicts the exact checked item.');
       for (const originId of exclusion.originIds ?? []) next.exclusions.push({ originId, releaseSha256: exclusion.releaseSha256, itemId: exclusion.itemId, scope: item.scopes[0] });
     }
     // A checked release does not establish the original declaration snapshot.

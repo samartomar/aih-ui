@@ -7,6 +7,7 @@ import { readAuthoring, composeAuthoring, editAuthoring, freshAuthoring, reconci
 import { intakeDeclaration, digestBytes } from 'aih-ui/intake';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { createMixedService } from './mixed-service.mjs';
+import { noteFixture } from './note-fixture.mjs';
 const output = process.argv[2]; await mkdir(output, { recursive: true });
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE);
 const installed = await readInstalledRelease({ root: dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'))), sourceInput: 'maintained' });
@@ -83,13 +84,9 @@ try {
   assert.deepEqual(kept, JSON.parse(new TextDecoder().decode(expectedKeep.value.policyBytes)));
   cases.push('trim with Keep becomes direct root and agrees with headless');
   // One additional compatible independent declaration, ordinary data only.
-  const extraDeclaration = JSON.parse(new TextDecoder().decode(inventories[1].declarationBytes));
-  extraDeclaration.package = { name: 'additional-notes', version: '1.0.0' }; extraDeclaration.items[0].id = 'independent.additional-note'; extraDeclaration.items[0].requires = [];
-  const declarationBytes = new TextEncoder().encode(JSON.stringify(extraDeclaration));
-  const files = Object.fromEntries(await Promise.all(['recipe.json', 'note.md', 'LICENSE'].map(async name => [name, [...new Uint8Array(await readFile(new URL(`./fixtures/review-note/${name}`, import.meta.url)))]])));
-  const extraRecipe = JSON.parse(new TextDecoder().decode(Uint8Array.from(files['recipe.json']))); extraRecipe.id = 'independent.additional-note';
-  files['recipe.json'] = [...new TextEncoder().encode(JSON.stringify(extraRecipe))];
-  const snapshot = { input: { id: 'additional', kind: 'local', locator: { input: 'additional' }, resolvedIdentity: { sha256: await digestBytes(declarationBytes) } }, declarationBytes: [...declarationBytes], sourceFiles: [{ source: 'notes', revision: 'b'.repeat(40), files }], materialSource: { kind: 'local', input: 'additional' } };
+  const extra = await noteFixture('additional'), declarationBytes = extra.declarationBytes;
+  const snapshot = { input: { id: 'additional', kind: 'local', locator: { input: 'additional' }, resolvedIdentity: { sha256: await digestBytes(declarationBytes) } }, declarationBytes: [...declarationBytes],
+    sourceFiles: extra.sourceFiles.map(source => ({ ...source, files: Object.fromEntries(Object.entries(source.files).map(([path, bytes]) => [path, [...bytes]])) })), materialSource: { kind: 'local', input: 'additional' } };
   const snapshotPath = join(output, 'additional.snapshot.json'); await writeFile(snapshotPath, JSON.stringify(snapshot));
   await fresh.locator('#intake').setInputFiles(snapshotPath); await fresh.locator('#intake-result').filter({ hasText: 'releaseSha256' }).waitFor();
   await fresh.locator('#search').fill('independent.additional-note'); await actionOn(fresh, 'Choose independent.additional-note');

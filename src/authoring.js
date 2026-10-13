@@ -14,9 +14,13 @@ function render(intent = currentIntent, optional = currentOptional) {
   for (const item of catalog.items.filter(item => `${item.label} ${item.id} ${item.package.name}`.toLowerCase().includes(query)).slice(0, 40)) {
     const box = document.createElement('fieldset'), title = document.createElement('legend'); title.textContent = `${item.label} · ${item.package.name}`; box.append(title);
     const description = document.createElement('p'); description.textContent = item.description ?? ''; box.append(description);
-    const config = document.createElement('input'); config.value = JSON.stringify(intent?.roots.find(root => key(root) === key(item.root))?.configuration ?? {}); config.setAttribute('aria-label', `Configuration for ${item.id}`); config.oninput = invalidate; box.append(config);
+    const savedRoots = intent?.roots.filter(root => root.releaseSha256 === item.root.releaseSha256 && root.itemId === item.id) ?? [];
+    const savedRoot = savedRoots[0];
+    const config = document.createElement('input'); config.value = JSON.stringify(savedRoot?.configuration ?? {}); config.setAttribute('aria-label', `Configuration for ${item.id}`); config.oninput = invalidate; box.append(config);
     const scope = document.createElement('select'); scope.setAttribute('aria-label', `Scope for ${item.id}`);
-    for (const value of item.scopes) { const option = document.createElement('option'); option.value = value; option.textContent = value; scope.append(option); } scope.onchange = invalidate; box.append(scope);
+    for (const value of item.scopes) { const option = document.createElement('option'); option.value = value; option.textContent = value; scope.append(option); }
+    scope.value = savedRoot?.scope ?? item.root.scope;
+    scope.onchange = () => { invalidate(); config.value = JSON.stringify(savedRoots.find(root => root.scope === scope.value)?.configuration ?? {}); }; box.append(scope);
     box.append(button(`Choose ${item.id}`, () => { try { return propose({ type: 'select', root: { ...item.root, scope: scope.value, configuration: JSON.parse(config.value) } }); } catch (error) { invalidate(); show('proposal', error.message); } })); $('items').append(box);
   }
   $('templates').replaceChildren();
@@ -54,6 +58,7 @@ $('candidate-mode').onchange = invalidate;
 $('refresh').onclick = async () => { invalidate(); const attempt = revision, result = await request('reconcile', { candidateMode: $('candidate-mode').value }); if (attempt !== revision) return;
   show('changes', result); $('choices').replaceChildren(); if (result.status !== 'ok') return;
   for (const choice of result.value.choices) {
+    if (choice.exclusion) { $('choices').append(button(`Remove unavailable exclusion ${choice.exclusion.itemId}`, () => propose({ type: 'unskip', exclusion: choice.exclusion }))); continue; }
     $('choices').append(button(`Keep exact ${choice.root.itemId}`, () => show('proposal', 'Original exact revision retained. Reopen still requires its snapshot.')),
       button(`Remove ${choice.root.itemId}`, () => propose({ type: 'remove-root', root: choice.root, keep: keep() })));
     for (const target of choice.candidates) $('choices').append(button(`Review update ${target.itemId}`, async () => {

@@ -1,17 +1,15 @@
-import { readFile } from 'node:fs/promises';
 import { intakeDeclaration, digestBytes } from './intake.mjs';
 import { composeAuthoring, readAuthoring, reconcileAuthoring, editAuthoring, freshAuthoring, stable, refuse } from './headless.mjs';
+import { noteFixture } from './note-fixture.mjs';
 const encode = value => new TextEncoder().encode(value);
 export async function createMixedService(maintained) {
-  const declarationBytes = new Uint8Array(await readFile(new URL('./fixtures/review-note/declaration.json', import.meta.url)));
-  const files = Object.fromEntries(await Promise.all(['recipe.json', 'note.md', 'LICENSE'].map(async name => [name, new Uint8Array(await readFile(new URL(`./fixtures/review-note/${name}`, import.meta.url)))])));
-  async function supplied(bytes, sourceFiles, id = 'notes') {
-    const input = { id, kind: 'local', locator: { input: id }, resolvedIdentity: { sha256: await digestBytes(bytes) } };
-    const result = await intakeDeclaration({ input, declarationBytes: bytes, sourceFiles: [{ source: 'notes', revision: 'b'.repeat(40), files: sourceFiles }], materialSource: { kind: 'local', input: id } });
+  async function supplied(snapshot, id = 'notes') {
+    const input = { id, kind: 'local', locator: { input: id }, resolvedIdentity: { sha256: await digestBytes(snapshot.declarationBytes) } };
+    const result = await intakeDeclaration({ input, ...snapshot, materialSource: { kind: 'local', input: id } });
     if (result.status !== 'ok') throw new Error(JSON.stringify(result.diagnostics));
     return result.value;
   }
-  const notes = await supplied(declarationBytes, files);
+  const notes = await supplied(await noteFixture());
   // Explicit authored demonstration template, not a maintained Catalog offering.
   const root = (entry, item) => ({ releaseSha256: entry.release.sha256, itemId: item.id, itemSha256: item.itemSha256, scope: item.scopes[0], configuration: {}, originIds: ['direct'] });
   async function template(entry) {
@@ -19,9 +17,7 @@ export async function createMixedService(maintained) {
     return { ...value, sha256: await digestBytes(encode(stable(value))) };
   }
   notes.templates = [await template(notes)];
-  const changedDeclaration = JSON.parse(new TextDecoder().decode(declarationBytes));
-  changedDeclaration.package.version = '1.0.1';
-  const changed = await supplied(encode(JSON.stringify(changedDeclaration)), { ...files, 'note.md': encode(new TextDecoder().decode(files['note.md']) + '\nAn explicit updated note snapshot.\n') });
+  const changed = await supplied(await noteFixture('updated'));
   changed.templates = [await template(changed)];
   const current = [maintained, notes], all = [maintained, notes, changed];
   const candidates = mode => mode === 'missing' ? [maintained] : mode === 'updated' ? [maintained, changed] : current;
