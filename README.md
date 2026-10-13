@@ -5,6 +5,7 @@ The Policy Workbench user interface for AIH, built as an independent application
 ## What this repo owns
 
 - The screens, interaction and presentation of the Policy Workbench.
+- Consumer draft editing, selection interactions, composition through public Catalog and Core validators, and policy import/export. This is application workflow; Core retains policy validity, organization authority and execution semantics.
 - `src/` owns the live screens, design tokens, and presentation. Tailwind utilities are compiled locally from the classes used in `src/`.
 - `prototype/` is retained as a separate design reference. The running page does not import it.
 - Local onboarding preferences (experience, organization context, requested assistance and explicit AI clients). These are UI settings, not policy artifacts or enterprise authorization.
@@ -730,6 +731,24 @@ verification, independently of the selected Catalog entry:
 The slot keeps its place, size and reason until its owner supplies the input.
 
 ## Running it
+
+The current execution-policy consumer is `node tools/consumer-preview.mjs`.
+Supply reviewed `CORE_TGZ`, `CATALOG_TGZ` and `SCAN_TGZ` artifacts. It installs
+them with lifecycle scripts disabled in a temporary consumer and prints the
+loopback URL and exact package hashes. Without `AIH_CONSUMER_PROJECT`, browsing,
+authoring, download and reopen work while Prepare/Apply stay unavailable. An
+explicit host-configured disposable target enables review and approval; the
+browser cannot supply target paths or material roots. `AIH_CONSUMER_CONTROLS`
+may name a host-owned controls JSON file. Use Node 24.15 through 24.x.
+
+The page saves ordinary execution policy JSON plus namespaced
+`aih.workbench` metadata describing exact source identity, explicit roots and
+optional exclusions. Core alone interprets executable selections. Reopening
+recomposes through the same public validators and refuses contradictory intent.
+Policies without that annotation remain consumable, with editing unavailable.
+The adapted public consumer examples retain their Apache-2.0 attribution in
+`tools/consumer/NOTICE` and `LICENSE`. The older preview below is retained as a
+separate presentation reference and is not the current contract consumer.
 
 ```
 node tools/preview.mjs
