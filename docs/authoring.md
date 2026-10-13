@@ -184,7 +184,8 @@ The local server may load it through host-selected `AIH_REVIEW_TRUST` JSON.
 No configured trust leaves portable inspection unchecked; no authentication
 result proves that the human named in a decision acted or that scanning occurred.
 
-Bindings use checked `observationId`, native rule ID (or explicit
+Bindings use checked `observationId` with the exact relevant annex descriptors
+(ID, media type, digest and byte length; an empty list explicitly means absent), native rule ID (or explicit
 `absent:rule:<reason>`) and raw occurrence fingerprint. Detector identity is an
 exact `detector:` JSON projection of detector ID/version, adapter digest and
 platform; rules and configuration use their checked `sha256:` identities.
@@ -193,14 +194,19 @@ is `<observationId>#input`, binding the observation's exact scope, targets,
 entries and platform. Coverage identity is `<observationId>#coverage:` plus the
 exact sorted-key JSON projection of checked detector coverage; the observation
 ID additionally binds its coverage and gaps. These projections encode public
-checked values without inventing digests or custody. Optional unavailable
+checked values without inventing digests or custody. The `observation:` projection
+binds the observation ID plus its referenced annex closure, so changed annex
+bytes cannot hide behind an unchanged observation ID. Optional unavailable
 location/support fields have explicit `absent:<field>:<reason>` display
 identities and remain bound by the observation. Required missing/incomparable
 dimensions, or projections exceeding the record's 1,000-character bound, cannot
 mint a reusable decision (`REVIEW_BINDING_UNAVAILABLE`).
 
 Supply `reviewEvidence:[originalBytes,...]` when reading, composing, editing or
-reconciling documents containing current decisions. Reopen checks each current
+reconciling documents containing current decisions. The page retains up to 32
+loaded reports/artifacts, with a 750,000-byte aggregate limit to leave room for
+the policy's byte-array JSON transport, and lets the user select which to inspect.
+Headless readers keep the owning Scan byte bounds. Reopen checks each current
 binding again. A changed report Scan ID alone does not invalidate an unchanged
 relevant observation. Changed detector/rule/configuration/profile/scope/coverage,
 finding or reviewed material requires reconsideration; missing bytes preserve

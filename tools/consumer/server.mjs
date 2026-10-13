@@ -74,7 +74,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
       catch { return send(response, 400, { error: 'invalid-json' }); }
       if (pathname.startsWith('/api/authoring-')) {
         const result = pathname === '/api/authoring-inspect-review' && reviewTrust
-          ? await inspectAuthenticatedReviewEvidence({ evidenceBytes: Uint8Array.from(body.evidenceBytes ?? []), inventory: mixedService.inventories.find(entry => entry.release.sha256 === body.target?.releaseSha256), itemId: body.target?.itemId, trust: reviewTrust })
+          ? await inspectAuthenticatedReviewEvidence({ evidenceBytes: Uint8Array.from((Number.isSafeInteger(body.evidenceIndex) ? body.reviewEvidence?.[body.evidenceIndex] : body.evidenceBytes) ?? []), inventory: mixedService.inventories.find(entry => entry.release.sha256 === body.target?.releaseSha256), itemId: body.target?.itemId, trust: reviewTrust })
           : await mixedService.run(pathname.slice('/api/authoring-'.length), body);
         // JSON transport represents bytes as arrays, never serialized handles.
         return send(response, 200, JSON.parse(JSON.stringify(result, (_key, value) => value instanceof Uint8Array ? [...value] : value)));

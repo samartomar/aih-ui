@@ -14,14 +14,26 @@ import { noteFixture } from './note-fixture.mjs';
 import * as authoring from './headless.mjs';
 import { inspectAuthenticatedReviewEvidence } from './review-host.mjs';
 const encode = value => new TextEncoder().encode(JSON.stringify(value));
-export async function reviewFixture() {
+export async function reviewFixture({ configured = false } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'ui5-review-'));
   const snapshot = await noteFixture();
+  if (configured) {
+    // Labelled synthetic producer variation. This changes configuration data,
+    // not an assertion about the pinned real repository fixture.
+    const declaration = JSON.parse(new TextDecoder().decode(snapshot.declarationBytes));
+    const recipePath = declaration.items[0].recipePath, recipe = JSON.parse(new TextDecoder().decode(snapshot.sourceFiles[0].files[recipePath]));
+    recipe.inputs = { directory: { type: 'string', required: true } };
+    declaration.items[0].configuration = recipe.inputs;
+    declaration.sources[0].repository = 'fixture/configured-notes';
+    snapshot.sourceFiles[0].revision = 'a'.repeat(40);
+    snapshot.sourceFiles[0].files[recipePath] = encode(recipe);
+    snapshot.declarationBytes = encode(declaration);
+  }
   const input = { id: 'notes', kind: 'local', locator: { input: 'notes' }, resolvedIdentity: { sha256: await digestBytes(snapshot.declarationBytes) } };
   const intake = await intakeDeclaration({ ...snapshot, input, materialSource: { kind: 'local', input: 'notes' } });
   assert.equal(intake.status, 'ok');
   const inventory = intake.value, item = inventory.release.items[0], intent = authoring.freshAuthoring();
-  intent.roots.push({ releaseSha256: inventory.release.sha256, itemId: item.id, itemSha256: item.itemSha256, scope: 'project', configuration: {}, originIds: ['direct'] });
+  intent.roots.push({ releaseSha256: inventory.release.sha256, itemId: item.id, itemSha256: item.itemSha256, scope: 'project', configuration: configured ? { directory: 'chosen' } : {}, originIds: ['direct'] });
   const maintained = await readInstalledRelease({ root: dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'))), sourceInput: 'maintained' });
   assert.equal(maintained.valid, true);
   const inventories = [{ release: maintained.release, materialSource: maintained.source }, inventory];
@@ -44,8 +56,17 @@ export async function reviewFixture() {
 export const decision = { id: 'decision-1', owner: { kind: 'organization', id: 'team' }, actor: 'reviewer', recordedAt: '2026-10-13T18:00:00Z', disposition: 'false-alarm', reason: 'Fixture review: deliberately lacks a license declaration.' };
 async function recorded(f, evidence) {
   const inspected = await authoring.inspectReviewEvidence({ evidenceBytes: evidence.bytes, inventory: f.inventory, itemId: f.item.id });
+  assert.equal(inspected.status, 'ok', JSON.stringify(inspected.diagnostics));
   const result = await authoring.recordReview({ policyBytes: f.saved.value.policyBytes, inventories: f.inventories, evidenceBytes: evidence.bytes, target: { releaseSha256: f.inventory.release.sha256, itemId: f.item.id }, finding: inspected.value.bindings[0].finding, decision });
   assert.equal(result.status, 'ok', JSON.stringify(result.diagnostics)); return result;
+}
+async function newNoteRelease(f, variant = 'current') {
+  const snapshot = await noteFixture(variant), declaration = JSON.parse(new TextDecoder().decode(snapshot.declarationBytes));
+  declaration.package.version = '1.0.1';
+  const declarationBytes = encode(declaration);
+  const result = await intakeDeclaration({ declarationBytes, sourceFiles: snapshot.sourceFiles, materialSource: f.inventory.materialSource,
+    input: { ...f.inventory.input, id: 'notes-next', resolvedIdentity: { sha256: await digestBytes(declarationBytes) } } });
+  assert.equal(result.status, 'ok'); return result.value;
 }
 test('checked finding decision round-trips with original subject and exact review-v1 fields', async () => {
   const f = await reviewFixture();
@@ -134,6 +155,10 @@ test('missing evidence preserves executable policy and originals; field/version/
       const result = await authoring.recordReview({ policyBytes: f.saved.value.policyBytes, inventories: f.inventories, evidenceBytes: evidence.bytes, target: record.subject, finding: inspected.value.bindings[0].finding, decision: { ...decision, ...bad } });
       assert.equal(result.status, 'refused', JSON.stringify(bad)); assert.equal(result.value, undefined);
     }
+    for (const reviewEvidence of [null, [null], [{}], Array(33).fill(evidence.bytes)]) {
+      const result = await authoring.recordReview({ policyBytes: f.saved.value.policyBytes, inventories: f.inventories, evidenceBytes: evidence.bytes, target: record.subject, finding: inspected.value.bindings[0].finding, decision, reviewEvidence });
+      assert.equal(result.status, 'refused'); assert.equal(result.diagnostics[0].code, 'REVIEW_BINDING_UNAVAILABLE');
+    }
     assert.equal((await authoring.inspectReviewEvidence({ evidenceBytes: evidence.bytes, inventory: JSON.parse(JSON.stringify(f.inventory)), itemId: f.item.id })).status, 'refused');
   } finally { await f.cleanup(); }
 });
@@ -155,10 +180,12 @@ test('real retained/authenticated built-in artifact custody differs from cloned 
     const authenticatedView = await inspectAuthenticatedReviewEvidence({ evidenceBytes: signed.bytes, inventory: f.inventory, itemId: f.item.id, trust, expectedScanId: signed.scanId });
     assert.equal(authenticatedView.value.producerAuthentication.status, 'authenticated');
     assert.equal(authenticatedView.value.sourceAssociation, 'matched');
-    assert.equal((await authenticateArtifact({ bytes: signed.bytes, expectedScanId: signed.scanId, trust: { keys: [], publishers: [] } })).status, 'unverifiable');
+    const unknownTrust = await authenticateArtifact({ bytes: signed.bytes, expectedScanId: signed.scanId, trust: { keys: [], publishers: [] } });
+    assert.equal(unknownTrust.status, 'unverifiable');
     const invalid = JSON.parse(new TextDecoder().decode(signed.bytes)); invalid.attestation.dsseEnvelope.signatures[0].sig = Buffer.alloc(64).toString('base64');
-    assert.equal((await authenticateArtifact({ bytes: encode(invalid), expectedScanId: signed.scanId, trust })).status, 'unverifiable');
-    assert.equal((await authenticateArtifact({ bytes: first.bytes, expectedScanId: first.scanId, trust })).reason, 'unsigned');
+    const invalidSignature = await authenticateArtifact({ bytes: encode(invalid), expectedScanId: signed.scanId, trust });
+    const unsigned = await authenticateArtifact({ bytes: first.bytes, expectedScanId: first.scanId, trust });
+    assert.equal(invalidSignature.status, 'unverifiable'); assert.equal(unsigned.reason, 'unsigned');
     // Retained artifact lives outside the source closure, so reuse compares the
     // original source. Only public host acquisition/authentication grants custody.
     const priorRoot = await mkdtemp(join(tmpdir(), 'ui5-artifact-'));
@@ -172,6 +199,10 @@ test('real retained/authenticated built-in artifact custody differs from cloned 
       const view = await authoring.inspectReviewEvidence({ evidenceBytes: signed.bytes, inventory: f.inventory, itemId: f.item.id });
       assert.equal(view.value.producerAuthentication, 'unchecked');
       assert.equal(view.value.annexBytes, 'checked');
+      console.log(JSON.stringify({ proof: 'ui5-public-artifact-custody', scope: 'local built-in source fixture and ephemeral Ed25519 fixture key; no production signing or native/external-runtime admission', scanId: signed.scanId,
+        signedArtifactSha256: createHash('sha256').update(signed.bytes).digest('hex'), observationId: first.report.results[0].observations[0].observationId,
+        retainedOrigin: own.report.results[0].observations[0].origin, cloneOrigin: clone.report.results[0].observations[0].origin, authenticatedImportOrigin: reused.report.results[0].observations[0].origin, untrustedImportOrigin: refused.report.results[0].observations[0].origin,
+        authenticated, unknownTrust, invalidSignature, unsigned, portableAuthentication: view.value.producerAuthentication }));
     } finally { await rm(priorRoot, { recursive: true, force: true }); }
   } finally { await f.cleanup(); }
 });
@@ -179,13 +210,7 @@ test('explicit unchanged subject comparison across a new release retains the ori
   const f = await reviewFixture();
   try {
     const evidence = await f.scan(), saved = await recorded(f, evidence);
-    const snapshot = await noteFixture(), declaration = JSON.parse(new TextDecoder().decode(snapshot.declarationBytes));
-    declaration.package.version = '1.0.1';
-    const declarationBytes = encode(declaration);
-    const result = await intakeDeclaration({ declarationBytes, sourceFiles: snapshot.sourceFiles, materialSource: f.inventory.materialSource,
-      input: { ...f.inventory.input, id: 'notes-next', resolvedIdentity: { sha256: await digestBytes(declarationBytes) } } });
-    assert.equal(result.status, 'ok');
-    const next = result.value, inventories = [...f.inventories, next], intent = structuredClone(saved.value.intent);
+    const next = await newNoteRelease(f), inventories = [...f.inventories, next], intent = structuredClone(saved.value.intent);
     intent.roots[0].releaseSha256 = next.release.sha256;
     intent.roots[0].itemSha256 = next.release.items[0].itemSha256;
     intent.inputs = [];
@@ -199,5 +224,64 @@ test('explicit unchanged subject comparison across a new release retains the ori
     assert.equal(compared.value[0].state, 'unchanged');
     assert.equal(compared.value[0].reviewedSubject.releaseSha256, f.inventory.release.sha256);
     assert.equal(compared.value[0].comparedSubject.releaseSha256, next.release.sha256);
+  } finally { await f.cleanup(); }
+});
+test('synthetic required-input item remains inspectable and reviewable with supported authored configuration', async () => {
+  const f = await reviewFixture({ configured: true });
+  try {
+    assert.deepEqual(f.saved.value.intent.roots[0].configuration, { directory: 'chosen' });
+    const evidence = await f.scan(), saved = await recorded(f, evidence);
+    const reopened = await authoring.readAuthoring({ policyBytes: saved.value.policyBytes, inventories: f.inventories, reviewEvidence: [evidence.bytes] });
+    assert.equal(reopened.value.editing, 'available', JSON.stringify(reopened.value.diagnostics));
+    assert.deepEqual(reopened.value.intent.roots[0].configuration, { directory: 'chosen' });
+  } finally { await f.cleanup(); }
+});
+test('changed relevant annex bytes require reconsideration even with the same checked observation ID', async () => {
+  const f = await reviewFixture();
+  try {
+    const evidence = await f.scan(), saved = await recorded(f, evidence);
+    const report = structuredClone(evidence.report), annexes = evidence.annexes.map(a => ({ id: a.id, bytes: Buffer.from(a.bytesBase64, 'base64') }));
+    const relevantId = report.results[0].observations[0].body.annexIds[0];
+    const annex = annexes.find(a => a.id === relevantId), body = JSON.parse(annex.bytes.toString('utf8'));
+    body.runs[0].results[0].message.text = 'Different supporting evidence fixture';
+    annex.bytes = encode(body);
+    const descriptor = report.annexes.find(a => a.id === relevantId);
+    descriptor.sha256 = createHash('sha256').update(annex.bytes).digest('hex'); descriptor.byteLength = annex.bytes.length;
+    const changed = await prepareArtifact({ report, annexes });
+    assert.notEqual(changed.scanId, evidence.scanId);
+    const read = await authoring.readAuthoring({ policyBytes: saved.value.policyBytes, inventories: f.inventories, reviewEvidence: [changed.bytes] });
+    assert.equal(read.value.editing, 'unavailable');
+    assert.equal(read.value.diagnostics[0].code, 'REVIEW_RECONSIDER_REQUIRED');
+    assert.deepEqual(read.value.intent.reviews, saved.value.intent.reviews);
+  } finally { await f.cleanup(); }
+});
+test('a changed review cannot hide an unavailable binding on another current record during composition', async () => {
+  const f = await reviewFixture();
+  try {
+    const evidence = await f.scan(), first = await recorded(f, evidence);
+    const second = await authoring.recordReview({ policyBytes: first.value.policyBytes, inventories: f.inventories, evidenceBytes: evidence.bytes, target: first.value.intent.reviews.records[0].subject, finding: first.value.intent.reviews.records[0].finding,
+      reviewEvidence: [evidence.bytes], decision: { ...decision, id: 'second-review', owner: { kind: 'individual', id: 'another-reviewer' } } });
+    assert.equal(second.status, 'ok');
+    const next = { ...await newNoteRelease(f), materials: [] }, inventories = [...f.inventories, next], intent = structuredClone(second.value.intent);
+    intent.roots[0].releaseSha256 = next.release.sha256; intent.roots[0].itemSha256 = next.release.items[0].itemSha256; intent.inputs = [];
+    const result = await authoring.composeAuthoring({ basePolicyBytes: second.value.policyBytes, intent, inventories, reviewEvidence: [evidence.bytes], comparisons: [{ recordId: 'second-review', target: { releaseSha256: next.release.sha256, itemId: f.item.id } }] });
+    assert.equal(result.status, 'refused'); assert.equal(result.value, undefined);
+    assert.equal(result.diagnostics[0].code, 'REVIEW_BINDING_UNAVAILABLE');
+    assert.deepEqual(result.originalBytes, second.value.policyBytes);
+  } finally { await f.cleanup(); }
+});
+test('explicit changed-subject comparison can retain history through composition and reconsideration', async () => {
+  const f = await reviewFixture();
+  try {
+    const evidence = await f.scan(), saved = await recorded(f, evidence), next = await newNoteRelease(f, 'updated');
+    const inventories = [...f.inventories, next], intent = structuredClone(saved.value.intent);
+    intent.roots[0].releaseSha256 = next.release.sha256; intent.roots[0].itemSha256 = next.release.items[0].itemSha256; intent.inputs = [];
+    const comparisons = [{ recordId: decision.id, target: { releaseSha256: next.release.sha256, itemId: f.item.id } }];
+    const changed = await authoring.composeAuthoring({ basePolicyBytes: saved.value.policyBytes, intent, inventories, reviewEvidence: [evidence.bytes], comparisons });
+    assert.equal(changed.status, 'ok', JSON.stringify(changed.diagnostics));
+    assert.equal(changed.value.intent.reviews.records[0].state, 'reconsider');
+    assert.deepEqual(changed.value.intent.reviews.history, saved.value.intent.reviews.records);
+    const reconsidered = await authoring.reconsiderReviews({ policyBytes: saved.value.policyBytes, inventories, reviewEvidence: [], comparisons: [{ recordId: decision.id, target: { releaseSha256: f.inventory.release.sha256, itemId: f.item.id } }] });
+    assert.equal(reconsidered.status, 'ok', JSON.stringify(reconsidered.diagnostics));
   } finally { await f.cleanup(); }
 });

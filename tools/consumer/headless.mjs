@@ -183,18 +183,27 @@ async function composeReviewed({ basePolicyBytes, intent, inventories, reviewEvi
       result = await build({ intent: reconsidered, inventories, base, capture: true });
     } else if (compared.value.some(comparison => comparison.state !== 'unchanged')) return { status: 'refused', diagnostics: await reviewDiagnostics({ intent: result.value.intent, inventories, reviewEvidence, comparisons }), ...(basePolicyBytes ? { originalBytes: basePolicyBytes.slice() } : {}) };
   }
+  // A changed subject can coexist with an unavailable binding on another
+  // record. Revalidate every surviving current decision after rebuilding.
+  if (result.status === 'ok') {
+    const diagnostics = await reviewDiagnostics({ intent: result.value.intent, inventories, reviewEvidence, comparisons });
+    if (diagnostics.length) return { status: 'refused', diagnostics, ...(basePolicyBytes ? { originalBytes: basePolicyBytes.slice() } : {}) };
+  }
   return result.status === 'refused' && basePolicyBytes ? { ...result, originalBytes: basePolicyBytes.slice() } : result;
 }
 // Use Core's public identity semantics for exact supplied recipe snapshots.
 // This describes content, not human approval or observation custody.
 export async function describeAuthoringSubject({ inventory, itemId }) {
+  if (!inventory || !isCheckedRelease(inventory.release)) return refuse('SOURCE_IDENTITY_MISMATCH', '/inventory', 'Supply an actual checked Catalog reader value.');
   const item = listItems(inventory.release).find(item => item.id === itemId);
   if (!item) return refuse('SOURCE_REVISION_UNAVAILABLE', '/itemId', 'Exact item unavailable.');
-  const configured = configureItem({ release: inventory.release, itemId, configuration: {}, materialSource: inventory.materialSource });
-  if (!configured.valid) return refuse('INPUT_INVALID', '/itemId', 'Catalog refused recipe configuration.', undefined, { owner: 'catalog', diagnostics: configured.diagnostics });
   const recipeBytes = inventory.materials?.find(material => material.path === item.recipe.path)?.bytes;
   if (!recipeBytes) return refuse('SOURCE_REVISION_UNAVAILABLE', '/recipeBytes', 'Exact recipe bytes are required for identity derivation.');
-  const identity = await deriveRecipeIdentity({ recipeBytes, reference: configured.selection.recipe.reference });
+  // Identity describes the checked recipe declaration, independent of the
+  // authored values for its required inputs. Core validates this public shape.
+  const reference = { source: inventory.materialSource, path: item.recipe.path, sha256: item.recipe.sha256, byteLength: item.recipe.byteLength,
+    materials: item.materials.map(({ id, path, sha256, byteLength }) => ({ id, path, sha256, byteLength })) };
+  const identity = await deriveRecipeIdentity({ recipeBytes, reference });
   if (identity.status !== 'ok') return identity;
   return ok({ releaseSha256: inventory.release.sha256, itemId, itemSha256: item.itemSha256, recipeIdentity: identity.value.recipeIdentity, materials: identity.value.materials });
 }
@@ -243,6 +252,7 @@ export async function editAuthoring({ policyBytes, inventories, operation, revie
 // These are the only mutation paths for reviews on an existing document.
 // Portable human records describe a decision; they do not authenticate a person.
 export async function recordReview({ policyBytes, inventories, evidenceBytes, target, finding, decision, reviewEvidence = [], comparisons = [] }) {
+  if (!Array.isArray(reviewEvidence) || reviewEvidence.length > 32 || reviewEvidence.some(bytes => !(bytes instanceof Uint8Array))) return refuse('REVIEW_BINDING_UNAVAILABLE', '/reviewEvidence', 'Supply at most 32 original evidence byte arrays.', policyBytes);
   const read = await readAuthoring({ policyBytes, inventories, reviewEvidence, comparisons });
   if (read.status !== 'ok') return read;
   if (read.value.diagnostics.some(d => !['REVIEW_BINDING_UNAVAILABLE', 'REVIEW_RECONSIDER_REQUIRED'].includes(d.code))) return { status: 'refused', diagnostics: read.value.diagnostics, originalBytes: policyBytes.slice() };
@@ -258,7 +268,8 @@ export async function recordReview({ policyBytes, inventories, evidenceBytes, ta
   }
   intent.reviews.records.push({ ...structuredClone(decision), subject: inspected.value.subject, finding: binding.finding, evidence: binding.evidence, state: 'current' });
   if (!checkReview(intent.reviews)) return refuse('FIELD_SEMANTICS_UNSUPPORTED', '/decision', 'Invalid review fields, identity, UTC timestamp or supersession.', policyBytes);
-  return composeReviewed({ basePolicyBytes: policyBytes, intent, inventories, reviewEvidence: [evidenceBytes, ...reviewEvidence], comparisons }, true);
+  const otherEvidence = reviewEvidence.filter(bytes => bytes.length !== evidenceBytes.length || bytes.some((byte, index) => byte !== evidenceBytes[index]));
+  return composeReviewed({ basePolicyBytes: policyBytes, intent, inventories, reviewEvidence: [evidenceBytes, ...otherEvidence], comparisons }, true);
 }
 
 function preserveReconsideration(reviews, changed) {

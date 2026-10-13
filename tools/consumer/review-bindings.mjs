@@ -26,8 +26,11 @@ export async function inspectReviewEvidence({ evidenceBytes, inventory, itemId }
     // covering the complete exact subject can support a reusable decision.
     if (sourceAssociation !== 'matched' || detector.outcome !== 'succeeded' || !contains(input.entries)
       || !descriptors.every(material => observation.body.coverage.coveredPaths.includes(material.path))) continue;
+    const annexIds = [...new Set([...observation.body.annexIds, ...observation.body.findings.filter(finding => finding.supportingEvidence.state === 'present').map(finding => finding.supportingEvidence.value.annexId)])].sort();
+    const annexes = annexIds.map(id => read.report.annexes.find(annex => annex.id === id));
+    if (annexes.some(annex => !annex)) continue;
     const evidence = {
-      observationIdentity: observation.observationId,
+      observationIdentity: exact('observation', { id: observation.observationId, annexes }),
       detectorIdentity: exact('detector', { id: input.detectorId, version: input.detectorVersion, adapterSha256: input.adapterSha256, platform: input.platform }),
       rulesIdentity: `sha256:${input.rulesSha256}`,
       configurationIdentity: `sha256:${input.configurationSha256}`,
@@ -50,7 +53,7 @@ export async function inspectReviewEvidence({ evidenceBytes, inventory, itemId }
 export async function compareReviewBindings({ intent, inventories, reviewEvidence = [], comparisons = [] }) {
   if (!checkIntentShape(intent) || !Array.isArray(inventories) || inventories.length > 32 || inventories.some(entry => !isCheckedRelease(entry?.release)) || !Array.isArray(reviewEvidence) || reviewEvidence.length > 32 || reviewEvidence.some(bytes => !(bytes instanceof Uint8Array)) || !Array.isArray(comparisons)
     || comparisons.length > 4096 || new Set(comparisons.map(value => value?.recordId)).size !== comparisons.length
-    || comparisons.some(value => !value || Object.keys(value).sort().join(',') !== 'recordId,target' || !intent.reviews.records.some(record => record.id === value.recordId)
+    || comparisons.some(value => !value || Object.keys(value).sort().join(',') !== 'recordId,target' || ![...intent.reviews.records, ...intent.reviews.history].some(record => record.id === value.recordId)
       || !value.target || Object.keys(value.target).sort().join(',') !== 'itemId,releaseSha256' || !/^[a-f0-9]{64}$/.test(value.target.releaseSha256) || !/^[\w.-]{1,180}$/.test(value.target.itemId))) return bindingFailure('Supply supported intent, checked inventories, at most 32 original evidence byte arrays and unique exact comparison targets.');
   const results = [];
   for (const record of intent.reviews.records.filter(record => record.state === 'current')) {

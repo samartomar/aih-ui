@@ -2,8 +2,8 @@ import { policyFile } from './policy-file.js';
 const $ = id => document.getElementById(id), documentFile = policyFile($('policy'));
 const show = (id, value) => { $(id).textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2); };
 let catalog, candidate, history, currentIntent, currentOptional = [], revision = 0;
-let evidenceBytes, inspected;
-const reviewContext = () => ({ reviewEvidence: evidenceBytes ? [[...evidenceBytes]] : [] });
+let evidenceBytes, inspected, evidenceFiles = [];
+const reviewContext = () => ({ reviewEvidence: evidenceFiles.map(file => [...file.bytes]) });
 const invalidate = () => { revision++; candidate = undefined; $('accept').disabled = true; };
 const request = async (operation, body = {}) => (await fetch(`/api/authoring-${operation}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ policyBytes: [...documentFile.bytes()], ...reviewContext(), ...body }) })).json();
 const button = (label, action) => { const node = document.createElement('button'); node.textContent = label; node.onclick = action; return node; };
@@ -83,14 +83,19 @@ const reviewTarget = () => { const [releaseSha256, itemId] = $('review-target').
 const clearInspection = () => { inspected = undefined; $('record-review').disabled = true; $('review-finding').replaceChildren(); };
 $('review-target').onchange = () => { invalidate(); clearInspection(); };
 $('review-file').onchange = async () => {
-  invalidate(); clearInspection(); evidenceBytes = undefined; const attempt = revision, file = $('review-file').files[0]; if (!file) return;
-  if (file.size > 1_500_000) return show('review-facts', 'Evidence exceeds this page transport limit (1,500,000 bytes). Use the headless reader for larger bounded artifacts.');
-  const bytes = new Uint8Array(await file.arrayBuffer()); if (attempt !== revision) return;
-  evidenceBytes = bytes; show('review-facts', 'Original evidence bytes loaded. Inspect for the selected subject.');
+  invalidate(); clearInspection(); const attempt = revision, files = [...$('review-file').files]; if (!files.length) return;
+  if (files.length + evidenceFiles.length > 32 || files.reduce((sum, file) => sum + file.size, evidenceFiles.reduce((sum, file) => sum + file.bytes.length, 0)) > 750_000) return show('review-facts', 'This page accepts up to 32 reports with 750,000 total bytes. Use the headless reader for larger bounded artifacts.');
+  const loaded = await Promise.all(files.map(async file => ({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) }))); if (attempt !== revision) return;
+  evidenceFiles.push(...loaded); $('review-evidence').replaceChildren();
+  for (const [index, file] of evidenceFiles.entries()) { const option = document.createElement('option'); option.value = index; option.textContent = file.name; $('review-evidence').append(option); }
+  $('review-evidence').value = String(evidenceFiles.length - loaded.length); evidenceBytes = loaded[0].bytes;
+  show('review-facts', 'Original evidence bytes loaded. Inspect for the selected subject.');
 };
+$('review-evidence').onchange = () => { invalidate(); clearInspection(); evidenceBytes = evidenceFiles[Number($('review-evidence').value)]?.bytes; };
+$('forget-evidence').onclick = () => { invalidate(); clearInspection(); evidenceFiles = []; evidenceBytes = undefined; $('review-evidence').replaceChildren(); show('review-facts', 'No optional evidence supplied. Existing policy and review history retained.'); };
 $('inspect-review').onclick = async () => {
   invalidate(); clearInspection(); const attempt = revision, target = reviewTarget();
-  const result = await request('inspect-review', { evidenceBytes: [...(evidenceBytes ?? [])], target }); if (attempt !== revision) return;
+  const result = await request('inspect-review', { evidenceIndex: Number($('review-evidence').value), target }); if (attempt !== revision) return;
   if (result.status !== 'ok') return show('review-facts', result);
   inspected = { ...result.value, target }; show('review-facts', { reportSupport: inspected.reportSupport, scanId: inspected.scanId, sourceAssociation: inspected.sourceAssociation, producerAuthentication: inspected.producerAuthentication, annexBytes: inspected.annexBytes, subject: inspected.subject });
   show('review-report', inspected.view);
@@ -102,7 +107,7 @@ $('record-review').onclick = async () => {
   invalidate(); const attempt = revision, binding = inspected?.bindings[Number($('review-finding').value)]; if (!binding || !evidenceBytes) return;
   const supersedes = $('review-supersedes').value;
   const decision = { id: $('review-id').value, owner: { kind: $('review-owner-kind').value, id: $('review-owner').value }, actor: $('review-actor').value, recordedAt: new Date().toISOString(), disposition: $('review-disposition').value, reason: $('review-reason').value, ...(supersedes ? { supersedes } : {}) };
-  const result = await request('record-review', { evidenceBytes: [...evidenceBytes], target: inspected.target, finding: binding.finding, decision }); if (attempt === revision) present(result);
+  const result = await request('record-review', { evidenceIndex: Number($('review-evidence').value), target: inspected.target, finding: binding.finding, decision }); if (attempt === revision) present(result);
 };
 $('reconsider-reviews').onclick = async () => { invalidate(); const attempt = revision, result = await request('reconsider-reviews'); if (attempt === revision) present(result); };
 catalog = await (await fetch('/api/authoring-catalog')).json(); show('source-description', catalog.description); await $('new').onclick();

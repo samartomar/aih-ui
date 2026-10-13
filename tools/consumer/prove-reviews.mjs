@@ -12,11 +12,13 @@ import { readAuthoring } from 'aih-ui/authoring';
 import { createMixedService } from './mixed-service.mjs';
 import { startConsumer } from './server.mjs';
 const output = process.argv[2]; await mkdir(output, { recursive: true });
-const installed = await readInstalledRelease({ root: dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'))), sourceInput: 'maintained' });
+const catalogRoot = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
+const installed = await readInstalledRelease({ root: catalogRoot, sourceInput: 'maintained' });
 assert.equal(installed.valid, true);
 const mixed = await createMixedService({ release: installed.release, materialSource: installed.source });
 const inventory = mixed.inventories.find(entry => entry.input?.id === 'notes');
 const source = await mkdtemp(join(tmpdir(), 'ui5-browser-source-'));
+const catalogSource = await mkdtemp(join(tmpdir(), 'ui5-browser-catalog-'));
 let browser, started;
 const errors = [];
 try {
@@ -25,6 +27,12 @@ try {
   assert.equal(result.status, 'assessment');
   const artifact = await prepareArtifact({ report: result.report, annexes: result.annexes.map(a => ({ id: a.id, bytes: Buffer.from(a.bytesBase64, 'base64') })) });
   const artifactPath = join(output, 'review-evidence.unsigned.json'); await writeFile(artifactPath, artifact.bytes);
+  const catalogItem = installed.release.items.find(item => item.id === 'mattpocock.domain-modeling');
+  for (const material of [catalogItem.recipe, ...catalogItem.materials]) { const path = join(catalogSource, material.path); await mkdir(dirname(path), { recursive: true }); await writeFile(path, await readFile(join(catalogRoot, material.path))); }
+  const catalogScan = await runScan({ schema: 'urn:aihq:scan:request:1.0.0', source: { kind: 'local', path: catalogSource }, selection: { paths: 'all', excludedPaths: [] }, detectors: [{ detectorId: 'detector.aih-binding-gate', configuration: {} }] });
+  assert.equal(catalogScan.status, 'assessment');
+  const catalogArtifact = await prepareArtifact({ report: catalogScan.report, annexes: catalogScan.annexes.map(a => ({ id: a.id, bytes: Buffer.from(a.bytesBase64, 'base64') })) });
+  const catalogArtifactPath = join(output, 'catalog-review-evidence.unsigned.json'); await writeFile(catalogArtifactPath, catalogArtifact.bytes);
   const { chromium } = await import(process.env.PLAYWRIGHT_MODULE);
   started = await startConsumer(); browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ acceptDownloads: true }); page.setDefaultTimeout(15_000); page.on('pageerror', e => errors.push(e.message));
@@ -44,6 +52,19 @@ try {
   await page.locator('#review-disposition').selectOption('accepted-risk'); await page.locator('#review-reason').fill('Fixture: no license declaration intentionally accepted for this local test.');
   await page.locator('#record-review').click(); await page.locator('#accept:not([disabled])').waitFor(); await page.locator('#accept').click();
   await page.locator('#review-history').filter({ hasText: 'browser-decision' }).waitFor();
+  await page.locator('#search').fill(catalogItem.id);
+  await page.getByRole('button', { name: `Choose ${catalogItem.id}`, exact: true }).click();
+  await page.locator('#accept:not([disabled])').waitFor(); await page.locator('#accept').click();
+  // A separately scoped report for an already selected maintained dependency.
+  // Loading it must preserve the first report for the independent item's record.
+  await page.locator('#review-target').selectOption(`${installed.release.sha256}/${catalogItem.id}`);
+  await page.locator('#review-file').setInputFiles(catalogArtifactPath); await page.locator('#review-facts').filter({ hasText: 'Original evidence bytes loaded' }).waitFor();
+  await page.locator('#inspect-review').click(); await page.locator('#record-review:not([disabled])').waitFor();
+  await page.locator('#review-id').fill('browser-decision-catalog'); await page.locator('#review-owner-kind').selectOption('individual');
+  await page.locator('#review-owner').fill('fixture-individual'); await page.locator('#review-disposition').selectOption('false-alarm');
+  await page.locator('#review-reason').fill('Separate maintained content fixture, independently reviewed.');
+  await page.locator('#record-review').click(); await page.locator('#accept:not([disabled])').waitFor(); await page.locator('#accept').click();
+  assert.equal(JSON.parse(await page.locator('#policy').inputValue()).metadata['aih.workbench'].reviews.records.length, 2);
   const waitDownload = page.waitForEvent('download'); await page.locator('#save').click(); const download = await waitDownload;
   const downloadedPath = join(output, 'review-policy.downloaded.json'); await download.saveAs(downloadedPath);
   const bytes = new Uint8Array(await readFile(downloadedPath));
@@ -52,20 +73,25 @@ try {
   await fresh.locator('#open').setInputFiles(downloadedPath); await fresh.locator('#proposal').filter({ hasText: 'Original bytes retained' }).waitFor();
   await fresh.locator('#reopen').click(); await fresh.locator('#proposal').filter({ hasText: 'REVIEW_BINDING_UNAVAILABLE' }).waitFor();
   // Fresh import independently reads the actual original evidence bytes.
-  await fresh.locator('#review-file').setInputFiles(artifactPath); await fresh.locator('#review-facts').filter({ hasText: 'Original evidence bytes loaded' }).waitFor();
+  await fresh.locator('#review-file').setInputFiles([artifactPath, catalogArtifactPath]); await fresh.locator('#review-facts').filter({ hasText: 'Original evidence bytes loaded' }).waitFor();
   await fresh.locator('#reopen').click(); await fresh.locator('#proposal').filter({ hasText: '"editing": "available"' }).waitFor();
-  const headless = await readAuthoring({ policyBytes: bytes, inventories: mixed.inventories, reviewEvidence: [artifact.bytes] });
+  mixed.inventories[0].materials = [{ ...catalogItem.recipe, bytes: new Uint8Array(await readFile(join(catalogRoot, catalogItem.recipe.path))) }];
+  const headless = await readAuthoring({ policyBytes: bytes, inventories: mixed.inventories, reviewEvidence: [artifact.bytes, catalogArtifact.bytes] });
   assert.equal(headless.value.editing, 'available');
   assert.deepEqual(JSON.parse(await fresh.locator('#policy').inputValue()).metadata['aih.workbench'], headless.value.intent);
   assert.equal(headless.value.intent.reviews.records[0].disposition, 'accepted-risk');
+  assert.equal(headless.value.intent.reviews.records[1].disposition, 'false-alarm');
+  await fresh.locator('#review-target').selectOption(target);
   await fresh.locator('#inspect-review').click(); await fresh.locator('#review-facts').filter({ hasText: '"sourceAssociation": "matched"' }).waitFor();
-  await fresh.screenshot({ path: join(output, 'review-browser.png'), fullPage: true });
+  await fresh.locator('main > section').last().screenshot({ path: join(output, 'review-browser.png') });
   await fresh.getByRole('button', { name: 'Trim consumer-proof.review-note', exact: true }).click();
   await fresh.locator('#accept:not([disabled])').waitFor(); await fresh.locator('#accept').click();
   const trimmed = JSON.parse(await fresh.locator('#policy').inputValue()).metadata['aih.workbench'].reviews;
-  assert.equal(trimmed.records[0].state, 'reconsider'); assert.equal(trimmed.history[0].id, 'browser-decision');
+  assert.equal(trimmed.records.find(record => record.supersedes === 'browser-decision').state, 'reconsider');
+  assert.equal(trimmed.records.find(record => record.id === 'browser-decision-catalog').state, 'current');
+  assert.equal(trimmed.history[0].id, 'browser-decision');
   assert.deepEqual(errors, []);
   await writeFile(join(output, 'review-browser-headless.json'), JSON.stringify({ status: 'passed', node: process.version, scanId: artifact.scanId, artifactSha256: createHash('sha256').update(artifact.bytes).digest('hex'), downloadSha256: createHash('sha256').update(bytes).digest('hex'), records: headless.value.intent.reviews, trimmed,
-    cases: ['explicit real built-in fixture assessment', 'source/support/authentication/coverage/findings separate', 'accepted-risk with organization owner', 'actual downloaded file and fresh browser import', 'missing optional evidence preserves policy and refuses reusable decision', 'fresh evidence byte read restores checked binding', 'installed public headless record/file agreement', 'authoring trim retains history and requests reconsideration'], errors,
+    cases: ['explicit real built-in fixture assessments', 'source/support/authentication/coverage/findings separate', 'accepted-risk organization BYO decision and false-alarm individual Catalog decision', 'two separately scoped original reports retained together', 'actual downloaded file and fresh browser import', 'missing optional evidence preserves policy and refuses reusable decision', 'fresh evidence byte reads restore checked bindings', 'installed public headless record/file agreement', 'authoring trim retains history and requests reconsideration'], errors,
     limits: ['Fixture source and local built-in analyzer only; no native/external runtime acceptance.', 'Unsigned artifact is checked, not authenticated; retained and ephemeral signed artifact trust is tested separately.', 'Portable JSON does not authenticate the human or authorize execution.'] }, null, 2) + '\n');
-} finally { await browser?.close(); if (started) await new Promise(resolve => started.server.close(resolve)); await rm(source, { recursive: true, force: true }); }
+} finally { await browser?.close(); if (started) await new Promise(resolve => started.server.close(resolve)); await rm(source, { recursive: true, force: true }); await rm(catalogSource, { recursive: true, force: true }); }
