@@ -27,3 +27,31 @@ test('fresh reopen restores saved user scope/configuration and switching scopes 
   scope.value = 'project'; scope.onchange(); assert.equal(config.value, '{}');
   scope.value = 'user'; scope.onchange(); assert.equal(config.value, '{"directory":"chosen"}');
 });
+
+test('editing while Prepare is pending cannot enable Apply for an older draft', async () => {
+  const nodes = new Map();
+  const node = tagName => ({ tagName, value: '', children: [], textContent: '', disabled: false, listeners: {},
+    addEventListener(name, listener) { (this.listeners[name] ??= []).push(listener); },
+    setAttribute() {}, append(...values) { this.children.push(...values); }, replaceChildren() { this.children = []; } });
+  const document = { getElementById(id) { if (!nodes.has(id)) nodes.set(id, node('node')); return nodes.get(id); }, createElement: node };
+  const intent = { origins: [], roots: [], pins: [], exclusions: [], inputs: [], reviews: { records: [], history: [] } };
+  let answerPrepare;
+  const fetch = async url => ({ json: async () => {
+    if (url.endsWith('-catalog')) return { executionAvailable: true, items: [], templates: [] };
+    if (url.endsWith('-new')) return { status: 'ok', value: { policyBytes: [...new TextEncoder().encode('{}')], intent } };
+    if (url.endsWith('-authority')) return { status: 'ok', value: { mode: 'vibe' } };
+    if (url.endsWith('-prepare')) return new Promise(resolve => { answerPrepare = resolve; });
+    throw Error(`Unexpected request ${url}`);
+  } });
+  const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
+  await new AsyncFunction('document', 'fetch', source)(document, fetch);
+  const pending = nodes.get('prepare').onclick();
+  await new Promise(resolve => setImmediate(resolve));
+  nodes.get('policy').value = '{"changed":true}';
+  for (const listener of nodes.get('policy').listeners.input) listener();
+  answerPrepare({ status: 'ready', sessionId: 'old-live-session', review: { reviewDigest: 'old-digest' } });
+  await pending;
+  assert.equal(nodes.get('apply').disabled, true);
+  assert.match(nodes.get('execution').textContent, /changed/);
+  assert.match(nodes.get('authority-summary').textContent, /Refresh authority/);
+});

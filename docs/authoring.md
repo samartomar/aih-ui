@@ -235,6 +235,71 @@ artifacts retain their owning API semantics. A serialized handle or JSON cache
 copy grants no trusted custody. Human records are portable claims, not human
 authenticity or execution authorization. There is no expiry or zero-findings gate.
 
+## Current organization authority and execution host
+
+`aih-ui/execution-host` exports the Node-only `createHost`. The `/authoring`
+page and headless consumers use this same host for current authority, preparation,
+approval and managed recovery. Configure `projectRoot`, `materialRoots`, exact
+`recipeMaterials`, optional `organizationSource`, and private `controls` independently
+of imported policy/source/review JSON. The local preview also accepts a host-owned
+`AIH_ORGANIZATION_SOURCE` JSON file and `AIH_CONSUMER_CONTROLS`; credentials never
+enter the browser or exported policy. Supply authentication to both Prepare and
+Apply through host controls. Portable organization origins remain provenance only.
+
+```js
+import { createHost } from 'aih-ui/execution-host';
+const host = createHost({ projectRoot, materialRoots, recipeMaterials,
+  organizationSource, controls });
+const advisory = await host.inspectAuthority({ policyText });
+const prepared = await host.prepareSession({ policyText });
+// Present the exact Core review, then obtain explicit approval.
+if (prepared.status === 'ready') {
+  const result = await host.applyApproved({ sessionId: prepared.sessionId,
+    reviewDigest: prepared.review.reviewDigest });
+}
+```
+
+`inspectAuthority` uses Harness `readGitHubPolicy`, Core organization parsing,
+`deriveRecipeIdentity` and `previewOrganizationAdmission`. It returns exact source,
+resolved commit, blob, digest, policy ID and reader accounting, and separates
+`affectedChoices` from `stillValidChoices`. Recipe materials are exact bytes from
+host-selected checked inventories. Preview does not capture runtime material or
+observe installed lifecycle state and is always advisory. Refused or unreachable
+authority has no cached fallback. Vibe explicitly has no organization boundary;
+invalid Enterprise never silently becomes Vibe.
+
+Open/import, reopen, explicit Refresh and preparation refresh current authority.
+Core independently acquires it again during Prepare and Apply. A changed source,
+commit, blob or digest rejects stale approval, even if some choices remain allowed.
+Draft/context changes discard the page's previous approval; only opaque host session
+IDs and exact review digests cross HTTP. Serialized reviews cannot recreate handles.
+
+`managedInventory()` reads Core's project managed inventory.
+`prepareRemovalSession({managementId,scope,mode})` delegates to Core's existing
+managed-removal API, returning its disposition and a serializable inner preparation.
+Only a ready inner preparation enables explicit Apply. Missing lifecycle grants
+require organization action; changed/unowned members may require reconciliation.
+Installed files are untouched by authority refresh/withdrawal alone. Replacement
+uses ordinary policy preparation; explicit Core `resolutionInputs` can inform a
+subsequent `prepareSession({policyText,resolutions})`. Nothing silently repins,
+uninstalls, chooses a resolution or claims remote enforcement.
+
+The preview binds only startup host-selected inventories to execution material
+roots. Later uploaded declaration envelopes remain portable authoring inputs;
+their locator cannot grant a filesystem root. An unknown execution binding is
+refused by Core. Optional evidence and attributed organization-owned human decisions
+remain separate from authority regardless of Catalog or independent provenance.
+
+`tools/consumer/prove-real-organization.mjs` runs one finite real GitHub acceptance
+scenario through installed packages. It performs no repository mutation: an operator
+coordinates a single current-source advance while a browser preparation is held,
+using the bounded signal file named by the runner. Prepublished scenario refs cover
+admitted/denied/withdrawn/unavailable authority, permitted and blocked recovery,
+mixed Vibe/Enterprise lifecycle, original evidence, and actual download/fresh import.
+The dedicated test repository and mutation plan are external operator responsibilities.
+Use retained transition evidence when rerunning against immutable scenario refs;
+never imply a new authority change occurred in that rerun.
+
 ## Proof boundaries
 
 The page mixes the real independent `consumer-proof.review-note` fixture and

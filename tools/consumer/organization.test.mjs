@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { organizationFixture } from './organization-fixture.mjs';
 const recipe = id => ({ schema: 'urn:aihq:core:recipe:1.3.0', id, description: 'Authored authority boundary fixture', inputs: { directory: { type: 'string', required: true } }, materials: [], targets: ['project'], prerequisites: [], operations: [{ id: 'write', purpose: 'Write fixture', kind: 'file.write', scope: 'project', target: { root: 'project', segments: [{ literal: `${id}.txt` }] }, content: { input: 'directory' }, requires: [], checks: [] }], checks: [] });
 const selection = id => ({ id, managementId: id, organizationSelectionId: `team-${id}`, scope: 'project', configuration: { directory: '.claude' }, requires: [], recipe: { inline: recipe(id) } });
 const policy = { schema: 'urn:aihq:core:execution-policy:1.3.0', mode: 'enterprise', selections: [selection('a'), selection('b')] };
@@ -25,6 +26,17 @@ test('one changed allowance affects only its selection and keeps advisory outcom
   assert.equal(denied.value.advisory, true);
   assert.ok(denied.value.affectedChoices[0].diagnostics.some(d => d.reason === 'input-value'));
   assert.equal(policy.selections[0].configuration.directory, '.claude');
+});
+
+test('changing one organization root identity preserves the separate authority identities of its dependencies', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'ui6-origins-'));
+  const f = await organizationFixture(root);
+  const result = await previewPolicyAuthority({ policy: f.updated.policy, organization: f.documents.recovery, recipeMaterials: f.recipeMaterials });
+  assert.equal(result.status, 'ok');
+  assert.equal(result.value.admitted, true, JSON.stringify(result));
+  const prior = f.policy.selections.find(s => s.recipe.reference.path.includes('mattpocock.domain-modeling'));
+  const next = f.updated.policy.selections.find(s => s.recipe.reference.path.includes('mattpocock.domain-modeling'));
+  assert.equal(next.organizationSelectionId, prior.organizationSelectionId);
 });
 
 test('host refresh never uses imported provenance or cached admission when authority is unavailable', async () => {

@@ -5,7 +5,7 @@ let catalog, candidate, history, currentIntent, currentOptional = [], revision =
 let evidenceBytes, inspected, evidenceFiles = [];
 let prepared;
 const reviewContext = () => ({ reviewEvidence: evidenceFiles.map(file => [...file.bytes]) });
-const invalidate = () => { revision++; candidate = undefined; prepared = undefined; $('accept').disabled = true; $('apply').disabled = true; show('execution', 'Draft or review context changed. Prepare again before Apply.'); };
+const invalidate = () => { revision++; candidate = undefined; prepared = undefined; $('accept').disabled = true; $('apply').disabled = true; show('execution', 'Draft or review context changed. Prepare again before Apply.'); show('authority-summary', 'Choices or review context changed. Refresh authority for this draft.'); };
 const request = async (operation, body = {}) => (await fetch(`/api/authoring-${operation}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ policyBytes: [...documentFile.bytes()], ...reviewContext(), ...body }) })).json();
 const button = (label, action) => { const node = document.createElement('button'); node.textContent = label; node.onclick = action; return node; };
 const key = ref => `${ref.releaseSha256}/${ref.itemId}/${ref.scope}`;

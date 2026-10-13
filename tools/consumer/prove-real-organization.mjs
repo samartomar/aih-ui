@@ -3,11 +3,11 @@
 // a real live preparation. No mocked authority transport or native client calls.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { createHost } from 'aih-ui/execution-host';
-import { readAuthoring, inspectReviewEvidence, recordReview, composeAuthoring } from 'aih-ui/authoring';
+import { readAuthoring, inspectReviewEvidence, recordReview, composeAuthoring, editAuthoring } from 'aih-ui/authoring';
 import { organizationFixture } from './organization-fixture.mjs';
 import { startConsumer } from './server.mjs';
 const [output, repository, transition = 'wait'] = process.argv.slice(2);
@@ -86,7 +86,12 @@ try {
   if (transition === 'wait') {
     const stalePreparation = await capture('before-authority-advance', await clickResult('prepare', 'prepare')); assert.equal(stalePreparation.status, 'ready');
     console.log('PREPARED_WAITING_FOR_AUTHORITY_ADVANCE');
-    await new Promise((resolve, reject) => { const timer = setTimeout(() => reject(Error('Finite authority transition wait expired')), 120000); process.stdin.once('data', () => { clearTimeout(timer); resolve(); }); });
+    const waitDeadline = Date.now() + 120000;
+    while (true) {
+      try { await access(join(output, 'authority-advanced.signal.json')); break; } catch {}
+      if (Date.now() >= waitDeadline) throw Error('Finite authority transition wait expired');
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
     const stale = await capture('stale-browser-apply', await clickResult('apply', 'apply'));
     assert.equal(stale.completion, 'rejected'); assert.ok(stale.diagnostics.some(d => d.code === 'REVIEW_STALE')); cases.push('real current main advanced between browser Prepare/Apply; Core rejected stale handle');
   }
@@ -104,6 +109,8 @@ try {
   const currentIntent = structuredClone(headless.value.intent), nextRoot = f.updated.intent.roots.find(r => r.itemId === 'consumer-proof.review-note');
   currentIntent.roots = currentIntent.roots.map(r => r.itemId === nextRoot.itemId ? nextRoot : r);
   currentIntent.origins = f.updated.intent.origins; currentIntent.inputs = currentIntent.inputs.filter(i => i.id !== 'notes');
+  const shared = f.inventories[0].release.items.find(i => i.id === 'mattpocock.domain-modeling');
+  currentIntent.roots.push({ releaseSha256: f.inventories[0].release.sha256, itemId: shared.id, itemSha256: shared.itemSha256, scope: 'project', configuration: { agentDirectory: '.claude' }, originIds: ['direct'] });
   const updated = await composeAuthoring({ basePolicyBytes: policyBytes, intent: currentIntent, inventories: f.inventories, reviewEvidence });
   assert.equal(updated.status, 'ok', JSON.stringify(updated));
   await writeFile(join(output, 'updated-policy.json'), updated.value.policyBytes);
@@ -120,6 +127,16 @@ try {
   const managed = await capture('retained-managed', await recovery.managedInventory());
   assert.ok(managed.selections.some(s => s.managementId.includes('domain-modeling'))); assert.ok(!managed.selections.some(s => s.managementId === f.withdrawnSelection.managementId));
   assert.equal(await readFile(join(target, 'unowned.txt'), 'utf8'), 'Unowned state\n'); cases.push('permitted removal retains still-used shared dependencies and unowned state');
+  const trimmed = await editAuthoring({ policyBytes: updated.value.policyBytes, inventories: f.inventories, reviewEvidence,
+    operation: { type: 'remove-root', root: nextRoot } });
+  assert.equal(trimmed.status, 'ok', JSON.stringify(trimmed));
+  assert.ok(trimmed.value.policy.selections.some(s => s.managementId.includes('domain-modeling')));
+  const noteManagementId = updated.value.policy.selections.find(s => s.organizationSelectionId === 'ui6-next-note').managementId;
+  const removeNote = await capture('byo-removal-prepare', await recovery.prepareRemovalSession({ managementId: noteManagementId, scope: 'project', mode: 'enterprise' }));
+  assert.equal(removeNote.preparation?.status, 'ready', JSON.stringify(removeNote));
+  assert.equal((await capture('byo-removal-apply', await recovery.applyApproved({ sessionId: removeNote.preparation.sessionId, reviewDigest: removeNote.preparation.review.reviewDigest }))).completion, 'complete');
+  await assert.rejects(readFile(join(target, 'note.md')), { code: 'ENOENT' });
+  assert.ok((await recovery.managedInventory()).selections.some(s => s.managementId.includes('domain-modeling'))); cases.push('BYO root trim and actual removal preserve explicitly shared Catalog root');
   const vibeTarget = join(output, 'vibe-project'); await mkdir(vibeTarget, { recursive: true });
   const vibe = createHost({ projectRoot: vibeTarget, materialRoots: f.materialRoots, recipeMaterials: f.recipeMaterials, controls: { logging: 'off' } });
   const vibePolicy = { ...f.policy, mode: 'vibe', selections: f.policy.selections.map(({ organizationSelectionId, ...s }) => s) };
@@ -130,6 +147,8 @@ try {
   assert.equal((await capture('vibe-update', await vibe.applyApproved({ sessionId: vibeNext.sessionId, reviewDigest: vibeNext.review.reviewDigest }))).completion, 'complete');
   const vibeRemove = await vibe.prepareRemovalSession({ managementId: f.withdrawnSelection.managementId, scope: 'project', mode: 'vibe' }); assert.equal(vibeRemove.preparation?.status, 'ready');
   assert.equal((await capture('vibe-removal', await vibe.applyApproved({ sessionId: vibeRemove.preparation.sessionId, reviewDigest: vibeRemove.preparation.review.reviewDigest }))).completion, 'complete'); cases.push('aligned mixed Vibe Prepare/Apply/update/removal through public Core');
+  const vibeNote = await vibe.prepareRemovalSession({ managementId: noteManagementId, scope: 'project', mode: 'vibe' }); assert.equal(vibeNote.preparation?.status, 'ready');
+  assert.equal((await capture('vibe-byo-removal', await vibe.applyApproved({ sessionId: vibeNote.preparation.sessionId, reviewDigest: vibeNote.preparation.review.reviewDigest }))).completion, 'complete');
   await page.locator('#authority-section').screenshot({ path: join(output, 'authority-browser.png') });
   assert.deepEqual(errors, []);
   await capture('real-organization-summary', { status: 'passed', repository, transition, node: process.version, cases, errors,
