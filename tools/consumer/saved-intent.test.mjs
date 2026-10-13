@@ -125,6 +125,28 @@ test('removing a dependency pin during update is never silently recaptured', () 
   assert.equal(reviewIntentUpdate({ ...args, resolutions }).valid, false);
 });
 
+test('Keep promotes a dropped changed or missing prerequisite to an exact direct root, or refuses unavailable old content', () => {
+  const old = fixtureRelease('kept-orphan', [fixtureItem('dependency'), fixtureItem('parent', { requires: [{ itemId: 'dependency' }] })]);
+  const previousIndex = indexReleases([old]);
+  const original = okay(composeIntent({ index: previousIndex, capture: true, intent: { ...freshIntent(), roots: [rootFor(old, 'parent')] } }));
+  const oldKey = itemKey(rootFor(old, 'dependency'));
+  for (const missing of [false, true]) {
+    const next = fixtureRelease('kept-orphan', [
+      ...(missing ? [] : [fixtureItem('dependency', {}, { description: 'New changed dependency.' })]), fixtureItem('parent')
+    ]);
+    const args = { previousIndex, policyText: original.policyText, replacements: { [old.release.sha256]: next.release.sha256 },
+      resolutions: { [itemKey(rootFor(old, 'parent'))]: 'accept', [oldKey]: 'keep' } };
+    const kept = okay(reviewIntentUpdate({ ...args, index: indexReleases([old, next]) }));
+    const promoted = kept.intent.roots.find(ref => itemKey(ref) === oldKey);
+    assert.ok(promoted, 'the dropped prerequisite is an explicit retained root');
+    assert.equal(promoted.scope, 'project'); assert.deepEqual(promoted.configuration, {}); assert.deepEqual(promoted.originIds, ['direct']);
+    assert.deepEqual(kept.intent.pins.find(ref => itemKey(ref) === oldKey), original.intent.pins.find(ref => itemKey(ref) === oldKey));
+    const unavailable = reviewIntentUpdate({ ...args, index: indexReleases([next]) });
+    assert.equal(unavailable.valid, false); assert.equal(unavailable.diagnostics[0].reason, 'keep-unavailable');
+    assert.equal(unavailable.originalPolicyText, original.policyText);
+  }
+});
+
 test('unavailable original preserves exact JSON and provenance for diagnosis', () => {
   const original = compose([root('app.alpha')]);
   const result = reopenIntent({ index: fixture.nextIndex, templates, policyText: original.policyText });

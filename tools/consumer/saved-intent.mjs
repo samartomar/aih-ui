@@ -260,8 +260,28 @@ export function reviewIntentUpdate({ previousIndex, index, policyText, replaceme
   catch (error) { return { ...failure('reconciliation', error.message), changes, originalPolicyText: policyText }; }
   // Pins are recaptured only in this explicit review operation.
   next.pins = [];
-  const candidate = composeIntent({ index, intent: next, mode: original.policy.mode, templates, capture: true });
+  const keptPins = original.intent.pins.filter(ref => resolutions[itemKey(ref)] === 'keep');
+  for (const saved of keptPins) {
+    const found = index.items.get(itemKey(saved));
+    if (!found || stable(pin(found.entry, found.item)) !== stable(saved)) return {
+      ...failure('keep-unavailable', `Cannot keep unavailable exact content: ${itemKey(saved)}`), changes, originalPolicyText: policyText
+    };
+  }
+  let candidate = composeIntent({ index, intent: next, mode: original.policy.mode, templates, capture: true });
   if (!candidate.valid) return { ...candidate, changes, originalPolicyText: policyText };
+  const orphans = keptPins.filter(saved => !candidate.intent.pins.some(ref => itemKey(ref) === itemKey(saved)));
+  if (orphans.length) {
+    if (!next.origins.some(origin => origin.id === 'direct')) next.origins.push({ id: 'direct', kind: 'direct' });
+    for (const saved of orphans) {
+      // A Keep decision owns the old selection after its parent stops requiring it.
+      for (const selection of original.policy.selections.filter(value => value.id === idFor(saved, value.scope))) {
+        next.roots.push({ releaseSha256: saved.releaseSha256, itemId: saved.itemId, itemSha256: saved.itemSha256,
+          scope: selection.scope, configuration: structuredClone(selection.configuration), originIds: ['direct'] });
+      }
+    }
+    candidate = composeIntent({ index, intent: next, mode: original.policy.mode, templates, capture: true });
+    if (!candidate.valid) return { ...candidate, changes, originalPolicyText: policyText };
+  }
   for (const change of changes) {
     const decision = resolutions[change.key];
     const targetKey = itemKey({ releaseSha256: replacements[change.saved.releaseSha256] ?? change.saved.releaseSha256, itemId: change.saved.itemId });

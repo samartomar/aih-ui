@@ -60,3 +60,35 @@ test('rendered choose/remove and skip/clear buttons send exact item keys', async
   for(const operation of operations.filter(value=>'key' in value))assert.equal(operation.key,`${root.releaseSha256}/${root.itemId}`);
   assert.equal(operations[0].root.itemId,root.itemId); assert.equal(operations[2].ref.itemId,root.itemId);
 });
+
+const changedReview = { valid: false, changes: [{ key: 'old/item', state: 'changed', saved: { itemId: 'item' }, current: {} }] };
+
+test('resolution change while update review is pending cannot enable its stale candidate', async () => {
+  const {document,nodes}=documentFixture(), delay=deferred(); let updates=0;
+  const fetch=async url=>({json:async()=>url.startsWith('/api/intent-catalog') ? data() : url==='/api/intent-update' ? ++updates===1 ? changedReview : delay.promise : draft('original')});
+  await new AsyncFunction('document','fetch',source)(document,fetch);
+  await nodes.get('update').onclick();
+  const resolution=nodes.get('decisions').children[0].children[0];
+  resolution.value='accept'; resolution.onchange();
+  const pending=nodes.get('resolve').onclick();
+  resolution.value='keep'; resolution.onchange();
+  assert.equal(nodes.get('resolve').disabled,false, 'the changed decisions can be reviewed again');
+  delay.resolve({...draft('stale candidate'),changes:changedReview.changes}); await pending;
+  assert.equal(nodes.get('accept').disabled,true); assert.equal(nodes.get('policy').value,'original');
+  assert.equal(resolution.value,'keep');
+});
+
+test('resolution change while acceptance is pending prevents stale candidate publication', async () => {
+  const {document,nodes}=documentFixture(), delay=deferred(); let updates=0, accepting=false;
+  const fetch=async url=>({json:async()=>url.startsWith('/api/intent-catalog') ? accepting ? delay.promise : data() : url==='/api/intent-update'
+    ? ++updates===1 ? changedReview : {...draft('accepted old decision'),changes:changedReview.changes} : draft('original')});
+  await new AsyncFunction('document','fetch',source)(document,fetch);
+  await nodes.get('update').onclick();
+  let resolution=nodes.get('decisions').children[0].children[0]; resolution.value='accept'; resolution.onchange();
+  await nodes.get('resolve').onclick();
+  accepting=true; const pending=nodes.get('accept').onclick();
+  resolution=nodes.get('decisions').children[0].children[0]; resolution.value='remove'; resolution.onchange();
+  assert.equal(nodes.get('resolve').disabled,false);
+  delay.resolve(data()); await pending;
+  assert.equal(nodes.get('policy').value,'original'); assert.equal(nodes.get('accept').disabled,true);
+});

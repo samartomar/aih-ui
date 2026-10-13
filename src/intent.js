@@ -78,7 +78,7 @@ async function update(resolutions = {}) {
     const label = document.createElement('label'); label.textContent = `${change.saved.itemId}: ${change.state} `;
     const select = document.createElement('select');
     for (const value of ['', ...(change.current ? ['accept'] : []), 'remove', 'keep']) { const option = document.createElement('option'); option.value = value; option.textContent = value || 'Choose a resolution'; select.append(option); }
-    select.value = resolutions[change.key] ?? ''; select.onchange = () => { candidate = null; $('accept').disabled = true; }; label.append(select); $('decisions').append(label); decisions.set(change.key, select);
+    select.value = resolutions[change.key] ?? ''; select.onchange = () => { invalidate(); $('resolve').disabled = !decisions.size; }; label.append(select); $('decisions').append(label); decisions.set(change.key, select);
   }
   $('resolve').disabled = !decisions.size;
 }
