@@ -25,3 +25,37 @@ test('a delayed reopen cannot replace newer policy edits or mode', async () => {
   assert.equal(nodes.get('policy').value, 'newer edit');
   assert.equal(nodes.get('reopen-result').textContent, '');
 });
+
+test('reopened explicit empty string stays present when authoring', async () => {
+  const makeNode = () => ({ value: '', checked: false, textContent: '', children: [], listeners: {},
+    addEventListener(event, callback) { this.listeners[event] = callback; }, setAttribute() {},
+    append(...children) { this.children.push(...children); }, replaceChildren() { this.children = []; } });
+  const nodes = new Map();
+  const document = { getElementById(id) { if (!nodes.has(id)) nodes.set(id, makeNode()); return nodes.get(id); },
+    createElement: makeNode, createTextNode: text => ({ textContent: text }) };
+  document.getElementById('mode').value = 'vibe';
+  let captured;
+  const fetch = async (url, options) => ({ json: async () => {
+    if (url === '/api/catalog') return { items: [{ id: 'example', label: 'Example', kind: 'skill', scopes: ['project'], inputs: { note: { type: 'string', default: 'default' } }, dependencies: { requires: [], optional: [] } }], packages: [], hostAvailable: false };
+    if (url === '/api/reopen') return { valid: true, editable: true, policy: { mode: 'vibe' }, intent: { roots: [{ itemId: 'example', scope: 'project', configuration: { note: '' } }], excludedItemIds: [] } };
+    captured = JSON.parse(options.body); return { valid: false };
+  } });
+  const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
+  await new AsyncFunction('document', 'fetch', await readFile(new URL('../../src/consumer.js', import.meta.url), 'utf8'))(document, fetch);
+  await nodes.get('reopen').onclick(); await nodes.get('author').onclick();
+  assert.equal(Object.hasOwn(captured.roots[0].configuration, 'note'), true);
+  assert.equal(captured.roots[0].configuration.note, '');
+});
+
+test('a delayed policy file read cannot overwrite a newer edit', async () => {
+  const nodes = new Map();
+  const document = { getElementById(id) { if (!nodes.has(id)) nodes.set(id, { value: '', textContent: '', listeners: {}, addEventListener(event, callback) { this.listeners[event] = callback; }, replaceChildren() {} }); return nodes.get(id); } };
+  let deliver; const delayed = new Promise(resolve => { deliver = resolve; });
+  const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
+  await new AsyncFunction('document', 'fetch', await readFile(new URL('../../src/consumer.js', import.meta.url), 'utf8'))(document, async () => ({ json: async () => ({items:[],packages:[],hostAvailable:false}) }));
+  nodes.get('open').files = [{ text: () => delayed }];
+  const pending = nodes.get('open').onchange();
+  nodes.get('policy').value = 'newer edit'; nodes.get('policy').listeners.input();
+  deliver('old file contents'); await pending;
+  assert.equal(nodes.get('policy').value, 'newer edit');
+});
