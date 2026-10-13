@@ -8,6 +8,7 @@ import { parsePolicy } from '@aihq/core/contracts';
 import { createHost } from './host.mjs';
 import { editSetup, reopenSetup, reviewSetupUpdate } from './setup.mjs';
 import { presentReport, readScanBytes } from './report-view.mjs';
+import { createIntentService } from './intent-service.mjs';
 
 export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, port = 0 } = {}) {
   const installed = await readInstalledRelease({
@@ -18,7 +19,8 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   const previous = previousCatalogRoot ? await readInstalledRelease({ root: previousCatalogRoot, sourceInput: 'catalog' }) : null;
   if (previous && !previous.valid) throw new Error(JSON.stringify(previous.diagnostics));
   const host = projectRoot ? createHost({ projectRoot, materialRoots, organizationSource, controls }) : null;
-  const staticFiles = new Map([['/', ['consumer.html', 'text/html']], ['/consumer.js', ['consumer.js', 'text/javascript']], ['/consumer.css', ['consumer.css', 'text/css']], ['/tokens.css', ['tokens.css', 'text/css']]]);
+  const intentService = createIntentService();
+  const staticFiles = new Map([['/', ['consumer.html', 'text/html']], ['/intent', ['intent.html', 'text/html']], ['/intent.js', ['intent.js', 'text/javascript']], ['/consumer.js', ['consumer.js', 'text/javascript']], ['/consumer.css', ['consumer.css', 'text/css']], ['/tokens.css', ['tokens.css', 'text/css']]]);
   const send = (response, status, body, type = 'application/json') => {
     response.writeHead(status, { 'content-type': `${type}; charset=utf-8`, 'cache-control': 'no-store',
       'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" });
@@ -38,6 +40,10 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
         organizationConfigured: organizationSource !== undefined,
         packages: JSON.parse(process.env.AIH_CONSUMER_PACKAGES ?? '[]')
       });
+      if (request.method === 'GET' && pathname === '/api/intent-catalog') {
+        const query = new URL(request.url, origin).searchParams;
+        return send(response, 200, intentService.catalog(query.get('inventory') ?? 'journey', query.get('stage') ?? 'current'));
+      }
       if (request.method !== 'POST' || !pathname.startsWith('/api/')) return send(response, 404, { error: 'not-found' });
       if (request.headers.origin !== origin) return send(response, 403, { error: 'foreign-origin' });
       if ((request.headers['content-type'] ?? '').split(';')[0] !== 'application/json') return send(response, 415, { error: 'expected-json' });
@@ -51,6 +57,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
       let body;
       try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
       catch { return send(response, 400, { error: 'invalid-json' }); }
+      if (pathname.startsWith('/api/intent-')) return send(response, 200, intentService.run(pathname.slice('/api/intent-'.length), body));
       if (pathname === '/api/author') return send(response, 200, editSetup({
         release, materialSource, roots: body.roots, excludedItemIds: body.excludedItemIds, mode: body.mode, basePolicyText: body.basePolicyText
       }));

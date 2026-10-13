@@ -6,6 +6,7 @@ The Policy Workbench user interface for AIH, built as an independent application
 
 - The screens, interaction and presentation of the Policy Workbench.
 - Consumer draft editing, selection interactions, composition through public Catalog and Core validators, and policy import/export. This is application workflow; Core retains policy validity, organization authority and execution semantics.
+- Versioned consumer saved intent: explicit roots, exact template origins, optional skips, configuration, source provenance and content pins. `metadata.aih.workbench` is a consumer convention. Catalog remains the dependency/configuration validator; Core remains the policy and execution authority.
 - `src/` owns the live screens, design tokens, and presentation. Tailwind utilities are compiled locally from the classes used in `src/`.
 - `prototype/` is retained as a separate design reference. The running page does not import it.
 - Local onboarding preferences (experience, organization context, requested assistance and explicit AI clients). These are UI settings, not policy artifacts or enterprise authorization.
@@ -24,6 +25,22 @@ An outside developer can build this UI from public package interfaces. The polic
 ## Testing against unpublished packages
 
 Pack each local package with `npm pack`, install the tarballs into a throwaway consumer project, and run the scenario there. Do not use `npm link`: it hides packaging errors such as a wrong `exports` map or a missing file.
+
+For the saved-intent local proof, set `CORE_TGZ`, `CATALOG_TGZ` and `SCAN_TGZ`
+to reviewed archives, then run `node tools/saved-intent-proof.mjs <output-directory> --serve`
+with Node 24.15–24.x. It installs into an isolated consumer, runs the focused tests,
+writes policies and measurements beneath that output directory, and serves
+`http://127.0.0.1:4821/intent` (override with `AIH_CONSUMER_PORT`). The ordinary `/`
+page still uses installed Catalog content and the public execution host when configured.
+
+`/intent` uses explicitly illustrative test data and offers authoring only. It
+demonstrates save/reopen, template ownership, shared dependency removal, optional
+skips and explicit changed/missing-pin reconciliation. Update candidates retain the
+original JSON and need acceptance. Evidence and execution lifecycle annotations
+remain readable, but edits refuse to strip them; they require separate resolution.
+The fixture runner measures six inventories of 300 items and adds a seventh as
+data. Inventory size and selected policy size are separate: selecting all 1,800
+illustrative items exceeds the current bounded policy format and is refused.
 
 ## How the page is put together
 
