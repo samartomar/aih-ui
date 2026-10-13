@@ -25,8 +25,8 @@ export function migrateIntent(old, inventories) {
     }
     // A checked release does not establish the original declaration snapshot.
     // Historical BYO acquisition identity must be resolved, never retrofitted.
-    if (inventories.some(e => e.input && old.provenance.some(p => p.releaseSha256 === e.release.sha256))) return refuse('SOURCE_IDENTITY_MISMATCH', '/inputs', 'Historical source declaration identity was not recorded; retain original and explicitly recover acquisition.');
-    return ok(next);
+    if (inventories.some(e => e.input && (old.provenance.some(p => p.releaseSha256 === e.release.sha256) || next.origins.some(o => o.kind === 'template' && o.releaseSha256 === e.release.sha256)))) return refuse('SOURCE_IDENTITY_MISMATCH', '/inputs', 'Historical source declaration identity was not recorded; retain original and explicitly recover acquisition.');
+    return { ...ok(next), historicalV2: true };
   }
   if (old?.schema === 'urn:aihq:workbench:setup-intent:1.0.0') {
     if (!only(old, ['schema', 'source', 'roots', 'excludedItemIds']) || !only(old.source, ['releaseSha256'])) return refuse('FIELD_SEMANTICS_UNSUPPORTED', '/metadata/aih.workbench', 'Unknown historical semantics.');

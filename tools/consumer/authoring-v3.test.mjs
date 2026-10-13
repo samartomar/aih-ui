@@ -238,3 +238,16 @@ test('trimmed template retains source provenance and rootless missing origin req
   const removed = await editAuthoring({ policyBytes: saved.value.policyBytes, inventories: [entry], operation: { type: 'remove-origin', originId: 'template' } });
   assert.equal(removed.status, 'ok'); assert.deepEqual(removed.value.intent.provenance, []);
 });
+test('v2 trimmed template validates frozen old provenance before adding v3 template-source provenance', async () => {
+  const entry = fixtureRelease('synthetic-template-migration', [fixtureItem('root')]);
+  entry.templates = [{ id: 'starter', sha256: 'a'.repeat(64), roots: [] }];
+  const intent = freshIntent(); intent.origins.push({ id: 'template', kind: 'template', templateId: 'starter', templateSha256: 'a'.repeat(64) });
+  const old = composeIntent({ index: indexReleases([entry]), templates: entry.templates, intent, capture: true }); assert.equal(old.valid, true); assert.deepEqual(old.intent.provenance, []);
+  const policyBytes = encode(JSON.stringify(old.policy, null, 2).replaceAll('\n', '\r\n'));
+  const migrated = await readAuthoring({ policyBytes, inventories: [entry] });
+  assert.equal(migrated.value.editing, 'available', JSON.stringify(migrated.value.diagnostics));
+  assert.deepEqual(migrated.value.originalBytes, policyBytes); assert.equal(migrated.value.intent.provenance[0].releaseSha256, entry.release.sha256);
+  const wrong = structuredClone(old.policy); wrong.metadata['aih.workbench'].provenance.push({ releaseSha256: entry.release.sha256, package: entry.release.package, sources: entry.release.sources, materialSource: entry.materialSource });
+  const refused = await readAuthoring({ policyBytes: encode(JSON.stringify(wrong)), inventories: [entry] });
+  assert.equal(refused.value.editing, 'unavailable'); assert.equal(refused.value.diagnostics[0].code, 'INTENT_POLICY_CONTRADICTION');
+});
