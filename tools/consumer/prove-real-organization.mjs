@@ -47,6 +47,7 @@ const hostFor = (ref, projectRoot = target, auth = controls) => createHost({ pro
 const baseRef = transition === 'wait' ? 'main' : 'scenario/admitted';
 const direct = hostFor(baseRef);
 let browser, started;
+const extraServers = [];
 const errors = [], cases = [];
 try {
   const initial = await capture('initial-current-authority', await direct.inspectAuthority({ policyText: new TextDecoder().decode(policyBytes) }));
@@ -55,6 +56,11 @@ try {
   deniedPolicy.selections.find(s => s.configuration.agentDirectory).configuration.agentDirectory = '.outside';
   const denied = await capture('denied-configuration', await direct.prepareSession({ policyText: JSON.stringify(deniedPolicy) }));
   assert.equal(denied.status, 'blocked'); assert.ok(denied.diagnostics.some(d => d.code === 'AUTHORITY_DENIED')); cases.push('denied configuration through actual Prepare');
+  const extra = f.inventories[0].release.items.find(i => i.id === 'mattpocock.codebase-design');
+  const extraChoice = await editAuthoring({ policyBytes, inventories: f.inventories, reviewEvidence, operation: { type: 'select', root: { releaseSha256: f.inventories[0].release.sha256, itemId: extra.id, itemSha256: extra.itemSha256, scope: 'project', configuration: {}, originIds: ['direct'] } } });
+  assert.equal(extraChoice.status, 'ok', JSON.stringify(extraChoice));
+  const deniedChoice = await capture('denied-choice', await direct.prepareSession({ policyText: new TextDecoder().decode(extraChoice.value.policyBytes) }));
+  assert.equal(deniedChoice.status, 'blocked'); assert.ok(deniedChoice.diagnostics.some(d => d.reason === 'selection-not-admitted')); cases.push('unadmitted new choice refused without changing installed state');
   const unavailable = await capture('unavailable-authority', await hostFor(baseRef, target, { logging: 'off', authentication: { kind: 'none' } }).inspectAuthority({ policyText: new TextDecoder().decode(policyBytes) }));
   assert.equal(unavailable.status, 'refused'); assert.ok(unavailable.diagnostics.some(d => d.code === 'AUTHORITY_UNAVAILABLE'));
   const unavailablePrepare = await capture('unavailable-prepare', await hostFor(baseRef, target, { logging: 'off', authentication: { kind: 'none' } }).prepareSession({ policyText: new TextDecoder().decode(policyBytes) }));
@@ -99,6 +105,21 @@ try {
   }
   const withdrawn = await capture('withdrawn-current-authority', await hostFor('main').inspectAuthority({ policyText: new TextDecoder().decode(policyBytes) }));
   assert.equal(withdrawn.value.admitted, false); assert.equal(withdrawn.value.affectedChoices.length, 1); assert.equal(withdrawn.value.stillValidChoices.length, 4);
+  const withdrawalServer = await startConsumer({ projectRoot: target, organizationSource: source('main'), controls, suppliedInventories: f.inventories.slice(1) }); extraServers.push(withdrawalServer.server);
+  const withdrawalPage = await browser.newPage({ acceptDownloads: true }); withdrawalPage.setDefaultTimeout(20000); withdrawalPage.on('pageerror', e => errors.push(e.message));
+  await withdrawalPage.goto(`${withdrawalServer.origin}/authoring`); await withdrawalPage.locator('#summary').filter({ hasText: '"roots"' }).waitFor();
+  await withdrawalPage.locator('#open').setInputFiles(savedPath); await withdrawalPage.locator('#authority-summary').filter({ hasText: '1 affected; 4 still valid' }).waitFor();
+  const refreshResponse = withdrawalPage.waitForResponse(r => r.url().endsWith('/api/authoring-authority')); await withdrawalPage.locator('#authority-refresh').click();
+  const refreshed = await capture('browser-explicit-authority-refresh', await (await refreshResponse).json());
+  assert.equal(refreshed.value.authority.resolvedCommit, withdrawn.value.authority.resolvedCommit);
+  const stillOriginal = withdrawalPage.waitForEvent('download'); await withdrawalPage.locator('#save').click(); const originalAfterRefresh = join(output, 'withdrawn.policy.downloaded.json'); await (await stillOriginal).saveAs(originalAfterRefresh);
+  assert.deepEqual(new Uint8Array(await readFile(originalAfterRefresh)), policyBytes); cases.push('withdrawn source checked on fresh browser open and explicit Refresh; original policy and organization reviews unchanged');
+  const blockedInventoryResponse = withdrawalPage.waitForResponse(r => r.url().endsWith('/api/authoring-managed')); await withdrawalPage.locator('#managed-refresh').click(); await blockedInventoryResponse;
+  const blockedRemovalResponse = withdrawalPage.waitForResponse(r => r.url().endsWith('/api/authoring-remove')); await withdrawalPage.getByRole('button', { name: `Review removal ${f.withdrawnSelection.managementId}`, exact: true }).click();
+  const browserBlocked = await capture('blocked-browser-recovery', await (await blockedRemovalResponse).json());
+  assert.ok(browserBlocked.preparation.diagnostics.some(d => d.code === 'AUTHORITY_DENIED' && d.reason === 'lifecycle-remove'));
+  assert.equal(await withdrawalPage.locator('#apply').isDisabled(), true);
+  await withdrawalPage.locator('#authority-section').screenshot({ path: join(output, 'withdrawal-browser.png') });
   const blocked = await capture('blocked-recovery', await hostFor('scenario/blocked').prepareRemovalSession({ managementId: f.withdrawnSelection.managementId, scope: 'project', mode: 'enterprise' }));
   assert.notEqual(blocked.disposition, 'invalid');
   assert.ok([...blocked.diagnostics, ...(blocked.preparation?.diagnostics ?? [])].some(d => d.code === 'AUTHORITY_DENIED' && d.reason === 'lifecycle-remove'), JSON.stringify(blocked));
@@ -126,9 +147,16 @@ try {
   assert.equal(replaced.completion, 'complete', JSON.stringify(replaced));
   assert.ok(updated.value.intent.reviews.history.some(r => r.id === 'ui6-organization-review-0'));
   assert.equal(updated.value.intent.reviews.records.find(r => r.id === 'ui6-organization-review-1').state, 'current'); cases.push('permitted mixed replacement; affected review history retained and unrelated organization review current');
-  const removal = await capture('permitted-removal-prepare', await recovery.prepareRemovalSession({ managementId: f.withdrawnSelection.managementId, scope: 'project', mode: 'enterprise' }));
+  const recoveryServer = await startConsumer({ projectRoot: target, organizationSource: source('scenario/recovery'), controls, suppliedInventories: f.inventories.slice(1) }); extraServers.push(recoveryServer.server);
+  const recoveryPage = await browser.newPage(); recoveryPage.setDefaultTimeout(20000); recoveryPage.on('pageerror', e => errors.push(e.message));
+  await recoveryPage.goto(`${recoveryServer.origin}/authoring`); await recoveryPage.locator('#summary').filter({ hasText: '"roots"' }).waitFor();
+  await recoveryPage.locator('#open').setInputFiles(join(output, 'updated-policy.json')); await recoveryPage.locator('#authority-summary').filter({ hasText: 'Advisory preview admits' }).waitFor();
+  const inventoryResponse = recoveryPage.waitForResponse(r => r.url().endsWith('/api/authoring-managed')); await recoveryPage.locator('#managed-refresh').click(); await inventoryResponse;
+  const removalResponse = recoveryPage.waitForResponse(r => r.url().endsWith('/api/authoring-remove')); await recoveryPage.getByRole('button', { name: `Review removal ${f.withdrawnSelection.managementId}`, exact: true }).click();
+  const removal = await capture('permitted-removal-prepare', await (await removalResponse).json());
   assert.equal(removal.preparation?.status, 'ready', JSON.stringify(removal));
-  const removed = await capture('permitted-removal-apply', await recovery.applyApproved({ sessionId: removal.preparation.sessionId, reviewDigest: removal.preparation.review.reviewDigest }));
+  const removalApply = recoveryPage.waitForResponse(r => r.url().endsWith('/api/authoring-apply')); await recoveryPage.locator('#apply:not([disabled])').click();
+  const removed = await capture('permitted-removal-apply', await (await removalApply).json());
   assert.equal(removed.completion, 'complete', JSON.stringify(removed));
   const managed = await capture('retained-managed', await recovery.managedInventory());
   assert.ok(managed.selections.some(s => s.managementId.includes('domain-modeling'))); assert.ok(!managed.selections.some(s => s.managementId === f.withdrawnSelection.managementId));
@@ -161,4 +189,4 @@ try {
     downloadSha256: createHash('sha256').update(policyBytes).digest('hex'), initialAuthority: initial.value.authority, withdrawnAuthority: withdrawn.value.authority,
     limits: ['Dedicated private test repository; no production enforcement or native client execution.', 'Advisory preview is separate from current Core Prepare/Apply.', 'Human review records are portable attribution, not organization authorization.'] });
   console.log('REAL_ORGANIZATION_PROOF_PASSED');
-} finally { await browser?.close(); if (started) await new Promise(resolve => started.server.close(resolve)); }
+} finally { await browser?.close(); for (const server of extraServers) await new Promise(resolve => server.close(resolve)); if (started) await new Promise(resolve => started.server.close(resolve)); }
