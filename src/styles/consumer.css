@@ -1,0 +1,17 @@
+@import url('/tokens.css');
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--color-canvas); color: var(--color-text); font: 16px/1.5 system-ui, sans-serif; }
+header, main { max-width: 1120px; margin: auto; padding: 24px; }
+header { border-bottom: 1px solid var(--color-border); }
+h1 { margin-bottom: 4px; } h2 { margin-top: 0; }
+p { color: var(--color-muted); }
+section { background: var(--color-panel); border: 1px solid var(--color-border); border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+fieldset { background: var(--color-card); border: 1px solid var(--color-card-border); border-radius: 8px; margin: 16px 0; padding: 16px; }
+label { display: block; margin: 8px 0; }
+input, select, textarea, button { font: inherit; background: var(--color-field); color: var(--color-text); border: 1px solid var(--color-control-border); border-radius: 5px; padding: 8px; }
+input[type=checkbox] { margin-right: 10px; }
+input:not([type=checkbox]):not([type=file]) { width: min(100%, 550px); }
+button { cursor: pointer; margin: 8px 12px 8px 0; } button:disabled { opacity: .5; cursor: default; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--color-primary); }
+textarea { width: 100%; min-height: 280px; font: 13px/1.5 monospace; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; max-height: 500px; overflow: auto; }
