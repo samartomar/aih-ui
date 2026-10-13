@@ -24,6 +24,12 @@ An outside developer can build this UI from public package interfaces. The polic
 
 ## Testing against unpublished packages
 
+The supported mixed-source v3 page is `/authoring`. It and the headless
+`aih-ui/authoring` entry share [the authoring contract](docs/authoring.md), including
+the shipped saved-intent v3/review-v1 schemas, portable source intake, exact
+snapshot reopen, migrations and explicit reconciliation. Start it with the same
+reviewed archives and `tools/consumer-preview.mjs`; execution remains host-owned.
+
 Pack each local package with `npm pack`, install the tarballs into a throwaway consumer project, and run the scenario there. Do not use `npm link`: it hides packaging errors such as a wrong `exports` map or a missing file.
 
 For the saved-intent local proof, set `CORE_TGZ`, `CATALOG_TGZ` and `SCAN_TGZ`

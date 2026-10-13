@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+const browserSource = async () => (await readFile(new URL('../../src/policy-file.js', import.meta.url), 'utf8')).replace('export function', 'function') + '\n' + (await readFile(new URL('../../src/consumer.js', import.meta.url), 'utf8')).replace("import { policyFile } from './policy-file.js';", '');
 
 test('a delayed reopen cannot replace newer policy edits or mode', async () => {
   const nodes = new Map();
@@ -13,7 +14,7 @@ test('a delayed reopen cannot replace newer policy edits or mode', async () => {
   const delayed = new Promise(resolve => { deliver = resolve; });
   const fetch = async url => ({ json: async () => url === '/api/catalog'
     ? { items: [], releaseSha256: 'test', hostAvailable: false, packages: [] } : delayed });
-  const source = await readFile(new URL('../../src/consumer.js', import.meta.url), 'utf8');
+  const source = await browserSource();
   const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
   await new AsyncFunction('document', 'fetch', source)(document, fetch);
   document.getElementById('reopen-result').textContent = '';
@@ -41,7 +42,7 @@ test('reopened explicit empty string stays present when authoring', async () => 
     captured = JSON.parse(options.body); return { valid: false };
   } });
   const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
-  await new AsyncFunction('document', 'fetch', await readFile(new URL('../../src/consumer.js', import.meta.url), 'utf8'))(document, fetch);
+  await new AsyncFunction('document', 'fetch', await browserSource())(document, fetch);
   await nodes.get('reopen').onclick(); await nodes.get('author').onclick();
   assert.equal(Object.hasOwn(captured.roots[0].configuration, 'note'), true);
   assert.equal(captured.roots[0].configuration.note, '');
@@ -52,10 +53,10 @@ test('a delayed policy file read cannot overwrite a newer edit', async () => {
   const document = { getElementById(id) { if (!nodes.has(id)) nodes.set(id, { value: '', textContent: '', listeners: {}, addEventListener(event, callback) { this.listeners[event] = callback; }, replaceChildren() {} }); return nodes.get(id); } };
   let deliver; const delayed = new Promise(resolve => { deliver = resolve; });
   const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
-  await new AsyncFunction('document', 'fetch', await readFile(new URL('../../src/consumer.js', import.meta.url), 'utf8'))(document, async () => ({ json: async () => ({items:[],packages:[],hostAvailable:false}) }));
-  nodes.get('open').files = [{ text: () => delayed }];
+  await new AsyncFunction('document', 'fetch', await browserSource())(document, async () => ({ json: async () => ({items:[],packages:[],hostAvailable:false}) }));
+  nodes.get('open').files = [{ arrayBuffer: () => delayed }];
   const pending = nodes.get('open').onchange();
   nodes.get('policy').value = 'newer edit'; nodes.get('policy').listeners.input();
-  deliver('old file contents'); await pending;
+  deliver(new TextEncoder().encode('old file contents').buffer); await pending;
   assert.equal(nodes.get('policy').value, 'newer edit');
 });
