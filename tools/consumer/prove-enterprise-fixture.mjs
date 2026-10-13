@@ -9,7 +9,7 @@ import { readInstalledRelease } from '@aihq/catalog/node';
 import { listItems } from '@aihq/catalog/reader';
 import { parsePolicy } from '@aihq/core/contracts';
 import { createHost } from './host.mjs';
-import { authorOrganizationPolicy, deriveExecutionPolicy } from './admin.mjs';
+import { authorOrganizationPolicy, deriveExecutionPolicy } from './fixture-admin.mjs';
 const [policyPath, outputPath] = process.argv.slice(2);
 if (!policyPath || !outputPath) throw new Error('Usage: node prove-enterprise-fixture.mjs policy.json new-output-directory');
 const output = resolve(outputPath); await mkdir(output);
@@ -58,6 +58,8 @@ try {
   const policyText = JSON.stringify(policy);
   const preparation = await host.prepareSession({ policyText });
   assert.equal(preparation.status, 'ready', JSON.stringify(preparation.diagnostics));
+  assert.ok(preparation.review.operations.every(operation => operation.scope === 'project' && operation.kind === 'file.write'
+    && operation.checks.every(check => check.kind === 'file.sha256')), 'Fixture Apply is limited to project file writes and hash checks.');
   const outside = structuredClone(policy); outside.selections[0].configuration.agentDirectory = '.outside-policy';
   const denied = await host.prepareSession({ policyText: JSON.stringify(outside) });
   assert.notEqual(denied.status, 'ready');
@@ -69,6 +71,8 @@ try {
   currentRoutes = routes(authored.document);
   const readyAgain = await host.prepareSession({ policyText });
   assert.equal(readyAgain.status, 'ready');
+  assert.ok(readyAgain.review.operations.every(operation => operation.scope === 'project' && operation.kind === 'file.write'
+    && operation.checks.every(check => check.kind === 'file.sha256')), 'Fixture Apply is limited to project file writes and hash checks.');
   const applied = await host.applyApproved({ sessionId: readyAgain.sessionId, reviewDigest: readyAgain.review.reviewDigest, origin: 'automation' });
   assert.equal(applied.completion, 'complete', JSON.stringify(applied.diagnostics));
   for (const [name,value] of Object.entries({ organization: authored.document, policy, preparation, denied, changedAuthority, applied })) await writeFile(join(output, `${name}.json`), JSON.stringify(value, null, 2));

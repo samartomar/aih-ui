@@ -1,5 +1,8 @@
-// Portable Enterprise administrator authoring: review a Scan report, author an
-// organization policy, and derive an execution policy that stays inside it.
+// FIXTURE ONLY. Adapted public example for fictional organization acceptance.
+// Its documented identity calculation and local admission mirror construct test
+// inputs; this is not a Workbench administrator feature or production authority.
+// No page or server imports this module. Public Core remains the tested authority.
+// Review a Scan report, author a fixture organization policy, and derive test input.
 // Browser-safe imports only; digests use WebCrypto. This is example content, not
 // an admin product: the administrator publishes the organization document to the
 // selected GitHub source, and Core re-admits every selection at Prepare and Apply.

@@ -1,4 +1,4 @@
-authoring.mjs, admin.mjs, host.mjs and report-view.mjs are adapted from the public consumer
+authoring.mjs, fixture-admin.mjs, host.mjs and report-view.mjs are adapted from the public consumer
 example in samartomar/aih-core, commit a2246f822d4f05fe592a2553450f46ef47628935.
 Copyright 2026 AIHQ contributors. Licensed under Apache-2.0; see LICENSE.
 These are consumer examples, not copied Core implementation.

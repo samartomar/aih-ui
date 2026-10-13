@@ -750,6 +750,14 @@ The adapted public consumer examples retain their Apache-2.0 attribution in
 `tools/consumer/NOTICE` and `LICENSE`. The older preview below is retained as a
 separate presentation reference and is not the current contract consumer.
 
+`tools/consumer/fixture-admin.mjs` is solely an acceptance fixture helper adapted
+from the public example. Its identity calculation and admission mirror construct
+test inputs for `prove-enterprise-fixture.mjs`; no page or server imports it, and
+it is not a Workbench administrator capability. The proof emulates GitHub REST
+responses for a fictional organization and tests admission through public Core.
+Both fixture Apply attempts require project file writes and file hash checks;
+no process, hook or user-scope operation is accepted by that proof.
+
 ```
 node tools/preview.mjs
 ```
