@@ -5,6 +5,8 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { installConsumer, resolvePackage } from './packages.mjs';
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const sourceStatus = () => spawnSync('git', ['status', '--porcelain'], { cwd: repo, windowsHide: true, encoding: 'utf8' }).stdout.trim();
+if (sourceStatus()) throw new Error('Qualify a clean committed source tree.');
 const output = resolve(process.argv[2]);
 mkdirSync(output, { recursive: true });
 function run(args, cwd = repo) {
@@ -26,5 +28,13 @@ const archive = join(output, readdirSync(output).find(name => name.startsWith('a
 run([npm, 'install', '--ignore-scripts', '--no-audit', '--no-fund', archive], consumerDir);
 const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repo, windowsHide: true, encoding: 'utf8' }).stdout.trim();
 writeFileSync(join(output, 'packages.json'), JSON.stringify({ head, packages, uiArchive: archive, uiSha256: createHash('sha256').update(readFileSync(archive)).digest('hex') }, null, 2) + '\n');
+const moduleHashes = Object.fromEntries(['headless.mjs', 'intake.mjs', 'intent-shape.mjs', 'migrate-intent.mjs', 'mixed-service.mjs'].map(name => {
+  const source = readFileSync(join(repo, 'tools/consumer', name));
+  const installed = readFileSync(join(consumerDir, 'node_modules/aih-ui/tools/consumer', name));
+  if (!source.equals(installed)) throw new Error(`Installed UI module differs: ${name}`);
+  return [name, createHash('sha256').update(installed).digest('hex')];
+}));
+writeFileSync(join(output, 'installed-module-hashes.json'), JSON.stringify(moduleHashes, null, 2) + '\n');
 run(['--test', ...readdirSync(join(consumerDir, 'consumer')).filter(name => name.endsWith('.test.mjs')).map(name => join(consumerDir, 'consumer', name))], consumerDir);
 run([join(consumerDir, 'consumer/prove-mixed-authoring.mjs'), output], consumerDir);
+if (sourceStatus()) throw new Error('Qualification changed the committed source tree.');

@@ -1,5 +1,5 @@
 // Authored consumer schemas; owning Catalog/Core validators check referenced data.
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 const string = { type: 'string', minLength: 1, maxLength: 1000 }, id = { type: 'string', pattern: '^[\\w.-]{1,180}$' }, hash = { type: 'string', pattern: '^[a-f0-9]{64}$' };
 const shape = (properties, optional = []) => ({ type: 'object', additionalProperties: false, required: Object.keys(properties).filter(k => !optional.includes(k)), properties });
 const array = items => ({ type: 'array', maxItems: 4096, items });
@@ -31,4 +31,9 @@ const saved = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: 'u
   reviews: { $ref: review.$id }
 }) };
 mkdirSync(new URL('../schemas/', import.meta.url), { recursive: true });
-for (const [name, schema] of [['saved-intent-3.0.0', saved], ['review-decisions-1.0.0', review]]) writeFileSync(new URL(`../schemas/${name}.json`, import.meta.url), JSON.stringify(schema, null, 2) + '\n');
+for (const [name, schema] of [['saved-intent-3.0.0', saved], ['review-decisions-1.0.0', review]]) {
+  const path = new URL(`../schemas/${name}.json`, import.meta.url), expected = JSON.stringify(schema, null, 2) + '\n';
+  if (process.argv.includes('--check')) {
+    if (readFileSync(path, 'utf8').replaceAll('\r\n', '\n') !== expected) throw new Error(`Schema is stale: ${name}`);
+  } else writeFileSync(path, expected);
+}
