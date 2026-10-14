@@ -29,11 +29,8 @@
  *   validation-fixture.mjs VALIDATION ONLY: the one module that manufactures
  *                          anything, and it labels everything it makes
  */
-import { catalogEntry, catalogIntegrity, entryContentDir, readCatalog } from "./catalog-access.mjs";
-import { servedCatalogDocument } from "./catalog-served.mjs";
-import { consume, parseEvidence, prepare, subject } from "./core-adapter.mjs";
-import { buildValidationFixture } from "./validation-fixture.mjs";
-
+let catalogEntry, catalogIntegrity, entryContentDir, readCatalog, servedCatalogDocument;
+let consume, parseEvidence, prepare, subject, buildValidationFixture;
 const OPS = {
   /** Identity only. Structure is validated; artifact bytes are not read. */
   subject({ entryId }) {
@@ -118,6 +115,12 @@ async function main() {
     return;
   }
   try {
+    if (['subject', 'catalogIntegrity', 'servedCatalog', 'parseEvidence', 'prepare', 'consume', 'fixture'].includes(request.op)) {
+      ({ catalogEntry, catalogIntegrity, entryContentDir, readCatalog } = await import('./catalog-access.mjs'));
+      ({ servedCatalogDocument } = await import('./catalog-served.mjs'));
+      ({ consume, parseEvidence, prepare, subject } = await import('./core-adapter.mjs'));
+      ({ buildValidationFixture } = await import('./validation-fixture.mjs'));
+    }
     const value = await operation(request);
     process.stdout.write(JSON.stringify({ ok: true, ...value }));
   } catch (error) {

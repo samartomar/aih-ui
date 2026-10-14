@@ -29,6 +29,7 @@
  */
 
 import { el, text } from "../app/dom.js";
+import { capabilityFacts } from './authoring-model.js';
 import {
   EVIDENCE_SUMMARY_ABSENT,
   FINDING_DETAIL_ABSENT,
@@ -222,11 +223,34 @@ export function createDetails({ elements }) {
 
   return {
     /** @param model { entry, counts, publisher, qualification } */
-    render({ entry, counts, publisher, qualification }) {
+    render({ entry, counts, publisher, qualification, target }) {
       reset();
       renderQualification(elements, qualification, entry ?? null);
       if (!entry) {
         renderEmpty();
+        return;
+      }
+      if (entry.authoringItem) {
+        const item = entry.authoringItem;
+        elements.inspectorName.textContent = item.label;
+        elements.inspectorKind.setAttribute('aria-label', `Kind: ${item.kind}`);
+        elements.inspectorIcon.textContent = KIND_ICON[item.kind] ?? 'extension';
+        elements.detailsDesc.textContent = item.description ?? NOT_PUBLISHED;
+        row(elements.detailsSource, 'Content family', item.family);
+        row(elements.detailsSource, 'Package', `${item.package.name}@${item.package.version}`);
+        row(elements.detailsSource, 'Provenance', item.family === 'Personal' ? 'Local folder explicitly selected in this page session; no GitHub provenance inferred.' : 'Published installed release; upstream origins retained below.');
+        for (const fact of capabilityFacts(item, target)) {
+          const node = el('p', 'p-2 rounded border border-wb-border text-[11px]', `${fact.support} · ${fact.capability} · ${fact.surface} — ${fact.reason ?? 'No producer reason supplied.'}`);
+          elements.detailsCapabilities.append(node);
+        }
+        row(elements.detailsIdentity, 'Item id', item.id);
+        codeRow(elements.detailsIdentity, 'Release sha256', item.root.releaseSha256);
+        codeRow(elements.detailsIdentity, 'Item sha256', item.root.itemSha256);
+        const disclosure = el('pre', 'whitespace-pre-wrap break-all text-[10px]');
+        disclosure.textContent = JSON.stringify({ origins: item.sources, dependencies: item.dependencies, recipe: item.recipe, materials: item.materials, targets: item.targets }, null, 2);
+        elements.detailsArtifacts.append(disclosure);
+        elements.detectorRunState.textContent = 'No verified per-item detector evidence supplied. Review evidence in the policy workspace; declared capabilities are not scan results.';
+        elements.detectorFindingDetail.textContent = 'Native execution and automatic guardrails are not established by supported material formats.';
         return;
       }
 

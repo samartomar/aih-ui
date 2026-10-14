@@ -30,7 +30,7 @@ function walk(root, extensions, prefix = "", found = []) {
       continue;
     }
     const dot = item.name.lastIndexOf(".");
-    if (dot > 0 && extensions.has(item.name.slice(dot))) found.push(next);
+    if (extensions === null || (dot > 0 && extensions.has(item.name.slice(dot)))) found.push(next);
   }
   return found;
 }
@@ -54,10 +54,12 @@ export function serviceAssets(repoRoot) {
   if (!served.includes("core-service.mjs")) {
     throw new Error(`tools/service/core-service.mjs is missing from ${repoRoot}`);
   }
-  return served.map((relative) => ({
+  return [...served.map((relative) => ({
     from: posix.join("tools/service", relative),
     to: posix.join("service", relative),
-  }));
+  })), ...walk(join(repoRoot, "tools", "consumer"), null).map(relative => ({
+    from: posix.join("tools/consumer", relative), to: posix.join("consumer", relative),
+  }))];
 }
 
 /** Fails before anything is built if a listed asset is not a readable file. */
