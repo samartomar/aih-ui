@@ -6,6 +6,42 @@ shared with `/authoring`. Install reviewed Core/Catalog/Scan archives through
 `tools/consumer-preview.mjs`; open `/authoring` on its printed local URL.
 No source checkout imports or `npm link` are needed.
 
+Ordinary `/authoring` loads the installed default release plus the public
+`release-extensions.json`, `release-ecc.json`, `release-superpowers.json` and
+`release-anthropic.json` exports. All items are browsable, with family counts,
+family filtering and search; fresh drafts have no selected content. Matt's
+skills appear under Extensions. Grouping changes no item, source, dependency or
+saved identity: each item's disclosure shows its exact release/item digests,
+original upstream origins and declared dependencies. The independent note and
+its authored demonstration template remain separately labeled.
+
+### Focused regression command
+
+With Node 24.15–24.x and reviewed local archives, run:
+
+```sh
+CORE_TGZ=/path/to/core.tgz CATALOG_TGZ=/path/to/catalog.tgz SCAN_TGZ=/path/to/scan.tgz npm run check:workbench
+```
+
+PowerShell users can set the same three environment variables with `$env:NAME`.
+An optional output directory follows `--`; otherwise a fresh temporary consumer
+is retained. The command installs only those archives with scripts disabled,
+records their SHA-256 identities in `reviewed-packages.json`, and writes
+`checks.log`. It exercises the same `startConsumer()` as
+`tools/consumer-preview.mjs`, checks all four required families and empty initial
+choices, and removes a required export in the isolated installation to prove
+startup refuses an omitted family. Selection/save/fresh reopen checks preserve
+exact identities, required dependencies and original Matt provenance, with
+headless reader agreement. Page interaction and existing mixed-source authoring
+regressions run alongside it. This focused check complements the full consumer
+test suite; it does not replay native acceptance.
+
+The Workbench families CI job builds pinned public Core, Catalog and Scan
+checkpoints in separate directories, packs them and runs this same command.
+The UI never imports those source directories. Updating these independent
+checkpoints is explicit; no registry publication, native acceptance replay or
+broader candidate acceptance is implied by this focused check.
+
 ```js
 import { freshAuthoring, readAuthoring, composeAuthoring,
   reconcileAuthoring, editAuthoring } from 'aih-ui/authoring';

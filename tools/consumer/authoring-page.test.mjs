@@ -55,3 +55,30 @@ test('editing while Prepare is pending cannot enable Apply for an older draft', 
   assert.match(nodes.get('execution').textContent, /changed/);
   assert.match(nodes.get('authority-summary').textContent, /Refresh authority/);
 });
+
+test('family filters expose every item including beyond the former forty-item cap without selecting content', async () => {
+  const nodes = new Map();
+  const node = tagName => ({ tagName, value: '', children: [], textContent: '', disabled: false,
+    addEventListener() {}, setAttribute() {}, append(...values) { this.children.push(...values); }, replaceChildren() { this.children = []; } });
+  const document = { getElementById(id) { if (!nodes.has(id)) nodes.set(id, node('node')); return nodes.get(id); }, createElement: node };
+  const intent = { origins: [], roots: [], pins: [], exclusions: [], inputs: [], reviews: { records: [], history: [] } };
+  const items = Array.from({ length: 45 }, (_, index) => ({ id: `item-${index}`, family: index < 42 ? 'Extensions' : 'Anthropic',
+    label: `Item ${index}`, package: { name: 'synthetic' }, scopes: ['project'], root: { scope: 'project' },
+    sources: [{ origin: { repository: 'https://github.com/mattpocock/skills' } }] }));
+  const operations = [];
+  const fetch = async url => ({ json: async () => {
+    if (url.endsWith('-catalog')) return { items, templates: [] };
+    operations.push(url); return { status: 'ok', value: { policyBytes: [...new TextEncoder().encode('{}')], intent } };
+  } });
+  const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
+  await new AsyncFunction('document', 'fetch', source)(document, fetch);
+  assert.equal(nodes.get('items').children.length, 45);
+  assert.deepEqual(nodes.get('family').children.map(option => option.textContent), ['Extensions (42)', 'Anthropic (3)']);
+  nodes.get('family').value = 'Anthropic'; nodes.get('family').onchange();
+  assert.equal(nodes.get('items').children.length, 3);
+  assert.match(nodes.get('items').children[0].children[0].textContent, /Anthropic/);
+  nodes.get('search').value = 'item-44'; nodes.get('search').oninput();
+  assert.equal(nodes.get('items').children.length, 1);
+  assert.match(nodes.get('inventory-count').textContent, /1 of 45/);
+  assert.deepEqual(operations, ['/api/authoring-new']);
+});

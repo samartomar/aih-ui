@@ -12,6 +12,7 @@
     "./schemas/review-decisions/1.0.0.json": "./schemas/review-decisions-1.0.0.json"
   },
   "scripts": {
+    "check:workbench": "node tools/check-workbench.mjs",
     "build:css": "node tools/build-css.mjs",
     "preview": "node tools/preview.mjs"
   },

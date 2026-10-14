@@ -11,6 +11,7 @@ import { editSetup, reopenSetup, reviewSetupUpdate } from './setup.mjs';
 import { presentReport, readScanBytes } from './report-view.mjs';
 import { createIntentService } from './intent-service.mjs';
 import { createMixedService } from './mixed-service.mjs';
+import { installedFamilies } from './installed-families.mjs';
 import { inspectAuthenticatedReviewEvidence } from './review-host.mjs';
 
 export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, port = 0 } = {}) {
@@ -31,11 +32,12 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
     if (!path.startsWith(catalogRoot + sep)) throw new Error('Catalog material path escapes the installed package.');
     return { ...descriptor, bytes: new Uint8Array(await readFile(path)) };
   }));
-  const mixedService = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories });
+  const familyInventories = await installedFamilies();
+  const mixedService = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories });
   const authoringRoots = { maintained: catalogRoot };
   if (projectRoot) {
     const staging = await mkdtemp(join(tmpdir(), 'aih-authoring-materials-'));
-    for (const inventory of mixedService.inventories.slice(1)) {
+    for (const inventory of mixedService.inventories.filter(entry => entry.materialSource.input !== 'maintained')) {
       const input = inventory.materialSource.input;
       // Only host-selected startup inventories acquire execution bindings.
       const directory = join(staging, `source-${Object.keys(authoringRoots).length}`);
