@@ -16,6 +16,46 @@ async function openPage(fetch) {
   return nodes;
 }
 
+for (const changeDraft of [false, true]) test(`folder readiness waits for catalog rendering${changeDraft ? ' and a newer draft discards the pending refresh' : ' before immediate reopen'}`, async () => {
+  const started = await startConsumer();
+  let releaseCatalog, observeCatalog, hold = false;
+  const gate = new Promise(resolve => { releaseCatalog = resolve; });
+  const observed = new Promise(resolve => { observeCatalog = resolve; });
+  const pageFetch = async (url, options) => {
+    const response = await fetch(`${started.origin}${url}`, { ...options, headers: { ...options?.headers, origin: started.origin } });
+    if (url === '/api/authoring-catalog' && hold) { observeCatalog(); await gate; }
+    return response;
+  };
+  try {
+    const nodes = await openPage(pageFetch);
+    nodes.get('folder').files = [
+      ['LICENSE', 'MIT License\nCopyright Example\nPermission is hereby granted.'],
+      ['skills/example/SKILL.md', '---\nname: example\ndescription: A personal example.\nlicense: MIT\n---\n\nPersonal instructions.\n']
+    ].map(([path, text]) => {
+      const bytes = new TextEncoder().encode(text);
+      return { webkitRelativePath: `chosen/${path}`, size: bytes.length, arrayBuffer: async () => bytes.buffer };
+    });
+    hold = true;
+    const folderAction = nodes.get('folder').onchange(); await observed;
+    assert.doesNotMatch(nodes.get('folder-result').textContent, /Folder validated for this page session/);
+    assert.equal(nodes.get('family').children.some(option => option.value === 'Personal'), false);
+    if (changeDraft) await nodes.get('new').onclick();
+    const policyBefore = nodes.get('policy').value;
+    releaseCatalog(); await folderAction;
+    assert.equal(nodes.get('policy').value, policyBefore);
+    if (changeDraft) {
+      assert.equal(nodes.get('family').children.some(option => option.value === 'Personal'), false);
+      assert.doesNotMatch(nodes.get('folder-result').textContent, /Folder validated for this page session/);
+    } else {
+      assert.match(nodes.get('folder-result').textContent, /Folder validated for this page session/);
+      await nodes.get('reopen').onclick();
+      assert.equal(nodes.get('family').children.some(option => option.value === 'Personal'), true);
+      nodes.get('family').value = 'Personal'; nodes.get('family').onchange();
+      assert.equal(nodes.get('items').children.length, 1);
+    }
+  } finally { releaseCatalog(); await new Promise(resolve => started.server.close(resolve)); }
+});
+
 test('supported-first browsing preserves mixed capability facts and exposes undeclared target support', async () => {
   const fact = (capability, support, reason) => ({ client: 'claude-code', surface: 'project', capability, support, reason });
   const item = (id, facts) => ({ id, label: id, package: { name: 'synthetic' }, scopes: ['project'], root: { scope: 'project' }, metadata: { discovery: { clientCapabilities: facts } } });

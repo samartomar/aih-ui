@@ -170,8 +170,12 @@ $('folder').onchange = async () => {
     if (attempt !== revision) return;
     const rebind = $('folder-binding').value ? JSON.parse($('folder-binding').value) : undefined;
     const result = await request('folder', { files, ...(rebind ? { rebind } : {}) }); if (attempt !== revision) return;
+    if (result.status === 'ok') {
+      show('folder-result', 'Loading validated personal inventory…');
+      const refreshed = await loadCatalog(); if (attempt !== revision) return;
+      catalog = refreshed; updateFamilies(); render();
+    }
     show('folder-result', result.status === 'ok' ? { message: result.value.message, input: result.value.input, items: result.value.itemIds } : result);
-    if (result.status === 'ok') { catalog = await loadCatalog(); if (attempt === revision) { updateFamilies(); render(); } }
   } catch (error) { if (attempt === revision) show('folder-result', error.message); }
   finally { $('folder').value = ''; }
 };
