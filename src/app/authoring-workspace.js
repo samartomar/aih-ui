@@ -106,6 +106,10 @@ export function createAuthoringWorkspace(client) {
   const executionDiagnostic = el('details'); executionDiagnostic.append(el('summary', 'cursor-pointer text-outline', 'Exact host review and effects'));
   const hostFacts = el('pre', 'whitespace-pre-wrap break-all text-[10px]'); executionDiagnostic.append(hostFacts);
   const presentHost = result => {
+    if (result.status === 'superseded') {
+      executionStatus.textContent = 'Host response superseded by a newer draft or host request. Prepare again; if Apply was in flight, inspect managed state before retrying.';
+      return;
+    }
     hostFacts.textContent = JSON.stringify(result, null, 2);
     const preparation = result.preparation ?? result;
     prepared = preparation.status === 'ready' && preparation.sessionId ? preparation : undefined;
@@ -113,18 +117,22 @@ export function createAuthoringWorkspace(client) {
     executionStatus.textContent = prepared ? 'Prepared effects are ready for review. Inspect the exact host review before explicitly approving Apply.'
       : result.status === 'ok' ? 'Host responded. Inspect authority and effect details; no organization approval is inferred.' : failure(result);
   };
-  const authority = button('Refresh current authority', safe(async () => presentHost(await client.request('authority'))));
-  const prepare = button('Prepare exact effects', safe(async () => presentHost(await client.request('prepare'))));
+  const authority = button('Refresh current authority', safe(async () => { prepared = undefined; apply.disabled = true; presentHost(await client.requestHost('authority')); }));
+  const prepare = button('Prepare exact effects', safe(async () => { prepared = undefined; apply.disabled = true; presentHost(await client.requestHost('prepare')); }));
   const apply = button('Approve and Apply reviewed effects', safe(async () => {
     if (!prepared) return; const approval = prepared; prepared = undefined; apply.disabled = true;
-    presentHost(await client.request('apply', { sessionId: approval.sessionId, reviewDigest: approval.review.reviewDigest }));
+    presentHost(await client.requestHost('apply', { sessionId: approval.sessionId, reviewDigest: approval.review.reviewDigest }));
   })); apply.disabled = true;
   const managedRows = el('div', 'space-y-1');
   const managed = button('Inspect managed selections', safe(async () => {
-    const result = await client.request('managed'); hostFacts.textContent = JSON.stringify(result, null, 2); managedRows.replaceChildren();
+    prepared = undefined; apply.disabled = true;
+    const result = await client.requestHost('managed');
+    if (result.status === 'superseded') return presentHost(result);
+    hostFacts.textContent = JSON.stringify(result, null, 2); managedRows.replaceChildren();
     for (const selection of result.selections ?? []) managedRows.append(button(`Review removal ${selection.managementId}`, safe(async () => {
       const mode = JSON.parse(new TextDecoder().decode(client.bytes)).mode;
-      presentHost(await client.request('remove', { managementId: selection.managementId, scope: selection.scope, mode }));
+      prepared = undefined; apply.disabled = true;
+      presentHost(await client.requestHost('remove', { managementId: selection.managementId, scope: selection.scope, mode }));
     })));
     executionStatus.textContent = result.selections?.length ? 'Choose an installed managed selection to review its removal.' : 'No managed selections returned. See host diagnostics for availability or refusal.';
   }));
@@ -175,6 +183,7 @@ export function createAuthoringWorkspace(client) {
   const binding = document.getElementById('personal-binding');
   client.subscribe(() => {
     prepared = undefined; apply.disabled = true;
+    managedRows.replaceChildren();
     for (const control of [authority, prepare, managed]) control.disabled = !client.catalog?.executionAvailable || !client.intent;
     const selected = binding.value; binding.replaceChildren(new Option('Add new personal content', ''));
     try {

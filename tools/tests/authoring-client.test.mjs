@@ -40,3 +40,16 @@ test('a folder catalog refresh cannot render after a newer draft revision', asyn
   pending[0].resolve(response({ items: ['older-folder'] })); assert.equal(await refreshed, undefined);
   assert.equal(client.catalog, undefined);
 });
+test('a delayed host preparation cannot restore approval after a draft import', async t => {
+  const pending = requests(t), client = createAuthoringClient(); client.publish(value(1));
+  const preparation = client.requestHost('prepare'); client.importBytes(Uint8Array.of(2));
+  pending[0].resolve(response({ status: 'ready', sessionId: 'stale-session' }));
+  assert.deepEqual(await preparation, { status: 'superseded' });
+});
+test('only the latest host request can present a prepared approval', async t => {
+  const pending = requests(t), client = createAuthoringClient(); client.publish(value(1));
+  const preparation = client.requestHost('prepare'), authority = client.requestHost('authority');
+  pending[1].resolve(response({ status: 'ok', value: {} })); await authority;
+  pending[0].resolve(response({ status: 'ready', sessionId: 'stale-session' }));
+  assert.deepEqual(await preparation, { status: 'superseded' });
+});

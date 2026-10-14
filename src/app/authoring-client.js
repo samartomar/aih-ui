@@ -3,7 +3,7 @@
 export function createAuthoringClient() {
   const headers = { 'x-aih-client': crypto.randomUUID() };
   const listeners = new Set();
-  let catalog, bytes = new Uint8Array(), intent, candidate, revision = 0, catalogRevision = 0, reviewEvidence = [];
+  let catalog, bytes = new Uint8Array(), intent, candidate, revision = 0, catalogRevision = 0, hostRevision = 0, reviewEvidence = [];
   const notify = () => { for (const listener of listeners) listener(); };
   async function request(operation, body = {}) {
     const response = await fetch(`/api/authoring-${operation}`, {
@@ -21,6 +21,11 @@ export function createAuthoringClient() {
     invalidate() { revision++; candidate = undefined; notify(); return revision; },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     request,
+    async requestHost(operation, body = {}) {
+      const attempt = ++hostRevision, draft = revision;
+      const result = await request(operation, body);
+      return attempt === hostRevision && draft === revision ? result : { status: 'superseded' };
+    },
     setReviewEvidence(values) { revision++; candidate = undefined; reviewEvidence = values.map(value => value.slice()); notify(); },
     async loadCatalog({ expectedRevision } = {}) {
       const attempt = ++catalogRevision;
