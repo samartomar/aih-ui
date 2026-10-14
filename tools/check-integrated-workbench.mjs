@@ -16,6 +16,12 @@ await buildCss(repo);
 for (const [assets, destination] of [[pageAssets(repo), runDir], [serviceAssets(repo), consumerDir]]) {
   for (const asset of assets) { const path = join(destination, asset.to); await mkdir(dirname(path), { recursive: true }); await copyFile(join(repo, asset.from), path); }
 }
+// Retained operations must enter their lazy package boundary. Current archives
+// may refuse a retired contract, but must not misreport it as an unknown route.
+for (const op of ['parseEvidence', 'prepare', 'consume', 'fixture']) {
+  const result = callService(consumerDir, { op });
+  assert.doesNotMatch(result.error ?? '', /unknown op:/, `${op} must dispatch to its supported-contract check`);
+}
 const targets = callService(consumerDir, { op: 'coreTargets' });
 const summary = { packages: await Promise.all(packages.map(async item => ({ ...item, packageName: `@aihq/${item.name}`, version: JSON.parse(await readFile(join(consumerDir, `node_modules/@aihq/${item.name}/package.json`), 'utf8')).version }))),
   coreTargets: targets.ok ? { state: 'published', source: '@aihq/core SUPPORTED_CLIS', targets: targets.targets } : { state: 'unavailable', reason: targets.error } };

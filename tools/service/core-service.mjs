@@ -59,10 +59,10 @@ const OPS = {
     const { content } = readCatalog();
     return { catalog: servedCatalogDocument(content) };
   },
-  parseEvidence,
-  prepare,
-  consume,
-  fixture: buildValidationFixture,
+  parseEvidence(request) { return parseEvidence(request); },
+  prepare(request) { return prepare(request); },
+  consume(request) { return consume(request); },
+  fixture(request) { return buildValidationFixture(request); },
 
   /**
    * Catalog's current collection view and Core's supported target list. Each
