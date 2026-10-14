@@ -14,9 +14,15 @@ function download(bytes, filename) { const url = URL.createObjectURL(new Blob([b
 function render(intent = currentIntent, optional = currentOptional) {
   $('items').replaceChildren();
   const query = $('search').value.toLowerCase();
-  for (const item of catalog.items.filter(item => `${item.label} ${item.id} ${item.package.name}`.toLowerCase().includes(query)).slice(0, 40)) {
-    const box = document.createElement('fieldset'), title = document.createElement('legend'); title.textContent = `${item.label} · ${item.package.name}`; box.append(title);
+  const items = catalog.items.filter(item => (!$('family').value || item.family === $('family').value) && `${item.label} ${item.id} ${item.package.name} ${JSON.stringify(item.sources ?? [])}`.toLowerCase().includes(query));
+  show('inventory-count', `${items.length} of ${catalog.items.length} installed items`);
+  for (const item of items) {
+    const box = document.createElement('fieldset'), title = document.createElement('legend'); title.textContent = `${item.family ?? 'Catalog'} · ${item.label} · ${item.package.name}`; box.append(title);
     const description = document.createElement('p'); description.textContent = item.description ?? ''; box.append(description);
+    const provenance = document.createElement('details'), caption = document.createElement('summary'), facts = document.createElement('pre');
+    caption.textContent = 'Exact identity, upstream origins and dependencies';
+    facts.textContent = JSON.stringify({ releaseSha256: item.root.releaseSha256, itemId: item.id, itemSha256: item.root.itemSha256, sources: item.sources ?? [], dependencies: item.dependencies ?? {} }, null, 2);
+    provenance.append(caption, facts); box.append(provenance);
     const savedRoots = intent?.roots.filter(root => root.releaseSha256 === item.root.releaseSha256 && root.itemId === item.id) ?? [];
     const savedRoot = savedRoots[0];
     const config = document.createElement('input'); config.value = JSON.stringify(savedRoot?.configuration ?? {}); config.setAttribute('aria-label', `Configuration for ${item.id}`); config.oninput = invalidate; box.append(config);
@@ -56,7 +62,7 @@ function present(result) {
 }
 $('accept').onclick = () => { if (!candidate) return; const accepted = candidate; history = documentFile.bytes(); invalidate(); publish(accepted); $('history').disabled = false; show('proposal', 'Candidate accepted. Original artifact retained.'); };
 $('new').onclick = async () => { invalidate(); const attempt = revision, result = await request('new', { mode: $('execution-mode').value }); if (attempt !== revision) return; if (result.status === 'ok') publish(result.value); else present(result); };
-$('search').oninput = () => render(); $('keep').oninput = invalidate; $('policy').addEventListener('input', invalidate);
+$('search').oninput = () => render(); $('family').onchange = () => render(); $('keep').oninput = invalidate; $('policy').addEventListener('input', invalidate);
 $('save').onclick = () => download(documentFile.bytes(), 'policy.json'); $('history').onclick = () => { if (history) download(history, 'policy.original.json'); };
 $('open').onchange = async () => { invalidate(); const attempt = revision, file = $('open').files[0]; if (!file) return; if (file.size > 1_000_000) return show('proposal', 'Policy exceeds the public byte limit.'); const bytes = new Uint8Array(await file.arrayBuffer()); if (attempt !== revision) return; documentFile.setBytes(bytes); history = bytes.slice(); currentIntent = undefined; currentOptional = []; render(); $('history').disabled = false; show('proposal', 'Original bytes retained. Validate and reopen to recover choices.'); await checkAuthority(); };
 $('reopen').onclick = async () => { invalidate(); const attempt = revision, result = await request('read', { availability: $('candidate-mode').value }); if (attempt !== revision) return;
@@ -154,5 +160,9 @@ $('managed-refresh').onclick = async () => {
   } catch (error) { if (attempt === revision) show('execution', error.message); }
 };
 catalog = await (await fetch('/api/authoring-catalog')).json(); show('source-description', catalog.description);
+for (const family of [...new Set(catalog.items.map(item => item.family).filter(Boolean))]) {
+  const option = document.createElement('option'); option.value = family;
+  option.textContent = `${family} (${catalog.items.filter(item => item.family === family).length})`; $('family').append(option);
+}
 for (const id of ['prepare', 'authority-refresh', 'managed-refresh']) $(id).disabled = !catalog.executionAvailable;
 await $('new').onclick();

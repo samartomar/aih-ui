@@ -2,7 +2,7 @@ import { intakeDeclaration, digestBytes } from './intake.mjs';
 import { composeAuthoring, readAuthoring, reconcileAuthoring, editAuthoring, freshAuthoring, stable, refuse, inspectReviewEvidence, recordReview, reconsiderReviews } from './headless.mjs';
 import { noteFixture } from './note-fixture.mjs';
 const encode = value => new TextEncoder().encode(value);
-export async function createMixedService(maintained, { suppliedInventories } = {}) {
+export async function createMixedService(maintained, { suppliedInventories, familyInventories = [] } = {}) {
   async function supplied(snapshot, id = 'notes') {
     const input = { id, kind: 'local', locator: { input: id }, resolvedIdentity: { sha256: await digestBytes(snapshot.declarationBytes) } };
     const result = await intakeDeclaration({ input, ...snapshot, materialSource: { kind: 'local', input: id } });
@@ -19,12 +19,15 @@ export async function createMixedService(maintained, { suppliedInventories } = {
   notes.templates = [await template(notes)];
   const changed = suppliedInventories?.[1] ?? await supplied(await noteFixture('updated'), 'notes-next');
   changed.templates = [await template(changed)];
-  const current = [maintained, notes], all = [maintained, notes, changed];
-  const candidates = mode => mode === 'missing' ? [maintained] : mode === 'updated' ? [maintained, changed] : current;
+  const maintainedInventories = [maintained, ...familyInventories];
+  const current = [...maintainedInventories, notes], all = [...current, changed];
+  const candidates = mode => mode === 'missing' ? maintainedInventories : mode === 'updated' ? [...maintainedInventories, changed] : current;
   return {
     inventories: all,
-    catalog() { return { executionAvailable: false, description: 'Real maintained Catalog content and independently authored review-note. Template is an authored demonstration.',
-      items: current.flatMap(entry => entry.release.items.map(item => ({ ...item, root: root(entry, item), package: entry.release.package }))),
+    catalog() { return { executionAvailable: false, description: 'Installed Catalog families and independently authored review-note. Template is an authored demonstration. Family grouping preserves upstream origins and exact identities.',
+      items: current.flatMap(entry => entry.release.items.map(item => ({ ...item, root: root(entry, item), package: entry.release.package,
+        family: entry.family ?? (entry === maintained ? 'Catalog' : 'Independent'),
+        sources: entry.release.sources.filter(source => item.sourceIds.includes(source.id)) }))),
       templates: notes.templates.map(t => ({ ...t, releaseSha256: notes.release.sha256 })) }; },
     async run(operation, body) {
       const policyBytes = body.policyBytes ? Uint8Array.from(body.policyBytes) : undefined;
@@ -33,7 +36,7 @@ export async function createMixedService(maintained, { suppliedInventories } = {
       const evidenceBytes = Number.isSafeInteger(body.evidenceIndex) ? reviewEvidence[body.evidenceIndex] : Uint8Array.from(body.evidenceBytes ?? []);
       if (operation === 'new') return composeAuthoring({ intent: freshAuthoring(), inventories: all,
         ...(body.mode === 'enterprise' ? { basePolicyBytes: encode(JSON.stringify({ schema: 'urn:aihq:core:execution-policy:1.3.0', mode: 'enterprise', selections: [], metadata: { 'aih.workbench': freshAuthoring() } })) } : {}) });
-      if (operation === 'read') return readAuthoring({ policyBytes, inventories: body.availability === 'missing' ? [maintained] : all, ...reviewContext });
+      if (operation === 'read') return readAuthoring({ policyBytes, inventories: body.availability === 'missing' ? maintainedInventories : all, ...reviewContext });
       if (operation === 'compose') return composeAuthoring({ basePolicyBytes: policyBytes, intent: body.intent, inventories: all, ...reviewContext });
       if (operation === 'edit') return editAuthoring({ policyBytes, inventories: all, operation: body.operation, ...reviewContext });
       if (operation === 'reconcile') return reconcileAuthoring({ savedPolicyBytes: policyBytes, inventories: all, candidateInventories: candidates(body.candidateMode), ...reviewContext });

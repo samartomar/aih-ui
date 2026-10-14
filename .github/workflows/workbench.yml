@@ -1,0 +1,65 @@
+name: Workbench families
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ordinary-families:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.19.0
+      # Independent producer checkpoints; consume their packed public interfaces.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: samartomar/aih-core
+          ref: 09561ed571947f94342ee0293acc3f408fd6ec66
+          path: .ci/core
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: samartomar/aih-catalog
+          ref: d191438284b16bd0432a65409d574c95fe2ea362
+          path: .ci/catalog
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: samartomar/aih-scan
+          ref: 0a3fc6b6120fd937dcd46a61505160b41078505a
+          path: .ci/scan
+          persist-credentials: false
+      - name: Build reviewed package checkpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/workbench-packages"
+          for component in core catalog scan; do
+            (
+              cd ".ci/$component"
+              npm ci --ignore-scripts --no-audit --no-fund
+              if [ "$component" = core ]; then
+                npm run pack:distribution -- --pack-destination "$RUNNER_TEMP/workbench-packages"
+              else
+                npm run build
+                npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/workbench-packages"
+              fi
+            )
+          done
+      - name: Check ordinary installed Workbench families
+        shell: bash
+        run: |
+          set -euo pipefail
+          export CORE_TGZ="$RUNNER_TEMP/workbench-packages/aihq-core-1.0.0-dev.37.tgz"
+          export CATALOG_TGZ="$RUNNER_TEMP/workbench-packages/aihq-catalog-0.1.0.tgz"
+          export SCAN_TGZ="$RUNNER_TEMP/workbench-packages/aihq-scan-0.5.0.tgz"
+          npm run check:workbench -- "$RUNNER_TEMP/workbench-consumer"
+      - name: Build local presentation styles
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build:css
