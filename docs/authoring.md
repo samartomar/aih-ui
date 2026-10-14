@@ -49,6 +49,8 @@ and Core checks actual applicability during preparation.
 With Node 24.15–24.x and reviewed local archives, run:
 
 ```sh
+npm ci --ignore-scripts
+node node_modules/playwright/cli.js install chromium
 CORE_TGZ=/path/to/core.tgz CATALOG_TGZ=/path/to/catalog.tgz SCAN_TGZ=/path/to/scan.tgz npm run check:workbench
 ```
 
@@ -56,7 +58,9 @@ PowerShell users can set the same three environment variables with `$env:NAME`.
 An optional output directory follows `--`; otherwise a fresh temporary consumer
 is retained. The command installs only those archives with scripts disabled,
 records their SHA-256 identities in `reviewed-packages.json`, and writes
-`checks.log`. It exercises the same `startConsumer()` as
+`checks.log` and `browser-check.log`. The pinned Playwright Chromium journey writes
+its downloaded policy, screenshot and `browser-evidence.json` beneath
+`personal-folder-evidence/`. It exercises the same `startConsumer()` as
 `tools/consumer-preview.mjs`, checks all four required families and empty initial
 choices, and removes a required export in the isolated installation to prove
 startup refuses an omitted family. Selection/save/fresh reopen checks preserve
@@ -67,6 +71,16 @@ declarations, scoped counts, target changes, and exact choice preservation.
 Existing mixed-source authoring
 regressions run alongside it. This focused check complements the full consumer
 test suite; it does not replay native acceptance.
+
+The actual headless Chromium check uses ordinary `/authoring`, chooses a disposable
+real directory through its directory file input, refuses unrecognized content,
+selects a personal skill alongside one representative from every maintained family,
+downloads the policy, and imports it in a fresh browser context against the same
+server. Fresh reopen cannot recover the local root until explicit folder reselection;
+changed support bytes refuse rebinding and the original exact bytes restore it.
+The same bytes resolve through the headless public validators. A supplied marker
+script remains unexecuted. HTTP regressions additionally check client-specific
+preparation/approval handles, bounded malformed input and stale approval invalidation.
 
 The Workbench families CI job builds pinned public Core, Catalog and Scan
 checkpoints in separate directories, packs them and runs this same command.
@@ -145,7 +159,8 @@ is emitted only by explicit successful composition, with originals retained.
 `intakeDeclaration({input,declarationBytes,sourceFiles,materialSource,archiveBytes?})`
 checks exact declaration bytes, source identities and required files, invokes
 Catalog's public producer compiler, and returns a checked inventory. Supported
-declarations use `urn:aihq:catalog:producer-declaration:3.0.0` with explicit
+declarations use `urn:aihq:catalog:producer-declaration:3.0.0`, or 3.1.0 for
+explicit local origins, with explicit
 discovery and relationships. Unsupported raw formats are refused, not inferred
 from prose. The host supplies `sourceFiles:[{source,revision,files}]` where
 files map relative source paths to bytes. Git/organization revisions must match
@@ -168,6 +183,58 @@ host supplied and validated by Catalog/Core. Organization content is ordinary
 declared content, not an authority service. BYO requires no Catalog publication.
 The browser accepts a JSON snapshot envelope with the same fields and byte
 arrays; the host keeps its checked handles, never trusts serialized handles.
+
+### Choose a personal folder
+
+Ordinary `/authoring` also accepts a directory through **Choose and validate
+folder**. The browser grants access to selected file bytes; the server receives
+canonical relative paths, never an absolute root or a permission imported from
+JSON. Selection does not execute any supplied code, initialize Git, contact a
+remote or publish content. **Advanced: bring a declaration** remains available.
+
+The recognized subset is `skills/<name>/SKILL.md`, with
+unique, single-line `name`, `description` and `license` YAML scalar fields.
+Names are lowercase kebab-case, up to 64 characters; descriptions are at most
+4,096 characters. Plain strings, JSON double-quoted strings and YAML single-quoted
+strings are supported. Additional fields, block scalars and other formats receive
+an actionable refusal; use a prepared declaration for them. Directory names must
+match each skill's declared name. All skills share one declared license identifier
+and a nonempty UTF-8 root `LICENSE`, `LICENSE.txt` or `LICENSE.md`. License text is
+retained exactly; recognition does not independently verify the license claim.
+Each skill's directory files form its support closure. These are delivery bytes,
+including scripts; recognition does not establish native use or execution admission.
+No dependency is inferred from prose. Required dependencies beyond this subset
+need an explicit advanced declaration.
+
+Limits are 32 skills, 256 selected files, 250,000 bytes per file and 1,000,000 bytes
+total. Paths must be relative and canonical, with no traversal, case aliases,
+Windows reserved names or Git metadata. Snapshot revision is SHA-256 over UTF-8
+`JSON.stringify` of sorted `[relativePath, sha256(fileBytes), byteLength]` tuples,
+without a trailing newline; every selected file contributes. The portable input
+name is `personal-` plus the first 24 revision hex characters. Catalog's public
+3.1 producer emits checked release 1.3 local provenance and exact material pins;
+no remote repository is invented. The generated configuration mirrors Catalog's
+public skill recipe input. Catalog, then Core, own configuration and policy validity.
+
+The live page uses a fresh random client token, held only in memory and sent as
+`x-aih-client`. Dynamic personal and advanced inventories are scoped to that
+client. Personal intake creates an opaque host grant; only validated compiled
+materials are staged for that client's execution host when a target is configured.
+Neither client tokens nor grants enter saved intent. Prepared snapshots remain
+authoring inputs and acquire no material root. A different page, reload, browser
+context or restarted server requires reacquisition. Host approval handles are
+client-specific; a new material binding discards prior preparations. Idle clients
+expire after one hour; at most 64 clients and 16 distinct personal grants per client
+are retained, and personal staging is removed on expiry or server shutdown.
+
+Open the saved policy, choose its **Rebind saved** input under **Folder purpose**
+and explicitly select the original folder. One saved personal input is displayed
+by default. Both the compiled release and declaration identity must match before
+the grant is bound; then **Validate and reopen** recovers exact choices. A changed
+folder receives `LOCAL_ROOT_CHANGED`, acquires no inventory/grant and preserves
+the policy bytes. Restore the original snapshot to rebind, or download the original
+policy and explicitly start a fresh draft to select changed content. This bounded
+route cannot recover unavailable historical bytes or automatically migrate them.
 
 ## Choose, trim, Keep and reconcile
 
@@ -352,10 +419,11 @@ uses ordinary policy preparation; explicit Core `resolutionInputs` can inform a
 subsequent `prepareSession({policyText,resolutions})`. Nothing silently repins,
 uninstalls, chooses a resolution or claims remote enforcement.
 
-The preview binds only startup host-selected inventories to execution material
-roots. Later uploaded declaration envelopes remain portable authoring inputs;
-their locator cannot grant a filesystem root. An unknown execution binding is
-refused by Core. Optional evidence and attributed organization-owned human decisions
+The preview binds startup host-selected inventories and explicitly selected,
+validated personal folders to execution material roots. Personal roots are scoped
+to the granting page's client. Later uploaded declaration envelopes remain portable
+authoring inputs; their locator cannot grant a filesystem root. An unknown execution
+binding is refused by Core. Optional evidence and attributed organization-owned human decisions
 remain separate from authority regardless of Catalog or independent provenance.
 
 `tools/consumer/prove-real-organization.mjs` runs one finite real GitHub acceptance

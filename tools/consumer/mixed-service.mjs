@@ -24,6 +24,10 @@ export async function createMixedService(maintained, { suppliedInventories, fami
   const candidates = mode => mode === 'missing' ? maintainedInventories : mode === 'updated' ? [...maintainedInventories, changed] : current;
   return {
     inventories: all,
+    addInventory(inventory) {
+      if (!all.some(entry => entry.release.sha256 === inventory.release.sha256)) all.push(inventory);
+      if (!current.some(entry => entry.release.sha256 === inventory.release.sha256)) current.push(inventory);
+    },
     catalog() { return { executionAvailable: false, description: 'Installed Catalog families and independently authored review-note. Template is an authored demonstration. Family grouping preserves upstream origins and exact identities.',
       items: current.flatMap(entry => entry.release.items.map(item => ({ ...item, root: root(entry, item), package: entry.release.package,
         family: entry.family ?? (entry === maintained ? 'Catalog' : 'Independent'),

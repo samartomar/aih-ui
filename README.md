@@ -9,6 +9,7 @@ The Policy Workbench user interface for AIH, built as an independent application
 - Versioned consumer saved intent: explicit roots, exact template origins, optional skips, configuration, source provenance and content pins. `metadata.aih.workbench` is a consumer convention. Catalog remains the dependency/configuration validator; Core remains the policy and execution authority.
 - Portable human evidence-review decisions, history and reconsideration through the same supported UI/headless boundary. Exact checked evidence bindings remain separate from producer authentication and execution authority.
 - Current host-selected Enterprise authority presentation and explicit recovery through public Core Prepare/Apply and managed-removal APIs; shared with the Node-only `aih-ui/execution-host` boundary.
+- Explicit browser folder selection, bounded recognition of personal SKILL.md content through Catalog's public producer, and ephemeral client-scoped material grants. Saved intent records exact choices and provenance; fresh pages require explicit folder rebinding.
 - `src/` owns the live screens, design tokens, and presentation. Tailwind utilities are compiled locally from the classes used in `src/`.
 - `prototype/` is retained as a separate design reference. The running page does not import it.
 - Local onboarding preferences (experience, organization context, requested assistance and explicit AI clients). These are UI settings, not policy artifacts or enterprise authorization.

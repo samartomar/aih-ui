@@ -11,14 +11,14 @@ export async function proveScaleBrowser({ output, policyPath, frameworks, eviden
   // No projectRoot: execution remains unavailable, including for uploaded data.
   const started = await startConsumer();
   let browser, page;
-  const errors = [], requests = [];
+  const errors = [], requests = []; let client;
   try {
     browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {}) });
     const context = await browser.newContext({ acceptDownloads: true });
     page = await context.newPage(); page.setDefaultTimeout(30_000);
     const observe = p => {
       p.on('pageerror', error => errors.push(error.message));
-      p.on('request', request => { if (request.url().includes('/api/')) requests.push(new URL(request.url()).pathname); });
+      p.on('request', request => { if (request.url().includes('/api/')) requests.push(new URL(request.url()).pathname); client = request.headers()['x-aih-client'] ?? client; });
     };
     observe(page);
     await page.goto(`${started.origin}/authoring`);
@@ -27,7 +27,7 @@ export async function proveScaleBrowser({ output, policyPath, frameworks, eviden
       await page.locator('#intake').setInputFiles(join(output, `framework-${index + 1}.snapshot.json`));
       await page.locator('#intake-result').filter({ hasText: framework.inventory.release.sha256 }).waitFor();
     }
-    const catalog = await (await context.request.get(`${started.origin}/api/authoring-catalog`)).json();
+    const catalog = await (await context.request.get(`${started.origin}/api/authoring-catalog`, { headers: { 'x-aih-client': client } })).json();
     assert.equal(catalog.items.length, 1800); assert.equal(catalog.executionAvailable, false);
     assert.equal(await page.locator('#prepare').isDisabled(), true);
     await page.locator('#open').setInputFiles(policyPath);
@@ -53,6 +53,11 @@ export async function proveScaleBrowser({ output, policyPath, frameworks, eviden
     await page.locator('#summary').filter({ hasText: '"roots"' }).waitFor();
     await page.locator('#open').setInputFiles(downloadedPath);
     await page.locator('#proposal').filter({ hasText: 'Original bytes retained' }).waitFor();
+    // Fresh pages must explicitly reacquire their portable snapshots, too.
+    for (const [index, framework] of frameworks.entries()) {
+      await page.locator('#intake').setInputFiles(join(output, `framework-${index + 1}.snapshot.json`));
+      await page.locator('#intake-result').filter({ hasText: framework.inventory.release.sha256 }).waitFor();
+    }
     await page.locator('#reopen').click();
     await page.locator('#proposal').filter({ hasText: 'REVIEW_BINDING_UNAVAILABLE' }).waitFor();
     await page.locator('#review-file').setInputFiles(evidencePath);
