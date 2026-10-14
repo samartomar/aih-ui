@@ -48,7 +48,7 @@ test('ordinary target changes refresh counts and reasons while preserving accept
   try {
     const requests = [];
     const pageFetch = async (url, options) => {
-      if (options) requests.push({ url, body: JSON.parse(options.body) });
+      if (options?.body) requests.push({ url, body: JSON.parse(options.body) });
       return fetch(`${started.origin}${url}`, { ...options, headers: { ...options?.headers, origin: started.origin } });
     };
     const nodes = await openPage(pageFetch);
@@ -204,7 +204,7 @@ test('family filters expose every item including beyond the former forty-item ca
   await new AsyncFunction('document', 'fetch', source)(document, fetch);
   nodes.get('support-filter').value = 'all'; nodes.get('support-filter').onchange();
   assert.equal(nodes.get('items').children.length, 45);
-  assert.deepEqual(nodes.get('family').children.map(option => option.textContent), ['Extensions (42)', 'Anthropic (3)']);
+  assert.deepEqual(nodes.get('family').children.map(option => option.textContent), ['All families', 'Extensions (42)', 'Anthropic (3)']);
   nodes.get('family').value = 'Anthropic'; nodes.get('family').onchange();
   assert.equal(nodes.get('items').children.length, 3);
   assert.match(nodes.get('items').children[0].children[0].textContent, /Anthropic/);

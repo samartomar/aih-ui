@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
-import { readFile, mkdir, writeFile, mkdtemp } from 'node:fs/promises';
+import { readFile, mkdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -13,6 +14,7 @@ import { createIntentService } from './intent-service.mjs';
 import { createMixedService } from './mixed-service.mjs';
 import { installedFamilies } from './installed-families.mjs';
 import { inspectAuthenticatedReviewEvidence } from './review-host.mjs';
+import { intakePersonalFolder } from './personal-folder.mjs';
 
 export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, port = 0 } = {}) {
   const installed = await readInstalledRelease({
@@ -51,6 +53,30 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   }
   const host = projectRoot ? createHost({ projectRoot, materialRoots: authoringRoots, organizationSource,
     recipeMaterials: mixedService.inventories.flatMap(i => i.materials ?? []), controls }) : null;
+  // Client tokens exist only in the live page. No cookie, saved intent or imported
+  // snapshot restores a client's inventory, material grants or prepared handles.
+  const clients = new Map(), clientStages = new Set();
+  async function clientFor(request) {
+    const id = request.headers['x-aih-client'];
+    if (id === undefined) return { mixed: mixedService, host };
+    if (typeof id !== 'string' || !/^[A-Za-z0-9-]{8,80}$/.test(id)) throw new Error('Invalid authoring client token.');
+    const now = Date.now();
+    for (const [key, value] of clients) if (now - value.usedAt > 3_600_000) {
+      clients.delete(key);
+      for (const directory of value.stages) { await rm(directory, { recursive: true, force: true }); clientStages.delete(directory); }
+    }
+    if (!clients.has(id)) {
+      if (clients.size >= 64) throw new Error('Too many active authoring clients; reopen after idle sessions expire.');
+      const client = { usedAt: now, stages: [], grants: new Map(), roots: { ...authoringRoots } };
+      clients.set(id, client);
+      client.ready = (async () => {
+        client.mixed = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories });
+        client.recipeMaterials = client.mixed.inventories.flatMap(i => i.materials ?? []);
+        client.host = projectRoot ? createHost({ projectRoot, materialRoots: client.roots, organizationSource, recipeMaterials: client.recipeMaterials, controls }) : null;
+      })();
+    }
+    const client = clients.get(id); await client.ready; client.usedAt = now; return client;
+  }
   const staticFiles = new Map([['/', ['consumer.html', 'text/html']], ['/intent', ['intent.html', 'text/html']], ['/intent.js', ['intent.js', 'text/javascript']], ['/consumer.js', ['consumer.js', 'text/javascript']], ['/consumer.css', ['consumer.css', 'text/css']], ['/tokens.css', ['tokens.css', 'text/css']]]);
   staticFiles.set('/authoring', ['authoring.html', 'text/html']);
   staticFiles.set('/authoring.js', ['authoring.js', 'text/javascript']);
@@ -78,7 +104,10 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
         const query = new URL(request.url, origin).searchParams;
         return send(response, 200, intentService.catalog(query.get('inventory') ?? 'journey', query.get('stage') ?? 'current'));
       }
-      if (request.method === 'GET' && pathname === '/api/authoring-catalog') return send(response, 200, { ...mixedService.catalog(), executionAvailable: !!host, organizationConfigured: organizationSource !== undefined });
+      if (request.method === 'GET' && pathname === '/api/authoring-catalog') {
+        const client = await clientFor(request);
+        return send(response, 200, { ...client.mixed.catalog(), executionAvailable: !!client.host, organizationConfigured: organizationSource !== undefined });
+      }
       if (request.method !== 'POST' || !pathname.startsWith('/api/')) return send(response, 404, { error: 'not-found' });
       if (request.headers.origin !== origin) return send(response, 403, { error: 'foreign-origin' });
       if ((request.headers['content-type'] ?? '').split(';')[0] !== 'application/json') return send(response, 415, { error: 'expected-json' });
@@ -93,7 +122,32 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
       try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
       catch { return send(response, 400, { error: 'invalid-json' }); }
       if (pathname.startsWith('/api/authoring-')) {
+        const client = await clientFor(request), mixedService = client.mixed, host = client.host;
         const operation = pathname.slice('/api/authoring-'.length);
+        if (['intake', 'folder'].includes(operation) && !client.grants) return send(response, 400, { status: 'refused', diagnostics: [{ code: 'CLIENT_REQUIRED', message: 'Open a fresh authoring client before supplying content.' }] });
+        if (operation === 'folder') {
+          if (client.grants.size >= 16) return send(response, 409, { status: 'refused', diagnostics: [{ code: 'LOCAL_GRANT_LIMIT', message: 'Up to 16 personal folders per page session; reopen a fresh page to start again.' }] });
+          const result = await intakePersonalFolder(body);
+          if (result.status !== 'ok') return send(response, 200, result);
+          const inventory = result.value, input = inventory.materialSource.input;
+          const grantId = randomUUID();
+          if (projectRoot && !client.grants.has(inventory.release.sha256)) {
+            const directory = await mkdtemp(join(tmpdir(), 'aih-personal-grant-'));
+            clientStages.add(directory); client.stages.push(directory);
+            for (const material of inventory.materials) {
+              const path = resolve(directory, material.path);
+              if (!path.startsWith(directory + sep)) throw new Error('Material path escapes granted staging.');
+              await mkdir(dirname(path), { recursive: true }); await writeFile(path, material.bytes);
+            }
+            client.roots[input] = directory;
+            client.recipeMaterials.push(...inventory.materials);
+            // A binding/context change discards prior approvals in this client.
+            client.host = createHost({ projectRoot, materialRoots: client.roots, organizationSource, recipeMaterials: client.recipeMaterials, controls });
+          }
+          mixedService.addInventory(inventory); client.grants.set(inventory.release.sha256, grantId);
+          return send(response, 200, { status: 'ok', diagnostics: [], value: { input: inventory.input, grantId, itemIds: inventory.release.items.map(item => item.id),
+            message: body.rebind ? 'Exact folder rebound for this page session. Validate and reopen the saved policy.' : 'Folder validated for this page session. Choose its Personal items alongside maintained content.' } });
+        }
         if (['authority', 'prepare', 'apply', 'managed', 'remove'].includes(operation)) {
           if (!host) return send(response, 409, { status: 'unavailable', diagnostics: [{ code: 'HOST_UNAVAILABLE', message: 'No execution target configured by host.' }] });
           const policyText = new TextDecoder().decode(Uint8Array.from(body.policyBytes ?? []));
@@ -140,6 +194,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
       return send(response, 404, { error: 'not-found' });
     } catch (error) { send(response, 400, { error: error.message }); }
   });
+  server.on('close', () => { for (const directory of clientStages) void rm(directory, { recursive: true, force: true }); clients.clear(); });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); });
   return { server, origin: `http://127.0.0.1:${server.address().port}` };
 }

@@ -30,6 +30,13 @@ local/Git/organization fixture snapshots; they claim no network acquisition or
 organization authority. Inventory size, roots, selected items, inclusion paths,
 unique files and byte counts are recorded separately.
 
+The ordinary browser also loads all four maintained family releases. Its receipt
+counts the 1,800 scenario items by exact scenario release identities, and reports
+the total visible inventory, additional items and each ordinary family's count
+separately. Synthetic material retains unknown native support; the browser
+explicitly selects Full inventory and its declared generic target before choosing
+a synthetic item. Browse filters never establish execution capability.
+
 Synthetic declarations are compiled by Catalog's public producer, then read and
 resolved through its public checked contracts. Actual UTF-8 Markdown and recipe
 bytes are hashed and counted; declared placeholder byte lengths are insufficient.

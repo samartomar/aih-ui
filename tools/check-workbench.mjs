@@ -2,7 +2,7 @@
 import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { installConsumer, resolvePackage } from './packages.mjs';
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -21,7 +21,7 @@ for (const name of ['consumer.css', 'tokens.css']) extraFiles[`page/${name}`] = 
 for (const key of Object.keys(process.env)) if (key.toLowerCase() === 'npm_config_allow_scripts') delete process.env[key];
 installConsumer({ consumerDir: output, packages, extraFiles, log: console.log });
 writeFileSync(join(output, 'reviewed-packages.json'), JSON.stringify(packages, null, 2) + '\n');
-const tests = ['ordinary-families', 'authoring-page', 'authoring-v3'];
+const tests = ['ordinary-families', 'authoring-page', 'authoring-v3', 'personal-folder'];
 const result = spawnSync(process.execPath, ['--test', ...tests.map(name => join(output, `consumer/${name}.test.mjs`))], {
   cwd: output, encoding: 'utf8', windowsHide: true, maxBuffer: 20_000_000, timeout: 120_000
 });
@@ -29,3 +29,14 @@ writeFileSync(join(output, 'checks.log'), `${result.stdout ?? ''}${result.stderr
 process.stdout.write(result.stdout ?? ''); process.stderr.write(result.stderr ?? '');
 if (result.error) throw result.error;
 process.exitCode = result.status ?? 1;
+if (process.exitCode === 0) {
+  const browser = spawnSync(process.execPath, [join(output, 'consumer/personal-folder-browser.mjs')], {
+    cwd: output, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 180_000,
+    env: { ...process.env, PLAYWRIGHT_MODULE: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href,
+      AIH_FOLDER_EVIDENCE: join(output, 'personal-folder-evidence') }
+  });
+  writeFileSync(join(output, 'browser-check.log'), `${browser.stdout ?? ''}${browser.stderr ?? ''}`);
+  process.stdout.write(browser.stdout ?? ''); process.stderr.write(browser.stderr ?? '');
+  if (browser.error) throw browser.error;
+  process.exitCode = browser.status ?? 1;
+}

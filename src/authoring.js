@@ -1,16 +1,39 @@
 import { policyFile } from './policy-file.js';
 const $ = id => document.getElementById(id), documentFile = policyFile($('policy'));
+const clientHeaders = { 'x-aih-client': crypto.randomUUID() };
+const loadCatalog = async () => (await fetch('/api/authoring-catalog', { headers: clientHeaders })).json();
 const show = (id, value) => { $(id).textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2); };
 let catalog, candidate, history, currentIntent, currentOptional = [], revision = 0;
 let evidenceBytes, inspected, evidenceFiles = [];
 let prepared;
 const reviewContext = () => ({ reviewEvidence: evidenceFiles.map(file => [...file.bytes]) });
 const invalidate = () => { revision++; candidate = undefined; prepared = undefined; $('accept').disabled = true; $('apply').disabled = true; show('execution', 'Draft or review context changed. Prepare again before Apply.'); show('authority-summary', 'Choices or review context changed. Refresh authority for this draft.'); };
-const request = async (operation, body = {}) => (await fetch(`/api/authoring-${operation}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ policyBytes: [...documentFile.bytes()], ...reviewContext(), ...body }) })).json();
+const request = async (operation, body = {}) => (await fetch(`/api/authoring-${operation}`, { method: 'POST', headers: { 'content-type': 'application/json', ...clientHeaders }, body: JSON.stringify({ policyBytes: [...documentFile.bytes()], ...reviewContext(), ...body }) })).json();
 const button = (label, action) => { const node = document.createElement('button'); node.textContent = label; node.onclick = action; return node; };
 const key = ref => `${ref.releaseSha256}/${ref.itemId}/${ref.scope}`;
 const keep = () => $('keep').value.split('\n').filter(v => v.trim()).map(value => { const [releaseSha256, itemId, scope] = value.trim().split('/'); return { releaseSha256, itemId, scope }; });
 function download(bytes, filename) { const url = URL.createObjectURL(new Blob([bytes], { type: 'application/json' })); const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); URL.revokeObjectURL(url); }
+function updateFolderBindings() {
+  $('folder-binding').replaceChildren();
+  const add = document.createElement('option'); add.value = ''; add.textContent = 'Add as new personal content'; $('folder-binding').append(add);
+  try {
+    const inputs = JSON.parse(documentFile.text()).metadata?.['aih.workbench']?.inputs ?? [];
+    for (const input of inputs.filter(input => input.kind === 'local' && input.id?.startsWith('personal-'))) {
+      const option = document.createElement('option'); option.value = JSON.stringify(input);
+      option.textContent = `Rebind saved ${input.id} · ${input.releaseSha256}`; $('folder-binding').append(option);
+    }
+    if ($('folder-binding').children.length === 2) $('folder-binding').value = $('folder-binding').children[1].value;
+  } catch { /* Invalid imported JSON stays in the editor for ordinary validation. */ }
+}
+function updateFamilies() {
+  const selected = $('family').value; $('family').replaceChildren();
+  const all = document.createElement('option'); all.value = ''; all.textContent = 'All families'; $('family').append(all);
+  for (const family of [...new Set(catalog.items.map(item => item.family).filter(Boolean))]) {
+    const option = document.createElement('option'); option.value = family;
+    option.textContent = `${family} (${catalog.items.filter(item => item.family === family).length})`; $('family').append(option);
+  }
+  $('family').value = [...$('family').children].some(option => option.value === selected) ? selected : '';
+}
 // Catalog checks the release, but descriptive metadata can have arbitrary JSON.
 // Only usable declarations become capability facts; none establish admission.
 const declaredCapabilities = item => item.metadata?.discovery?.clientCapabilities;
@@ -94,7 +117,7 @@ function render(intent = currentIntent, optional = currentOptional) {
   if (intent.pins.some(pin => `${pin.releaseSha256}/${pin.itemId}` === selected)) $('review-target').value = selected;
   show('review-history', intent.reviews);
 }
-function publish(value) { documentFile.setBytes(Uint8Array.from(value.policyBytes)); currentIntent = value.intent; currentOptional = value.optional ?? []; render(); void checkAuthority(); }
+function publish(value) { documentFile.setBytes(Uint8Array.from(value.policyBytes)); currentIntent = value.intent; currentOptional = value.optional ?? []; updateFolderBindings(); render(); void checkAuthority(); }
 async function propose(operation) {
   invalidate(); const attempt = revision;
   try { const result = await request('edit', { operation }); if (attempt !== revision) return; present(result); }
@@ -110,7 +133,7 @@ $('support-filter').value = 'supported';
 $('target').onchange = () => render(); $('support-filter').onchange = () => render();
 $('search').oninput = () => render(); $('family').onchange = () => render(); $('keep').oninput = invalidate; $('policy').addEventListener('input', invalidate);
 $('save').onclick = () => download(documentFile.bytes(), 'policy.json'); $('history').onclick = () => { if (history) download(history, 'policy.original.json'); };
-$('open').onchange = async () => { invalidate(); const attempt = revision, file = $('open').files[0]; if (!file) return; if (file.size > 1_000_000) return show('proposal', 'Policy exceeds the public byte limit.'); const bytes = new Uint8Array(await file.arrayBuffer()); if (attempt !== revision) return; documentFile.setBytes(bytes); history = bytes.slice(); currentIntent = undefined; currentOptional = []; render(); $('history').disabled = false; show('proposal', 'Original bytes retained. Validate and reopen to recover choices.'); await checkAuthority(); };
+$('open').onchange = async () => { invalidate(); const attempt = revision, file = $('open').files[0]; if (!file) return; if (file.size > 1_000_000) return show('proposal', 'Policy exceeds the public byte limit.'); const bytes = new Uint8Array(await file.arrayBuffer()); if (attempt !== revision) return; documentFile.setBytes(bytes); history = bytes.slice(); currentIntent = undefined; currentOptional = []; updateFolderBindings(); render(); $('history').disabled = false; show('proposal', 'Original bytes retained. Validate and reopen to recover choices. Personal inputs require explicit folder reselection and exact rebinding below.'); await checkAuthority(); };
 $('reopen').onclick = async () => { invalidate(); const attempt = revision, result = await request('read', { availability: $('candidate-mode').value }); if (attempt !== revision) return;
   show('proposal', result); if (result.status === 'ok' && result.value.editing === 'available') { currentIntent = result.value.intent; currentOptional = result.value.optional ?? []; render(); } await checkAuthority(); };
 $('candidate-mode').onchange = invalidate; $('execution-mode').onchange = invalidate;
@@ -130,8 +153,28 @@ $('refresh').onclick = async () => { invalidate(); const attempt = revision, res
   } };
 $('intake').onchange = async () => { invalidate(); const attempt = revision, file = $('intake').files[0]; if (!file) return;
   try { if (file.size > 5_000_000) throw new Error('Snapshot exceeds the bounded intake size.'); const snapshot = JSON.parse(await file.text()); const result = await request('intake', { snapshot }); if (attempt !== revision) return;
-    show('intake-result', result.status === 'ok' ? { releaseSha256: result.value.release.sha256, input: result.value.input } : result); if (result.status === 'ok') { catalog = await (await fetch('/api/authoring-catalog')).json(); if (attempt === revision) render(); }
+    show('intake-result', result.status === 'ok' ? { releaseSha256: result.value.release.sha256, input: result.value.input } : result); if (result.status === 'ok') { catalog = await loadCatalog(); if (attempt === revision) { updateFamilies(); render(); } }
   } catch (error) { if (attempt === revision) show('intake-result', error.message); } };
+$('folder-binding').onchange = () => { invalidate(); $('folder').value = ''; show('folder-result', 'Choose the folder explicitly for this binding.'); };
+$('folder').onchange = async () => {
+  invalidate(); const attempt = revision, chosen = [...$('folder').files]; if (!chosen.length) return;
+  show('folder-result', 'Validating the selected files…');
+  try {
+    if (chosen.length > 256 || chosen.some(file => file.size > 250_000) || chosen.reduce((sum, file) => sum + file.size, 0) > 1_000_000) throw new Error('Choose up to 256 files, 250 KB each, 1 MB total.');
+    const root = chosen[0].webkitRelativePath.split('/')[0];
+    const files = [];
+    for (const file of chosen) {
+      if (!file.webkitRelativePath.startsWith(root + '/')) throw new Error('Select one folder with relative file paths.');
+      files.push({ path: file.webkitRelativePath.slice(root.length + 1), bytes: [...new Uint8Array(await file.arrayBuffer())] });
+    }
+    if (attempt !== revision) return;
+    const rebind = $('folder-binding').value ? JSON.parse($('folder-binding').value) : undefined;
+    const result = await request('folder', { files, ...(rebind ? { rebind } : {}) }); if (attempt !== revision) return;
+    show('folder-result', result.status === 'ok' ? { message: result.value.message, input: result.value.input, items: result.value.itemIds } : result);
+    if (result.status === 'ok') { catalog = await loadCatalog(); if (attempt === revision) { updateFamilies(); render(); } }
+  } catch (error) { if (attempt === revision) show('folder-result', error.message); }
+  finally { $('folder').value = ''; }
+};
 const reviewTarget = () => { const [releaseSha256, itemId] = $('review-target').value.split('/'); return { releaseSha256, itemId }; };
 const clearInspection = () => { inspected = undefined; $('record-review').disabled = true; $('review-finding').replaceChildren(); };
 $('review-target').onchange = () => { invalidate(); clearInspection(); };
@@ -205,10 +248,6 @@ $('managed-refresh').onclick = async () => {
     }));
   } catch (error) { if (attempt === revision) show('execution', error.message); }
 };
-catalog = await (await fetch('/api/authoring-catalog')).json(); show('source-description', catalog.description);
-for (const family of [...new Set(catalog.items.map(item => item.family).filter(Boolean))]) {
-  const option = document.createElement('option'); option.value = family;
-  option.textContent = `${family} (${catalog.items.filter(item => item.family === family).length})`; $('family').append(option);
-}
+catalog = await loadCatalog(); show('source-description', catalog.description); updateFamilies();
 for (const id of ['prepare', 'authority-refresh', 'managed-refresh']) $(id).disabled = !catalog.executionAvailable;
 await $('new').onclick();
