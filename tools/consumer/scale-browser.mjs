@@ -28,7 +28,16 @@ export async function proveScaleBrowser({ output, policyPath, frameworks, eviden
       await page.locator('#intake-result').filter({ hasText: framework.inventory.release.sha256 }).waitFor();
     }
     const catalog = await (await context.request.get(`${started.origin}/api/authoring-catalog`, { headers: { 'x-aih-client': client } })).json();
-    assert.equal(catalog.items.length, 1800); assert.equal(catalog.executionAvailable, false);
+    const scenarioReleases = new Set(inventories.map(inventory => inventory.release.sha256));
+    const scenarioItems = catalog.items.filter(item => scenarioReleases.has(item.root.releaseSha256));
+    assert.equal(scenarioItems.length, 1800);
+    const itemKey = (releaseSha256, itemId) => `${releaseSha256}/${itemId}`;
+    assert.deepEqual(scenarioItems.map(item => itemKey(item.root.releaseSha256, item.id)).sort(),
+      inventories.flatMap(inventory => inventory.release.items.map(item => itemKey(inventory.release.sha256, item.id))).sort());
+    const ordinaryFamilies = ['Extensions', 'ECC', 'Superpowers', 'Anthropic'];
+    const ordinaryFamilyCounts = Object.fromEntries(ordinaryFamilies.map(family => [family, catalog.items.filter(item => item.family === family).length]));
+    for (const family of ordinaryFamilies) assert.ok(ordinaryFamilyCounts[family] > 0, `Missing ordinary family: ${family}`);
+    assert.equal(catalog.executionAvailable, false);
     assert.equal(await page.locator('#prepare').isDisabled(), true);
     await page.locator('#open').setInputFiles(policyPath);
     await page.locator('#proposal').filter({ hasText: 'Original bytes retained' }).waitFor();
@@ -39,6 +48,9 @@ export async function proveScaleBrowser({ output, policyPath, frameworks, eviden
     // Ordinary UI selection action composes the same 300-item draft through the
     // installed public validators. No mocked validity or special scale route.
     await page.locator('#search').fill('scale1.item002');
+    await page.locator('#support-filter').selectOption('all');
+    await page.locator('#target').selectOption('generic');
+    assert.match(await page.locator('#items').textContent(), /unknown · native-loading/);
     await page.getByRole('button', { name: 'Choose scale1.item002', exact: true }).click();
     await page.locator('#accept:not([disabled])').waitFor(); await page.locator('#accept').click();
     assert.deepEqual(JSON.parse(await page.locator('#policy').inputValue()), expected.policy);
@@ -74,7 +86,10 @@ export async function proveScaleBrowser({ output, policyPath, frameworks, eviden
     await page.locator('main > section').first().screenshot({ path: join(output, 'functional-scale-browser.png') });
     assert.deepEqual(errors, []);
     assert.ok(requests.every(path => !/authoring-(prepare|apply|remove|managed|authority)$/.test(path)));
-    return { browser: browser.version(), inventoryItems: catalog.items.length, selectedItemsIncludingClosure: 300, downloadedSha256: digest(downloadedBytes), downloadedBytes: downloadedBytes.length, freshContext: true, missingEvidenceRefused: true, pageErrors: errors, apiRequests: requests, executionAvailable: false };
+    return { browser: browser.version(), inventoryItems: scenarioItems.length, totalInventoryItems: catalog.items.length,
+      additionalInventoryItems: catalog.items.length - scenarioItems.length, ordinaryFamilyCounts,
+      syntheticBrowseTarget: 'generic', syntheticSupportFilter: 'all', selectedItemsIncludingClosure: 300,
+      downloadedSha256: digest(downloadedBytes), downloadedBytes: downloadedBytes.length, freshContext: true, missingEvidenceRefused: true, pageErrors: errors, apiRequests: requests, executionAvailable: false };
   } catch (error) {
     await writeFile(join(output, 'browser-failure.json'), JSON.stringify({ message: error.message, pageErrors: errors, apiRequests: requests, proposal: await page?.locator('#proposal').innerText().catch(() => '') }, null, 2));
     throw error;
