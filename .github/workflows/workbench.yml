@@ -51,7 +51,7 @@ jobs:
               fi
             )
           done
-      - name: Check ordinary installed Workbench families
+      - name: Check ordinary installed Workbench families and target support
         shell: bash
         run: |
           set -euo pipefail

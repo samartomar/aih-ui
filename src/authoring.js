@@ -11,17 +11,49 @@ const button = (label, action) => { const node = document.createElement('button'
 const key = ref => `${ref.releaseSha256}/${ref.itemId}/${ref.scope}`;
 const keep = () => $('keep').value.split('\n').filter(v => v.trim()).map(value => { const [releaseSha256, itemId, scope] = value.trim().split('/'); return { releaseSha256, itemId, scope }; });
 function download(bytes, filename) { const url = URL.createObjectURL(new Blob([bytes], { type: 'application/json' })); const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); URL.revokeObjectURL(url); }
+// Checked Catalog discovery facts describe individual capabilities, not admission.
+const capabilityFacts = item => item.metadata?.discovery?.clientCapabilities ?? [];
+function targetFacts(item, target) {
+  const facts = capabilityFacts(item).filter(fact => fact.client === target);
+  return facts.length ? facts : [{ support: 'unknown', capability: 'Target support', surface: 'Not declared',
+    reason: target ? `No capability facts declared for ${target}.` : 'No target capability facts declared in this inventory.' }];
+}
+function updateTargets() {
+  const targets = [...new Set(catalog.items.flatMap(item => capabilityFacts(item).map(fact => fact.client)))].sort();
+  const previous = $('target').value;
+  $('target').replaceChildren();
+  for (const target of targets) {
+    const option = document.createElement('option'); option.value = target; option.textContent = target; $('target').append(option);
+  }
+  if (!targets.length) { const option = document.createElement('option'); option.value = ''; option.textContent = 'No declared targets'; $('target').append(option); }
+  $('target').value = targets.includes(previous) ? previous : targets.includes('claude-code') ? 'claude-code' : targets[0] ?? '';
+  $('target').disabled = !targets.length;
+}
 function render(intent = currentIntent, optional = currentOptional) {
+  updateTargets();
   $('items').replaceChildren();
   const query = $('search').value.toLowerCase();
-  const items = catalog.items.filter(item => (!$('family').value || item.family === $('family').value) && `${item.label} ${item.id} ${item.package.name} ${JSON.stringify(item.sources ?? [])}`.toLowerCase().includes(query));
+  const scoped = catalog.items.filter(item => (!$('family').value || item.family === $('family').value) && `${item.label} ${item.id} ${item.package.name} ${JSON.stringify(item.sources ?? [])}`.toLowerCase().includes(query))
+    .map(item => ({ item, facts: targetFacts(item, $('target').value) }));
+  const count = status => scoped.filter(({ facts }) => facts.some(fact => fact.support === status)).length;
+  show('support-counts', `${$('target').value || 'No declared target'} · ${scoped.length} items in family/search scope: ${count('supported')} with supported facts · ${count('unsupported')} with unsupported facts · ${count('unknown')} with unknown facts.`);
+  const items = scoped.filter(({ facts }) => $('support-filter').value === 'all' || facts.some(fact => fact.support === $('support-filter').value));
   show('inventory-count', `${items.length} of ${catalog.items.length} installed items`);
-  for (const item of items) {
+  if (!items.length) show('inventory-count', `0 of ${catalog.items.length} installed items. Choose Full inventory or another support filter to inspect other facts; family and search filters still apply.`);
+  for (const { item, facts: supportFacts } of items) {
     const box = document.createElement('fieldset'), title = document.createElement('legend'); title.textContent = `${item.family ?? 'Catalog'} · ${item.label} · ${item.package.name}`; box.append(title);
     const description = document.createElement('p'); description.textContent = item.description ?? ''; box.append(description);
+    const supportTitle = document.createElement('p'); supportTitle.textContent = `Capability facts for ${$('target').value || 'undeclared target'}`; box.append(supportTitle);
+    const support = document.createElement('ul');
+    for (const fact of supportFacts) {
+      const row = document.createElement('li');
+      row.textContent = `${fact.support} · ${fact.capability} · ${fact.surface} — ${fact.reason ?? 'No producer reason supplied.'}`;
+      support.append(row);
+    }
+    box.append(support);
     const provenance = document.createElement('details'), caption = document.createElement('summary'), facts = document.createElement('pre');
     caption.textContent = 'Exact identity, upstream origins and dependencies';
-    facts.textContent = JSON.stringify({ releaseSha256: item.root.releaseSha256, itemId: item.id, itemSha256: item.root.itemSha256, sources: item.sources ?? [], dependencies: item.dependencies ?? {} }, null, 2);
+    facts.textContent = JSON.stringify({ releaseSha256: item.root.releaseSha256, itemId: item.id, itemSha256: item.root.itemSha256, sources: item.sources ?? [], dependencies: item.dependencies ?? {}, recipeTargets: item.targets ?? [], clientCapabilities: capabilityFacts(item) }, null, 2);
     provenance.append(caption, facts); box.append(provenance);
     const savedRoots = intent?.roots.filter(root => root.releaseSha256 === item.root.releaseSha256 && root.itemId === item.id) ?? [];
     const savedRoot = savedRoots[0];
@@ -62,6 +94,8 @@ function present(result) {
 }
 $('accept').onclick = () => { if (!candidate) return; const accepted = candidate; history = documentFile.bytes(); invalidate(); publish(accepted); $('history').disabled = false; show('proposal', 'Candidate accepted. Original artifact retained.'); };
 $('new').onclick = async () => { invalidate(); const attempt = revision, result = await request('new', { mode: $('execution-mode').value }); if (attempt !== revision) return; if (result.status === 'ok') publish(result.value); else present(result); };
+$('support-filter').value = 'supported';
+$('target').onchange = () => render(); $('support-filter').onchange = () => render();
 $('search').oninput = () => render(); $('family').onchange = () => render(); $('keep').oninput = invalidate; $('policy').addEventListener('input', invalidate);
 $('save').onclick = () => download(documentFile.bytes(), 'policy.json'); $('history').onclick = () => { if (history) download(history, 'policy.original.json'); };
 $('open').onchange = async () => { invalidate(); const attempt = revision, file = $('open').files[0]; if (!file) return; if (file.size > 1_000_000) return show('proposal', 'Policy exceeds the public byte limit.'); const bytes = new Uint8Array(await file.arrayBuffer()); if (attempt !== revision) return; documentFile.setBytes(bytes); history = bytes.slice(); currentIntent = undefined; currentOptional = []; render(); $('history').disabled = false; show('proposal', 'Original bytes retained. Validate and reopen to recover choices.'); await checkAuthority(); };

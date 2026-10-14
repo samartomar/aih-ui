@@ -15,6 +15,31 @@ saved identity: each item's disclosure shows its exact release/item digests,
 original upstream origins and declared dependencies. The independent note and
 its authored demonstration template remain separately labeled.
 
+### Browse target support
+
+The browse target lists clients declared in installed items' checked
+`metadata.discovery.clientCapabilities`. It starts with `claude-code` when
+declared, otherwise the first declared client. **With supported facts** is the
+default: an item appears when it has at least one declared supported capability
+for that client. Each card still shows its unsupported and unknown capabilities,
+their surfaces and producer reasons. Supported material format does not establish
+native loading, execution, tool interception or automatic guardrails.
+
+Visible counts describe items with supported, unsupported and unknown facts in
+the current family/search scope, before the support filter. Mixed-capability items
+can count in more than one group. **Full inventory**, **With unsupported facts**
+and **With unknown facts** expose the remaining content. No facts for the client
+means unknown, not unsupported. An inventory with no declared clients remains
+discoverable through Full inventory or With unknown facts.
+
+All family options retain their installed counts even when the current target
+has no supported items in that family. Exact identity disclosures retain the
+published recipe targets and all declared client capability facts. Empty recipe
+targets do not establish support. Browse target, family, search and support
+filters change presentation only: they preserve selected roots, dependency pins,
+saved bytes and headless intent. The host independently owns execution targets
+and Core checks actual applicability during preparation.
+
 ### Focused regression command
 
 With Node 24.15–24.x and reviewed local archives, run:
@@ -32,7 +57,10 @@ records their SHA-256 identities in `reviewed-packages.json`, and writes
 choices, and removes a required export in the isolated installation to prove
 startup refuses an omitted family. Selection/save/fresh reopen checks preserve
 exact identities, required dependencies and original Matt provenance, with
-headless reader agreement. Page interaction and existing mixed-source authoring
+headless reader agreement. Ordinary installed-page interaction additionally
+checks supported-first browsing, mixed capability statuses and reasons, unknown
+declarations, scoped counts, target changes, and exact choice preservation.
+Existing mixed-source authoring
 regressions run alongside it. This focused check complements the full consumer
 test suite; it does not replay native acceptance.
 
