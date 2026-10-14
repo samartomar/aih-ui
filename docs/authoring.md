@@ -2,9 +2,35 @@
 
 The supported consumer entry is `aih-ui/authoring` (this private application is
 not an npm authoring library). It uses public Core and Catalog interfaces and is
-shared with `/authoring`. Install reviewed Core/Catalog/Scan archives through
-`tools/consumer-preview.mjs`; open `/authoring` on its printed local URL.
+shared with the ordinary prototype-derived application at `/` and the separate
+`/authoring` contract exploration page. Install reviewed Core/Catalog/Scan
+archives through `tools/preview.mjs` and open its printed local URL for the
+application. `tools/consumer-preview.mjs` serves the exploration page.
 No source checkout imports or `npm link` are needed.
+
+### Existing application workflow
+
+The ordinary application retains its shell, onboarding, catalog, inspector and
+role-specific Policy workspace. Choose a content family in the rail or family
+selector, browse producer capability facts for a target, then choose an item
+from its card or the inspector's **Add to project policy** action. Review the
+proposal in Policy workspace and accept it before saving. Configuration changes
+and removal use the same proposal boundary. **Check Policy** validates current
+bytes and exact available sources; it establishes no organization approval.
+
+**Choose personal folder** supplies only explicitly selected bytes to the
+existing bounded intake contract. Invalid formats and changed saved roots show
+actionable diagnostics. Fresh pages must open the saved policy, select its
+personal input binding and reselect the exact folder, then validate and reopen.
+A saved artifact grants no filesystem access. Target/family filters never change
+policy bytes, roots or executable selections.
+
+Portable declaration snapshots, source reconciliation and optional evidence
+review are part of the same workspace. Human review decisions retain checked
+subject/finding bindings and history; they do not authenticate the reviewer or
+producer. Operator-host configuration independently controls authority,
+Prepare/Apply and managed-removal availability. The connection summary keeps
+scan queue, audit, compliance, Git publication and native execution gaps visible.
 
 Ordinary `/authoring` loads the installed default release plus the public
 `release-extensions.json`, `release-ecc.json`, `release-superpowers.json` and
@@ -59,11 +85,16 @@ An optional output directory follows `--`; otherwise a fresh temporary consumer
 is retained. The command installs only those archives with scripts disabled,
 records their SHA-256 identities in `reviewed-packages.json`, and writes
 `checks.log` and `browser-check.log`. The pinned Playwright Chromium journey writes
-its downloaded policy, screenshot and `browser-evidence.json` beneath
-`personal-folder-evidence/`. It exercises the same `startConsumer()` as
-`tools/consumer-preview.mjs`, checks all four required families and empty initial
-choices, and removes a required export in the isolated installation to prove
-startup refuses an omitted family. Selection/save/fresh reopen checks preserve
+its exploration-page evidence beneath `personal-folder-evidence/` and the normal
+application's downloaded policy, screenshots and `browser-evidence.json` beneath
+`prototype-evidence/`. The normal journey exercises the same `createWorkbench()`
+startup as `tools/preview.mjs`, including `/`, all four required families,
+rail/dropdown synchronization, five-source proposals, actual download,
+missing/changed personal-root refusals, exact explicit rebinding and public
+headless agreement. Removing a required export in the isolated installation
+proves normal startup refuses incomplete families. Presentation tests also check
+stale catalog responses and draft/reopen invalidation. Selection/save/fresh reopen
+checks preserve
 exact identities, required dependencies and original Matt provenance, with
 headless reader agreement. Ordinary installed-page interaction additionally
 checks supported-first browsing, mixed capability statuses and reasons, unknown

@@ -55,14 +55,14 @@
 </div>
 <!-- Header Action CTAs -->
 <div class="flex items-center gap-2 shrink-0">
-<button class="flex items-center gap-1.5 px-2 py-1 rounded bg-surface-container-low text-on-surface-variant text-[12px] opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not connected: needs organization review state from Core, and organizations supply the workflow">
+<button class="flex items-center gap-1.5 px-2 py-1 rounded bg-surface-container-low text-on-surface-variant text-[12px] opacity-50 cursor-not-allowed" id="review-project-changes" type="button" title="Review proposed project policy changes">
 <span class="">Review Changes</span>
 <span class="text-[10px] font-mono px-1 py-0.2 rounded bg-surface-container-high text-outline font-medium">Not connected</span>
 </button>
-<button class="px-2.5 py-1 rounded bg-surface-container text-on-surface-variant text-[12px] font-medium opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not connected: needs a Core check-policy contract">
+<button class="px-2.5 py-1 rounded bg-surface-container text-on-surface-variant text-[12px] font-medium opacity-50 cursor-not-allowed" id="check-project-policy" type="button" title="Validate the current project policy and its exact sources">
         Check Policy
       </button>
-<button class="flex items-center gap-1 px-3 py-1 rounded bg-surface-container text-on-surface-variant text-[12px] font-medium opacity-50 cursor-not-allowed" type="button" disabled aria-disabled="true" title="Not connected: needs organization resolution and a Core publish contract">
+<button class="flex items-center gap-1 px-3 py-1 rounded bg-surface-container text-on-surface-variant text-[12px] font-medium opacity-50 cursor-not-allowed" id="publish-project-policy" type="button" disabled aria-disabled="true" title="Git publishing is not connected. Save the project policy in Policy workspace, then use your Git workflow.">
 <span class="">Publish</span>
 <span class="material-symbols-outlined text-[13px]">arrow_forward</span>
 </button>
@@ -183,8 +183,8 @@
 </h1>
 </div>
 <div class="flex items-center gap-2">
-<span class="text-[10.5px] font-mono text-outline uppercase tracking-wider hidden sm:inline-block">Source Policy:</span>
-<div class="flex items-center bg-surface-container-lowest p-0.5 rounded border border-wb-border text-[11px]" title="Not published: needs a Core source-policy resolution contract">
+<span class="text-[10.5px] font-mono text-outline uppercase tracking-wider hidden sm:inline-block">Organization Source Policy:</span>
+<div class="flex items-center bg-surface-container-lowest p-0.5 rounded border border-wb-border text-[11px]" title="Needs operator input: connect current organization authority before resolving source-wide allow/hold decisions. Project choices remain available below.">
 <button class="px-2.5 py-1 rounded text-on-surface-variant opacity-50 cursor-not-allowed" id="source-btn-allow-all" type="button" disabled aria-disabled="true">Allow all</button>
 <button class="px-2.5 py-1 rounded text-on-surface-variant opacity-50 cursor-not-allowed" id="source-btn-allow-exceptions" type="button" disabled aria-disabled="true">Allow with exceptions</button>
 <button class="px-2.5 py-1 rounded text-on-surface-variant opacity-50 cursor-not-allowed" id="source-btn-hold-back" type="button" disabled aria-disabled="true">Hold back</button>
@@ -231,6 +231,15 @@
 <div class="flex-1 flex overflow-hidden">
 <div class="flex-1 overflow-y-auto p-4 bg-wb-cards flex flex-col gap-3">
 <div id="category-context" aria-live="polite"></div>
+<div class="flex flex-wrap gap-2 mb-3 text-[11px]" id="authoring-browse">
+<label>Family <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-family" aria-label="Content family"></select></label>
+<label>Target <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-target" aria-label="Browse target"></select></label>
+<label>Support <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-support" aria-label="Target support"><option value="supported">With supported facts</option><option value="all">Full inventory</option><option value="unsupported">With unsupported facts</option><option value="unknown">With unknown facts</option></select></label>
+<label class="cursor-pointer rounded border border-wb-border p-1">Choose personal folder <input id="personal-folder" type="file" webkitdirectory multiple aria-label="Choose personal folder"></label>
+<label>Folder binding <select class="bg-wb-input border border-wb-border rounded p-1" id="personal-binding" aria-label="Personal folder binding"><option value="">Add new personal content</option></select></label>
+<p class="w-full text-outline" id="support-counts"></p>
+<p class="w-full text-on-surface-variant" id="personal-result" role="status">Personal content stays local to this page session. Choose a folder containing SKILL.md with name, description and license.</p>
+</div>
 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3" id="cards-grid"></div>
 </div>
 </div>
@@ -242,7 +251,7 @@
 <p class="text-on-surface-variant mt-1 max-w-3xl" id="policy-workspace-intro"></p>
 </div>
 <div class="p-4 space-y-3">
-<p class="px-3 py-2 rounded border border-wb-border bg-surface-container-low text-on-surface-variant" id="policy-workspace-boundary">Your saved setup selects this view. It does not create policy authority or a policy draft.</p>
+<p class="px-3 py-2 rounded border border-wb-border bg-surface-container-low text-on-surface-variant" id="policy-workspace-boundary">Your setup selects this view. Project authoring below saves a portable policy; organization authority and execution require a separately configured operator host.</p><details class="rounded border border-wb-border bg-surface-container-low p-3 text-on-surface-variant" id="workbench-connections"><summary class="cursor-pointer font-medium">Working capabilities and remaining connections</summary><ul class="list-disc pl-4 space-y-1 mt-2"><li>Available: installed families, target declarations, personal folder validation, project configuration, dependency proposals, exact policy save/reopen and source reconciliation.</li><li>Evidence review: supply exact evidence in the section below. Human decisions and reconsideration use checked bindings; producer authentication requires separately configured trust.</li><li>Scan Review is not connected to an organization scan queue. Review supplied evidence below; no scanner is run from this page.</li><li>Audit Feed and Compliance Matrix have no connected audit source or organization aggregate. Saved review history remains available below.</li><li>Publish has no connected Git workflow. Save the policy, then review and publish through your own repository.</li><li>Host Prepare/Apply requires an operator-selected project, controls and material; Enterprise also requires current organization authority. Native client use remains unverified and automatic guardrails are not connected. Setup preferences establish none of these capabilities.</li></ul></details>
 <div class="grid grid-cols-1 xl:grid-cols-3 gap-3">
 <section class="rounded border border-wb-border bg-surface-container-lowest p-4 space-y-2" aria-labelledby="policy-start-title">
 <div class="font-mono text-[10px] uppercase tracking-wider text-outline">01 / Start</div>

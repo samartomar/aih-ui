@@ -40,3 +40,21 @@ if (process.exitCode === 0) {
   if (browser.error) throw browser.error;
   process.exitCode = browser.status ?? 1;
 }
+if (process.exitCode === 0) {
+  const integrated = spawnSync(process.execPath, [join(repo, 'tools/check-integrated-workbench.mjs'), output], {
+    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 180_000,
+  });
+  writeFileSync(join(output, 'prototype-check.log'), `${integrated.stdout ?? ''}${integrated.stderr ?? ''}`);
+  process.stdout.write(integrated.stdout ?? ''); process.stderr.write(integrated.stderr ?? '');
+  if (integrated.error) throw integrated.error;
+  process.exitCode = integrated.status ?? 1;
+}
+if (process.exitCode === 0) {
+  const unit = spawnSync(process.execPath, ['--test', ...readdirSync(join(repo, 'tools/tests')).filter(name => name.endsWith('.test.mjs')).map(name => join(repo, 'tools/tests', name))], {
+    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 120_000,
+  });
+  writeFileSync(join(output, 'presentation-checks.log'), `${unit.stdout ?? ''}${unit.stderr ?? ''}`);
+  process.stdout.write(unit.stdout ?? ''); process.stderr.write(unit.stderr ?? '');
+  if (unit.error) throw unit.error;
+  process.exitCode = unit.status ?? 1;
+}

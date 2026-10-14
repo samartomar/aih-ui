@@ -47,12 +47,12 @@ function badgeOf(entry, record, categories, publisher) {
   };
 }
 
-function card(entry, selectedId, onSelect, publisher, categories) {
+function card(entry, selectedId, onSelect, publisher, categories, model) {
   const id = identity(entry);
   const record = publisherOf(publisher, entry);
-  const title = publishedText(record, "title");
-  const description = publishedText(record, "description");
-  const badge = badgeOf(entry, record, categories, publisher);
+  const title = entry.authoringItem?.label ?? publishedText(record, "title");
+  const description = entry.authoringItem?.description ?? publishedText(record, "description");
+  const badge = entry.authoringItem ? { text: entry.authoringItem.family, value: true, title: 'Installed content family; upstream origins are shown in the inspector.', source: 'Content family' } : badgeOf(entry, record, categories, publisher);
   const isSelected = selectedId === id.entryId;
 
   const node = el("div", "wb-card group rounded border p-3 flex flex-col justify-between cursor-pointer");
@@ -117,12 +117,21 @@ function card(entry, selectedId, onSelect, publisher, categories) {
   const toggle = el("div", "flex items-center gap-1.5");
   const button = el("button", "toggle-switch w-6 h-3.5 rounded-full bg-surface-container-highest p-0.5 flex items-center opacity-50 cursor-not-allowed", undefined);
   button.type = "button";
-  button.disabled = true;
+  button.disabled = !entry.authoringItem;
   button.setAttribute("aria-disabled", "true");
   button.setAttribute("aria-label", `Local preference unavailable for ${title ?? id.name}`);
   button.title = "Local preference not saved. This control is unavailable in this version and does not change tool access.";
   button.appendChild(el("div", "w-2.5 h-2.5 rounded-full bg-outline"));
   toggle.appendChild(button);
+  if (entry.authoringItem) {
+    const chosen = model.intent?.roots.some(root => root.itemId === entry.authoringItem.id && root.releaseSha256 === entry.authoringItem.root.releaseSha256);
+    button.className = 'px-2 py-1 rounded bg-primary-container text-on-primary text-[10px] font-medium';
+    button.replaceChildren(); button.textContent = chosen ? 'Selected' : 'Choose';
+    button.setAttribute('aria-label', `Choose ${entry.authoringItem.id}`);
+    button.removeAttribute('aria-disabled');
+    button.title = 'Review this proposed choice in your policy workspace before accepting it.';
+    button.addEventListener('click', event => { event.stopPropagation(); model.onChoose(entry.authoringItem); });
+  }
   foot.appendChild(toggle);
   node.appendChild(foot);
 
@@ -155,7 +164,7 @@ export function createCards({ elements, onSelect }) {
         empty.appendChild(el("span", "font-mono text-on-surface", String(model.total)));
         elements.cardsGrid.appendChild(empty);
       } else {
-        const nodes = model.entries.map((entry) => card(entry, model.selectedId, onSelect, model.publisher, model.categories));
+        const nodes = model.entries.map((entry) => card(entry, model.selectedId, onSelect, model.publisher, model.categories, model));
         const shared = nodes[0].dataset.categoryLabel;
         if (shared !== NOT_PUBLISHED && nodes.every((node) => node.dataset.categoryLabel === shared && node.dataset.categorySource === nodes[0].dataset.categorySource)) {
           elements.categoryContext.textContent = `${nodes[0].dataset.categorySource} · ${shared}`;

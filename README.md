@@ -27,11 +27,31 @@ An outside developer can build this UI from public package interfaces. The polic
 
 ## Testing against unpublished packages
 
-The supported mixed-source v3 page is `/authoring`. It and the headless
-`aih-ui/authoring` entry share [the authoring contract](docs/authoring.md), including
+The ordinary prototype-derived application at `/` integrates mixed-source v3
+authoring into its existing catalog cards, inspector and Policy workspace.
+Start it with `node tools/preview.mjs --port 4173` and the three reviewed archive
+environment variables. `/authoring` remains a separate contract exploration
+page. Both and the headless `aih-ui/authoring` entry share
+[the authoring contract](docs/authoring.md), including
 the shipped saved-intent v3/review-v1 schemas, portable source intake, exact
 snapshot reopen, migrations and explicit reconciliation. Start it with the same
-reviewed archives and `tools/consumer-preview.mjs`; execution remains host-owned.
+reviewed archives and `tools/preview.mjs`; execution remains host-owned.
+
+The application offers project proposals, configuration, dependency review,
+acceptance, exact policy downloads, fresh reopen and explicit personal-folder
+rebinding. Target support is producer-declared capability data, independent of
+policy choices and native execution. Portable declaration intake, evidence
+inspection, human review decisions and source reconciliation are available in
+the same Policy workspace. Imported original bytes remain downloadable.
+Organization role preferences do not establish organization authority. The
+workspace's connection summary explains the scan queue, audit, compliance,
+Git publishing and operator-host inputs that are still needed.
+
+Optional host configuration uses the existing `AIH_CONSUMER_PROJECT`,
+`AIH_CONSUMER_CONTROLS`, `AIH_ORGANIZATION_SOURCE` and `AIH_REVIEW_TRUST`
+environment inputs. Without a configured host, Prepare/Apply and managed removal
+remain unavailable with an explanation. `AIH_UI_SETTINGS_PATH` selects an
+isolated local setup store for tests; HTTP inputs cannot choose that path.
 
 Pack each local package with `npm pack`, install the tarballs into a throwaway consumer project, and run the scenario there. Do not use `npm link`: it hides packaging errors such as a wrong `exports` map or a missing file.
 
@@ -78,6 +98,9 @@ src/
     policy-import.js    read-only local PolicyBundle structure review
     decision-import.js  read-only local Decision V2 structure review
     policy-workspace.js role-specific policy workspace presentation
+    authoring-client.js page-scoped authoring state and exact byte transport
+    authoring-workspace.js project proposals, files, intake and host presentation
+    evidence-review.js checked evidence and portable human review decisions
   styles/               Workbench design tokens and presentation rules
     tokens.css          dark and light colour roles
     workbench.css       compact layout and component styling

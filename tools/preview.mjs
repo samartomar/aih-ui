@@ -7,10 +7,6 @@
  * entry point through the installed packages' export maps. No repository's source tree is
  * read, no `dist/` is deep-imported, and npm link is never used.
  *
- * Installing @aihq/core@0.6.2, @aihq/scan@0.4.0 or @aihq/catalog@0.2.0 FROM NPM does not
- * provide the APIs this preview needs: the published versions predate them. Only the local
- * tarballs carry the governance-input contract.
- *
  * Two halves:
  *   - a static page (src/), copied into the run directory with its module tree intact,
  *     beside the catalog document it reads - the OUTPUT of Catalog's public reader,
@@ -31,13 +27,12 @@ import { copyFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { EXPECTED_FORMAT, EXPECTED_VERSION, contractViolations } from "./catalog-index-contract.mjs";
 import { buildCss } from "./build-css.mjs";
 import { installConsumer, resolvePackage } from "./packages.mjs";
-import { createApi } from "./server/api.mjs";
+import { createWorkbench } from "./server/workbench.mjs";
 import { callService } from "./server/service-client.mjs";
 import { assertReadable, pageAssets, serviceAssets } from "./server/assets.mjs";
-import { createStaticServer, listen } from "./server/static.mjs";
+import { listen } from "./server/static.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, ".."); // the aih-ui checkout this tool belongs to
@@ -115,24 +110,6 @@ function startupFact(consumerDir, op) {
   return { state: "unavailable", reason: answer.error };
 }
 
-/**
- * A Catalog sidecar the page can do without. `absent` means the installed
- * Catalog does not export it; `unavailable` means its own reader refused it or
- * the service failed. Neither is ever turned into a value.
- */
-function sidecarFact(consumerDir, op) {
-  const fact = startupFact(consumerDir, op);
-  if (fact.state === "published" && fact[op] === null) return { state: "absent", reason: fact.absent };
-  return fact;
-}
-
-/** The summary block for a sidecar: where the page fetches it, or why it cannot. */
-function sidecarSummary(fact, key, url) {
-  if (fact.state !== "published") return { state: fact.state, reason: fact.reason };
-  const { entries, ...facts } = fact[key];
-  return { state: "published", url, ...facts };
-}
-
 /* ----------------------------------------------------------------------- main */
 
 async function main() {
@@ -204,162 +181,34 @@ async function main() {
 
   // --- 3. the catalog, through Catalog's public reader ----------------------
   //
-  // The page is served what readCatalogContentV1 returned, projected member by
-  // member - never the raw index bytes - so every field it can render is a
-  // field of the reader's result type.
-  const servedFact = startupFact(consumerDir, "servedCatalog");
-  if (servedFact.state !== "published") {
-    fatal(`the installed ${CATALOG_PACKAGE} index could not be read through its public reader: ${servedFact.reason}`);
-  }
-  const index = servedFact.catalog;
-  const violations = contractViolations(index);
-  if (violations.length) fatal(violations.join("; "));
-  log(
-    `index: read with readCatalogContentV1 (format ${index.format}, version ${index.version}, ${index.entries.length} entries, ${index.digest})`,
-  );
+  // The authoring host reads the installed default and required family releases
+  // through public Catalog APIs. No retired index-root export is required.
   const installedPackages = readInstalledPackages(consumerDir, packages);
-  const installed = installedPackages.find((pkg) => pkg.name === CATALOG_PACKAGE);
-  const catalogPkg = packages.find((pkg) => pkg.name === "catalog");
-  for (const pkg of installedPackages) log(`installed: ${pkg.name} ${pkg.version}`);
-
-  // Catalog's current collection view decides which entries of a collected
-  // source type are current inventory. Without it the page cannot tell a
-  // current Core entry from an older one, so the preview does not start.
-  const collections = startupFact(consumerDir, "collections");
-  if (collections.state !== "published") {
-    fatal(
-      `the installed ${CATALOG_PACKAGE} publishes no readable collection view: ${collections.reason}
-` +
-        "This UI needs a Catalog with the collection contract (readCatalogCollectionsV1). " +
-        "Point CATALOG_REPO at a checkout that has it, or CATALOG_TGZ at such a package.",
-    );
-  }
-  for (const collection of collections.collections.collections) {
-    log(`collection: ${collection.id} (${collection.owner.package}) release ${collection.current.release}, ${collection.members.length} current members`);
-  }
-  // Core's supported AI CLI targets. A Core that does not export them leaves
-  // the AI tools control saying so; the rest of the page does not depend on it.
-  const coreTargets = startupFact(consumerDir, "coreTargets");
-  log(
-    coreTargets.state === "published"
-      ? `core targets: ${coreTargets.targets.length} supported AI CLIs from @aihq/core SUPPORTED_CLIS`
-      : `core targets: unavailable (${coreTargets.reason})`,
-  );
-
-  // Catalog's publisher titles and descriptions. Display-only: a Catalog
-  // without them leaves those slots reading Not published.
-  const publisher = startupFact(consumerDir, "publisher");
-  log(
-    publisher.state === "published"
-      ? `publisher: ${publisher.publisher.coverage.entries} entries; description ${publisher.publisher.coverage.description.published} published, title ${publisher.publisher.coverage.title.published}, category ${publisher.publisher.coverage.category.published}`
-      : `publisher: unavailable (${publisher.reason})`,
-  );
-
-  // Catalog's publisher qualification and curated categories. Display-only:
-  // a Catalog that predates either export leaves its block reading Not
-  // published, and one whose sidecar its own reader refuses says so.
-  const qualification = sidecarFact(consumerDir, "qualification");
-  log(
-    qualification.state === "published"
-      ? `qualification: ${qualification.qualification.coverage.qualified} of ${qualification.qualification.coverage.entries} entries qualified at ${qualification.qualification.evaluatedAt}; signature ${qualification.qualification.signature}, attestation ${qualification.qualification.attestation}`
-      : `qualification: ${qualification.state} (${qualification.reason})`,
-  );
-  const categories = sidecarFact(consumerDir, "categories");
-  log(
-    categories.state === "published"
-      ? `categories: ${categories.categories.taxonomy.length} curated categories; ${categories.categories.coverage.curated} of ${categories.categories.coverage.entries} entries curated`
-      : `categories: ${categories.state} (${categories.reason})`,
-  );
-
+  const coreTargets = startupFact(consumerDir, 'coreTargets');
   // --- 4. page files into the run directory ---------------------------------
   for (const asset of page) {
     const target = join(runDir, asset.to);
     mkdirSync(dirname(target), { recursive: true });
     await copyFile(join(REPO_ROOT, asset.from), target);
   }
-  if (publisher.state === "published") {
-    writeFileSync(join(runDir, "publisher-metadata.json"), `${JSON.stringify(publisher.publisher)}
-`);
-  }
-  if (qualification.state === "published") {
-    writeFileSync(join(runDir, "catalog-qualification.json"), `${JSON.stringify(qualification.qualification)}
-`);
-  }
-  if (categories.state === "published") {
-    writeFileSync(join(runDir, "catalog-categories.json"), `${JSON.stringify(categories.categories)}
-`);
-  }
-  // The URL is unchanged; the bytes are the reader's projection.
-  writeFileSync(join(runDir, "catalog-index.json"), `${JSON.stringify(index)}
-`);
-  log(`page: ${page.length} page files and the served catalog document`);
-
-  // Provenance shown in the page's strip: what was ACTUALLY installed, by
-  // tarball hash and commit, never the index's own package block alone.
   const summary = {
-    format: index.format,
-    version: index.version,
-    entryCount: index.entries.length,
-    organizationAdmission: index.organizationAdmission,
-    // The reader's digest over the exact published index bytes, not over the
-    // served projection.
-    indexSha256: index.digest.replace(/^sha256:/, ""),
-    package: {
-      name: installed.name,
-      version: installed.version,
-      tarball: basename(catalogPkg.tarball),
-      tarballSha256: catalogPkg.sha256,
-      commit: catalogPkg.commit,
-    },
-    packages: packages.map((pkg) => ({
-      name: pkg.name,
-      packageName: `@aihq/${pkg.name}`,
-      // From npm's installation record, cross-checked with the installed manifest.
-      version: installedPackages.find((item) => item.name === `@aihq/${pkg.name}`).version,
-      tarball: basename(pkg.tarball),
-      sha256: pkg.sha256,
-      commit: pkg.commit,
-      source: pkg.source,
+    packages: packages.map(pkg => ({
+      name: pkg.name, packageName: `@aihq/${pkg.name}`,
+      version: installedPackages.find(item => item.name === `@aihq/${pkg.name}`).version,
+      tarball: basename(pkg.tarball), sha256: pkg.sha256, commit: pkg.commit, source: pkg.source,
     })),
-    indexPackage: index.package ?? null,
-    // Catalog's collection view, exactly as its reader returned it.
-    collections: collections.collections,
-    // Catalog's publisher metadata: where it is served and what it covers, or why it is unavailable.
-    publisher:
-      publisher.state === "published"
-        ? {
-            state: "published",
-            url: "./publisher-metadata.json",
-            specifier: publisher.publisher.specifier,
-            digest: publisher.publisher.digest,
-            sources: publisher.publisher.sources,
-            coverage: publisher.publisher.coverage,
-          }
-        : { state: "unavailable", reason: publisher.reason },
-    // Catalog's qualification and curated categories: where each is served, or
-    // why it is not.
-    qualification: sidecarSummary(qualification, "qualification", "./catalog-qualification.json"),
-    categories: sidecarSummary(categories, "categories", "./catalog-categories.json"),
-    // Core's supported targets, or why they are unavailable.
-    coreTargets:
-      coreTargets.state === "published"
-        ? { state: "published", source: "@aihq/core SUPPORTED_CLIS", targets: coreTargets.targets }
-        : { state: "unavailable", reason: coreTargets.reason },
+    coreTargets: coreTargets.state === 'published'
+      ? { state: 'published', source: '@aihq/core SUPPORTED_CLIS', targets: coreTargets.targets }
+      : { state: 'unavailable', reason: coreTargets.reason },
   };
+  const { server, catalog: currentCatalog } = await createWorkbench({ consumerDir, runDir, summary, settingsPath: process.env.AIH_UI_SETTINGS_PATH });
+  summary.entryCount = currentCatalog.items.length;
   writeFileSync(join(runDir, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
 
   // --- 5. serve ------------------------------------------------------------
-  const handleApi = createApi({ consumerDir, runDir, summary });
-  const server = createStaticServer(runDir, handleApi);
   const address = await listen(server, PORT);
   const url = `http://127.0.0.1:${address.port}/`;
 
-  const health = await fetch(`${url}catalog-index.json`);
-  if (!health.ok) fatal(`served index is not reachable at ${url}catalog-index.json (${health.status})`);
-  const served = await health.json();
-  if (served.format !== EXPECTED_FORMAT || served.version !== EXPECTED_VERSION) {
-    fatal(`served index lost its contract: ${JSON.stringify(served.format)} / ${JSON.stringify(served.version)}`);
-  }
   const pageResponse = await fetch(url);
   if (!pageResponse.ok) fatal(`served page is not reachable at ${url} (${pageResponse.status})`);
   // Every module the page imports must be reachable too: a page that loads and
@@ -377,7 +226,7 @@ async function main() {
 
   log(`run directory: ${runDir}`);
   log(`consumer: ${consumerDir}`);
-  log(`index contract: ${served.format} version ${served.version} (${served.entries.length} entries)`);
+  log(`installed authoring inventory: ${currentCatalog.items.length} items`);
   log(`page assets: ${page.length} served, every one reachable`);
   process.stdout.write(`${url}\n`);
   log("press Ctrl+C to stop serving; the run directory is removed on exit");

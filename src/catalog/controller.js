@@ -16,7 +16,7 @@ import { createProvenance } from "./provenance.js";
 import { createToolbar } from "./toolbar.js";
 import { categoryCoverage } from "./publisher.js";
 import { categoryRows } from "./categories.js";
-import { loadCatalog } from "./index-source.js";
+import { projectItems, capabilityFacts, declaredTargets, supportedEntries } from "./authoring-model.js";
 import { inventoryCounts, scopeEntries, scopeTotal, selectedScope, visibleEntries } from "./selectors.js";
 import { emptyView, restoreView, saveView } from "./view-state.js";
 import { text } from "../app/dom.js";
@@ -32,7 +32,7 @@ import { text } from "../app/dom.js";
  * @param onReselectEntry  called when the selected card is activated again
  * @param onSummary        called with the preview summary once it has loaded
  */
-export function createCatalog({ onSelectEntry, onReselectEntry = () => {}, onSummary }) {
+export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () => {}, onSummary, onProposal = () => {} }) {
   const elements = catalogElements();
   const state = {
     entries: [],
@@ -68,7 +68,10 @@ export function createCatalog({ onSelectEntry, onReselectEntry = () => {}, onSum
   });
   const navigation = createNavigation({
     elements: elements.navigation,
-    onSelectSource: (source) => changeView({ source, sourceType: null, category: null }),
+    onSelectSource: (source) => {
+      family.value = '';
+      changeView({ source, sourceType: null, category: null });
+    },
     onToggleCategory: (category) => changeView({
       category: state.view.category !== null && state.view.category.id === category.id ? null : category,
     }),
@@ -88,6 +91,17 @@ export function createCatalog({ onSelectEntry, onReselectEntry = () => {}, onSum
   });
   const cards = createCards({ elements: elements.cards, onSelect: (entryId) => select(entryId) });
   const details = createDetails({ elements: elements.details });
+  const family = document.getElementById('browse-family');
+  const target = document.getElementById('browse-target');
+  const support = document.getElementById('browse-support');
+  const counts = document.getElementById('support-counts');
+  family.addEventListener('change', () => changeView({ source: null, sourceType: null, category: null }));
+  for (const control of [target, support]) control.addEventListener('change', () => render());
+
+  function browseEntries() {
+    return visibleEntries(state.entries, state.view, state.context.membership, state.publisher, state.categories)
+      .filter(entry => !family.value || entry.authoringItem.family === family.value);
+  }
 
   function selectedEntry() {
     return state.entries.find((candidate) => text(candidate?.entryId) === state.selectedId) ?? null;
@@ -96,12 +110,17 @@ export function createCatalog({ onSelectEntry, onReselectEntry = () => {}, onSum
   function cardsModel() {
     const scope = selectedScope(state.counts, state.view);
     return {
-      entries: visibleEntries(state.entries, state.view, state.context.membership, state.publisher, state.categories),
+      entries: supportedEntries(browseEntries(), target.value, support.value),
       total: scopeTotal(state.entries, state.view, state.context.membership),
       noun: scope === null ? "catalog entries" : "entries from this source",
       selectedId: state.selectedId,
       publisher: state.publisher,
       categories: state.categories,
+      intent: authoring.intent,
+      onChoose: async item => {
+        try { onProposal(await authoring.propose({ type: 'select', root: item.root })); }
+        catch (error) { onProposal({ status: 'refused', diagnostics: [{ message: error.message }] }); }
+      },
     };
   }
 
@@ -121,7 +140,7 @@ export function createCatalog({ onSelectEntry, onReselectEntry = () => {}, onSum
   }
 
   function detailsModel(entry) {
-    return { entry, counts: state.counts, publisher: state.publisher, qualification: state.qualification };
+    return { entry, counts: state.counts, publisher: state.publisher, qualification: state.qualification, target: target.value };
   }
 
   function render() {
@@ -130,6 +149,9 @@ export function createCatalog({ onSelectEntry, onReselectEntry = () => {}, onSum
     const scope = selectedScope(state.counts, state.view);
     const inScope = scopeTotal(state.entries, state.view, state.context.membership);
     const cardsView = cardsModel();
+    const scoped = browseEntries();
+    const count = status => scoped.filter(entry => capabilityFacts(entry.authoringItem, target.value).some(fact => fact.support === status)).length;
+    counts.textContent = `${target.value || 'No declared target'} · ${scoped.length} items in family/search/source scope: ${count('supported')} with supported facts · ${count('unsupported')} with unsupported facts · ${count('unknown')} with unknown facts. Mixed items can count in more than one group.`;
     const availableKinds = visibleEntries(state.entries, { ...state.view, kind: null }, state.context.membership, state.publisher, state.categories);
     const filteredCounts = inventoryCounts(availableKinds);
     provenance.render({
@@ -174,24 +196,27 @@ export function createCatalog({ onSelectEntry, onReselectEntry = () => {}, onSum
 
   return {
     async start() {
-      const { entries, inventory, summary, publisher, qualification, categories } = await loadCatalog();
-      state.entries = entries;
-      state.publisher = publisher;
-      state.qualification = qualification;
-      state.categories = categories;
-      state.inventory = inventory;
-      state.summary = summary;
-      onSummary?.(summary);
-      state.context = {
-        membership: inventory.membership,
-        // Installed versions from the backend's installation record, by name.
-        installed: new Map(
-          (summary?.packages ?? [])
-            .filter((pkg) => typeof pkg?.packageName === "string" && typeof pkg?.version === "string")
-            .map((pkg) => [pkg.packageName, pkg.version]),
-        ),
+      state.summary = await (await fetch('./summary.json', { cache: 'no-store' })).json();
+      onSummary?.(state.summary);
+      const refresh = () => {
+        if (!authoring.catalog) return;
+        state.entries = projectItems(authoring.catalog.items);
+        if (state.selectedId && !selectedEntry()) { state.selectedId = null; onSelectEntry(null); }
+        state.inventory = { membership: new Map(), collections: [], notCurrent: 0 };
+        state.context = { membership: new Map(), installed: new Map() };
+        const selectedFamily = family.value, selectedTarget = target.value;
+        family.replaceChildren(new Option('All families', ''));
+        for (const value of [...new Set(authoring.catalog.items.map(item => item.family))]) {
+          family.append(new Option(`${value} (${authoring.catalog.items.filter(item => item.family === value).length})`, value));
+        }
+        family.value = [...family.options].some(option => option.value === selectedFamily) ? selectedFamily : '';
+        target.replaceChildren(...declaredTargets(authoring.catalog.items).map(value => new Option(value, value)));
+        target.value = [...target.options].some(option => option.value === selectedTarget) ? selectedTarget
+          : [...target.options].some(option => option.value === 'claude-code') ? 'claude-code' : target.options[0]?.value ?? '';
+        render();
       };
-      // Counts first: restoreView validates every saved filter against them, so
+      authoring.subscribe(refresh);
+      refresh();      // Counts first: restoreView validates every saved filter against them, so
       // restoring before they exist silently discards the saved kind and source.
       state.counts = inventoryCounts(state.entries, state.context);
       restoreView(state.view, state.counts, state.categories, state.entries);
