@@ -81,9 +81,40 @@ try {
   assert.deepEqual(JSON.parse(await reopened.locator('#policy').inputValue()), saved);
   assert.ok(!(await reopened.locator('#family').textContent()).includes('Personal'));
   await writeFile(join(folder, 'skills/example/support/checklist.txt'), sources['skills/example/support/checklist.txt']);
-  await reopened.locator('#folder').setInputFiles(folder);
-  await reopened.locator('#folder-result').filter({ hasText: 'Exact folder rebound' }).waitFor();
-  await reopened.locator('#reopen').click(); await reopened.locator('#proposal').filter({ hasText: '"editing": "available"' }).waitFor();
+  // Hold the real server's post-grant catalog response to expose premature
+  // readiness. No page, release or validation result is fabricated here.
+  let releaseCatalog, observeCatalog, finishCatalog, heldCatalog;
+  const catalogGate = new Promise(resolve => { releaseCatalog = resolve; });
+  const catalogObserved = new Promise(resolve => { observeCatalog = resolve; });
+  const catalogFinished = new Promise(resolve => { finishCatalog = resolve; });
+  const holdCatalog = async route => {
+    const response = await route.fetch(); heldCatalog = await response.json(); observeCatalog();
+    await catalogGate; await route.fulfill({ response }); finishCatalog();
+  };
+  await reopened.route('**/api/authoring-catalog', holdCatalog);
+  try {
+    await reopened.locator('#folder').setInputFiles(folder);
+    await catalogObserved;
+    assert.ok(heldCatalog.items.some(item => item.family === 'Personal'), 'The real server retains this client’s granted inventory.');
+    const pendingStatus = await reopened.locator('#folder-result').textContent();
+    if (/Exact folder rebound/.test(pendingStatus)) {
+      // Reproduce the real caller: immediate Reopen after the premature signal
+      // advances the draft revision before the pending catalog can render.
+      await reopened.locator('#reopen').click();
+      await reopened.locator('#proposal').filter({ hasText: '"editing": "available"' }).waitFor();
+      releaseCatalog(); await catalogFinished; await reopened.waitForLoadState('networkidle');
+      assert.equal(await reopened.locator('#family option[value="Personal"]').count(), 1,
+        'Immediate reopen after reported readiness must keep Personal browsable.');
+    }
+    assert.doesNotMatch(pendingStatus, /Exact folder rebound/,
+      'Rebinding must not report ready while the refreshed catalog is still pending.');
+    assert.ok(!(await reopened.locator('#family').textContent()).includes('Personal'));
+    releaseCatalog();
+    await reopened.locator('#folder-result').filter({ hasText: 'Exact folder rebound' }).waitFor();
+    await reopened.locator('#reopen').click(); await reopened.locator('#proposal').filter({ hasText: '"editing": "available"' }).waitFor();
+    await reopened.locator('#family').selectOption('Personal');
+    assert.equal(await reopened.locator('#items fieldset').count(), 2);
+  } finally { releaseCatalog(); await catalogFinished; await reopened.unroute('**/api/authoring-catalog', holdCatalog); }
   assert.deepEqual(JSON.parse(await reopened.locator('#summary').textContent()).roots, saved.metadata['aih.workbench'].roots);
   // A separate effect-free headless call acquires the same files through the
   // same intake and public validators; browser state is never its inventory.
@@ -98,7 +129,7 @@ try {
   await reopened.screenshot({ path: join(output, 'fresh-rebound.png'), fullPage: true });
   await writeFile(join(output, 'browser-evidence.json'), JSON.stringify({ status: 'passed', entry: '/authoring', chromium: browser.version(),
     families: ['Extensions', 'ECC', 'Superpowers', 'Anthropic', 'Personal'], roots: saved.metadata['aih.workbench'].roots,
-    scenarios: ['invalid-folder-refused', 'two-skills-recognized', 'local-origin', 'five-family-selection', 'actual-download', 'fresh-context-missing-root', 'changed-root-refused', 'exact-explicit-rebind', 'headless-agreement', 'no-supplied-code-execution'], errors }, null, 2));
+    scenarios: ['invalid-folder-refused', 'two-skills-recognized', 'local-origin', 'five-family-selection', 'actual-download', 'fresh-context-missing-root', 'changed-root-refused', 'exact-explicit-rebind', 'catalog-ready-before-success', 'immediate-reopen-preserves-personal-browsing', 'headless-agreement', 'no-supplied-code-execution'], errors }, null, 2));
   console.log(`Ordinary personal-folder Chromium journey passed: ${output}`);
 } catch (error) {
   await writeFile(join(output, 'browser-failure.json'), JSON.stringify({ message: error.message, errors,
