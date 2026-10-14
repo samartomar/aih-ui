@@ -31,6 +31,10 @@ can count in more than one group. **Full inventory**, **With unsupported facts**
 and **With unknown facts** expose the remaining content. No facts for the client
 means unknown, not unsupported. An inventory with no declared clients remains
 discoverable through Full inventory or With unknown facts.
+Catalog's checked release permits arbitrary descriptive metadata. Malformed
+capability lists or records remain unknown; usable records still display their
+individual facts. Unusable records cannot qualify an item as supported or hide
+its unknown status, including when mixed with a usable supported declaration.
 
 All family options retain their installed counts even when the current target
 has no supported items in that family. Exact identity disclosures retain the

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { startConsumer } from './server.mjs';
+import { fixtureItem, fixtureRelease, rootFor } from './intent-fixtures.mjs';
 const source = (await readFile(new URL('../page/policy-file.js', import.meta.url), 'utf8')).replace('export function', 'function') + '\n' +
   (await readFile(new URL('../page/authoring.js', import.meta.url), 'utf8')).replace("import { policyFile } from './policy-file.js';", '');
 
@@ -104,6 +105,33 @@ test('an inventory without target declarations stays unknown and remains fully d
   assert.equal(nodes.get('items').children.length, 1);
   const disclosure = nodes.get('items').children[0].children.find(node => node.tagName === 'details');
   assert.deepEqual(JSON.parse(disclosure.children[1].textContent).recipeTargets, ['declared-recipe-target']);
+});
+
+test('public-reader accepted malformed capability metadata stays unknown without blocking full inventory', async () => {
+  const supported = { client: 'claude-code', surface: 'project', capability: 'instruction-material', support: 'supported' };
+  const declarations = [
+    {}, null, [null], [{ ...supported, client: {} }], [{ ...supported, surface: {} }],
+    [{ ...supported, capability: ' ' }], [{ ...supported, support: 'yes' }],
+    [{ ...supported, reason: {} }], [{ ...supported, support: 'unsupported' }],
+    [supported, { ...supported, support: 'yes' }]
+  ];
+  // fixtureRelease invokes the installed public readRelease and refuses invalid
+  // releases. Descriptive discovery metadata is intentionally not schema-checked.
+  const inventory = fixtureRelease('malformed-discovery', declarations.map((clientCapabilities, index) =>
+    fixtureItem(`item-${index}`, {}, { metadata: { discovery: { clientCapabilities } } })));
+  const intent = { origins: [], roots: [], pins: [], exclusions: [], inputs: [], reviews: {} };
+  const nodes = await openPage(async url => ({ json: async () => url.endsWith('-catalog') ? {
+    items: inventory.release.items.map(item => ({ ...item, root: rootFor(inventory, item.id), package: inventory.release.package })), templates: []
+  } : { status: 'ok', value: { policyBytes: [...new TextEncoder().encode('{}')], intent } } }));
+  assert.deepEqual(nodes.get('target').children.map(option => option.value), ['claude-code']);
+  assert.equal(nodes.get('items').children.length, 1, 'Malformed supported claims must not qualify an item');
+  assert.match(nodes.get('support-counts').textContent, /1 with supported.*0 with unsupported.*10 with unknown/);
+  const text = node => [node.textContent, ...node.children.map(text)].join(' ');
+  assert.match(text(nodes.get('items')), /unknown.*Unusable capability declarations/);
+  nodes.get('support-filter').value = 'all'; nodes.get('support-filter').onchange();
+  assert.equal(nodes.get('items').children.length, 10);
+  nodes.get('support-filter').value = 'unknown'; nodes.get('support-filter').onchange();
+  assert.equal(nodes.get('items').children.length, 10);
 });
 test('fresh reopen restores saved user scope/configuration and switching scopes restores each choice', async () => {
   const nodes = new Map();

@@ -11,10 +11,22 @@ const button = (label, action) => { const node = document.createElement('button'
 const key = ref => `${ref.releaseSha256}/${ref.itemId}/${ref.scope}`;
 const keep = () => $('keep').value.split('\n').filter(v => v.trim()).map(value => { const [releaseSha256, itemId, scope] = value.trim().split('/'); return { releaseSha256, itemId, scope }; });
 function download(bytes, filename) { const url = URL.createObjectURL(new Blob([bytes], { type: 'application/json' })); const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); URL.revokeObjectURL(url); }
-// Checked Catalog discovery facts describe individual capabilities, not admission.
-const capabilityFacts = item => item.metadata?.discovery?.clientCapabilities ?? [];
+// Catalog checks the release, but descriptive metadata can have arbitrary JSON.
+// Only usable declarations become capability facts; none establish admission.
+const declaredCapabilities = item => item.metadata?.discovery?.clientCapabilities;
+const nonemptyString = value => typeof value === 'string' && value.trim().length > 0;
+const usableCapability = fact => fact !== null && typeof fact === 'object' && !Array.isArray(fact)
+  && ['client', 'surface', 'capability'].every(field => nonemptyString(fact[field]))
+  && ['supported', 'unsupported', 'unknown'].includes(fact.support)
+  && (fact.reason === undefined || nonemptyString(fact.reason))
+  && (fact.support !== 'unsupported' || nonemptyString(fact.reason));
+const capabilityFacts = item => Array.isArray(declaredCapabilities(item)) ? declaredCapabilities(item).filter(usableCapability) : [];
 function targetFacts(item, target) {
   const facts = capabilityFacts(item).filter(fact => fact.client === target);
+  const declared = declaredCapabilities(item);
+  const unusable = declared !== undefined && (!Array.isArray(declared) || declared.some(fact => !usableCapability(fact)));
+  if (unusable) facts.push({ support: 'unknown', capability: 'Unusable declaration', surface: 'Not established',
+    reason: 'Unusable capability declarations remain unknown; they establish no client, surface or capability support.' });
   return facts.length ? facts : [{ support: 'unknown', capability: 'Target support', surface: 'Not declared',
     reason: target ? `No capability facts declared for ${target}.` : 'No target capability facts declared in this inventory.' }];
 }
@@ -53,7 +65,7 @@ function render(intent = currentIntent, optional = currentOptional) {
     box.append(support);
     const provenance = document.createElement('details'), caption = document.createElement('summary'), facts = document.createElement('pre');
     caption.textContent = 'Exact identity, upstream origins and dependencies';
-    facts.textContent = JSON.stringify({ releaseSha256: item.root.releaseSha256, itemId: item.id, itemSha256: item.root.itemSha256, sources: item.sources ?? [], dependencies: item.dependencies ?? {}, recipeTargets: item.targets ?? [], clientCapabilities: capabilityFacts(item) }, null, 2);
+    facts.textContent = JSON.stringify({ releaseSha256: item.root.releaseSha256, itemId: item.id, itemSha256: item.root.itemSha256, sources: item.sources ?? [], dependencies: item.dependencies ?? {}, recipeTargets: item.targets ?? [], clientCapabilities: declaredCapabilities(item) ?? [] }, null, 2);
     provenance.append(caption, facts); box.append(provenance);
     const savedRoots = intent?.roots.filter(root => root.releaseSha256 === item.root.releaseSha256 && root.itemId === item.id) ?? [];
     const savedRoot = savedRoots[0];
