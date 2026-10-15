@@ -9,7 +9,9 @@
     "./review-host": "./tools/consumer/review-host.mjs",
     "./execution-host": "./tools/consumer/host.mjs",
     "./schemas/saved-intent/3.0.0.json": "./schemas/saved-intent-3.0.0.json",
-    "./schemas/review-decisions/1.0.0.json": "./schemas/review-decisions-1.0.0.json"
+    "./schemas/review-decisions/1.0.0.json": "./schemas/review-decisions-1.0.0.json",
+    "./journey": "./tools/consumer/journey.mjs",
+    "./schemas/journey-envelope/1.0.0.json": "./schemas/journey-envelope-1.0.0.json"
   },
   "scripts": {
     "check:workbench": "node tools/check-workbench.mjs",

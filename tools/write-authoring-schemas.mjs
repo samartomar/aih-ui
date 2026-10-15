@@ -30,8 +30,22 @@ const saved = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: 'u
     input('organization', shape({ authorityId: id, sourceId: id }), shape({ revision: string, sha256: hash }))] }),
   reviews: { $ref: review.$id }
 }) };
+// Journey envelope: separately versioned wrapper that references exact saved-intent bytes and is never executable.
+const journeyRecord = 'urn:aihq:workbench:journey-record:unresolved-draft:1.0.0', journeyEnvelope = 'urn:aihq:workbench:journey-envelope:1.0.0';
+const recordUrn = { type: 'string', pattern: '^urn:aihq:workbench:journey-record:[a-z0-9-]+:\d+\.\d+\.\d+$' };
+const journey = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: journeyEnvelope, ...shape({
+  schema: { const: journeyEnvelope },
+  id: { type: 'string', pattern: '^journey-[a-f0-9]{32}$' },
+  revision: shape({ sequence: { type: 'integer', minimum: 1 }, sha256: hash, previousSha256: hash }, ['previousSha256']),
+  executable: { const: false },
+  savedIntent: shape({ type: { const: 'urn:aihq:core:execution-policy-bytes' }, mediaType: { const: 'application/json' }, sha256: hash,
+    byteLength: { type: 'integer', minimum: 0, maximum: 1000000 }, base64: { type: 'string', maxLength: 1333336, pattern: '^[A-Za-z0-9+/]*={0,2}$' } }),
+  records: array({ if: { required: ['schema'], properties: { schema: { const: journeyRecord } } },
+    then: shape({ id, schema: { const: journeyRecord }, required: { const: true }, savedIntentSha256: hash, intent: { $ref: saved.$id } }),
+    else: { type: 'object', required: ['id', 'schema', 'required'], additionalProperties: true, properties: { id, schema: recordUrn, required: { type: 'boolean' } } } })
+}) };
 mkdirSync(new URL('../schemas/', import.meta.url), { recursive: true });
-for (const [name, schema] of [['saved-intent-3.0.0', saved], ['review-decisions-1.0.0', review]]) {
+for (const [name, schema] of [['saved-intent-3.0.0', saved], ['review-decisions-1.0.0', review], ['journey-envelope-1.0.0', journey]]) {
   const path = new URL(`../schemas/${name}.json`, import.meta.url), expected = JSON.stringify(schema, null, 2) + '\n';
   if (process.argv.includes('--check')) {
     if (readFileSync(path, 'utf8').replaceAll('\r\n', '\n') !== expected) throw new Error(`Schema is stale: ${name}`);

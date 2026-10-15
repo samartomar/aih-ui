@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:aihq:workbench:journey-envelope:1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "revision",
+    "executable",
+    "savedIntent",
+    "records"
+  ],
+  "properties": {
+    "schema": {
+      "const": "urn:aihq:workbench:journey-envelope:1.0.0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^journey-[a-f0-9]{32}$"
+    },
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sequence",
+        "sha256"
+      ],
+      "properties": {
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "previousSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "executable": {
+      "const": false
+    },
+    "savedIntent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "mediaType",
+        "sha256",
+        "byteLength",
+        "base64"
+      ],
+      "properties": {
+        "type": {
+          "const": "urn:aihq:core:execution-policy-bytes"
+        },
+        "mediaType": {
+          "const": "application/json"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "byteLength": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "base64": {
+          "type": "string",
+          "maxLength": 1333336,
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+        }
+      }
+    },
+    "records": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": {
+        "if": {
+          "required": [
+            "schema"
+          ],
+          "properties": {
+            "schema": {
+              "const": "urn:aihq:workbench:journey-record:unresolved-draft:1.0.0"
+            }
+          }
+        },
+        "then": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "schema",
+            "required",
+            "savedIntentSha256",
+            "intent"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[\\w.-]{1,180}$"
+            },
+            "schema": {
+              "const": "urn:aihq:workbench:journey-record:unresolved-draft:1.0.0"
+            },
+            "required": {
+              "const": true
+            },
+            "savedIntentSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "intent": {
+              "$ref": "urn:aihq:workbench:saved-intent:3.0.0"
+            }
+          }
+        },
+        "else": {
+          "type": "object",
+          "required": [
+            "id",
+            "schema",
+            "required"
+          ],
+          "additionalProperties": true,
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[\\w.-]{1,180}$"
+            },
+            "schema": {
+              "type": "string",
+              "pattern": "^urn:aihq:workbench:journey-record:[a-z0-9-]+:d+.d+.d+$"
+            },
+            "required": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    }
+  }
+}

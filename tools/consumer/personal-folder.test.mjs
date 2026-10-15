@@ -29,7 +29,10 @@ test('personal folder grant is client-local and exact saved choices require fres
     const policyBytes = selected.value.policyBytes;
     assert.doesNotMatch(new TextDecoder().decode(Uint8Array.from(policyBytes)), /grantId|client-one|hostPath/);
     const missing = await call('client-two', 'read', { policyBytes });
-    assert.equal(missing.value.editing, 'unavailable');
+    // A client without the grant sees the exact choice as unresolved, not as an unreadable document.
+    assert.equal(missing.value.editing, 'unresolved');
+    assert.deepEqual(missing.value.intent, selected.value.intent);
+    assert.equal(missing.value.roots.find(root => root.itemId === personal.root.itemId).status, 'unresolved');
     const changed = await call('client-two', 'folder', { files: folderFiles('Changed instructions.'), rebind: granted.value.input });
     assert.equal(changed.status, 'refused');
     assert.equal(changed.diagnostics[0].code, 'LOCAL_ROOT_CHANGED');

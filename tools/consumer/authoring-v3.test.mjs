@@ -69,8 +69,13 @@ test('missing exact revision does not silently use a candidate; reconciliation r
   intent.roots.push({ releaseSha256: inventories[1].release.sha256, itemId: item.id, itemSha256: item.itemSha256, scope: 'project', configuration: {}, originIds: ['direct'] });
   const saved = await composeAuthoring({ intent, inventories });
   const read = await readAuthoring({ policyBytes: saved.value.policyBytes, inventories: [inventories[0]] });
-  assert.equal(read.value.editing, 'unavailable');
+  // Source unavailability keeps every exact choice as unresolved; nothing is dropped or substituted.
+  assert.equal(read.value.editing, 'unresolved');
   assert.equal(read.value.diagnostics[0].code, 'SOURCE_REVISION_UNAVAILABLE');
+  assert.deepEqual(read.value.intent, saved.value.intent);
+  assert.deepEqual(read.value.originalBytes, saved.value.policyBytes);
+  assert.deepEqual(read.value.unresolved.map(u => [u.kind, u.ref.itemId, u.reason]), [['root', item.id, 'source-unavailable'], ['input', undefined, 'source-unavailable']]);
+  assert.equal(read.value.roots[0].status, 'unresolved');
   const reconciliation = await reconcileAuthoring({ savedPolicyBytes: saved.value.policyBytes, inventories, candidateInventories: [inventories[0]] });
   assert.equal(reconciliation.value.status, 'needs-decisions');
   assert.equal(reconciliation.value.affectedRoots.length, 1);

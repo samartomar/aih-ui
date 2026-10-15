@@ -295,6 +295,69 @@ intent to 850,000 UTF-8 bytes, 4,096 entries per choice array and 32 inventories
 Core's independent policy bounds also apply. Reduce selected state after a bound
 refusal; no partial artifact is produced.
 
+## Unresolved drafts and the journey envelope
+
+When the only problem is that an exact source, release, template snapshot or
+input record is not among the supplied inventories, `readAuthoring` returns
+`editing:"unresolved"` instead of `"unavailable"`. The original `intent` and
+`originalBytes` are unchanged, `unresolved` lists what is missing and `roots`
+marks every choice `resolved` or `unresolved`. Each unresolved entry is
+`{kind:"root"|"dependency"|"origin"|"exclusion"|"input",ref,reason,dependents}`;
+`reason` is `revision-unavailable` when a different revision of the same package
+or input is supplied and `source-unavailable` otherwise. A different revision is
+never substituted. Unsupported semantics, contradictions, identity mismatches
+and review-binding problems stay `"unavailable"`. `editAuthoring`,
+`composeAuthoring` and `reconcileAuthoring` still refuse an unresolved document
+because they produce or compare executable policies.
+
+The draft operations work on the exact recorded choices:
+
+| Function | Result |
+| --- | --- |
+| `openDraft({bytes,inventories})` | `bytes` is a policy or a journey envelope. Returns `{envelopeBytes,envelope,projection,intent,editing,unresolved,roots,savedIntentBytes,compile,diagnostics}`. `compile` is `{status:"available"}` or `{status:"refused",reasons}`. Unsupported semantics refuse with the original bytes and produce no envelope. |
+| `editDraft({envelopeBytes,inventories,operation})` | New envelope revision. Operations: `remove-root`, `remove-origin` (with `keep`), `select`, `replace`, `skip`, `unskip`. Returns the `openDraft` value plus `changes`. |
+| `compileDraft({envelopeBytes,inventories,roots?})` | `{policyBytes,intent,policy,scope,reviewsReconsidered}` for a resolved, dependency-correct scope; the only executable output. |
+
+`select` and `replace` fill `itemSha256` from the checked inventory; a different
+supplied hash is `SOURCE_IDENTITY_MISMATCH`. `replace` keeps the choice's
+origins, configuration, reason and every exclusion. Removing an unavailable item
+that a retained choice still requires is refused as `DEPENDENCY_RETAINED` with
+`details.dependents`. `skip` needs a resolvable item; a recorded skip can always
+be removed. `compileDraft` refuses an unresolved scope as `SCOPE_UNRESOLVED`
+with `details:{unresolved,blocked}`. A scoped compile keeps origins used by the
+kept roots plus `direct`; decisions about content outside the scope keep their
+history and are reported in `reviewsReconsidered`. Pins, provenance and inputs in
+a draft are retained facts pruned to what the kept choices reach; identities are
+added only from supplied checked inventories.
+
+`aih-ui/journey` is a pure module (bytes in, bytes out; Web Crypto digests only).
+Its envelope, [schema](../schemas/journey-envelope-1.0.0.json), is versioned
+separately from saved intent:
+
+```json
+{ "schema": "urn:aihq:workbench:journey-envelope:1.0.0",
+  "id": "journey-<32 hex>", "executable": false,
+  "revision": { "sequence": 1, "sha256": "<hex>", "previousSha256": "<hex, from 2>" },
+  "savedIntent": { "type": "urn:aihq:core:execution-policy-bytes", "mediaType": "application/json",
+                   "sha256": "<hex>", "byteLength": 0, "base64": "<exact original bytes>" },
+  "records": [{ "id": "draft", "schema": "urn:aihq:workbench:journey-record:unresolved-draft:1.0.0",
+                "required": true, "savedIntentSha256": "<hex>", "intent": {} }] }
+```
+
+The envelope is never an execution policy. `id` derives from the first
+revision's saved-intent digest and stays stable; `revision.sha256` covers the
+canonical envelope without itself. The saved-intent bytes are carried verbatim, so
+a reopened journey yields the same meaning and the original bytes. Functions:
+`readJourneyEnvelope(bytes)`, `writeJourneyEnvelope({savedIntentBytes,records,previous})`
+and `projectJourneyEnvelope(envelope)`. Every record has `id`, a versioned
+`schema` URN and `required`. An unknown optional record is preserved verbatim and
+reported as `JOURNEY_RECORD_PRESERVED`; an unknown required record reads as
+`supported:false` with `JOURNEY_RECORD_UNSUPPORTED` and every change or compile
+refuses. Other codes: `JOURNEY_VERSION_UNSUPPORTED`, `JOURNEY_REVISION_MISMATCH`,
+`JOURNEY_REFERENCE_MISMATCH`, `INPUT_INVALID`, `FIELD_SEMANTICS_UNSUPPORTED`.
+Refusals keep the original bytes and no refused read or write rewrites them.
+Bounds: 1,000,000 saved-intent bytes and 2,000,000 envelope bytes.
+
 ## Evidence and review lifecycle
 
 Review-v1 records contain id, owner `{kind:"individual"|"organization",id}`,
