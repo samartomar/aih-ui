@@ -511,7 +511,16 @@ test('an envelope with an unsupported required record advertises a refused compi
   assert.equal(compiled.status, 'refused'); assert.equal(compiled.diagnostics[0].code, 'JOURNEY_RECORD_UNSUPPORTED');
 });
 
-test('a choice whose closure fails for another reason is unresolved with an explicit closure reason', async () => {
+// Rewrites the draft record of an envelope with an intent the page could not itself have produced.
+async function rewritten(envelopeBytes, savedIntentBytes, intent) {
+  const previous = (await readJourneyEnvelope(envelopeBytes)).value;
+  const result = await writeJourneyEnvelope({ savedIntentBytes, previous, records: [{ id: 'draft', schema: DRAFT_RECORD_SCHEMA, required: true, intent }] });
+  assert.equal(result.status, 'ok', JSON.stringify(result.diagnostics));
+  return result.value.envelopeBytes;
+}
+const codes = diagnostics => diagnostics.map(d => d.code);
+
+test('a choice that Catalog refuses with everything supplied is reported with Catalog diagnostics, not as missing sources', async () => {
   const base = fixtureRelease('journey-skip-base', [fixtureItem('base.dep')]);
   const app = fixtureRelease('journey-skip-app', [fixtureItem('app.added', { requires: [crossRef(base, 'base.dep')] })]);
   const solo = fixtureRelease('journey-skip-solo', [fixtureItem('solo.one')]);
@@ -521,19 +530,104 @@ test('a choice whose closure fails for another reason is unresolved with an expl
   const saved = await composeAuthoring({ intent, inventories: [solo] });
   const open = await opened({ bytes: saved.value.policyBytes, inventories });
   const added = await edited({ envelopeBytes: open.envelopeBytes, inventories, operation: { type: 'select', root: { releaseSha256: app.release.sha256, itemId: 'app.added', scope: 'project', configuration: {} } } });
-  // A recorded skip of a required item makes the live closure unresolvable although every item is supplied.
+  // A recorded skip of a required item contradicts the closure although every item is supplied.
   const skipped = structuredClone(added.intent);
   skipped.exclusions.push({ originId: 'direct', releaseSha256: base.release.sha256, itemId: 'base.dep', scope: 'project' });
-  const rewritten = await writeJourneyEnvelope({ savedIntentBytes: saved.value.policyBytes, previous: await readJourneyEnvelope(added.envelopeBytes).then(r => r.value),
-    records: [{ id: 'draft', schema: DRAFT_RECORD_SCHEMA, required: true, intent: skipped }] });
-  assert.equal(rewritten.status, 'ok', JSON.stringify(rewritten.diagnostics));
-  const reopened = await opened({ bytes: rewritten.value.envelopeBytes, inventories });
+  const ordinary = await composeAuthoring({ intent: skipped, inventories });
+  assert.equal(ordinary.status, 'refused');
+  const bytes = await rewritten(added.envelopeBytes, saved.value.policyBytes, skipped);
+  const reopened = await opened({ bytes, inventories });
   const root = reopened.roots.find(r => r.itemId === 'app.added');
-  assert.equal(root.status, 'unresolved');
-  assert.deepEqual(root.blockedBy.map(b => [b.kind, b.ref.itemId, b.reason]), [['root', 'app.added', 'closure-unavailable']]);
+  assert.equal(root.status, 'refused');
+  assert.equal(root.blockedBy, undefined);
+  assert.equal(root.refusal.owner, 'catalog');
+  assert.deepEqual(root.refusal.diagnostics, ordinary.diagnostics);
+  assert.deepEqual(reopened.unresolved, []);
+  assert.equal(reopened.diagnostics.some(d => /unavailable/i.test(d.code)), false);
+  assert.equal(JSON.stringify(reopened).includes('closure-unavailable'), false);
   assert.equal(reopened.roots.find(r => r.itemId === 'solo.one').status, 'resolved');
   assert.equal(reopened.compile.status, 'refused');
-  const refused = await compileDraft({ envelopeBytes: rewritten.value.envelopeBytes, inventories, roots: [ref(rootFor(app, 'app.added'))] });
-  assert.equal(refused.status, 'refused'); assert.equal(refused.diagnostics[0].code, 'SCOPE_UNRESOLVED');
-  assert.equal((await compileDraft({ envelopeBytes: rewritten.value.envelopeBytes, inventories, roots: [ref(rootFor(solo, 'solo.one'))] })).status, 'ok');
+  assert.deepEqual(reopened.compile.reasons, ordinary.diagnostics);
+  const refused = await compileDraft({ envelopeBytes: bytes, inventories, roots: [ref(rootFor(app, 'app.added'))] });
+  assert.equal(refused.status, 'refused'); assert.deepEqual(refused.diagnostics, ordinary.diagnostics);
+  assert.equal((await compileDraft({ envelopeBytes: bytes, inventories })).status, 'refused');
+  assert.equal((await compileDraft({ envelopeBytes: bytes, inventories, roots: [ref(rootFor(solo, 'solo.one'))] })).status, 'ok');
+});
+
+test('an invalid configuration on an available choice is a Catalog refusal, and the draft stays fixable', async () => {
+  const release = fixtureRelease('journey-config', [fixtureItem('cfg.one', {}, { inputs: { directory: { type: 'string', required: false } } }), fixtureItem('solo.one')]);
+  const inventories = [release];
+  const intent = freshAuthoring();
+  intent.roots.push(rootFor(release, 'solo.one'));
+  const saved = await composeAuthoring({ intent, inventories });
+  const open = await opened({ bytes: saved.value.policyBytes, inventories });
+  const added = await edited({ envelopeBytes: open.envelopeBytes, inventories, operation: { type: 'select', root: { releaseSha256: release.release.sha256, itemId: 'cfg.one', scope: 'project', configuration: {} } } });
+  const invalid = structuredClone(added.intent);
+  invalid.roots.find(r => r.itemId === 'cfg.one').configuration = { directory: 7, bogus: true };
+  const ordinary = await composeAuthoring({ intent: invalid, inventories });
+  assert.equal(ordinary.status, 'refused', 'the configuration must be refused by ordinary authoring');
+  const bytes = await rewritten(added.envelopeBytes, saved.value.policyBytes, invalid);
+  const reopened = await opened({ bytes, inventories });
+  const root = reopened.roots.find(r => r.itemId === 'cfg.one');
+  assert.equal(root.status, 'refused');
+  assert.equal(root.refusal.owner, 'catalog');
+  assert.deepEqual(codes(root.refusal.diagnostics), codes(ordinary.diagnostics));
+  assert.equal(root.refusal.diagnostics[0].details.owner, 'catalog');
+  assert.deepEqual(reopened.unresolved, []);
+  assert.equal(JSON.stringify(reopened).includes('closure-unavailable'), false);
+  assert.equal(reopened.compile.status, 'refused'); assert.deepEqual(codes(reopened.compile.reasons), codes(ordinary.diagnostics));
+  // A new choice with an invalid configuration is refused with the original bytes and no revision.
+  const other = await editDraft({ envelopeBytes: bytes, inventories, operation: { type: 'select', root: { releaseSha256: release.release.sha256, itemId: 'cfg.one', scope: 'user', configuration: { bogus: true } } } });
+  assert.equal(other.status, 'refused'); assert.deepEqual(other.originalBytes, bytes);
+  // Correcting the configuration through the draft resolves the choice.
+  const fixed = await edited({ envelopeBytes: bytes, inventories, operation: { type: 'select', root: { releaseSha256: release.release.sha256, itemId: 'cfg.one', scope: 'project', configuration: {} } } });
+  assert.equal(fixed.roots.find(r => r.itemId === 'cfg.one').status, 'resolved');
+  assert.equal(fixed.compile.status, 'available');
+});
+
+test('a skip of a required dependency is refused with Catalog diagnostics and the original bytes', async () => {
+  const base = fixtureRelease('journey-edit-base', [fixtureItem('base.dep')]);
+  const app = fixtureRelease('journey-edit-app', [fixtureItem('app.added', { requires: [crossRef(base, 'base.dep')] })]);
+  const solo = fixtureRelease('journey-edit-solo', [fixtureItem('solo.one')]);
+  const inventories = [solo, app, base];
+  const intent = freshAuthoring();
+  intent.roots.push(rootFor(solo, 'solo.one'));
+  const saved = await composeAuthoring({ intent, inventories: [solo] });
+  const open = await opened({ bytes: saved.value.policyBytes, inventories });
+  const added = await edited({ envelopeBytes: open.envelopeBytes, inventories, operation: { type: 'select', root: { releaseSha256: app.release.sha256, itemId: 'app.added', scope: 'project', configuration: {} } } });
+  const operation = { type: 'skip', exclusion: { originId: 'direct', releaseSha256: base.release.sha256, itemId: 'base.dep', scope: 'project' } };
+  const result = await editDraft({ envelopeBytes: added.envelopeBytes, inventories, operation });
+  assert.equal(result.status, 'refused');
+  assert.deepEqual(result.originalBytes, added.envelopeBytes);
+  assert.equal(result.value, undefined);
+  const skipped = structuredClone(added.intent);
+  skipped.exclusions.push(operation.exclusion);
+  const ordinary = await composeAuthoring({ intent: skipped, inventories });
+  assert.deepEqual(result.diagnostics, ordinary.diagnostics);
+  // Content that is merely not supplied cannot be checked, so that edit stays an availability matter.
+  const unsupplied = await editDraft({ envelopeBytes: added.envelopeBytes, inventories: [solo, app], operation });
+  assert.equal(unsupplied.status, 'refused'); assert.equal(unsupplied.diagnostics[0].code, 'SOURCE_REVISION_UNAVAILABLE');
+});
+
+test('an unrelated edit keeps every recorded pin while any choice closure is undetermined', async () => {
+  const c = fixtureRelease('journey-chain-c', [fixtureItem('chain.c')]);
+  const b = fixtureRelease('journey-chain-b', [fixtureItem('chain.b', { requires: [crossRef(c, 'chain.c')] })]);
+  const a = fixtureRelease('journey-chain-a', [fixtureItem('chain.a', { requires: [crossRef(b, 'chain.b')] })]);
+  const solo = fixtureRelease('journey-chain-solo', [fixtureItem('solo.one')]);
+  const extra = fixtureRelease('journey-chain-extra', [fixtureItem('extra.one')]);
+  const everything = [solo, a, b, c], withoutB = [solo, a, c];
+  const intent = freshAuthoring();
+  intent.roots.push(rootFor(solo, 'solo.one'));
+  const saved = await composeAuthoring({ intent, inventories: [solo] });
+  const open = await opened({ bytes: saved.value.policyBytes, inventories: everything });
+  const added = await edited({ envelopeBytes: open.envelopeBytes, inventories: everything, operation: { type: 'select', root: { releaseSha256: a.release.sha256, itemId: 'chain.a', scope: 'project', configuration: {} } } });
+  assert.deepEqual(added.intent.pins.map(p => p.itemId).sort(), ['chain.a', 'chain.b', 'chain.c', 'solo.one']);
+  const further = await edited({ envelopeBytes: added.envelopeBytes, inventories: [...withoutB, extra], operation: { type: 'select', root: { releaseSha256: extra.release.sha256, itemId: 'extra.one', scope: 'project', configuration: {} } } });
+  assert.equal(further.roots.find(r => r.itemId === 'chain.a').status, 'unresolved');
+  assert.deepEqual(further.intent.pins.map(p => p.itemId).sort(), ['chain.a', 'chain.b', 'chain.c', 'extra.one', 'solo.one']);
+  assert.deepEqual(further.changes.removedPins, []);
+  for (const release of [a, b, c]) assert.equal(further.intent.provenance.some(p => p.releaseSha256 === release.release.sha256), true);
+  // Everything supplied again: the same choices resolve and compile with their recorded pins.
+  const restored = await opened({ bytes: further.envelopeBytes, inventories: [...everything, extra] });
+  assert.equal(restored.editing, 'available'); assert.equal(restored.compile.status, 'available', JSON.stringify(restored.compile));
 });

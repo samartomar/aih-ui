@@ -334,7 +334,7 @@ function refusalDiagnostics(value) {
 function availabilityDiagnostics(unresolved) {
   const paths = { root: '/roots', dependency: '/pins', origin: '/origins', exclusion: '/exclusions', input: '/inputs' };
   const what = { origin: 'template snapshot', input: 'input release' };
-  const suffix = { 'revision-unavailable': ' (a different revision is supplied and is not substituted)', 'closure-unavailable': ' (its required items cannot be resolved from the supplied inventories)' };
+  const suffix = { 'revision-unavailable': ' (a different revision is supplied and is not substituted)' };
   return unresolved.map(({ kind, ref, reason }) => ({ code: kind === 'origin' ? 'ORIGIN_UNAVAILABLE' : 'SOURCE_REVISION_UNAVAILABLE', path: paths[kind],
     message: `Exact ${what[kind] ?? 'source/item'} unavailable: ${describeRef(ref)}${suffix[reason] ?? ''}` }));
 }
@@ -368,9 +368,20 @@ function reach(graph, start) {
   while (queue.length) for (const next of graph.edges.get(queue.shift()) ?? []) if (!seen.has(next)) { seen.add(next); queue.push(next); }
   return seen;
 }
+// What ordinary authoring would decide about one choice: its required closure, or Catalog's refusal.
 function liveClosure(index, root, skips) {
   const resolved = resolveSelections({ releases: index.releases, roots: [{ releaseSha256: root.releaseSha256, itemId: root.itemId, scope: root.scope, configuration: root.configuration }], skips });
-  return resolved.status === 'ok' ? new Set(resolved.value.inclusions.filter(i => rootKey(i.root) === rootKey(root)).map(i => rootKey(i.item))) : null;
+  if (resolved.status !== 'ok') return { diagnostics: resolved.diagnostics };
+  const refusal = (path, message, diagnostics) => ({ diagnostics: [{ code: 'INPUT_INVALID', path, message, details: { owner: 'catalog', diagnostics } }] });
+  for (const selection of resolved.value.selections) {
+    const found = index.items.get(pinKey(selection.item));
+    if (!found) continue;
+    const configured = configureItem({ release: found.entry.release, itemId: found.item.id, configuration: selection.configuration, materialSource: found.entry.materialSource });
+    if (!configured.valid) return refusal('/roots/configuration', 'Catalog refused item configuration.', configured.diagnostics);
+  }
+  const validation = validateSelectionSet({ releases: index.releases, selections: resolved.value.selections });
+  if (!validation.valid) return refusal('/selections', 'Catalog refused the resolved set.', validation.diagnostics);
+  return { closure: new Set(resolved.value.inclusions.filter(i => rootKey(i.root) === rootKey(root)).map(i => rootKey(i.item))) };
 }
 // Required items of `root` that live in releases the supplied inventories do not include.
 function missingRequirements(index, root) {
@@ -396,7 +407,7 @@ function analyzeDraft({ intent, policy, inventories, live = true }) {
     return inventories.some(e => e.release.sha256 !== sha && ((name !== undefined && e.release.package?.name === name)
       || (input && e.input && e.input.kind === input.kind && stable(e.input.locator) === stable(input.locator)))) ? 'revision-unavailable' : 'source-unavailable';
   };
-  const mismatches = [], nodeEntries = new Map(), originEntries = new Map(), exclusionEntries = [], inputEntries = [], unavailableNodes = new Set(), undeterminedRoots = new Set(), resolvable = new Set(), closures = new Map();
+  const mismatches = [], nodeEntries = new Map(), originEntries = new Map(), exclusionEntries = [], inputEntries = [], unavailableNodes = new Set(), undeterminedRoots = new Set(), resolvable = new Set(), closures = new Map(), refusals = new Map();
   const check = (value, path) => {
     const found = index.items.get(pinKey(value));
     if (found && value.itemSha256 !== undefined && found.item.itemSha256 !== value.itemSha256) mismatches.push({ code: 'SOURCE_IDENTITY_MISMATCH', path, message: 'Recorded item differs from the checked item.' });
@@ -417,18 +428,20 @@ function analyzeDraft({ intent, policy, inventories, live = true }) {
         ref: { releaseSha256: value.releaseSha256, itemId: value.itemId, itemSha256: value.itemSha256, scope: value.scope }, reason: reasonFor(value.releaseSha256) });
     }
     // A root added after the policy was saved is not in the recorded graph, so its live closure is the
-    // only evidence of what it needs. If that cannot be resolved the root is never treated as resolved.
-    const closure = live && complete ? liveClosure(index, root, skips) : undefined;
-    if (closure) for (const node of closure) nodes.add(node);
-    else if (closure === null) {
+    // only evidence of what it needs. A root is never treated as resolved while that is unknown. An
+    // unknown closure is an availability gap only when required content is missing from the supplied
+    // inventories; any other refusal is a contradiction and keeps Catalog's own diagnostics.
+    const evidence = live && complete ? liveClosure(index, root, skips) : undefined;
+    if (evidence?.closure) for (const node of evidence.closure) nodes.add(node);
+    else if (evidence) {
       complete = false; undeterminedRoots.add(key);
       const missing = missingRequirements(index, root);
-      for (const need of missing.length ? missing : [root]) {
+      if (!missing.length) refusals.set(key, evidence.diagnostics);
+      for (const need of missing) {
         const node = rootKey({ ...need, scope: root.scope });
         nodes.add(node); unavailableNodes.add(node);
-        if (!nodeEntries.has(node)) nodeEntries.set(node, { kind: missing.length ? 'dependency' : 'root',
-          ref: { releaseSha256: need.releaseSha256, itemId: need.itemId, itemSha256: need.itemSha256, scope: root.scope },
-          reason: missing.length ? reasonFor(need.releaseSha256) : 'closure-unavailable' });
+        if (!nodeEntries.has(node)) nodeEntries.set(node, { kind: 'dependency',
+          ref: { releaseSha256: need.releaseSha256, itemId: need.itemId, itemSha256: need.itemSha256, scope: root.scope }, reason: reasonFor(need.releaseSha256) });
       }
     }
     if (complete) resolvable.add(key);
@@ -458,10 +471,12 @@ function analyzeDraft({ intent, policy, inventories, live = true }) {
     const blockers = [...[...closures.get(rootKey(root))].filter(k => nodeEntries.has(k)).map(k => nodeEntries.get(k)),
       ...root.originIds.filter(id => originEntries.has(id)).map(id => originEntries.get(id)),
       ...exclusionEntries.filter(e => root.originIds.includes(e.ref.originId))];
+    const refusal = refusals.get(rootKey(root));
+    if (!blockers.length && refusal) return { ...structuredClone(root), status: 'refused', refusal: { owner: 'catalog', diagnostics: structuredClone(refusal) } };
     return { ...structuredClone(root), status: blockers.length ? 'unresolved' : 'resolved',
       ...(blockers.length ? { blockedBy: blockers.map(({ kind, ref, reason }) => ({ kind, ref, reason })) } : {}) };
   });
-  return { index, graph, closures, resolvable, skips, unavailableNodes, undeterminedRoots, mismatches, unresolved, roots };
+  return { index, graph, closures, resolvable, skips, unavailableNodes, undeterminedRoots, refusals, mismatches, unresolved, roots };
 }
 
 async function loadDraft(envelopeBytes) {
@@ -480,6 +495,8 @@ async function compileScope({ policy, intent, inventories, analysis, roots, revi
   const requested = roots ?? intent.roots.map(rootRef), keys = new Set(intent.roots.map(rootKey));
   if (!Array.isArray(requested) || requested.some(r => !isRef(r) || !keys.has(rootKey(r)))) return refuse('INPUT_INVALID', '/roots', 'Requested scope must name choices that exist in the draft.', originalBytes);
   const want = new Set(requested.map(rootKey)), whole = intent.roots.every(r => want.has(rootKey(r)));
+  const refused = analysis.roots.filter(r => want.has(rootKey(r)) && r.status === 'refused');
+  if (refused.length) return { status: 'refused', diagnostics: refused.flatMap(r => r.refusal.diagnostics), originalBytes: originalBytes.slice() };
   const blocked = analysis.roots.filter(r => want.has(rootKey(r)) && r.status === 'unresolved');
   const entries = whole ? analysis.unresolved : analysis.unresolved.filter(u => blocked.some(r => r.blockedBy.some(b => b.kind === u.kind && stable(b.ref) === stable(u.ref))));
   if (entries.length) return refuse('SCOPE_UNRESOLVED', '/roots', `Requested scope is unresolved: ${entries.map(u => `${u.kind} ${describeRef(u.ref)} (${u.reason})`).join('; ')}. Resolve, replace or remove it before compiling.`,
@@ -664,14 +681,17 @@ export async function editDraft({ envelopeBytes, inventories, operation, reviewE
   let after;
   try { after = analyzeDraft({ intent, policy, inventories }); }
   catch (error) { return fail('SOURCE_IDENTITY_MISMATCH', '/inventories', error.message); }
+  // Availability gaps stay editable; a contradiction on content that is fully supplied is refused as ordinary authoring would.
+  const introduced = intent.roots.filter(r => after.refusals.has(rootKey(r)) && !before.refusals.has(rootKey(r)));
+  if (introduced.length) return unchanged({ status: 'refused', diagnostics: introduced.flatMap(r => after.refusals.get(rootKey(r))) });
   const resolveAvailableRoots = (analysis, value) => resolveSelections({ releases: index.releases, skips: analysis.skips,
     roots: value.roots.filter(r => analysis.resolvable.has(rootKey(r))).map(({ releaseSha256, itemId, scope, configuration }) => ({ releaseSha256, itemId, scope, configuration })) });
   const settled = resolveAvailableRoots(after, intent);
   if (settled.status !== 'ok' && resolveAvailableRoots(before, record.intent).status === 'ok') return unchanged(settled);
   const reached = new Set(intent.roots.flatMap(r => [...after.closures.get(rootKey(r))].map(k => k.split('/').slice(0, 2).join('/'))));
-  // A choice whose required closure cannot be resolved may still need any recorded item that is not
-  // available to rebuild, so those pins are retained until that closure can be resolved again.
-  if (after.undeterminedRoots.size) for (const pin of record.intent.pins) if (!index.items.has(pinKey(pin))) reached.add(pinKey(pin));
+  // While any choice's required closure is undetermined, nothing recorded can be known to be unneeded
+  // (an item behind a missing one is invisible), so every recorded pin is retained until it resolves again.
+  if (after.undeterminedRoots.size) for (const pin of record.intent.pins) reached.add(pinKey(pin));
   const pins = [...reached].flatMap(key => {
     const existing = record.intent.pins.find(p => pinKey(p) === key), found = index.items.get(key);
     return existing ? [existing] : found ? [{ releaseSha256: found.entry.release.sha256, itemId: found.item.id, itemSha256: found.item.itemSha256, recipe: found.item.recipe, materials: found.item.materials }] : [];

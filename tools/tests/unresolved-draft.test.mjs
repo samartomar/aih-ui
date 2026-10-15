@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { createAuthoringClient, isJourneyEnvelope, importLimitError } from '../../src/app/authoring-client.js';
 
@@ -206,4 +207,16 @@ test('draft requests carry the envelope alone and never repeat the saved policy 
   await client.compileDraft();
   assert.deepEqual(calls.map(call => call.url), ['/api/authoring-draft-open', '/api/authoring-draft-edit', '/api/authoring-draft-compile']);
   for (const call of calls) assert.equal('policyBytes' in call.body, false, call.url);
+});
+
+test('the client import constants equal the journey module they mirror', async () => {
+  const [client, journey] = await Promise.all([readFile(new URL('../../src/app/authoring-client.js', import.meta.url), 'utf8'), readFile(new URL('../consumer/journey.mjs', import.meta.url), 'utf8')]);
+  const text = (source, name) => source.match(new RegExp(String.raw`${name}\s*=\s*'([^']+)'`))?.[1];
+  const number = (source, pattern) => Number(source.match(pattern)?.[1]?.replaceAll('_', ''));
+  assert.ok(text(client, 'JOURNEY_PREFIX'), 'client prefix is declared');
+  assert.equal(text(client, 'JOURNEY_PREFIX'), text(journey, 'JOURNEY_SCHEMA_PREFIX'));
+  const limits = { policy: number(client, /IMPORT_LIMITS\s*=\s*\{[^}]*policy:\s*([\d_]+)/), envelope: number(client, /IMPORT_LIMITS\s*=\s*\{[^}]*envelope:\s*([\d_]+)/) };
+  assert.equal(limits.policy, number(journey, /MAX_SAVED_INTENT_BYTES\s*=\s*([\d_]+)/));
+  assert.equal(limits.envelope, number(journey, /MAX_ENVELOPE_BYTES\s*=\s*([\d_]+)/));
+  assert.ok(limits.policy > 0 && limits.envelope > limits.policy);
 });

@@ -15,7 +15,7 @@ function failure(result) {
   return [...(result.diagnostics ?? []), ...(result.value?.diagnostics ?? [])].map(diagnostic => `${diagnostic.code ?? 'Input'}: ${diagnostic.message}`).join(' ') || result.error || result.status;
 }
 
-const reasonText = { 'source-unavailable': 'source unavailable', 'revision-unavailable': 'revision unavailable', 'closure-unavailable': 'required items cannot be resolved' };
+const reasonText = { 'source-unavailable': 'source unavailable', 'revision-unavailable': 'revision unavailable' };
 const markerClass = 'px-1.5 py-0.5 rounded border font-mono text-[10px]';
 const refOf = ({ releaseSha256, itemId, scope }) => ({ releaseSha256, itemId, scope });
 // Exact digests stay in the artifact; messages show a short prefix so they read as text.
@@ -184,16 +184,17 @@ export function createAuthoringWorkspace(client) {
   choices.after(draftSection);
   const itemLabel = ref => client.catalog?.items.find(item => item.id === ref.itemId && item.root.releaseSha256 === ref.releaseSha256)?.label ?? ref.itemId ?? ref.templateId ?? ref.id;
   const blocker = entry => {
-    const what = entry.kind === 'root' ? (entry.reason === 'closure-unavailable' ? 'its required items' : 'its exact source') : entry.kind === 'dependency' ? `required item ${itemLabel(entry.ref)}`
+    const what = entry.kind === 'root' ? 'its exact source' : entry.kind === 'dependency' ? `required item ${itemLabel(entry.ref)}`
       : entry.kind === 'origin' ? `template origin ${entry.ref.templateId}` : entry.kind === 'exclusion' ? `skip of ${itemLabel(entry.ref)}` : `input ${entry.ref.id}`;
     return `${what}: ${reasonText[entry.reason] ?? entry.reason}`;
   };
   const markers = root => {
     const row = el('p', 'flex flex-wrap gap-1');
     if (root.status === 'resolved') { row.append(el('span', `${markerClass} bg-secondary-container border-secondary/40 text-secondary`, 'Resolved')); return row; }
+    // A contradiction is not a missing source: Catalog refused a choice whose content is fully supplied.
+    if (root.status === 'refused') { row.append(el('span', `${markerClass} bg-error-container border-error/40 text-error`, 'Refused by Catalog — change or remove this choice')); return row; }
     for (const reason of new Set(root.blockedBy.map(entry => entry.reason))) row.append(el('span', `${markerClass} bg-tertiary-container border-tertiary/40 text-tertiary`,
-      reason === 'revision-unavailable' ? 'Unresolved — revision unavailable (no newer revision substituted)'
-        : reason === 'closure-unavailable' ? 'Unresolved — required items cannot be resolved' : 'Unresolved — source unavailable'));
+      reason === 'revision-unavailable' ? 'Unresolved — revision unavailable (no newer revision substituted)' : 'Unresolved — source unavailable'));
     return row;
   };
   function renderDraft() {
@@ -211,6 +212,7 @@ export function createAuthoringWorkspace(client) {
       const item = client.catalog?.items.find(entry => entry.id === root.itemId && entry.root.releaseSha256 === root.releaseSha256);
       row.append(el('p', 'font-medium', itemLabel(root)), el('p', 'font-mono text-[10px] text-outline', `${item?.family ?? 'Saved source'} · ${root.scope} · ${root.itemId}`), markers(root));
       for (const entry of root.blockedBy ?? []) row.append(el('p', 'text-outline text-[11px]', blocker(entry)));
+      if (root.status === 'refused') row.append(el('p', 'text-error text-[11px] break-words', readable(failure({ diagnostics: root.refusal.diagnostics }))));
       const actions = el('div', 'flex flex-wrap items-center gap-2');
       actions.append(button(`Remove ${root.itemId}`, safe(async () => present(await client.propose({ type: 'remove-root', root: refOf(root), keep: [] })))));
       const replacements = (client.catalog?.items ?? []).filter(entry => entry.scopes?.includes(root.scope) && !(entry.id === root.itemId && entry.root.releaseSha256 === root.releaseSha256));
@@ -225,7 +227,7 @@ export function createAuthoringWorkspace(client) {
         })));
       }
       row.append(actions);
-      if (root.status === 'resolved') {
+      if (root.status !== 'unresolved') {
         const configuration = el('input', 'w-full bg-wb-input border border-wb-border rounded p-1 font-mono text-[10px]'); configuration.value = JSON.stringify(root.configuration); configuration.setAttribute('aria-label', `Configuration for ${root.itemId}`);
         row.append(configuration, button(`Review configuration of ${root.itemId}`, safe(async () => present(await client.propose({ type: 'select', root: { ...refOf(root), configuration: JSON.parse(configuration.value) } })))));
       }
@@ -255,7 +257,8 @@ export function createAuthoringWorkspace(client) {
     render();
     showStatus(draft.editing === 'unresolved'
       ? `Unresolved draft opened: ${draft.roots.length} saved ${draft.roots.length === 1 ? 'choice' : 'choices'} kept, ${open} unresolved. Nothing was dropped and no other revision was substituted. Rebind the saved sources in Sources & Catalogs and validate again, or edit the draft and compile its resolved choices. Availability: ${[...new Set(draft.diagnostics.map(diagnostic => diagnostic.code))].join(', ')}.`
-      : 'Saved draft reopened: every recorded choice resolves from exact sources. Compile it to produce an executable policy.');
+      : draft.compile.status === 'available' ? 'Saved draft reopened: every recorded choice resolves from exact sources. Compile it to produce an executable policy.'
+        : `Saved draft reopened. It cannot be compiled yet: ${readable(failure({ diagnostics: draft.compile.reasons }))}`);
     return true;
   }
 

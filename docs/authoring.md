@@ -303,12 +303,10 @@ When the only problem is that an exact source, release, template snapshot or
 input record is not among the supplied inventories, `readAuthoring` returns
 `editing:"unresolved"` instead of `"unavailable"`. The original `intent` and
 `originalBytes` are unchanged, `unresolved` lists what is missing and `roots`
-marks every choice `resolved` or `unresolved`. Each unresolved entry is
+marks every choice `resolved`, `unresolved` (availability) or `refused` (Catalog contradiction). Each unresolved entry is
 `{kind:"root"|"dependency"|"origin"|"exclusion"|"input",ref,reason,dependents}`;
 `reason` is `revision-unavailable` when a different revision of the same package
-or input is supplied and `source-unavailable` otherwise. `closure-unavailable`
-marks a choice whose live required closure cannot be resolved from the supplied
-inventories although nothing recorded for it is named as missing. A different
+or input is supplied and `source-unavailable` otherwise. A different
 revision is never substituted. Unsupported semantics, contradictions, identity mismatches
 and review-binding problems stay `"unavailable"`. `editAuthoring`,
 `composeAuthoring` and `reconcileAuthoring` still refuse an unresolved document
@@ -333,11 +331,27 @@ kept roots plus `direct`; decisions about content outside the scope keep their
 history and are reported in `reviewsReconsidered`. Pins, provenance and inputs in
 a draft are retained facts pruned to what the kept choices reach; identities are
 added only from supplied checked inventories. A choice added in a draft is not in the
-saved policy's recorded graph: if its required closure later cannot be resolved
-(a dependency's inventory is no longer supplied) it is `unresolved`, naming the
-missing dependency where it can be determined or `closure-unavailable`, and compile
-of any scope containing it is refused. Retained pins and their source records are
-not pruned while such a choice may still need them.
+saved policy's recorded graph, so its required closure is resolved live. An
+availability gap and a contradiction are kept apart:
+
+- **Availability gap.** Required content lives in a release or item that is not
+  among the supplied inventories (a dependency's inventory is no longer supplied).
+  The choice is `unresolved` and names each missing dependency with
+  `source-unavailable` or `revision-unavailable`. Supplying the content resolves it.
+- **Contradiction.** Everything the choice needs is supplied but Catalog refuses it
+  (an invalid configuration, a recorded skip of a required item, a conflicting
+  set). The choice is `refused`, not `unresolved`: it carries
+  `refusal:{owner:"catalog",diagnostics}` with Catalog's own diagnostics, is never
+  listed in `unresolved`, and `compileDraft` of any scope containing it returns
+  those diagnostics. The draft stays openable and can be fixed (for example with
+  `select` and a valid configuration) or the choice removed.
+
+`editDraft` refuses an edit that would introduce such a contradiction for content
+that is fully supplied, returning Catalog's diagnostics and the original envelope
+bytes with no new revision, exactly as ordinary authoring would. Availability gaps
+remain editable. While any choice's closure is undetermined, every recorded pin
+and its provenance and inputs are retained, because an item behind a missing one
+cannot be seen; they are pruned again once the closure resolves.
 
 `aih-ui/journey` is a pure module (bytes in, bytes out; Web Crypto digests only).
 Its envelope, [schema](../schemas/journey-envelope-1.0.0.json), is versioned
