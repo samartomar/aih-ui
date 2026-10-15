@@ -136,7 +136,7 @@
             },
             "schema": {
               "type": "string",
-              "pattern": "^urn:aihq:workbench:journey-record:[a-z0-9-]+:d+.d+.d+$"
+              "pattern": "^urn:aihq:workbench:journey-record:[a-z0-9-]+:\\d+\\.\\d+\\.\\d+$"
             },
             "required": {
               "type": "boolean"

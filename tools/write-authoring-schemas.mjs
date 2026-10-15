@@ -31,8 +31,10 @@ const saved = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: 'u
   reviews: { $ref: review.$id }
 }) };
 // Journey envelope: separately versioned wrapper that references exact saved-intent bytes and is never executable.
+// These URNs mirror tools/consumer/journey.mjs (journey.test.mjs asserts they agree); that module needs the
+// installed @aihq packages, which this repo-root script does not have.
 const journeyRecord = 'urn:aihq:workbench:journey-record:unresolved-draft:1.0.0', journeyEnvelope = 'urn:aihq:workbench:journey-envelope:1.0.0';
-const recordUrn = { type: 'string', pattern: '^urn:aihq:workbench:journey-record:[a-z0-9-]+:\d+\.\d+\.\d+$' };
+const recordUrn = { type: 'string', pattern: String.raw`^urn:aihq:workbench:journey-record:[a-z0-9-]+:\d+\.\d+\.\d+$` };
 const journey = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: journeyEnvelope, ...shape({
   schema: { const: journeyEnvelope },
   id: { type: 'string', pattern: '^journey-[a-f0-9]{32}$' },

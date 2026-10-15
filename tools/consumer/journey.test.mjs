@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { readAuthoring, editAuthoring, composeAuthoring, freshAuthoring, stable, openDraft, editDraft, compileDraft } from './headless.mjs';
-import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, JOURNEY_SCHEMA, JOURNEY_ACCEPTED_SCHEMAS, JOURNEY_RECORD_SCHEMAS } from './journey.mjs';
+import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJourneyEnvelope, JOURNEY_SCHEMA, JOURNEY_SCHEMA_PREFIX, JOURNEY_ACCEPTED_SCHEMAS, JOURNEY_RECORD_SCHEMAS, DRAFT_RECORD_SCHEMA, SAVED_INTENT_TYPE } from './journey.mjs';
 import { mixedInventories } from './authoring-v3.test.mjs';
 import { intakeDeclaration, digestBytes } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
@@ -395,4 +395,145 @@ test('shipped JSON Schema describes the envelope the writer produces', async t =
   assert.deepEqual([...known.then.required].sort(), Object.keys(open.envelope.records[0]).sort());
   assert.equal(known.then.properties.intent.$ref, 'urn:aihq:workbench:saved-intent:3.0.0');
   assert.equal(known.else.additionalProperties, true);
+});
+
+// Reads the shipped schema in either consumer layout, or returns undefined where it is not shipped.
+async function shippedJourneySchema() {
+  for (const path of ['../../schemas/journey-envelope-1.0.0.json', '../schemas/journey-envelope-1.0.0.json']) {
+    try { return JSON.parse(await readFile(new URL(path, import.meta.url), 'utf8')); } catch { /* try next layout */ }
+  }
+  return undefined;
+}
+const patternsOf = (value, path = '') => value && typeof value === 'object'
+  ? Object.entries(value).flatMap(([key, member]) => key === 'pattern' && typeof member === 'string' ? [[path, member]] : patternsOf(member, `${path}/${key}`)) : [];
+
+test('every pattern in the shipped schema keeps its escapes and accepts what the runtime accepts', async t => {
+  const schema = await shippedJourneySchema();
+  if (!schema) return t.skip('schema file is not present in this consumer layout; tools/write-authoring-schemas.mjs --check verifies it');
+  const patterns = patternsOf(schema);
+  const samples = {
+    '/properties/id': { accept: [`journey-${'a'.repeat(32)}`], reject: ['journey-xyz', `journey-${'A'.repeat(32)}`] },
+    '/properties/savedIntent/properties/base64': { accept: ['', 'QUJD', 'QQ=='], reject: ['QU*D'] },
+    'record id': { accept: ['draft', 'draft-1.a_b'], reject: ['has space', ''] },
+    'hash': { accept: ['0123456789abcdef'.repeat(4)], reject: ['0'.repeat(63), 'G'.repeat(64)] },
+    'record schema': { accept: [], reject: ['urn:aihq:workbench:journey-record:Annotation:1.0.0', 'urn:aihq:workbench:journey-record:annotation:1.0',
+      'urn:aihq:workbench:journey-record:annotation:dd.d.d', 'urn:aihq:workbench:journey-record:annotation:1x0x0', 'urn:aihq:workbench:journey-record:annotation:1.0.0\n'] }
+  };
+  const kindOf = path => path in samples ? path : path.endsWith('/schema') ? 'record schema' : /sha256$/i.test(path) ? 'hash' : /\/id$/.test(path) ? 'record id' : undefined;
+  assert.ok(patterns.length >= 8);
+  // The same URNs the runtime accepts for records it does not interpret, optional and required.
+  const { maintained, policyBytes } = await savedMixed();
+  const open = await opened({ bytes: policyBytes, inventories: [maintained] });
+  const foreign = [{ id: 'notes', schema: 'urn:aihq:workbench:journey-record:annotation:1.0.0', required: false },
+    { id: 'workspace', schema: 'urn:aihq:workbench:journey-record:workspace:12.30.4', required: true }];
+  const read = await readJourneyEnvelope(await withRecords(open.envelopeBytes, foreign));
+  assert.equal(read.status, 'ok', JSON.stringify(read.diagnostics));
+  samples['record schema'].accept.push(...foreign.map(record => record.schema));
+  for (const [path, pattern] of patterns) {
+    const kind = kindOf(path), regex = new RegExp(pattern);
+    assert.ok(kind, `unreviewed pattern at ${path}`);
+    for (const value of samples[kind].accept) assert.equal(regex.test(value), true, `${path} should accept ${JSON.stringify(value)} (${pattern})`);
+    for (const value of samples[kind].reject) assert.equal(regex.test(value), false, `${path} should reject ${JSON.stringify(value)} (${pattern})`);
+  }
+});
+
+test('the journey envelope helper and constants agree with the shipped schema', async t => {
+  assert.equal(JOURNEY_SCHEMA.startsWith(JOURNEY_SCHEMA_PREFIX), true);
+  assert.equal(isJourneyEnvelope(encode(JSON.stringify({ schema: JOURNEY_SCHEMA }))), true);
+  assert.equal(isJourneyEnvelope(encode(JSON.stringify({ schema: `${JOURNEY_SCHEMA_PREFIX}9.0.0` }))), true);
+  assert.equal(isJourneyEnvelope(encode(JSON.stringify({ schema: 'urn:aihq:core:execution-policy:1.3.0' }))), false);
+  assert.equal(isJourneyEnvelope(encode('not json')), false);
+  assert.equal(isJourneyEnvelope(Uint8Array.of(0xff, 0xfe)), false);
+  assert.equal(isJourneyEnvelope(encode('null')), false);
+  assert.equal(isJourneyEnvelope(undefined), false);
+  const schema = await shippedJourneySchema();
+  if (!schema) return t.skip('schema file is not present in this consumer layout; tools/write-authoring-schemas.mjs --check verifies it');
+  assert.equal(schema.$id, JOURNEY_SCHEMA);
+  assert.equal(schema.properties.records.items.if.properties.schema.const, DRAFT_RECORD_SCHEMA);
+  assert.equal(schema.properties.savedIntent.properties.type.const, SAVED_INTENT_TYPE);
+});
+
+test('a choice added in a draft whose dependency later disappears reopens unresolved and keeps what it needs', async () => {
+  const base = fixtureRelease('journey-dep-base', [fixtureItem('base.dep')]);
+  const app = fixtureRelease('journey-dep-app', [fixtureItem('app.added', { requires: [crossRef(base, 'base.dep')] })]);
+  const solo = fixtureRelease('journey-dep-solo', [fixtureItem('solo.one')]);
+  const extra = fixtureRelease('journey-dep-extra', [fixtureItem('extra.one')]);
+  const intent = freshAuthoring();
+  intent.roots.push(rootFor(solo, 'solo.one'));
+  const saved = await composeAuthoring({ intent, inventories: [solo] });
+  assert.equal(saved.status, 'ok', JSON.stringify(saved.diagnostics));
+  const everything = [solo, app, base], without = [solo, app];
+  const open = await opened({ bytes: saved.value.policyBytes, inventories: everything });
+  const added = await edited({ envelopeBytes: open.envelopeBytes, inventories: everything, operation: { type: 'select', root: { releaseSha256: app.release.sha256, itemId: 'app.added', scope: 'project', configuration: {} } } });
+  assert.equal(added.compile.status, 'available');
+  assert.equal(added.intent.pins.some(p => p.itemId === 'base.dep'), true);
+  // Reopened without the dependency's inventory, nothing is treated as resolved.
+  const reopened = await opened({ bytes: added.envelopeBytes, inventories: without });
+  const root = reopened.roots.find(r => r.itemId === 'app.added');
+  assert.equal(reopened.editing, 'unresolved');
+  assert.equal(root.status, 'unresolved');
+  assert.deepEqual(root.blockedBy.map(b => [b.kind, b.ref.itemId, b.reason]), [['dependency', 'base.dep', 'source-unavailable']]);
+  assert.equal(reopened.roots.find(r => r.itemId === 'solo.one').status, 'resolved');
+  assert.deepEqual(reopened.unresolved.map(u => [u.kind, u.ref.itemId, u.reason, u.dependents.map(d => d.itemId)]), [['dependency', 'base.dep', 'source-unavailable', ['app.added']]]);
+  assert.equal(reopened.compile.status, 'refused'); assert.equal(reopened.compile.reasons[0].code, 'SCOPE_UNRESOLVED');
+  const refused = await compileDraft({ envelopeBytes: added.envelopeBytes, inventories: without, roots: [ref(rootFor(app, 'app.added'))] });
+  assert.equal(refused.status, 'refused'); assert.equal(refused.diagnostics[0].code, 'SCOPE_UNRESOLVED');
+  assert.deepEqual(refused.diagnostics[0].details.blocked.map(b => b.root.itemId), ['app.added']);
+  const whole = await compileDraft({ envelopeBytes: added.envelopeBytes, inventories: without });
+  assert.equal(whole.status, 'refused'); assert.equal(whole.diagnostics[0].code, 'SCOPE_UNRESOLVED');
+  // The other resolved choice still compiles, alone.
+  const alone = await compileDraft({ envelopeBytes: added.envelopeBytes, inventories: without, roots: [ref(rootFor(solo, 'solo.one'))] });
+  assert.equal(alone.status, 'ok', JSON.stringify(alone.diagnostics));
+  assert.deepEqual(alone.value.scope.map(r => r.itemId), ['solo.one']);
+  // An unrelated edit while the dependency is missing prunes nothing the unresolved choice needs.
+  const further = await edited({ envelopeBytes: added.envelopeBytes, inventories: [...without, extra], operation: { type: 'select', root: { releaseSha256: extra.release.sha256, itemId: 'extra.one', scope: 'project', configuration: {} } } });
+  assert.equal(further.intent.pins.some(p => p.itemId === 'base.dep'), true);
+  assert.deepEqual(further.changes.removedPins, []);
+  assert.equal(further.intent.provenance.some(p => p.releaseSha256 === base.release.sha256), true);
+  assert.equal(further.roots.find(r => r.itemId === 'app.added').status, 'unresolved');
+  // Supplied again, the same exact choice resolves with its dependency.
+  const restored = await opened({ bytes: further.envelopeBytes, inventories: [...everything, extra] });
+  assert.equal(restored.editing, 'available'); assert.equal(restored.compile.status, 'available');
+});
+
+test('an envelope with an unsupported required record advertises a refused compile with that reason', async () => {
+  const { policyBytes, inventories } = await savedMixed();
+  const open = await opened({ bytes: policyBytes, inventories });
+  assert.equal(open.compile.status, 'available');
+  const required = { id: 'workspace', schema: 'urn:aihq:workbench:journey-record:workspace:1.0.0', required: true, declarations: [] };
+  const bytes = await withRecords(open.envelopeBytes, [required]);
+  const shown = await opened({ bytes, inventories });
+  assert.equal(shown.supported, false);
+  assert.equal(shown.compile.status, 'refused');
+  assert.equal(shown.compile.reasons[0].code, 'JOURNEY_RECORD_UNSUPPORTED');
+  assert.match(shown.compile.reasons[0].message, /workspace/);
+  const compiled = await compileDraft({ envelopeBytes: bytes, inventories });
+  assert.equal(compiled.status, 'refused'); assert.equal(compiled.diagnostics[0].code, 'JOURNEY_RECORD_UNSUPPORTED');
+});
+
+test('a choice whose closure fails for another reason is unresolved with an explicit closure reason', async () => {
+  const base = fixtureRelease('journey-skip-base', [fixtureItem('base.dep')]);
+  const app = fixtureRelease('journey-skip-app', [fixtureItem('app.added', { requires: [crossRef(base, 'base.dep')] })]);
+  const solo = fixtureRelease('journey-skip-solo', [fixtureItem('solo.one')]);
+  const inventories = [solo, app, base];
+  const intent = freshAuthoring();
+  intent.roots.push(rootFor(solo, 'solo.one'));
+  const saved = await composeAuthoring({ intent, inventories: [solo] });
+  const open = await opened({ bytes: saved.value.policyBytes, inventories });
+  const added = await edited({ envelopeBytes: open.envelopeBytes, inventories, operation: { type: 'select', root: { releaseSha256: app.release.sha256, itemId: 'app.added', scope: 'project', configuration: {} } } });
+  // A recorded skip of a required item makes the live closure unresolvable although every item is supplied.
+  const skipped = structuredClone(added.intent);
+  skipped.exclusions.push({ originId: 'direct', releaseSha256: base.release.sha256, itemId: 'base.dep', scope: 'project' });
+  const rewritten = await writeJourneyEnvelope({ savedIntentBytes: saved.value.policyBytes, previous: await readJourneyEnvelope(added.envelopeBytes).then(r => r.value),
+    records: [{ id: 'draft', schema: DRAFT_RECORD_SCHEMA, required: true, intent: skipped }] });
+  assert.equal(rewritten.status, 'ok', JSON.stringify(rewritten.diagnostics));
+  const reopened = await opened({ bytes: rewritten.value.envelopeBytes, inventories });
+  const root = reopened.roots.find(r => r.itemId === 'app.added');
+  assert.equal(root.status, 'unresolved');
+  assert.deepEqual(root.blockedBy.map(b => [b.kind, b.ref.itemId, b.reason]), [['root', 'app.added', 'closure-unavailable']]);
+  assert.equal(reopened.roots.find(r => r.itemId === 'solo.one').status, 'resolved');
+  assert.equal(reopened.compile.status, 'refused');
+  const refused = await compileDraft({ envelopeBytes: rewritten.value.envelopeBytes, inventories, roots: [ref(rootFor(app, 'app.added'))] });
+  assert.equal(refused.status, 'refused'); assert.equal(refused.diagnostics[0].code, 'SCOPE_UNRESOLVED');
+  assert.equal((await compileDraft({ envelopeBytes: rewritten.value.envelopeBytes, inventories, roots: [ref(rootFor(solo, 'solo.one'))] })).status, 'ok');
 });

@@ -1,10 +1,18 @@
+// Mirrors JOURNEY_SCHEMA_PREFIX and the byte bounds in tools/consumer/journey.mjs, the source of truth; the page cannot import it.
 const JOURNEY_PREFIX = 'urn:aihq:workbench:journey-envelope:';
+const IMPORT_LIMITS = { policy: 1_000_000, envelope: 2_000_000 };
 /** True when the bytes are a journey envelope (any version) rather than an execution policy. */
 export function isJourneyEnvelope(bytes) {
   try {
     const schema = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))?.schema;
     return typeof schema === 'string' && schema.startsWith(JOURNEY_PREFIX);
   } catch { return false; }
+}
+/** Why a file of `size` bytes may not be imported, or undefined. Pass the bytes once they are read to apply the policy bound. */
+export function importLimitError(size, bytes) {
+  if (size > IMPORT_LIMITS.envelope) return 'File exceeds the public byte limit: 1 MB for a policy, 2 MB for a journey envelope.';
+  if (bytes && size > IMPORT_LIMITS.policy && !isJourneyEnvelope(bytes)) return 'Policy exceeds the public byte limit of 1 MB.';
+  return undefined;
 }
 const refusal = (code, message) => ({ status: 'refused', diagnostics: [{ code, message }] });
 const asDraft = ({ originalBytes: _kept, ...value }) => ({ ...value,
@@ -29,8 +37,10 @@ export function createAuthoringClient() {
     return result;
   }
   // Adopts an opened draft: the policy becomes its original bytes, never the envelope.
+  // Draft requests carry the envelope alone: it already holds the saved policy bytes, and sending them
+  // twice would count against the request body bound for a large envelope.
   async function openAttempt(attempt, input) {
-    const result = await request('draft-open', { bytes: [...input] });
+    const result = await request('draft-open', { bytes: [...input], policyBytes: undefined });
     if (attempt !== revision) return { status: 'superseded' };
     if (result.status === 'ok') { draftValue = { ...asDraft(result.value), fromPolicy: !isJourneyEnvelope(input) }; bytes = draftValue.savedIntentBytes.slice(); intent = undefined; compiled = undefined; }
     notify(); return result;
@@ -79,7 +89,7 @@ export function createAuthoringClient() {
     async proposeDraft(operation) {
       if (!draftValue) return refusal('INPUT_INVALID', 'Open a draft before editing it.');
       const attempt = ++revision; candidate = undefined; notify();
-      const result = await request('draft-edit', { envelopeBytes: [...draftValue.envelopeBytes], operation });
+      const result = await request('draft-edit', { envelopeBytes: [...draftValue.envelopeBytes], operation, policyBytes: undefined });
       if (attempt !== revision) return { status: 'superseded' };
       if (result.status === 'ok') candidate = asDraft(result.value);
       notify(); return result;
@@ -91,7 +101,7 @@ export function createAuthoringClient() {
     async compileDraft(roots) {
       if (!draftValue) return refusal('INPUT_INVALID', 'Open a draft before compiling it.');
       const attempt = ++revision; candidate = undefined; notify();
-      const result = await request('draft-compile', { envelopeBytes: [...draftValue.envelopeBytes], ...(roots ? { roots } : {}) });
+      const result = await request('draft-compile', { envelopeBytes: [...draftValue.envelopeBytes], policyBytes: undefined, ...(roots ? { roots } : {}) });
       if (attempt !== revision) return { status: 'superseded' };
       if (result.status === 'ok') {
         bytes = Uint8Array.from(result.value.policyBytes); intent = result.value.intent;

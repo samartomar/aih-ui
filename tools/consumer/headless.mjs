@@ -5,7 +5,7 @@ import { checkIntentShape, rootKey, pinKey } from './intent-shape.mjs';
 import { migrateIntent } from './migrate-intent.mjs';
 import { inspectReviewEvidence, compareReviewBindings, reviewDiagnostics } from './review-bindings.mjs';
 import { checkReview } from './intent-shape.mjs';
-import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_SCHEMAS } from './journey.mjs';
+import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_SCHEMAS } from './journey.mjs';
 export { inspectReviewEvidence, compareReviewBindings } from './review-bindings.mjs';
 export const AUTHORING_SCHEMA = 'urn:aihq:workbench:saved-intent:3.0.0';
 export const REVIEW_SCHEMA = 'urn:aihq:workbench:review-decisions:1.0.0';
@@ -323,8 +323,7 @@ export async function reconsiderReviews({ policyBytes, inventories, reviewEviden
 // ---- Unresolved drafts -------------------------------------------------------
 // A draft keeps every recorded choice exactly as saved. Availability is a fact
 // about the supplied inventories; no newer or candidate revision is substituted.
-const JOURNEY_SCHEMA_PREFIX = 'urn:aihq:workbench:journey-envelope:';
-const ref3 = value => ({ releaseSha256: value.releaseSha256, itemId: value.itemId, scope: value.scope });
+const rootRef = value => ({ releaseSha256: value.releaseSha256, itemId: value.itemId, scope: value.scope });
 const isRef = value => !!value && typeof value === 'object' && typeof value.releaseSha256 === 'string' && typeof value.itemId === 'string' && ['project', 'user'].includes(value.scope);
 const label = value => `${value.itemId} (${value.scope})`;
 const describeRef = ref => `${ref.releaseSha256 ?? ''}/${ref.itemId ?? ref.templateId ?? ref.id ?? ''}`;
@@ -335,8 +334,9 @@ function refusalDiagnostics(value) {
 function availabilityDiagnostics(unresolved) {
   const paths = { root: '/roots', dependency: '/pins', origin: '/origins', exclusion: '/exclusions', input: '/inputs' };
   const what = { origin: 'template snapshot', input: 'input release' };
+  const suffix = { 'revision-unavailable': ' (a different revision is supplied and is not substituted)', 'closure-unavailable': ' (its required items cannot be resolved from the supplied inventories)' };
   return unresolved.map(({ kind, ref, reason }) => ({ code: kind === 'origin' ? 'ORIGIN_UNAVAILABLE' : 'SOURCE_REVISION_UNAVAILABLE', path: paths[kind],
-    message: `Exact ${what[kind] ?? 'source/item'} unavailable: ${describeRef(ref)}${reason === 'revision-unavailable' ? ' (a different revision is supplied and is not substituted)' : ''}` }));
+    message: `Exact ${what[kind] ?? 'source/item'} unavailable: ${describeRef(ref)}${suffix[reason] ?? ''}` }));
 }
 // Current decisions on subjects whose release is not supplied cannot be compared
 // and are reported through their unresolved choices, not as binding failures.
@@ -372,6 +372,22 @@ function liveClosure(index, root, skips) {
   const resolved = resolveSelections({ releases: index.releases, roots: [{ releaseSha256: root.releaseSha256, itemId: root.itemId, scope: root.scope, configuration: root.configuration }], skips });
   return resolved.status === 'ok' ? new Set(resolved.value.inclusions.filter(i => rootKey(i.root) === rootKey(root)).map(i => rootKey(i.item))) : null;
 }
+// Required items of `root` that live in releases the supplied inventories do not include.
+function missingRequirements(index, root) {
+  const missing = new Map(), seen = new Set([pinKey(root)]), queue = [pinKey(root)];
+  while (queue.length) {
+    const found = index.items.get(queue.shift());
+    if (!found) continue;
+    for (const dependency of found.item.dependencies.requires) {
+      const releaseSha256 = 'release' in dependency ? dependency.release.manifest.sha256 : found.entry.release.sha256, key = pinKey({ releaseSha256, itemId: dependency.itemId });
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (index.items.has(key)) queue.push(key);
+      else missing.set(key, { releaseSha256, itemId: dependency.itemId, ...(dependency.itemSha256 !== undefined ? { itemSha256: dependency.itemSha256 } : {}) });
+    }
+  }
+  return [...missing.values()];
+}
 // Pure classification of a saved intent against supplied exact inventories.
 function analyzeDraft({ intent, policy, inventories, live = true }) {
   const index = inventoryIndex(inventories), graph = recordedGraph(policy, intent.pins), entryOf = sha => inventories.find(e => e.release.sha256 === sha);
@@ -380,7 +396,7 @@ function analyzeDraft({ intent, policy, inventories, live = true }) {
     return inventories.some(e => e.release.sha256 !== sha && ((name !== undefined && e.release.package?.name === name)
       || (input && e.input && e.input.kind === input.kind && stable(e.input.locator) === stable(input.locator)))) ? 'revision-unavailable' : 'source-unavailable';
   };
-  const mismatches = [], nodeEntries = new Map(), originEntries = new Map(), exclusionEntries = [], inputEntries = [], unavailableNodes = new Set(), resolvable = new Set(), closures = new Map();
+  const mismatches = [], nodeEntries = new Map(), originEntries = new Map(), exclusionEntries = [], inputEntries = [], unavailableNodes = new Set(), undeterminedRoots = new Set(), resolvable = new Set(), closures = new Map();
   const check = (value, path) => {
     const found = index.items.get(pinKey(value));
     if (found && value.itemSha256 !== undefined && found.item.itemSha256 !== value.itemSha256) mismatches.push({ code: 'SOURCE_IDENTITY_MISMATCH', path, message: 'Recorded item differs from the checked item.' });
@@ -400,8 +416,22 @@ function analyzeDraft({ intent, policy, inventories, live = true }) {
       if (!nodeEntries.has(node)) nodeEntries.set(node, { kind: rootKeys.has(node) ? 'root' : 'dependency',
         ref: { releaseSha256: value.releaseSha256, itemId: value.itemId, itemSha256: value.itemSha256, scope: value.scope }, reason: reasonFor(value.releaseSha256) });
     }
+    // A root added after the policy was saved is not in the recorded graph, so its live closure is the
+    // only evidence of what it needs. If that cannot be resolved the root is never treated as resolved.
+    const closure = live && complete ? liveClosure(index, root, skips) : undefined;
+    if (closure) for (const node of closure) nodes.add(node);
+    else if (closure === null) {
+      complete = false; undeterminedRoots.add(key);
+      const missing = missingRequirements(index, root);
+      for (const need of missing.length ? missing : [root]) {
+        const node = rootKey({ ...need, scope: root.scope });
+        nodes.add(node); unavailableNodes.add(node);
+        if (!nodeEntries.has(node)) nodeEntries.set(node, { kind: missing.length ? 'dependency' : 'root',
+          ref: { releaseSha256: need.releaseSha256, itemId: need.itemId, itemSha256: need.itemSha256, scope: root.scope },
+          reason: missing.length ? reasonFor(need.releaseSha256) : 'closure-unavailable' });
+      }
+    }
     if (complete) resolvable.add(key);
-    if (live && complete) for (const node of liveClosure(index, root, skips) ?? []) nodes.add(node);
     closures.set(key, nodes);
   }
   for (const origin of intent.origins) if (origin.kind === 'template') {
@@ -417,7 +447,7 @@ function analyzeDraft({ intent, policy, inventories, live = true }) {
     if (!entry) inputEntries.push({ kind: 'input', ref: { id: input.id, kind: input.kind, locator: input.locator, releaseSha256: input.releaseSha256 }, reason: reasonFor(input.releaseSha256) });
     else if (stable(entry.input) !== stable(input)) mismatches.push({ code: 'SOURCE_IDENTITY_MISMATCH', path: '/inputs', message: 'Acquired input identity differs from the saved snapshot.' });
   }
-  const rootsWhere = test => intent.roots.filter(test).map(ref3);
+  const rootsWhere = test => intent.roots.filter(test).map(rootRef);
   const order = [...[...nodeEntries.keys()].filter(k => rootKeys.has(k)), ...[...nodeEntries.keys()].filter(k => !rootKeys.has(k)).sort()];
   for (const key of order) nodeEntries.get(key).dependents = rootsWhere(r => rootKey(r) !== key && closures.get(rootKey(r)).has(key));
   for (const [id, entry] of originEntries) entry.dependents = rootsWhere(r => r.originIds.includes(id));
@@ -431,7 +461,7 @@ function analyzeDraft({ intent, policy, inventories, live = true }) {
     return { ...structuredClone(root), status: blockers.length ? 'unresolved' : 'resolved',
       ...(blockers.length ? { blockedBy: blockers.map(({ kind, ref, reason }) => ({ kind, ref, reason })) } : {}) };
   });
-  return { index, graph, closures, resolvable, skips, unavailableNodes, mismatches, unresolved, roots };
+  return { index, graph, closures, resolvable, skips, unavailableNodes, undeterminedRoots, mismatches, unresolved, roots };
 }
 
 async function loadDraft(envelopeBytes) {
@@ -447,13 +477,13 @@ async function loadDraft(envelopeBytes) {
 }
 // Compose and Core-validate an executable policy for the requested roots only.
 async function compileScope({ policy, intent, inventories, analysis, roots, reviewEvidence, comparisons, originalBytes }) {
-  const requested = roots ?? intent.roots.map(ref3), keys = new Set(intent.roots.map(rootKey));
+  const requested = roots ?? intent.roots.map(rootRef), keys = new Set(intent.roots.map(rootKey));
   if (!Array.isArray(requested) || requested.some(r => !isRef(r) || !keys.has(rootKey(r)))) return refuse('INPUT_INVALID', '/roots', 'Requested scope must name choices that exist in the draft.', originalBytes);
   const want = new Set(requested.map(rootKey)), whole = intent.roots.every(r => want.has(rootKey(r)));
   const blocked = analysis.roots.filter(r => want.has(rootKey(r)) && r.status === 'unresolved');
   const entries = whole ? analysis.unresolved : analysis.unresolved.filter(u => blocked.some(r => r.blockedBy.some(b => b.kind === u.kind && stable(b.ref) === stable(u.ref))));
   if (entries.length) return refuse('SCOPE_UNRESOLVED', '/roots', `Requested scope is unresolved: ${entries.map(u => `${u.kind} ${describeRef(u.ref)} (${u.reason})`).join('; ')}. Resolve, replace or remove it before compiling.`,
-    originalBytes, { unresolved: entries, blocked: blocked.map(r => ({ root: ref3(r), blockedBy: r.blockedBy })) });
+    originalBytes, { unresolved: entries, blocked: blocked.map(r => ({ root: rootRef(r), blockedBy: r.blockedBy })) });
   let scoped = structuredClone(intent);
   if (!whole) {
     const kept = intent.roots.filter(r => want.has(rootKey(r))), originIds = new Set(kept.flatMap(r => r.originIds));
@@ -468,7 +498,7 @@ async function compileScope({ policy, intent, inventories, analysis, roots, revi
   const result = await buildReviewed({ intent: scoped, inventories, base: policy, originalBytes, reviewEvidence, comparisons });
   if (result.status !== 'ok') return result;
   const before = new Set(scoped.reviews.records.filter(r => r.state === 'reconsider').map(r => r.id));
-  return ok({ policyBytes: result.value.policyBytes, intent: result.value.intent, policy: result.value.policy, scope: requested.map(ref3),
+  return ok({ policyBytes: result.value.policyBytes, intent: result.value.intent, policy: result.value.policy, scope: requested.map(rootRef),
     reviewsReconsidered: result.value.intent.reviews.records.filter(r => r.state === 'reconsider' && !before.has(r.id)).map(r => r.id) });
 }
 async function presentDraft({ envelopeBytes, envelope, savedIntentBytes, supported, policy, intent, inventories, reviewEvidence, comparisons, journeyDiagnostics = [], changes }) {
@@ -479,7 +509,10 @@ async function presentDraft({ envelopeBytes, envelope, savedIntentBytes, support
   const scope = availableReviewScope({ intent, inventories, comparisons });
   const review = await reviewDiagnostics({ intent: scope.intent, inventories, reviewEvidence, comparisons: scope.comparisons });
   if (review.length) return { status: 'refused', diagnostics: review, originalBytes: envelopeBytes.slice() };
-  const compiled = await compileScope({ policy, intent, inventories, analysis, reviewEvidence, comparisons, originalBytes: envelopeBytes });
+  // Unsupported required records cannot be interpreted, so nothing may be compiled from this envelope.
+  const unsupported = journeyDiagnostics.filter(d => d.code === 'JOURNEY_RECORD_UNSUPPORTED');
+  const compiled = supported ? await compileScope({ policy, intent, inventories, analysis, reviewEvidence, comparisons, originalBytes: envelopeBytes })
+    : { status: 'refused', diagnostics: unsupported.length ? unsupported : [{ code: 'JOURNEY_RECORD_UNSUPPORTED', path: '/records', message: 'The envelope has required records this version cannot interpret; compile is unavailable.' }] };
   return ok({ envelopeBytes: envelopeBytes.slice(), envelope, projection: projectJourneyEnvelope(envelope), supported, intent, editing: analysis.unresolved.length ? 'unresolved' : 'available',
     unresolved: analysis.unresolved, roots: analysis.roots, savedIntentBytes: savedIntentBytes.slice(),
     compile: compiled.status === 'ok' ? { status: 'available' } : { status: 'refused', reasons: compiled.diagnostics },
@@ -489,9 +522,7 @@ async function presentDraft({ envelopeBytes, envelope, savedIntentBytes, support
 export async function openDraft({ bytes, inventories, reviewEvidence = [], comparisons = [] } = {}) {
   if (!(bytes instanceof Uint8Array)) return refuse('INPUT_INVALID', '/bytes', 'Supply original policy or journey envelope bytes.');
   const context = { inventories, reviewEvidence, comparisons };
-  let schema;
-  try { schema = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))?.schema; } catch { /* diagnosed by the policy path */ }
-  if (typeof schema === 'string' && schema.startsWith(JOURNEY_SCHEMA_PREFIX)) {
+  if (isJourneyEnvelope(bytes)) {
     const loaded = await loadDraft(bytes);
     if (loaded.status !== 'ok') return loaded;
     const { read, record, policy } = loaded.value;
@@ -522,19 +553,20 @@ export async function editDraft({ envelopeBytes, inventories, operation, reviewE
   if (loaded.status !== 'ok') return loaded;
   const { read, record, policy } = loaded.value;
   const fail = (code, path, message, details) => refuse(code, path, message, envelopeBytes, details);
+  const unchanged = refusal => ({ ...refusal, originalBytes: envelopeBytes.slice() });
   if (!read.supported) return fail('JOURNEY_RECORD_UNSUPPORTED', '/records', 'The envelope has required records this version cannot change; it is read-only.');
   if (!operation || typeof operation !== 'object') return fail('INPUT_INVALID', '/operation', 'Supply an edit operation.');
   let before;
   try { before = analyzeDraft({ intent: record.intent, policy, inventories }); }
   catch (error) { return fail('SOURCE_IDENTITY_MISMATCH', '/inventories', error.message); }
-  if (before.mismatches.length) return { status: 'refused', diagnostics: before.mismatches, originalBytes: envelopeBytes.slice() };
+  if (before.mismatches.length) return unchanged({ status: 'refused', diagnostics: before.mismatches });
   const { index } = before, intent = structuredClone(record.intent);
   const changes = { removedRoots: [], removedOrigins: [], removedExclusions: [], addedRoots: [], removedPins: [], reviewsReconsidered: [] };
   const closureOf = root => before.closures.get(rootKey(root)) ?? reach(before.graph, rootKey(root));
   const dependentsOf = (key, retained) => retained.filter(r => rootKey(r) !== key && closureOf(r).has(key));
   const required = (target, dependents) => fail('DEPENDENCY_RETAINED', '/operation/root',
     `Cannot remove ${label(target)}: it is still required by ${dependents.map(label).join(', ')}. Remove or replace those choices first.`,
-    { target: ref3(target), dependents: dependents.map(ref3) });
+    { target: rootRef(target), dependents: dependents.map(rootRef) });
   const pruneOrigin = id => {
     changes.removedExclusions.push(...intent.exclusions.filter(e => e.originId === id));
     intent.exclusions = intent.exclusions.filter(e => e.originId !== id);
@@ -554,7 +586,7 @@ export async function editDraft({ envelopeBytes, inventories, operation, reviewE
     if (!found) return fail('SOURCE_REVISION_UNAVAILABLE', '/operation/root', `Exact source/item unavailable in the supplied inventories: ${pinKey(root)}`);
     if (root.itemSha256 !== undefined && root.itemSha256 !== found.item.itemSha256) return fail('SOURCE_IDENTITY_MISMATCH', '/operation/root/itemSha256', 'Supplied item identity differs from the checked item.');
     const resolution = resolveSelections({ releases: index.releases, roots: [{ releaseSha256: root.releaseSha256, itemId: root.itemId, scope: root.scope, configuration: root.configuration }], skips: before.skips });
-    if (resolution.status !== 'ok') return { ...resolution, originalBytes: envelopeBytes.slice() };
+    if (resolution.status !== 'ok') return unchanged(resolution);
     const configured = configureItem({ release: found.entry.release, itemId: found.item.id, configuration: root.configuration, materialSource: found.entry.materialSource });
     if (!configured.valid) return fail('INPUT_INVALID', '/operation/root/configuration', 'Catalog refused item configuration.', { owner: 'catalog', diagnostics: configured.diagnostics });
     return { found };
@@ -570,14 +602,14 @@ export async function editDraft({ envelopeBytes, inventories, operation, reviewE
       // A resolvable root that is also a dependency is simply no longer a direct choice, as in ordinary
       // authoring. An unavailable one would silently remain as an unresolved requirement, so it is refused.
       if (before.unavailableNodes.has(key) && dependents.length) return required(target, dependents);
-      intent.roots = retained; changes.removedRoots.push(ref3(found));
+      intent.roots = retained; changes.removedRoots.push(rootRef(found));
       for (const id of found.originIds) if (id !== 'direct' && !retained.some(r => r.originIds.includes(id))) pruneOrigin(id);
     } else if (operation.type === 'remove-origin') {
       const id = operation.originId;
       if (!intent.origins.some(o => o.id === id)) return fail('INPUT_INVALID', '/operation/originId', 'Origin is not recorded in this draft.');
       const dropped = intent.roots.filter(r => r.originIds.every(origin => origin === id));
       intent.roots = intent.roots.map(r => ({ ...r, originIds: r.originIds.filter(origin => origin !== id) })).filter(r => r.originIds.length);
-      changes.removedRoots.push(...dropped.map(ref3));
+      changes.removedRoots.push(...dropped.map(rootRef));
       pruneOrigin(id);
       for (const keep of operation.keep ?? []) {
         const pin = intent.pins.find(p => pinKey(p) === pinKey(keep));
@@ -599,7 +631,7 @@ export async function editDraft({ envelopeBytes, inventories, operation, reviewE
       const root = draftRoot(operation.root), prior = intent.roots.find(r => rootKey(r) === rootKey(root));
       if (prior?.originIds.length === 1 && prior.originIds[0] === 'direct') prior.configuration = structuredClone(root.configuration);
       mergeRoot(root);
-      if (!prior) changes.addedRoots.push(ref3(root));
+      if (!prior) changes.addedRoots.push(rootRef(root));
     } else if (operation.type === 'replace') {
       const replacement = operation.replacement;
       if (!isRef(operation.root) || !replacement || typeof replacement.releaseSha256 !== 'string' || typeof replacement.itemId !== 'string') return fail('INPUT_INVALID', '/operation', 'Supply {root,replacement:{releaseSha256,itemId}}.');
@@ -610,17 +642,17 @@ export async function editDraft({ envelopeBytes, inventories, operation, reviewE
       if (!checked.found) return checked;
       intent.roots = intent.roots.filter(r => r !== prior);
       mergeRoot(draftRoot(target, prior));
-      changes.removedRoots.push(ref3(prior)); changes.addedRoots.push(ref3(target));
+      changes.removedRoots.push(rootRef(prior)); changes.addedRoots.push(rootRef(target));
       for (const id of prior.originIds) if (id !== 'direct' && !intent.roots.some(r => r.originIds.includes(id))) pruneOrigin(id);
     } else if (operation.type === 'skip' || operation.type === 'unskip') {
-      const x = operation.exclusion;
-      if (!isRef(x) || typeof x.originId !== 'string' || (x.reason !== undefined && typeof x.reason !== 'string')) return fail('INPUT_INVALID', '/operation/exclusion', 'Supply {originId,releaseSha256,itemId,scope,reason?}.');
-      if (!intent.origins.some(o => o.id === x.originId)) return fail('INPUT_INVALID', '/operation/exclusion/originId', 'Origin is not recorded in this draft.');
-      const at = intent.exclusions.findIndex(e => e.originId === x.originId && rootKey(e) === rootKey(x));
+      const exclusion = operation.exclusion;
+      if (!isRef(exclusion) || typeof exclusion.originId !== 'string' || (exclusion.reason !== undefined && typeof exclusion.reason !== 'string')) return fail('INPUT_INVALID', '/operation/exclusion', 'Supply {originId,releaseSha256,itemId,scope,reason?}.');
+      if (!intent.origins.some(o => o.id === exclusion.originId)) return fail('INPUT_INVALID', '/operation/exclusion/originId', 'Origin is not recorded in this draft.');
+      const at = intent.exclusions.findIndex(e => e.originId === exclusion.originId && rootKey(e) === rootKey(exclusion));
       if (operation.type === 'skip') {
-        if (!index.items.has(pinKey(x))) return fail('SOURCE_REVISION_UNAVAILABLE', '/operation/exclusion', 'Optionality cannot be checked for unavailable content; supply the exact inventory that declares it.');
+        if (!index.items.has(pinKey(exclusion))) return fail('SOURCE_REVISION_UNAVAILABLE', '/operation/exclusion', 'Optionality cannot be checked for unavailable content; supply the exact inventory that declares it.');
         if (at >= 0) return fail('INPUT_INVALID', '/operation/exclusion', 'That skip is already recorded.');
-        intent.exclusions.push({ originId: x.originId, releaseSha256: x.releaseSha256, itemId: x.itemId, scope: x.scope, ...(x.reason !== undefined ? { reason: x.reason } : {}) });
+        intent.exclusions.push({ originId: exclusion.originId, releaseSha256: exclusion.releaseSha256, itemId: exclusion.itemId, scope: exclusion.scope, ...(exclusion.reason !== undefined ? { reason: exclusion.reason } : {}) });
       } else {
         // Removing a recorded skip needs no availability check: it only stops suppressing a suggestion.
         if (at < 0) return fail('INPUT_INVALID', '/operation/exclusion', 'That skip is not recorded in this draft.');
@@ -632,11 +664,14 @@ export async function editDraft({ envelopeBytes, inventories, operation, reviewE
   let after;
   try { after = analyzeDraft({ intent, policy, inventories }); }
   catch (error) { return fail('SOURCE_IDENTITY_MISMATCH', '/inventories', error.message); }
-  const trial = (analysis, value) => resolveSelections({ releases: index.releases, skips: analysis.skips,
+  const resolveAvailableRoots = (analysis, value) => resolveSelections({ releases: index.releases, skips: analysis.skips,
     roots: value.roots.filter(r => analysis.resolvable.has(rootKey(r))).map(({ releaseSha256, itemId, scope, configuration }) => ({ releaseSha256, itemId, scope, configuration })) });
-  const settled = trial(after, intent);
-  if (settled.status !== 'ok' && trial(before, record.intent).status === 'ok') return { ...settled, originalBytes: envelopeBytes.slice() };
+  const settled = resolveAvailableRoots(after, intent);
+  if (settled.status !== 'ok' && resolveAvailableRoots(before, record.intent).status === 'ok') return unchanged(settled);
   const reached = new Set(intent.roots.flatMap(r => [...after.closures.get(rootKey(r))].map(k => k.split('/').slice(0, 2).join('/'))));
+  // A choice whose required closure cannot be resolved may still need any recorded item that is not
+  // available to rebuild, so those pins are retained until that closure can be resolved again.
+  if (after.undeterminedRoots.size) for (const pin of record.intent.pins) if (!index.items.has(pinKey(pin))) reached.add(pinKey(pin));
   const pins = [...reached].flatMap(key => {
     const existing = record.intent.pins.find(p => pinKey(p) === key), found = index.items.get(key);
     return existing ? [existing] : found ? [{ releaseSha256: found.entry.release.sha256, itemId: found.item.id, itemSha256: found.item.itemSha256, recipe: found.item.recipe, materials: found.item.materials }] : [];
@@ -659,8 +694,8 @@ export async function editDraft({ envelopeBytes, inventories, operation, reviewE
   if (!checkIntentShape(intent)) return fail('FIELD_SEMANTICS_UNSUPPORTED', '/records/0/intent', 'Edited draft violates the supported saved-intent shape.');
   const known = read.records.filter(r => r.schema in JOURNEY_RECORD_SCHEMAS).map(r => r === record ? { id: r.id, schema: r.schema, required: true, intent } : r);
   const written = await writeJourneyEnvelope({ savedIntentBytes: read.savedIntentBytes, records: known, previous: read });
-  if (written.status !== 'ok') return { ...written, originalBytes: envelopeBytes.slice() };
+  if (written.status !== 'ok') return unchanged(written);
   const presented = await presentDraft({ inventories, reviewEvidence, comparisons, envelopeBytes: written.value.envelopeBytes, envelope: written.value.envelope,
     savedIntentBytes: read.savedIntentBytes, supported: true, policy, intent, changes });
-  return presented.status === 'ok' ? presented : { ...presented, originalBytes: envelopeBytes.slice() };
+  return presented.status === 'ok' ? presented : unchanged(presented);
 }

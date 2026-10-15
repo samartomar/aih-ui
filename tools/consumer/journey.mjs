@@ -3,13 +3,21 @@
 // Digests use the shared Web Crypto; no host, filesystem or network is touched.
 import { checkIntentShape } from './intent-shape.mjs';
 import { digestBytes, hash, object, only } from './intake.mjs';
-export const JOURNEY_SCHEMA = 'urn:aihq:workbench:journey-envelope:1.0.0';
+export const JOURNEY_SCHEMA_PREFIX = 'urn:aihq:workbench:journey-envelope:';
+export const JOURNEY_SCHEMA = `${JOURNEY_SCHEMA_PREFIX}1.0.0`;
 export const JOURNEY_ACCEPTED_SCHEMAS = [JOURNEY_SCHEMA];
 export const SAVED_INTENT_TYPE = 'urn:aihq:core:execution-policy-bytes';
 export const DRAFT_RECORD_SCHEMA = 'urn:aihq:workbench:journey-record:unresolved-draft:1.0.0';
 export const JOURNEY_RECORD_SCHEMAS = { [DRAFT_RECORD_SCHEMA]: { kind: 'unresolved-draft', version: '1.0.0' } };
 export const MAX_SAVED_INTENT_BYTES = 1_000_000;
 export const MAX_ENVELOPE_BYTES = 2_000_000;
+// True for an envelope of any version, so an unsupported one is refused as such rather than read as a policy.
+export function isJourneyEnvelope(bytesOrText) {
+  try {
+    const schema = JSON.parse(typeof bytesOrText === 'string' ? bytesOrText : new TextDecoder('utf-8', { fatal: true }).decode(bytesOrText))?.schema;
+    return typeof schema === 'string' && schema.startsWith(JOURNEY_SCHEMA_PREFIX);
+  } catch { return false; }
+}
 const recordSchemaUrn = /^urn:aihq:workbench:journey-record:[a-z0-9-]+:\d+\.\d+\.\d+$/;
 const idPattern = /^[\w.-]{1,180}$/;
 // Same canonical JSON as headless `stable`; kept local so this module has no host dependency.

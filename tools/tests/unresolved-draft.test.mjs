@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createAuthoringClient, isJourneyEnvelope } from '../../src/app/authoring-client.js';
+import { createAuthoringClient, isJourneyEnvelope, importLimitError } from '../../src/app/authoring-client.js';
 
 const encode = value => new TextEncoder().encode(typeof value === 'string' ? value : JSON.stringify(value));
 const policy = encode({ schema: 'urn:aihq:core:execution-policy:1.3.0', mode: 'project', selections: [] });
@@ -183,4 +183,27 @@ test('an edited draft keeps its edits when it is revalidated', async t => {
   assert.equal(calls[3].url, '/api/authoring-draft-open');
   assert.deepEqual(calls[3].body.bytes, [...encode('envelope-2')]);
   assert.equal(client.draft.editing, 'available'); assert.equal(client.draft.roots.length, 2);
+});
+
+test('imports are bounded at 1 MB for a policy and 2 MB for a journey envelope', () => {
+  const padded = (value, size) => { const bytes = new Uint8Array(size).fill(32); bytes.set(value); return bytes; };
+  const bigEnvelope = padded(envelope, 1_500_000), bigPolicy = padded(policy, 1_500_000);
+  assert.equal(importLimitError(bigEnvelope.length), undefined);
+  assert.equal(importLimitError(bigEnvelope.length, bigEnvelope), undefined);
+  assert.equal(importLimitError(2_000_000, padded(envelope, 2_000_000)), undefined);
+  assert.match(importLimitError(bigPolicy.length, bigPolicy), /Policy exceeds the public byte limit of 1 MB/);
+  assert.equal(importLimitError(1_000_000, padded(policy, 1_000_000)), undefined);
+  assert.match(importLimitError(2_000_001), /2 MB for a journey envelope/);
+  assert.match(importLimitError(2_000_001, padded(envelope, 2_000_001)), /2 MB for a journey envelope/);
+});
+
+test('draft requests carry the envelope alone and never repeat the saved policy bytes', async t => {
+  const calls = service(t, ok(draftValue(1, root('mine', 'unresolved'), root('shared'))), ok(draftValue(2, root('mine', 'unresolved'), root('shared'))),
+    ok({ policyBytes: [...policy], intent: { roots: [] }, scope: [] }));
+  const client = createAuthoringClient(); client.importBytes(envelope);
+  await client.reopen();
+  await client.propose({ type: 'remove-root', root: root('mine') });
+  await client.compileDraft();
+  assert.deepEqual(calls.map(call => call.url), ['/api/authoring-draft-open', '/api/authoring-draft-edit', '/api/authoring-draft-compile']);
+  for (const call of calls) assert.equal('policyBytes' in call.body, false, call.url);
 });

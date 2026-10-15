@@ -1,5 +1,5 @@
 import { el } from './dom.js';
-import { isJourneyEnvelope } from './authoring-client.js';
+import { isJourneyEnvelope, importLimitError } from './authoring-client.js';
 
 const buttonClass = 'px-3 py-1.5 rounded bg-surface-container text-on-surface border border-wb-border hover:bg-surface-container-high';
 function button(label, action) {
@@ -15,7 +15,7 @@ function failure(result) {
   return [...(result.diagnostics ?? []), ...(result.value?.diagnostics ?? [])].map(diagnostic => `${diagnostic.code ?? 'Input'}: ${diagnostic.message}`).join(' ') || result.error || result.status;
 }
 
-const reasonText = { 'source-unavailable': 'source unavailable', 'revision-unavailable': 'revision unavailable' };
+const reasonText = { 'source-unavailable': 'source unavailable', 'revision-unavailable': 'revision unavailable', 'closure-unavailable': 'required items cannot be resolved' };
 const markerClass = 'px-1.5 py-0.5 rounded border font-mono text-[10px]';
 const refOf = ({ releaseSha256, itemId, scope }) => ({ releaseSha256, itemId, scope });
 // Exact digests stay in the artifact; messages show a short prefix so they read as text.
@@ -79,9 +79,12 @@ export function createAuthoringWorkspace(client) {
   })), save, originalDownload);
   file.addEventListener('change', safe(async () => {
     const selected = file.files[0]; if (!selected) return;
-    if (selected.size > 1_000_000) throw new Error('Policy exceeds the public byte limit of 1 MB.');
+    const tooLarge = importLimitError(selected.size);
+    if (tooLarge) throw new Error(tooLarge);
     const attempt = client.invalidate(), loaded = new Uint8Array(await selected.arrayBuffer());
     if (attempt !== client.revision) return;
+    const tooLargePolicy = importLimitError(loaded.length, loaded);
+    if (tooLargePolicy) throw new Error(tooLargePolicy);
     original = loaded; client.importBytes(original); file.value = '';
     if (isJourneyEnvelope(loaded)) {
       showStatus('Saved draft envelope loaded. Opening its recorded choices…');
@@ -181,7 +184,7 @@ export function createAuthoringWorkspace(client) {
   choices.after(draftSection);
   const itemLabel = ref => client.catalog?.items.find(item => item.id === ref.itemId && item.root.releaseSha256 === ref.releaseSha256)?.label ?? ref.itemId ?? ref.templateId ?? ref.id;
   const blocker = entry => {
-    const what = entry.kind === 'root' ? 'its exact source' : entry.kind === 'dependency' ? `required item ${itemLabel(entry.ref)}`
+    const what = entry.kind === 'root' ? (entry.reason === 'closure-unavailable' ? 'its required items' : 'its exact source') : entry.kind === 'dependency' ? `required item ${itemLabel(entry.ref)}`
       : entry.kind === 'origin' ? `template origin ${entry.ref.templateId}` : entry.kind === 'exclusion' ? `skip of ${itemLabel(entry.ref)}` : `input ${entry.ref.id}`;
     return `${what}: ${reasonText[entry.reason] ?? entry.reason}`;
   };
@@ -189,7 +192,8 @@ export function createAuthoringWorkspace(client) {
     const row = el('p', 'flex flex-wrap gap-1');
     if (root.status === 'resolved') { row.append(el('span', `${markerClass} bg-secondary-container border-secondary/40 text-secondary`, 'Resolved')); return row; }
     for (const reason of new Set(root.blockedBy.map(entry => entry.reason))) row.append(el('span', `${markerClass} bg-tertiary-container border-tertiary/40 text-tertiary`,
-      reason === 'revision-unavailable' ? 'Unresolved — revision unavailable (no newer revision substituted)' : 'Unresolved — source unavailable'));
+      reason === 'revision-unavailable' ? 'Unresolved — revision unavailable (no newer revision substituted)'
+        : reason === 'closure-unavailable' ? 'Unresolved — required items cannot be resolved' : 'Unresolved — source unavailable'));
     return row;
   };
   function renderDraft() {
@@ -197,6 +201,8 @@ export function createAuthoringWorkspace(client) {
     draftSection.hidden = !draft;
     if (!draft) return;
     const unresolvedRoots = draft.roots.filter(root => root.status === 'unresolved'), resolvedRoots = draft.roots.filter(root => root.status === 'resolved');
+    // An envelope with required records this version cannot interpret is shown but never compiled.
+    const compilable = draft.supported !== false;
     draftTitle.textContent = draft.editing === 'unresolved' ? 'Unresolved draft' : 'Saved draft';
     draftNote.textContent = `Draft revision ${draft.projection.revision.sequence} · ${draft.roots.length} recorded ${draft.roots.length === 1 ? 'choice' : 'choices'}, ${unresolvedRoots.length} unresolved. Every original choice is kept exactly as recorded; nothing is dropped and no other revision is substituted. This draft is not an executable policy.`;
     draftRoots.replaceChildren();
@@ -236,9 +242,9 @@ export function createAuthoringWorkspace(client) {
     draftChanges.textContent = changes ? `Last change: ${what || 'no choice added or removed'}.` : '';
     compileNote.textContent = (draft.compile.status === 'available' ? 'Every recorded choice resolves with its dependencies: the whole draft can be compiled.'
       : `The whole draft cannot be compiled yet. ${readable(failure({ diagnostics: draft.compile.reasons }))}`)
-      + (resolvedRoots.length && unresolvedRoots.length ? ` ${resolvedRoots.length} of ${draft.roots.length} choices are resolved and can be compiled on their own; the others stay in the draft.` : '')
-      + (resolvedRoots.length ? '' : ' No choice is resolved yet, so there is no resolved scope to compile.');
-    compileResolved.disabled = !resolvedRoots.length;
+      + (compilable && resolvedRoots.length && unresolvedRoots.length ? ` ${resolvedRoots.length} of ${draft.roots.length} choices are resolved and can be compiled on their own; the others stay in the draft.` : '')
+      + (!compilable || resolvedRoots.length ? '' : ' No choice is resolved yet, so there is no resolved scope to compile.');
+    compileAll.disabled = !compilable; compileResolved.disabled = !compilable || !resolvedRoots.length;
     for (const action of [compileAll, compileResolved]) { action.setAttribute('aria-disabled', String(action.disabled)); action.classList.toggle('opacity-50', action.disabled); action.classList.toggle('cursor-not-allowed', action.disabled); }
   }
   // Returns true when the reopened artifact is a draft and this has described it.
