@@ -100,10 +100,14 @@ test('offline repair needs a live preparation, a matching digest and approval, a
   assert.equal(unapproved.status, 'rejected');
   assert.equal(existsSync(join(first.home, '.npmrc')), false, 'a rejected approval writes nothing');
 
-  // A machine check that overlaps the repair is not the one labelled as taken before it.
-  const [applied, overlapping] = await Promise.all([host.applyRepair({ sessionId: value.sessionId, reviewDigest: value.reviewDigest, approved: true }),
-    host.check({ targets: ['node'], network: 'off' })]);
+  // A machine check that finishes while the repair runs is not the one labelled as taken before it.
+  // The settle order is recorded and required, so this test cannot pass without the overlap.
+  const settled = [];
+  const [applied, overlapping] = await Promise.all([
+    host.applyRepair({ sessionId: value.sessionId, reviewDigest: value.reviewDigest, approved: true }).finally(() => settled.push('apply')),
+    host.check({ targets: ['node'], network: 'off' }).finally(() => settled.push('check'))]);
   ok(overlapping);
+  assert.deepEqual(settled, ['check', 'apply'], 'the overlapping check must finish while the repair is still running');
   const { outcome, recheck, machine, guidance } = ok(applied);
   assert.deepEqual(machine, { ...before, beforeRepair: true });
   assert.deepEqual(recheck.notRechecked, [{ target: 'jq', state: 'failed' }]);
