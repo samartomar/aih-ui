@@ -8,6 +8,8 @@
     "./intake": "./tools/consumer/intake.mjs",
     "./review-host": "./tools/consumer/review-host.mjs",
     "./execution-host": "./tools/consumer/host.mjs",
+    "./readiness": "./tools/consumer/readiness.mjs",
+    "./readiness-host": "./tools/consumer/readiness-host.mjs",
     "./schemas/saved-intent/3.0.0.json": "./schemas/saved-intent-3.0.0.json",
     "./schemas/review-decisions/1.0.0.json": "./schemas/review-decisions-1.0.0.json"
   },
