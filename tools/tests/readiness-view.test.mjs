@@ -98,6 +98,9 @@ test('repair outcome distinguishes applied from verified', () => {
   const conditionFailed = projectRepairOutcome({ run: run('complete', [['applied', 'passed']]), recheck: satisfied,
     inspection: inspection([check('npm/tls/node', 'npm', 'failed', 'connection-failed')], { status: 'incomplete' }), repair });
   assert.match(overallLine(conditionFailed), /^Not ready\b.*fresh check.*failed/);
+  const outstanding = projectRepairOutcome({ run: run('complete', [['applied', 'passed']]), recheck: preparation('ready', ['already-satisfied', 'create-file']),
+    inspection: healthy, repair });
+  assert.match(overallLine(outstanding), /^Not ready\b.*fresh preparation.*trust\/op1/);
   assert.deepEqual(rowsFor(verified).map(row => [row.stateLabel, row.application, row.verification]),
     [['Verified', 'applied', 'passed'], ['Verified', 'applied', 'passed']]);
   const offline = projectRepairOutcome({ run: run('incomplete', [['applied', 'passed'], ['applied', 'skipped']]), recheck: satisfied, repair });

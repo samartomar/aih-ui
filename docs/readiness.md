@@ -61,8 +61,9 @@ Preparing never changes anything.
 
 The overall outcome also uses a fresh inspection of the repair's targets after apply:
 a failed check of that condition makes the outcome `failed`; a missing, unavailable or
-unchecked one leaves it at most `applied`. Fresh-preparation work outside the run that
-still needs changes is `failed`. The outcome is ready only when every operation is
+unchecked one leaves it at most `applied`. Fresh-preparation work outside the run is
+listed as `unresolved` and follows the preparation mapping above (changes needed is
+`failed`; unavailable is `unknown`). The outcome is ready only when every operation is
 verified and that inspection is ready.
 
 ## HTTP routes

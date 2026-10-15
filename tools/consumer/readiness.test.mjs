@@ -105,6 +105,10 @@ test('the post-repair check of the same condition governs the success claim', ()
   const extra = projectRepairOutcome({ run: passed, recheck: preparation('ready', ['already-satisfied', 'create-file']),
     inspection: inspection([check('npm/version', 'npm', 'passed', 'version-ok')]), repair });
   assert.equal(extra.state, 'failed', 'a fresh preparation that still needs changes is not success');
+  assert.deepEqual(extra.unresolved.map(item => [item.id, item.state]), [['trust/op1', 'failed']]);
+  const opaque = projectRepairOutcome({ run: passed, recheck: preparation('ready', ['already-satisfied', 'unavailable']),
+    inspection: inspection([check('npm/version', 'npm', 'passed', 'version-ok')]), repair });
+  assert.equal(opaque.state, 'unknown', 'uncovered unavailable work follows the preparation mapping');
 });
 
 test('guidance text is plain, failure-first and states that nothing was executed', () => {

@@ -69,6 +69,7 @@ export function overallLine(projection) {
   }
   if (projection.kind === 'repair-outcome') {
     // Every change can verify while the fresh check of the same condition still disagrees.
+    if (projection.unresolved?.length) return `Not ready — a fresh preparation still finds work outside this run: ${projection.unresolved.map(item => `${item.id} (${item.effects})`).join(', ')}.`;
     if (projection.condition?.state === 'failed' && !counts.failed) return 'Not ready — the fresh check of the same condition failed.';
     if (projection.state !== 'verified' && total && counts.verified === total) return 'Not ready — the changes verified, but the fresh check of the same condition did not confirm it.';
     if (!['complete', 'incomplete'].includes(projection.completion)) return `Not ready — the repair was ${projection.completion}; check this machine again before relying on it.`;

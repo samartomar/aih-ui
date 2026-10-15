@@ -66,17 +66,18 @@ export function projectRepairOutcome({ run, recheck, inspection, repair }) {
   });
   // Fresh-preparation work the run did not cover still needs changes.
   const covered = new Set(operations.map(item => item.id));
-  const unresolved = [...rechecked].filter(([id, effects]) => !covered.has(id) && effects !== 'already-satisfied');
+  const unresolved = [...rechecked].filter(([id, effects]) => !covered.has(id) && effects !== 'already-satisfied')
+    .map(([id, effects]) => ({ id, effects, state: EFFECT_STATES[effects] ?? 'unknown', reason: EFFECT_REASONS[effects] ?? 'unrecognized' }));
   // The same condition, inspected after apply, governs the claim: a failure is failure, and
   // an unchecked or unavailable condition leaves the repair applied rather than verified.
   const condition = inspection ? projectInspection(inspection) : null;
   const complete = run?.completion === 'complete' || run?.completion === 'incomplete';
-  let state = complete ? worst([...operations.map(item => item.state), ...unresolved.map(() => 'failed')]) : 'unknown';
+  let state = complete ? worst([...operations.map(item => item.state), ...unresolved.map(item => item.state)]) : 'unknown';
   if (complete && condition?.state === 'failed') state = 'failed';
   else if (state === 'verified' && !condition?.ready) state = 'applied';
   return { kind: 'repair-outcome', repairId: repair.id, targets: [...repair.targets], completion: run?.completion ?? 'unavailable', state,
     ready: run?.completion === 'complete' && operations.length > 0 && state === 'verified', operations: failureFirst(operations),
-    recheck: recheck ? projectRepairPreparation(recheck, repair) : null, condition, diagnostics: diagnosticsOf(run), followUp: [...(run?.followUp ?? [])] };
+    recheck: recheck ? projectRepairPreparation(recheck, repair) : null, unresolved, condition, diagnostics: diagnosticsOf(run), followUp: [...(run?.followUp ?? [])] };
 }
 
 // Plain text for the developer's existing AI client. Producing or copying it executes nothing.
