@@ -609,6 +609,29 @@ test('a skip of a required dependency is refused with Catalog diagnostics and th
   assert.equal(unsupplied.status, 'refused'); assert.equal(unsupplied.diagnostics[0].code, 'SOURCE_REVISION_UNAVAILABLE');
 });
 
+test('an already refused choice cannot take on a new contradiction through an edit', async () => {
+  const base = fixtureRelease('journey-refused-base', [fixtureItem('base.dep')]);
+  const app = fixtureRelease('journey-refused-app', [fixtureItem('app.cfg', { requires: [crossRef(base, 'base.dep')] }, { inputs: { directory: { type: 'string', required: false } } })]);
+  const solo = fixtureRelease('journey-refused-solo', [fixtureItem('solo.one')]);
+  const inventories = [solo, app, base];
+  const intent = freshAuthoring();
+  intent.roots.push(rootFor(solo, 'solo.one'));
+  const saved = await composeAuthoring({ intent, inventories: [solo] });
+  const open = await opened({ bytes: saved.value.policyBytes, inventories });
+  const added = await edited({ envelopeBytes: open.envelopeBytes, inventories, operation: { type: 'select', root: { releaseSha256: app.release.sha256, itemId: 'app.cfg', scope: 'project', configuration: {} } } });
+  const invalid = structuredClone(added.intent);
+  invalid.roots.find(r => r.itemId === 'app.cfg').configuration = { directory: 7 };
+  const bytes = await rewritten(added.envelopeBytes, saved.value.policyBytes, invalid);
+  const reopened = await opened({ bytes, inventories });
+  assert.equal(reopened.roots.find(r => r.itemId === 'app.cfg').status, 'refused');
+  // Skipping the refused choice's required dependency adds a contradiction; the edit is refused.
+  const skip = await editDraft({ envelopeBytes: bytes, inventories, operation: { type: 'skip', exclusion: { originId: 'direct', releaseSha256: base.release.sha256, itemId: 'base.dep', scope: 'project' } } });
+  assert.equal(skip.status, 'refused'); assert.deepEqual(skip.originalBytes, bytes); assert.equal(skip.value, undefined);
+  // An unrelated edit that leaves the existing refusal unchanged stays allowed, so the choice remains fixable.
+  const unrelated = await edited({ envelopeBytes: bytes, inventories, operation: { type: 'remove-root', root: { releaseSha256: solo.release.sha256, itemId: 'solo.one', scope: 'project' } } });
+  assert.equal(unrelated.roots.find(r => r.itemId === 'app.cfg').status, 'refused');
+});
+
 test('an unrelated edit keeps every recorded pin while any choice closure is undetermined', async () => {
   const c = fixtureRelease('journey-chain-c', [fixtureItem('chain.c')]);
   const b = fixtureRelease('journey-chain-b', [fixtureItem('chain.b', { requires: [crossRef(c, 'chain.c')] })]);

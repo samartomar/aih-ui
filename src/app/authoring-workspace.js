@@ -12,7 +12,9 @@ function download(bytes, name) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 function failure(result) {
-  return [...(result.diagnostics ?? []), ...(result.value?.diagnostics ?? [])].map(diagnostic => `${diagnostic.code ?? 'Input'}: ${diagnostic.message}`).join(' ') || result.error || result.status;
+  // Wrapped Catalog/Core refusals carry their specific reasons in details.diagnostics.
+  const describe = diagnostic => [`${diagnostic.code ?? 'Input'}: ${diagnostic.message}`, ...(diagnostic.details?.diagnostics ?? []).map(inner => `(${inner.code ?? inner.reason ?? 'detail'}: ${inner.message ?? ''})`)].join(' ');
+  return [...(result.diagnostics ?? []), ...(result.value?.diagnostics ?? [])].map(describe).join(' ') || result.error || result.status;
 }
 
 const reasonText = { 'source-unavailable': 'source unavailable', 'revision-unavailable': 'revision unavailable' };

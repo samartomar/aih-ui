@@ -682,7 +682,9 @@ export async function editDraft({ envelopeBytes, inventories, operation, reviewE
   try { after = analyzeDraft({ intent, policy, inventories }); }
   catch (error) { return fail('SOURCE_IDENTITY_MISMATCH', '/inventories', error.message); }
   // Availability gaps stay editable; a contradiction on content that is fully supplied is refused as ordinary authoring would.
-  const introduced = intent.roots.filter(r => after.refusals.has(rootKey(r)) && !before.refusals.has(rootKey(r)));
+  // An already refused choice stays fixable, but must not take on a further diagnostic.
+  const priorDiagnostics = r => new Set((before.refusals.get(rootKey(r)) ?? []).map(stable));
+  const introduced = intent.roots.filter(r => (after.refusals.get(rootKey(r)) ?? []).some(d => !priorDiagnostics(r).has(stable(d))));
   if (introduced.length) return unchanged({ status: 'refused', diagnostics: introduced.flatMap(r => after.refusals.get(rootKey(r))) });
   const resolveAvailableRoots = (analysis, value) => resolveSelections({ releases: index.releases, skips: analysis.skips,
     roots: value.roots.filter(r => analysis.resolvable.has(rootKey(r))).map(({ releaseSha256, itemId, scope, configuration }) => ({ releaseSha256, itemId, scope, configuration })) });
