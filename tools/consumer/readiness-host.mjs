@@ -91,6 +91,8 @@ export function createReadinessHost({ repairs = [] } = {}) {
       if (body.reviewDigest !== session.reviewDigest) return rejected('digest-mismatch', 'Approval must name the exact review digest returned by preparation.');
       sessions.delete(body.sessionId);
       const { handle, repair } = session;
+      // Taken now, so a check that finishes while the repair runs is never labelled as before it.
+      const before = latestCheck;
       try {
         const run = await apply(handle, { approved: true, origin: 'interactive', reviewDigest: session.reviewDigest }, CONTROLS);
         // The same condition is checked again by a fresh preparation (its handle is discarded)
@@ -98,11 +100,11 @@ export function createReadinessHost({ repairs = [] } = {}) {
         const fresh = await prepare(request(repair), CONTROLS).then(serialize, () => undefined);
         const inspection = await inspect({ targets: [...repair.targets], network: repair.network }).catch(error => ({ status: 'incomplete',
           diagnostics: [{ code: 'RECHECK_FAILED', message: `Recheck failed: ${error.message}` }] }));
-        const outcome = projectRepairOutcome({ run, recheck: fresh, inspection, repair, latestCheck });
+        const outcome = projectRepairOutcome({ run, recheck: fresh, inspection, repair, latestCheck: before });
         // The recheck covers only the repair's targets; machine readiness stays with the latest
         // machine check, which predates this repair and is labelled so.
         const recheck = outcome.condition;
-        const machine = latestCheck ? { ...latestCheck, beforeRepair: true } : null;
+        const machine = before ? { ...before, beforeRepair: true } : null;
         return { status: 'ok', value: { outcome, recheck, machine, guidance: readinessGuidance([...(machine ? [machine] : []), outcome, recheck]) } };
       } catch (error) { return failure('APPLY_FAILED', `Repair apply failed: ${error.message}`); }
     },

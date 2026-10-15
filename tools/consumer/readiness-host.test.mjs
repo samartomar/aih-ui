@@ -80,6 +80,7 @@ test('configured repairs are listed without paths or inputs', () => {
 });
 
 test('offline repair needs a live preparation, a matching digest and approval, and is applied, not verified', async () => {
+  const before = ok(await host.check({ targets: ['jq', 'npm'], network: 'off' })).projection;
   const value = ok(await host.prepareRepair({ key: 'npm-ca-offline' }));
   assert.equal(typeof value.sessionId, 'string');
   assert.equal(typeof value.reviewDigest, 'string');
@@ -99,7 +100,13 @@ test('offline repair needs a live preparation, a matching digest and approval, a
   assert.equal(unapproved.status, 'rejected');
   assert.equal(existsSync(join(first.home, '.npmrc')), false, 'a rejected approval writes nothing');
 
-  const { outcome, recheck, guidance } = ok(await host.applyRepair({ sessionId: value.sessionId, reviewDigest: value.reviewDigest, approved: true }));
+  // A machine check that overlaps the repair is not the one labelled as taken before it.
+  const [applied, overlapping] = await Promise.all([host.applyRepair({ sessionId: value.sessionId, reviewDigest: value.reviewDigest, approved: true }),
+    host.check({ targets: ['node'], network: 'off' })]);
+  ok(overlapping);
+  const { outcome, recheck, machine, guidance } = ok(applied);
+  assert.deepEqual(machine, { ...before, beforeRepair: true });
+  assert.deepEqual(recheck.notRechecked, [{ target: 'jq', state: 'failed' }]);
   assert.ok(outcome.operations.every(item => item.application === 'applied'), JSON.stringify(outcome.operations));
   assert.equal(outcome.state, 'applied', JSON.stringify(outcome.operations));
   assert.equal(outcome.ready, false);

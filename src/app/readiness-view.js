@@ -14,9 +14,9 @@ const REASONS = {
   'application-failed': 'The change could not be applied.',
   'verification-failed': 'The change was applied but verification failed.',
   'not-attempted': 'Not attempted.',
-  'verified-and-rechecked': 'Verified, and a fresh check agrees.',
-  'recheck-unavailable': 'Verification passed, but no fresh check was available.',
-  'recheck-not-satisfied': 'Verification passed, but a fresh check still needs changes.',
+  'verified-and-rechecked': 'Verified, and a fresh preparation finds this change in place.',
+  'recheck-unavailable': 'Verification passed, but no fresh preparation was available.',
+  'recheck-not-satisfied': 'Verification passed, but a fresh preparation still needs changes.',
   'loading-unverified': 'Installed or configured; loading was not verified.',
   'network-off': 'Skipped because the check ran offline.',
 };
