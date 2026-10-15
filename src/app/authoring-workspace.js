@@ -1,4 +1,5 @@
 import { el } from './dom.js';
+import { isJourneyEnvelope } from './authoring-client.js';
 
 const buttonClass = 'px-3 py-1.5 rounded bg-surface-container text-on-surface border border-wb-border hover:bg-surface-container-high';
 function button(label, action) {
@@ -14,6 +15,12 @@ function failure(result) {
   return [...(result.diagnostics ?? []), ...(result.value?.diagnostics ?? [])].map(diagnostic => `${diagnostic.code ?? 'Input'}: ${diagnostic.message}`).join(' ') || result.error || result.status;
 }
 
+const reasonText = { 'source-unavailable': 'source unavailable', 'revision-unavailable': 'revision unavailable' };
+const markerClass = 'px-1.5 py-0.5 rounded border font-mono text-[10px]';
+const refOf = ({ releaseSha256, itemId, scope }) => ({ releaseSha256, itemId, scope });
+// Exact digests stay in the artifact; messages show a short prefix so they read as text.
+const readable = text => text.replace(/\b[a-f0-9]{64}\b/g, digest => `${digest.slice(0, 12)}…`);
+
 export function createAuthoringWorkspace(client) {
   const start = document.getElementById('policy-start-description');
   const choices = document.getElementById('policy-choices-description');
@@ -24,12 +31,16 @@ export function createAuthoringWorkspace(client) {
   const status = el('p', 'text-on-surface-variant'); status.id = 'policy-status'; controls.after(status);
   const file = el('input'); file.type = 'file'; file.accept = 'application/json,.json'; file.id = 'policy-open'; file.setAttribute('aria-label', 'Open saved project policy');
   const accepted = el('div', 'space-y-2'); accepted.id = 'policy-roots'; roots.append(accepted);
-  const accept = button('Accept proposed changes', () => { client.accept(); showStatus('Changes accepted. Review your policy and save the exact artifact.'); });
+  const accept = button('Accept proposed changes', () => {
+    client.accept();
+    showStatus(client.draft ? 'Draft change accepted. Save the draft to keep it; compile a resolved scope to produce an executable policy.' : 'Changes accepted. Review your policy and save the exact artifact.');
+  });
   accept.id = 'policy-accept'; accept.disabled = true;
   const save = button('Save project policy', () => download(client.bytes, 'policy.json')); save.id = 'policy-save';
   let original, optional = [], prepared;
   let selectedItem;
-  const showStatus = message => { status.textContent = message; };
+  const draftStatus = el('p', 'text-on-surface-variant break-words'); draftStatus.id = 'policy-draft-status'; draftStatus.setAttribute('role', 'status');
+  const showStatus = message => { status.textContent = message; if (client.draft) draftStatus.textContent = message; };
   const safe = action => async () => { try { await action(); } catch (error) { showStatus(error.message); } };
   const originalDownload = button('Download original artifact', () => original && download(original, 'policy.original.json'));
   originalDownload.disabled = true;
@@ -41,7 +52,7 @@ export function createAuthoringWorkspace(client) {
   document.getElementById('review-project-changes').addEventListener('click', goToPolicy);
   document.getElementById('check-project-policy').addEventListener('click', safe(async () => {
     goToPolicy(); const result = await client.reopen(); diagnostics.textContent = JSON.stringify(result, null, 2);
-    showStatus(result.status === 'ok' && result.value.editing === 'available' ? 'Policy and exact sources validated. This is not organization approval or execution authorization.' : failure(result));
+    if (!reopenedDraft(result)) showStatus(result.status === 'ok' && result.value.editing === 'available' ? 'Policy and exact sources validated. This is not organization approval or execution authorization.' : failure(result));
   }));
   const copy = document.getElementById('copy-json-btn'), jsonDownload = document.getElementById('download-json-btn');
   for (const action of [copy, jsonDownload]) { action.disabled = false; action.removeAttribute('aria-disabled'); action.classList.remove('cursor-not-allowed'); }
@@ -49,11 +60,12 @@ export function createAuthoringWorkspace(client) {
   jsonDownload.addEventListener('click', () => download(client.bytes, 'policy.json'));
   const stage = document.getElementById('apply-staging-btn');
   stage.textContent = 'Add to project policy'; stage.title = 'Propose this exact catalog item; review and accept in the project policy workspace.';
+  // With a draft open the client routes this through the draft edit, not the policy proposal.
   stage.addEventListener('click', safe(async () => { if (!selectedItem) return; present(await client.propose({ type: 'select', root: selectedItem.root })); goToPolicy(); }));
   const reset = document.getElementById('reset-item-btn'); reset.textContent = 'Remove project choice'; reset.title = 'Review removing this explicit project root; shared required dependencies remain owned by the composition validator.';
   reset.addEventListener('click', safe(async () => {
-    const root = client.intent?.roots.find(root => root.itemId === selectedItem?.id && root.releaseSha256 === selectedItem?.root.releaseSha256);
-    if (root) { present(await client.propose({ type: 'remove-root', root, keep: [] })); goToPolicy(); }
+    const root = (client.draft?.roots ?? client.intent?.roots)?.find(root => root.itemId === selectedItem?.id && root.releaseSha256 === selectedItem?.root.releaseSha256);
+    if (root) { present(await client.propose({ type: 'remove-root', root: client.draft ? refOf(root) : root, keep: [] })); goToPolicy(); }
   }));
   controls.append(button('New project policy', safe(async () => {
     original = client.bytes; const result = await client.newDraft();
@@ -61,6 +73,7 @@ export function createAuthoringWorkspace(client) {
     else present(result);
   })), file, button('Validate and reopen', safe(async () => {
     const result = await client.reopen();
+    if (reopenedDraft(result)) return;
     if (result.status === 'ok' && result.value.editing === 'available') { optional = result.value.optional ?? []; render(); showStatus('Saved choices recovered from exact source snapshots.'); }
     else showStatus(`${failure(result)} Reselect the saved personal folder and its binding in Sources & Catalogs, then validate and reopen again. Original bytes retained.`);
   })), save, originalDownload);
@@ -69,8 +82,12 @@ export function createAuthoringWorkspace(client) {
     if (selected.size > 1_000_000) throw new Error('Policy exceeds the public byte limit of 1 MB.');
     const attempt = client.invalidate(), loaded = new Uint8Array(await selected.arrayBuffer());
     if (attempt !== client.revision) return;
-    original = loaded; client.importBytes(original);
-    showStatus('Original bytes retained. Validate and reopen to recover choices. Personal content requires explicit folder rebinding in Sources & Catalogs.'); file.value = '';
+    original = loaded; client.importBytes(original); file.value = '';
+    if (isJourneyEnvelope(loaded)) {
+      showStatus('Saved draft envelope loaded. Opening its recorded choices…');
+      const result = await client.reopen(); diagnostics.textContent = JSON.stringify(result, null, 2);
+      if (!reopenedDraft(result)) showStatus(failure(result));
+    } else showStatus('Original bytes retained. Validate and reopen to recover choices. Personal content requires explicit folder rebinding in Sources & Catalogs.');
   }));
   proposal.append(accept);
   const proposed = el('div', 'space-y-1'); proposed.id = 'policy-proposed-choices'; proposal.prepend(proposed);
@@ -138,6 +155,104 @@ export function createAuthoringWorkspace(client) {
   }));
   execution.append(authority, prepare, apply, managed, executionStatus, managedRows, executionDiagnostic);
 
+  // The unresolved draft: every recorded choice with its marker, safe edits, a non-executable
+  // save and compile of a resolved scope. It owns its DOM and reads only the client.
+  const draftSection = el('section', 'p-3 border border-wb-border rounded bg-surface-container-low space-y-2'); draftSection.id = 'policy-draft'; draftSection.hidden = true;
+  const draftTitle = el('h3', 'font-semibold text-on-surface');
+  const draftNote = el('p', 'text-on-surface-variant'); draftNote.id = 'policy-draft-note';
+  const draftRoots = el('div', 'space-y-2'); draftRoots.id = 'policy-draft-roots';
+  const draftMissing = el('div', 'space-y-1'); draftMissing.id = 'policy-draft-unresolved';
+  const draftChanges = el('p', 'text-outline'); draftChanges.id = 'policy-draft-changes';
+  const draftSave = button('Save unresolved draft', () => client.draft && download(client.draft.envelopeBytes, 'policy.draft.journey.json')); draftSave.id = 'policy-draft-save';
+  const draftSaveNote = el('p', 'text-outline', 'Saves a journey envelope that is not executable. It keeps your original policy bytes exactly and every recorded choice, so you can reopen it later.'); draftSaveNote.id = 'policy-draft-save-note';
+  const compileNote = el('p', 'text-on-surface-variant break-words'); compileNote.id = 'policy-draft-compile-note';
+  const compileScope = async roots => {
+    const result = await client.compileDraft(roots); diagnostics.textContent = JSON.stringify(result, null, 2);
+    if (result.status === 'superseded') return showStatus('Compile superseded by a newer draft change. Compile again.');
+    if (result.status !== 'ok') return showStatus(`Compile refused. ${readable(failure(result))} ${client.compiled ? 'The previously compiled policy remains the current executable policy.' : 'No executable policy was produced; your draft is unchanged.'}`);
+    const { scope, reviewsReconsidered } = result.value, count = `${scope.length} ${scope.length === 1 ? 'choice' : 'choices'}`;
+    showStatus(`Compiled ${count}${client.compiled?.whole ? '' : ' (resolved choices only)'}. This compiled policy is now the current executable policy; the draft envelope is unchanged and can still be saved.`
+      + (reviewsReconsidered?.length ? ` ${reviewsReconsidered.length} recorded review decision(s) need reconsideration.` : ''));
+  };
+  const compileAll = button('Compile whole draft', safe(() => compileScope())); compileAll.id = 'policy-draft-compile-all';
+  const compileResolved = button('Compile resolved choices only', safe(() => compileScope(client.draft.roots.filter(root => root.status === 'resolved').map(refOf)))); compileResolved.id = 'policy-draft-compile-resolved';
+  const draftActions = el('div', 'flex flex-wrap gap-2'); draftActions.append(draftSave, compileAll, compileResolved);
+  draftSection.append(draftTitle, draftNote, draftRoots, draftMissing, draftChanges, draftActions, draftSaveNote, compileNote, draftStatus);
+  choices.after(draftSection);
+  const itemLabel = ref => client.catalog?.items.find(item => item.id === ref.itemId && item.root.releaseSha256 === ref.releaseSha256)?.label ?? ref.itemId ?? ref.templateId ?? ref.id;
+  const blocker = entry => {
+    const what = entry.kind === 'root' ? 'its exact source' : entry.kind === 'dependency' ? `required item ${itemLabel(entry.ref)}`
+      : entry.kind === 'origin' ? `template origin ${entry.ref.templateId}` : entry.kind === 'exclusion' ? `skip of ${itemLabel(entry.ref)}` : `input ${entry.ref.id}`;
+    return `${what}: ${reasonText[entry.reason] ?? entry.reason}`;
+  };
+  const markers = root => {
+    const row = el('p', 'flex flex-wrap gap-1');
+    if (root.status === 'resolved') { row.append(el('span', `${markerClass} bg-secondary-container border-secondary/40 text-secondary`, 'Resolved')); return row; }
+    for (const reason of new Set(root.blockedBy.map(entry => entry.reason))) row.append(el('span', `${markerClass} bg-tertiary-container border-tertiary/40 text-tertiary`,
+      reason === 'revision-unavailable' ? 'Unresolved — revision unavailable (no newer revision substituted)' : 'Unresolved — source unavailable'));
+    return row;
+  };
+  function renderDraft() {
+    const draft = client.draft;
+    draftSection.hidden = !draft;
+    if (!draft) return;
+    const unresolvedRoots = draft.roots.filter(root => root.status === 'unresolved'), resolvedRoots = draft.roots.filter(root => root.status === 'resolved');
+    draftTitle.textContent = draft.editing === 'unresolved' ? 'Unresolved draft' : 'Saved draft';
+    draftNote.textContent = `Draft revision ${draft.projection.revision.sequence} · ${draft.roots.length} recorded ${draft.roots.length === 1 ? 'choice' : 'choices'}, ${unresolvedRoots.length} unresolved. Every original choice is kept exactly as recorded; nothing is dropped and no other revision is substituted. This draft is not an executable policy.`;
+    draftRoots.replaceChildren();
+    for (const root of draft.roots) {
+      const row = el('div', 'p-2 border border-wb-border rounded space-y-1'); row.dataset.status = root.status; row.dataset.itemId = root.itemId;
+      const item = client.catalog?.items.find(entry => entry.id === root.itemId && entry.root.releaseSha256 === root.releaseSha256);
+      row.append(el('p', 'font-medium', itemLabel(root)), el('p', 'font-mono text-[10px] text-outline', `${item?.family ?? 'Saved source'} · ${root.scope} · ${root.itemId}`), markers(root));
+      for (const entry of root.blockedBy ?? []) row.append(el('p', 'text-outline text-[11px]', blocker(entry)));
+      const actions = el('div', 'flex flex-wrap items-center gap-2');
+      actions.append(button(`Remove ${root.itemId}`, safe(async () => present(await client.propose({ type: 'remove-root', root: refOf(root), keep: [] })))));
+      const replacements = (client.catalog?.items ?? []).filter(entry => entry.scopes?.includes(root.scope) && !(entry.id === root.itemId && entry.root.releaseSha256 === root.releaseSha256));
+      if (replacements.length) {
+        const pick = el('select', 'bg-wb-input border border-wb-border rounded p-1 max-w-full text-[11px]'); pick.setAttribute('aria-label', `Replacement for ${root.itemId}`);
+        pick.append(new Option('Choose an available replacement', ''));
+        for (const [index, entry] of replacements.entries()) pick.append(new Option(`${entry.label ?? entry.id} · ${entry.family}`, String(index)));
+        actions.append(pick, button(`Replace ${root.itemId}`, safe(async () => {
+          if (pick.value === '') return showStatus('Choose an available catalog item to replace this choice with.');
+          const target = replacements[Number(pick.value)];
+          present(await client.propose({ type: 'replace', root: refOf(root), replacement: { releaseSha256: target.root.releaseSha256, itemId: target.id } }));
+        })));
+      }
+      row.append(actions);
+      if (root.status === 'resolved') {
+        const configuration = el('input', 'w-full bg-wb-input border border-wb-border rounded p-1 font-mono text-[10px]'); configuration.value = JSON.stringify(root.configuration); configuration.setAttribute('aria-label', `Configuration for ${root.itemId}`);
+        row.append(configuration, button(`Review configuration of ${root.itemId}`, safe(async () => present(await client.propose({ type: 'select', root: { ...refOf(root), configuration: JSON.parse(configuration.value) } })))));
+      }
+      draftRoots.append(row);
+    }
+    draftMissing.replaceChildren();
+    const requirements = draft.unresolved.filter(entry => entry.kind !== 'root');
+    if (requirements.length) draftMissing.append(el('p', 'font-medium', 'Unresolved requirements'));
+    for (const entry of requirements) {
+      const needed = entry.dependents.map(itemLabel).join(', ');
+      draftMissing.append(el('p', 'text-[11px]', `${blocker(entry)}${needed ? ` · needed by ${needed}` : ''}`));
+    }
+    const changes = draft.changes, what = changes && [['removed', changes.removedRoots], ['added', changes.addedRoots]].filter(([, list]) => list?.length).map(([verb, list]) => `${verb} ${list.map(itemLabel).join(', ')}`).join('; ');
+    draftChanges.textContent = changes ? `Last change: ${what || 'no choice added or removed'}.` : '';
+    compileNote.textContent = (draft.compile.status === 'available' ? 'Every recorded choice resolves with its dependencies: the whole draft can be compiled.'
+      : `The whole draft cannot be compiled yet. ${readable(failure({ diagnostics: draft.compile.reasons }))}`)
+      + (resolvedRoots.length && unresolvedRoots.length ? ` ${resolvedRoots.length} of ${draft.roots.length} choices are resolved and can be compiled on their own; the others stay in the draft.` : '')
+      + (resolvedRoots.length ? '' : ' No choice is resolved yet, so there is no resolved scope to compile.');
+    compileResolved.disabled = !resolvedRoots.length;
+    for (const action of [compileAll, compileResolved]) { action.setAttribute('aria-disabled', String(action.disabled)); action.classList.toggle('opacity-50', action.disabled); action.classList.toggle('cursor-not-allowed', action.disabled); }
+  }
+  // Returns true when the reopened artifact is a draft and this has described it.
+  function reopenedDraft(result) {
+    if (result.status !== 'ok' || !client.draft) return false;
+    const draft = client.draft, open = draft.roots.filter(root => root.status === 'unresolved').length;
+    original = draft.savedIntentBytes.slice(); optional = [];
+    render();
+    showStatus(draft.editing === 'unresolved'
+      ? `Unresolved draft opened: ${draft.roots.length} saved ${draft.roots.length === 1 ? 'choice' : 'choices'} kept, ${open} unresolved. Nothing was dropped and no other revision was substituted. Rebind the saved sources in Sources & Catalogs and validate again, or edit the draft and compile its resolved choices. Availability: ${[...new Set(draft.diagnostics.map(diagnostic => diagnostic.code))].join(', ')}.`
+      : 'Saved draft reopened: every recorded choice resolves from exact sources. Compile it to produce an executable policy.');
+    return true;
+  }
+
   function present(result) {
     diagnostics.textContent = JSON.stringify(result, null, 2);
     if (result.status !== 'ok') { showStatus(failure(result)); return; }
@@ -145,7 +260,12 @@ export function createAuthoringWorkspace(client) {
     if (value.optional) optional = value.optional;
     proposed.replaceChildren();
     const candidate = client.candidate;
-    if (candidate) {
+    if (candidate?.envelopeBytes) {
+      const open = candidate.roots.filter(root => root.status === 'unresolved').length;
+      proposed.append(el('p', 'font-medium', `Proposed draft revision ${candidate.projection.revision.sequence}: ${candidate.roots.length} explicit choices; ${open} unresolved. Not an executable policy.`));
+      for (const root of candidate.roots) proposed.append(el('p', 'font-mono text-[10px]', `${root.itemId} — ${root.status}`));
+      showStatus('Review the proposed draft change, then accept. Your current draft is retained until acceptance.');
+    } else if (candidate) {
       proposed.append(el('p', 'font-medium', `Proposed policy: ${candidate.intent.roots.length} explicit choices; ${candidate.intent.pins.length} pinned items including dependencies.`));
       for (const root of candidate.intent.roots) proposed.append(el('p', 'font-mono text-[10px]', root.itemId));
       showStatus('Review the proposed choices and dependencies, then accept. Your current saved artifact is retained until acceptance.');
@@ -153,17 +273,20 @@ export function createAuthoringWorkspace(client) {
     render();
   }
   function render() {
-    const intent = client.intent;
+    const intent = client.intent, draft = client.draft, current = draft ? draft.roots : intent?.roots ?? [];
     accept.disabled = !client.candidate; save.disabled = !client.bytes.length || !intent;
     originalDownload.disabled = !original?.length;
     if (!client.candidate) proposed.replaceChildren();
     bytes.textContent = new TextDecoder().decode(client.bytes);
     document.getElementById('live-json-viewer').textContent = new TextDecoder().decode(client.bytes);
-    stage.disabled = !selectedItem || !intent; reset.disabled = !intent?.roots.some(root => root.itemId === selectedItem?.id && root.releaseSha256 === selectedItem?.root.releaseSha256);
+    stage.disabled = !selectedItem || (!intent && !draft); reset.disabled = !current.some(root => root.itemId === selectedItem?.id && root.releaseSha256 === selectedItem?.root.releaseSha256);
     for (const action of [stage, reset]) { action.setAttribute('aria-disabled', String(action.disabled)); action.classList.toggle('opacity-50', action.disabled); action.classList.toggle('cursor-not-allowed', action.disabled); }
-    summary.textContent = intent ? `Current artifact: local project policy · ${intent.roots.length} explicit choices · ${intent.pins.length} exact pins including dependencies. This artifact establishes no organization authority.` : 'Imported artifact awaits exact-source validation. Saving and editing resume after successful reopen.';
+    summary.textContent = draft ? (intent
+      ? `Current executable policy: compiled from the draft · ${intent.roots.length} explicit choices · ${intent.pins.length} exact pins including dependencies. The draft envelope is kept separately and is not executable.`
+      : 'Current artifact: draft (journey envelope, not executable). Your original policy bytes are retained inside it. Compile a resolved scope to produce an executable policy.')
+      : intent ? `Current artifact: local project policy · ${intent.roots.length} explicit choices · ${intent.pins.length} exact pins including dependencies. This artifact establishes no organization authority.` : 'Imported artifact awaits exact-source validation. Saving and editing resume after successful reopen.';
     accepted.replaceChildren();
-    for (const root of intent?.roots ?? []) {
+    for (const root of draft ? [] : intent?.roots ?? []) {
       const item = client.catalog?.items.find(item => item.id === root.itemId && item.root.releaseSha256 === root.releaseSha256);
       const row = el('div', 'p-2 border border-wb-border rounded space-y-1');
       row.append(el('p', 'font-medium', item?.label ?? root.itemId), el('p', 'font-mono text-[10px] text-outline', `${item?.family ?? 'Saved source'} · ${root.scope} · ${root.itemId}`));
@@ -172,11 +295,13 @@ export function createAuthoringWorkspace(client) {
         button(`Remove ${root.itemId}`, safe(async () => present(await client.propose({ type: 'remove-root', root, keep: [] })))));
       accepted.append(row);
     }
-    for (const suggestion of optional) {
+    for (const suggestion of draft ? [] : optional) {
       const exclusion = { originId: intent?.origins.find(origin => origin.kind === 'direct')?.id ?? intent?.origins[0]?.id, ...suggestion.to };
       accepted.append(button(`${suggestion.skipped ? 'Clear skip' : 'Skip optional'} ${suggestion.to.itemId}`, safe(async () => present(await client.propose({ type: suggestion.skipped ? 'unskip' : 'skip', exclusion })))));
     }
-    host.textContent = client.catalog?.executionAvailable
+    renderDraft();
+    host.textContent = draft && !intent ? 'Prepare and Apply are unavailable: this draft is not an executable policy. Compile a resolved scope first; the compiled policy is then reviewed with the exact host effects.'
+      : client.catalog?.executionAvailable
       ? 'Execution host connected. Prepare and Apply require target review; Enterprise also requires current organization authority.'
       : 'Execution is not connected: this preview has no operator-selected project, material roots or controls. Save the policy for a configured CLI host; supported material facts do not establish native execution or automatic guardrails.';
   }
