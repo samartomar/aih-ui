@@ -136,6 +136,7 @@ test('online repair is verified and rechecked, or honestly not verified when the
   assert.equal(outcome.recheck.state, 'configured');
   assert.equal(outcome.recheck.operations.every(item => item.reason === 'in-place-not-verified'), true);
   assert.equal(recheck.status, 'complete');
+  assert.deepEqual(outcome.condition, recheck, 'the success claim uses the same post-repair check the page shows');
 });
 
 test('the headless projection carries the same meaning as the host API', async () => {

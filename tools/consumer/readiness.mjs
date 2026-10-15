@@ -4,15 +4,8 @@
 // network, browser or package access: the host acquires the records, and the
 // page and headless callers render the same projection.
 //
-// Mapping (see docs/readiness.md):
-// - Inspect check: passed -> verified; failed -> failed; unavailable or skipped -> unknown.
-// - A client whose installation was observed but whose loading was not checked -> configured.
-// - Repair preparation: already-satisfied -> configured (files alone are not verification);
-//   create/replace/remove or conflict -> failed; unavailable, opaque or not prepared -> unknown.
-// - Repair run: application failed or verification failed -> failed; not attempted -> unknown;
-//   applied without passing verification -> applied; already-satisfied without it -> configured;
-//   passing verification -> verified only when a fresh preparation finds the operation satisfied.
-// A result is ready only when it is complete, non-empty and every condition is verified.
+// docs/readiness.md owns the status mapping; a result is ready only when it is complete,
+// non-empty and every condition is verified.
 
 export const READINESS_STATES = Object.freeze(['failed', 'unknown', 'applied', 'configured', 'verified']);
 const rank = state => READINESS_STATES.indexOf(state);
@@ -58,7 +51,7 @@ export function projectRepairPreparation(preparation, repair) {
     operations: failureFirst(operations), diagnostics: diagnosticsOf(preparation) };
 }
 
-export function projectRepairOutcome({ run, recheck, repair }) {
+export function projectRepairOutcome({ run, recheck, inspection, repair }) {
   const rechecked = new Map((['ready', 'partial'].includes(recheck?.status) ? recheck.review?.operations ?? [] : []).map(item => [item.id, item.effects]));
   const operations = (run?.operations ?? []).map(result => {
     const verification = result.verification?.status ?? 'unverified';
@@ -71,16 +64,24 @@ export function projectRepairOutcome({ run, recheck, repair }) {
     else [state, reason] = ['failed', 'recheck-not-satisfied'];
     return { id: result.id, application: result.application, verification, state, reason };
   });
+  // Fresh-preparation work the run did not cover still needs changes.
+  const covered = new Set(operations.map(item => item.id));
+  const unresolved = [...rechecked].filter(([id, effects]) => !covered.has(id) && effects !== 'already-satisfied');
+  // The same condition, inspected after apply, governs the claim: a failure is failure, and
+  // an unchecked or unavailable condition leaves the repair applied rather than verified.
+  const condition = inspection ? projectInspection(inspection) : null;
   const complete = run?.completion === 'complete' || run?.completion === 'incomplete';
-  const state = complete ? worst(operations.map(item => item.state)) : 'unknown';
+  let state = complete ? worst([...operations.map(item => item.state), ...unresolved.map(() => 'failed')]) : 'unknown';
+  if (complete && condition?.state === 'failed') state = 'failed';
+  else if (state === 'verified' && !condition?.ready) state = 'applied';
   return { kind: 'repair-outcome', repairId: repair.id, targets: [...repair.targets], completion: run?.completion ?? 'unavailable', state,
     ready: run?.completion === 'complete' && operations.length > 0 && state === 'verified', operations: failureFirst(operations),
-    recheck: recheck ? projectRepairPreparation(recheck, repair) : null, diagnostics: diagnosticsOf(run), followUp: [...(run?.followUp ?? [])] };
+    recheck: recheck ? projectRepairPreparation(recheck, repair) : null, condition, diagnostics: diagnosticsOf(run), followUp: [...(run?.followUp ?? [])] };
 }
 
-// Plain text for the developer's existing AI client. Producing it changes nothing.
+// Plain text for the developer's existing AI client. Producing or copying it executes nothing.
 export function readinessGuidance(projections) {
-  const lines = ['Machine readiness from AIH Workbench. This is diagnostic context only; nothing has been changed or executed.', ''];
+  const lines = ['Machine readiness from AIH Workbench. Producing or copying this text executes nothing; any repair listed below was separately approved.', ''];
   for (const projection of projections) {
     if (projection.kind === 'machine-check') {
       lines.push(`Machine check (${projection.status}, network ${projection.options.network ?? 'unknown'}): ${projection.ready ? 'ready' : 'not ready'}.`);

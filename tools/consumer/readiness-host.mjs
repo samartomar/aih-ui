@@ -93,9 +93,10 @@ export function createReadinessHost({ repairs = [] } = {}) {
         // The same condition is checked again by a fresh preparation (its handle is discarded)
         // and by inspecting the repair's targets; either may be unavailable without hiding the run.
         const fresh = await prepare(request(repair), CONTROLS).then(serialize, () => undefined);
-        const recheck = projectInspection(await inspect({ targets: [...repair.targets], network: repair.network }).catch(error => ({ status: 'incomplete',
-          diagnostics: [{ code: 'RECHECK_FAILED', message: `Recheck failed: ${error.message}` }] })));
-        const outcome = projectRepairOutcome({ run, recheck: fresh, repair });
+        const inspection = await inspect({ targets: [...repair.targets], network: repair.network }).catch(error => ({ status: 'incomplete',
+          diagnostics: [{ code: 'RECHECK_FAILED', message: `Recheck failed: ${error.message}` }] }));
+        const outcome = projectRepairOutcome({ run, recheck: fresh, inspection, repair });
+        const recheck = outcome.condition;
         return { status: 'ok', value: { outcome, recheck, guidance: readinessGuidance([outcome, recheck]) } };
       } catch (error) { return failure('APPLY_FAILED', `Repair apply failed: ${error.message}`); }
     },

@@ -71,20 +71,40 @@ test('repair preparation reports the condition without claiming readiness from f
 
 test('applied without passing verification shows applied; verified needs passing checks and a satisfied recheck', () => {
   const satisfied = preparation('ready', ['already-satisfied', 'already-satisfied']);
-  const verified = projectRepairOutcome({ run: run('complete', [['applied', 'passed'], ['applied', 'passed']]), recheck: satisfied, repair });
+  const healthy = inspection([check('npm/version', 'npm', 'passed', 'version-ok')]);
+  const verified = projectRepairOutcome({ run: run('complete', [['applied', 'passed'], ['applied', 'passed']]), recheck: satisfied, inspection: healthy, repair });
   assert.equal(verified.state, 'verified');
   assert.equal(verified.ready, true);
-  const offline = projectRepairOutcome({ run: run('incomplete', [['applied', 'passed'], ['applied', 'skipped']]), recheck: satisfied, repair });
+  const offline = projectRepairOutcome({ run: run('incomplete', [['applied', 'passed'], ['applied', 'skipped']]), recheck: satisfied, inspection: healthy, repair });
   assert.deepEqual(offline.operations.map(item => [item.id, item.state]), [['trust/op1', 'applied'], ['trust/op0', 'verified']]);
   assert.equal(offline.state, 'applied');
   assert.equal(offline.ready, false);
-  const drifted = projectRepairOutcome({ run: run('complete', [['applied', 'passed']]), recheck: preparation('ready', ['replace-file']), repair });
+  const drifted = projectRepairOutcome({ run: run('complete', [['applied', 'passed']]), recheck: preparation('ready', ['replace-file']), inspection: healthy, repair });
   assert.equal(drifted.state, 'failed');
-  const unrechecked = projectRepairOutcome({ run: run('complete', [['applied', 'passed']]), recheck: null, repair });
+  const unrechecked = projectRepairOutcome({ run: run('complete', [['applied', 'passed']]), recheck: null, inspection: healthy, repair });
   assert.equal(unrechecked.state, 'applied');
-  assert.equal(projectRepairOutcome({ run: run('complete', [['failed', 'unverified']]), recheck: satisfied, repair }).state, 'failed');
-  assert.equal(projectRepairOutcome({ run: run('complete', [['already-satisfied', 'unverified']]), recheck: satisfied, repair }).state, 'configured');
+  assert.equal(projectRepairOutcome({ run: run('complete', [['failed', 'unverified']]), recheck: satisfied, inspection: healthy, repair }).state, 'failed');
+  assert.equal(projectRepairOutcome({ run: run('complete', [['already-satisfied', 'unverified']]), recheck: satisfied, inspection: healthy, repair }).state, 'configured');
   assert.equal(projectRepairOutcome({ run: { completion: 'rejected', operations: [], checks: [], diagnostics: [] }, recheck: null, repair }).state, 'unknown');
+});
+
+test('the post-repair check of the same condition governs the success claim', () => {
+  const satisfied = preparation('ready', ['already-satisfied']);
+  const passed = run('complete', [['applied', 'passed']]);
+  const outcome = condition => projectRepairOutcome({ run: passed, recheck: satisfied, inspection: condition, repair });
+  const failedCheck = outcome(inspection([check('npm/tls/node/registry.npmjs.org', 'npm', 'failed', 'connection-failed')], { status: 'incomplete' }));
+  assert.equal(failedCheck.state, 'failed');
+  assert.equal(failedCheck.ready, false);
+  assert.equal(failedCheck.condition.state, 'failed');
+  const unavailable = outcome(inspection([check('npm/tls/node/registry.npmjs.org', 'npm', 'unavailable', 'deadline')]));
+  assert.equal(unavailable.state, 'applied');
+  assert.equal(unavailable.ready, false);
+  const missing = projectRepairOutcome({ run: passed, recheck: satisfied, repair });
+  assert.equal(missing.state, 'applied', 'no post-repair check is not verification');
+  assert.equal(missing.condition, null);
+  const extra = projectRepairOutcome({ run: passed, recheck: preparation('ready', ['already-satisfied', 'create-file']),
+    inspection: inspection([check('npm/version', 'npm', 'passed', 'version-ok')]), repair });
+  assert.equal(extra.state, 'failed', 'a fresh preparation that still needs changes is not success');
 });
 
 test('guidance text is plain, failure-first and states that nothing was executed', () => {
@@ -92,7 +112,9 @@ test('guidance text is plain, failure-first and states that nothing was executed
     { repairChoices: [{ target: 'jq', kind: 'manual-guidance', reason: 'executable-missing', guidance: 'Install jq yourself.' }] }));
   const text = readinessGuidance([projected]);
   assert.equal(typeof text, 'string');
-  assert.match(text, /nothing has been changed/i);
+  assert.match(text, /executes nothing/i);
+  const repaired = readinessGuidance([projectRepairOutcome({ run: run('complete', [['applied', 'passed']]), recheck: preparation('ready', ['already-satisfied']), repair })]);
+  assert.doesNotMatch(repaired, /nothing has been changed/i, 'a repair outcome must not claim nothing changed');
   assert.ok(text.indexOf('jq/version') < text.indexOf('npm/version'));
   assert.match(text, /Install jq yourself\./);
   assert.doesNotMatch(text, /fixture-home/);

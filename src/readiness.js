@@ -158,7 +158,7 @@ async function loadPublishedTargets() {
   try {
     const summary = await (await fetch('/api/packages')).json();
     if (summary.coreTargets?.state === 'published' && Array.isArray(summary.coreTargets.targets)) published = summary.coreTargets.targets.filter(target => typeof target === 'string');
-    else reason = summary.coreTargets?.reason ?? 'The installed Core does not publish its supported clients.';
+    else reason = 'The installed Core does not publish its supported clients to this Workbench.';
   } catch { /* the free-entry field still works */ }
   $('target-help').textContent = published
     ? 'Core publishes these AI clients; choose any to add them, or type other target ids. Core reports any id it does not recognize.'

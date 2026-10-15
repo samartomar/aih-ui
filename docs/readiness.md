@@ -33,7 +33,7 @@ non-empty and every condition is `verified`.
 | check `failed` | `failed` |
 | check `unavailable` or `skipped` (for example `network-off`, `executable-missing`) | `unknown` |
 | client observation `…/loading` (installed, loading not checked) | `configured` |
-| result status other than `complete` | `unknown`, not ready |
+| result status other than `complete` | rows keep their states; the overall state adds `unknown`, so an observed failure still leads and the result is never ready |
 
 ### Repair preparation (Core `prepare`)
 
@@ -41,7 +41,9 @@ non-empty and every condition is `verified`.
 | --- | --- |
 | `already-satisfied` | `configured` (files alone are not verification) |
 | `create-file`, `replace-file`, `remove-file`, `conflict` | `failed` (changes needed) |
-| `unavailable`, `opaque-process`, or preparation not ready/partial | `unknown` |
+| `unavailable`, `opaque-process`, or preparation neither `ready` nor `partial` | `unknown` |
+
+A `partial` preparation keeps its operation states and is approvable only when Core returned a live handle and review digest; Core's own partial-work rules then apply.
 
 Preparing never changes anything.
 
@@ -56,6 +58,12 @@ Preparing never changes anything.
 | verification `passed` and a fresh preparation finds the operation `already-satisfied` | `verified` |
 | verification `passed` but no fresh preparation is available | `applied` |
 | verification `passed` but the fresh preparation still needs changes | `failed` |
+
+The overall outcome also uses a fresh inspection of the repair's targets after apply:
+a failed check of that condition makes the outcome `failed`; a missing, unavailable or
+unchecked one leaves it at most `applied`. Fresh-preparation work outside the run that
+still needs changes is `failed`. The outcome is ready only when every operation is
+verified and that inspection is ready.
 
 ## HTTP routes
 

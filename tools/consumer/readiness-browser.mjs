@@ -100,7 +100,7 @@ try {
   const shown = await page.inputValue('#guidance');
   // The Windows clipboard converts line endings; the text is otherwise identical.
   assert.equal((await page.evaluate(() => navigator.clipboard.readText())).split('\r\n').join('\n'), shown);
-  assert.match(shown, /nothing has been changed/i);
+  assert.match(shown, /executes nothing/i);
   assert.match(shown, /\[failed\] jq\/version/);
   assert.deepEqual(changed(beforeCopy, await fingerprint(fixture.root)), [], 'copying must not change any fixture file');
 

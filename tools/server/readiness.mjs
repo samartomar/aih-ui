@@ -64,11 +64,12 @@ export function createReadinessAdapter(consumerDir) {
   const refuse = (response, code, message, reason = 'INVALID_REQUEST') => reply(response, code, { status: 'error', diagnostics: [{ code: reason, message }] });
   async function readBody(request) {
     const chunks = []; let size = 0;
+    // Drain an oversized body instead of returning mid-stream, so the client receives the 413.
     for await (const chunk of request) {
       size += chunk.length;
-      if (size > MAX_BODY) return { tooLarge: true };
-      chunks.push(chunk);
+      if (size <= MAX_BODY) chunks.push(chunk);
     }
+    if (size > MAX_BODY) return { tooLarge: true };
     try {
       const value = JSON.parse(Buffer.concat(chunks).toString('utf8') || 'null');
       return value !== null && typeof value === 'object' && !Array.isArray(value) ? { value } : { malformed: true };
@@ -92,7 +93,8 @@ export function createReadinessAdapter(consumerDir) {
       let body;
       if (method === 'POST') {
         if (!/^application\/json\s*(;|$)/i.test(request.headers['content-type'] ?? '')) { refuse(response, 415, 'Content-Type must be application/json.', 'UNSUPPORTED_MEDIA_TYPE'); return true; }
-        const read = await readBody(request);
+        const read = await readBody(request).catch(() => ({ aborted: true }));
+        if (read.aborted) { refuse(response, 400, 'The request body could not be read.'); return true; }
         if (read.tooLarge) { refuse(response, 413, `The request body is larger than ${MAX_BODY} bytes.`, 'PAYLOAD_TOO_LARGE'); return true; }
         if (read.malformed) { refuse(response, 400, 'The request body must be a JSON object.'); return true; }
         body = read.value;
