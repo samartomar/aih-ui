@@ -22,10 +22,12 @@ export function createGitHubFixture({ owner = 'fixture-org', name = 'authority',
       [`${base}/blobs/${blobId}`, { sha: blobId, size: bytes.length, encoding: 'base64', content: bytes.toString('base64') }],
       ...parts.map((part, i) => [`${base}/trees/${trees[i]}`, { sha: trees[i], truncated: false, tree: [{ path: part, mode: i === parts.length - 1 ? '100644' : '040000', type: i === parts.length - 1 ? 'blob' : 'tree', sha: trees[i + 1] ?? blobId, ...(i === parts.length - 1 ? { size: bytes.length } : {}) }] }])
     ]);
-    return { resolvedCommit, blobId, contentDigest: `sha256:${createHash('sha256').update(bytes).digest('hex')}` };
+    return { resolvedCommit, blobId };
   }
   publish({ schema: 'urn:aihq:core:organization-policy:1.0.0', id: 'controlled-organization', selections: [] });
   return { source, requests, publish,
+    // Every later read finds nothing: the source becomes unavailable.
+    withdraw() { routes = new Map(); },
     install() {
       if (originalFetch) throw Error('Fixture already installed.');
       originalFetch = globalThis.fetch;

@@ -77,6 +77,11 @@ try {
   await page.locator('#authority-source-change[data-change="changed"]').waitFor();
   await page.locator('#authority-source-review[data-review="stale"]').waitFor(); assert.equal(await apply.isDisabled(), true);
   states.push('changed', 'stale'); await captureAuthority(page, output, 'changed-revision');
+  // A failed read must not clear the stale review it already showed.
+  fixture.withdraw(); await page.locator('#authority-source-refresh').click();
+  await page.locator('#authority-source[data-state="refused"]').waitFor();
+  await page.locator('#authority-source-review[data-review="stale"]').waitFor(); assert.equal(await apply.isDisabled(), true);
+  states.push('refused', 'stale');
   assert.ok(fixture.requests.every(path => path.startsWith(`/repos/${fixture.source.repository.owner}/${fixture.source.repository.name}/git/`)));
   await writeFile(join(output, 'summary.json'), JSON.stringify({ states, revisions, fixtureRequests: fixture.requests.length, liveNetwork: false }, null, 2));
   console.log(`Authority source demo passed: ${output}`);

@@ -129,7 +129,7 @@ export function createAuthoringWorkspace(client) {
     const configured = client.catalog ? configuredSource() : undefined;
     sourceState = configured === undefined ? undefined : !configured ? 'not-configured' : sourceState === 'refused' ? 'refused' : latest ? 'configured' : 'unread';
     if (sourceState) source.dataset.state = sourceState; else delete source.dataset.state;
-    const rows = Object.fromEntries(sourceRows(configured ?? undefined).map(row => [row.id, row.value]));
+    const rows = sourceRows(configured);
     for (const id of ['provider', 'repository', 'path', 'ref']) factValues[id].textContent = rows[id] ?? dash;
     factValues.commit.textContent = latest?.resolvedCommit ?? dash; factValues.blob.textContent = latest?.blobId ?? dash;
     factValues.digest.textContent = latest?.contentDigest ?? dash;
@@ -140,7 +140,8 @@ export function createAuthoringWorkspace(client) {
     sourceNote.textContent = sourceState === undefined ? 'Reading host configuration…'
       : none ? 'No organization authority source is configured by the host. Enterprise policies cannot be admitted until one is.'
       : 'Read-only. The host configures this source; this page can only read it again.';
-    const freshness = reviewFreshness(prepared?.review, latest);
+    // A failed read keeps the last known revision: an established stale review stays stale.
+    const freshness = reviewFreshness(prepared?.review, known);
     sourceReview.dataset.review = freshness;
     sourceReview.textContent = freshness === 'stale' ? staleReviewMessage
       : freshness === 'current' ? 'The prepared review matches the current organization policy revision.' : 'No prepared review is bound to an organization policy revision.';

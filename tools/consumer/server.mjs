@@ -79,9 +79,9 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
     const client = clients.get(id); await client.ready; client.usedAt = now; return client;
   }
   // Only the declared source fields reach the page; extra host-file members never do.
-  const publicSource = organizationSource && typeof organizationSource === 'object' ? {
-    provider: organizationSource.provider, repository: { owner: organizationSource.repository?.owner, name: organizationSource.repository?.name },
-    path: organizationSource.path, revision: { kind: organizationSource.revision?.kind, value: organizationSource.revision?.value } } : null;
+  const publicSource = organizationSource !== undefined ? {
+    provider: organizationSource?.provider, repository: { owner: organizationSource?.repository?.owner, name: organizationSource?.repository?.name },
+    path: organizationSource?.path, revision: { kind: organizationSource?.revision?.kind, value: organizationSource?.revision?.value } } : null;
   const staticFiles = new Map([['/', ['consumer.html', 'text/html']], ['/intent', ['intent.html', 'text/html']], ['/intent.js', ['intent.js', 'text/javascript']], ['/consumer.js', ['consumer.js', 'text/javascript']], ['/consumer.css', ['consumer.css', 'text/css']], ['/tokens.css', ['tokens.css', 'text/css']]]);
   staticFiles.set('/authoring', ['authoring.html', 'text/html']);
   staticFiles.set('/authoring.js', ['authoring.js', 'text/javascript']);

@@ -7,13 +7,8 @@ const authority = (commit = 'c1', blob = 'b1', digest = 'd1') => ({ source, reso
 const review = (commit = 'c1', blob = 'b1', digest = 'd1') => ({ inputs: { organization: { resolvedCommit: commit, blobId: blob, contentDigest: digest, policyId: 'team' } } });
 
 test('source rows name provider, owner/name, path and "kind value" ref', () => {
-  assert.deepEqual(sourceRows(source), [
-    { id: 'provider', label: 'Provider', value: 'github' },
-    { id: 'repository', label: 'Repository', value: 'acme/policies' },
-    { id: 'path', label: 'Path', value: 'org/policy.json' },
-    { id: 'ref', label: 'Revision requested', value: 'branch main' },
-  ]);
-  assert.deepEqual(sourceRows(null), []);
+  assert.deepEqual(sourceRows(source), { provider: 'github', repository: 'acme/policies', path: 'org/policy.json', ref: 'branch main' });
+  assert.deepEqual(sourceRows(null), {});
 });
 test('revision identity is exactly commit, blob and digest', () => {
   assert.deepEqual(revisionOf(authority()), { resolvedCommit: 'c1', blobId: 'b1', contentDigest: 'd1' });

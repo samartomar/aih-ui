@@ -3,13 +3,9 @@
 const REVISION_KEYS = ['resolvedCommit', 'blobId', 'contentDigest'];
 
 export function sourceRows(source) {
-  if (!source) return [];
-  return [
-    { id: 'provider', label: 'Provider', value: source.provider },
-    { id: 'repository', label: 'Repository', value: `${source.repository?.owner}/${source.repository?.name}` },
-    { id: 'path', label: 'Path', value: source.path },
-    { id: 'ref', label: 'Revision requested', value: `${source.revision?.kind} ${source.revision?.value}` },
-  ];
+  if (!source) return {};
+  return { provider: source.provider, repository: `${source.repository?.owner}/${source.repository?.name}`,
+    path: source.path, ref: `${source.revision?.kind} ${source.revision?.value}` };
 }
 export function revisionOf(value) {
   if (!value || REVISION_KEYS.some(key => typeof value[key] !== 'string')) return undefined;
