@@ -51,7 +51,23 @@ export function projectRepairPreparation(preparation, repair) {
     operations: failureFirst(operations), diagnostics: diagnosticsOf(preparation) };
 }
 
-export function projectRepairOutcome({ run, recheck, inspection, repair }) {
+// A post-repair inspection covers only the repair's targets, so it is never machine readiness.
+// `scopeVerified` says whether those targets verified; `notRechecked` lists every other target of
+// the latest machine check with its state there (null when no machine check was supplied).
+export function projectRecheck(inspection, { targets, latestCheck = null }) {
+  const base = projectInspection(inspection);
+  const scope = new Set(targets);
+  let notRechecked = null;
+  if (latestCheck) {
+    const states = new Map((Array.isArray(latestCheck.options?.targets) ? latestCheck.options.targets : []).map(target => [target, []]));
+    for (const tool of latestCheck.tools ?? []) if (!states.has(tool.id)) states.set(tool.id, []);
+    for (const item of latestCheck.items ?? []) states.set(item.target, [...(states.get(item.target) ?? []), item.state]);
+    notRechecked = [...states].filter(([target]) => !scope.has(target)).map(([target, found]) => ({ target, state: worst(found) }));
+  }
+  return { ...base, kind: 'repair-recheck', ready: false, scopeVerified: base.ready, scope: [...targets], notRechecked };
+}
+
+export function projectRepairOutcome({ run, recheck, inspection, repair, latestCheck = null }) {
   const rechecked = new Map((['ready', 'partial'].includes(recheck?.status) ? recheck.review?.operations ?? [] : []).map(item => [item.id, item.effects]));
   const operations = (run?.operations ?? []).map(result => {
     const verification = result.verification?.status ?? 'unverified';
@@ -70,22 +86,32 @@ export function projectRepairOutcome({ run, recheck, inspection, repair }) {
     .map(([id, effects]) => ({ id, effects, state: EFFECT_STATES[effects] ?? 'unknown', reason: EFFECT_REASONS[effects] ?? 'unrecognized' }));
   // The same condition, inspected after apply, governs the claim: a failure is failure, and
   // an unchecked or unavailable condition leaves the repair applied rather than verified.
-  const condition = inspection ? projectInspection(inspection) : null;
+  const condition = inspection ? projectRecheck(inspection, { targets: repair.targets, latestCheck }) : null;
   const complete = run?.completion === 'complete' || run?.completion === 'incomplete';
   let state = complete ? worst([...operations.map(item => item.state), ...unresolved.map(item => item.state)]) : 'unknown';
   if (complete && condition?.state === 'failed') state = 'failed';
-  else if (state === 'verified' && !condition?.ready) state = 'applied';
+  else if (state === 'verified' && !condition?.scopeVerified) state = 'applied';
   return { kind: 'repair-outcome', repairId: repair.id, targets: [...repair.targets], completion: run?.completion ?? 'unavailable', state,
     ready: run?.completion === 'complete' && operations.length > 0 && state === 'verified', operations: failureFirst(operations),
     recheck: recheck ? projectRepairPreparation(recheck, repair) : null, unresolved, condition, diagnostics: diagnosticsOf(run), followUp: [...(run?.followUp ?? [])] };
 }
 
+const notRecheckedText = projection => projection.notRechecked === null
+  ? 'Other targets were not re-checked; run the machine check again before claiming machine readiness.'
+  : projection.notRechecked.length ? `Not re-checked: ${projection.notRechecked.map(item => `${item.target} (${item.state} in the latest machine check)`).join(', ')}.`
+    : 'Run the machine check again before claiming machine readiness.';
+
 // Plain text for the developer's existing AI client. Producing or copying it executes nothing.
+// A machine check marked `beforeRepair` is the latest full check, taken before the repair ran.
 export function readinessGuidance(projections) {
   const lines = ['Machine readiness from AIH Workbench. Producing or copying this text executes nothing; any repair listed below was separately approved.', ''];
   for (const projection of projections) {
-    if (projection.kind === 'machine-check') {
-      lines.push(`Machine check (${projection.status}, network ${projection.options.network ?? 'unknown'}): ${projection.ready ? 'ready' : 'not ready'}.`);
+    if (projection.kind === 'machine-check' || projection.kind === 'repair-recheck') {
+      const network = `${projection.status}, network ${projection.options.network ?? 'unknown'}`;
+      if (projection.kind === 'repair-recheck') {
+        lines.push(`Recheck of the repair's targets only: ${projection.scope.join(', ')} (${network}): ${projection.scopeVerified ? 'every checked condition verified for these targets' : 'not verified'}. This is not a machine readiness result.`);
+        lines.push(notRecheckedText(projection));
+      } else lines.push(`${projection.beforeRepair ? 'Latest machine check, taken before this repair' : 'Machine check'} (${network}): ${projection.ready ? 'ready' : 'not ready'}.`);
       for (const item of projection.items) {
         lines.push(`- [${item.state}] ${item.id}: ${item.reason}${item.detail ? ` (${item.detail})` : ''}`);
         if (item.guidance) lines.push(`  Guidance: ${item.guidance}`);

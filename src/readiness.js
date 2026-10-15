@@ -116,14 +116,17 @@ async function applyRepair() {
   if (result.status === 'lost') { $('repair-status').textContent = `The prepared review is no longer available. Nothing was applied. Prepare the repair again. ${result.message}`; return; }
   if (result.status === 'rejected') { $('repair-status').textContent = `The approval was rejected. Nothing was applied. Prepare the repair again. ${result.message}`; return; }
   if (result.status !== 'ok') { $('repair-status').textContent = `The repair could not be applied: ${result.message} Check the machine again before relying on it.`; return; }
-  const { outcome, recheck, guidance } = result.value;
+  const { outcome, recheck, machine, guidance } = result.value;
   $('repair-status').textContent = 'The approved repair ran. Each change below shows whether it was applied and whether it was verified.';
   $('outcome').hidden = false;
   $('outcome-overall').textContent = overallLine(outcome);
   renderRows($('outcome-rows'), outcome);
+  // The recheck covers only the repair's targets; the Result line stays with the latest machine check.
+  $('recheck-heading').textContent = `Recheck of the repair's targets only: ${(recheck?.scope ?? outcome.targets).join(', ')}`;
   $('recheck-overall').textContent = overallLine(recheck);
   renderRows($('recheck-rows'), recheck);
-  showGuidance(guidance, 'from the repair outcome and fresh check');
+  $('overall').textContent = machine ? overallLine(machine) : "Not ready — no machine check has run; the recheck covered only the repair's targets.";
+  showGuidance(guidance, "from the latest machine check, the repair outcome and the recheck of the repair's targets");
 }
 
 async function copyGuidance() {

@@ -64,7 +64,17 @@ a failed check of that condition makes the outcome `failed`; a missing, unavaila
 unchecked one leaves it at most `applied`. Fresh-preparation work outside the run is
 listed as `unresolved` and follows the preparation mapping above (changes needed is
 `failed`; unavailable is `unknown`). The outcome is ready only when every operation is
-verified and that inspection is ready.
+verified and that inspection verified every checked condition of the repair's targets.
+
+### Recheck scope
+
+The post-repair inspection covers only the repair's targets, so it is a
+`repair-recheck`, never a machine check: its `ready` is always `false`, `scopeVerified`
+says whether those targets verified, and `notRechecked` lists every other target of the
+host's latest machine check with its state there (`null` when no machine check ran).
+Neither a repair outcome nor a recheck is worded as machine readiness. After a repair,
+the page's Result line and the guidance show the latest machine check, labelled as taken
+before the repair; only a new machine check can state that the machine is ready.
 
 ## HTTP routes
 
@@ -76,7 +86,7 @@ equal to the page origin; bodies are limited to 64 KiB; responses are `no-store`
 | `POST /api/readiness-check` | `{ targets?, network? }` — Core target ids, `declared` or `off` | `{ status: 'ok', value: { projection, guidance } }` |
 | `GET /api/readiness-repairs` | — | `{ status: 'ok', value: { repairs: [{ key, id, targets, network }] } }` — never paths or inputs |
 | `POST /api/readiness-repair-prepare` | `{ key }` | `{ status: 'ok', value: { sessionId?, reviewDigest?, operations, projection } }` |
-| `POST /api/readiness-repair-apply` | `{ sessionId, reviewDigest, approved: true }` | `{ status: 'ok', value: { outcome, recheck, guidance } }` |
+| `POST /api/readiness-repair-apply` | `{ sessionId, reviewDigest, approved: true }` | `{ status: 'ok', value: { outcome, recheck, machine, guidance } }` — `machine` is the latest machine check (`beforeRepair: true`) or `null` |
 
 A missing or already-used session answers `{ status: 'lost' }`; a wrong digest or
 `approved !== true` answers `{ status: 'rejected' }` and applies nothing. Both are HTTP 200

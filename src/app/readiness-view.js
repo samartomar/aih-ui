@@ -27,7 +27,7 @@ export const stateTone = state => TONES[known(state)];
 
 const reasonText = reason => REASONS[reason]
   ?? (reason?.startsWith('verification-') ? `Applied, but verification was ${reason.slice('verification-'.length)}.` : reason ?? '');
-const sourceRows = projection => projection?.kind === 'machine-check' ? projection.items ?? [] : projection?.operations ?? [];
+const sourceRows = projection => ['machine-check', 'repair-recheck'].includes(projection?.kind) ? projection.items ?? [] : projection?.operations ?? [];
 
 export function rowsFor(projection) {
   return sourceRows(projection).map(item => ({
@@ -45,11 +45,26 @@ export function summaryCounts(projection) {
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
-// "Ready" is stated only when the projection says ready; every other line starts "Not ready".
+const targetList = targets => (targets ?? []).join(', ') || 'none';
+// Which targets a scoped recheck left out, from the latest machine check.
+export function notRecheckedLine(projection) {
+  if (!Array.isArray(projection?.notRechecked)) return 'Other targets were not re-checked; check this machine again before relying on it.';
+  if (!projection.notRechecked.length) return 'Check this machine again to confirm machine readiness.';
+  return `Not re-checked: ${projection.notRechecked.map(item => `${item.target} (${stateLabel(item.state).toLowerCase()} in the latest machine check)`).join(', ')}.`;
+}
+
+// Machine readiness ("Ready") is stated only for a machine check that says ready. A repair or
+// a recheck of the repair's targets never claims it; other machine-check lines start "Not ready".
 export function overallLine(projection) {
   if (!projection) return 'Not ready — no result yet.';
+  if (projection.kind === 'machine-check' && projection.beforeRepair) return `Latest machine check, taken before this repair: ${overallLine({ ...projection, beforeRepair: false })}`;
+  if (projection.kind === 'repair-recheck') {
+    const scope = `Recheck of the repair's targets only (${targetList(projection.scope)})`;
+    if (projection.scopeVerified === true) return `${scope}: every checked condition verified. This is not machine readiness. ${notRecheckedLine(projection)}`;
+    return `${scope}: not verified — ${overallLine({ ...projection, kind: 'machine-check' }).replace(/^Not ready — /, '')} ${notRecheckedLine(projection)}`;
+  }
   if (projection.ready === true) return projection.kind === 'repair-outcome'
-    ? 'Ready — the repair was applied, verified and rechecked.' : 'Ready — every condition was checked and verified.';
+    ? `Repair verified — applied, verified and rechecked for ${targetList(projection.targets)}. This is not machine readiness.` : 'Ready — every condition was checked and verified.';
   const counts = Object.fromEntries(summaryCounts(projection).map(item => [item.state, item.count]));
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   const parts = [];
@@ -68,10 +83,10 @@ export function overallLine(projection) {
     return counts.failed ? `Not ready — the repair would make ${plural(counts.failed, 'change')}; nothing changes until you approve.` : listed;
   }
   if (projection.kind === 'repair-outcome') {
-    // Every change can verify while the fresh check of the same condition still disagrees.
+    // Every change can verify while the recheck of the repair's targets still disagrees.
     if (projection.unresolved?.length) return `Not ready — a fresh preparation still finds work outside this run: ${projection.unresolved.map(item => `${item.id} (${item.effects})`).join(', ')}.`;
-    if (projection.condition?.state === 'failed' && !counts.failed) return 'Not ready — the fresh check of the same condition failed.';
-    if (projection.state !== 'verified' && total && counts.verified === total) return 'Not ready — the changes verified, but the fresh check of the same condition did not confirm it.';
+    if (projection.condition?.state === 'failed' && !counts.failed) return "Not ready — the recheck of the repair's targets failed.";
+    if (projection.state !== 'verified' && total && counts.verified === total) return "Not ready — the changes verified, but the recheck of the repair's targets did not confirm it.";
     if (!['complete', 'incomplete'].includes(projection.completion)) return `Not ready — the repair was ${projection.completion}; check this machine again before relying on it.`;
     return total ? listed : 'Not ready — the repair reported no operations.';
   }

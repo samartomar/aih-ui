@@ -91,13 +91,14 @@ test('repair outcome distinguishes applied from verified', () => {
   const satisfied = preparation('ready', ['already-satisfied', 'already-satisfied']);
   const healthy = inspection([check('npm/version', 'npm', 'passed', 'version-ok')]);
   const verified = projectRepairOutcome({ run: run('complete', [['applied', 'passed'], ['applied', 'passed']]), recheck: satisfied, inspection: healthy, repair });
-  assert.match(overallLine(verified), /^Ready\b/);
+  assert.match(overallLine(verified), /^Repair verified\b.*for npm.*not machine readiness/);
+  assert.doesNotMatch(overallLine(verified), /^Ready\b/, 'a repair outcome never claims machine readiness');
   const unconfirmed = projectRepairOutcome({ run: run('complete', [['applied', 'passed']]), recheck: satisfied,
     inspection: inspection([check('npm/tls/node', 'npm', 'unavailable', 'deadline')]), repair });
-  assert.match(overallLine(unconfirmed), /^Not ready\b.*fresh check/);
+  assert.match(overallLine(unconfirmed), /^Not ready\b.*recheck of the repair's targets/);
   const conditionFailed = projectRepairOutcome({ run: run('complete', [['applied', 'passed']]), recheck: satisfied,
     inspection: inspection([check('npm/tls/node', 'npm', 'failed', 'connection-failed')], { status: 'incomplete' }), repair });
-  assert.match(overallLine(conditionFailed), /^Not ready\b.*fresh check.*failed/);
+  assert.match(overallLine(conditionFailed), /^Not ready\b.*recheck of the repair's targets failed/);
   const outstanding = projectRepairOutcome({ run: run('complete', [['applied', 'passed']]), recheck: preparation('ready', ['already-satisfied', 'create-file']),
     inspection: healthy, repair });
   assert.match(overallLine(outstanding), /^Not ready\b.*fresh preparation.*trust\/op1/);
@@ -112,6 +113,26 @@ test('repair outcome distinguishes applied from verified', () => {
   assert.match(overallLine(failed), /1 failed/);
   const rejected = projectRepairOutcome({ run: { completion: 'rejected', operations: [], checks: [], diagnostics: [] }, recheck: null, repair });
   assert.match(overallLine(rejected), /^Not ready\b.*rejected/);
+});
+
+test('a verified repair recheck names its scope and never reads as machine readiness while another target fails', () => {
+  const latest = projectInspection(inspection([check('npm/tls/node', 'npm', 'failed', 'connection-failed'), check('jq/version', 'jq', 'failed', 'version-exit'),
+    check('node/version', 'node', 'passed', 'version-ok')], { effectiveOptions: { ...options, targets: { value: ['jq', 'npm', 'node'], origin: 'explicit' } } }));
+  const outcome = projectRepairOutcome({ run: run('complete', [['applied', 'passed']]), recheck: preparation('ready', ['already-satisfied']),
+    inspection: inspection([check('npm/tls/node', 'npm', 'passed', 'connected')], { effectiveOptions: { ...options, targets: { value: ['npm'], origin: 'explicit' } } }),
+    repair, latestCheck: latest });
+  assert.equal(outcome.ready, true, 'the repair itself verified');
+  const recheck = outcome.condition;
+  assert.equal(recheck.scopeVerified, true);
+  const line = overallLine(recheck);
+  assert.match(line, /^Recheck of the repair's targets only \(npm\): every checked condition verified\. This is not machine readiness\./);
+  assert.match(line, /Not re-checked: jq \(failed in the latest machine check\)/);
+  assert.match(overallLine({ ...latest, beforeRepair: true }), /^Latest machine check, taken before this repair: Not ready — 2 failed\./);
+  assert.deepEqual(rowsFor(recheck).map(row => [row.id, row.stateLabel]), [['npm/tls/node', 'Verified']]);
+  for (const text of [line, overallLine(outcome), overallLine({ ...latest, beforeRepair: true })]) assert.doesNotMatch(text, /^Ready\b/, text);
+  const unscoped = projectRepairOutcome({ run: run('complete', [['applied', 'passed']]), recheck: preparation('ready', ['already-satisfied']),
+    inspection: inspection([check('npm/tls/node', 'npm', 'passed', 'connected')]), repair });
+  assert.match(overallLine(unscoped.condition), /Other targets were not re-checked/);
 });
 
 test('helpers tolerate a missing projection', () => {

@@ -43,6 +43,8 @@ export function createReadinessHost({ repairs = [] } = {}) {
   if (!Array.isArray(repairs)) throw new TypeError('repairs must be a list');
   const configured = normalizeRepairs(repairs);
   const sessions = new Map();
+  // The latest machine check lets a repair outcome say which targets its recheck did not cover.
+  let latestCheck = null;
   const request = repair => ({ useCase: 'repair', repairs: [{ id: repair.id, targets: [...repair.targets], inputs: structuredClone(repair.inputs) }], network: repair.network });
   const operationView = operation => ({ id: operation.id, purpose: operation.purpose, kind: operation.kind, scope: operation.scope,
     effects: operation.effects, target: operation.details?.target ?? null });
@@ -55,6 +57,7 @@ export function createReadinessHost({ repairs = [] } = {}) {
       if (network !== undefined && !NETWORKS.includes(network)) return invalid('network must be declared or off');
       try {
         const projection = projectInspection(await inspect({ ...(targets ? { targets } : {}), ...(network ? { network } : {}) }));
+        latestCheck = projection;
         return { status: 'ok', value: { projection, guidance: readinessGuidance([projection]) } };
       } catch (error) { return failure('CHECK_FAILED', `Machine check failed: ${error.message}`); }
     },
@@ -95,9 +98,12 @@ export function createReadinessHost({ repairs = [] } = {}) {
         const fresh = await prepare(request(repair), CONTROLS).then(serialize, () => undefined);
         const inspection = await inspect({ targets: [...repair.targets], network: repair.network }).catch(error => ({ status: 'incomplete',
           diagnostics: [{ code: 'RECHECK_FAILED', message: `Recheck failed: ${error.message}` }] }));
-        const outcome = projectRepairOutcome({ run, recheck: fresh, inspection, repair });
+        const outcome = projectRepairOutcome({ run, recheck: fresh, inspection, repair, latestCheck });
+        // The recheck covers only the repair's targets; machine readiness stays with the latest
+        // machine check, which predates this repair and is labelled so.
         const recheck = outcome.condition;
-        return { status: 'ok', value: { outcome, recheck, guidance: readinessGuidance([outcome, recheck]) } };
+        const machine = latestCheck ? { ...latestCheck, beforeRepair: true } : null;
+        return { status: 'ok', value: { outcome, recheck, machine, guidance: readinessGuidance([...(machine ? [machine] : []), outcome, recheck]) } };
       } catch (error) { return failure('APPLY_FAILED', `Repair apply failed: ${error.message}`); }
     },
   };

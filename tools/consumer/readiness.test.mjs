@@ -111,6 +111,30 @@ test('the post-repair check of the same condition governs the success claim', ()
   assert.equal(opaque.state, 'unknown', 'uncovered unavailable work follows the preparation mapping');
 });
 
+test('a repair recheck covers only its targets and never states machine readiness while another target fails', () => {
+  const targets = value => ({ effectiveOptions: { ...options, targets: { value, origin: 'explicit' } } });
+  const latestCheck = projectInspection(inspection([check('npm/tls/node', 'npm', 'failed', 'connection-failed'), check('jq/version', 'jq', 'failed', 'version-exit'),
+    check('node/version', 'node', 'passed', 'version-ok')], targets(['jq', 'npm', 'node'])));
+  const outcome = projectRepairOutcome({ run: run('complete', [['applied', 'passed']]), recheck: preparation('ready', ['already-satisfied']),
+    inspection: inspection([check('npm/tls/node', 'npm', 'passed', 'connected')], targets(['npm'])), repair, latestCheck });
+  assert.equal(outcome.state, 'verified');
+  const recheck = outcome.condition;
+  assert.equal(recheck.kind, 'repair-recheck');
+  assert.deepEqual(recheck.scope, ['npm']);
+  assert.equal(recheck.scopeVerified, true);
+  assert.equal(recheck.ready, false, 'a scoped recheck is never machine readiness');
+  assert.deepEqual(recheck.notRechecked, [{ target: 'jq', state: 'failed' }, { target: 'node', state: 'verified' }]);
+  const text = readinessGuidance([{ ...latestCheck, beforeRepair: true }, outcome, recheck]);
+  assert.match(text, /^Latest machine check, taken before this repair \(complete, network declared\): not ready\.$/m);
+  assert.match(text, /^Recheck of the repair's targets only: npm \(complete, network declared\): every checked condition verified for these targets\. This is not a machine readiness result\.$/m);
+  assert.match(text, /^Not re-checked: jq \(failed in the latest machine check\), node \(verified in the latest machine check\)\.$/m);
+  assert.doesNotMatch(text, /\): ready\./, 'no line claims the machine is ready');
+  const alone = projectRepairOutcome({ run: run('complete', [['applied', 'passed']]), recheck: preparation('ready', ['already-satisfied']),
+    inspection: inspection([check('npm/tls/node', 'npm', 'passed', 'connected')], targets(['npm'])), repair });
+  assert.equal(alone.condition.notRechecked, null);
+  assert.match(readinessGuidance([alone, alone.condition]), /Other targets were not re-checked/);
+});
+
 test('guidance text is plain, failure-first and states that nothing was executed', () => {
   const projected = projectInspection(inspection([check('npm/version', 'npm', 'passed', 'version-ok'), check('jq/version', 'jq', 'failed', 'executable-missing')],
     { repairChoices: [{ target: 'jq', kind: 'manual-guidance', reason: 'executable-missing', guidance: 'Install jq yourself.' }] }));

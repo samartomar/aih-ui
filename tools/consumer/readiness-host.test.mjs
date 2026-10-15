@@ -116,10 +116,24 @@ test('offline repair needs a live preparation, a matching digest and approval, a
 test('online repair is verified and rechecked, or honestly not verified when the registry is unreachable', async t => {
   const second = makeFixture();
   enter(second);
+  // The machine check covers an unrelated target that still fails after the npm repair.
+  const before = ok(await host.check({ targets: ['jq', 'npm'], network: 'declared' })).projection;
+  assert.equal(before.ready, false);
   const value = ok(await host.prepareRepair({ key: 'npm-ca-online' }));
   assert.equal(value.projection.state, 'failed');
   for (const operation of value.operations) assert.ok(inside(second.home, operation.target), operation.target);
-  const { outcome, recheck } = ok(await host.applyRepair({ sessionId: value.sessionId, reviewDigest: value.reviewDigest, approved: true }));
+  const { outcome, recheck, machine, guidance } = ok(await host.applyRepair({ sessionId: value.sessionId, reviewDigest: value.reviewDigest, approved: true }));
+  // Whatever the registry allows, the recheck is scoped to npm and jq is reported as not re-checked.
+  assert.equal(recheck.kind, 'repair-recheck');
+  assert.deepEqual(recheck.scope, ['npm']);
+  assert.equal(recheck.ready, false, 'a recheck of the repair targets is never machine readiness');
+  assert.deepEqual(recheck.notRechecked, [{ target: 'jq', state: 'failed' }]);
+  assert.equal(machine.beforeRepair, true);
+  assert.equal(machine.ready, false);
+  assert.match(guidance, /^Latest machine check, taken before this repair \((?:complete|incomplete), network declared\): not ready\.$/m);
+  assert.match(guidance, /^Recheck of the repair's targets only: npm /m);
+  assert.match(guidance, /^Not re-checked: jq \(failed in the latest machine check\)\.$/m);
+  assert.doesNotMatch(guidance, /\): ready\./);
   assert.equal(existsSync(join(second.home, '.npmrc')), true);
   assert.match(readFileSync(join(second.home, '.npmrc'), 'utf8'), /\S/);
   assert.ok(outcome.operations.every(item => item.application === 'applied'), JSON.stringify(outcome.operations));
@@ -139,7 +153,7 @@ test('online repair is verified and rechecked, or honestly not verified when the
   assert.equal(outcome.recheck.operations.every(item => item.reason === 'in-place-not-verified'), true);
   assert.equal(recheck.status, 'complete');
   assert.deepEqual([recheck.options.targets, recheck.options.network], [['npm'], 'declared'], 'the recheck inspects the repaired condition');
-  assert.equal(recheck.ready, true);
+  assert.equal(recheck.scopeVerified, true);
 });
 
 test('the headless projection carries the same meaning as the host API', async () => {

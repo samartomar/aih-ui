@@ -128,13 +128,22 @@ try {
   const outcomeOverall = await page.textContent('#outcome-overall');
   const outcomeRows = await page.locator('#outcome-rows > li').allTextContents();
   assert.ok(outcomeRows.length > 0, 'the outcome lists the operations');
-  const verified = /^Ready/.test(outcomeOverall);
+  const verified = /^Repair verified/.test(outcomeOverall);
+  // The recheck covers npm only, so neither it nor the Result line may read as machine readiness while jq fails.
+  assert.equal(await page.textContent('#recheck-heading'), "Recheck of the repair's targets only: npm");
+  const recheckOverall = await page.textContent('#recheck-overall');
+  assert.match(recheckOverall, /^Recheck of the repair's targets only \(npm\)/);
+  assert.match(recheckOverall, /Not re-checked: jq \(failed in the latest machine check\)/);
+  assert.match(await page.textContent('#overall'), /^Latest machine check, taken before this repair: Not ready\b/);
+  const repairGuidance = await page.inputValue('#guidance');
+  assert.doesNotMatch(repairGuidance, /\): ready\./, 'the guidance never states machine readiness after a scoped recheck');
+  assert.match(repairGuidance, /^Not re-checked: jq \(failed in the latest machine check\)/m);
   if (verified) for (const row of outcomeRows) assert.match(row, /^Verified/, row);
   else for (const row of outcomeRows) assert.doesNotMatch(row, /^Verified.*Verification: (?!passed)/, row);
   assert.ok(existsSync(npmrc), 'the fixture npm configuration was written');
   assert.equal(await page.locator('#apply').isDisabled(), true, 'a session is one-shot');
   await shot('03-repair-outcome.png');
-  console.log(verified ? 'Repair outcome: Verified (fresh check agrees).' : `Repair outcome: honestly not verified: ${outcomeOverall}`);
+  console.log(verified ? `Repair outcome: verified for npm; ${recheckOverall}` : `Repair outcome: honestly not verified: ${outcomeOverall}`);
 
   // 5. A second review now finds the repair in place, which is configured, not verified-by-files.
   await page.click('#repairs li button');
@@ -156,7 +165,7 @@ try {
   assert.deepEqual(errors, [], 'no uncaught page errors');
   assert.equal(await npmrcState(), realNpmrcBefore, "the real home's .npmrc is untouched");
   await writeFile(join(evidence, 'readiness-evidence.json'), JSON.stringify({ status: 'passed', chromium: browser.version(), port: PORT,
-    onlineCheck: online, offlineOverall: await page.textContent('#overall'), repairOutcome: { overall: outcomeOverall, verified, rows: outcomeRows.map(row => row.slice(0, 200)) },
+    onlineCheck: online, recheckOverall, offlineOverall: await page.textContent('#overall'), repairOutcome: { overall: outcomeOverall, verified, rows: outcomeRows.map(row => row.slice(0, 200)) },
     filesChangedByPrepare: prepareChanges.map(path => path.slice(fixture.root.length)), screenshots }, null, 2));
   console.log('Machine-readiness Chromium demonstration passed.');
   for (const path of screenshots) console.log(`screenshot: ${path}`);
