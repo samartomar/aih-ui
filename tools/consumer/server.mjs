@@ -8,6 +8,7 @@ import { readInstalledRelease } from '@aihq/catalog/node';
 import { listItems } from '@aihq/catalog/reader';
 import { parsePolicy } from '@aihq/core/contracts';
 import { createHost } from './host.mjs';
+import { readAuthoritySource } from './authority-source.mjs';
 import { editSetup, reopenSetup, reviewSetupUpdate } from './setup.mjs';
 import { presentReport, readScanBytes } from './report-view.mjs';
 import { createIntentService } from './intent-service.mjs';
@@ -77,6 +78,10 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
     }
     const client = clients.get(id); await client.ready; client.usedAt = now; return client;
   }
+  // Only the declared source fields reach the page; extra host-file members never do.
+  const publicSource = organizationSource && typeof organizationSource === 'object' ? {
+    provider: organizationSource.provider, repository: { owner: organizationSource.repository?.owner, name: organizationSource.repository?.name },
+    path: organizationSource.path, revision: { kind: organizationSource.revision?.kind, value: organizationSource.revision?.value } } : null;
   const staticFiles = new Map([['/', ['consumer.html', 'text/html']], ['/intent', ['intent.html', 'text/html']], ['/intent.js', ['intent.js', 'text/javascript']], ['/consumer.js', ['consumer.js', 'text/javascript']], ['/consumer.css', ['consumer.css', 'text/css']], ['/tokens.css', ['tokens.css', 'text/css']]]);
   staticFiles.set('/authoring', ['authoring.html', 'text/html']);
   staticFiles.set('/authoring.js', ['authoring.js', 'text/javascript']);
@@ -106,7 +111,8 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
       }
       if (request.method === 'GET' && pathname === '/api/authoring-catalog') {
         const client = await clientFor(request);
-        return send(response, 200, { ...client.mixed.catalog(), executionAvailable: !!client.host, organizationConfigured: organizationSource !== undefined });
+        return send(response, 200, { ...client.mixed.catalog(), executionAvailable: !!client.host,
+          organizationConfigured: organizationSource !== undefined, organizationSource: publicSource });
       }
       if (request.method !== 'POST' || !pathname.startsWith('/api/')) return send(response, 404, { error: 'not-found' });
       if (request.headers.origin !== origin) return send(response, 403, { error: 'foreign-origin' });
@@ -148,6 +154,8 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
           return send(response, 200, { status: 'ok', diagnostics: [], value: { input: inventory.input, grantId, itemIds: inventory.release.items.map(item => item.id),
             message: body.rebind ? 'Exact folder rebound for this page session. Validate and reopen the saved policy.' : 'Folder validated for this page session. Choose its Personal items alongside maintained content.' } });
         }
+        // Host-configured source and controls only; the request body is ignored and needs no project root.
+        if (operation === 'authority-source') return send(response, 200, await readAuthoritySource({ organizationSource, controls }));
         if (['authority', 'prepare', 'apply', 'managed', 'remove'].includes(operation)) {
           if (!host) return send(response, 409, { status: 'unavailable', diagnostics: [{ code: 'HOST_UNAVAILABLE', message: 'No execution target configured by host.' }] });
           const policyText = new TextDecoder().decode(Uint8Array.from(body.policyBytes ?? []));

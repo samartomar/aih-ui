@@ -21,8 +21,9 @@ for (const name of ['consumer.css', 'tokens.css']) extraFiles[`page/${name}`] = 
 for (const key of Object.keys(process.env)) if (key.toLowerCase() === 'npm_config_allow_scripts') delete process.env[key];
 installConsumer({ consumerDir: output, packages, extraFiles, log: console.log });
 writeFileSync(join(output, 'reviewed-packages.json'), JSON.stringify(packages, null, 2) + '\n');
-const tests = ['ordinary-families', 'authoring-page', 'authoring-v3', 'personal-folder'];
-const result = spawnSync(process.execPath, ['--test', ...tests.map(name => join(output, `consumer/${name}.test.mjs`))], {
+const tests = ['ordinary-families', 'authoring-page', 'authoring-v3', 'personal-folder', 'authority-source'];
+// One file at a time: ordinary-families temporarily rewrites the installed Catalog manifest.
+const result = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...tests.map(name => join(output, `consumer/${name}.test.mjs`))], {
   cwd: output, encoding: 'utf8', windowsHide: true, maxBuffer: 20_000_000, timeout: 120_000
 });
 writeFileSync(join(output, 'checks.log'), `${result.stdout ?? ''}${result.stderr ?? ''}`);
@@ -48,6 +49,15 @@ if (process.exitCode === 0) {
   process.stdout.write(integrated.stdout ?? ''); process.stderr.write(integrated.stderr ?? '');
   if (integrated.error) throw integrated.error;
   process.exitCode = integrated.status ?? 1;
+}
+if (process.exitCode === 0) {
+  const authority = spawnSync(process.execPath, [join(repo, 'tools/check-authority-source.mjs'), output, join(output, 'authority-source-evidence')], {
+    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 180_000,
+  });
+  writeFileSync(join(output, 'authority-source-check.log'), `${authority.stdout ?? ''}${authority.stderr ?? ''}`);
+  process.stdout.write(authority.stdout ?? ''); process.stderr.write(authority.stderr ?? '');
+  if (authority.error) throw authority.error;
+  process.exitCode = authority.status ?? 1;
 }
 if (process.exitCode === 0) {
   const unit = spawnSync(process.execPath, ['--test', ...readdirSync(join(repo, 'tools/tests')).filter(name => name.endsWith('.test.mjs')).map(name => join(repo, 'tools/tests', name))], {
