@@ -2,7 +2,7 @@
 // one deliberately broken tool and a test-only CA certificate. Tests and demos
 // pass `env` to the readiness host process so Core observes and repairs only
 // these directories, never the developer's real clients or configuration.
-import { chmodSync, copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -24,7 +24,10 @@ export function createReadinessFixture(root) {
     join(home, '.local', 'state'), join(home, '.local', 'share'), join(home, '.cache')]) mkdirSync(directory, { recursive: true });
   writeBrokenTool(bin);
   const system = process.platform === 'win32' ? [join(process.env.SystemRoot || 'C:\\Windows', 'System32')] : ['/usr/bin', '/bin'];
-  const path = [bin, dirname(process.execPath), ...system].join(delimiter);
+  // Some Node layouts keep npm outside Node's directory; the npm repair verifies through it.
+  const hasNpm = directory => existsSync(join(directory, process.platform === 'win32' ? 'npm.cmd' : 'npm'));
+  const npm = hasNpm(dirname(process.execPath)) ? [] : (process.env.PATH ?? '').split(delimiter).filter(entry => entry && hasNpm(entry)).slice(0, 1);
+  const path = [bin, dirname(process.execPath), ...npm, ...system].join(delimiter);
   const env = { HOME: home, USERPROFILE: home, APPDATA: join(home, 'AppData', 'Roaming'), LOCALAPPDATA: join(home, 'AppData', 'Local'),
     XDG_CONFIG_HOME: join(home, '.config'), XDG_STATE_HOME: join(home, '.local', 'state'), XDG_DATA_HOME: join(home, '.local', 'share'),
     XDG_CACHE_HOME: join(home, '.cache'), PATH: path };

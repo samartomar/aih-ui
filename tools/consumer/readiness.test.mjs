@@ -44,6 +44,8 @@ test('offline, unavailable and unchecked conditions are unknown and never ready'
     assert.equal(partial.state, 'unknown', status);
   }
   assert.equal(projectInspection(inspection([])).ready, false, 'nothing checked is not ready');
+  const failedIncomplete = projectInspection(inspection([check('jq/version', 'jq', 'failed', 'version-exit')], { status: 'incomplete' }));
+  assert.equal(failedIncomplete.state, 'failed', 'an observed failure is not hidden by an incomplete inspection');
 });
 
 test('an already-healthy machine check is verified, and installed clients without a check stay configured', () => {

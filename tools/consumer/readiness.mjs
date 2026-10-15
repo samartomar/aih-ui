@@ -39,7 +39,8 @@ export function projectInspection(result) {
     reason: 'loading-unverified', detail: observation.detail, guidance: guidanceFor(observation.target, 'loading-unverified') });
   const sorted = failureFirst(items);
   const complete = result.status === 'complete';
-  const state = complete ? worst(sorted.map(item => item.state)) : 'unknown';
+  // An incomplete inspection is never ready, but a failure it did observe still leads.
+  const state = worst([...sorted.map(item => item.state), ...(complete ? [] : ['unknown'])]);
   return { kind: 'machine-check', status: result.status, state, ready: complete && sorted.length > 0 && state === 'verified',
     summary: summarize(sorted), items: sorted,
     tools: (result.tools ?? []).filter(tool => tool.selection !== 'unselected').map(({ id, label, state: presence, selection }) => ({ id, label, presence, selection })),
