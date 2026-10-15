@@ -20,13 +20,13 @@ export async function isolatedConsumer() {
   const root = await mkdtemp(join(tmpdir(), 'aih-isolated-consumer-'));
   const dispose = () => rm(root, { recursive: true, force: true });
   try {
-    await cp(join(sharedRoot, 'consumer'), join(root, 'consumer'), { recursive: true });
+    for (const dir of ['consumer', 'page']) await cp(join(sharedRoot, dir), join(root, dir), { recursive: true });
     await cp(join(sharedRoot, 'package.json'), join(root, 'package.json'));
     const shared = join(sharedRoot, 'node_modules'), modules = join(root, 'node_modules');
     const link = (name) => symlink(join(shared, name), join(modules, name), process.platform === 'win32' ? 'junction' : 'dir');
     await mkdir(join(modules, scope), { recursive: true });
     for (const entry of await readdir(shared, { withFileTypes: true })) {
-      if (entry.isDirectory() && entry.name !== scope && entry.name !== '.bin') await link(entry.name);
+      if ((entry.isDirectory() || entry.isSymbolicLink()) && entry.name !== scope && entry.name !== '.bin') await link(entry.name);
     }
     for (const entry of await readdir(join(shared, scope))) {
       if (entry === copied) await copyTree(join(shared, scope, entry), join(modules, scope, entry));
