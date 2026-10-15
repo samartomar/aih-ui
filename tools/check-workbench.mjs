@@ -22,11 +22,7 @@ for (const name of readdirSync(join(repo, 'schemas'))) extraFiles[`schemas/${nam
 for (const key of Object.keys(process.env)) if (key.toLowerCase() === 'npm_config_allow_scripts') delete process.env[key];
 installConsumer({ consumerDir: output, packages, extraFiles, log: console.log });
 writeFileSync(join(output, 'reviewed-packages.json'), JSON.stringify(packages, null, 2) + '\n');
-<<<<<<< HEAD
-const tests = ['ordinary-families', 'authoring-page', 'authoring-v3', 'personal-folder', 'journey'];
-=======
-const tests = ['ordinary-families', 'authoring-page', 'authoring-v3', 'personal-folder', 'readiness', 'readiness-host'];
->>>>>>> 1fc1a7f136000f92e3c9fd34c6868dc729abf73a
+const tests = ['ordinary-families', 'authoring-page', 'authoring-v3', 'personal-folder', 'journey', 'readiness', 'readiness-host'];
 const result = spawnSync(process.execPath, ['--test', ...tests.map(name => join(output, `consumer/${name}.test.mjs`))], {
   cwd: output, encoding: 'utf8', windowsHide: true, maxBuffer: 20_000_000, timeout: 120_000
 });
