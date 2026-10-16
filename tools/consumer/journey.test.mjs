@@ -1,18 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { readAuthoring, editAuthoring, composeAuthoring, freshAuthoring, stable, openDraft, editDraft, compileDraft } from './headless.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJourneyEnvelope, JOURNEY_SCHEMA, JOURNEY_SCHEMA_PREFIX, JOURNEY_ACCEPTED_SCHEMAS, JOURNEY_RECORD_SCHEMAS, JOURNEY_RECORD_KINDS, DRAFT_RECORD_SCHEMA, SAVED_INTENT_TYPE } from './journey.mjs';
 import { mixedInventories } from './authoring-v3.test.mjs';
 import { intakeDeclaration, digestBytes } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { fixtureRelease, fixtureItem, crossRef, rootFor } from './intent-fixtures.mjs';
-import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { recordMaintenance } from './maintenance.mjs';
-import { MAINTENANCE_DISPOSITION_RECORD_SCHEMA, MAINTENANCE_CHECK_RECORD_SCHEMA } from './maintenance-record.mjs';
+import { MAINTENANCE_DISPOSITION_RECORD_SCHEMA, MAINTENANCE_CHECK_RECORD_SCHEMA, MAINTENANCE_CHECK_RECORD_ID } from './maintenance-record.mjs';
 import { checkImprovements, recordImprovement } from './improvements.mjs';
 import { IMPROVEMENT_SUGGESTION_RECORD_SCHEMA, IMPROVEMENT_DISMISSAL_RECORD_SCHEMA } from './improvement-record.mjs';
 import { recordTrial } from './trials.mjs';
@@ -682,7 +682,7 @@ const hex = n => n.toString(16).padStart(64, '0');
 let installedPromise;
 const installed = () => installedPromise ??= readInstalledRelease({ root: dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'))), sourceInput: 'maintained' });
 // A draft over the installed maintained Catalog: the base every kind below is recorded on.
-async function recorded() {
+async function draftOverMaintained() {
   const found = await installed();
   assert.equal(found.valid, true, JSON.stringify(found.diagnostics));
   const maintained = { release: found.release, materialSource: found.source }, inventories = [maintained], intent = freshAuthoring();
@@ -693,53 +693,54 @@ async function recorded() {
   const open = valueOf(await openDraft({ bytes: composed.policyBytes, inventories }));
   return { inventories, root: intent.roots[0], envelopeBytes: open.envelopeBytes };
 }
-let recordedPromise;
-const shared = () => recordedPromise ??= recorded();
+let maintainedDraftPromise;
+const maintainedDraft = () => maintainedDraftPromise ??= draftOverMaintained();
 const NOW = '2026-10-16T09:00:00Z';
 const withoutDisplay = ({ label: _label, description: _description, prompt: _prompt, dismissal: _dismissal, promotion: _promotion, ...fields }) => fields;
-const suggestionOf = async s => {
-  const checked = valueOf(await checkImprovements({ envelopeBytes: s.envelopeBytes, inventories: s.inventories, goal: 'add tests to my app', clients: ['claude'], now: NOW }));
+const suggestionOf = async draft => {
+  const checked = valueOf(await checkImprovements({ envelopeBytes: draft.envelopeBytes, inventories: draft.inventories, goal: 'add tests to my app', clients: ['claude'], now: NOW }));
   return withoutDisplay([checked.leading, ...checked.alternatives].find(x => x.change.itemId === 'mattpocock.tdd'));
 };
-const declaredWorkspace = async s => {
-  const declared = valueOf(await editWorkspace({ envelopeBytes: s.envelopeBytes, operation: { type: 'declare', label: 'Shop' }, now: NOW }));
+const declaredWorkspace = async draft => {
+  const declared = valueOf(await editWorkspace({ envelopeBytes: draft.envelopeBytes, operation: { type: 'declare', label: 'Shop' }, now: NOW }));
   return valueOf(await editWorkspace({ envelopeBytes: declared.envelopeBytes, operation: { type: 'set-member', member: { id: 'api', identity: 'github.com/acme/api', label: 'API' } }, now: NOW })).envelopeBytes;
 };
 // One real envelope per kind, written by the module that owns the kind. A kind added to JOURNEY_RECORD_KINDS needs a sample here.
 const KIND_SAMPLES = {
-  [DRAFT_RECORD_SCHEMA]: async () => (await shared()).envelopeBytes,
+  [DRAFT_RECORD_SCHEMA]: async () => (await maintainedDraft()).envelopeBytes,
   [MAINTENANCE_DISPOSITION_RECORD_SCHEMA]: async () => {
-    const s = await shared(), { releaseSha256, itemId, itemSha256 } = s.root;
-    return valueOf(await recordMaintenance({ envelopeBytes: s.envelopeBytes, now: NOW, operation: { type: 'set', category: 'content', scope: 'project', disposition: 'keep-current',
+    const draft = await maintainedDraft(), { releaseSha256, itemId, itemSha256 } = draft.root;
+    return valueOf(await recordMaintenance({ envelopeBytes: draft.envelopeBytes, now: NOW, operation: { type: 'set', category: 'content', scope: 'project', disposition: 'keep-current',
       subject: { kind: 'selection', releaseSha256, itemId, itemSha256 }, candidate: { kind: 'content-revision', releaseSha256: hex(7), itemId, itemSha256: hex(8) } } })).envelopeBytes;
   },
-  [MAINTENANCE_CHECK_RECORD_SCHEMA]: async () => valueOf(await recordMaintenance({ envelopeBytes: (await shared()).envelopeBytes, now: NOW,
+  [MAINTENANCE_CHECK_RECORD_SCHEMA]: async () => valueOf(await recordMaintenance({ envelopeBytes: (await maintainedDraft()).envelopeBytes, now: NOW,
     operation: { type: 'note-check', checkedAt: '2026-10-15T08:00:00Z', categories: [{ category: 'content', state: 'checked' }, { category: 'software', state: 'unknown', reason: 'not-connected' }] } })).envelopeBytes,
   // A dismissal carries the suggestion it dismisses, so one envelope serves both kinds.
   [IMPROVEMENT_SUGGESTION_RECORD_SCHEMA]: async () => {
-    const s = await shared();
-    return valueOf(await recordImprovement({ envelopeBytes: s.envelopeBytes, now: NOW, operation: { type: 'dismiss', suggestion: await suggestionOf(s), reason: 'Not for this project.' } })).envelopeBytes;
+    const draft = await maintainedDraft();
+    return valueOf(await recordImprovement({ envelopeBytes: draft.envelopeBytes, now: NOW, operation: { type: 'dismiss', suggestion: await suggestionOf(draft), reason: 'Not for this project.' } })).envelopeBytes;
   },
   [IMPROVEMENT_DISMISSAL_RECORD_SCHEMA]: () => KIND_SAMPLES[IMPROVEMENT_SUGGESTION_RECORD_SCHEMA](),
+  // Built by hand as organization-author.test.mjs does: its module writes the record only through a full authoring run.
   [ORGANIZATION_DRAFT_RECORD_SCHEMA]: async () => {
     const item = { releaseSha256: hex(10), itemId: 'mattpocock.implement', itemSha256: hex(11) }, target = { scope: 'project' };
     const record = { id: 'organization-draft', schema: ORGANIZATION_DRAFT_RECORD_SCHEMA, required: true, entries: [{ id: await organizationEntryId({ ...item, scope: 'project' }), item, scope: 'project', inputs: {} }],
       targets: [{ id: await organizationTargetId(target), ...target }] };
     return valueOf(await writeJourneyEnvelope({ savedIntentBytes: encode(JSON.stringify({ schema: 'urn:aihq:core:execution-policy:1.3.0', mode: 'enterprise', selections: [], metadata: {} }) + '\n'), records: [record] })).envelopeBytes;
   },
-  [WORKSPACE_DECLARATION_RECORD_SCHEMA]: async () => declaredWorkspace(await shared()),
+  [WORKSPACE_DECLARATION_RECORD_SCHEMA]: async () => declaredWorkspace(await maintainedDraft()),
   [LOCAL_BINDING_RECORD_SCHEMA]: async () => {
     const observation = { root: '/work/api', remotes: [{ name: 'origin', identity: remoteIdentity('https://github.com/acme/api.git').identity }], revision: 'a'.repeat(40), branch: 'main',
       worktree: { kind: 'main', gitDirSha256: hex(1) }, workingState: { clean: true, sha256: hex(100) }, observedAt: NOW };
-    return valueOf(await bindCheckout({ envelopeBytes: await declaredWorkspace(await shared()), memberId: 'api', observation, now: NOW })).envelopeBytes;
+    return valueOf(await bindCheckout({ envelopeBytes: await declaredWorkspace(await maintainedDraft()), memberId: 'api', observation, now: NOW })).envelopeBytes;
   },
   [BATCH_RECORD_SCHEMA]: async () => {
-    const root = await mkdtemp(join(tmpdir(), 'ui61-'));
+    const root = await mkdtemp(join(tmpdir(), 'journey-batch-'));
     try { return (await batchFixture(root, { applyEarlier: false })).envelopeBytes; } finally { await rm(root, { recursive: true, force: true }); }
   },
   [TRIAL_RECORD_SCHEMA]: async () => {
-    const s = await shared();
-    return valueOf(await recordTrial({ envelopeBytes: s.envelopeBytes, inventories: s.inventories, now: NOW, operation: { type: 'propose', suggestion: await suggestionOf(s), scope: 'project', task: 'Add tests to a small module.',
+    const draft = await maintainedDraft();
+    return valueOf(await recordTrial({ envelopeBytes: draft.envelopeBytes, inventories: draft.inventories, now: NOW, operation: { type: 'propose', suggestion: await suggestionOf(draft), scope: 'project', task: 'Add tests to a small module.',
       quality: { outcome: 'The new tests catch a seeded regression.', checks: [{ id: 'catches-regression', text: 'A seeded regression fails a test.' }] },
       conditions: 'Same task, same client, same repository state.', bounds: [{ id: 'context', label: 'Context budget', unit: 'tokens', value: 20000, enforcement: { kind: 'advisory' } }],
       unknowns: ['Model spending: no cost source is connected.'] } })).envelopeBytes;
@@ -761,7 +762,7 @@ test('every kind the journey interprets reads from a real envelope without being
 test('a maintenance check written by this build reads back clean, and its fixed id cannot be hand-edited', async () => {
   const bytes = await KIND_SAMPLES[MAINTENANCE_CHECK_RECORD_SCHEMA](), read = await readJourneyEnvelope(bytes);
   assert.equal(read.status, 'ok'); assert.deepEqual(read.diagnostics, []);
-  assert.equal(read.value.records.find(r => r.schema === MAINTENANCE_CHECK_RECORD_SCHEMA).id, 'maintenance-check');
+  assert.equal(read.value.records.find(r => r.schema === MAINTENANCE_CHECK_RECORD_SCHEMA).id, MAINTENANCE_CHECK_RECORD_ID);
   assert.equal(projectJourneyEnvelope(read.value.envelope).records.find(r => r.schema === MAINTENANCE_CHECK_RECORD_SCHEMA).supported, true);
   const renamed = await reseal(bytes, doc => { doc.records.find(r => r.schema === MAINTENANCE_CHECK_RECORD_SCHEMA).id = 'maintenance-check-2'; });
   const at = JSON.parse(decode(renamed)).records.findIndex(r => r.schema === MAINTENANCE_CHECK_RECORD_SCHEMA), refused = await readJourneyEnvelope(renamed);
