@@ -10,7 +10,7 @@ it, and `src/app/claims-view.js` turns the projection into panels. The page and 
 
 | Panel | Content |
 | --- | --- |
-| Configuration-check score | Passed checks over all checks of the latest machine check, or `Unavailable` with the reason. Unknown checks stay in the total; failed checks are listed whatever the score. |
+| Configuration-check score | Passed checks over all checks of the latest machine check, or `Unavailable` with the reason. Unknown checks stay in the total; failed checks are listed whatever the score. The check set and calculation method are named with their versions. |
 | Verified repairs | Core's count, then every attempt with its reason, counted or not. |
 | Suggested actions | Core's ranked actions: blockers, urgent reviews, important unknowns. |
 | Claims | Each check, condition and repair claim: kind (Measured, Estimated, Declared, Unknown), value or `Unavailable — <reason>`, coverage, freshness, de-duplication and its sources. |
@@ -31,7 +31,9 @@ The read-only text box is the headless rendering of the same records.
 | Usage | A Measured `observed-usage` claim; with none, one Unknown claim. |
 
 Each claim keeps its record id and SHA-256 as a source, so importing the same record again is
-the same claim and a record id re-used with other content is shown as a conflict.
+the same claim and a record id re-used with other content is shown as a conflict. The same holds
+for estimates and usage: an identical entry twice is one claim, and two entries for one event with
+different amounts are both shown as a conflict. Ids that look like a machine-local path are refused.
 
 ## What counts as a verified repair
 
@@ -63,4 +65,5 @@ the machine check to be run again. Failed checks of targets no repair touched st
 - Records live in the host's memory (latest 64) and are lost when the host restarts; nothing is written to disk.
 - The page shows readiness records only. Scan reads, estimates and usage are headless adapter
   inputs (`readinessReport({ scanReports, estimates, usage })`); the page does not collect them.
+- `generatedAt`, the instant the caller passes to `readinessReport`, is the capture time of the Unknown usage claim; the host passes its own clock.
 - The report is a projection for the developer; it does not change anything and grants no approval.

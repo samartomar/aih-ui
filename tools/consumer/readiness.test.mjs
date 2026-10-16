@@ -1,7 +1,7 @@
 import test from 'node:test';
-import * as readiness from './readiness.mjs';
 import assert from 'node:assert/strict';
 import { READINESS_STATES, projectInspection, projectRepairPreparation, projectRepairOutcome, readinessGuidance } from './readiness.mjs';
+import * as readiness from './readiness.mjs';
 
 // Core-shaped records: InspectResult, PreparationResult (serializable part) and RunResult.
 const options = { targets: { value: ['npm', 'jq'], origin: 'explicit' }, network: { value: 'declared', origin: 'default' },

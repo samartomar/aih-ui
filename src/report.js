@@ -53,9 +53,13 @@ function renderPanel(panel, { heading = 'h2', headingId, depth = 0 } = {}) {
 }
 
 // A failed load or render leaves no earlier report on screen to be read as current.
+// The headings are the view's own panel titles and keep their ids, so each section stays labelled.
 function clear(message) {
+  const empty = reportPanels(null);
   for (const name of SECTIONS) {
-    $(`report-${name}`).replaceChildren(el('h2', 'font-semibold', name[0].toUpperCase() + name.slice(1)), el('p', 'text-on-surface-variant', message));
+    const heading = el('h2', 'font-semibold', empty[name].title);
+    heading.id = `report-${name}-heading`;
+    $(`report-${name}`).replaceChildren(heading, el('p', 'text-on-surface-variant', message));
   }
   $('report-text').value = '';
 }

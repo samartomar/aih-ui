@@ -67,6 +67,9 @@ test('claims keep the exact producer record identity, the Core run and a stable 
   const claimSet = readinessClaimSet({ records: [before, repaired] });
   assert.equal(validateClaimSet(claimSet).valid, true, JSON.stringify(validateClaimSet(claimSet).errors));
   assert.deepEqual(claimSet.claims.find(claim => claim.producer.id).producer, CLAIMS_PRODUCER);
+  assert.deepEqual(CHECK_SET, { id: 'aih-ui/machine-check', version: '1.0.0' });
+  const checkClaims = claimSet.claims.filter(claim => claim.measure === 'configuration-check');
+  assert.ok(checkClaims.length > 0 && checkClaims.every(claim => JSON.stringify(claim.method) === JSON.stringify(CHECK_SET)), 'check claims name the check set');
   const fromBefore = claimSet.claims.filter(claim => claim.sources.some(source => source.id === before.id));
   assert.ok(fromBefore.length >= 4, 'a check claim and a condition claim per check item');
   for (const claim of fromBefore) {
@@ -226,6 +229,8 @@ test('the score keeps unknown checks in the denominator and lists failed checks 
   assert.equal(scoreOf(high).failed.length, 1);
   const panels = reportPanels(high);
   assert.equal(panels.score.value, '95%');
+  assert.match(panels.score.summary, /Check set aih-ui\/machine-check 1\.0\.0 · method configuration-check-score 1\.0\.0\./);
+  assert.match(reportText(high), /^Configuration-check score\n95%\n19 of 20 checks passed/m, 'the headline value is printed');
   assert.match(panels.score.items[0].text, /^Failed: npm\/version on npm/);
   const mixed = readinessReport({ records: [world().machine([check('npm/version', 'npm', 'passed'), check('jq/version', 'jq', 'failed'),
     check('npm/tls/node', 'npm', 'skipped', 'network-off'), check('jq/tls', 'jq', 'unavailable', 'deadline')])] }).projection;
@@ -269,7 +274,7 @@ test('older machine checks are recheck-needed and only the latest one feeds the 
   assert.ok(olderClaims.every(claim => claim.applicability.state === 'recheck-needed'));
   assert.ok(projection.claims.filter(claim => claim.sources.some(source => source.id === second.id)).every(claim => claim.applicability.state === 'current'));
   const text = reportText(projection);
-  assert.match(text, /Freshness: Recheck needed — .*Captured 2026-10-15T10:00:0\dZ|Freshness: Recheck needed/);
+  assert.match(text, /Freshness: Recheck needed — A later machine check exists\. Captured 2026-10-15T10:00:0\d\.000Z/);
 });
 
 test('estimated context, observed usage and file size stay separate; missing usage is Unavailable, not 0', () => {
@@ -294,6 +299,53 @@ test('estimated context, observed usage and file size stay separate; missing usa
   const sections = reportPanels(withUsage.projection).context.sections;
   assert.match(sections.find(section => section.id === 'configured-context').items[0].details.join('\n'), /Value: 400 tokens/);
   assert.match(sections.find(section => section.id === 'observed-usage').items[0].details.join('\n'), /Value: 280 tokens/);
+});
+
+const supplied = { subject: { kind: 'instruction-set', id: 'project-instructions' }, amount: 400, unit: 'tokens', method: { id: 'chars-over-four', version: '1.0.0' },
+  source: { id: 'estimate-1', schema: 'urn:aih-ui:estimate:1.0.0' }, observation: 'estimate-1#tokens', capturedAt: '2026-10-15T09:00:00.000Z' };
+const identities = claimSet => claimSet.claims.map(claim => `${claim.id}@${claim.revision}`).sort();
+
+test('identical supplied entries collapse; entries that differ stay distinct claims of one event, a Core conflict', () => {
+  for (const [key, measure] of [['estimates', 'configured-context'], ['usage', 'observed-usage']]) {
+    const once = readinessReport({ [key]: [supplied] });
+    const same = readinessReport({ [key]: [supplied, JSON.parse(JSON.stringify(supplied))] });
+    assert.deepEqual(identities(same.claimSet), identities(once.claimSet), `${key}: the same entry twice is one claim`);
+    assert.equal(same.projection.observations.conflicts.length, 0);
+
+    const other = { ...supplied, amount: 500 };
+    const differing = readinessReport({ [key]: [supplied, other] });
+    assert.equal(validateClaimSet(differing.claimSet).valid, true, JSON.stringify(validateClaimSet(differing.claimSet).errors));
+    const found = differing.projection.claims.filter(claim => claim.measure === measure);
+    assert.deepEqual(found.map(claim => claim.value.amount).sort(), [400, 500], `${key}: both amounts stay visible`);
+    assert.equal(new Set(found.map(claim => claim.observation)).size, 1, 'one event');
+    assert.equal(new Set(found.map(claim => `${claim.id}@${claim.revision}`)).size, 2, 'two claim identities');
+    assert.deepEqual(differing.projection.observations.conflicts.map(entry => entry.claims.length), [2]);
+    assert.ok(found.every(claim => claim.dedup.status === 'conflict'));
+    assert.match(reportText(differing.projection), /Conflicting records for one event/);
+    const swapped = readinessReport({ [key]: [other, supplied] });
+    assert.deepEqual(identities(swapped.claimSet), identities(differing.claimSet), `${key}: identity does not depend on input order`);
+  }
+});
+
+test('supplied ids that carry a machine-local path are refused before any claim is built', () => {
+  const paths = ['/home/alice/private/AGENTS.md', 'C:\\Users\\x\\AGENTS.md', 'C:/x/AGENTS.md', '\\\\server\\share\\AGENTS.md', '~/x/AGENTS.md', 'file:///home/alice/AGENTS.md'];
+  const variants = path => [
+    { ...supplied, subject: { kind: 'instruction-set', id: path } },
+    { ...supplied, scope: { kind: 'repository', targets: [path] } },
+    { ...supplied, source: { ...supplied.source, id: path } },
+    { ...supplied, source: { ...supplied.source, schema: path } },
+    { ...supplied, observation: path },
+  ];
+  for (const path of paths) for (const key of ['estimates', 'usage']) for (const entry of variants(path)) {
+    assert.throws(() => readinessClaimSet({ [key]: [entry] }), error => error instanceof TypeError && !/alice|Users|server|\.md/.test(error.message), `${key}: ${path}`);
+  }
+  for (const key of ['estimates', 'usage']) assert.doesNotThrow(() => readinessClaimSet({ [key]: [{ ...supplied, scope: { kind: 'repository', targets: ['docs/AGENTS.md', 'https://example.com/a'] } }] }));
+});
+
+test('an invalid claim set is refused by the claim-set builder instead of being returned unvalidated', () => {
+  const bad = { ...supplied, coverage: { state: 'bogus', reason: 'x' } };
+  assert.throws(() => readinessClaimSet({ estimates: [bad] }), /not valid/);
+  assert.throws(() => readinessReport({ estimates: [bad] }), /not valid/);
 });
 
 test('file size from a real Scan report read is one measured bytes claim', async () => {
@@ -326,14 +378,13 @@ test('headless text is built only from the strings of the UI panels', () => {
     estimates: [{ subject: { kind: 'instruction-set', id: 'p' }, amount: 10, unit: 'tokens', method: { id: 'm', version: '1' }, source: { id: 'e', schema: 'urn:aih-ui:estimate:1.0.0' },
       observation: 'e#1', capturedAt: '2026-10-15T09:00:00.000Z' }] });
   const panels = reportPanels(projection), text = reportText(projection);
-  const strings = value => [value.title, value.summary, ...value.items.flatMap(entry => [entry.text, ...entry.details]), ...(value.sections ?? []).flatMap(strings)];
+  const strings = value => [value.title, value.value, value.summary, ...value.items.flatMap(entry => [entry.text, ...entry.details]), ...(value.sections ?? []).flatMap(strings)];
   const meanings = [...new Set(Object.values(panels).flatMap(strings).filter(Boolean))].sort((a, b) => b.length - a.length);
   assert.ok(meanings.length > 20);
   for (const meaning of meanings) assert.ok(text.includes(meaning), `reportText lacks: ${meaning}`);
   let rest = text;
   for (const meaning of meanings) rest = rest.split(meaning).join('');
   assert.match(rest, /^[\s-]*$/, 'reportText adds no words of its own');
-  assert.equal(CHECK_SET.id, 'aih-ui/machine-check');
 });
 
 test('invalid input is refused rather than rendered', () => {

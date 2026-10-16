@@ -4,7 +4,7 @@
 // Port 4196 only (AIH_REPORT_PORT may override it; 4173 is refused).
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtemp, mkdir, readdir, stat, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, stat, writeFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, isAbsolute } from 'node:path';
@@ -136,12 +136,13 @@ try {
   assert.match(scoreText, /Failed: jq\/version on jq/, 'the failed jq check stays listed');
   assert.match(await panelText('actions'), /Blocker — The check jq\/version failed on jq/);
   // The claims behind the count: the failed precheck, the applied repair and the recheck stay visible.
-  const claimsText = await panelText('claims');
+  const claimItems = await page.locator('#report-claims li').allInnerTexts();
   for (const id of verifiedIds) {
-    assert.ok(claimsText.includes(`${id} on npm`), `${id} precheck and recheck claims are listed`);
-    assert.match(claimsText, /Value: failed/);
+    const own = claimItems.filter(text => text.startsWith(`${id} on npm`));
+    assert.ok(own.some(text => /Value: failed/.test(text)), `${id}: the failed precheck claim is listed`);
+    assert.ok(own.some(text => /Value: passed/.test(text)), `${id}: the passing recheck claim is listed`);
   }
-  assert.match(claimsText, /Kind: Measured/);
+  assert.match(claimItems.join('\n'), /Kind: Measured/);
   assert.match(await panelText('repairs'), /Operation: node-npm-ca/);
   await shot('02-report-after-repair.png');
   const afterRepair = { verified: verifiedIds, attempts: shown, score: scoreText.slice(0, 200) };

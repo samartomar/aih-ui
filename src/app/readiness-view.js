@@ -46,6 +46,7 @@ export function summaryCounts(projection) {
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
 const targetList = targets => (targets ?? []).join(', ') || 'none';
+// Which targets a scoped recheck left out, from the latest machine check.
 // Browser assets cannot import tools/consumer/readiness.mjs; keep target/state wording in sync with notRecheckedText, preserving channel-specific instructions.
 export function notRecheckedLine(projection) {
   if (!Array.isArray(projection?.notRechecked)) return 'Other targets were not re-checked; check this machine again before relying on it.';

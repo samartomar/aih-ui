@@ -6,6 +6,7 @@
 // Rules: a claim never carries a machine-local path or free text from a check (reasons are Core
 // codes); a claim's revision is its source record's sha256, so a re-import is the same claim and
 // a same-id record with other content is a Core-visible conflict; unknown is never a value.
+// A supplied estimate or usage entry never carries a machine-local path.
 import { CLAIMS_SCHEMA, projectClaims, validateClaimSet } from '@aihq/core/report';
 
 export const READINESS_RECORD_SCHEMA = 'urn:aih-ui:readiness-record:1.0.0';
@@ -45,7 +46,43 @@ function admit(records) {
   return unique.map((record, index) => [record, index]).sort(([a, i], [b, j]) => instant(a.capturedAt) - instant(b.capturedAt) || i - j).map(([record]) => record);
 }
 
-export function readinessClaimSet({ records = [], scanReports = [], estimates = [], usage = [], generatedAt = null } = {}) {
+// A claim names things by stable identity, never by a location on this machine: absolute POSIX
+// and Windows paths, UNC shares, `~` and file: URLs are refused before any claim is built.
+const LOCAL_PATH = /^(?:file:|~(?:[\\/]|$)|[\\/][^\\/]|[\\/]{2})|(?:^|[^A-Za-z0-9])[A-Za-z]:[\\/]|[\s=,;([:](?:~?\/|\\\\)[^\s\\/]/i;
+function assertNoLocalPath(value, what) {
+  if (typeof value === 'string' && LOCAL_PATH.test(value)) throw new TypeError(`${what} looks like a machine-local path; supply a stable identifier instead.`);
+}
+function assertSupplied(list, name) {
+  list.forEach((entry, index) => {
+    const at = field => `${name}[${index}] ${field}`;
+    assertNoLocalPath(entry?.subject?.id, at('subject id'));
+    assertNoLocalPath(entry?.subject?.kind, at('subject kind'));
+    assertNoLocalPath(entry?.scope?.kind, at('scope kind'));
+    for (const target of Array.isArray(entry?.scope?.targets) ? entry.scope.targets : []) assertNoLocalPath(target, at('scope target'));
+    assertNoLocalPath(entry?.source?.id, at('source id'));
+    assertNoLocalPath(entry?.source?.schema, at('source schema'));
+    assertNoLocalPath(entry?.observation, at('observation'));
+    assertNoLocalPath(entry?.method?.id, at('method id'));
+    assertNoLocalPath(entry?.coverage?.reason, at('coverage reason'));
+  });
+}
+
+// A supplied claim's revision names its content, so an entry that repeats collapses and one that
+// differs from another of the same event stays a separate claim, which Core reports as a conflict.
+// FNV-1a over canonical JSON: deterministic, with no clock, randomness or crypto.
+const canonical = value => Array.isArray(value) ? value.map(canonical) : value !== null && typeof value === 'object'
+  ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
+function fingerprint(value) {
+  let hash = 0xcbf29ce484222325n;
+  for (const char of JSON.stringify(canonical(value))) hash = BigInt.asUintN(64, (hash ^ BigInt(char.codePointAt(0))) * 0x100000001b3n);
+  return hash.toString(16).padStart(16, '0');
+}
+
+// Builds the validated claim set and its Core projection together, so a report projects once
+// unless an urgent review has to be ranked by Core as well.
+function assemble({ records = [], scanReports = [], estimates = [], usage = [], generatedAt = null } = {}) {
+  assertSupplied(estimates, 'estimates');
+  assertSupplied(usage, 'usage');
   const ordered = admit(records);
   const machines = ordered.filter(record => record.kind === 'machine-check');
   const repairs = ordered.filter(record => record.kind === 'repair');
@@ -136,6 +173,8 @@ export function readinessClaimSet({ records = [], scanReports = [], estimates = 
   const scanned = new Set();
   for (const read of scanReports) {
     if (read?.status !== 'read' || !read.report?.source?.capture || scanned.has(read.scanId)) continue;
+    assertNoLocalPath(read.scanId, 'scan report id');
+    assertNoLocalPath(read.report.schema, 'scan report schema');
     scanned.add(read.scanId);
     const bytes = read.report.source.capture.entries.filter(entry => entry.kind === 'file' || entry.kind === 'file-link')
       .reduce((total, entry) => total + entry.byteLength, 0);
@@ -147,12 +186,16 @@ export function readinessClaimSet({ records = [], scanReports = [], estimates = 
         : { state: 'partial', reason: `The Scan report was ${read.report.completion}.` },
       authentication: unauthenticated(), applicability: noComparison() });
   }
-  const supplied = (entry, index, measure, kind) => ({ id: `${measure}/${entry.source.id}/${entry.subject.kind}:${entry.subject.id}/${entry.observation ?? `#${index}`}`,
-    revision: entry.source.sha256 ?? entry.capturedAt, producer: producer(), recordSchema: entry.source.schema, subject: { ...entry.subject },
-    scope: entry.scope ? { kind: entry.scope.kind, targets: [...entry.scope.targets] } : { kind: 'workspace', targets: [entry.subject.id] },
-    sources: [{ ...entry.source }], observation: entry.observation ?? null, capturedAt: entry.capturedAt, measure, kind,
-    value: { amount: entry.amount, unit: entry.unit }, ...(entry.method ? { method: { ...entry.method } } : {}),
-    coverage: entry.coverage ? { ...entry.coverage } : { state: 'unknown', reason: 'Coverage was not reported.' }, authentication: unauthenticated(), applicability: noComparison() });
+  const supplied = (entry, index, measure, kind) => {
+    const claim = { id: `${measure}/${entry.source.id}/${entry.subject.kind}:${entry.subject.id}/${entry.observation ?? `#${index}`}`,
+      revision: entry.source.sha256 ?? entry.capturedAt, producer: producer(), recordSchema: entry.source.schema, subject: { ...entry.subject },
+      scope: entry.scope ? { kind: entry.scope.kind, targets: [...entry.scope.targets] } : { kind: 'workspace', targets: [entry.subject.id] },
+      sources: [{ ...entry.source }], observation: entry.observation ?? null, capturedAt: entry.capturedAt, measure, kind,
+      value: { amount: entry.amount, unit: entry.unit }, ...(entry.method ? { method: { ...entry.method } } : {}),
+      coverage: entry.coverage ? { ...entry.coverage } : { state: 'unknown', reason: 'Coverage was not reported.' }, authentication: unauthenticated(), applicability: noComparison() };
+    const { revision, ...body } = claim;
+    return { ...claim, revision: `${revision}~${fingerprint(body)}` };
+  };
   estimates.forEach((entry, index) => add(supplied(entry, index, 'configured-context', 'estimated')));
   usage.forEach((entry, index) => add(supplied(entry, index, 'observed-usage', 'measured')));
   if (!usage.length) {
@@ -190,22 +233,30 @@ export function readinessClaimSet({ records = [], scanReports = [], estimates = 
     evidence: [{ id: 'observed-usage/unavailable', revision: '1' }], reason: 'No client usage was observed, so usage is unknown rather than zero.',
     prerequisites: [], route: guidance('workbench', 'usage-unavailable') });
   const claimSet = { schema: CLAIMS_SCHEMA, claims: [...claims.values()], calculations, actions };
-  let projected;
-  try { projected = projectClaims(claimSet); } catch { return claimSet; } // readinessReport reports why the set is invalid.
+  const projectValid = candidate => {
+    const validation = validateClaimSet(candidate);
+    if (!validation.valid) throw new Error(`The readiness claim set is not valid: ${validation.errors.join('; ')}`);
+    return projectClaims(candidate);
+  };
+  let projection = projectValid(claimSet);
+  const ranked = actions.length;
   const urgent = { 'applied-unverified': 'was applied but the same check has not passed since', 'repair-not-verified': 'was applied but the same check still failed' };
-  for (const result of projected.calculations.find(entry => entry.id === 'verified-repairs').attempts) {
+  for (const result of projection.calculations.find(entry => entry.id === 'verified-repairs').attempts) {
     if (!urgent[result.reason]) continue;
     actions.push({ id: `urgent-review/${result.repair.id}/${result.condition}`, category: 'urgent-review', subjects: [{ ...result.subject }],
       evidence: [result.precheck, result.repair, result.postcheck].filter(Boolean).map(entry => ({ ...entry })),
       reason: `The repair ${result.operation} for ${result.subject.id} ${urgent[result.reason]}; check it again.`,
       prerequisites: [], route: guidance(result.subject.id, result.reason) });
   }
-  return claimSet;
+  // Urgent reviews join the set, so Core ranks it again; with none, the first projection stands.
+  if (actions.length > ranked) projection = projectValid(claimSet);
+  return { claimSet, projection };
+}
+
+export function readinessClaimSet(input = {}) {
+  return assemble(input).claimSet;
 }
 
 export function readinessReport(input = {}) {
-  const claimSet = readinessClaimSet(input);
-  const validation = validateClaimSet(claimSet);
-  if (!validation.valid) throw new Error(`The readiness claim set is not valid: ${validation.errors.join('; ')}`);
-  return { claimSet, projection: projectClaims(claimSet) };
+  return assemble(input);
 }

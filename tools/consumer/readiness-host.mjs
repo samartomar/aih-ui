@@ -5,13 +5,13 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { apply, inspect, prepare } from '@aihq/core';
 import { targets as coreTargets } from '@aihq/core/harness';
+import { READINESS_RECORD_SCHEMA, readinessReport } from './claims.mjs';
 import { projectInspection, projectRepairOutcome, projectRepairPreparation, readinessGuidance } from './readiness.mjs';
 
 const KNOWN_TARGETS = new Set(coreTargets.map(target => target.id));
 const NETWORKS = ['declared', 'off'];
 const MAX_SESSIONS = 8;
 const MAX_RECORDS = 64;
-const RECORD_SCHEMA = 'urn:aih-ui:readiness-record:1.0.0';
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const coreIdentity = inspection => inspection.package ? { name: inspection.package.name, version: inspection.package.version } : null;
 const CONTROLS = Object.freeze({ logging: 'off' });
@@ -69,7 +69,6 @@ export function createReadinessHost({ repairs = [] } = {}) {
 
     async report() {
       try {
-        const { readinessReport } = await import('./claims.mjs');
         const records = structuredClone(journal);
         // The host clock, never earlier than the latest journaled instant.
         const generatedAt = new Date(Math.max(Date.now(), lastStamp)).toISOString();
@@ -88,7 +87,7 @@ export function createReadinessHost({ repairs = [] } = {}) {
         const capturedAt = stamp();
         const projection = projectInspection(result);
         const id = randomUUID();
-        append({ schema: RECORD_SCHEMA, id, kind: 'machine-check', capturedAt, sha256: digest(result), core: coreIdentity(result), check: projection });
+        append({ schema: READINESS_RECORD_SCHEMA, id, kind: 'machine-check', capturedAt, sha256: digest(result), core: coreIdentity(result), check: projection });
         latestCheck = projection;
         latestCheckId = id;
         return { status: 'ok', value: { projection, guidance: readinessGuidance([projection]) } };
@@ -139,7 +138,7 @@ export function createReadinessHost({ repairs = [] } = {}) {
         const outcome = projectRepairOutcome({ run, recheck: fresh, inspection, repair, latestCheck: before });
         // The recheck covers only the repair's targets; machine readiness stays with the latest
         // machine check, which predates this repair and is labelled so.
-        append({ schema: RECORD_SCHEMA, id: randomUUID(), kind: 'repair', capturedAt: recheckedAt,
+        append({ schema: READINESS_RECORD_SCHEMA, id: randomUUID(), kind: 'repair', capturedAt: recheckedAt,
           sha256: digest({ run, recheck: fresh, inspection }), core: coreIdentity(inspection),
           repair: { repairId: repair.id, targets: [...repair.targets], before: beforeId,
             run: typeof run.runId === 'string' && typeof run.schema === 'string' ? { id: run.runId, schema: run.schema } : null,

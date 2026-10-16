@@ -21,7 +21,7 @@ const attempt = (reason, extra = {}) => ({ operation: 'node-npm-ca', subject: { 
   precheck: null, repair: null, postcheck: null, counted: reason === 'verified', reason, ...extra });
 const repairs = (count, attempts) => ({ id: 'verified-repairs', method: { id: 'verified-repair-count', version: '1.0.0' }, status: 'available',
   reason: null, inputs: [], count, attempts, deduplication: { status: 'established', unidentified: [] } });
-const strings = panel => [panel.title, panel.summary, ...panel.items.flatMap(item => [item.text, ...item.details]),
+const strings = panel => [panel.title, panel.value, panel.summary, ...panel.items.flatMap(item => [item.text, ...item.details]),
   ...(panel.sections ?? []).flatMap(strings)].filter(Boolean);
 
 test('a score keeps unknown checks in the denominator and lists failed checks even when the score is high', () => {
@@ -30,6 +30,7 @@ test('a score keeps unknown checks in the denominator and lists failed checks ev
     numerator: 19, denominator: 20, score: 95, failed: [ref('rec-1/check/npm/version')] })] }));
   assert.equal(panels.score.value, '95%');
   assert.match(panels.score.summary, /19 of 20 checks passed/);
+  assert.match(panels.score.summary, /Check set aih-ui\/machine-check 1\.0\.0 · method configuration-check-score 1\.0\.0\./);
   assert.equal(panels.score.items.length, 1);
   assert.match(panels.score.items[0].text, /^Failed: npm\/version on npm/);
   assert.equal(panels.score.items[0].tone, 'error');
@@ -145,6 +146,23 @@ test('actions follow the projection order and say where each one routes', () => 
   assert.deepEqual(panels.actions.items.map(item => item.text), ['1. Blocker — jq failed.', '2. Important unknown — jq is unknown.']);
   assert.ok(panels.actions.items[0].details.includes('Route: guidance jq/b'));
   assert.match(reportPanels(projection()).actions.summary, /No action/);
+});
+
+test('the headline values are printed by reportText', () => {
+  const text = reportText(projection({ calculations: [score(), repairs(1, [attempt('verified')])] }));
+  assert.match(text, /^Configuration-check score\n50%\n2 of 4 checks passed/m);
+  assert.match(text, /^Verified repairs\n1\n1 verified repair\b/m);
+  assert.match(reportText(projection()), /^Configuration-check score\nUnavailable\n/m);
+});
+
+test('only claims of the Workbench readiness producer have their claim id read as record/role/check', () => {
+  const own = claim('rec-1/check/npm/version');
+  const foreign = claim('rec-9/check/npm/version', { producer: { id: 'other/producer', version: '1.0.0' }, measure: 'configured-context',
+    kind: 'estimated', value: { amount: 3, unit: 'tokens' }, subject: { kind: 'instruction-set', id: 'p' } });
+  const items = reportPanels(projection({ claims: [own, foreign] })).claims.items;
+  assert.deepEqual(items.map(entry => entry.text), ['npm/version on npm']);
+  const foreignText = reportPanels(projection({ claims: [foreign], calculations: [score({ failed: [ref('rec-9/check/npm/version')] })] }));
+  assert.match(foreignText.score.items[0].text, /^Failed: configured-context on p$/);
 });
 
 test('reportText is built only from the panel strings', () => {

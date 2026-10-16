@@ -38,8 +38,13 @@ const list = value => Array.isArray(value) ? value : [];
 const item = (id, tone, text, details = []) => ({ id, tone, text, details });
 const panel = (id, title, summary, tone, items = [], extra = {}) => ({ id, title, summary, tone, items, ...extra });
 
-// Claim ids from the Workbench adapter read "<record>/<role>/<check id>"; any other id is shown by its measure.
-const checkOf = id => { const [, role, ...rest] = String(id).split('/'); return ROLES[role] && rest.length ? rest.join('/') : null; };
+// Claim ids from the Workbench adapter read "<record>/<role>/<check id>"; any other claim is shown by its measure and subject.
+const READINESS_PRODUCER = 'aih-ui/readiness';
+const checkOf = claim => {
+  if (claim?.producer?.id !== READINESS_PRODUCER) return null;
+  const [, role, ...rest] = String(claim.id).split('/');
+  return ROLES[role] && rest.length ? rest.join('/') : null;
+};
 const CONDITION = /^condition:/;
 const conditionKey = measure => String(measure).replace(CONDITION, '');
 
@@ -48,8 +53,8 @@ export function reportPanels(projection) {
   const byRef = new Map(claims.map(claim => [keyOf(claim), claim]));
   const label = ref => {
     const claim = byRef.get(keyOf(ref));
-    if (!claim) return checkOf(ref?.id) ?? String(ref?.id ?? '');
-    return `${checkOf(claim.id) ?? claim.measure} on ${claim.subject.id}`;
+    if (!claim) return String(ref?.id ?? '');
+    return `${checkOf(claim) ?? claim.measure} on ${claim.subject.id}`;
   };
   const calculation = method => list(projection?.calculations).find(result => result.method?.id === method);
   const valueText = claim => claim.kind === 'unknown' ? `Unavailable — ${claim.unknownReason}`
@@ -59,7 +64,7 @@ export function reportPanels(projection) {
     if (status === 'canonical') return 'Canonical record of an event imported more than once';
     if (status === 'duplicate') return `Duplicate of ${canonical ? label(canonical) : 'another record'}; counted once`;
     if (status === 'conflict') return 'Conflicts with another record of the same event; counted as unknown';
-    if (status === 'unidentified') return 'No event identity; a re-import cannot be recognised';
+    if (status === 'unidentified') return 'No event identity; a re-import cannot be recognized';
     return 'Unique';
   };
   const claimTone = claim => claim.kind === 'unknown' ? 'warning' : claim.value.unit === 'outcome'
@@ -75,17 +80,20 @@ export function reportPanels(projection) {
 
   // Score: unknown checks stay in the denominator; failed checks stay listed whatever the score.
   const scoreResult = calculation('configuration-check-score');
+  // The check set and calculation method, with versions, as the projection states them.
+  const basis = scoreResult?.checkSet && scoreResult.method
+    ? ` Check set ${scoreResult.checkSet.id} ${scoreResult.checkSet.version} · method ${scoreResult.method.id} ${scoreResult.method.version}.` : '';
   let score;
   if (!scoreResult) score = panel('score', 'Configuration-check score', 'No machine check has been run, so there is no score.', 'warning', [], { value: 'Unavailable' });
   else if (scoreResult.status !== 'available' || scoreResult.score === null) score = panel('score', 'Configuration-check score',
-    scoreResult.reason === 'no-applicable-checks' ? 'No applicable check was run, so there is no score.' : `The score is unavailable: ${scoreResult.reason}.`,
+    `${scoreResult.reason === 'no-applicable-checks' ? 'No applicable check was run, so there is no score.' : `The score is unavailable: ${scoreResult.reason}.`}${basis}`,
     'warning', [], { value: 'Unavailable' });
   else {
     // Truncate, never round up: 99.96 must not read as 100.
     const shown = `${Math.floor(scoreResult.score * 10) / 10}%`;
     const { failed, unknown } = scoreResult.counts;
     score = panel('score', 'Configuration-check score',
-      `${scoreResult.numerator} of ${scoreResult.denominator} checks passed (${failed} failed, ${unknown} unknown). Unknown checks stay in the total.`,
+      `${scoreResult.numerator} of ${scoreResult.denominator} checks passed (${failed} failed, ${unknown} unknown). Unknown checks stay in the total.${basis}`,
       failed ? 'error' : unknown ? 'warning' : 'success', [], { value: shown });
   }
   if (scoreResult) {
@@ -93,7 +101,7 @@ export function reportPanels(projection) {
     for (const ref of list(scoreResult.conflicts)) score.items.push(item(`conflict:${keyOf(ref)}`, 'warning', `Conflicting record counted as unknown: ${label(ref)}`));
     for (const { claim, reason } of list(scoreResult.excluded)) score.items.push(item(`excluded:${keyOf(claim)}`, 'neutral', `Excluded: ${label(claim)}`, [`Reason: ${sentence(reason)}`]));
     if (scoreResult.deduplication?.status === 'not-established') score.items.push(item('dedup', 'warning',
-      `Duplicate imports cannot be recognised for ${plural(list(scoreResult.deduplication.unidentified).length, 'check')} without an event identity.`));
+      `Duplicate imports cannot be recognized for${plural(list(scoreResult.deduplication.unidentified).length, 'check')} without an event identity.`));
   }
 
   // Repairs: Core's count; every attempt shows its own Core reason.
@@ -101,7 +109,7 @@ export function reportPanels(projection) {
   const attempts = list(repairResult?.attempts);
   const repairItems = attempts.map((attempt, index) => {
     const condition = `${attempt.subject.id} ${conditionKey(attempt.condition)}`;
-    const reason = ATTEMPT_REASONS[attempt.reason] ?? `see the Core reason.`;
+    const reason = ATTEMPT_REASONS[attempt.reason] ?? 'see the Core reason.';
     const text = attempt.counted ? `Counted — ${condition}: ${reason}` : `Not counted — ${condition}: ${reason}`;
     return item(`attempt:${index}`, attempt.counted ? 'success' : attempt.reason === 'applied-unverified' || attempt.reason === 'repair-not-verified' ? 'error' : 'neutral',
       text, [`Core reason: ${attempt.reason}`, `Operation: ${attempt.operation}`]);
@@ -161,7 +169,7 @@ export function reportPanels(projection) {
       `Counted once: ${label(entry.claim)} was imported ${entry.imports} times.`, [`Merged: ${list(entry.merged).map(label).join(', ')}`])),
     ...list(observed.conflicts).map(entry => item(`conflict:${entry.observation}`, 'warning',
       `Conflicting records for one event: ${list(entry.claims).map(label).join(', ')}. They are counted as unknown.`, [`Reason: ${entry.reason}`])),
-    ...list(observed.unidentified).map(ref => item(`unidentified:${keyOf(ref)}`, 'warning', `No event identity: ${label(ref)}. A re-import cannot be recognised.`)),
+    ...list(observed.unidentified).map(ref => item(`unidentified:${keyOf(ref)}`, 'warning', `No event identity: ${label(ref)}. A re-import cannot be recognized.`)),
   ];
   const observations = panel('observations', 'De-duplication', observationItems.length ? `${plural(observationItems.length, 'note')}.` : 'No duplicate, conflicting or unidentified event.',
     observationItems.some(entry => entry.tone === 'warning') ? 'warning' : 'neutral', observationItems);
@@ -174,7 +182,9 @@ export function reportText(projection) {
   const lines = [];
   const write = (panelValue, depth) => {
     const pad = '  '.repeat(depth);
-    lines.push(`${pad}${panelValue.title}`, `${pad}${panelValue.summary}`);
+    lines.push(`${pad}${panelValue.title}`);
+    if (panelValue.value !== undefined) lines.push(`${pad}${panelValue.value}`);
+    lines.push(`${pad}${panelValue.summary}`);
     for (const entry of panelValue.items) {
       lines.push(`${pad}- ${entry.text}`);
       for (const detail of entry.details) lines.push(`${pad}  ${detail}`);

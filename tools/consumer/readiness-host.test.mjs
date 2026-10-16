@@ -247,10 +247,16 @@ test('the host journal reports verified repairs end to end through the adapter a
   assert.equal(repairs.status, 'available');
   assert.deepEqual(repairs.attempts.filter(attempt => attempt.counted).map(attempt => attempt.condition.replace(/^condition:/, '')).sort(), [...expected].sort());
   assert.equal(repairs.count, expected.length, JSON.stringify(repairs.attempts));
+  assert.ok(outcome.operations.every(item => item.application === 'applied'), 'the repair was applied, so each attempt has an applied repair');
+  // The reason Core must give for each before/after pair of that condition, stated independently of the attempt.
+  const expectedReason = (was, now) => was === 'verified' ? 'already-healthy'
+    : was !== 'failed' ? 'unknown-precondition'
+      : now === 'verified' ? 'verified' : now === 'failed' ? 'repair-not-verified' : 'applied-unverified';
+  assert.ok(repairs.attempts.length > 0, 'the repair of npm has attempts');
   for (const attempt of repairs.attempts) {
     const id = attempt.condition.replace(/^condition:/, '');
-    const reason = stateBefore.get(id) === 'verified' ? 'already-healthy' : attempt.counted ? 'verified' : attempt.reason;
-    assert.equal(attempt.reason, reason, `${id}: before ${stateBefore.get(id)}, after ${stateAfter.get(id)}`);
+    assert.equal(attempt.reason, expectedReason(stateBefore.get(id), stateAfter.get(id)), `${id}: before ${stateBefore.get(id)}, after ${stateAfter.get(id)}`);
+    assert.equal(attempt.counted, attempt.reason === 'verified');
     assert.equal(attempt.operation, 'node-npm-ca');
   }
   const [machineRecord, repairRecord] = records;
