@@ -133,7 +133,8 @@ export function createAuthoringClient() {
     async refreshJudgments() {
       const attempt = revision, result = draftValue && !intent
         ? await request('draft-open', { bytes: [...draftValue.envelopeBytes], policyBytes: undefined }) : bytes.length ? await request('read') : undefined;
-      if (!result || attempt !== revision) return result ?? { status: 'ok' };
+      if (!result) return { status: 'ok' };
+      if (attempt !== revision) return { status: 'superseded' };
       if (result.status === 'ok') { keepJudgments(result.value); notify(); }
       return result;
     },

@@ -53,6 +53,7 @@ export function createEvidenceReview(client, onProposal) {
   // Applicability is derived from the supplied evidence and identity, so either change re-reads the saved judgments.
   const refresh = async () => {
     const result = await client.refreshJudgments();
+    if (result.status === 'superseded') return false;
     if (result.status === 'refused') { status.textContent = result.diagnostics?.map(value => value.message).join(' ') ?? result.status; return false; }
     return true;
   };
