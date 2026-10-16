@@ -80,9 +80,13 @@ try {
   };
   const panelText = async name => page.locator(`#report-${name}`).innerText();
   const attemptsShown = async () => (await page.locator('#report-repairs li').allInnerTexts()).map(text => text.split('\n')[0]);
+  // The check response the page received: it also carries the same targets inspected with the persisted configuration.
+  let checkBody = null;
   const check = async () => {
     await page.locator('#check-status').evaluate(node => { node.textContent = ''; });
+    const response = page.waitForResponse(reply => new URL(reply.url()).pathname === '/api/readiness-check');
     await page.click('#check');
+    checkBody = await (await response).json();
     await page.locator('#check-status', { hasText: /Check finished|did not run/ }).waitFor();
     assert.doesNotMatch(await page.textContent('#check-status'), /did not run/, await page.textContent('#check-status'));
   };
@@ -123,7 +127,10 @@ try {
   // What Core itself said about each npm condition before and after the applied repair.
   const stateBefore = new Map(checked.filter(row => row.id.startsWith('npm/')).map(row => [row.id, row.state]));
   const stateAfter = new Map(rechecked.filter(row => row.id.startsWith('npm/')).map(row => [row.id, row.state]));
-  const verifiedIds = [...stateBefore].filter(([id, state]) => /^Failed/.test(state) && /^Verified/.test(stateAfter.get(id) ?? '')).map(([id]) => id);
+  // Broken before only if it failed for this host (the page) and with the persisted configuration.
+  const persistedBefore = new Map((checkBody?.value?.persistedCheck?.items ?? []).map(item => [item.id, item.state]));
+  const verifiedIds = [...stateBefore].filter(([id, state]) => /^Failed/.test(state) && persistedBefore.get(id) === 'failed'
+    && /^Verified/.test(stateAfter.get(id) ?? '')).map(([id]) => id);
 
   // 3. The report counts exactly the conditions Core saw fail, repaired and pass again.
   await openReport();

@@ -29,7 +29,7 @@ const COMPARE_REASONS = {
 const SERIES = [['file-size', 'Measured file size'], ['configured-context', 'Estimated configured context'], ['observed-usage', 'Observed usage']];
 const SERIES_EMPTY = { 'file-size': 'No Scan report has been read.', 'configured-context': 'No estimate was supplied.',
   'observed-usage': 'Unavailable — no usage observation was supplied.' };
-const ROLES = { check: 'check', condition: 'condition', postcheck: 'condition after repair', repair: 'repair' };
+const ROLES = { check: 'check', condition: 'condition', 'persisted-condition': 'condition with the persisted configuration', postcheck: 'condition after repair', repair: 'repair' };
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 const sentence = text => /[.!?]$/.test(text) ? text : `${text}.`;
@@ -57,7 +57,9 @@ export function reportPanels(projection) {
     if (!claim) return String(ref?.id ?? '');
     // A persisted value Core reported for a repair's re-check names the targets that re-check covered, not a target of the value.
     if (claim.measure === PERSISTED) return `persisted configuration ${claim.subject.id} found by the re-check of ${list(claim.scope?.targets).join(', ')}`;
-    return `${checkOf(claim) ?? claim.measure} on ${claim.subject.id}`;
+    const shown = `${checkOf(claim) ?? claim.measure} on ${claim.subject.id}`;
+    // The same machine check made with the configuration Core's managed repairs persist for a new process.
+    return checkOf(claim) && String(claim.id).split('/')[1] === 'persisted-condition' ? `${shown} with the persisted configuration` : shown;
   };
   const calculation = method => list(projection?.calculations).find(result => result.method?.id === method);
   const valueText = claim => claim.kind === 'unknown' ? `Unavailable — ${claim.unknownReason}`

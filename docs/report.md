@@ -23,7 +23,7 @@ The read-only text box is the headless rendering of the same records.
 
 | Readiness record | Claims |
 | --- | --- |
-| Machine check | A `configuration-check` claim and a `condition:<check id>` claim per Core check. Passed or failed is Measured; unavailable, skipped and client `…/loading` observations are Unknown with Core's reason. |
+| Machine check | A `configuration-check` claim and a `condition:<check id>` claim per Core check, plus a `condition:<check id>` claim for the same check made with the persisted configuration when the record carries it. Passed or failed is Measured; unavailable, skipped and client `…/loading` observations are Unknown with Core's reason. |
 | Repair | A `repair` claim per target when an operation was applied, a `condition:<check id>` claim per rechecked condition, and a `persisted-configuration` claim per persisted value Core reported for the recheck, Measured with Core's state (`applied`, `removed`, `modified`, `unowned`). The Core run is a source. |
 | Two machine checks with no repair of the target between them | An attempt with no repair, so Core reports an unknown cause or no recovery. |
 | Scan report read | One measured `file-size` claim in bytes. |
@@ -46,11 +46,27 @@ and the same check **passed** afterwards. Nothing else counts:
   (both also rank an urgent review);
 - no earlier machine check is `unknown-precondition`.
 
-A check made with the host's start-time trust and one made with the persisted configuration
-(see [readiness](readiness.md#persisted-configuration)) are different conditions: such a precheck
-is not paired with the recheck, so the attempt is `unknown-precondition`, and two such machine
-checks are not compared. A record from a Core that reported no configuration counts as the
-process configuration.
+The machine check records each condition twice: for this host (`process`) and with the
+persisted configuration (see [readiness](readiness.md#persisted-configuration)). The post-repair
+recheck uses the persisted configuration. The precheck Core sees is chosen so that a repair
+counts only when:
+
+1. the condition **failed in both** configurations before the repair;
+2. the repair was applied;
+3. the persisted recheck passed.
+
+| Before: this host | Before: persisted | Persisted recheck | Result |
+| --- | --- | --- | --- |
+| passed (for example a CA the developer trusts) | failed | any | `already-healthy`, not counted |
+| failed | passed (a Core-managed block from before this host started) | any | `already-healthy`, not counted |
+| failed | failed | passed | `verified`, counted once |
+| failed | failed | failed | `repair-not-verified` |
+
+A record without the persisted inspection (from an older Workbench or Core) never pairs, and
+neither does a recheck made with this host's own trust: the attempt is `unknown-precondition`. A
+recheck that failed before Core answered keeps its precheck, so the attempt is `applied-unverified`.
+When the two configurations disagree in the latest machine check, an important-unknown action
+says so; the score and blockers keep using this host's result.
 
 A later machine check does not add a second win for the same repair.
 

@@ -78,18 +78,22 @@ before the repair; only a new machine check can state that the machine is ready.
 
 ### Persisted configuration
 
-The host passes Core's `configuration: 'persisted'` to every inspection: the machine
-check and the post-repair recheck alike. Node reads `NODE_EXTRA_CA_CERTS` only when a
-process starts, so a long-running host checking with its own start-time trust never
-sees the CA a repair persists, and a real repair could never verify. With the persisted
-configuration Core evaluates Node TLS with the trust its own managed `node-npm-ca`
-configuration gives a new process; `tls/os` checks still use the operating system's
-trust.
+Node reads `NODE_EXTRA_CA_CERTS` only when a process starts. A long-running host that
+checks with its own start-time trust therefore never sees the CA a repair persists, so a
+real repair could never verify. Core's `configuration: 'persisted'` instead evaluates
+Node TLS with the trust its own managed `node-npm-ca` configuration gives a new process.
+`tls/os` checks still use the operating system's trust.
 
-The machine check uses it too, so a precheck and its recheck are the same condition,
-and a machine check run again after a repair agrees with that repair's recheck. The
-cost: a CA trusted only through configuration Core does not manage (for example a
-`NODE_EXTRA_CA_CERTS` line the developer wrote) does not make a Node TLS check pass.
+- **Machine check.** Core's default (`process`) inspection is the machine's readiness,
+  exactly as before, so trust the developer configured themselves still counts. The host
+  then inspects the same targets with the same network setting in the persisted
+  configuration, and journals that inspection beside it as `persistedCheck`. The check
+  returns `{ projection, persistedCheck, comparison, guidance }`. The `comparison` names
+  every check whose state differs between the two. The guidance and the report say so
+  plainly, and the score and blockers keep using this host's result. If the persisted
+  inspection fails, the comparison is unavailable and says so.
+- **Recheck.** The post-repair recheck of the repair's targets uses the persisted
+  configuration.
 
 Each projection carries `options.configuration` and `persisted`: one entry per value
 Core found (`id`, `repair`, `managementId`, `state`, and when `applied` the
@@ -99,12 +103,15 @@ is not `applied` is not used, and Core marks the inspection incomplete. The guid
 names each value and its state, or says Core could not read that configuration
 (`persisted-configuration-unavailable`) rather than that none was found.
 
+What counts as a verified repair under this rule is in [report](report.md#what-counts-as-a-verified-repair).
+
 ## Readiness records
 
 The host keeps the latest 64 checks and repair outcomes in memory, never on disk.
 Each `urn:aih-ui:readiness-record:1.0.0` record carries a UUID, strictly increasing
 UTC timestamps, the Core package name/version when known, and a SHA-256 of the
-exact Core result records. Repairs link to the machine check held when apply
+exact Core result records. A machine check also carries its persisted inspection
+(`persistedCheck`). Repairs link to the machine check held when apply
 started and carry Core's run identity, apply/recheck instants and projected outcome.
 `records()` returns a deep copy; restarting the host loses the journal.
 
@@ -115,7 +122,7 @@ equal to the page origin; bodies are limited to 64 KiB; responses are `no-store`
 
 | Route | Body | Result |
 | --- | --- | --- |
-| `POST /api/readiness-check` | `{ targets?, network? }` — Core target ids, `declared` or `off` | `{ status: 'ok', value: { projection, guidance } }` |
+| `POST /api/readiness-check` | `{ targets?, network? }` — Core target ids, `declared` or `off` | `{ status: 'ok', value: { projection, persistedCheck, comparison, guidance } }` — `projection` is the machine's readiness |
 | `GET /api/readiness-report` | — | `{ status: 'ok', value: { records, claimSet, projection } }` — normalized claims and Core's report projection |
 | `GET /api/readiness-repairs` | — | `{ status: 'ok', value: { repairs: [{ key, id, targets, network }] } }` — never paths or inputs |
 | `POST /api/readiness-repair-prepare` | `{ key }` | `{ status: 'ok', value: { sessionId?, reviewDigest?, operations, projection } }` |

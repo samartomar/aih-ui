@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { READINESS_STATES, projectInspection, projectRepairPreparation, projectRepairOutcome, readinessGuidance } from './readiness.mjs';
+import { READINESS_STATES, projectConfigurationComparison, projectInspection, projectRepairPreparation, projectRepairOutcome, readinessGuidance } from './readiness.mjs';
 import * as readiness from './readiness.mjs';
 
 // Core-shaped records: InspectResult, PreparationResult (serializable part) and RunResult.
@@ -164,6 +164,28 @@ test('a persisted inspection carries its configuration and what Core reported pe
   assert.deepEqual([processDefault.options.configuration, processDefault.persisted], ['process', null]);
   assert.doesNotMatch(readinessGuidance([processDefault]), /persist/);
   assert.equal(projectInspection(inspection([])).options.configuration, null, 'a Core without the option reports none');
+});
+
+test("the machine check is this host's result; the persisted inspection beside it is compared, and a disagreement is said plainly", () => {
+  const persistedOptions = { effectiveOptions: { ...options, configuration: { value: 'persisted', origin: 'explicit' } } };
+  const host = projectInspection(inspection([check('npm/tls/node/registry.npmjs.org', 'npm', 'passed', 'connected'), check('jq/version', 'jq', 'failed', 'version-exit')],
+    { effectiveOptions: { ...options, configuration: { value: 'process', origin: 'default' } } }));
+  const persisted = projectInspection(inspection([check('npm/tls/node/registry.npmjs.org', 'npm', 'failed', 'certificate-chain'), check('jq/version', 'jq', 'failed', 'version-exit')],
+    { ...persistedOptions, persisted: { values: [] } }));
+  const comparison = projectConfigurationComparison(host, persisted);
+  assert.deepEqual(comparison, { kind: 'configuration-comparison', available: true, persisted: [], unreadable: false,
+    differences: [{ id: 'npm/tls/node/registry.npmjs.org', target: 'npm', process: 'verified', persisted: 'failed' }] });
+  const text = readinessGuidance([host, comparison]);
+  assert.match(text, /^Machine check \(complete, network declared\): not ready\.$/m);
+  assert.match(text, /^With the configuration Core's managed repairs persist for a new process, these checks differ from this host's result above, which is the machine's readiness: npm\/tls\/node\/registry\.npmjs\.org \(this host verified, persisted failed\)\.$/m);
+  assert.match(text, /^Checked with the configuration Core's managed repairs persist for a new process: none found\.$/m);
+  const same = projectConfigurationComparison(host, projectInspection(inspection(host.items.map(item => check(item.id, item.target, item.outcome, item.reason)), { ...persistedOptions, persisted: { values: [] } })));
+  assert.deepEqual(same.differences, []);
+  assert.match(readinessGuidance([host, same]), /every check gives the same result as this host\./);
+  // The persisted inspection failed before Core answered: nothing is compared or claimed.
+  const missing = projectConfigurationComparison(host, projectInspection({ status: 'incomplete', diagnostics: [{ code: 'PERSISTED_CHECK_FAILED', message: 'x' }] }));
+  assert.deepEqual([missing.available, missing.differences, missing.persisted], [false, [], null]);
+  assert.match(readinessGuidance([host, missing]), /did not run, so the two cannot be compared\./);
 });
 
 test('guidance text is plain, failure-first and states that nothing was executed', () => {
