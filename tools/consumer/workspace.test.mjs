@@ -16,6 +16,8 @@ import { unsafeText, identityOf } from './workspace-record.mjs';
 import { recordMaintenance } from './maintenance.mjs';
 import { checkImprovements, recordImprovement } from './improvements.mjs';
 import { digestBytes } from './intake.mjs';
+import { BATCH_RECORD_SCHEMA } from './batch-record.mjs';
+import { batchFixture } from './batch-fixture.mjs';
 import { createMixedService } from './mixed-service.mjs';
 import { workspaceRevision, relationshipId } from './workspace-record.mjs';
 const encode = value => new TextEncoder().encode(value), decode = bytes => new TextDecoder().decode(bytes);
@@ -537,7 +539,7 @@ test('the default export excludes bindings, absolute local paths and credentials
   assert.equal(valueOf(await readWorkspace({ envelopeBytes: bytes })).bindings, 2);
   const exported = valueOf(await exportWorkspace({ envelopeBytes: bytes }));
   const text = decode(exported.envelopeBytes);
-  assert.deepEqual(exported.excluded, { bindings: 3, unknownRecords: 0 });
+  assert.deepEqual(exported.excluded, { bindings: 3, batches: 0, unknownRecords: 0 });
   for (const forbidden of [LOCAL_BINDING_SCHEMA, ':local-binding:', 'binding-', 'C:\\\\Users', 'someone', 'secret', 'ghp_secret', 'user:', 'gitDirSha256', 'workingState', '/home/', /(?<![A-Za-z0-9])[A-Za-z]:[\\/]/, /\\\\\\\\/, /\/(?:home|Users|root)\//, /:\/\/[^\s"]*@/])
     typeof forbidden === 'string' ? assert.equal(text.includes(forbidden), false, forbidden) : assert.doesNotMatch(text, forbidden, String(forbidden));
   // It is a valid envelope: it re-reads, keeps the declaration and its relationship, and carries no binding.
@@ -551,9 +553,22 @@ test('the default export excludes bindings, absolute local paths and credentials
   assert.deepEqual(exported.envelope.savedIntent, valueOf(await readJourneyEnvelope(bytes)).envelope.savedIntent);
   // The local envelope is untouched, and exporting an envelope with no workspace or bindings still works.
   assert.equal(decode(bytes), own);
-  assert.deepEqual(valueOf(await exportWorkspace({ envelopeBytes: (await shared()).envelopeBytes })).excluded, { bindings: 0, unknownRecords: 0 });
+  assert.deepEqual(valueOf(await exportWorkspace({ envelopeBytes: (await shared()).envelopeBytes })).excluded, { bindings: 0, batches: 0, unknownRecords: 0 });
   // Exporting twice excludes nothing more.
-  assert.deepEqual(valueOf(await exportWorkspace({ envelopeBytes: exported.envelopeBytes })).excluded, { bindings: 0, unknownRecords: 0 });
+  assert.deepEqual(valueOf(await exportWorkspace({ envelopeBytes: exported.envelopeBytes })).excluded, { bindings: 0, batches: 0, unknownRecords: 0 });
+});
+
+test('a reviewed batch holds local target roots, so the default export leaves it out and counts it', async () => {
+  const f = await batchFixture(await mkdtemp(join(tmpdir(), 'ui35-export-')), { applyEarlier: false });
+  const bytes = (await edit(f.envelopeBytes, { type: 'declare', label: 'Shop' })).envelopeBytes;
+  assert.equal(valueOf(await readJourneyEnvelope(bytes)).records.filter(r => r.schema === BATCH_RECORD_SCHEMA).length, 1);
+  const exported = valueOf(await exportWorkspace({ envelopeBytes: bytes }));
+  assert.deepEqual(exported.excluded, { bindings: 0, batches: 1, unknownRecords: 0 });
+  const text = decode(exported.envelopeBytes);
+  for (const forbidden of [BATCH_RECORD_SCHEMA, ':reviewed-batch:', 'home-a', 'home-b', f.batchId]) assert.equal(text.includes(forbidden), false, forbidden);
+  assert.equal(valueOf(await readJourneyEnvelope(exported.envelopeBytes)).records.some(r => r.schema === BATCH_RECORD_SCHEMA), false);
+  assert.equal(decode(bytes).includes('home-a'), true, 'the local envelope still holds the roots');
+  assert.deepEqual(valueOf(await exportWorkspace({ envelopeBytes: exported.envelopeBytes })).excluded, { bindings: 0, batches: 0, unknownRecords: 0 });
 });
 
 test('the default export refuses unsafe text anywhere in the outgoing envelope or the saved intent, reports only pointers, and still exports a normal composed envelope', async () => {
@@ -615,12 +630,12 @@ test('the default export is a portable artifact: it keeps only kinds known to be
   assert.ok(decode(unknown).includes(payload), 'the local envelope carries the unknown optional record');
   assert.equal(valueOf(await readWorkspace({ envelopeBytes: unknown })).members.length, 2);
   const bound = (await bind(unknown, 'api', observation())).envelopeBytes, exported = valueOf(await exportWorkspace({ envelopeBytes: bound })), text = decode(exported.envelopeBytes);
-  assert.deepEqual(exported.excluded, { bindings: 1, unknownRecords: 1 });
+  assert.deepEqual(exported.excluded, { bindings: 1, batches: 0, unknownRecords: 1 });
   for (const leaked of [payload, '/srv/checkouts/api', 'secret123', 'future-note', 'local-binding']) assert.equal(text.includes(leaked), false, leaked);
   assert.deepEqual(exported.envelope.records.map(r => r.schema).sort(), ['urn:aihq:workbench:journey-record:unresolved-draft:1.0.0', WORKSPACE_DECLARATION_SCHEMA]);
-  // Every kind this build knows to be portable survives; the local envelope is untouched.
-  assert.ok(Object.values(JOURNEY_RECORD_KINDS).filter(entry => entry.kind !== 'local-binding').length === 7);
-  assert.deepEqual(valueOf(await exportWorkspace({ envelopeBytes: exported.envelopeBytes })).excluded, { bindings: 0, unknownRecords: 0 });
+  // Every kind this build knows to be portable survives (a binding and a batch are local); the local envelope is untouched.
+  assert.ok(Object.values(JOURNEY_RECORD_KINDS).filter(entry => !['local-binding', 'reviewed-batch'].includes(entry.kind)).length === 7);
+  assert.deepEqual(valueOf(await exportWorkspace({ envelopeBytes: exported.envelopeBytes })).excluded, { bindings: 0, batches: 0, unknownRecords: 0 });
   // An unknown required record cannot be left out, so nothing is exported and the original bytes stay.
   const required = await resign(base, doc => { doc.records.push({ id: 'future-required', schema: 'urn:aihq:workbench:journey-record:future-required:1.0.0', required: true, payload }); });
   const refused = await exportWorkspace({ envelopeBytes: required });
@@ -667,7 +682,7 @@ test('an unsupported workspace record version fails explicitly, keeps its bytes,
   }
   // The binding future version alone still allows a default export that drops it.
   const bindingOnly = future['binding 9.0.0'][0], exported = valueOf(await exportWorkspace({ envelopeBytes: bindingOnly }));
-  assert.deepEqual(exported.excluded, { bindings: 1, unknownRecords: 0 }); assert.equal(decode(exported.envelopeBytes).includes('/home/me/x'), false);
+  assert.deepEqual(exported.excluded, { bindings: 1, batches: 0, unknownRecords: 0 }); assert.equal(decode(exported.envelopeBytes).includes('/home/me/x'), false);
   // Garbage is the journey reader's refusal, untouched.
   const garbage = encode('not json');
   assert.equal(code(await readWorkspace({ envelopeBytes: garbage })), 'INPUT_INVALID');
@@ -990,7 +1005,7 @@ test('mixed service: an ordinary saved policy becomes a draft on workspace-edit;
   const [bindingId] = Object.keys(verified.statuses);
   assert.equal(verified.statuses[bindingId].status, 'current'); assert.equal(inspected.at(-1), '/work/api'); assert.equal(verified.projection.members[0].bindings[0].status, 'current');
   const exported = valueOf(await service.run('workspace-export', { envelopeBytes: bytes }));
-  assert.deepEqual(exported.excluded, { bindings: 1, unknownRecords: 0 });
+  assert.deepEqual(exported.excluded, { bindings: 1, batches: 0, unknownRecords: 0 });
   assert.equal(decode(Uint8Array.from(exported.envelopeBytes)).includes('/work/api'), false); assert.equal(decode(Uint8Array.from(exported.envelopeBytes)).includes(LOCAL_BINDING_SCHEMA), false);
   assert.equal('draft' in exported, false);
   const unbound = valueOf(await service.run('workspace-unbind', { envelopeBytes: bytes, bindingId }));

@@ -31,7 +31,7 @@ const STATUSES = {
   unverified: 'Not verified since opening — select Verify checkouts',
 };
 // What the sharing export left out, in words.
-export const exportedText = (excluded = {}) => `Exported for sharing without ${excluded.bindings ?? 0} local ${excluded.bindings === 1 ? 'binding' : 'bindings'} and ${excluded.unknownRecords ?? 0} ${excluded.unknownRecords === 1 ? 'record' : 'records'} of a kind this Workbench cannot check.`;
+export const exportedText = (excluded = {}) => `Exported for sharing without ${excluded.bindings ?? 0} local ${excluded.bindings === 1 ? 'binding' : 'bindings'} and ${excluded.unknownRecords ?? 0} ${excluded.unknownRecords === 1 ? 'record' : 'records'} of a kind this Workbench cannot check.${excluded.batches ? ` ${excluded.batches} reviewed ${excluded.batches === 1 ? 'batch' : 'batches'} stayed local because they hold local folder paths.` : ''}`;
 export const bindingStatusText = status => STATUSES[status] ?? STATUSES.unverified;
 export function memberOperation(form) {
   const member = { id: trim(form.id), identity: trim(form.identity), aliases: [...new Set(list(form.aliases))], ...(trim(form.label) ? { label: trim(form.label) } : {}) };

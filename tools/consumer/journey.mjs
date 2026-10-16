@@ -7,6 +7,7 @@ import { MAINTENANCE_DISPOSITION_RECORD_SCHEMA, MAINTENANCE_CHECK_RECORD_SCHEMA,
 import { IMPROVEMENT_SUGGESTION_RECORD_SCHEMA, IMPROVEMENT_DISMISSAL_RECORD_SCHEMA, suggestionProblem, suggestionDerivedProblem, dismissalProblem, dismissalId as improvementDismissalId, unlinkedDismissal } from './improvement-record.mjs';
 import { WORKSPACE_DECLARATION_RECORD_SCHEMA, LOCAL_BINDING_RECORD_SCHEMA, declarationProblem, declarationDerivedProblem, bindingProblem, bindingDerivedProblem } from './workspace-record.mjs';
 import { ORGANIZATION_DRAFT_RECORD_SCHEMA, organizationDraftProblem, organizationDraftDerivedProblem } from './organization-draft-record.mjs';
+import { BATCH_RECORD_SCHEMA, batchProblem, batchDerivedProblem } from './batch-record.mjs';
 export const JOURNEY_SCHEMA_PREFIX = 'urn:aihq:workbench:journey-envelope:';
 export const JOURNEY_SCHEMA = `${JOURNEY_SCHEMA_PREFIX}1.0.0`;
 export const JOURNEY_ACCEPTED_SCHEMAS = [JOURNEY_SCHEMA];
@@ -22,7 +23,8 @@ export const JOURNEY_RECORD_KINDS = { [DRAFT_RECORD_SCHEMA]: { kind: 'unresolved
   [IMPROVEMENT_DISMISSAL_RECORD_SCHEMA]: { kind: 'improvement-dismissal', version: '1.0.0', required: false },
   [ORGANIZATION_DRAFT_RECORD_SCHEMA]: { kind: 'organization-draft', version: '1.0.0', required: true },
   [WORKSPACE_DECLARATION_RECORD_SCHEMA]: { kind: 'workspace-declaration', version: '1.0.0', required: false },
-  [LOCAL_BINDING_RECORD_SCHEMA]: { kind: 'local-binding', version: '1.0.0', required: false } };
+  [LOCAL_BINDING_RECORD_SCHEMA]: { kind: 'local-binding', version: '1.0.0', required: false },
+  [BATCH_RECORD_SCHEMA]: { kind: 'reviewed-batch', version: '1.0.0', required: false } };
 const known = schema => Object.hasOwn(JOURNEY_RECORD_KINDS, schema);
 export const MAX_SAVED_INTENT_BYTES = 1_000_000;
 export const MAX_ENVELOPE_BYTES = 2_000_000;
@@ -87,6 +89,7 @@ function shapeProblem(envelope) {
     if (record.schema === ORGANIZATION_DRAFT_RECORD_SCHEMA && organizationDraftProblem(record) !== null) return path;
     if (record.schema === WORKSPACE_DECLARATION_RECORD_SCHEMA && declarationProblem(record) !== null) return path;
     if (record.schema === LOCAL_BINDING_RECORD_SCHEMA && bindingProblem(record) !== null) return path;
+    if (record.schema === BATCH_RECORD_SCHEMA && batchProblem(record) !== null) return path;
   }
   return null;
 }
@@ -136,6 +139,9 @@ export async function readJourneyEnvelope(bytes) {
     } else if (record.schema === LOCAL_BINDING_RECORD_SCHEMA) {
       const problem = await bindingDerivedProblem(record);
       if (problem !== null) return refuse('INPUT_INVALID', `/records/${index}${problem}`, 'Binding id must derive from its workspace, member and checkout root.', originalBytes);
+    } else if (record.schema === BATCH_RECORD_SCHEMA) {
+      const problem = await batchDerivedProblem(record);
+      if (problem !== null) return refuse('INPUT_INVALID', `/records/${index}${problem}`, 'Batch id and checks must derive from its categories, continuation, scopes, inputs and actions.', originalBytes);
     } else if (record.required) {
       supported = false;
       diagnostics.push({ code: 'JOURNEY_RECORD_UNSUPPORTED', path: `/records/${index}`, message: `Required record ${record.id} has unsupported schema ${record.schema}; it can be read but not changed.` });
@@ -196,6 +202,12 @@ export async function writeJourneyEnvelope({ savedIntentBytes, records, previous
     if (record?.schema === LOCAL_BINDING_RECORD_SCHEMA) {
       const problem = bindingProblem(record) ?? await bindingDerivedProblem(record);
       if (problem !== null) return refuse('INPUT_INVALID', `${path}${problem}`, 'Supply a closed local-binding record with a derived id.');
+      written.push(structuredClone(record));
+      continue;
+    }
+    if (record?.schema === BATCH_RECORD_SCHEMA) {
+      const problem = batchProblem(record) ?? await batchDerivedProblem(record);
+      if (problem !== null) return refuse('INPUT_INVALID', `${path}${problem}`, 'Supply a closed reviewed-batch record with a derived id and checks.');
       written.push(structuredClone(record));
       continue;
     }

@@ -300,4 +300,6 @@ test('unsafe export displays its diagnostic in the status line without downloadi
 test('the export reports what it left out', () => {
   assert.equal(workspace.exportedText({ bindings: 1, unknownRecords: 0 }), 'Exported for sharing without 1 local binding and 0 records of a kind this Workbench cannot check.');
   assert.equal(workspace.exportedText({ bindings: 3, unknownRecords: 1 }), 'Exported for sharing without 3 local bindings and 1 record of a kind this Workbench cannot check.');
+  assert.equal(workspace.exportedText({ bindings: 0, batches: 1, unknownRecords: 0 }), 'Exported for sharing without 0 local bindings and 0 records of a kind this Workbench cannot check. 1 reviewed batch stayed local because they hold local folder paths.');
+  assert.equal(workspace.exportedText({ bindings: 1, batches: 2, unknownRecords: 0 }).endsWith(' 2 reviewed batches stayed local because they hold local folder paths.'), true);
 });

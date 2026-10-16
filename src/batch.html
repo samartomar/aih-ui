@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html class="dark" lang="en" data-mode="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reviewed batch - aih Policy Workbench</title>
+<link rel="stylesheet" href="/styles/tailwind.css">
+<link rel="stylesheet" href="/styles/tokens.css">
+<script src="/app/mode.js"></script>
+</head>
+<body class="bg-background font-body text-on-surface text-sm leading-normal antialiased">
+<header class="bg-wb-chrome border-b border-wb-border px-4 py-3 flex items-center justify-between">
+<h1 class="text-base font-semibold">Add a second client as one reviewed batch</h1>
+<a class="text-primary hover:underline" href="/">Back to the Workbench</a>
+</header>
+<main class="max-w-4xl mx-auto p-4 space-y-4">
+<p>Review the existing and added scopes together. Checks and outcomes apply to the scopes shown below.</p>
+<p id="batch-status" role="status" aria-live="polite">Opening the journey envelope…</p>
+<p id="batch-notice" class="text-tertiary"></p>
+<div id="batch-content" class="space-y-4" hidden>
+<section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="batch-heading">
+<h2 id="batch-heading" class="font-semibold">Batch</h2>
+<p id="batch-id" class="font-mono text-xs break-all"></p>
+<p id="batch-supersedes" class="break-all"></p>
+<h3 class="font-medium">Scopes</h3><ul id="batch-scopes" class="space-y-2"></ul>
+<h3 class="font-medium">Actions in reviewed order</h3><ol id="batch-actions" class="space-y-2 list-decimal pl-4"></ol>
+<details open><summary class="cursor-pointer font-medium">Disclosed checks</summary><ul id="batch-checks" class="space-y-1 mt-2"></ul></details>
+</section>
+<section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="batch-choice-heading">
+<h2 id="batch-choice-heading" class="font-semibold">After a failure</h2>
+<label class="block" for="batch-continuation">Independent action choice (saved to the envelope)</label>
+<select id="batch-continuation" class="w-full bg-wb-input border border-wb-control-border rounded px-2 py-1">
+<option value="stop">Stop everything after a failure</option>
+<option value="continue-independent">Continue independent actions</option>
+</select>
+<p class="text-on-surface-variant">The failed action and its dependents stop. Independent actions continue only when you choose to allow them.</p>
+<div class="flex flex-wrap gap-3">
+<button type="button" id="batch-review" class="px-3 py-1.5 rounded border border-wb-control-border disabled:opacity-50">Review</button>
+<button type="button" id="batch-apply" class="px-3 py-1.5 rounded bg-primary-container text-on-primary disabled:opacity-50" disabled>Apply reviewed batch</button>
+<button type="button" id="batch-recover" class="px-3 py-1.5 rounded border border-wb-control-border disabled:opacity-50" disabled>Recover</button>
+</div>
+</section>
+<section id="batch-review-section" class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="batch-review-heading" hidden>
+<h2 id="batch-review-heading" class="font-semibold">Review before apply</h2>
+<p id="batch-review-summary"></p>
+<ul id="batch-conflicts" class="space-y-2 text-error"></ul>
+<ul id="batch-reviewed-scopes" class="space-y-2"></ul>
+</section>
+<section id="batch-outcome-section" class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="batch-outcome-heading" hidden>
+<h2 id="batch-outcome-heading" class="font-semibold">Observed outcome report</h2>
+<p id="batch-outcome-id" class="font-mono text-xs break-all"></p>
+<p id="batch-counts"></p>
+<div class="overflow-x-auto"><table class="w-full text-left">
+<caption class="text-on-surface-variant text-left">Each action and each scope's unrelated state, as observed by the host</caption>
+<thead><tr><th scope="col" class="p-2">Action / state</th><th scope="col" class="p-2">Scope</th><th scope="col" class="p-2">Outcome</th><th scope="col" class="p-2">Reason</th></tr></thead>
+<tbody id="batch-outcomes"></tbody>
+</table></div>
+</section>
+<p id="batch-atomic-note" class="text-on-surface-variant"></p>
+</div>
+</main>
+<script type="module" src="/batch.js"></script>
+</body>
+</html>

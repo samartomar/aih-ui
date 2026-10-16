@@ -2,8 +2,8 @@
 // the page only ever sees the serializable projections the child returns. AIH_READINESS_HOME,
 // AIH_READINESS_PATH and AIH_READINESS_REPAIRS are host/test inputs, never HTTP inputs.
 import { fork } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { homeEnvironment } from '../consumer/home-environment.mjs';
 
 const MAX_BODY = 64 * 1024;
 const TIMEOUT_MS = { check: 200_000, 'repair-prepare': 120_000, 'repair-apply': 120_000, repairs: 10_000, report: 30_000 };
@@ -11,15 +11,6 @@ const ROUTES = { '/api/readiness-report': ['GET', 'report'], '/api/readiness-che
   '/api/readiness-repair-prepare': ['POST', 'repair-prepare'], '/api/readiness-repair-apply': ['POST', 'repair-apply'] };
 // lost and rejected are decisions the page renders from the body status, not transport failures.
 const HTTP_STATUS = { ok: 200, lost: 200, rejected: 200 };
-
-// Same layout as tools/consumer/readiness-fixture.mjs, so a demo points Core at one disposable home.
-function homeEnvironment(home) {
-  const layout = { HOME: home, USERPROFILE: home, APPDATA: join(home, 'AppData', 'Roaming'), LOCALAPPDATA: join(home, 'AppData', 'Local'),
-    XDG_CONFIG_HOME: join(home, '.config'), XDG_STATE_HOME: join(home, '.local', 'state'), XDG_DATA_HOME: join(home, '.local', 'share'),
-    XDG_CACHE_HOME: join(home, '.cache') };
-  for (const directory of Object.values(layout)) mkdirSync(directory, { recursive: true });
-  return layout;
-}
 
 export function createReadinessAdapter(consumerDir) {
   let child = null;

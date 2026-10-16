@@ -2,6 +2,7 @@ import { copyFile, mkdir, readFile, writeFile, rename } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { pageAssets, serviceAssets } from './server/assets.mjs';
 import { buildCss } from './build-css.mjs';
@@ -29,6 +30,17 @@ const summary = { packages: await Promise.all(packages.map(async item => ({ ...i
 const maintenanceSource = join(consumerDir, 'maintenance-source.json');
 await writeFile(maintenanceSource, JSON.stringify({ revisions: ['current'] }));
 process.env.AIH_MAINTENANCE_SOURCE = maintenanceSource;
+// Disposable reviewed-batch host input. batchFixture owns policy and record construction (conflict variant first: B's first
+// target already holds unowned content); the journey removes that file as test setup. The stale-target fault is host
+// configuration for B's first action, never an HTTP input. Each run uses a new fixture folder: Core keeps custody of what it
+// applied per folder, so a reused path would no longer be a first setup.
+const { batchFixture } = await import(pathToFileURL(join(consumerDir, 'consumer/batch-fixture.mjs')));
+const batch = await batchFixture(join(consumerDir, `batch-fixture-${randomUUID().slice(0, 8)}`), { conflict: true });
+const batchEnvelopePath = join(consumerDir, 'batch-envelope.json');
+await writeFile(batchEnvelopePath, batch.envelopeBytes);
+const batchFixturePath = join(consumerDir, 'batch-host.json');
+await writeFile(batchFixturePath, JSON.stringify({ envelopePath: batchEnvelopePath, homes: batch.homes, coreHome: batch.coreHome, materialRoot: batch.materialRoot, faults: { 'b-core': 'stale-target' } }));
+process.env.AIH_BATCH_FIXTURE = batchFixturePath;
 const started = await createWorkbench({ consumerDir, runDir, summary, settingsPath: join(consumerDir, 'prototype-settings.json') });
 summary.entryCount = started.catalog.items.length; await writeFile(join(runDir, 'summary.json'), JSON.stringify(summary));
 const address = await listen(started.server, 0), origin = `http://127.0.0.1:${address.port}`;
@@ -47,7 +59,10 @@ try {
   await runImprovementsBrowser({ origin, output: join(consumerDir, 'improvements-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, settingsPath: join(consumerDir, 'prototype-settings.json'), sourcePath: maintenanceSource });
   const { runWorkspaceBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/workspace-browser.mjs')));
   await runWorkspaceBrowser({ origin, output: join(consumerDir, 'workspace-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
-} finally { delete process.env.AIH_MAINTENANCE_SOURCE; await new Promise(resolve => started.server.close(resolve)); }
+  const { runBatchBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/batch-browser.mjs')));
+  await runBatchBrowser({ origin, output: join(consumerDir, 'batch-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, fixturePath: batchFixturePath,
+    conflictFile: batch.conflictFile, procMarker: batch.procMarker, procCount: batch.procCount, userFiles: batch.userFiles });
+} finally { delete process.env.AIH_BATCH_FIXTURE; delete process.env.AIH_MAINTENANCE_SOURCE; await new Promise(resolve => started.server.close(resolve)); }
 
 // The normal application's startup must refuse an absent required family,
 // before it can serve a deceptively incomplete inventory. Only this isolated

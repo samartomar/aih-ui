@@ -40,7 +40,7 @@ process.on('exit', () => {
   const realCoreChange = compareCoreHome(realCoreBefore, snapshotCoreHome(homedir()));
   if (!realCoreChange.unchanged) { console.error(describeCoreHomeChange(realCoreChange)); process.exitCode = 1; }
 });
-const tests = ['ordinary-families', 'authoring-page', 'authoring-v3', 'reviews', 'personal-folder', 'journey', 'maintenance', 'readiness', 'readiness-host', 'claims', 'authority-source', 'organization-author', 'guided-setup', 'core-targets', 'improvements', 'workspace'];
+const tests = ['ordinary-families', 'authoring-page', 'authoring-v3', 'reviews', 'personal-folder', 'journey', 'maintenance', 'readiness', 'readiness-host', 'claims', 'authority-source', 'organization-author', 'guided-setup', 'core-targets', 'improvements', 'workspace', 'batch'];
 const result = spawnSync(process.execPath, ['--test', ...tests.map(name => join(output, `consumer/${name}.test.mjs`))], {
   cwd: output, encoding: 'utf8', windowsHide: true, maxBuffer: 20_000_000, timeout: 120_000,
   env: { ...isolated, AIH_REPO: repo }
@@ -61,8 +61,9 @@ if (process.exitCode === 0) {
   process.exitCode = browser.status ?? 1;
 }
 if (process.exitCode === 0) {
+  // The reviewed-batch journey runs several fresh Core prepares and applies, in a disposable account home, so this stage takes longer.
   const integrated = spawnSync(process.execPath, [join(repo, 'tools/check-integrated-workbench.mjs'), output], {
-    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 180_000, env: isolated,
+    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 300_000, env: isolated,
   });
   writeFileSync(join(output, 'prototype-check.log'), `${integrated.stdout ?? ''}${integrated.stderr ?? ''}`);
   process.stdout.write(integrated.stdout ?? ''); process.stderr.write(integrated.stderr ?? '');
