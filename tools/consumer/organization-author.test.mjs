@@ -12,7 +12,10 @@ import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseOrganizationPolicy, previewOrganizationObligations } from '@aihq/core/contracts';
+import { runOrganizationAuthor } from './organization-author.mjs';
+import { readInstalledRelease } from '@aihq/catalog/node';
+import { nativeClientIds } from '@aihq/core/harness';
+import { parseOrganizationPolicy, previewOrganizationObligations, validateOrganizationPolicy } from '@aihq/core/contracts';
 const encode = value => new TextEncoder().encode(value);
 const hex = char => char.repeat(64);
 const savedIntentBytes = encode(JSON.stringify({ schema: 'urn:aihq:core:execution-policy:1.3.0', mode: 'enterprise', selections: [], metadata: {} }) + '\n');
@@ -122,6 +125,7 @@ test('the journey writer and reader keep an unresolved organization draft and re
 
 // ---- Through the consumer server ----------------------------------------------------------------
 async function post(started, operation, body = {}) {
+  if (started.localAuthor) return JSON.parse(JSON.stringify(await started.localAuthor(operation, body), (_key, value) => value instanceof Uint8Array ? [...value] : value));
   const response = await fetch(`${started.origin}/api/authoring-${operation}`, { method: 'POST', headers: { origin: started.origin, 'content-type': 'application/json', 'x-aih-client': 'organization-author-test' }, body: JSON.stringify(body) });
   assert.equal(response.status, 200, await response.clone().text());
   return response.json();
@@ -131,6 +135,7 @@ async function withConsumer(options, run) {
   try { return await run(started); } finally { await new Promise(resolve => started.server.close(resolve)); }
 }
 async function catalogRefs(started) {
+  if (started.localCatalog) return started.localCatalog;
   const catalog = await (await fetch(`${started.origin}/api/authoring-catalog`, { headers: { 'x-aih-client': 'organization-author-test' } })).json();
   const ref = id => { const item = catalog.items.find(entry => entry.id === id); assert.ok(item, id); return { releaseSha256: item.root.releaseSha256, itemId: id }; };
   return { ref, catalog };
@@ -159,6 +164,96 @@ async function startDraft(started) {
 }
 const SOURCE = { provider: 'github', repository: { owner: 'acme', name: 'policies' }, path: 'org/baseline.json', revision: { kind: 'branch', value: 'main' } };
 const AGENT_DIR = { fixed: '.claude' };
+
+// Exercise the same headless operations without needing an HTTP listener.
+async function withLocalAuthor(run) {
+  const root = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
+  const installed = await readInstalledRelease({ root, sourceInput: 'maintained' });
+  assert.equal(installed.valid, true, JSON.stringify(installed.diagnostics));
+  const materials = await Promise.all(installed.release.items.map(item => item.recipe).map(async recipe => ({ ...recipe, bytes: new Uint8Array(await readFile(join(root, recipe.path))) })));
+  const inventories = [{ release: installed.release, materialSource: installed.source, materials }];
+  return run({ localAuthor: (operation, body) => runOrganizationAuthor(operation, body, { inventories }),
+    localCatalog: { ref: itemId => ({ releaseSha256: installed.release.sha256, itemId }) } });
+}
+
+// Older drafts may contain ids that new edits must refuse. Write through the structural journey API.
+async function saveLegacyClients(d, mutate) {
+  const read = await readJourneyEnvelope(Uint8Array.from(d.state.envelopeBytes));
+  const record = structuredClone(read.value.records.find(record => record.schema === ORGANIZATION_DRAFT_RECORD_SCHEMA));
+  mutate(record);
+  for (const target of record.targets) target.id = await organizationTargetId(target);
+  const saved = await writeJourneyEnvelope({ savedIntentBytes: read.value.savedIntentBytes, records: [record], previous: read.value });
+  assert.equal(saved.status, 'ok', JSON.stringify(saved));
+  const opened = await post(d.started, 'organization-open', { bytes: [...saved.value.envelopeBytes] });
+  assert.equal(opened.status, 'ok', JSON.stringify(opened));
+  assert.deepEqual(opened.value.envelopeBytes, [...saved.value.envelopeBytes]);
+  d.state.envelopeBytes = opened.value.envelopeBytes; d.state.draft = opened.value.draft;
+  return opened;
+}
+
+test('client edits refuse unknown ids at the operation field and accept every published Core id', async () => {
+  await withLocalAuthor(async started => {
+    const { ref } = await catalogRefs(started), d = await startDraft(started);
+    await d.edit({ kind: 'add-entry', ...ref('mattpocock.implement'), scope: 'project' });
+    const entryId = d.state.draft.entries[0].id;
+    for (const [operation, path, subject] of [
+      [{ kind: 'add-target', scope: 'project', client: 'not-a-client' }, '/operation/client', 'target'],
+      [{ kind: 'set-selectors', entryId, clients: [nativeClientIds[0], 'not-a-client'] }, '/operation/clients/1', 'entry']
+    ]) {
+      const result = await d.refused(operation);
+      assert.deepEqual(result.diagnostics[0], { code: 'INPUT_INVALID', reason: 'unknown-client', path,
+        message: `The organization ${subject} names a client that Core does not know.` });
+    }
+    for (const client of nativeClientIds) {
+      await d.edit({ kind: 'add-target', scope: 'project', client });
+      await d.edit({ kind: 'set-selectors', entryId, clients: [client] });
+      assert.deepEqual(d.state.draft.entries[0].clients, [client]);
+    }
+  });
+});
+
+test('a saved unknown target loads unchanged, reports the id, and refuses preview and export', async () => {
+  await withLocalAuthor(async started => {
+    const { ref } = await catalogRefs(started), d = await startDraft(started);
+    await author(d, ref, { entries: [], targets: [{ scope: 'project', client: nativeClientIds[0] }] });
+    const opened = await saveLegacyClients(d, record => { record.targets[0].client = 'not-a-client'; });
+    assert.equal(opened.value.draft.targets[0].client, 'not-a-client');
+    assert.ok(opened.diagnostics.some(row => row.reason === 'unknown-client' && row.path === '/targets/0/client'));
+    const previewed = await d.preview();
+    assert.equal(previewed.value.targets[0].status, 'refused');
+    assert.equal(previewed.value.targets[0].diagnostics[0].path, '/target/client');
+    const exported = await d.export();
+    assert.equal(exported.status, 'refused', JSON.stringify(exported));
+    assert.equal(exported.diagnostics[0].code, 'ORGANIZATION_TARGET_INVALID');
+    assert.equal(exported.diagnostics[0].details.owner, 'core');
+    assert.deepEqual(exported.diagnostics[0].details.diagnostics, previewed.value.targets[0].diagnostics);
+  });
+});
+
+test('a saved unknown entry client loads unchanged and Core refuses its preview and export', async () => {
+  await withLocalAuthor(async started => {
+    const { ref } = await catalogRefs(started), d = await startDraft(started);
+    await author(d, ref, { entries: [{ id: 'mattpocock.implement', obligation: 'permitted' }], targets: [{ scope: 'project' }] });
+    const valid = await d.export();
+    assert.equal(valid.status, 'ok', JSON.stringify(valid.diagnostics));
+    const document = JSON.parse(new TextDecoder().decode(Uint8Array.from(valid.value.candidateBytes)));
+    assert.equal(validateOrganizationPolicy(document).valid, true);
+    document.selections[0].clients = ['not-a-client'];
+    const checked = validateOrganizationPolicy(document);
+    assert.equal(checked.valid, false);
+    assert.ok(checked.diagnostics.some(row => row.reason === 'unknown-client'));
+    const opened = await saveLegacyClients(d, record => { record.entries[0].clients = ['not-a-client']; });
+    assert.deepEqual(opened.value.draft.entries[0].clients, ['not-a-client']);
+    assert.ok(opened.diagnostics.some(row => row.reason === 'unknown-client' && row.path === '/entries/0/clients/0'));
+    const previewed = await d.preview();
+    assert.equal(previewed.value.candidate.status, 'invalid');
+    assert.ok(previewed.value.candidate.diagnostics.some(row => row.reason === 'unknown-client'));
+    const exported = await d.export();
+    assert.equal(exported.status, 'refused');
+    assert.equal(exported.diagnostics[0].code, 'ORGANIZATION_CANDIDATE_INVALID');
+    assert.deepEqual(exported.diagnostics[0].details.diagnostics, previewed.value.candidate.diagnostics);
+  });
+});
 
 test('an unresolved organization draft saves, reopens identically and edits through closed operations', async () => {
   await withConsumer({}, async started => {
@@ -429,7 +524,8 @@ test('preview of an incomplete draft previews what is decided and lists what was
     const { ref } = await catalogRefs(started);
     const d = await startDraft(started);
     await author(d, ref, { policyId: null, source: null, entries: [{ id: 'mattpocock.implement', obligation: 'required' }, { id: 'mattpocock.tdd', inputs: false }],
-      targets: [{ scope: 'project' }, { scope: 'project', client: 'not-a-client' }] });
+      targets: [{ scope: 'project' }, { scope: 'project', client: 'claude' }] });
+    await saveLegacyClients(d, record => { record.targets[1].client = 'not-a-client'; });
     const preview = await d.preview();
     assert.equal(preview.status, 'ok', JSON.stringify(preview));
     assert.equal(preview.value.candidate.status, 'incomplete');
@@ -483,7 +579,9 @@ test('export refuses an unresolved or contradictory draft, naming what to resolv
     assert.deepEqual(candidate.selections.map(entry => entry.obligation).sort(), ['permitted', 'required']);
 
     // A selector Core does not know makes the candidate invalid: Core's diagnostics are returned, not paraphrased.
-    await d.edit({ kind: 'set-selectors', entryId: review.id, clients: ['not-a-client'], repositories: null });
+    const opened = await saveLegacyClients(d, record => { record.entries.find(entry => entry.id === review.id).clients = ['not-a-client']; });
+    assert.deepEqual(opened.value.draft.entries.find(entry => entry.id === review.id).clients, ['not-a-client']);
+    assert.ok(opened.diagnostics.some(row => row.reason === 'unknown-client' && row.path.endsWith('/clients/0')));
     const invalid = await d.export();
     assert.equal(invalid.status, 'refused');
     assert.equal(invalid.diagnostics[0].code, 'ORGANIZATION_CANDIDATE_INVALID');

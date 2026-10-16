@@ -1,10 +1,27 @@
 // Exact repository-backed material snapshots. Declarations remain independent
 // local authoring data; the source pin attributes recipe/material bytes only.
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 export const NOTE_SOURCE_REVISION = '4878543b94c81fbc836ca136150c22c9a9615bfb';
 const prefix = 'tools/consumer/fixtures/review-note/';
+// The note requires an item of the installed maintained release. Its exact pin is read from that package's public
+// release export each time, so moving to another Catalog changes the pin with it. Without an installed Catalog the
+// pin stays incomplete and Catalog refuses the declaration.
+async function pinMaintained(requirement) {
+  let release;
+  try { release = fileURLToPath(import.meta.resolve('@aihq/catalog/release.json')); } catch { return; }
+  const [{ readRelease, getItem }, bytes] = await Promise.all([import('@aihq/catalog/reader'), readFile(release)]);
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  const read = readRelease(new Uint8Array(bytes), { expectedSha256: sha256 });
+  const found = read.valid ? getItem(read.release, requirement.itemId) : undefined;
+  if (!found?.found) throw new Error(`The installed @aihq/catalog release.json does not offer ${requirement.itemId}.`);
+  Object.assign(requirement.release.manifest, { sha256, byteLength: bytes.length });
+  requirement.itemSha256 = found.item.itemSha256;
+}
 export async function noteFixture(variant = 'current') {
   const declaration = JSON.parse(await readFile(new URL('./fixtures/review-note/declaration.json', import.meta.url), 'utf8'));
+  for (const requirement of declaration.items[0].requires) if (requirement.release?.source?.input === 'maintained') await pinMaintained(requirement);
   declaration.sources[0].repository = 'samartomar/aih-ui';
   declaration.sources[0].licensePath = `${prefix}LICENSE`;
   const item = declaration.items[0];

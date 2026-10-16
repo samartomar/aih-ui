@@ -117,7 +117,7 @@ export async function runGuidedSetupBrowser({ origin, output, playwrightModule }
     assert.equal(envelope.executable, false);
     assert.deepEqual(envelope.records.map(record => record.schema), ['urn:aihq:workbench:journey-record:unresolved-draft:1.0.0']);
     const reasons = envelope.records[0].intent.roots.map(root => root.reason);
-    assert.ok(reasons.length === count && reasons.every(reason => reason.includes('guided-setup rules 1.0.0') && reason.includes(GOAL)), 'Every saved choice keeps its rule version and goal.');
+    assert.ok(reasons.length === count && reasons.every(reason => reason.includes('guided-setup rules 1.1.0') && reason.includes(GOAL)), 'Every saved choice keeps its rule version and goal.');
     await shot(page, '06-saved');
 
     // Reopen the downloaded setup in a fresh page.
@@ -146,6 +146,47 @@ export async function runGuidedSetupBrowser({ origin, output, playwrightModule }
     assert.equal(await unknown.locator('#browse-link').isVisible(), true);
     await currentPromptListsTickedClients(unknown);
     await shot(unknown, '08-no-confident-suggestion');
+
+    // A re-check replaces the earlier answer. The check is answered here (nothing on this machine is read), first
+    // finding claude and then reporting it absent: the client is no longer detected, the tick the check made goes
+    // with it, the suggestion built on the old answer is withdrawn, and a new one states what the last check said.
+    const recheck = await openPage();
+    const answer = presence => route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', diagnostics: [],
+      value: { projection: { tools: [{ id: 'claude', label: 'Claude Code', presence, selection: 'detected' }] } } }) });
+    await recheck.route('**/api/readiness-check', answer('runnable'));
+    await recheck.locator('#start-guided').click();
+    await recheck.locator('#goal').fill(GOAL);
+    await recheck.locator('#folder').setInputFiles(join(FIXTURES, 'guided-project'));
+    await recheck.locator('#folder-status').filter({ hasText: 'Nothing was uploaded' }).waitFor();
+    await recheck.locator('#clients li').first().waitFor();
+    await recheck.waitForLoadState('networkidle');
+    const claudeRow = recheck.locator('#clients li').filter({ has: recheck.locator('span.font-mono', { hasText: /^claude$/ }) });
+    const suggestAgain = async () => {
+      await recheck.locator('#suggest').click();
+      await recheck.locator('#suggest-status').filter({ hasText: /Suggestions are ready|No confident|could not/ }).waitFor();
+    };
+    await recheck.locator('#detect-clients').click();
+    await recheck.locator('#clients-status').filter({ hasText: /Found claude/ }).waitFor();
+    assert.match(await claudeRow.innerText(), /detected on this machine/);
+    assert.equal(await claudeRow.locator('input').isChecked(), true, 'A client the check found is ticked.');
+    await suggestAgain();
+    const clientCard = recheck.locator('#choices > li').filter({ hasText: 'About this client' });
+    assert.equal(await clientCard.count(), 1);
+    assert.match(await clientCard.innerText(), /Installed or connected: found by a check on this machine\./);
+
+    await recheck.unroute('**/api/readiness-check');
+    await recheck.route('**/api/readiness-check', answer('absent'));
+    await recheck.locator('#detect-clients').click();
+    await recheck.locator('#clients-status').filter({ hasText: /No supported AI client was found/ }).waitFor();
+    assert.doesNotMatch(await claudeRow.innerText(), /detected on this machine|found on this machine/, 'A client the re-check reports absent is no longer detected.');
+    assert.equal(await claudeRow.locator('input').isChecked(), false, 'The tick the first check made goes with its finding.');
+    assert.equal(await recheck.locator('#choices > li').count(), 0, 'The suggestion built on the earlier answer is withdrawn.');
+    assert.match(await recheck.locator('#suggest-status').innerText(), /Your inputs changed/);
+    await claudeRow.locator('input').check();
+    await suggestAgain();
+    assert.match(await clientCard.innerText(), /Installed or connected: the last check did not find it\./);
+    assert.doesNotMatch(await clientCard.innerText(), /found by a check on this machine/);
+    await shot(recheck, '09-recheck');
 
     // No request left the Workbench origin and none carried fixture file content.
     assert.deepEqual(requests.filter(request => !request.url.startsWith(origin) && !request.url.startsWith('data:') && !/fonts\.(googleapis|gstatic)\.com/.test(request.url)).map(request => request.url), []);

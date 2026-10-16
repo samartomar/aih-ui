@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ADDED_BY_YOU, GUIDED_RULES_VERSION, KNOWN_STACK, RULE_TARGETS, addDetection, choiceReason, clientPrompt, describePolicy, detectStack, provenanceText, suggestStarters, wantsContent }
+import { ADDED_BY_YOU, GUIDED_RULES_VERSION, KNOWN_STACK, RULE_TARGETS, addDetection, choiceReason, clientPrompt, describePolicy, detectStack, observationsFrom, provenanceText, reconcileClient, suggestStarters, wantsContent }
   from '../../src/app/guided-rules.js';
 
-const item = (id, kind, { scopes = ['project', 'user'], requires = [], inputs = {}, description = `${id} description.` } = {}) =>
-  ({ id, kind, label: id.split('.').pop().replaceAll('-', ' '), description, scopes, inputs, dependencies: { requires: requires.map(itemId => ({ itemId })) },
+const item = (id, kind, { scopes = ['project', 'user'], requires = [], inputs = {}, description = `${id} description.`, clientId } = {}) =>
+  ({ id, kind, ...(clientId === undefined ? {} : { clientId }), label: id.split('.').pop().replaceAll('-', ' '), description, scopes, inputs, dependencies: { requires: requires.map(itemId => ({ itemId })) },
     root: { releaseSha256: 'a'.repeat(64), itemId: id, itemSha256: 'b'.repeat(64), scope: scopes[0], configuration: {}, originIds: ['direct'] } });
 // Catalog publishes inputs as an object keyed by input name.
 const skillsDir = { agentDirectory: { description: 'Project directory that receives skills/<name>/ (Claude Code reads .claude).', default: '.claude', required: true, type: 'string' } };
@@ -19,8 +19,8 @@ const CATALOG = [
   item('mattpocock.research', 'skill'),
   item('aihq.project-context', 'project-context', { scopes: ['project'], description: 'Writes shared project context to AGENTS.md for every AI client.' }),
   item('aihq.project-context-pointer.claude-md', 'client-entry-pointer', { scopes: ['project'], requires: ['aihq.project-context'], description: 'Points CLAUDE.md at the shared project context.' }),
-  item('aihq.client.claude', 'client-adapter', { requires: ['aihq.project-context-pointer.claude-md'], description: 'Claude Code adapter note and its native entry pointer(s): claude-md.' }),
-  item('aihq.client.codex', 'client-adapter', { scopes: ['project'], description: 'Connects the Codex client to your setup.' }),
+  item('aihq.client.claude', 'client-adapter', { clientId: 'claude', requires: ['aihq.project-context-pointer.claude-md'], description: 'Claude Code adapter note and its native entry pointer(s): claude-md.' }),
+  item('aihq.client.codex', 'client-adapter', { clientId: 'codex', scopes: ['project'], description: 'Connects the Codex client to your setup.' }),
 ];
 const file = (path, text) => (text === undefined ? { path } : { path, text });
 const pkg = deps => file('package.json', JSON.stringify({ name: 'x', devDependencies: deps }));
@@ -292,5 +292,93 @@ test('describePolicy: an included dependency pinned to another release falls bac
 test('choiceReason gives exactly the reason the consumer test round-trips', () => {
   const detections = detectStack(JS).detections;
   assert.equal(choiceReason({ goal: 'add tests to my react app', detections, choice: { ruleId: 'goal.test' }, rulesVersion: GUIDED_RULES_VERSION }),
-    'guided-setup rules 1.0.0: goal.test. Goal: add tests to my react app. Project: JavaScript, TypeScript, React, Vitest.');
+    'guided-setup rules 1.1.0: goal.test. Goal: add tests to my react app. Project: JavaScript, TypeScript, React, Vitest.');
+});
+
+// ---- Which adapter serves a client: Catalog's clientId, never the item id --------------------------------------------
+const adaptersOnly = items => items.filter(other => other.kind !== 'client-adapter');
+const clientChoice = (catalogItems, clients, extra = {}) =>
+  suggestStarters({ goal: 'add tests', detections: [], clients, catalogItems, ...extra }).choices.find(choice => choice.ruleId.startsWith('client.'));
+
+test('a client is served by the adapter whose clientId names it, even when the item id does not follow aihq.client.<x>', () => {
+  const catalog = [...adaptersOnly(CATALOG), item('vendor.wire-claude', 'client-adapter', { clientId: 'claude' })];
+  const choice = clientChoice(catalog, ['claude']);
+  assert.equal(choice.itemId, 'vendor.wire-claude');
+  assert.equal(choice.ruleId, 'client.claude');
+});
+
+test('an item named aihq.client.y with clientId z serves z and never y', () => {
+  const catalog = [...adaptersOnly(CATALOG), item('aihq.client.y', 'client-adapter', { clientId: 'z' })];
+  assert.equal(clientChoice(catalog, ['z']).itemId, 'aihq.client.y');
+  assert.equal(clientChoice(catalog, ['y']), undefined);
+});
+
+test('an adapter from an earlier release format has no clientId, so no client is matched to it by its id', () => {
+  const catalog = [...adaptersOnly(CATALOG), item('aihq.client.claude', 'client-adapter')];
+  assert.equal(clientChoice(catalog, ['claude']), undefined);
+});
+
+test('a non-adapter item with a clientId or an aihq.client.* id never serves a client', () => {
+  const catalog = [...adaptersOnly(CATALOG), item('aihq.client.claude', 'skill', { clientId: 'claude' })];
+  assert.equal(clientChoice(catalog, ['claude']), undefined);
+});
+
+test('a client adapter choice states its target, Core support and installed state as three separate facts', () => {
+  const claude = clientChoice(CATALOG, ['claude'], { coreClients: ['claude'] }).client;
+  assert.deepEqual([claude.target.state, claude.target.clientId, claude.core.state, claude.installed.state], ['declared', 'claude', 'supported', 'not-checked']);
+  const other = clientChoice([...adaptersOnly(CATALOG), item('vendor.other', 'client-adapter', { clientId: 'other' })], ['other'], { coreClients: ['claude'] }).client;
+  assert.deepEqual([other.core.state, other.installed.state], ['not-supported', 'not-checked']);
+  assert.equal(clientChoice(CATALOG, ['claude']).client.core.state, 'unknown', 'no Core list given');
+});
+
+test('an observation changes only the installed fact of a client choice', () => {
+  const choice = clientChoice(CATALOG, ['claude'], { coreClients: ['codex'], observations: { claude: 'runnable' } });
+  assert.deepEqual([choice.client.core.state, choice.client.installed.state], ['not-supported', 'found']);
+  assert.equal(clientChoice(CATALOG, ['claude'], { coreClients: ['claude'], observations: { codex: 'runnable' } }).client.installed.state, 'not-checked');
+});
+
+test('a choice that is not an adapter carries no client facts', () => {
+  const { choices } = suggestStarters({ goal: 'fix a bug', detections: [], clients: [], catalogItems: CATALOG });
+  assert.ok(choices.length > 0 && choices.every(choice => choice.client === undefined));
+});
+
+test('observationsFrom keeps only string tool states by string id, from this one check', () => {
+  assert.deepEqual(observationsFrom([{ id: 'claude', presence: 'runnable' }, { id: 'codex', presence: 'absent' }, { id: 7, presence: 'runnable' }, { id: 'zed', presence: 3 }, null]), { claude: 'runnable', codex: 'absent' });
+  assert.deepEqual(observationsFrom(undefined), {});
+  assert.deepEqual(Object.keys(observationsFrom([{ id: '__proto__', presence: 'runnable' }])), ['__proto__']);
+});
+
+const fresh = (extra = {}) => ({ setup: false, detected: false, broken: false, added: false, checked: false, unlisted: false, autoTicked: false, ...extra });
+
+test('a re-check that no longer finds a client takes back "detected", the tick the check made and the stale found fact', () => {
+  const first = reconcileClient(fresh(), 'runnable');
+  assert.deepEqual([first.detected, first.broken, first.checked, first.autoTicked], [true, false, true, true]);
+  const again = reconcileClient(first, 'absent');
+  assert.deepEqual([again.detected, again.broken, again.checked, again.autoTicked, again.added], [false, false, false, false, false]);
+});
+
+test('a client the re-check did not report keeps no stale found', () => {
+  const found = reconcileClient(fresh(), 'broken');
+  assert.deepEqual([found.detected, found.broken], [true, true]);
+  const unreported = reconcileClient(found, undefined);
+  assert.deepEqual([unreported.detected, unreported.broken], [false, false]);
+});
+
+test('only a program Core found is detected; configuration alone or an unknown value is not', () => {
+  for (const observation of ['config-only', 'present', 'weird']) assert.equal(reconcileClient(fresh(), observation).detected, false, observation);
+  for (const observation of ['runnable', 'binary', 'broken']) assert.equal(reconcileClient(fresh(), observation).detected, true, observation);
+});
+
+test('a manual tick and a saved setup choice survive a re-check that finds nothing', () => {
+  const ticked = reconcileClient(fresh({ checked: true }), 'absent');
+  assert.deepEqual([ticked.checked, ticked.added, ticked.detected], [true, true, false]);
+  const saved = reconcileClient(fresh({ setup: true, checked: true }), 'absent');
+  assert.deepEqual([saved.checked, saved.added], [true, false]);
+  const detectedAndSaved = reconcileClient(reconcileClient(fresh({ setup: true, checked: true }), 'runnable'), 'absent');
+  assert.deepEqual([detectedAndSaved.checked, detectedAndSaved.autoTicked], [true, false], 'the check did not make this tick, so it stays');
+});
+
+test('a suggestion made after a re-check carries the new installed fact, not the old one', () => {
+  const run = presence => clientChoice(CATALOG, ['claude'], { coreClients: ['claude'], observations: observationsFrom([{ id: 'claude', presence }]) }).client.installed.state;
+  assert.deepEqual([run('runnable'), run('absent')], ['found', 'not-found']);
 });
