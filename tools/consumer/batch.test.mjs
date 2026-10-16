@@ -65,7 +65,9 @@ test('malformed batch records refuse the envelope', async () => {
     'unknown input': { at: '/actions/0/inputs', mutate: record => { record.actions[0].inputs = ['nope']; } },
     'unused input': { at: '/inputs', mutate: record => { record.inputs.push({ id: 'unused', kind: 'material', sha256: 'a'.repeat(64), byteLength: 1 }); } },
     'unused scope': { at: '/scopes', mutate: record => { record.scopes.push({ id: 'scope-c', role: 'added', client: 'gemini', target: { kind: 'project', root: record.scopes[0].target.root + '-c' } }); } },
-    'duplicate root': { at: '/scopes', mutate: record => { record.scopes[1].target.root = record.scopes[0].target.root.toUpperCase(); } },
+    'duplicate root': { at: '/scopes', mutate: record => { record.scopes[1].target.root = record.scopes[0].target.root; } },
+    // Drive and UNC roots compare case-insensitively; POSIX roots are case-sensitive, so only a drive root is tested this way.
+    'duplicate drive root in another case': { at: '/scopes', mutate: record => { record.scopes[0].target.root = 'C:/work/batch-a'; record.scopes[1].target.root = 'c:\\WORK\\batch-a\\'; } },
     'category not selected': { at: '/actions/0/category', mutate: record => { record.actions[0].category = 'content'; } },
     'continuation': { at: '/continuation', mutate: record => { record.continuation = 'carry-on'; } },
     'derived check id': { at: '/checks', mutate: record => { record.checks[0].id = `check-${'1'.repeat(32)}`; }, rederive: false },
