@@ -24,12 +24,17 @@ async function api(path, body) {
 const ticked = () => [...node('actions').querySelectorAll('input[data-action]:checked')].map(box => box.dataset.action);
 const untick = () => { for (const box of node('actions').querySelectorAll('input[data-action]')) box.checked = false; };
 const withChoice = () => rerunChoice(ticked(), current.revision);
+// The batch as the host holds it now, with the clients and whether this Workbench can run it: the page's opening load, and what a stale choice falls back to.
+async function reopen() {
+  const result = await api('batch'); clients = result.clients; supported = result.supported !== false;
+  node('notice').textContent = supported ? '' : UNSUPPORTED_NOTE;
+  renderBatch(result.projection, result.batchId, result.revision);
+}
 // A choice made before the last attempt on the batch is refused. It is dropped, never reused: show the batch as stored, every box unticked.
 async function dropStaleChoice(error) {
   if (!isStaleChoice(error.result)) return false;
   untick(); reviewed = null; node('review-section').hidden = true;
-  const result = await api('batch');
-  renderBatch(result.projection, result.batchId, result.revision);
+  await reopen();
   return true;
 }
 // A changed choice changes what would run, so the review no longer describes it.
@@ -121,6 +126,7 @@ node('apply').addEventListener('click', () => perform(async () => {
     // The run used up the choice. Show the batch as the host now holds it (a first attempt at a process spent its consent into a
     // newer batch); every box is unticked, and a box is never ticked by anything but the person.
     untick();
+    // Without `current` the saved batch could not be re-read and the answer has no revision: a later Run again is then refused as stale, which is intended.
     if (result.current) renderBatch(result.current.projection, result.current.batchId, result.revision); else current.revision = result.revision;
     renderReport(result.report); node('status').textContent = result.current ? 'Run finished. Inspect every observed outcome; Recover reinspects and prepares fresh work.'
       : 'Run finished, but the saved batch could not be read again. Inspect every observed outcome, then reload before acting on this batch.';
@@ -150,8 +156,6 @@ async function recover() {
 }
 node('recover').addEventListener('click', () => perform(() => recover()));
 await perform(async () => {
-  const result = await api('batch'); clients = result.clients; supported = result.supported !== false;
-  node('notice').textContent = supported ? '' : UNSUPPORTED_NOTE;
-  renderBatch(result.projection, result.batchId, result.revision);
+  await reopen();
   node('status').textContent = 'Reopened from the journey envelope. Review before applying, or Recover to reinspect earlier effects.';
 });

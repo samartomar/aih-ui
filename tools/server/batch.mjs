@@ -18,9 +18,8 @@ const reply = (response, code, value) => response.writeHead(code, { 'content-typ
 const problem = (message, code = 'INVALID_REQUEST') => Object.assign(new Error(message), { code });
 const refusal = (code, message) => ({ status: 'refused', diagnostics: [{ code, message }] });
 // A write the person's page asked for is refused, not forced, when the saved batch changed since the request read it.
-const CHANGED = ['BATCH_ENVELOPE_CHANGED', 'BATCH_ENVELOPE_BUSY'];
 const replacing = (path, bytes, read) => replaceEnvelope(path, bytes, { expectedRevisionSha256: revisionOf(read) })
-  .then(() => null, error => CHANGED.includes(error.code) ? refusal('BATCH_CHANGED', 'The current batch changed. Reopen and review it again.') : Promise.reject(error));
+  .then(() => null, error => error.code === 'BATCH_ENVELOPE_CHANGED' ? refusal('BATCH_CHANGED', 'The current batch changed. Reopen and review it again.') : Promise.reject(error));
 // A module or host answer goes to the page as it is (codes, paths, `review`); only bytes the page never needs are dropped.
 const passed = ({ originalBytes: _held, ...rest }) => rest;
 const statusOf = result => HTTP_STATUS[result?.status] ?? (result?.diagnostics?.[0]?.code === 'INVALID_REQUEST' ? 400 : 500);
@@ -46,20 +45,32 @@ export function createBatchAdapter(consumerDir) {
   const settleAll = reason => {
     for (const [id, entry] of pending) { clearTimeout(entry.timer); entry.reject(problem(reason, 'BATCH_HOST_UNAVAILABLE')); pending.delete(id); }
   };
-  // Core runs in a forked child whose account home is the fixture's `coreHome`, never the developer's. The child also gets the
-  // envelope file's path (from the fixture, never a request) so that it can make a spent Run again choice durable before a process
-  // runs. Killing the child drops nothing durable: the envelope file is the only state, and every request starts from its bytes.
+  // Core runs in a forked child whose account home is the fixture's `coreHome`, never the developer's. This process is the one
+  // writer of the envelope file (see envelope-file): the child, which is given no path to it, asks over IPC for each attempt at an
+  // opaque process to be recorded before it can run, and this process answers once it has replaced the file as a compare-and-swap.
+  // Killing the child drops nothing durable: the envelope file is the only state, and every request starts from its bytes.
   const stop = reason => {
     const dying = child; child = null; childKey = null;
     if (dying) { dying.removeAllListeners(); dying.on('error', () => {}); dying.kill(); }
     settleAll(reason);
   };
+  // Replaces the envelope file the child was started for (never a path the child names) and answers it, ok or the error code.
+  async function save(target, envelopePath, { id, persist, expectedRevisionSha256 }) {
+    let reply;
+    try {
+      if (typeof persist !== 'string') throw problem('The batch host asked to save something that is not bytes.');
+      await replaceEnvelope(envelopePath, new Uint8Array(Buffer.from(persist, 'base64')), { expectedRevisionSha256 });
+      reply = { id, persisted: true };
+    } catch (error) { reply = { id, persisted: false, code: error?.code ?? 'persist-failed' }; }
+    if (target.connected) target.send(reply, () => {});
+  }
   function start(coreHome, envelopePath) {
-    const env = { ...process.env, ...homeEnvironment(coreHome), AIH_BATCH_CORE_HOME: coreHome, AIH_BATCH_ENVELOPE: envelopePath };
+    const env = { ...process.env, ...homeEnvironment(coreHome), AIH_BATCH_CORE_HOME: coreHome };
     const next = fork(join(consumerDir, 'consumer/batch-child.mjs'), [], { cwd: consumerDir, env, windowsHide: true,
       serialization: 'json', stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
     next.stderr.resume();
     next.on('message', message => {
+      if (message?.persist !== undefined) { save(next, envelopePath, message); return; }
       const entry = pending.get(message?.id);
       if (!entry) return;
       clearTimeout(entry.timer); pending.delete(message.id); entry.resolve(message.result);
@@ -116,7 +127,7 @@ export function createBatchAdapter(consumerDir) {
       clients: clients.targets, materialRoots, faults: config.faults, ...extra });
     // Run again is a choice for this one request: the ids it names, and the revision it was made against, go to the host and are saved nowhere.
     const choice = { rerun: body.rerun, rerunRevision: body.rerunRevision };
-    if (pathname === '/api/batch-review') { const review = await ask('review', choice); return review.status === 'ok' ? { status: 'ok', batchId: record.id, revision: revisionOf(envelopeBytes), review } : review; }
+    if (pathname === '/api/batch-review') { const review = await ask('review', choice); return review.status === 'ok' ? { status: 'ok', batchId: record.id, review } : review; }
     if (pathname === '/api/batch-run') {
       const report = await ask('run', { approve: { batchId: record.id }, ...choice, now: new Date().toISOString() });
       if (report.status !== 'ok') return report;
@@ -130,8 +141,9 @@ export function createBatchAdapter(consumerDir) {
     }
     const recovered = await ask('recover', { now: new Date().toISOString() });
     if (recovered.status !== 'ok') return recovered;
-    const refused = await replacing(config.envelopePath, new Uint8Array(Buffer.from(recovered.envelope, 'base64')), envelopeBytes);
-    return refused ?? { status: 'ok', batchId: recovered.record.id, projection: recovered.projection, revision: revisionOf(new Uint8Array(Buffer.from(recovered.envelope, 'base64'))), review: recovered.review };
+    const recoveredBytes = new Uint8Array(Buffer.from(recovered.envelope, 'base64'));
+    const refused = await replacing(config.envelopePath, recoveredBytes, envelopeBytes);
+    return refused ?? { status: 'ok', batchId: recovered.record.id, projection: recovered.projection, revision: revisionOf(recoveredBytes), review: recovered.review };
   }
   return {
     close() { closed = true; stop('The batch adapter was closed.'); },

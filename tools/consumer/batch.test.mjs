@@ -1,6 +1,6 @@
 import test, { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, readdir, mkdir, writeFile, mkdtemp, rm, utimes } from 'node:fs/promises';
+import { readFile, readdir, mkdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { mkdtempSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,7 +13,7 @@ import { createHost } from './host.mjs';
 import { createBatchHost } from './batch-host.mjs';
 import { batchFixture } from './batch-fixture.mjs';
 import { homeEnvironment } from './home-environment.mjs';
-import { replaceEnvelope, revisionOf } from './envelope-file.mjs';
+import { revisionOf } from './envelope-file.mjs';
 
 // Core keeps ownership records, recovery manifests, snapshots and run history under the current account's `~/.aih/core`, even
 // with logging off. It resolves the account home with os.homedir() whenever it is used (not at import), so pointing this
@@ -458,37 +458,6 @@ describe('reviewed batch against Core', () => {
     }
     const malformed = await host.runBatch({ envelopeBytes: kept.envelopeBytes, batchId: kept.record.id, approve: { batchId: kept.record.id }, rerun: 'b-proc' });
     assert.equal(malformed.diagnostics[0].code, 'INPUT_INVALID'); assert.equal(malformed.diagnostics[0].path, '/rerun');
-  });
-
-  it('replaces the envelope file only while its stored revision is the expected one', async () => {
-    const f = await pure(), root = await scratch(), path = join(root, 'envelope.json');
-    const edited = valueOf(await setContinuation({ envelopeBytes: f.envelopeBytes, batchId: f.batchId, continuation: 'continue-independent', now: NOW }));
-    await writeFile(path, edited.envelopeBytes);
-    await assert.rejects(replaceEnvelope(path, f.envelopeBytes, { expectedRevisionSha256: revisionOf(f.envelopeBytes) }), { code: 'BATCH_ENVELOPE_CHANGED' });
-    assert.deepEqual(new Uint8Array(await readFile(path)), edited.envelopeBytes, 'a stale writer left the file as it was');
-    await writeFile(`${path}.lock`, 'someone-else');
-    await assert.rejects(replaceEnvelope(path, f.envelopeBytes, { expectedRevisionSha256: revisionOf(edited.envelopeBytes) }), { code: 'BATCH_ENVELOPE_BUSY' });
-    assert.deepEqual(new Uint8Array(await readFile(path)), edited.envelopeBytes, 'a held lock stops the write');
-    assert.equal(await readFile(`${path}.lock`, 'utf8'), 'someone-else', 'a writer that did not take the lock does not remove it');
-    await rm(`${path}.lock`);
-    await replaceEnvelope(path, f.envelopeBytes, { expectedRevisionSha256: revisionOf(edited.envelopeBytes) });
-    assert.deepEqual(new Uint8Array(await readFile(path)), f.envelopeBytes);
-    assert.deepEqual((await readdir(root)).sort(), ['envelope.json'], 'no lock or temporary file is left behind');
-  });
-
-  it('lets exactly one of several writers break a stale lock, and leaves the winner\'s bytes', async () => {
-    const f = await pure(), root = await scratch(), path = join(root, 'envelope.json'), old = new Date(Date.now() - 60_000);
-    const first = valueOf(await setContinuation({ envelopeBytes: f.envelopeBytes, batchId: f.batchId, continuation: 'continue-independent', now: NOW })).envelopeBytes;
-    const bytes = [first, new Uint8Array([...first, 32])];
-    for (let round = 0; round < 25; round++) {
-      await writeFile(path, f.envelopeBytes); await writeFile(`${path}.lock`, 'dead-writer'); await utimes(`${path}.lock`, old, old);
-      const settled = await Promise.allSettled(bytes.map(next => replaceEnvelope(path, next, { expectedRevisionSha256: revisionOf(f.envelopeBytes) })));
-      const won = settled.findIndex(result => result.status === 'fulfilled');
-      assert.deepEqual(settled.map(result => result.status).sort(), ['fulfilled', 'rejected'], `round ${round}: ${JSON.stringify(settled.map(result => result.reason?.code ?? 'won'))}`);
-      assert.ok(['BATCH_ENVELOPE_CHANGED', 'BATCH_ENVELOPE_BUSY'].includes(settled[1 - won].reason.code), settled[1 - won].reason.code);
-      assert.deepEqual(new Uint8Array(await readFile(path)), bytes[won], `round ${round}: the file holds the winner's bytes`);
-      assert.deepEqual((await readdir(root)).sort(), ['envelope.json'], 'no lock, aside or temporary file is left behind');
-    }
   });
 
   it('does not run an opaque process whose consent could not be recorded, and holds its dependents', async () => {

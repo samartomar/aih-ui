@@ -40,7 +40,7 @@ process.on('exit', () => {
   const realCoreChange = compareCoreHome(realCoreBefore, snapshotCoreHome(homedir()));
   if (!realCoreChange.unchanged) { console.error(describeCoreHomeChange(realCoreChange)); process.exitCode = 1; }
 });
-const tests = ['ordinary-families', 'authoring-page', 'authoring-v3', 'reviews', 'personal-folder', 'journey', 'maintenance', 'readiness', 'readiness-host', 'claims', 'authority-source', 'organization-author', 'guided-setup', 'core-targets', 'improvements', 'workspace', 'batch'];
+const tests = ['ordinary-families', 'authoring-page', 'authoring-v3', 'reviews', 'personal-folder', 'journey', 'maintenance', 'readiness', 'readiness-host', 'claims', 'authority-source', 'organization-author', 'guided-setup', 'core-targets', 'improvements', 'workspace', 'batch', 'envelope-file'];
 const result = spawnSync(process.execPath, ['--test', ...tests.map(name => join(output, `consumer/${name}.test.mjs`))], {
   cwd: output, encoding: 'utf8', windowsHide: true, maxBuffer: 20_000_000, timeout: 120_000,
   env: { ...isolated, AIH_REPO: repo }

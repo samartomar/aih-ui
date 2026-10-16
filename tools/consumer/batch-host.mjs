@@ -196,13 +196,15 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
       const { value } = await inspect(opened.value, again);
       return { status: 'ok', diagnostics: opened.value.diagnostics, batchId: opened.value.record.id, ...value, ready: value.ready && opened.value.supported };
     },
-    // `persist(envelopeBytes, { expectedRevisionSha256 })` makes a superseding batch durable and resolves once it is. It is how the
-    // person's consent to run an action Core cannot verify is spent: just before a first attempt at such an action is applied, the
-    // host writes the current batch again with that action kept (`retain`), and only if that was persisted does the action run.
-    // Contract: `persist` must atomically refuse (throw) unless the stored envelope's revision digest is `expectedRevisionSha256`
-    // (the revision of the bytes this run started from, then of each batch it wrote), so a copy that was already spent and replaced
-    // cannot spend the same consent again. Without a `persist` that works, the action is `failed` (`consent-not-recorded`) and
-    // nothing is applied for it. The report's `consumedBy` is the latest batch written that way.
+    // `persist(envelopeBytes, { expectedRevisionSha256 })` makes the next envelope durable and resolves once it is. It is how the
+    // person's consent to run an action Core cannot verify is spent: just before each attempt at such an action is applied, the host
+    // records the attempt (a first attempt: the superseding batch that keeps the action, `retain`; Run again: the same batch at its
+    // next revision), and only if that was persisted does the action run.
+    // Contract: `persist` must be an atomic compare-and-swap against the stored state: it throws unless the stored envelope's revision
+    // digest is `expectedRevisionSha256` (the revision of the bytes this run started from, then of each envelope it wrote), so a copy
+    // that was already spent and replaced cannot spend the same consent again. Concurrent calls for one stored envelope must be
+    // serialized (this repository's adapter does that within its one writer process, see envelope-file). Without a `persist` that
+    // works, the action is `failed` (`consent-not-recorded`) and nothing is applied for it. The report's `consumedBy` is the latest batch written that way.
     // `rerun` names kept opaque actions to run in this call alone (see chosenAgain), and `rerunRevision` the stored revision of the batch
     // the choice was made against; any other revision refuses the whole call (`BATCH_RERUN_STALE`). An unnamed kept action stays
     // untouched. A named one is an attempt like the first: just before it is applied the host persists the same batch as the next
