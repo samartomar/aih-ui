@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createAuthoringClient } from '../../src/app/authoring-client.js';
 import * as improvements from '../../src/app/improvements-view.js';
 
-const { createImprovementsView, groupImprovements, promotionText, dismissOperation, restoreOperation } = improvements;
+const { createImprovementsView, groupImprovements, promotionText, dismissOperation, restoreOperation, referenceText } = improvements;
 const ok = value => ({ status: 'ok', value });
 const draft = { envelopeBytes: [1], savedIntentBytes: [9], projection: { revision: { sequence: 1 } }, intent: { roots: [] } };
 const record = { id: 'suggestion-one', revision: 'a'.repeat(64), rulesVersion: '1.0.0', scope: 'project',
@@ -163,4 +163,11 @@ test('default clients come from saved setup and check failures leave suggestions
   client.checkImprovements = async input => { calls.push(input); return ok(checked); };
   calls.length = 0; await built.check();
   assert.deepEqual(calls, ['/api/workbench-settings', { clients: [] }]);
+});
+
+test('reasons name their source in words and keep the exact reference', () => {
+  assert.equal(referenceText({ kind: 'saved-reason', ref: 'mattpocock.implement' }), 'From the reason saved with mattpocock.implement');
+  assert.equal(referenceText({ kind: 'setting', ref: 'clients' }), 'From your Workbench setup');
+  assert.equal(referenceText({ kind: 'request', ref: 'goal' }), 'From the goal you asked about');
+  assert.equal(referenceText({ kind: 'catalog-item', ref: 'mattpocock.tdd' }), 'Catalog item mattpocock.tdd');
 });

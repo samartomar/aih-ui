@@ -22,6 +22,9 @@ export function dismissOperation(suggestion, reason) {
   const record = Object.fromEntries(RECORD_FIELDS.filter(key => suggestion[key] !== undefined).map(key => [key, suggestion[key]]));
   return { type: 'dismiss', suggestion: record, ...(reason === undefined ? {} : { reason }) };
 }
+// Where a reason came from, in words; the record keeps the exact kind and reference.
+const SOURCES = { setting: () => 'From your Workbench setup', 'saved-reason': ref => `From the reason saved with ${ref}`, request: () => 'From the goal you asked about', 'catalog-item': ref => `Catalog item ${ref}` };
+export const referenceText = reference => SOURCES[reference.kind]?.(reference.ref) ?? `${reference.kind}: ${reference.ref}`;
 export const restoreOperation = id => ({ type: 'restore', id });
 // No saved setup means no declared clients, not a failed check.
 async function savedClients() {
@@ -79,13 +82,14 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
         const suggestion = preserved ? row.suggestion : row;
         const card = el('div', 'p-2 border border-wb-border rounded space-y-1'); card.dataset.suggestionId = suggestion.id;
         card.append(el('p', 'font-medium', suggestion.label ?? suggestion.change.itemId), el('p', 'text-outline text-[11px]', `Scope: ${suggestion.scope}`));
+        // Why a dismissed suggestion is back comes first, so it is not mistaken for repeated nudging.
+        for (const reason of promotionText(suggestion)) card.append(el('p', 'px-1.5 py-0.5 rounded bg-tertiary-container text-tertiary', reason));
         if (suggestion.description) card.append(el('p', 'text-on-surface-variant', suggestion.description));
         if (suggestion.goal) card.append(el('p', 'text-on-surface-variant', `Goal: ${suggestion.goal}`));
         for (const trigger of suggestion.triggers ?? []) card.append(el('p', 'text-on-surface-variant', trigger.text));
         for (const fact of suggestion.facts ?? []) card.append(el('p', 'text-on-surface-variant text-[11px]', fact.text));
         for (const unknown of suggestion.unknowns ?? []) card.append(el('p', 'text-outline text-[11px]', unknown));
-        for (const reference of suggestion.references ?? []) card.append(el('p', 'text-outline text-[11px]', `${reference.kind}: ${reference.ref}`));
-        for (const reason of promotionText(suggestion)) card.append(el('p', 'text-on-surface-variant', reason));
+        for (const reference of suggestion.references ?? []) card.append(el('p', 'text-outline text-[11px]', referenceText(reference)));
         const dismissal = preserved ? row.dismissal : suggestion.dismissal;
         if (dismissal?.reason) card.append(el('p', 'text-outline text-[11px]', dismissal.reason));
         if (preserved) card.append(el('p', 'text-on-surface-variant', 'This suggestion is not current. Its dismissal is preserved.'));

@@ -41,6 +41,8 @@ try {
   await runUnresolvedDraftBrowser({ origin, output: join(consumerDir, 'unresolved-draft-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
   const { runMaintenanceBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/maintenance-browser.mjs')));
   await runMaintenanceBrowser({ origin, output: join(consumerDir, 'maintenance-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, sourcePath: maintenanceSource });
+  const { runImprovementsBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/improvements-browser.mjs')));
+  await runImprovementsBrowser({ origin, output: join(consumerDir, 'improvements-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, settingsPath: join(consumerDir, 'prototype-settings.json') });
 } finally { delete process.env.AIH_MAINTENANCE_SOURCE; await new Promise(resolve => started.server.close(resolve)); }
 
 // The normal application's startup must refuse an absent required family,
