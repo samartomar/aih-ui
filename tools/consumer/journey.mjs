@@ -131,9 +131,11 @@ export async function readJourneyEnvelope(bytes) {
       const problem = await organizationDraftDerivedProblem(record);
       if (problem !== null) return refuse('INPUT_INVALID', `/records/${index}${problem}`, 'Entry and target ids must derive from their item, scope and target.', originalBytes);
     } else if (record.schema === WORKSPACE_DECLARATION_RECORD_SCHEMA) {
-      if (await declarationDerivedProblem(record) !== null) return refuse('INPUT_INVALID', `/records/${index}/revision`, 'Declaration relationship ids and revision must derive from its workspace, members and relationships.', originalBytes);
+      const problem = await declarationDerivedProblem(record);
+      if (problem !== null) return refuse('INPUT_INVALID', `/records/${index}${problem}`, 'Declaration relationship ids and revision must derive from its workspace, members and relationships.', originalBytes);
     } else if (record.schema === LOCAL_BINDING_RECORD_SCHEMA) {
-      if (await bindingDerivedProblem(record) !== null) return refuse('INPUT_INVALID', `/records/${index}/id`, 'Binding id must derive from its workspace, member and checkout root.', originalBytes);
+      const problem = await bindingDerivedProblem(record);
+      if (problem !== null) return refuse('INPUT_INVALID', `/records/${index}${problem}`, 'Binding id must derive from its workspace, member and checkout root.', originalBytes);
     } else if (record.required) {
       supported = false;
       diagnostics.push({ code: 'JOURNEY_RECORD_UNSUPPORTED', path: `/records/${index}`, message: `Required record ${record.id} has unsupported schema ${record.schema}; it can be read but not changed.` });

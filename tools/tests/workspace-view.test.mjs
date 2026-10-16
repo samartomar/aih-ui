@@ -6,7 +6,7 @@ import * as workspace from '../../src/app/workspace-view.js';
 const ok = value => ({ status: 'ok', value });
 const draft = { envelopeBytes: [1], savedIntentBytes: [9], projection: { revision: { sequence: 1 } }, intent: { roots: [] } };
 const projection = { workspace: { id: 'workspace-one', label: 'Team' }, members: [{ id: 'api', identity: 'github.com/acme/api', aliases: [], responsibilities: { status: 'unresolved' }, instructions: { status: 'unresolved' }, contracts: { status: 'unresolved' }, bindings: [] }], relationships: { status: 'unresolved', confirmed: [], suggested: [] }, unsupported: [] };
-const reasons = ['moved', 'fork', 'similar-name', 'ambiguous-remote', 'no-remote'];
+const reasons = ['additional-checkout', 'moved', 'fork', 'similar-name', 'ambiguous-remote', 'no-remote'];
 const observed = { root: '/tmp/checkout', repository: 'github.com/acme/api', revision: 'a'.repeat(40), branch: 'main', worktree: { kind: 'linked' }, workingState: { clean: true } };
 function service(t, ...script) {
   const calls = [], previous = globalThis.fetch;
@@ -104,7 +104,7 @@ test('export downloads exact bytes once and explains exclusions', async () => {
 });
 
 test('unsupported records are read-only, including version refusals', async () => {
-  for (const result of [ok({ ...projection, unsupported: [{ id: 'future', schema: 'future' }] }), { status: 'refused', diagnostics: [{ code: 'WORKSPACE_VERSION_UNSUPPORTED', message: 'Future record' }] }]) {
+  for (const result of [ok({ ...projection, unsupported: [{ id: 'future', schema: 'urn:aihq:workbench:journey-record:workspace-declaration:2.0.0' }] }), { status: 'refused', diagnostics: [{ code: 'WORKSPACE_VERSION_UNSUPPORTED', message: 'Future record' }] }]) {
     const { client } = clientFor(); client.readWorkspace = async () => result;
     const built = view(client); await built.open();
     assert.match(textOf(built.node), /This workspace uses a record version this Workbench does not support\. It is shown read-only; the original bytes are kept unchanged\./);
@@ -127,6 +127,7 @@ test('record URNs and explanations match the browser contract', () => {
   assert.equal(workspace.WORKSPACE_DECLARATION_RECORD_SCHEMA, 'urn:aihq:workbench:journey-record:workspace-declaration:1.0.0');
   assert.equal(workspace.LOCAL_BINDING_RECORD_SCHEMA, 'urn:aihq:workbench:journey-record:local-binding:1.0.0');
   assert.deepEqual(reasons.map(workspace.reasonText), [
+    'This member is already bound to another folder; confirm this is an additional checkout (another worktree or clone). If the checkout moved, use Rebind (moved) instead.',
     'This member was bound to a different folder; confirm the checkout moved.',
     "The checkout's remote is a fork: same name under a different owner.",
     "The checkout's repository name only resembles the declared one.",
@@ -212,4 +213,82 @@ test('a fresh bind or verify status survives later writes; an unsupported declar
   const locked = view(unsupported.client); await locked.open();
   assert.equal(find(locked, 'Declare workspace'), undefined);
   assert.match(textOf(locked.node), /does not support/);
+});
+
+
+test('member aliases are trimmed, empty entries dropped and duplicates removed', () => {
+  assert.deepEqual(workspace.memberOperation({ aliases: ' github.com/acme/old, , github.com/acme/api, github.com/acme/old ' }).member.aliases,
+    ['github.com/acme/old', 'github.com/acme/api']);
+});
+
+test('Edit member fills every field and Save preserves confirmed aliases', async () => {
+  const member = { ...projection.members[0], label: 'API', aliases: ['github.com/acme/old', 'github.com/acme/service'],
+    responsibilities: { status: 'known', values: ['build', 'test'] },
+    instructions: { status: 'known', locations: ['AGENTS.md', 'docs/rules.md'] },
+    contracts: { status: 'known', references: ['urn:api:v1', 'api.json'] } };
+  const { client } = clientFor(), calls = [];
+  client.readWorkspace = async () => ok({ ...projection, members: [member] });
+  client.editWorkspace = async operation => { calls.push(operation); return ok({ projection }); };
+  const built = view(client); await built.open();
+  await find(built, 'Edit member').listeners.click();
+  const fields = Object.fromEntries(elements(built.node).filter(n => n['aria-label']).map(n => [n['aria-label'], n.value]));
+  assert.equal(fields['Member id'], member.id); assert.equal(fields['Remote identity'], member.identity);
+  assert.equal(fields['Member label'], 'API');
+  assert.equal(fields['Aliases (comma-separated)'], member.aliases.join(', '));
+  for (const [name, key] of Object.entries({ responsibilities: 'values', instructions: 'locations', contracts: 'references' })) {
+    assert.equal(fields[`${name} status`], 'known');
+    assert.equal(fields[`${name} (comma-separated)`], member[name][key].join(', '));
+  }
+  await find(built, 'Save member').listeners.click();
+  const { bindings, ...expected } = member;
+  assert.deepEqual(calls, [{ type: 'set-member', member: expected }]);
+});
+
+test('removed member bindings show facts and statuses and can only be removed', async () => {
+  const binding = { id: 'detached-one', checkout: { root: '/tmp/removed' }, observed,
+    verification: { result: 'confirmed', reasons: ['moved'] }, status: 'missing' };
+  const { client } = clientFor(), calls = [];
+  client.readWorkspace = async () => ok({ ...projection, detached: [binding] });
+  client.unbindCheckout = async id => { calls.push(id); return ok({ projection }); };
+  const built = view(client); await built.open();
+  for (const fact of ['Bindings for removed members', '/tmp/removed', 'aaaaaaaaaaaa', 'main', 'linked', 'clean', 'confirmed', workspace.reasonText('moved'), workspace.bindingStatusText('missing')])
+    assert.ok(textOf(built.node).includes(fact), fact);
+  assert.equal(find(built, 'Rebind (moved)'), undefined);
+  await find(built, 'Remove binding').listeners.click();
+  assert.deepEqual(calls, ['detached-one']);
+  assert.equal(find(built, 'Remove binding'), undefined);
+});
+
+test('unsupported local bindings keep sharing enabled and disclose preservation', async () => {
+  const downloads = [], { client } = clientFor();
+  client.readWorkspace = async () => ok({ ...projection, unsupported: [{ id: 'future-binding', schema: 'urn:aihq:workbench:journey-record:local-binding:2.0.0' }] });
+  const built = view(client, { download: (...args) => downloads.push(args) }); await built.open();
+  assert.ok(textOf(built.node).includes('Some local bindings use a version this Workbench does not support; they are kept unchanged and are never exported.'));
+  assert.equal(find(built, 'Export for sharing').disabled, false);
+  assert.equal(find(built, 'Save member').disabled, false);
+  await find(built, 'Export for sharing').listeners.click();
+  assert.deepEqual(downloads, [[[4, 5], 'workspace.share.json']]);
+});
+
+test('Verify discloses every bound root including removed members before its button', async () => {
+  const { client } = clientFor(); const built = view(client); await built.open();
+  assert.doesNotMatch(textOf(built.node), /Verify reads local Git metadata in:/);
+  client.readWorkspace = async () => ok({ ...projection,
+    members: [{ ...projection.members[0], bindings: [{ id: 'one', checkout: { root: '/tmp/one' } }, { id: 'two', checkout: { root: '/tmp/two' } }] }],
+    detached: [{ id: 'removed', checkout: { root: '/tmp/removed' } }] });
+  await built.open();
+  const nodes = elements(built.node);
+  const disclosure = nodes.findIndex(n => n.textContent === 'Verify reads local Git metadata in: /tmp/one, /tmp/two, /tmp/removed');
+  assert.ok(disclosure >= 0);
+  assert.ok(disclosure < nodes.indexOf(find(built, 'Verify checkouts')));
+});
+
+test('unsafe export displays its diagnostic in the status line without downloading', async () => {
+  const downloads = [], { client } = clientFor();
+  const message = 'The declaration contains a local path and cannot be shared.';
+  client.exportWorkspace = async () => ({ status: 'refused', diagnostics: [{ code: 'WORKSPACE_EXPORT_UNSAFE', message }] });
+  const built = view(client, { download: (...args) => downloads.push(args) }); await built.open();
+  await find(built, 'Export for sharing').listeners.click();
+  assert.equal(elements(built.node).find(n => n.role === 'status').textContent, message);
+  assert.deepEqual(downloads, []);
 });

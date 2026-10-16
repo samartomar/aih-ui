@@ -118,15 +118,16 @@ const improvementDismissal = { $schema: 'https://json-schema.org/draft/2020-12/s
 // (tools/consumer/workspace-record.mjs) enforces what a schema cannot express, so a record this schema accepts can still be
 // refused when the Workbench opens it:
 //   - revision is the sha256 of the stable workspace, members and relationships; each relationship id is derived from (from, to, kind);
-//   - members and relationships are sorted by id, aliases are sorted and differ from the identity (also ignoring case);
+//   - members and relationships are sorted by id, aliases are sorted, unique and differ from the identity (case folds only on github.com, gitlab.com and bitbucket.org);
 //   - relationship endpoints are declared members and differ from each other;
 //   - every free-text field, instruction location and contract reference is refused when it holds a drive or UNC path, a
-//     file: URL, a ~/ path, a /home/, /Users/ or /root/ path, or a URL with userinfo; locations and contract paths are
+//     file: URL, a ~/ path, an absolute POSIX path of two or more segments, a URL with userinfo or a recognizable credential
+//     (token, key or password assignments and common provider token prefixes); locations and contract paths are
 //     repository-relative (no leading slash, no .. or . segment);
 //   - recordedAt must be a real calendar timestamp.
 // An empty members or confirmed list is valid, and relationships.status stays "unresolved" until the owner says otherwise.
 const memberSlug = { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,63}$' };
-const repoIdentity = { type: 'string', maxLength: 512, pattern: String.raw`^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?:/[\w.+~-]+){2,}$` };
+const repoIdentity = { type: 'string', maxLength: 512, pattern: String.raw`^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[1-9]\d{0,4})?(?:/[\w.+~-]+){2,}$` };
 const repoPath = { type: 'string', minLength: 1, maxLength: 512, pattern: String.raw`^(?![/\\~])(?![A-Za-z]:)(?!.*\\)(?!.*(?:^|/)\.{0,2}(?:/|$))[^\x00-\x1f]+$` };
 const contractRef = { anyOf: [repoPath, { type: 'string', maxLength: 300, pattern: String.raw`^urn:[A-Za-z0-9][A-Za-z0-9-]{0,31}:[\w.:@%/+-]+$` }] };
 const knownField = (key, items, maxItems) => ({ oneOf: [shape({ status: { const: 'unresolved' } }),
@@ -145,7 +146,8 @@ const workspaceDeclaration = { $schema: 'https://json-schema.org/draft/2020-12/s
 }) };
 // Local binding: local state that ties one declared member to one checkout folder; never part of a default sharing export
 // and never portable execution permission. The reader also requires its id to derive from (workspace id, member id,
-// checkout root), reasons to be sorted and empty exactly when the result is "matched", remotes to be sorted by unique name,
+// checkout root), reasons to be sorted and empty exactly when the result is "matched", remotes to be sorted by unique name
+// (a remote whose name cannot be carried is recorded as "(unrecognized)" with no identity),
 // and verifiedAt to be a real calendar timestamp. A different worktree has a different root, so its own binding.
 const bindingCommit = { type: 'string', pattern: '^(?:[a-f0-9]{40}|[a-f0-9]{64})$' }, nullable = schema => ({ oneOf: [schema, { type: 'null' }] });
 const localBinding = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: bindingRecord, ...shape({
@@ -154,10 +156,10 @@ const localBinding = { $schema: 'https://json-schema.org/draft/2020-12/schema', 
   member: shape({ id: memberSlug, identity: repoIdentity }),
   checkout: shape({ root: { type: 'string', minLength: 1, maxLength: 1024, pattern: String.raw`^(?:[A-Za-z]:[\\/]|\\\\|/)` } }),
   observed: shape({ repository: nullable(repoIdentity),
-    remotes: { type: 'array', maxItems: 32, items: shape({ name: { type: 'string', pattern: String.raw`^[\w./-]{1,200}$` }, identity: nullable(repoIdentity) }) },
+    remotes: { type: 'array', maxItems: 32, items: shape({ name: { type: 'string', pattern: String.raw`^(?:[\w./-]{1,200}|\(unrecognized\))$` }, identity: nullable(repoIdentity) }) },
     revision: nullable(bindingCommit), branch: suggestionText(255),
     worktree: shape({ kind: { enum: ['main', 'linked'] }, gitDirSha256: hash }), workingState: shape({ clean: { type: 'boolean' }, sha256: hash }) }, ['branch']),
-  verification: shape({ result: { enum: ['matched', 'confirmed'] }, reasons: { type: 'array', maxItems: 5, uniqueItems: true, items: { enum: ['ambiguous-remote', 'fork', 'moved', 'no-remote', 'similar-name'] } }, verifiedAt: utcTimestamp }),
+  verification: shape({ result: { enum: ['matched', 'confirmed'] }, reasons: { type: 'array', maxItems: 6, uniqueItems: true, items: { enum: ['additional-checkout', 'ambiguous-remote', 'fork', 'moved', 'no-remote', 'similar-name'] } }, verifiedAt: utcTimestamp }),
   replaces: { type: 'string', pattern: '^binding-[a-f0-9]{32}$' }
 }, ['replaces']) };
 const journey = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: journeyEnvelope, ...shape({

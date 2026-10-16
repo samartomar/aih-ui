@@ -6,7 +6,7 @@ import { only } from './intake.mjs';
 import { refuse, stable } from './headless.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { isUtcTimestamp } from './maintenance-record.mjs';
-import { WORKSPACE_DECLARATION_RECORD_SCHEMA, LOCAL_BINDING_RECORD_SCHEMA, WORKSPACE_DECLARATION_RECORD_ID, RELATIONSHIP_KINDS, BINDING_REASONS, MAX_MEMBERS, MAX_RELATIONSHIPS, MAX_BINDINGS,
+import { unsafeText, parseIdentity, WORKSPACE_DECLARATION_RECORD_SCHEMA, LOCAL_BINDING_RECORD_SCHEMA, WORKSPACE_DECLARATION_RECORD_ID, RELATIONSHIP_KINDS, BINDING_REASONS, MAX_MEMBERS, MAX_RELATIONSHIPS, MAX_BINDINGS,
   declarationProblem, declarationDerivedProblem, bindingProblem, bindingDerivedProblem, memberProblem, edgeProblem, observationProblem, relationshipId, workspaceId, workspaceRevision,
   bindingId, remoteIdentity, sameIdentity, identityOf, sameRoot, digest } from './workspace-record.mjs';
 export const WORKSPACE_DECLARATION_SCHEMA = WORKSPACE_DECLARATION_RECORD_SCHEMA;
@@ -82,6 +82,7 @@ async function write(loaded, envelopeBytes, declaration, bindings, previous = lo
 }
 // ---- Editing the declaration ---------------------------------------------------------------------------------------
 const problemOf = (path, message) => ({ problem: [path, message] });
+const unjudged = relationships => ({ ...relationships, status: 'unresolved' });
 const memberOf = async (body, operation) => {
   if (!only(operation, ['type', 'member'])) return problemOf('/operation', 'Supply {type,member}.');
   const input = operation.member;
@@ -95,7 +96,9 @@ const memberOf = async (body, operation) => {
   const problem = memberProblem(member);
   if (problem !== null) return problemOf(`/operation/member${problem}`, 'Supply a valid workspace member: slug id, repository identity, and no local paths or credentials.');
   if (!body.members.some(existing => existing.id === member.id) && body.members.length >= MAX_MEMBERS) return problemOf('/operation/member', `A workspace has at most ${MAX_MEMBERS} members.`);
-  return { members: [...body.members.filter(existing => existing.id !== member.id), member].sort(byId) };
+  // Adding a member, or changing which repository one is, leaves its relationships unjudged: "complete" no longer holds.
+  const previous = body.members.find(existing => existing.id === member.id), moved = !previous || previous.identity !== member.identity || stable(previous.aliases) !== stable(member.aliases);
+  return { members: [...body.members.filter(existing => existing.id !== member.id), member].sort(byId), ...(moved ? { relationships: unjudged(body.relationships) } : {}) };
 };
 const edgeOf = async (operation, fields, now, ids) => {
   const input = operation.relationship, shapes = { confirmed: ['from', 'to', 'kind', 'provenance'], suggested: ['from', 'to', 'kind', 'reason'] };
@@ -120,7 +123,7 @@ const edit = {
     if (!only(operation, ['type', 'id'])) return problemOf('/operation', 'Supply {type,id}.');
     if (!body.members.some(member => member.id === operation.id)) return problemOf('/operation/id', 'No declared member has that id.');
     const touches = edge => edge.from === operation.id || edge.to === operation.id, { confirmed, suggested } = body.relationships;
-    return { members: body.members.filter(member => member.id !== operation.id), relationships: { ...body.relationships, confirmed: confirmed.filter(edge => !touches(edge)), suggested: suggested.filter(edge => !touches(edge)) } };
+    return { members: body.members.filter(member => member.id !== operation.id), relationships: { ...body.relationships, confirmed: confirmed.filter(edge => !touches(edge)), suggested: suggested.filter(edge => !touches(edge)), status: 'unresolved' } };
   },
   async 'set-relationship'(body, operation, now) {
     const built = await edgeOf(operation, 'confirmed', now, new Set(body.members.map(member => member.id)));
@@ -198,10 +201,19 @@ const similarName = (a, b) => {
 // How a found identity relates to a declared one, when it is not the same: a fork keeps the name under another owner (or
 // host); a similar name keeps host and owner. Never an automatic match.
 const relation = (found, declared) => {
-  const a = remoteIdentity(`https://${found}`), b = remoteIdentity(`https://${declared}`);
+  const a = parseIdentity(found), b = parseIdentity(declared);
   if (a.name.toLowerCase() === b.name.toLowerCase()) return 'fork';
-  return a.host === b.host && a.owner.toLowerCase() === b.owner.toLowerCase() && similarName(a.name, b.name) ? 'similar-name' : null;
+  return a.host.toLowerCase() === b.host.toLowerCase() && a.owner.toLowerCase() === b.owner.toLowerCase() && similarName(a.name, b.name) ? 'similar-name' : null;
 };
+// What a checkout's remotes say about a member: the distinct resolved identities, which one matches the member exactly, and whether
+// that is ambiguous (several identities, a remote that resolves to none next to a resolved one, or an identity another member declares).
+function survey(declaration, member, remotes) {
+  const declared = [member.identity, ...member.aliases], others = declaration.members.filter(entry => entry.id !== member.id), found = [];
+  const owned = identity => others.some(other => [other.identity, ...other.aliases].some(value => sameIdentity(value, identity)));
+  for (const remote of remotes) if (remote.identity !== null && !found.some(identity => sameIdentity(identity, remote.identity))) found.push(remote.identity);
+  const exact = found.find(identity => declared.some(value => sameIdentity(value, identity)));
+  return { declared, found, exact, owned, ambiguous: found.length > 0 && (found.length > 1 || remotes.some(remote => remote.identity === null) || (exact !== undefined && owned(exact))) };
+}
 function evaluate({ declaration, bindings, memberId, observation, replaces }) {
   const refused = (code, message) => ({ outcome: 'refused', reasons: [], repository: null, refusal: { code, message } });
   const member = declaration.members.find(entry => entry.id === memberId);
@@ -210,25 +222,22 @@ function evaluate({ declaration, bindings, memberId, observation, replaces }) {
   if (replaces !== undefined && !replaced) return refused('WORKSPACE_BINDING_UNKNOWN', 'The binding to replace is not one of this member\'s bindings.');
   if (bindings.some(binding => binding.member.id !== memberId && sameRoot(binding.checkout.root, observation.root)))
     return refused('CHECKOUT_BOUND_TO_OTHER_MEMBER', 'This checkout folder is already bound to another member; remove that binding first.');
-  const declared = [member.identity, ...member.aliases], others = declaration.members.filter(entry => entry.id !== member.id);
-  const owned = identity => others.some(other => [other.identity, ...other.aliases].some(value => sameIdentity(value, identity)));
-  const found = [];
-  for (const remote of observation.remotes) if (remote.identity !== null && !found.some(identity => sameIdentity(identity, remote.identity))) found.push(remote.identity);
-  const exact = found.find(identity => declared.some(value => sameIdentity(value, identity))), reasons = new Set();
+  const { declared, found, exact, owned, ambiguous } = survey(declaration, member, observation.remotes), reasons = new Set();
   let repository = null;
   if (found.length === 0) reasons.add('no-remote');
-  else if (exact !== undefined) {
-    repository = exact;
-    if (found.length > 1 || owned(exact)) reasons.add('ambiguous-remote');
-  } else {
+  else if (exact !== undefined) repository = exact;
+  else {
     if (found.some(owned)) return refused('WORKSPACE_REPOSITORY_MISMATCH', 'This checkout\'s repository is another declared member\'s repository.');
     const related = found.flatMap(identity => { const kinds = declared.map(value => relation(identity, value)).filter(Boolean); return kinds.length ? [{ identity, kind: kinds.includes('fork') ? 'fork' : 'similar-name' }] : []; });
     if (related.length === 0) return refused('WORKSPACE_REPOSITORY_MISMATCH', 'This checkout\'s repository is neither the declared repository nor one of its confirmed aliases.');
     repository = related[0].identity;
     for (const { kind } of related) reasons.add(kind);
-    if (found.length > 1) reasons.add('ambiguous-remote');
   }
+  if (ambiguous) reasons.add('ambiguous-remote');
   if (replaced && !sameRoot(replaced.checkout.root, observation.root)) reasons.add('moved');
+  // A second checkout of a member that is already bound is deliberate; a moved one says so with `replaces`.
+  else if (replaces === undefined && bindings.some(binding => binding.member.id === memberId && !sameRoot(binding.checkout.root, observation.root))
+    && !bindings.some(binding => binding.member.id === memberId && sameRoot(binding.checkout.root, observation.root))) reasons.add('additional-checkout');
   return { outcome: reasons.size ? 'confirm' : 'ready', reasons: [...reasons].sort(), repository, member, replaced };
 }
 const bindingInput = async ({ envelopeBytes, memberId, observation, replaces }) => {
@@ -294,13 +303,19 @@ const identities = observation => observation.remotes.flatMap(remote => remote.i
 function statusOf(binding, declaration, observation) {
   const member = declaration?.members.find(entry => entry.id === binding.member.id && binding.workspace.id === declaration.workspace.id);
   const { repository } = binding.observed;
-  if (!member || member.identity !== binding.member.identity
-    || (binding.verification.result === 'matched' && ![member.identity, ...member.aliases].some(value => sameIdentity(value, repository)))) return { status: 'declaration-changed' };
+  if (!member || !sameIdentity(member.identity, binding.member.identity)
+    || (binding.verification.reasons.every(reason => reason === 'additional-checkout' || reason === 'moved') && ![member.identity, ...member.aliases].some(value => sameIdentity(value, repository)))) return { status: 'declaration-changed' };
   if (observation === undefined) return { status: 'unverified' };
   if (observation.status === 'refused') return { status: 'missing', code: observation.diagnostics?.[0]?.code ?? 'CHECKOUT_UNAVAILABLE' };
   const now = identities(observation);
   const same = repository === null ? now.length === 0 : now.some(identity => sameIdentity(identity, repository));
-  if (!same || !sameRoot(observation.root, binding.checkout.root) || observation.worktree.gitDirSha256 !== binding.observed.worktree.gitDirSha256 || observation.worktree.kind !== binding.observed.worktree.kind)
+  // The recorded remotes must still be the observed ones (by name and identity), and no ambiguity may be new since the person confirmed.
+  const remotes = observation.remotes.length === binding.observed.remotes.length && observation.remotes.every((remote, index) => {
+    const recorded = binding.observed.remotes[index];
+    return remote.name === recorded.name && (remote.identity === null || recorded.identity === null ? remote.identity === recorded.identity : sameIdentity(remote.identity, recorded.identity));
+  });
+  const blurred = survey(declaration, member, observation.remotes).ambiguous && !binding.verification.reasons.includes('ambiguous-remote');
+  if (!same || !remotes || blurred || !sameRoot(observation.root, binding.checkout.root) || observation.worktree.gitDirSha256 !== binding.observed.worktree.gitDirSha256 || observation.worktree.kind !== binding.observed.worktree.kind)
     return { status: 'identity-changed', recorded: { repository, root: binding.checkout.root }, observed: { repository: now[0] ?? null, root: observation.root } };
   const changes = [...(observation.revision !== binding.observed.revision ? [{ field: 'revision', recorded: binding.observed.revision, observed: observation.revision }] : []),
     ...(observation.workingState.sha256 !== binding.observed.workingState.sha256 ? [{ field: 'workingState', recorded: structuredClone(binding.observed.workingState), observed: structuredClone(observation.workingState) }] : [])];
@@ -324,9 +339,19 @@ export async function verifyBindings({ envelopeBytes, observations = {} } = {}) 
   return { status: 'ok', diagnostics: [], value: { statuses, projection: projection({ ...loaded.value }, statuses) } };
 }
 // ---- Default sharing export ----------------------------------------------------------------------------------------
+// JSON pointers (at most 20) of the strings in `value` that hold a local path or a credential; the values are never reported.
+function unsafePointers(value, pointer, found, depth = 0) {
+  if (found.length >= 20) return;
+  if (depth > 64) found.push(pointer);
+  else if (typeof value === 'string') { if (unsafeText(value)) found.push(pointer); }
+  else if (Array.isArray(value)) value.forEach((item, index) => unsafePointers(item, `${pointer}/${index}`, found, depth + 1));
+  else if (value && typeof value === 'object') for (const [key, item] of Object.entries(value)) unsafePointers(item, unsafeText(key) ? `${pointer}/(key)` : `${pointer}/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`, found, depth + 1);
+}
 // A new revision without any local binding record (of any version): bindings hold absolute local paths and are never
-// shared. A declaration needs no stripping: its validator refuses local paths and credentials. A declaration of a version this
-// module cannot read refuses, since it might hold either.
+// shared. A declaration's validator refuses local paths and credentials, but sharing also carries the other records and the saved
+// intent, so every string in the outgoing records and in the decoded saved intent must pass the same guard or nothing is
+// exported; the original bytes stay and only JSON pointers are reported. A declaration of a version this module cannot read
+// refuses, since it might hold either.
 export async function exportWorkspace({ envelopeBytes } = {}) {
   const loaded = await load(envelopeBytes);
   if (loaded.status !== 'ok') return loaded;
@@ -336,5 +361,12 @@ export async function exportWorkspace({ envelopeBytes } = {}) {
   const excluded = read.records.filter(isLocal).length;
   const previous = { ...read, envelope: { ...read.envelope, records: read.envelope.records.filter(record => !isLocal(record)) } };
   const written = await write({ ...loaded.value, read: previous }, envelopeBytes, declaration, [], previous);
-  return written.status === 'ok' ? { ...written, value: { ...written.value, excluded: { bindings: excluded } } } : written;
+  if (written.status !== 'ok') return written;
+  const found = [];
+  unsafePointers(written.value.envelope.records, '/records', found);
+  let intent;
+  try { intent = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(read.savedIntentBytes)); } catch { found.push('/savedIntent'); }
+  if (intent !== undefined) unsafePointers(intent, '/savedIntent', found);
+  if (found.length > 0) return refuse('WORKSPACE_EXPORT_UNSAFE', found[0], `Sharing is refused: ${found.length >= 20 ? 'at least 20' : found.length} values look like local paths or credentials (at ${found.join(', ')}). Remove them and export again; this file is unchanged.`, envelopeBytes);
+  return { ...written, value: { ...written.value, excluded: { bindings: excluded } } };
 }

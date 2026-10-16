@@ -1,6 +1,6 @@
 // Ordinary Workbench journey: declare a workspace with members and a relationship, bind local checkouts deliberately
-// (a fork needs confirmation and is not confirmed, different worktrees stay different bindings, a moved checkout is
-// rebound with confirmation), save and reopen, export for sharing without any local binding, and open a declaration of
+// (a fork needs confirmation and is not confirmed, a second worktree of a bound member needs confirmation as an additional
+// checkout and stays a different binding, a moved checkout is rebound with confirmation), save and reopen, export for sharing without any local binding, and open a declaration of
 // a version this Workbench does not support read-only. Every repository is a controlled local fixture created here:
 // nothing real is inspected and nothing is fetched. The fixture remote carries a fake credential so the journey can show
 // that it never reaches a page, a response, a saved draft or a shared export.
@@ -29,6 +29,7 @@ const SHELL_FONTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
 const OPENED = /Saved draft reopened|Unresolved draft opened/;
 const READ_ONLY = 'This workspace uses a record version this Workbench does not support. It is shown read-only; the original bytes are kept unchanged.';
 const SHARE_NOTE = 'Local checkout bindings, absolute paths and credentials are not included.';
+const ADDITIONAL_REASON = 'This member is already bound to another folder; confirm this is an additional checkout (another worktree or clone). If the checkout moved, use Rebind (moved) instead.';
 const FORK_REASON = "The checkout's remote is a fork: same name under a different owner.";
 const MOVED_REASON = 'This member was bound to a different folder; confirm the checkout moved.';
 const VERIFIED = 'Verified: matches the recorded checkout';
@@ -226,11 +227,16 @@ export async function runWorkspaceBrowser({ origin, output, playwrightModule }) 
     await noToken(first);
     screenshots.push(await shot(first, '4-api-bound.png'));
 
-    // 5. A linked worktree of the same repository is a second, different binding.
+    // 5. A linked worktree of the same repository is a second, different binding, bound only after confirming it is an additional checkout.
     await input(first, 'Checkout folder for api').fill(fixtures.linked);
     steps.inspectLinked = await act(first, 'workspace-plan', () => button(card(first, 'api'), 'Inspect checkout').click());
-    assert.equal(await button(card(first, 'api'), 'Bind checkout').count(), 1, 'A different worktree is a new binding, not a confirmation.');
-    steps.bindLinked = await act(first, 'workspace-bind', () => button(card(first, 'api'), 'Bind checkout').click());
+    assert.deepEqual(steps.inspectLinked, ['workspace-plan']);
+    const linkedPlan = await card(first, 'api').innerText();
+    assert.ok(linkedPlan.includes(ADDITIONAL_REASON), linkedPlan);
+    assert.equal(await button(card(first, 'api'), 'Confirm and bind').count(), 1);
+    assert.equal(await button(card(first, 'api'), 'Bind checkout').count(), 0, 'A second checkout of a bound member is never bound without confirmation.');
+    assert.equal(await rows(first, 'api').count(), 1, 'Nothing is bound before the confirmation.');
+    steps.bindLinked = await act(first, 'workspace-bind', () => button(card(first, 'api'), 'Confirm and bind').click());
     assert.deepEqual(steps.bindLinked, ['workspace-bind']);
     assert.equal(await rows(first, 'api').count(), 2);
     const worktrees = await rows(first, 'api').evaluateAll(nodes => nodes.map(node => /worktree: (\w+)/.exec(node.innerText)?.[1]));

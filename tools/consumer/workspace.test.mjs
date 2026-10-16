@@ -12,6 +12,7 @@ import { readWorkspace, editWorkspace, planBinding, bindCheckout, unbindCheckout
   validateDeclaration, validateBinding, WORKSPACE_DECLARATION_SCHEMA, LOCAL_BINDING_SCHEMA } from './workspace.mjs';
 import { observeCheckout } from './workspace-host.mjs';
 import { readJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
+import { unsafeText, identityOf } from './workspace-record.mjs';
 import { recordMaintenance } from './maintenance.mjs';
 import { checkImprovements, recordImprovement } from './improvements.mjs';
 import { digestBytes } from './intake.mjs';
@@ -72,17 +73,33 @@ const recordsOf = (bytes, family) => JSON.parse(decode(bytes)).records.filter(r 
 test('remoteIdentity normalizes network remotes, drops credentials and port, and returns null for anything local', () => {
   const same = 'github.com/acme/api';
   for (const url of ['https://github.com/acme/api', 'https://github.com/acme/api.git', 'https://github.com/acme/api/', 'http://github.com/acme/api.git', 'HTTPS://GITHUB.COM/acme/api.git',
-    'https://user:ghp_secret@github.com/acme/api.git', 'https://ghp_secret@github.com:8443/acme/api', 'https://github.com/acme/api.git?x=1#frag', 'ssh://git@github.com/acme/api.git',
+    'https://user:ghp_secret@github.com/acme/api.git', 'https://ghp_secret@github.com:443/acme/api', 'http://github.com:80/acme/api', 'git://github.com:9418/acme/api', 'https://github.com/acme/api.git?x=1#frag', 'ssh://git@github.com/acme/api.git',
     'ssh://git@github.com:22/acme/api', 'git://github.com/acme/api.git', 'git+ssh://git@github.com/acme/api.git', 'git@github.com:acme/api.git', 'git@github.com:acme/api',
     'user:tok@github.com:acme/api.git', 'github.com:acme/api.git', 'git@github.com:/acme/api.git'])
     assert.deepEqual(remoteIdentity(url), { host: 'github.com', owner: 'acme', name: 'api', identity: same }, url);
-  assert.equal(remoteIdentity('https://GitLab.example.com:8443/Group/Sub/Team/Repo.git').identity, 'gitlab.example.com/Group/Sub/Team/Repo');
+  assert.equal(remoteIdentity('https://GitLab.example.com:8443/Group/Sub/Team/Repo.git').identity, 'gitlab.example.com:8443/Group/Sub/Team/Repo');
+  // A non-default port names another service: kept (host:port); the scheme's default port is dropped; scp-like has no port.
+  assert.deepEqual(remoteIdentity('https://git.example.com:8443/acme/api'), { host: 'git.example.com:8443', owner: 'acme', name: 'api', identity: 'git.example.com:8443/acme/api' });
+  assert.notEqual(remoteIdentity('https://git.example.com:8443/acme/api').identity, remoteIdentity('https://git.example.com:9443/acme/api').identity);
+  assert.equal(remoteIdentity('ssh://git@git.example.com:2222/acme/api.git').identity, 'git.example.com:2222/acme/api');
+  assert.equal(remoteIdentity('https://github.com:22/acme/api').identity, 'github.com:22/acme/api');
+  assert.equal(remoteIdentity('ssh://git@github.com:443/acme/api').identity, 'github.com:443/acme/api');
+  assert.equal(remoteIdentity('git@git.example.com:acme/api.git').identity, 'git.example.com/acme/api');
+  for (const bad of ['https://git.example.com:0/a/b', 'https://git.example.com:99999/a/b', 'https://git.example.com:8x/a/b']) assert.equal(remoteIdentity(bad), null, bad);
+  // A typed identity keeps its port too (and survives the member round trip).
+  assert.equal(identityOf('git.example.com:8443/acme/api'), 'git.example.com:8443/acme/api'); assert.equal(identityOf('Git.Example.com:8443/acme/api.git'), 'git.example.com:8443/acme/api');
+  assert.equal(identityOf('ssh://git@git.example.com:2222/acme/api'), 'git.example.com:2222/acme/api'); assert.equal(identityOf('git@github.com:acme/api.git'), 'github.com/acme/api');
   assert.deepEqual(remoteIdentity('https://gitlab.com/g/sub/r'), { host: 'gitlab.com', owner: 'g/sub', name: 'r', identity: 'gitlab.com/g/sub/r' });
   for (const url of ['C:\\repo', 'C:/repo', 'C:repo', '/srv/repo.git', './repo', '../repo', '~/repo', 'repo.git', 'file:///srv/repo.git', 'file://host/repo.git', 'ftp://host/o/n', '\\\\server\\share\\repo',
     'https://github.com', 'https://github.com/acme', 'https://github.com/acme/.git', 'https://github.com/acme/..', 'https://github.com/acme/a%20b', 'https://user:p@ss@@github.com/a/b/%', 'a@b:c', '', '   ', 'x'.repeat(3000), null, undefined, 7, {}])
     assert.equal(remoteIdentity(url), null, String(url));
   assert.equal(sameIdentity('github.com/Acme/API', 'github.com/acme/api'), true);
   assert.equal(sameIdentity('github.com/acme/api', 'github.com/acme/api2'), false);
+  // Owner and name are case-insensitive only on the hosted services that fold case; the host always is; another port is another service.
+  for (const host of ['github.com', 'gitlab.com', 'bitbucket.org']) assert.equal(sameIdentity(`${host}/Acme/Api`, `${host}/acme/api`), true, host);
+  assert.equal(sameIdentity('git.example.com/Acme/Api', 'git.example.com/acme/api'), false); assert.equal(sameIdentity('git.example.com/acme/api', 'git.example.com/acme/api'), true);
+  assert.equal(sameIdentity('GIT.Example.com/acme/api', 'git.example.com/acme/api'), true); assert.equal(sameIdentity('github.com:8443/Acme/Api', 'github.com:8443/acme/api'), false);
+  assert.equal(sameIdentity('github.com:8443/acme/api', 'github.com/acme/api'), false);
   assert.equal(sameIdentity(null, 'github.com/acme/api'), false);
 });
 
@@ -162,7 +179,9 @@ test('members: known/unresolved fields are explicit, pasted remote URLs lose the
 
 test('absolute local paths, URL userinfo and malformed fields are refused in every free-text and location field', async () => {
   const bytes = (await edit((await shared()).envelopeBytes, { type: 'declare' })).envelopeBytes;
-  const unsafe = ['C:\\Users\\me\\repo', 'c:/work/repo', '\\\\server\\share\\repo', '/home/me/repo', '/Users/me/repo', '/root/repo', '~/repo', 'cloned at /home/me/repo', 'see (~/repo)', 'see file:///etc/passwd', 'https://user:ghp_secret@github.com/acme/api', 'clone from https://ghp_secret@host/x'];
+  const unsafe = ['C:\\Users\\me\\repo', 'c:/work/repo', '\\\\server\\share\\repo', '/home/me/repo', '/Users/me/repo', '/root/repo', '~/repo', 'cloned at /home/me/repo', 'see (~/repo)', 'see file:///etc/passwd', 'https://user:ghp_secret@github.com/acme/api', 'clone from https://ghp_secret@host/x',
+    '/srv/checkouts/api', 'checkout lives at /srv/repos/api', '/opt/a/b', 'see "/mnt/c/work"', '/Volumes/x/y', 'path=/var/lib/x', 'ssh://host/access?token=secret123', 'curl -H api_key=abc', 'password: hunter2', 'secret : s3',
+    'ghp_' + 'a'.repeat(36), 'github_pat_11AAAAAAA', 'glpat-abcdefghij', 'xoxb-123-456', 'sk-' + 'a1'.repeat(12), 'AKIAIOSFODNN7EXAMPLE', 'Token=abc', 'x?access_token=1', 'passwd=1', 'pwd=1', 'apikey=1'];
   const attempt = async (patch, operation = { type: 'set-member', member: { ...UI, ...patch } }) => editWorkspace({ envelopeBytes: bytes, operation, now: NOW });
   for (const text of unsafe) {
     for (const [name, patch] of [['label', { label: text }], ['responsibilities', { responsibilities: { status: 'known', values: [text] } }]]) {
@@ -181,7 +200,10 @@ test('absolute local paths, URL userinfo and malformed fields are refused in eve
     assert.equal(code(await editWorkspace({ envelopeBytes: two, operation: { type: 'set-relationship', relationship: { from: 'api', to: 'ui', kind: 'depends-on', provenance: { kind: 'owner', ref: text } } }, now: NOW })), 'INPUT_INVALID', text);
     assert.equal(code(await editWorkspace({ envelopeBytes: two, operation: { type: 'suggest-relationship', relationship: { from: 'api', to: 'ui', kind: 'depends-on', reason: text } }, now: NOW })), 'INPUT_INVALID', text);
   }
-  for (const safe of ['Owns src/home/index.ts', 'Edits the profile: page', 'Serves api/root/health']) assert.equal((await attempt({ label: safe, responsibilities: { status: 'known', values: [safe] } })).status, 'ok', safe);
+  for (const safe of ['Owns src/home/index.ts', 'Edits the profile: page', 'Serves api/root/health', 'See docs/api/v1/orders and AGENTS.md', 'Owns /health only', 'https://example.com/a/b is documented', 'Rotates secrets quarterly', 'sk-short'])
+    assert.equal((await attempt({ label: safe, responsibilities: { status: 'known', values: [safe] } })).status, 'ok', safe);
+  for (const text of unsafe) assert.equal(unsafeText(text), true, text);
+  for (const text of ['src/home/index.ts', 'profile: page', 'serves api/root/health', 'AGENTS.md', 5, null]) assert.equal(unsafeText(text), false, String(text));
   for (const path of ['AGENTS.md', 'docs/agents/api.md', 'a/b/c.txt', 'src/Users/notes.md', 'src/home/index.ts']) assert.equal((await attempt({ instructions: { status: 'known', locations: [path] } })).status, 'ok', path);
   for (const path of ['/AGENTS.md', '\\AGENTS.md', 'C:AGENTS.md', '~AGENTS.md', '../AGENTS.md', 'a/../b', './a', 'a//b', 'a/', 'a\\b', '', 'x'.repeat(513)])
     assert.equal(code(await attempt({ instructions: { status: 'known', locations: [path] } })), 'INPUT_INVALID', JSON.stringify(path));
@@ -200,7 +222,7 @@ test('a mismatched revision, relationship or binding id and unknown members are 
   const mutations = {
     'revision': [d => { find(d, WORKSPACE_DECLARATION_SCHEMA).revision = hex(7); }, 'derived', '/revision'],
     'member edit without a new revision': [d => { find(d, WORKSPACE_DECLARATION_SCHEMA).members[0].label = 'Edited'; }, 'derived', '/revision'],
-    'relationship id': [d => { find(d, WORKSPACE_DECLARATION_SCHEMA).relationships.confirmed[0].id = `relationship-${'0'.repeat(32)}`; }, 'derived', '/revision'],
+    'relationship id': [d => { find(d, WORKSPACE_DECLARATION_SCHEMA).relationships.confirmed[0].id = `relationship-${'0'.repeat(32)}`; }, 'derived', '/relationships/confirmed/0/id'],
     'binding id': [d => { find(d, LOCAL_BINDING_SCHEMA).id = `binding-${'0'.repeat(32)}`; }, 'derived', '/id'],
     'binding root edited': [d => { find(d, LOCAL_BINDING_SCHEMA).checkout.root = '/work/elsewhere'; }, 'derived', '/id'],
     'unknown declaration field': [d => { find(d, WORKSPACE_DECLARATION_SCHEMA).extra = true; }, 'shape'],
@@ -276,6 +298,10 @@ test('a fork, similar name, ambiguous remote, missing remote or moved checkout n
     'not similar: far apart': [observation({ remotes: [['origin', 'https://github.com/acme/api-gateway']] }), null],
     'ambiguous: two identities': [observation({ remotes: [['origin', 'https://github.com/acme/api'], ['upstream', 'https://github.com/other/lib']] }), ['ambiguous-remote']],
     'fork with upstream': [observation({ remotes: [['origin', 'https://github.com/someone/api'], ['upstream', 'https://github.com/else/api']] }), ['ambiguous-remote', 'fork']],
+    'exact origin with an unrecognizable second remote is ambiguous': [observation({ remotes: [['origin', 'https://github.com/acme/api'], ['upstream', '/srv/git/api.git']] }), ['ambiguous-remote']],
+    'unrecognizable origin next to an exact remote is ambiguous': [observation({ remotes: [['origin', '/srv/git/api.git'], ['upstream', 'https://github.com/acme/api']] }), ['ambiguous-remote']],
+    'fork with an unrecognizable second remote': [observation({ remotes: [['origin', 'https://github.com/someone/api'], ['x', 'ftp://nowhere/o/n']] }), ['ambiguous-remote', 'fork']],
+    'only unrecognizable remotes': [observation({ remotes: [['a', '/srv/git/a.git'], ['b', '/srv/git/b.git']] }), ['no-remote']],
     'no remote': [observation({ remotes: [] }), ['no-remote']],
     'unrecognizable remote': [observation({ remotes: [['origin', '/srv/git/api.git']] }), ['no-remote']]
   };
@@ -320,8 +346,7 @@ test('an unrelated repository, another member\'s repository or checkout, and unk
   // Another member's repository next to this member's own is ambiguous, not a match by accident: confirmation lists exactly that.
   const both = await plan(bytes, 'api', observation({ remotes: [['origin', 'https://github.com/acme/ui'], ['upstream', 'https://github.com/acme/api']] }));
   assert.deepEqual([both.outcome, both.reasons], ['confirm', ['ambiguous-remote']]);
-  const owned = await bind(bytes, 'api', observation({ root: '/work/owned' }));
-  const twin = (await edit(owned.envelopeBytes, { type: 'set-member', member: { id: 'api-fork', identity: 'github.com/acme/api' } })).envelopeBytes;
+  const twin = (await edit(bytes, { type: 'set-member', member: { id: 'api-fork', identity: 'github.com/acme/api' } })).envelopeBytes;
   assert.deepEqual((await plan(twin, 'api', observation())).reasons, ['ambiguous-remote'], 'an identity declared by two members is ambiguous');
   await refuseCase(observation(), 'ghost', 'WORKSPACE_MEMBER_UNKNOWN');
   await refuseCase(observation(), 'api', 'WORKSPACE_BINDING_UNKNOWN', { replaces: `binding-${'0'.repeat(32)}` });
@@ -345,8 +370,15 @@ test('different worktrees of one repository are different bindings; rebinding th
   const bytes = await declared();
   const main = observation({ root: '/work/api', git: 1, kind: 'main' }), linked = observation({ root: '/work/api-feature', git: 2, kind: 'linked', branch: 'feature' });
   const one = (await bind(bytes, 'api', main)).envelopeBytes;
-  assert.equal((await plan(one, 'api', linked)).outcome, 'ready');
-  const two = await bind(one, 'api', linked);
+  // A second checkout of a member that is already bound is deliberate: it needs confirmation as an additional checkout.
+  const extra = await plan(one, 'api', linked);
+  assert.deepEqual([extra.outcome, extra.reasons], ['confirm', ['additional-checkout']]);
+  const unconfirmed = await bindCheckout({ envelopeBytes: one, memberId: 'api', observation: linked, now: NOW });
+  assert.equal(code(unconfirmed), 'WORKSPACE_CONFIRMATION_REQUIRED'); assert.deepEqual(unconfirmed.originalBytes, one);
+  assert.deepEqual((await plan(one, 'api', observation({ root: '/work/api-fork', git: 4, remotes: [['origin', 'https://github.com/someone/api']] }))).reasons, ['additional-checkout', 'fork']);
+  assert.deepEqual((await plan(bytes, 'api', linked)).reasons, [], 'the first checkout of a member needs no such confirmation');
+  const two = await confirmed(one, 'api', linked);
+  assert.deepEqual(recordsOf(two.envelopeBytes, 'local-binding').find(b => b.checkout.root === '/work/api-feature').verification, { result: 'confirmed', reasons: ['additional-checkout'], verifiedAt: NOW });
   const bindings = recordsOf(two.envelopeBytes, 'local-binding');
   assert.equal(bindings.length, 2); assert.equal(new Set(bindings.map(b => b.id)).size, 2);
   assert.deepEqual(bindings.map(b => b.checkout.root).sort(), ['/work/api', '/work/api-feature']);
@@ -361,7 +393,7 @@ test('different worktrees of one repository are different bindings; rebinding th
   const old = bindings.find(b => b.checkout.root === '/work/api');
   const moved = observation({ root: '/elsewhere/api', git: 3 });
   const p = await plan(two.envelopeBytes, 'api', moved, { replaces: old.id });
-  assert.deepEqual([p.outcome, p.reasons], ['confirm', ['moved']]);
+  assert.deepEqual([p.outcome, p.reasons], ['confirm', ['moved']], 'replaces keeps moved and is not also an additional checkout');
   assert.equal(code(await bindCheckout({ envelopeBytes: two.envelopeBytes, memberId: 'api', observation: moved, replaces: old.id, now: NOW })), 'WORKSPACE_CONFIRMATION_REQUIRED');
   const rebound = await confirmed(two.envelopeBytes, 'api', moved, { replaces: old.id });
   const kept = recordsOf(rebound.envelopeBytes, 'local-binding');
@@ -388,7 +420,7 @@ test('verifyBindings reports current, changed, identity-changed, missing, declar
   let bytes = await declared();
   bytes = (await bind(bytes, 'api', observation({ root: '/work/api', git: 1 }))).envelopeBytes;
   bytes = (await bind(bytes, 'ui', observation({ root: '/work/ui', git: 2, remotes: [['origin', 'https://github.com/acme/ui']] }))).envelopeBytes;
-  bytes = (await bind(bytes, 'api', observation({ root: '/work/api-wt', git: 3, kind: 'linked' }))).envelopeBytes;
+  bytes = (await confirmed(bytes, 'api', observation({ root: '/work/api-wt', git: 3, kind: 'linked' }))).envelopeBytes;
   const [api, apiWt, ui] = ['/work/api', '/work/api-wt', '/work/ui'].map(root => recordsOf(bytes, 'local-binding').find(b => b.checkout.root === root));
   const read = valueOf(await readWorkspace({ envelopeBytes: bytes }));
   assert.deepEqual(read.members.flatMap(m => m.bindings.map(b => b.status)), ['unverified', 'unverified', 'unverified']);
@@ -420,13 +452,62 @@ test('verifyBindings reports current, changed, identity-changed, missing, declar
   const renamed = (await edit(bytes, { type: 'set-member', member: { ...API, identity: 'github.com/acme/api-v2', aliases: [] } })).envelopeBytes;
   assert.equal((await verify({}, renamed)).statuses[api.id].status, 'declaration-changed');
   assert.equal(valueOf(await readWorkspace({ envelopeBytes: renamed })).members[0].bindings.length, 2, 'bindings are kept');
-  const aliasBound = (await bind(bytes, 'api', observation({ root: '/work/alias', git: 5, remotes: [['m', 'https://gitlab.com/acme/api-mirror']] }))).envelopeBytes;
+  const aliasBound = (await confirmed(bytes, 'api', observation({ root: '/work/alias', git: 5, remotes: [['m', 'https://gitlab.com/acme/api-mirror']] }))).envelopeBytes;
   const aliasId = recordsOf(aliasBound, 'local-binding').find(b => b.checkout.root === '/work/alias').id;
   assert.equal((await verify({}, aliasBound)).statuses[aliasId].status, 'unverified');
   const noAlias = (await edit(aliasBound, { type: 'set-member', member: { ...API, aliases: [] } })).envelopeBytes;
   assert.equal((await verify({}, noAlias)).statuses[aliasId].status, 'declaration-changed');
   assert.equal(code(await verifyBindings({ envelopeBytes: bytes, observations: { [api.id]: { root: 'x' } } })), 'INPUT_INVALID');
   assert.equal(code(await verifyBindings({ envelopeBytes: bytes, observations: [] })), 'INPUT_INVALID');
+});
+
+test('verifyBindings compares the recorded remotes with the observed ones and flags an ambiguity that is new since the person confirmed', async () => {
+  const acme = 'https://github.com/acme/api', bytes = (await bind(await declared(), 'api', observation())).envelopeBytes, [api] = recordsOf(bytes, 'local-binding');
+  const status = async (obs, source = bytes) => valueOf(await verifyBindings({ envelopeBytes: source, observations: { [api.id]: obs } })).statuses[api.id].status;
+  assert.equal(await status(observation()), 'current');
+  assert.equal(await status(observation({ remotes: [['origin', 'https://github.com/ACME/API.git']] })), 'current', 'case and .git are not changes');
+  // The fork became origin while the declared repository stays as upstream: the identity is still present, but the remotes are not the recorded ones.
+  assert.equal(await status(observation({ remotes: [['origin', 'https://github.com/someone/api'], ['upstream', acme]] })), 'identity-changed');
+  assert.equal(await status(observation({ remotes: [['origin', acme], ['upstream', 'https://github.com/other/lib']] })), 'identity-changed', 'a remote was added');
+  assert.equal(await status(observation({ remotes: [['origin', acme], ['x', '/srv/git/x.git']] })), 'identity-changed', 'an unrecognizable remote was added');
+  assert.equal(await status(observation({ remotes: [['upstream', acme]] })), 'identity-changed', 'the remote was renamed');
+  // An ambiguity the person confirmed is not new; one that appears with a declaration change is.
+  const ambiguous = observation({ remotes: [['origin', acme], ['upstream', 'https://github.com/other/lib']] }), withAmbiguity = (await confirmed(await declared(), 'api', ambiguous)).envelopeBytes;
+  const [known] = recordsOf(withAmbiguity, 'local-binding');
+  assert.deepEqual(known.verification.reasons, ['ambiguous-remote']);
+  assert.equal(valueOf(await verifyBindings({ envelopeBytes: withAmbiguity, observations: { [known.id]: ambiguous } })).statuses[known.id].status, 'current');
+  const twin = (await edit(bytes, { type: 'set-member', member: { id: 'api-fork', identity: 'github.com/acme/api' } })).envelopeBytes;
+  assert.equal(await status(observation(), twin), 'identity-changed');
+  // A case-only edit of the declared identity (github.com folds case) is not a declaration change; another host's case is part of the name.
+  const recased = (await edit(bytes, { type: 'set-member', member: { ...API, identity: 'github.com/ACME/api' } })).envelopeBytes;
+  assert.equal(await status(observation(), recased), 'current');
+  const other = (await edit(await declared(), { type: 'set-member', member: { id: 'api', identity: 'git.example.com/Acme/Api' } })).envelopeBytes;
+  const otherBound = (await bind(other, 'api', observation({ remotes: [['origin', 'https://git.example.com/Acme/Api']] }))).envelopeBytes, [mine] = recordsOf(otherBound, 'local-binding');
+  assert.equal(valueOf(await verifyBindings({ envelopeBytes: otherBound, observations: { [mine.id]: observation({ remotes: [['origin', 'https://git.example.com/Acme/Api']] }) } })).statuses[mine.id].status, 'current');
+  assert.equal(valueOf(await verifyBindings({ envelopeBytes: otherBound, observations: { [mine.id]: observation({ remotes: [['origin', 'https://git.example.com/acme/api']] }) } })).statuses[mine.id].status, 'identity-changed');
+  const recasedRemote = await plan(other, 'api', observation({ remotes: [['origin', 'https://git.example.com/acme/api']] }));
+  assert.deepEqual([recasedRemote.outcome, recasedRemote.reasons], ['confirm', ['fork']], 'a different case on a plain host is not the same repository');
+});
+
+test('relationships return to unresolved when a member is added or removed or its identity or aliases change, and not on other edits', async () => {
+  const shown = async bytes => valueOf(await readWorkspace({ envelopeBytes: bytes })).relationships.shown;
+  const complete = async bytes => (await edit(bytes, { type: 'set-relationship-status', status: 'complete' })).envelopeBytes;
+  const base = await complete(await declared());
+  assert.equal(await shown(base), 'complete');
+  // Label, field and relationship edits do not reopen the judgement.
+  for (const operation of [{ type: 'set-member', member: { ...UI, label: 'UI app' } }, { type: 'set-member', member: { ...UI, responsibilities: { status: 'known', values: ['Renders'] } } }, { type: 'set-label', label: 'Renamed' },
+    { type: 'set-relationship', relationship: { from: 'ui', to: 'api', kind: 'consumes-api', provenance: { kind: 'owner' } } }, { type: 'set-member', member: API }])
+    assert.equal(await shown((await edit(base, operation)).envelopeBytes), 'complete', operation.type);
+  // A new member, another identity, other aliases and a removed member each leave the relationships unjudged.
+  for (const [name, operation] of Object.entries({ 'new member': { type: 'set-member', member: { id: 'docs', identity: 'github.com/acme/docs' } },
+    'identity change': { type: 'set-member', member: { ...UI, identity: 'github.com/acme/ui-v2' } }, 'alias added': { type: 'set-member', member: { ...UI, aliases: ['gitlab.com/acme/ui'] } },
+    'alias removed': { type: 'set-member', member: { ...API, aliases: [] } }, 'member removed': { type: 'remove-member', id: 'ui' } })) {
+    const changed = await edit(base, operation);
+    assert.equal(await shown(changed.envelopeBytes), 'unresolved', name); assert.equal(changed.workspace.relationships.status, 'unresolved', name);
+    assert.deepEqual(changed.workspace.unresolved.at(-1), { memberId: null, field: 'relationships' }, name);
+  }
+  // It can be declared complete again afterwards.
+  assert.equal(await shown(await complete((await edit(base, { type: 'set-member', member: { id: 'docs', identity: 'github.com/acme/docs' } })).envelopeBytes)), 'complete');
 });
 
 // ---- 5. Default export -----------------------------------------------------------------------------------------------
@@ -462,6 +543,35 @@ test('the default export excludes bindings, absolute local paths and credentials
   assert.deepEqual(valueOf(await exportWorkspace({ envelopeBytes: (await shared()).envelopeBytes })).excluded, { bindings: 0 });
   // Exporting twice excludes nothing more.
   assert.deepEqual(valueOf(await exportWorkspace({ envelopeBytes: exported.envelopeBytes })).excluded, { bindings: 0 });
+});
+
+test('the default export refuses unsafe text anywhere in the outgoing envelope or the saved intent, reports only pointers, and still exports a normal composed envelope', async () => {
+  const s = await shared(), { writeJourneyEnvelope } = await import('./journey.mjs');
+  // A normal envelope composed from the installed Catalog, with a workspace and bindings, exports.
+  const normal = await declared(), withBinding = (await bind(normal, 'api', observation())).envelopeBytes;
+  assert.equal(valueOf(await exportWorkspace({ envelopeBytes: withBinding })).excluded.bindings, 1);
+  assert.equal(valueOf(await exportWorkspace({ envelopeBytes: s.envelopeBytes })).excluded.bindings, 0);
+  // An unresolved draft whose root reason names a local path and a token is refused with the original bytes and no echoed value.
+  const dirty = await resign(normal, doc => { doc.records.find(r => r.id === 'draft').intent.roots[0].reason = 'uses /home/alice/private-checkout; token=secret123'; });
+  assert.equal(valueOf(await readWorkspace({ envelopeBytes: dirty })).members.length, 2, 'the envelope itself is valid and readable');
+  const refused = await exportWorkspace({ envelopeBytes: dirty });
+  assert.equal(code(refused), 'WORKSPACE_EXPORT_UNSAFE'); assert.deepEqual(refused.originalBytes, dirty);
+  assert.match(refused.diagnostics[0].path, /^\/records\/\d+\/intent\/roots\/0\/reason$/);
+  const reported = JSON.stringify(refused.diagnostics);
+  for (const leaked of ['alice', 'secret123', '/home/', 'private-checkout', 'token=']) assert.equal(reported.includes(leaked), false, leaked);
+  assert.match(reported, /intent\/roots\/0\/reason/);
+  // The same text in a binding is not a problem: bindings never leave.
+  assert.equal(valueOf(await exportWorkspace({ envelopeBytes: (await bind(normal, 'ui', observation({ root: '/home/alice/private-checkout', remotes: [['origin', 'https://github.com/acme/ui']] }))).envelopeBytes })).excluded.bindings, 1);
+  // The decoded saved intent is checked too, and the raw base64 field is not (it would never pass), nor is an ordinary Catalog policy.
+  const read = valueOf(await readJourneyEnvelope(normal)), policy = JSON.parse(decode(read.savedIntentBytes));
+  const written = await writeJourneyEnvelope({ savedIntentBytes: encode(JSON.stringify({ ...policy, note: 'checkout at /srv/checkouts/api' })), records: read.records.filter(r => r.id === 'draft').map(({ savedIntentSha256: _bound, ...rest }) => rest) });
+  const unsafeIntent = (await edit(valueOf(written).envelopeBytes, { type: 'declare' })).envelopeBytes, refusedIntent = await exportWorkspace({ envelopeBytes: unsafeIntent });
+  assert.equal(code(refusedIntent), 'WORKSPACE_EXPORT_UNSAFE'); assert.equal(refusedIntent.diagnostics[0].path, '/savedIntent/note'); assert.deepEqual(refusedIntent.originalBytes, unsafeIntent);
+  assert.equal(JSON.stringify(refusedIntent.diagnostics).includes('srv'), false);
+  // Many offenders: at most 20 pointers.
+  const many = await resign(normal, doc => { for (const root of doc.records.find(r => r.id === 'draft').intent.roots) root.reason = 'x'; doc.records.push(...Array.from({ length: 30 }, (_, n) => ({ id: `note-${n}`, schema: 'urn:aihq:workbench:journey-record:future-note:1.0.0', required: false, text: 'see /srv/a/b' }))); });
+  const crowded = await exportWorkspace({ envelopeBytes: many });
+  assert.equal(code(crowded), 'WORKSPACE_EXPORT_UNSAFE'); assert.equal(crowded.diagnostics[0].message.split('/records/').length - 1, 20);
 });
 
 // ---- 6. Unsupported versions -----------------------------------------------------------------------------------------
@@ -575,7 +685,7 @@ test('observeCheckout reads Git metadata only: same identity across worktrees, d
     // The observation is a valid input to planning; two worktrees of one repository bind separately.
     let bytes = await declared();
     bytes = valueOf(await bindCheckout({ envelopeBytes: bytes, memberId: 'api', observation: a, now: NOW })).envelopeBytes;
-    assert.equal(valueOf(await bindCheckout({ envelopeBytes: bytes, memberId: 'api', observation: b, now: NOW })).workspace.members[0].bindings.length, 2);
+    assert.equal((await confirmed(bytes, 'api', b)).workspace.members[0].bindings.length, 2);
     // A non-repository folder, a missing folder and bad input are refusals that echo nothing.
     const none = observeCheckout(plain);
     assert.equal(code(none), 'CHECKOUT_NOT_REPOSITORY');
@@ -595,6 +705,112 @@ test('observeCheckout reads Git metadata only: same identity across worktrees, d
     assert.equal(dirty.revision, a.revision);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+const gitIn = (cwd, ...args) => { const result = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8', windowsHide: true }); assert.equal(result.status, 0, result.stderr); return result.stdout.trim(); };
+const posix = path => path.replaceAll('\\', '/');
+// A process runner that answers every Git call the host makes from canned output, so folder-reading rules are tested without Git.
+const fakeGit = ({ top, config = '', status = Buffer.alloc(0) }) => (_command, args) => {
+  const sub = args.slice(args.indexOf('-C') + 2), ok = stdout => ({ status: 0, stdout, stderr: '' });
+  if (sub[0] === 'rev-parse' && sub.includes('--show-toplevel')) return ok(`${posix(top)}\n${posix(join(top, '.git'))}\n${posix(join(top, '.git'))}\n`);
+  if (sub[0] === 'rev-parse') return ok(`${'a'.repeat(40)}\n`);
+  if (sub[0] === 'symbolic-ref') return ok('main\n');
+  return sub[0] === 'config' ? ok(config) : ok(status);
+};
+const porcelain = (...entries) => Buffer.from(entries.map(entry => `${entry}\0`).join(''));
+test('observeCheckout never runs a command the repository configures, drops inherited Git variables and keeps every remote', async () => {
+  const { writeFile, appendFile, access } = await import('node:fs/promises'), root = await realpath(await mkdtemp(join(tmpdir(), 'aih-workspace-'))), calls = [], saved = { ...process.env };
+  const exists = path => access(path).then(() => true, () => false);
+  try {
+    const repo = join(root, 'repo'); await mkdir(repo); gitIn(repo, 'init', '-q'); gitIn(repo, 'commit', '-q', '--allow-empty', '-m', 'init');
+    // A configured fsmonitor command runs on `git status`; observing must not run it. The fixture first proves plain Git does run it.
+    const marker = join(root, 'fsmonitor-ran'), script = join(root, 'fsmonitor.sh');
+    await writeFile(script, `#!/bin/sh\n: > '${posix(marker)}'\nprintf '\\0'\n`);
+    gitIn(repo, 'config', 'core.fsmonitor', `sh '${posix(script)}'`);
+    gitIn(repo, 'status', '--porcelain');
+    assert.equal(await exists(marker), true, 'the fixture hook runs under plain git status');
+    await rm(marker);
+    valueOf(observeCheckout(repo));
+    assert.equal(await exists(marker), false, 'observeCheckout did not run the configured fsmonitor command');
+    // A remote whose name cannot be carried is still a remote: it is recorded once as (unrecognized), so a plan sees the ambiguity.
+    await appendFile(join(repo, '.git', 'config'), '[remote "origin"]\n\turl = https://user:tok@github.com/acme/api.git\n[remote "up@x"]\n\turl = https://github.com/evil/other\n[remote "up y"]\n\turl = https://github.com/evil/other2\n[remote "multi"]\n\turl = https://github.com/a/b\n\turl = https://github.com/c/d\n');
+    // Inherited variables that would point Git at another repository or add configuration are not passed on (they would break this call).
+    Object.assign(process.env, { GIT_DIR: join(root, 'elsewhere'), GIT_WORK_TREE: root, GIT_INDEX_FILE: join(root, 'index'), GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.fsmonitor', GIT_CONFIG_VALUE_0: 'true', GIT_CONFIG_PARAMETERS: "'core.fsmonitor=true'" });
+    let odd;
+    try { odd = valueOf(observeCheckout(repo, (command, args, options) => { calls.push({ command, args, options }); return spawnSync(command, args, options); })); } finally { for (const key of Object.keys(process.env)) if (!(key in saved)) delete process.env[key]; }
+    assert.deepEqual(odd.remotes, [{ name: '(unrecognized)', identity: null }, { name: 'multi', identity: null }, { name: 'origin', identity: 'github.com/acme/api' }]);
+    assert.equal(JSON.stringify(odd).includes('tok'), false);
+    const planned = await plan(await declared(), 'api', odd);
+    assert.deepEqual([planned.outcome, planned.reasons], ['confirm', ['ambiguous-remote']]);
+    assert.ok(calls.length >= 5);
+    for (const { command, args, options } of calls) {
+      assert.equal(command, 'git');
+      assert.deepEqual(args.slice(0, 5), ['--no-optional-locks', '-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false']);
+      assert.equal(options.windowsHide, true); assert.equal(options.env.GIT_TERMINAL_PROMPT, '0'); assert.equal(options.env.GIT_OPTIONAL_LOCKS, '0');
+      assert.deepEqual(Object.keys(options.env).filter(key => /^GIT_(?:DIR|WORK_TREE|INDEX_FILE|CONFIG.*)$/i.test(key)), []);
+    }
+    assert.ok(calls.find(call => call.args.includes('--get-regexp')).args.includes('--local'));
+    assert.ok(calls.find(call => call.args.includes('status')).args.includes('--untracked-files=all'));
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('observeCheckout refuses in words a person can act on: ownership, too many remotes, too many changes', async () => {
+  const { writeFile, truncate } = await import('node:fs/promises'), root = await realpath(await mkdtemp(join(tmpdir(), 'aih-workspace-')));
+  try {
+    const remotes = count => Array.from({ length: count }, (_, n) => `remote.r${n}.url\nhttps://github.com/a/r${n}\0`).join('');
+    assert.equal(valueOf(observeCheckout(root, fakeGit({ top: root, config: remotes(32) }))).remotes.length, 32);
+    const tooMany = observeCheckout(root, fakeGit({ top: root, config: remotes(33) }));
+    assert.equal(code(tooMany), 'CHECKOUT_UNAVAILABLE'); assert.equal(tooMany.diagnostics[0].message, 'The checkout has more than 32 remotes.');
+    const dubious = () => ({ status: 128, stdout: '', stderr: "fatal: detected dubious ownership in repository at 'C:/secret/place'\nTo add an exception for this directory, call:\n\tgit config --global --add safe.directory C:/secret/place\n" });
+    const owned = observeCheckout(root, dubious);
+    assert.equal(code(owned), 'CHECKOUT_UNAVAILABLE'); assert.equal(owned.diagnostics[0].message, 'Git refuses this folder because it is owned by another user (safe.directory).');
+    assert.equal(JSON.stringify(owned).includes('secret'), false);
+    assert.equal(code(observeCheckout(root, () => ({ status: 128, stdout: '', stderr: 'fatal: not a git repository' }))), 'CHECKOUT_NOT_REPOSITORY');
+    // Up to 2000 changed paths are identified; one more is refused (before any file is read), and so are more than 256 MiB of changed bytes.
+    const paths = count => porcelain(...Array.from({ length: count }, (_, n) => `?? many/f${n}`));
+    assert.equal(valueOf(observeCheckout(root, fakeGit({ top: root, status: paths(2000) }))).workingState.clean, false);
+    const crowded = observeCheckout(root, fakeGit({ top: root, status: paths(2001) }));
+    assert.equal(code(crowded), 'CHECKOUT_UNAVAILABLE'); assert.equal(crowded.diagnostics[0].message, 'Too many changed files to identify the working state; commit or stash, then inspect again.');
+    await writeFile(join(root, 'big.bin'), ''); await truncate(join(root, 'big.bin'), 257 * 1024 * 1024);
+    assert.equal(observeCheckout(root, fakeGit({ top: root, status: porcelain('?? big.bin') })).diagnostics[0].message, crowded.diagnostics[0].message);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('the working state covers the content of changed files, so editing an already changed file changes it', async () => {
+  const { writeFile, symlink, mkdir: makeDir } = await import('node:fs/promises'), root = await realpath(await mkdtemp(join(tmpdir(), 'aih-workspace-')));
+  try {
+    const state = (...entries) => valueOf(observeCheckout(root, fakeGit({ top: root, status: porcelain(...entries) }))).workingState;
+    await writeFile(join(root, 'a.txt'), 'one');
+    const first = state(' M a.txt');
+    await writeFile(join(root, 'a.txt'), 'two');                           // the same status line, other bytes
+    const second = state(' M a.txt');
+    assert.deepEqual([first.clean, second.clean], [false, false]); assert.notEqual(first.sha256, second.sha256);
+    await writeFile(join(root, 'a.txt'), 'one'); assert.equal(state(' M a.txt').sha256, first.sha256, 'the same content is the same state');
+    assert.equal(state().clean, true);
+    // An untracked file, and a deleted one (listed, but nothing to read).
+    await writeFile(join(root, 'u.txt'), 'aaa'); const u1 = state('?? u.txt'); await writeFile(join(root, 'u.txt'), 'bbb'); assert.notEqual(state('?? u.txt').sha256, u1.sha256);
+    assert.equal(state(' D gone.txt').clean, false); assert.notEqual(state(' D gone.txt').sha256, state(' D other.txt').sha256);
+    // A rename or copy entry is followed by its original path; that path is not a change of its own (`zzzc.txt` would otherwise read as `c.txt`).
+    await writeFile(join(root, 'b.txt'), 'b1'); await writeFile(join(root, 'c.txt'), 'c1');
+    for (const kind of ['R ', ' R', 'C ']) {
+      const entry = `${kind} b.txt`, renamed = state(entry, 'zzzc.txt'), before = renamed.sha256;
+      await writeFile(join(root, 'c.txt'), 'c2'); assert.equal(state(entry, 'zzzc.txt').sha256, before, kind); await writeFile(join(root, 'c.txt'), 'c1');
+      await writeFile(join(root, 'b.txt'), 'b2'); assert.notEqual(state(entry, 'zzzc.txt').sha256, before, kind); await writeFile(join(root, 'b.txt'), 'b1');
+    }
+    // A symlink digests its target string and is never followed; so is a path below a link that leaves the checkout. Without the privilege to make
+    // links the symlink assertions are skipped, never weakened.
+    const outside = join(root, 'outside'); await makeDir(outside); await writeFile(join(outside, 'file.txt'), 'secret'); await makeDir(join(root, 'work'));
+    const checkout = join(root, 'work');
+    const inside = (...entries) => valueOf(observeCheckout(checkout, fakeGit({ top: checkout, status: porcelain(...entries) }))).workingState;
+    try {
+      await symlink(join(outside, 'file.txt'), join(checkout, 'link'), 'file'); const l1 = inside('?? link');
+      await writeFile(join(outside, 'file.txt'), 'changed elsewhere'); assert.equal(inside('?? link').sha256, l1.sha256, 'the target of a link is not read');
+      await rm(join(checkout, 'link')); await symlink(join(outside, 'other.txt'), join(checkout, 'link'), 'file'); assert.notEqual(inside('?? link').sha256, l1.sha256, 'another target is a change');
+      await symlink(outside, join(checkout, 'door'), process.platform === 'win32' ? 'junction' : 'dir'); const d1 = inside('?? door/file.txt');
+      await writeFile(join(outside, 'file.txt'), 'changed again'); assert.equal(inside('?? door/file.txt').sha256, d1.sha256, 'a path that leaves the checkout is not read');
+    } catch (error) { if (!['EPERM', 'EACCES', 'ENOSYS'].includes(error.code)) throw error; }
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 
 // ---- 9. Service operations --------------------------------------------------------------------------------------------
 test('mixed service: an ordinary saved policy becomes a draft on workspace-edit; bind returns the draft; export has no bindings', async () => {
@@ -633,9 +849,9 @@ test('mixed service: an ordinary saved policy becomes a draft on workspace-edit;
   assert.equal(code(await service.run('workspace-edit', { operation: { type: 'declare' } })), 'INPUT_INVALID');
   const fork = await createMixedService(s.maintained, { observeCheckout: root => ({ status: 'ok', diagnostics: [], value: observation({ root, remotes: [['origin', 'https://github.com/someone/api']] }) }) });
   const forkPlan = valueOf(await fork.run('workspace-plan', { envelopeBytes: bytes, memberId: 'api', root: '/work/fork' }));
-  assert.deepEqual([forkPlan.outcome, forkPlan.reasons], ['confirm', ['fork']]);
+  assert.deepEqual([forkPlan.outcome, forkPlan.reasons], ['confirm', ['additional-checkout', 'fork']]);
   assert.equal(code(await fork.run('workspace-bind', { envelopeBytes: bytes, memberId: 'api', root: '/work/fork' })), 'WORKSPACE_CONFIRMATION_REQUIRED');
-  const forkBound = valueOf(await fork.run('workspace-bind', { envelopeBytes: bytes, memberId: 'api', root: '/work/fork', confirmation: { observationSha256: forkPlan.observationSha256, reasons: ['fork'] } }));
+  const forkBound = valueOf(await fork.run('workspace-bind', { envelopeBytes: bytes, memberId: 'api', root: '/work/fork', confirmation: { observationSha256: forkPlan.observationSha256, reasons: ['additional-checkout', 'fork'] } }));
   assert.equal(forkBound.projection.members[0].bindings.find(b => b.checkout.root === '/work/fork').verification.result, 'confirmed');
 });
 
@@ -678,7 +894,7 @@ test('shipped workspace schemas agree structurally with the runtime records and 
   const observed = bindingSchema.properties.observed;
   assert.deepEqual([...observed.required].sort(), ['remotes', 'repository', 'revision', 'workingState', 'worktree']); assert.deepEqual(Object.keys(observed.properties).sort(), [...Object.keys(binding.observed)].sort());
   assert.deepEqual([...bindingSchema.properties.verification.required].sort(), Object.keys(binding.verification).sort());
-  assert.deepEqual(bindingSchema.properties.verification.properties.reasons.items.enum, ['ambiguous-remote', 'fork', 'moved', 'no-remote', 'similar-name']);
+  assert.deepEqual(bindingSchema.properties.verification.properties.reasons.items.enum, ['additional-checkout', 'ambiguous-remote', 'fork', 'moved', 'no-remote', 'similar-name']);
   assert.deepEqual(observed.properties.worktree.properties.kind.enum, ['main', 'linked']);
   assert.match(binding.observed.revision, new RegExp(observed.properties.revision.oneOf[0].pattern));
   // The path, identity and root patterns accept and refuse the same values as the runtime.

@@ -57,7 +57,7 @@
         "identity": {
           "type": "string",
           "maxLength": 512,
-          "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?:/[\\w.+~-]+){2,}$"
+          "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[1-9]\\d{0,4})?(?:/[\\w.+~-]+){2,}$"
         }
       }
     },
@@ -92,7 +92,7 @@
             {
               "type": "string",
               "maxLength": 512,
-              "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?:/[\\w.+~-]+){2,}$"
+              "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[1-9]\\d{0,4})?(?:/[\\w.+~-]+){2,}$"
             },
             {
               "type": "null"
@@ -112,14 +112,14 @@
             "properties": {
               "name": {
                 "type": "string",
-                "pattern": "^[\\w./-]{1,200}$"
+                "pattern": "^(?:[\\w./-]{1,200}|\\(unrecognized\\))$"
               },
               "identity": {
                 "oneOf": [
                   {
                     "type": "string",
                     "maxLength": 512,
-                    "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?:/[\\w.+~-]+){2,}$"
+                    "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[1-9]\\d{0,4})?(?:/[\\w.+~-]+){2,}$"
                   },
                   {
                     "type": "null"
@@ -201,10 +201,11 @@
         },
         "reasons": {
           "type": "array",
-          "maxItems": 5,
+          "maxItems": 6,
           "uniqueItems": true,
           "items": {
             "enum": [
+              "additional-checkout",
               "ambiguous-remote",
               "fork",
               "moved",

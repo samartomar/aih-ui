@@ -9,19 +9,24 @@ export const LOCAL_BINDING_RECORD_SCHEMA = 'urn:aihq:workbench:journey-record:lo
 export const WORKSPACE_DECLARATION_RECORD_ID = 'workspace-declaration';
 export const RELATIONSHIP_KINDS = ['depends-on', 'consumes-api', 'deploys', 'shares-contract'];
 export const PROVENANCE_KINDS = ['owner', 'contract', 'instruction'];
-export const BINDING_REASONS = ['ambiguous-remote', 'fork', 'moved', 'no-remote', 'similar-name'];
+export const BINDING_REASONS = ['additional-checkout', 'ambiguous-remote', 'fork', 'moved', 'no-remote', 'similar-name'];
 export const MAX_MEMBERS = 64, MAX_RELATIONSHIPS = 256, MAX_BINDINGS = 256;
-const slugPattern = /^[a-z0-9][a-z0-9-]{0,63}$/, commitPattern = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/, remoteName = /^[\w./-]{1,200}$/;
+const slugPattern = /^[a-z0-9][a-z0-9-]{0,63}$/, commitPattern = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/, remoteName = /^(?:[\w./-]{1,200}|\(unrecognized\))$/;
+// A remote whose name this module cannot carry is recorded under this name with no identity, so it still counts as an unresolved remote.
+export const UNRECOGNIZED_REMOTE = '(unrecognized)';
 // Same canonical JSON as headless `stable`; kept local so this module has no host dependency.
 const stable = value => JSON.stringify(value, (_key, member) => member && typeof member === 'object' && !Array.isArray(member)
   ? Object.fromEntries(Object.entries(member).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : member);
 export const digest = async value => digestBytes(new TextEncoder().encode(stable(value)));
 const list = (value, max, each, min = 0) => Array.isArray(value) && value.length >= min && value.length <= max && value.every(each);
 const sortedUnique = values => values.every((value, index) => index === 0 || values[index - 1] < value);
-// A drive path, a UNC path, a file URL, a home path or a URL with userinfo: refused wherever free text or a location is accepted.
-// Home and `~` paths count only where a path starts, so a repository path such as `src/home/index.ts` stays valid.
+// A drive path, a UNC path, a file URL, a home path, any absolute POSIX path of two or more segments, a URL with userinfo or a
+// recognizable credential: refused wherever free text or a location is accepted. Paths count only where a path starts, so a
+// repository path such as `src/home/index.ts` or text such as `serves api/root/health` stays valid.
 const start = String.raw`(?:^|[\s"'(=,;])`;
-const LOCAL_OR_SECRET = [/(?<![A-Za-z0-9])[A-Za-z]:[\\/]/, /\\\\/, /\bfile:/i, new RegExp(`${start}~[\\\\/]`), new RegExp(`${start}/(?:home|Users|root)/`, 'i'), /:\/\/[^\s/?#]*@/];
+const LOCAL_OR_SECRET = [/(?<![A-Za-z0-9])[A-Za-z]:[\\/]/, /\\\\/, /\bfile:/i, new RegExp(`${start}~[\\\\/]`), new RegExp(`${start}/(?:home|Users|root)/`, 'i'), new RegExp(`${start}/[^\\s/]+/`), /:\/\/[^\s/?#]*@/,
+  /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}/, /\bgithub_pat_/, /\bglpat-/, /\bxox[abprs]-/, /\bsk-[A-Za-z0-9]{20,}/, /\bAKIA[0-9A-Z]{16}\b/,
+  /(?:access_token|token|api[_-]?key|apikey|secret|password|passwd|pwd)=/i, /(?:password|passwd|secret|api[_-]?key)\s*:\s*\S/i];
 export const unsafeText = value => typeof value === 'string' && LOCAL_OR_SECRET.some(pattern => pattern.test(value));
 const plain = (value, max) => typeof value === 'string' && value.length >= 1 && value.length <= max && !/[\x00-\x1f\x7f]/.test(value);
 const text = (value, max) => plain(value, max) && !unsafeText(value);
@@ -31,22 +36,29 @@ export const isRepoPath = value => plain(value, 512) && !unsafeText(value) && !/
   && value.split('/').every(segment => segment !== '' && segment !== '.' && segment !== '..');
 const isUrn = value => plain(value, 300) && /^urn:[a-z0-9][a-z0-9-]{0,31}:[\w.:@%/+-]+$/i.test(value);
 // ---- Remote identity ---------------------------------------------------------------------------------------------
-const SCHEMES = ['http', 'https', 'ssh', 'git', 'git+ssh'], HOST = /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/, SEGMENT = /^[\w.+~-]+$/;
-// `host/owner/name` of a remote, or null for anything that is not a recognizable network repository. Userinfo
-// (credentials), port, query and a trailing `.git` are dropped, so the result never carries a secret; local paths and
-// file URLs are null and never echoed. Owner may hold subgroups; owner and name keep their case.
+const DEFAULT_PORTS = { http: '80', https: '443', ssh: '22', 'git+ssh': '22', git: '9418' }, SCHEMES = Object.keys(DEFAULT_PORTS);
+const HOST = /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/, SEGMENT = /^[\w.+~-]+$/;
+// `host[:port]/owner/name` of a remote, or null for anything that is not a recognizable network repository. Userinfo
+// (credentials), query and a trailing `.git` are dropped, so the result never carries a secret; a port stays unless it is the
+// scheme's default, since another port is another service; local paths and file URLs are null and never echoed. Owner may hold
+// subgroups; owner and name keep their case.
 export function remoteIdentity(url) {
   if (typeof url !== 'string') return null;
   const value = url.trim();
   if (value.length === 0 || value.length > 2048 || /[\x00-\x20\x7f\\]/.test(value)) return null;
-  let host, path;
+  let host, path, port = '';
   const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(value);
   if (scheme) {
-    if (!SCHEMES.includes(scheme[1].toLowerCase())) return null;
+    const kind = scheme[1].toLowerCase();
+    if (!SCHEMES.includes(kind)) return null;
     const rest = value.slice(scheme[0].length), end = rest.search(/[/?#]/);
     if (end < 0) return null;
-    const authority = rest.slice(0, end);
-    host = authority.slice(authority.lastIndexOf('@') + 1).replace(/:\d*$/, '');
+    const authority = rest.slice(0, end), given = /^(.*?)(?::(\d*))?$/.exec(authority.slice(authority.lastIndexOf('@') + 1));
+    host = given[1];
+    if (given[2]) {
+      if (!/^[1-9]\d{0,4}$/.test(given[2]) || Number(given[2]) > 65535) return null;
+      if (given[2] !== DEFAULT_PORTS[kind]) port = given[2];
+    }
     path = rest.slice(end).replace(/[?#].*$/, '');
   } else {
     const scp = /^(?:[^@/]*@)?([^:/@]+):(.+)$/.exec(value);
@@ -57,13 +69,31 @@ export function remoteIdentity(url) {
   if (!HOST.test(host)) return null;
   const segments = path.replace(/^\/+/, '').replace(/\/+$/, '').replace(/\.git$/, '').split('/');
   if (segments.length < 2 || !segments.every(segment => SEGMENT.test(segment) && !/^\.+$/.test(segment))) return null;
-  const name = segments.at(-1), owner = segments.slice(0, -1).join('/'), identity = `${host}/${owner}/${name}`;
-  return identity.length <= 512 ? { host, owner, name, identity } : null;
+  const where = port === '' ? host : `${host}:${port}`, name = segments.at(-1), owner = segments.slice(0, -1).join('/'), identity = `${where}/${owner}/${name}`;
+  return identity.length <= 512 ? { host: where, owner, name, identity } : null;
 }
-export const isIdentity = value => typeof value === 'string' && remoteIdentity(`https://${value}`)?.identity === value;
-export const sameIdentity = (a, b) => typeof a === 'string' && typeof b === 'string' && a.toLowerCase() === b.toLowerCase();
-// What a person typed for an identity: a remote URL (its credentials dropped) or an already normalized `host/owner/name`.
-export const identityOf = value => typeof value === 'string' ? (remoteIdentity(value)?.identity ?? remoteIdentity(`https://${value}`)?.identity ?? null) : null;
+const IDENTITY = /^([a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::([1-9]\d{0,4}))?)((?:\/[\w.+~-]+){2,})$/;
+// The parts of a normalized `host[:port]/owner/name` as remoteIdentity returns it, else null.
+export function parseIdentity(value) {
+  const match = typeof value === 'string' && value.length <= 512 ? IDENTITY.exec(value) : null;
+  if (!match || Number(match[2] ?? 0) > 65535 || match[3].endsWith('.git') || match[3].split('/').some(segment => /^\.+$/.test(segment))) return null;
+  const segments = match[3].slice(1).split('/');
+  return { host: match[1], owner: segments.slice(0, -1).join('/'), name: segments.at(-1) };
+}
+export const isIdentity = value => parseIdentity(value) !== null;
+// Hosted services that fold the case of owner and name; everywhere else case is part of the name. The host always folds.
+const CASE_INSENSITIVE_HOSTS = new Set(['github.com', 'gitlab.com', 'bitbucket.org']);
+const identityKey = value => { const at = value.indexOf('/'), host = value.slice(0, at).toLowerCase(); return CASE_INSENSITIVE_HOSTS.has(host) ? value.toLowerCase() : `${host}${value.slice(at)}`; };
+export const sameIdentity = (a, b) => typeof a === 'string' && typeof b === 'string' && a.includes('/') && b.includes('/') && identityKey(a) === identityKey(b);
+// What a person typed for an identity: a remote URL (its credentials dropped) or an already normalized `host[:port]/owner/name`.
+export function identityOf(value) {
+  if (typeof value !== 'string') return null;
+  const text = value.trim();
+  if (isIdentity(text)) return text;
+  // `host:port/owner/name` without a scheme would read as scp-like (`host:path`), so it is read as an https identity first.
+  const typed = !text.includes('://') && /^[A-Za-z0-9.-]+(?::\d{1,5})?\/[^@\s]*$/.test(text);
+  return (typed ? remoteIdentity(`https://${text}`) : remoteIdentity(text) ?? remoteIdentity(`https://${text}`))?.identity ?? null;
+}
 // ---- Checkout roots ------------------------------------------------------------------------------------------------
 const absoluteRoot = value => plain(value, 1024) && /^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(value);
 const rootKey = root => { const key = root.replaceAll('\\', '/').replace(/\/+$/, ''); return /^(?:[A-Za-z]:|\/\/)/.test(key) ? key.toLowerCase() : key; };
@@ -78,7 +108,7 @@ export function memberProblem(member) {
   if (!isSlug(member.id)) return '/id';
   if (!isIdentity(member.identity)) return '/identity';
   if (!list(member.aliases, 16, isIdentity) || !sortedUnique(member.aliases) || member.aliases.some(alias => sameIdentity(alias, member.identity))
-    || new Set(member.aliases.map(alias => alias.toLowerCase())).size !== member.aliases.length) return '/aliases';
+    || member.aliases.some((alias, index) => member.aliases.slice(0, index).some(earlier => sameIdentity(alias, earlier)))) return '/aliases';
   if (member.label !== undefined && !text(member.label, 120)) return '/label';
   if (!known(member.responsibilities, 'values', 32, value => text(value, 300))) return '/responsibilities';
   if (!known(member.instructions, 'locations', 32, isRepoPath)) return '/instructions';
@@ -143,7 +173,7 @@ export async function declarationDerivedProblem(record) {
 // The Git state both an observation and a binding's observed section carry; pointer relative to that object, else null.
 export function stateProblem(state) {
   const { remotes, revision, branch, worktree, workingState } = state;
-  if (!list(remotes, 32, remote => only(remote, ['name', 'identity']) && remoteName.test(remote.name) && (remote.identity === null || isIdentity(remote.identity)))
+  if (!list(remotes, 32, remote => only(remote, ['name', 'identity']) && remoteName.test(remote.name) && (remote.identity === null || (remote.name !== UNRECOGNIZED_REMOTE && isIdentity(remote.identity))))
     || !sortedUnique(remotes.map(remote => remote.name))) return '/remotes';
   if (revision !== null && !commitPattern.test(revision)) return '/revision';
   if (branch !== undefined && !plain(branch, 255)) return '/branch';

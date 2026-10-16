@@ -2,6 +2,7 @@
 export const WORKSPACE_DECLARATION_RECORD_SCHEMA = 'urn:aihq:workbench:journey-record:workspace-declaration:1.0.0';
 export const LOCAL_BINDING_RECORD_SCHEMA = 'urn:aihq:workbench:journey-record:local-binding:1.0.0';
 const READ_ONLY = 'This workspace uses a record version this Workbench does not support. It is shown read-only; the original bytes are kept unchanged.';
+const LOCAL_BINDINGS_UNSUPPORTED = 'Some local bindings use a version this Workbench does not support; they are kept unchanged and are never exported.';
 const SHARE_NOTE = 'Local checkout bindings, absolute paths and credentials are not included.';
 const trim = value => String(value ?? '').trim();
 const list = value => trim(value).split(',').map(trim).filter(Boolean);
@@ -13,6 +14,7 @@ export function relationshipSummary(projection) {
     : `Relationships: unresolved — ${count} confirmed so far; this map may be incomplete.`;
 }
 const REASONS = {
+  'additional-checkout': 'This member is already bound to another folder; confirm this is an additional checkout (another worktree or clone). If the checkout moved, use Rebind (moved) instead.',
   moved: 'This member was bound to a different folder; confirm the checkout moved.',
   fork: "The checkout's remote is a fork: same name under a different owner.",
   'similar-name': "The checkout's repository name only resembles the declared one.",
@@ -30,7 +32,7 @@ const STATUSES = {
 };
 export const bindingStatusText = status => STATUSES[status] ?? STATUSES.unverified;
 export function memberOperation(form) {
-  const member = { id: trim(form.id), identity: trim(form.identity), aliases: [], ...(trim(form.label) ? { label: trim(form.label) } : {}) };
+  const member = { id: trim(form.id), identity: trim(form.identity), aliases: [...new Set(list(form.aliases))], ...(trim(form.label) ? { label: trim(form.label) } : {}) };
   for (const [field, key] of Object.entries(FIELDS)) {
     const values = list(form[field]);
     member[field] = form[`${field}Status`] === 'known' && values.length ? { status: 'known', [key]: values } : { status: 'unresolved' };
@@ -76,7 +78,7 @@ export function createWorkspaceView({ client, el, button, showStatus, download =
   // Form nodes survive pending renders, keeping typed values when a request fails.
   const declareForm = el('div', 'space-y-1'), memberForm = el('div', 'space-y-1');
   const declarationLabel = field(declareForm, 'Workspace label');
-  const memberFields = { id: field(memberForm, 'Member id'), identity: field(memberForm, 'Remote identity'), label: field(memberForm, 'Member label') };
+  const memberFields = { id: field(memberForm, 'Member id'), identity: field(memberForm, 'Remote identity'), aliases: field(memberForm, 'Aliases (comma-separated)'), label: field(memberForm, 'Member label') };
   memberFields.identity.placeholder = 'github.com/acme/api';
   for (const name of Object.keys(FIELDS)) {
     memberFields[`${name}Status`] = field(memberForm, `${name} status`, ['unresolved', 'known']);
@@ -101,7 +103,7 @@ export function createWorkspaceView({ client, el, button, showStatus, download =
     if (isUnsupported(result)) unsupported = true;
     if (result?.status === 'ok') {
       receive?.(result.value);
-      unsupported = unsupported || Boolean(projection?.unsupported?.length);
+      unsupported = unsupported || Boolean(projection?.unsupported?.some(record => record.schema?.includes(':workspace-declaration:')));
       if (write) { plans.clear(); message = 'Workspace choice recorded. Save the draft to keep it.'; showStatus(message); }
     } else { message = diagnostic(result); showStatus(message); }
     render();
@@ -118,26 +120,38 @@ export function createWorkspaceView({ client, el, button, showStatus, download =
     text(parent, `Repository: ${observed.repository ?? 'Unresolved'}; revision: ${observed.revision?.slice(0, 12) ?? 'Unborn'}; branch: ${observed.branch ?? 'Detached'}; worktree: ${observed.worktree?.kind ?? 'Unknown'}; ${observed.workingState?.clean ? 'clean' : 'dirty'}`);
     for (const remote of observed.remotes ?? []) text(parent, `Remote ${remote.name}: ${remote.identity ?? 'Unresolved'}`);
   }
+  function bindingRow(binding, member, folder) {
+    const row = el('div', 'p-2 border border-wb-border rounded space-y-1');
+    text(row, binding.checkout?.root ?? binding.root ?? 'Unknown folder'); observation(row, binding.observed);
+    text(row, `Result: ${binding.verification?.result ?? 'Unknown'}`);
+    for (const reason of binding.verification?.reasons ?? []) text(row, reasonText(reason));
+    text(row, bindingStatusText(statuses.get(binding.id) ?? (typeof binding.status === 'string' ? binding.status : binding.status?.status)));
+    if (member) row.append(action('Rebind (moved)', () => inspect(member, folder, binding.id)));
+    row.append(action('Remove binding', () => request(() => client.unbindCheckout(binding.id), { write: true, receive: value => { projection = value.projection; } })));
+    return row;
+  }
   function memberCard(member) {
     const card = el('div', 'p-2 border border-wb-border rounded space-y-1');
     card.dataset.memberId = member.id;
     text(card, `${member.id}${member.label ? ` — ${member.label}` : ''}: ${member.identity}`);
     text(card, `Aliases: ${(member.aliases ?? []).join(', ') || 'None confirmed'}`);
     for (const [name, key] of Object.entries(FIELDS)) text(card, `${name}: ${member[name]?.status === 'known' ? `Known: ${member[name][key].join(', ')}` : 'Unresolved'}`);
+    card.append(action('Edit member', () => {
+      memberFields.id.value = member.id;
+      memberFields.identity.value = member.identity;
+      memberFields.aliases.value = (member.aliases ?? []).join(', ');
+      memberFields.label.value = member.label ?? '';
+      for (const [name, key] of Object.entries(FIELDS)) {
+        memberFields[`${name}Status`].value = member[name]?.status ?? 'unresolved';
+        memberFields[name].value = (member[name]?.[key] ?? []).join(', ');
+      }
+    }));
     let folder = folders.get(member.id);
     if (!folder) { const holder = el('div'); folder = field(holder, `Checkout folder for ${member.id}`); folders.set(member.id, folder); }
     folder.disabled = locked();
     const label = el('label', 'block text-on-surface-variant', 'Checkout folder'); label.append(folder); card.append(label);
     card.append(action('Inspect checkout', () => inspect(member, folder)));
-    for (const binding of member.bindings ?? []) {
-      const row = el('div', 'p-2 border border-wb-border rounded space-y-1');
-      text(row, binding.checkout?.root ?? binding.root ?? 'Unknown folder'); observation(row, binding.observed);
-      text(row, `Result: ${binding.verification?.result ?? 'Unknown'}`);
-      for (const reason of binding.verification?.reasons ?? []) text(row, reasonText(reason));
-      text(row, bindingStatusText(statuses.get(binding.id) ?? (typeof binding.status === 'string' ? binding.status : binding.status?.status)));
-      row.append(action('Rebind (moved)', () => inspect(member, folder, binding.id)), action('Remove binding', () => request(() => client.unbindCheckout(binding.id), { write: true, receive: value => { projection = value.projection; } })));
-      card.append(row);
-    }
+    for (const binding of member.bindings ?? []) card.append(bindingRow(binding, member, folder));
     const planned = plans.get(member.id);
     if (planned) {
       const { plan, input } = planned;
@@ -161,6 +175,7 @@ export function createWorkspaceView({ client, el, button, showStatus, download =
     status.textContent = unsupported ? READ_ONLY : pending ? 'Reading workspace…' : message;
     if (unsupported) text(body, 'WORKSPACE_VERSION_UNSUPPORTED');
     if (!projection) return;
+    if (projection.unsupported?.some(record => record.schema?.includes(':local-binding:'))) text(body, LOCAL_BINDINGS_UNSUPPORTED);
     setFormDisabled([declarationLabel, ...Object.values(memberFields)]);
     if (!projection.workspace) {
       if (unsupported) return;
@@ -172,6 +187,10 @@ export function createWorkspaceView({ client, el, button, showStatus, download =
     const saveMember = action('Save member', () => edit(memberOperation(values(memberFields))));
     body.append(memberForm, saveMember);
     for (const member of projection.members ?? []) body.append(memberCard(member));
+    if (projection.detached?.length) {
+      body.append(el('h4', 'font-medium', 'Bindings for removed members'));
+      for (const binding of projection.detached) body.append(bindingRow(binding));
+    }
     text(body, relationshipSummary(projection));
     const relationshipForm = el('div', 'space-y-1');
     const memberIds = (projection.members ?? []).map(member => member.id);
@@ -189,10 +208,13 @@ export function createWorkspaceView({ client, el, button, showStatus, download =
     }
     for (const relationship of projection.relationships?.suggested ?? []) text(body, `Suggested (unconfirmed): ${relationship.from} → ${relationship.to}: ${relationship.kind}; ${relationship.reason}`);
     body.append(action('Mark relationships complete', () => edit({ type: 'set-relationship-status', status: 'complete' })), action('Mark relationships unresolved', () => edit({ type: 'set-relationship-status', status: 'unresolved' })));
+    const bindings = [...(projection.members ?? []).flatMap(member => member.bindings ?? []), ...(projection.detached ?? [])];
+    const roots = bindings.map(binding => binding.checkout?.root ?? binding.root).filter(Boolean);
+    if (roots.length) text(body, `Verify reads local Git metadata in: ${roots.join(', ')}`);
     body.append(action('Verify checkouts', () => request(() => client.verifyWorkspace(), { receive: value => {
       projection = value.projection;
       // The service returns statuses beside the projection; keep its recorded facts and overlay only status.
-      for (const member of projection.members ?? []) for (const binding of member.bindings ?? []) {
+      for (const binding of [...(projection.members ?? []).flatMap(member => member.bindings ?? []), ...(projection.detached ?? [])]) {
         const status = value.statuses?.[binding.id];
         if (status) statuses.set(binding.id, typeof status === 'string' ? status : status.status);
       }
