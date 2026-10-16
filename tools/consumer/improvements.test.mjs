@@ -171,6 +171,16 @@ test('a change to an item the suggestion needs is material: a dismissed suggesti
   assert.deepEqual(classifyImprovement(after, before), { dismissed: false, reasons: ['Shown again: the suggested item, or an item it needs, changed since you dismissed it.'] });
 });
 
+test('a required closure larger than the tracked bound is disclosed, and the suggestion still records', async () => {
+  const needed = Array.from({ length: 257 }, (_, n) => item(`needed.${String(n).padStart(3, '0')}`));
+  const tdd = item('mattpocock.tdd', { dependencies: { requires: needed.map(i => ({ itemId: i.id })), optional: [], conflicts: [] } });
+  const [suggestion] = await suggestImprovements({ intent: intentOf(), items: [tdd, ...needed], clients: [], goal: 'add tests' });
+  assert.equal(suggestion.change.content.requires.length, 256);
+  assert.match(suggestion.unknowns.at(-1), /needs 257 items; changes to those after the first 256 by id are not tracked/);
+  const { label: _label, description: _description, ...fields } = suggestion;
+  assert.equal(suggestionProblem({ ...fields, schema: IMPROVEMENT_SUGGESTION_SCHEMA, required: false, recordedAt: NOW }), null);
+});
+
 test('long Catalog labels never make a suggestion impossible to dismiss', async () => {
   const needed = Array.from({ length: 9 }, (_, n) => item(`needed.${n}`, { label: 'L'.repeat(400) }));
   const items = [item('mattpocock.tdd', { dependencies: { requires: needed.map(i => ({ itemId: i.id })), optional: [], conflicts: [] } }), ...needed];

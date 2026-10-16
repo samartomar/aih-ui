@@ -20,7 +20,7 @@ const digests = value => only(value, ['recipeSha256', 'materials']) && hash(valu
 // The item's own digests and those of every item it requires, so a change to a needed item is a material change too.
 const required = value => only(value, ['itemId', 'recipeSha256', 'materials']) && typeof value.itemId === 'string' && idPattern.test(value.itemId) && digests({ recipeSha256: value.recipeSha256, materials: value.materials });
 const content = value => only(value, ['recipeSha256', 'materials', 'requires']) && digests({ recipeSha256: value.recipeSha256, materials: value.materials })
-  && list(value.requires, 64, required) && sortedUnique(value.requires.map(r => r.itemId));
+  && list(value.requires, 256, required) && sortedUnique(value.requires.map(r => r.itemId));
 const change = value => only(value, ['kind', 'itemId', 'releaseSha256', 'itemSha256', 'content']) && value.kind === 'add-item'
   && typeof value.itemId === 'string' && idPattern.test(value.itemId) && hash(value.releaseSha256) && hash(value.itemSha256) && content(value.content);
 const trigger = value => only(value, ['ruleId', 'key', 'text']) && typeof value.ruleId === 'string' && ruleIdPattern.test(value.ruleId)

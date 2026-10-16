@@ -93,7 +93,7 @@
             },
             "requires": {
               "type": "array",
-              "maxItems": 64,
+              "maxItems": 256,
               "items": {
                 "type": "object",
                 "additionalProperties": false,

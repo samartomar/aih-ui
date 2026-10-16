@@ -5,7 +5,7 @@ export const SUGGESTION_RECORD = 'urn:aihq:workbench:journey-record:improvement-
 export const DISMISSAL_RECORD = 'urn:aihq:workbench:journey-record:improvement-dismissal:1.0.0';
 export const IMPROVEMENTS_NOTE = 'Suggestions come from fixed improvement rules using this policy, your saved AI clients and the Catalog. No model is called and nothing is applied or sent. Save the draft to keep a dismissal.';
 const PROMPT_NOTE = 'AI advice — paste this into an AI client you already use. The Workbench sends nothing, runs nothing and calls no model.';
-// Mirrors SUGGESTION_FIELDS (plus the optional goal) in tools/consumer/improvement-record.mjs: what a dismissal records.
+// Mirrors SUGGESTION_FIELDS in tools/consumer/improvement-record.mjs: what a dismissal records.
 const RECORD_FIELDS = ['id', 'revision', 'rulesVersion', 'scope', 'change', 'triggers', 'goal', 'references', 'facts', 'unknowns'];
 
 export function groupImprovements(value) {
@@ -42,7 +42,8 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
   const status = el('p', 'text-on-surface-variant'); status.setAttribute('role', 'status');
   const groups = el('div', 'space-y-2');
   // `checked` is the client revision the shown suggestions answer; any later change to the open artifact retires them.
-  let value, checked, pending = false, attempt = 0, failed = false, changed = false;
+  // `recording` marks the revision change this view's own record request makes, which never retires its cards.
+  let value, checked, pending = false, attempt = 0, failed = false, changed = false, recording = false;
   const diagnostic = result => result?.diagnostics?.map(row => row.message).join(' ') || result?.error || 'The improvement check could not be completed.';
   const safe = action => async () => { try { await action(); } catch (error) { showStatus(error.message); } };
   const suggest = button('Suggest', safe(() => check())); suggest.id = 'policy-improvements-suggest';
@@ -50,9 +51,12 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
   node.append(el('h3', 'font-medium', 'Improvements'), el('p', 'text-on-surface-variant', IMPROVEMENTS_NOTE), controls, status, groups);
 
   async function record(operation) {
-    const result = await client.recordImprovement(operation);
+    recording = true;
+    let result;
+    try { result = await client.recordImprovement(operation); } finally { recording = false; }
     if (result.status === 'superseded') return;
-    if (result.status !== 'ok') return showStatus(diagnostic(result));
+    // A refused choice changed nothing: the shown suggestions still answer the open artifact.
+    if (result.status !== 'ok') { checked = client.revision; render(); return showStatus(diagnostic(result)); }
     // Old cards describe the previous envelope; a failed recheck must not show stale actions.
     value = undefined;
     showStatus('Improvement choice recorded. Save the draft to keep it.');
@@ -72,10 +76,10 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
   }
   function render() {
     node.hidden = !(client.draft || client.intent);
-    if (value && !pending && checked !== client.revision) { value = undefined; changed = true; }
+    if (value && !recording && checked !== client.revision) { value = undefined; changed = true; }
     if (node.hidden) { attempt++; value = undefined; pending = false; failed = false; changed = false; goal.value = ''; groups.replaceChildren(); return; }
     suggest.disabled = pending;
-    status.textContent = pending ? 'Checking improvements…' : failed ? 'The improvement check could not be completed; suggestions are unknown.' : changed ? 'The policy changed since the last check; Suggest again to update the suggestions.' : value ? `Checked ${value.checkedAt}.` : 'Suggest improvements using the fixed rules.';
+    status.textContent = pending ? 'Checking improvements…' : failed ? 'The improvement check could not be completed; suggestions are unknown.' : changed ? 'The open policy or its inputs changed since the last check; Suggest again to update the suggestions.' : value ? `Checked ${value.checkedAt}.` : 'Suggest improvements using the fixed rules.';
     groups.replaceChildren();
     for (const group of groupImprovements(value)) {
       if (!group.rows.length) continue;
@@ -97,7 +101,9 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
         if (dismissal?.reason) card.append(el('p', 'text-outline text-[11px]', dismissal.reason));
         if (preserved) card.append(el('p', 'text-on-surface-variant', 'This suggestion is not current: none of its reasons applies now. Its dismissal is preserved; forgetting it shows nothing until a reason applies again.'));
         // A preserved dismissal's suggestion no longer arises, so clearing it forgets the choice rather than showing a card.
-        if (dismissed || preserved) card.append(button(preserved ? 'Forget dismissal' : 'Show again', safe(() => record(restoreOperation(suggestion.id)))));
+        if (preserved) card.append(button('Forget dismissal', safe(() => record(restoreOperation(suggestion.id)))));
+        // A suggestion that arose from a typed goal is shown again for that goal, so restoring it never makes it vanish.
+        else if (dismissed) card.append(button('Show again', safe(() => { if (suggestion.references?.some(r => r.kind === 'request')) goal.value = suggestion.goal; return record(restoreOperation(suggestion.id)); })));
         else card.append(button('Dismiss', safe(() => record(dismissOperation(suggestion)))), promptControls(suggestion));
         section.append(card);
       }

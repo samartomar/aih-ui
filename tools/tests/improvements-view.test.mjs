@@ -124,7 +124,7 @@ test('dismiss, show again and suggest use injected clients, goal and closed oper
   await find(built, 'Dismiss').listeners.click();
   assert.deepEqual(calls[1], dismissOperation(suggestion)); assert.deepEqual(calls[2], { clients: ['codex'] });
   await find(built, 'Show again').listeners.click();
-  assert.deepEqual(calls[3], restoreOperation(record.id)); assert.deepEqual(calls[4], { clients: ['codex'] });
+  assert.deepEqual(calls[3], restoreOperation(record.id)); assert.deepEqual(calls[4], { clients: ['codex'], goal: 'tests' }); // its typed goal is restored
   elements(built.node).find(node => node.id === 'policy-improvements-goal').value = 'fewer regressions';
   await find(built, 'Suggest').listeners.click();
   assert.deepEqual(calls[5], { clients: ['codex'], goal: 'fewer regressions' });
@@ -159,9 +159,35 @@ test('suggestions checked for one revision are retired when the open policy chan
   assert.match(textOf(built.node), /Test helper/); assert.ok(find(built, 'Dismiss'));
   client.revision = 2; built.render();
   assert.doesNotMatch(textOf(built.node), /Test helper/); assert.equal(find(built, 'Dismiss'), undefined);
-  assert.match(textOf(built.node), /policy changed since the last check; Suggest again/);
+  assert.match(textOf(built.node), /open policy or its inputs changed since the last check; Suggest again/);
   await find(built, 'Suggest').listeners.click();
-  assert.match(textOf(built.node), /Test helper/); assert.doesNotMatch(textOf(built.node), /policy changed/);
+  assert.match(textOf(built.node), /Test helper/); assert.doesNotMatch(textOf(built.node), /policy or its inputs changed/);
+  // The view's own refused record raises the client revision but changes nothing: the cards stay, without the changed message.
+  client.recordImprovement = async () => { client.revision++; built.render(); assert.match(textOf(built.node), /Test helper/); return { status: 'refused', diagnostics: [{ message: 'Refused for the test.' }] }; };
+  await find(built, 'Dismiss').listeners.click();
+  assert.match(textOf(built.node), /Test helper/); assert.doesNotMatch(textOf(built.node), /policy or its inputs changed/); built.render(); assert.ok(find(built, 'Dismiss'));
+});
+
+test('a pending check does not keep cards for a revision that has changed', async () => {
+  let finish;
+  const client = { draft, revision: 1, checkImprovements: async () => ok(checked) };
+  const built = view(client); await built.open();
+  client.checkImprovements = () => new Promise(resolve => { finish = resolve; });
+  const running = built.check(); await new Promise(resolve => setTimeout(resolve, 0));
+  client.revision = 2; built.render();
+  assert.equal(find(built, 'Dismiss'), undefined); assert.doesNotMatch(textOf(built.node), /Test helper/);
+  finish(ok(checked)); await running;
+  assert.equal(find(built, 'Dismiss'), undefined);
+});
+
+test('showing again a suggestion that arose from a typed goal checks with that goal', async () => {
+  const calls = [], asked = { ...suggestion, goal: 'add tests', references: [{ kind: 'request', ref: 'goal' }], dismissal: { id: 'dismissal-x' } };
+  const client = { draft, revision: 1, checkImprovements: async input => { calls.push(input); return ok({ ...checked, leading: null, alternatives: [], dismissed: [asked] }); },
+    recordImprovement: async operation => { calls.push(operation); return ok({}); } };
+  const built = view(client); await built.open();
+  assert.equal(elements(built.node).find(node => node.id === 'policy-improvements-goal').value, '');
+  await find(built, 'Show again').listeners.click();
+  assert.deepEqual(calls.slice(1), [restoreOperation(asked.id), { clients: ['codex'], goal: 'add tests' }]);
 });
 
 test('an artifact change while settings load releases the pending Suggest control without checking stale input', async () => {

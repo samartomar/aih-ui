@@ -97,7 +97,7 @@ const improvementSuggestion = { $schema: 'https://json-schema.org/draft/2020-12/
   id: { type: 'string', pattern: '^suggestion-[a-f0-9]{32}$' }, schema: { const: suggestionRecord }, required: { const: false },
   rulesVersion: { type: 'string', pattern: String.raw`^\d+\.\d+\.\d+$` }, revision: hash, scope,
   change: shape({ kind: { const: 'add-item' }, itemId: id, releaseSha256: hash, itemSha256: hash,
-    content: shape({ recipeSha256: hash, materials: suggestionDigests, requires: { type: 'array', maxItems: 64, items: shape({ itemId: id, recipeSha256: hash, materials: suggestionDigests }) } }) }),
+    content: shape({ recipeSha256: hash, materials: suggestionDigests, requires: { type: 'array', maxItems: 256, items: shape({ itemId: id, recipeSha256: hash, materials: suggestionDigests }) } }) }),
   triggers: { type: 'array', minItems: 1, maxItems: 16, items: shape({ ruleId: { type: 'string', pattern: '^[a-z][a-z0-9.-]{0,63}$' },
     key: { type: 'string', pattern: '^[a-z][a-z0-9-]{0,31}:[\\w.@-]{1,180}$' }, text: suggestionText() }) },
   goal: suggestionText(300),

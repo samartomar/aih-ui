@@ -4,7 +4,7 @@
 // inputs always give the same suggestions. Rule text is not part of a suggestion's identity (see improvement-record.mjs).
 import { suggestionId, suggestionRevision, sameContent } from './improvement-record.mjs';
 export const IMPROVEMENT_RULES_VERSION = '1.0.0';
-export const MAX_GOAL = 300, MAX_ALTERNATIVES = 3;
+export const MAX_GOAL = 300, MAX_ALTERNATIVES = 3, MAX_TRACKED_NEEDS = 256;
 // Independent of the guided-setup rules on purpose: each rule set is versioned alone, so changing one never changes
 // the saved reasons the other wrote.
 export const GOAL_RULES = [
@@ -98,13 +98,16 @@ export async function suggestImprovements({ intent, items = [], clients = [], go
   const suggestions = [];
   for (const { item, triggers, references, goal: goalText } of candidates.values()) {
     const scope = item.scopes.includes('project') ? 'project' : item.scopes[0];
+    const closure = needs(item, offered, new Set()).found;
     const change = { kind: 'add-item', itemId: item.id, releaseSha256: item.root.releaseSha256, itemSha256: item.itemSha256,
       // Material content: the item and its whole required closure, whatever this policy already selects.
-      content: { ...digestsOf(item), requires: needs(item, offered, new Set()).found.slice(0, 64).map(needed => ({ itemId: needed.id, ...digestsOf(needed) })) } };
+      content: { ...digestsOf(item), requires: closure.slice(0, MAX_TRACKED_NEEDS).map(needed => ({ itemId: needed.id, ...digestsOf(needed) })) } };
+    // Bounded like the record; a larger closure is said so, never silently truncated.
+    const untracked = closure.length > MAX_TRACKED_NEEDS ? [`It needs ${closure.length} items; changes to those after the first ${MAX_TRACKED_NEEDS} by id are not tracked, so they will not show a dismissed suggestion again.`] : [];
     const sorted = [...triggers.values()].sort((a, b) => compare(a.key, b.key)), id = await suggestionId({ change, scope });
     suggestions.push({ id, rulesVersion: IMPROVEMENT_RULES_VERSION, revision: await suggestionRevision({ id, change, triggers: sorted }), scope, change, triggers: sorted,
       ...(goalText !== undefined ? { goal: goalText } : {}), references: [...references.slice(0, 31), { kind: 'catalog-item', ref: item.id }],
-      facts: facts(item, scope, offered, selected), unknowns: [...UNKNOWNS], label: item.label ?? item.id, description: item.description ?? '' });
+      facts: facts(item, scope, offered, selected), unknowns: [...UNKNOWNS, ...untracked], label: item.label ?? item.id, description: item.description ?? '' });
   }
   const rank = s => [s.references.some(r => r.kind === 'request') ? 0 : 1, -s.triggers.length, s.references.some(r => r.kind === 'saved-reason') ? 0 : 1];
   return suggestions.sort((a, b) => {
