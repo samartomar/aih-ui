@@ -6,7 +6,8 @@ import { suggestionId, suggestionRevision, sameContent } from './improvement-rec
 import { adapterFor, describeClientIdentity } from './client-identity.mjs';
 // 1.1.0: the client rule names a client by its published label when one is supplied (wording only; identity is unchanged).
 // 1.2.0: a goal-relevant item new or revised in a newer revision of a saved source is suggested from that revision; recurring friction is named as unchecked.
-export const IMPROVEMENT_RULES_VERSION = '1.2.0';
+// 1.3.0: the client rule matches adapters by Catalog clientId; an adapter without one is not suggested.
+export const IMPROVEMENT_RULES_VERSION = '1.3.0';
 export const MAX_GOAL = 300, MAX_ALTERNATIVES = 3, MAX_TRACKED_NEEDS = 256;
 // Independent of the guided-setup rules on purpose: each rule set is versioned alone, so changing one never changes
 // the saved reasons the other wrote.

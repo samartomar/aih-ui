@@ -8,11 +8,13 @@
  *   - CORE-SUPPORTED: membership in the clients @aihq/core lists in its public
  *     nativeClientIds. An adapter for a client Core does not list is shown, not
  *     hidden and not an error. With no list, support is unknown.
- *   - INSTALLED / CONNECTED: observed evidence only (a readiness check's presence
- *     for that client). Neither the target nor the Core list ever implies it.
+ *   - INSTALLED / CONNECTED: observed evidence only (a readiness check's tool state
+ *     for that client, in the vocabulary Core's diagnostic contract defines: runnable,
+ *     binary, broken, config-only, absent). Neither the target nor the Core list ever
+ *     implies it, and a value outside that vocabulary is "unknown", not "absent".
  *
  * Pure and free of browser and Node built-ins. tools/consumer/client-identity.mjs is
- * this same file, because the headless readers cannot import the page modules;
+ * this same file, because the headless consumer modules don't import from src/;
  * tools/tests/client-identity.test.mjs fails if the two differ.
  */
 
@@ -45,15 +47,34 @@ export function adapterClientIds(items) {
 const INSTALLED = {
   "not-checked": "Installed or connected: not checked.",
   found: "Installed or connected: found by a check on this machine.",
+  "found-not-run": "Installed or connected: found by a check on this machine, but not run.",
   "found-failed": "Installed or connected: found by a check on this machine, but its check failed.",
+  "config-only": "Installed or connected: only its configuration was found, not the program.",
   "not-found": "Installed or connected: the last check did not find it.",
+  unknown: "Installed or connected: the check could not tell.",
 };
+const FROM_CORE = { runnable: "found", binary: "found-not-run", broken: "found-failed", "config-only": "config-only", absent: "not-found" };
+
+/**
+ * The installed state a readiness check's tool state stands for. Only Core's own words count:
+ * its explicit "absent" is "not-found", and any other or unrecognised string is "unknown".
+ * Nothing at all (or a non-string) means no check observed the client.
+ */
+export function installedStateOf(observation) {
+  if (typeof observation !== "string" || observation === "") return "not-checked";
+  return Object.hasOwn(FROM_CORE, observation) ? FROM_CORE[observation] : "unknown";
+}
+
+/** True when the check found the program itself (runnable, binary or broken), which configuration alone does not. */
+export function programWasFound(observation) {
+  return ["found", "found-not-run", "found-failed"].includes(installedStateOf(observation));
+}
 
 /**
  * The three facts for one adapter item, each stated on its own.
  *
  * @param coreClients Core's nativeClientIds as an array, or anything else when Core publishes none
- * @param observation a readiness check's presence for the target client ("present", "broken", other), or nothing
+ * @param observation a readiness check's tool state for the target client (see installedStateOf), or nothing
  * @returns null for an item that is not a client adapter, otherwise { target, core, installed } where each is { state, text }
  */
 export function describeClientIdentity({ item, coreClients, observation } = {}) {
@@ -70,13 +91,11 @@ export function describeClientIdentity({ item, coreClients, observation } = {}) 
   } else {
     core = { state: "not-supported", text: `Not Core-supported: Core does not list ${target.clientId}.` };
   }
-  const seen = typeof observation !== "string" || observation === ""
-    ? "not-checked"
-    : observation === "present" ? "found" : observation === "broken" ? "found-failed" : "not-found";
+  const seen = installedStateOf(observation);
   return {
     target: target.state === "declared"
-      ? { ...target, text: `Target: ${target.clientId}.` }
-      : { ...target, text: "Target: not declared by this release format." },
+      ? { ...target, text: `Adapter target: ${target.clientId}.` }
+      : { ...target, text: "Adapter target: not declared by this release format." },
     core,
     installed: { state: seen, text: INSTALLED[seen] },
   };

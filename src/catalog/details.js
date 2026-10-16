@@ -223,7 +223,10 @@ export function createDetails({ elements }) {
   }
 
   return {
-    /** @param model { entry, counts, publisher, qualification } */
+    /**
+     * @param model { entry, counts, publisher, qualification, target, coreClients } `target` is the AI client whose capability facts the
+     *   page shows; `coreClients` is Core's nativeClientIds, or null when Core published none (client support is then unknown)
+     */
     render({ entry, counts, publisher, qualification, target, coreClients }) {
       reset();
       renderQualification(elements, qualification, entry ?? null);

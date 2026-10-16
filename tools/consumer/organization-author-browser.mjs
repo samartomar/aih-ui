@@ -145,7 +145,7 @@ export async function runOrganizationAuthorBrowser({ page, output, fixture, refr
     const unknown = entryRow(page, IMPLEMENT, 'project').locator('select[data-field="clients"] option[value="not-a-client"]');
     // The option's own disabled and selected state is read: Playwright's isDisabled does not report a disabled <option>.
     assert.deepEqual(await unknown.evaluate(option => [option.disabled, option.selected]), [true, true]); assert.match(await unknown.textContent(), /not known to Core/);
-    assert.match(await page.locator('#organization-author [data-target-id]').first().textContent(), /not-a-client.*not known to Core/);
+    assert.match(await page.locator('#organization-author [data-target-id]').first().textContent(), /not-a-client.*Not known to the installed Core/);
     await preview(page); assert.match(await page.locator('#org-preview-results').textContent(), /Candidate: invalid[\s\S]*unknown-client/);
     const keptPath = join(output, 'organization-legacy-client-saved.journey.json');
     assert.deepEqual(await download(page, () => page.locator('#org-draft-save').click(), keptPath), legacy.value.envelopeBytes);

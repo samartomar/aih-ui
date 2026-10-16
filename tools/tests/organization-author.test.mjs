@@ -221,7 +221,7 @@ test('declared target rows show a listed client\'s label and keep an unlisted on
   view.setTargets(published);
   assert.match(textOf(row('target-one')), /project · Claude Code \(claude\)/); assert.doesNotMatch(textOf(row('target-one')), /Not listed/);
   assert.match(textOf(row('target-two')), /user · legacy/);
-  assert.match(textOf(row('target-two')), /Not listed by the installed Core; not known to Core\. Core decides at preview\./);
+  assert.match(textOf(row('target-two')), /Not known to the installed Core; preview and export will refuse it\./);
   assert.equal(elements(row('target-one')).find(control => control.id === 'target-one-remove').textContent, 'Remove target project · Claude Code (claude)');
   assert.equal(calls.length, 0); // setTargets only re-renders; it requests nothing
 });

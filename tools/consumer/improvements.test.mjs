@@ -11,6 +11,7 @@ import { recordMaintenance } from './maintenance.mjs';
 import { digestBytes, intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { createMixedService } from './mixed-service.mjs';
+import { nativeClientIds } from '@aihq/core/harness';
 import { suggestionRevision, suggestionProblem } from './improvement-record.mjs';
 import { suggestImprovements, lead, classifyImprovement, improvementPrompt, GOAL_RULES, UNKNOWNS, IMPROVEMENT_RULES_VERSION, MAX_ALTERNATIVES } from './improvement-rules.mjs';
 import { checkImprovements, recordImprovement, projectDismissals, IMPROVEMENT_SUGGESTION_SCHEMA, IMPROVEMENT_DISMISSAL_SCHEMA } from './improvements.mjs';
@@ -34,7 +35,7 @@ const byItem = (suggestions, itemId) => suggestions.find(s => s.change.itemId ==
 const shownItem = (checked, itemId) => byItem([checked.leading, ...checked.alternatives, ...checked.dismissed].filter(Boolean), itemId);
 
 test('the rules version and goal table are fixed and every rule names a distinct, well-formed reason', () => {
-  assert.equal(IMPROVEMENT_RULES_VERSION, '1.2.0');
+  assert.equal(IMPROVEMENT_RULES_VERSION, '1.3.0');
   assert.deepEqual(GOAL_RULES.map(rule => [rule.id, rule.itemId]), [['goal.fix', 'mattpocock.diagnosing-bugs'], ['goal.test', 'mattpocock.tdd'], ['goal.regressions', 'mattpocock.tdd'],
     ['goal.review', 'mattpocock.code-review'], ['goal.refactor', 'mattpocock.improve-codebase-architecture'], ['goal.plan', 'mattpocock.grill-me'], ['goal.context', 'aihq.project-context']]);
   for (const rule of GOAL_RULES) assert.match(rule.id, /^[a-z][a-z0-9.-]{0,63}$/);
@@ -130,7 +131,7 @@ test('the client rule names a client by its published label, and the label never
   const [plain] = await suggest({ clients: ['claude'] }), [named] = await suggest({ clients: ['claude'], labels: { claude: 'Claude Code', codex: 'Codex' } });
   assert.deepEqual(named.triggers, [{ ruleId: 'client.instructions', key: 'client:claude', text: 'You use Claude Code (Workbench setup), but this policy does not give it the shared project instructions.' }]);
   assert.equal(named.goal, 'Give Claude Code the same shared project instructions as your other AI clients.');
-  assert.equal(named.rulesVersion, '1.2.0');
+  assert.equal(named.rulesVersion, '1.3.0');
   // A label is wording: the same id and revision, so a dismissal made before a rename still applies.
   assert.deepEqual([named.id, named.revision], [plain.id, plain.revision]);
   assert.deepEqual(classifyImprovement(named, plain), { dismissed: true, reasons: [] });
@@ -309,7 +310,7 @@ test('a goal-relevant item that is new or revised in a newer revision of a saved
   assert.equal(changeTrigger(tdd).text, '“Label mattpocock.tdd” changed in review-notes-catalog 1.1.0 (its recipe or files differ from the revision this policy was saved from); your saved goal “add tests to my app” mentions “tests”.');
   assert.deepEqual(tdd.triggers.map(t => t.key), ['change:revised@1.1.0', 'goal:goal.test']);
   assert.deepEqual(tdd.references, [{ kind: 'saved-reason', ref: 'x.root' }, { kind: 'catalog-item', ref: 'mattpocock.tdd' }]);
-  assert.equal(tdd.goal, GOAL); assert.equal(tdd.rulesVersion, '1.2.0');
+  assert.equal(tdd.goal, GOAL); assert.equal(tdd.rulesVersion, '1.3.0');
   // The change describes the candidate item, the content the reason talks about.
   assert.deepEqual([tdd.change.releaseSha256, tdd.change.itemSha256, tdd.change.content.recipeSha256], [hex(10), hex(121), hex(21)]);
   const plan = byItem(got, 'notes.plan');
@@ -479,14 +480,14 @@ test('the rule table points at items the installed maintained Catalog really off
   const before = s.envelopeBytes.slice();
   const value = await check(s, s.envelopeBytes, { clients: ['claude', 'not-a-client'], goal: 'fewer regressions' });
   assert.deepEqual(s.envelopeBytes, before);
-  assert.equal(value.rulesVersion, '1.2.0'); assert.equal(value.checkedAt, NOW); assert.deepEqual(value.mutations, []);
+  assert.equal(value.rulesVersion, '1.3.0'); assert.equal(value.checkedAt, NOW); assert.deepEqual(value.mutations, []);
   assert.deepEqual(value.reads, ['envelope', 'supplied-inventories', 'declared-clients', 'request-goal']);
   // implement is the root; tdd arises from the saved goal and the request (two reasons), the client wiring from setup.
   assert.equal(value.leading.change.itemId, 'mattpocock.tdd');
   assert.deepEqual(value.leading.triggers.map(t => t.key), ['goal:goal.regressions', 'goal:goal.test']);
   assert.equal(value.leading.label, s.maintained.release.items.find(i => i.id === 'mattpocock.tdd').label);
   assert.equal(value.leading.scope, 'project'); assert.equal(value.leading.dismissal, null); assert.equal(value.leading.promotion, undefined);
-  assert.equal(value.leading.rulesVersion, '1.2.0'); assert.equal(value.leading.change.releaseSha256, s.maintained.release.sha256);
+  assert.equal(value.leading.rulesVersion, '1.3.0'); assert.equal(value.leading.change.releaseSha256, s.maintained.release.sha256);
   assert.match(value.leading.facts[0].text, /^Adds \d+ files, \d+ bytes in total, and needs 0 other items\.$/);
   assert.deepEqual(value.alternatives.map(a => a.change.itemId), ['aihq.client.claude']);
   assert.match(value.alternatives[0].facts[0].text, /^Adds \d+ files, \d+ bytes in total, and needs [1-9]\d* other items?: /);
@@ -896,7 +897,7 @@ test('the prompt is attributed, tells the AI to change nothing, and carries no p
   for (const suggestion of [checked.leading, ...checked.alternatives]) {
     const prompt = suggestion.prompt;
     assert.equal(prompt, improvementPrompt(suggestion));
-    assert.ok(prompt.includes('Suggested by the AIH Workbench improvement rules 1.2.0 (fixed rules; no AI model was used).'));
+    assert.ok(prompt.includes('Suggested by the AIH Workbench improvement rules 1.3.0 (fixed rules; no AI model was used).'));
     assert.match(prompt, /Do not install, change or run anything/); assert.match(prompt, /do not ask me to upload/);
     assert.ok(prompt.includes('Start your reply with “AI advice:”.'));
     assert.ok(prompt.includes(suggestion.label)); assert.ok(prompt.includes(suggestion.change.itemId));
@@ -988,7 +989,7 @@ test('shipped suggestion and dismissal schemas agree structurally with the runti
   for (const urn of [IMPROVEMENT_SUGGESTION_SCHEMA, IMPROVEMENT_DISMISSAL_SCHEMA]) assert.ok(rules.some(([a, b]) => a === urn && b === urn), urn);
 });
 
-test('checkImprovements fills the client facts from the Core clients it is given, keeps them out of records, and refuses a malformed list', async () => {
+test('checkImprovements fills the client facts from the Core clients the host gives it and keeps them out of records', async () => {
   const s = await scenario(), declared = { clients: ['claude', 'codex'], coreClients: ['claude'] };
   const checked = await check(s, s.envelopeBytes, declared);
   const shown = [checked.leading, ...checked.alternatives].filter(Boolean).filter(x => x.client);
@@ -998,11 +999,18 @@ test('checkImprovements fills the client facts from the Core clients it is given
   if (byClient.codex) assert.deepEqual([byClient.codex.core.state, byClient.codex.installed.state], ['not-supported', 'not-checked']);
   const dismissed = await record(s.envelopeBytes, dismissOperation(shown[0]));
   assert.equal(JSON.stringify(dismissed.record).includes('Core-supported'), false);
-  for (const coreClients of ['claude', ['claude', 7], Array.from({ length: 65 }, (_, i) => `c${i}`)]) {
-    const refused = await checkImprovements({ envelopeBytes: s.envelopeBytes, inventories: s.inventories, now: NOW, clients: ['claude'], coreClients });
-    assert.equal(refused.status, 'refused');
-    assert.equal(refused.diagnostics[0].path, '/coreClients');
-  }
+});
+
+test('host route: Core support comes from the installed Core, and a list in the request has no effect', async () => {
+  const s = await scenario(), service = await createMixedService(s.maintained);
+  const stateOf = async extra => {
+    const value = valueOf(await service.run('improvements-check', { envelopeBytes: [...s.envelopeBytes], clients: ['claude'], ...extra }));
+    return [value.leading, ...value.alternatives].filter(Boolean).find(x => x.client?.target.clientId === 'claude').client.core.state;
+  };
+  assert.ok(nativeClientIds.includes('claude'), 'the installed Core lists claude');
+  assert.equal(await stateOf({}), 'supported', 'with no list in the request, support is still the installed Core list');
+  for (const coreClients of [[], ['codex'], 'claude', null, ['claude', 7]])
+    assert.equal(await stateOf({ coreClients }), 'supported', `a request list ${JSON.stringify(coreClients)} is ignored`);
 });
 
 test('the authoring catalog the browser is served carries every installed adapter\'s clientId, and only adapters have one', async () => {

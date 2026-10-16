@@ -168,13 +168,13 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
       : listed().length ? 'These are the AI clients the installed Core lists. Listing a client does not mean it is installed, connected or admitted.'
       : `Core's AI clients are unavailable: ${reason.replace(/\.?$/, '.')} A target can still be declared without a client.`;
   }
-  // A declared client the list does not carry stays in the draft as its id; Core decides at preview.
+  // A declared client the list does not carry stays in the draft as its id; preview and export refuse it with Core's reason.
   function renderTargets() {
     targets.replaceChildren();
     for (const target of session.value?.draft?.targets ?? []) {
       const row = line(), label = targetLabel(target, labels()); row.dataset.targetId = target.id;
       const remove = action(`Remove target ${label}`, `${target.id}-remove`, () => edit({ kind: 'remove-target', targetId: target.id })); remove.dataset.action = 'remove-target'; row.append(el('span', '', label), remove);
-      if (target.client && clients && !listed().includes(target.client)) row.append(el('span', 'text-on-surface-variant', 'Not listed by the installed Core; not known to Core. Core decides at preview.'));
+      if (target.client && clients && !listed().includes(target.client)) row.append(el('span', 'text-on-surface-variant', 'Not known to the installed Core; preview and export will refuse it.'));
       targets.append(row);
     }
   }

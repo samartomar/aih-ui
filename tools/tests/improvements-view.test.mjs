@@ -169,8 +169,8 @@ test('published clients filter saved suggestions and supply labels while naming 
   const built = view(client, { loadClients: async () => saved });
   built.setTargets({ state: 'published', targets: ['claude', 'codex'], labels: { claude: 'Claude Code', codex: 'Codex', gone: 'Gone' } });
   await built.open();
-  // Core's own list travels with the check, so an adapter's target can be stated against it; saved clients are filtered by it.
-  assert.deepEqual(calls, [{ clients: ['claude'], labels: { claude: 'Claude Code' }, coreClients: ['claude', 'codex'] }]);
+  // Saved clients are filtered by Core's list; the list itself is not sent, because the host reads Core's support from the installed Core.
+  assert.deepEqual(calls, [{ clients: ['claude'], labels: { claude: 'Claude Code' } }]);
   const note = elements(built.node).find(node => node.id === 'policy-improvements-unlisted');
   assert.equal(note.hidden, false);
   assert.equal(note.textContent, 'Saved AI client gone is not listed by the installed Core, so no suggestion is made for it. Your saved setup is unchanged.');
@@ -314,7 +314,7 @@ test('reasons name their source in words and keep the exact reference', () => {
 });
 
 test('an adapter suggestion shows its target, Core support and installed state as three lines, and a dismissal never records them', async () => {
-  const client = { target: { state: 'declared', clientId: 'other', text: 'Target: other.' }, core: { state: 'not-supported', text: 'Not Core-supported: Core does not list other.' },
+  const client = { target: { state: 'declared', clientId: 'other', text: 'Adapter target: other.' }, core: { state: 'not-supported', text: 'Not Core-supported: Core does not list other.' },
     installed: { state: 'not-checked', text: 'Installed or connected: not checked.' } };
   const withClient = { ...suggestion, client };
   const built = view({ intent: {}, revision: 1, checkImprovements: async () => ok({ ...checked, leading: withClient }) }, { loadClients: async () => ['codex'] });

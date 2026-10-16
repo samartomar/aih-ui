@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { adapterClientIds, adapterFor, adapterTargetOf, describeClientIdentity } from '../../src/app/client-identity.js';
+import { adapterClientIds, adapterFor, adapterTargetOf, describeClientIdentity, installedStateOf, programWasFound } from '../../src/app/client-identity.js';
 
 const adapter = (id, clientId, extra = {}) => ({ id, kind: 'client-adapter', label: id, ...(clientId === undefined ? {} : { clientId }), ...extra });
 const skill = id => ({ id, kind: 'skill', label: id });
@@ -92,13 +92,36 @@ test('installed or connected comes only from an observation, and a Core list or 
   const item = adapter('aihq.client.claude', 'claude');
   assert.equal(describeClientIdentity({ item, coreClients: CORE }).installed.state, 'not-checked');
   assert.equal(describeClientIdentity({ item, coreClients: CORE, observation: null }).installed.state, 'not-checked');
-  assert.equal(describeClientIdentity({ item, coreClients: CORE, observation: 'present' }).installed.state, 'found');
+  assert.equal(describeClientIdentity({ item, coreClients: CORE, observation: 'runnable' }).installed.state, 'found');
+  assert.equal(describeClientIdentity({ item, coreClients: CORE, observation: 'binary' }).installed.state, 'found-not-run');
   assert.equal(describeClientIdentity({ item, coreClients: CORE, observation: 'broken' }).installed.state, 'found-failed');
+  assert.equal(describeClientIdentity({ item, coreClients: CORE, observation: 'config-only' }).installed.state, 'config-only');
   assert.equal(describeClientIdentity({ item, coreClients: CORE, observation: 'absent' }).installed.state, 'not-found');
   // An observation changes only the installed fact.
-  const seen = describeClientIdentity({ item: adapter('vendor.other', 'other'), coreClients: CORE, observation: 'present' });
+  const seen = describeClientIdentity({ item: adapter('vendor.other', 'other'), coreClients: CORE, observation: 'runnable' });
   assert.equal(seen.installed.state, 'found');
   assert.equal(seen.core.state, 'not-supported');
+});
+
+test('only an explicit absent from Core is "not found"; any other or unrecognised value is "unknown", never a definite absence', () => {
+  const item = adapter('aihq.client.claude', 'claude');
+  for (const observation of ['present', 'missing', 'not-installed', 'Absent', 'ABSENT', ' absent', 'unknown', 'x', '0']) {
+    const facts = describeClientIdentity({ item, coreClients: CORE, observation });
+    assert.equal(facts.installed.state, 'unknown', observation);
+    assert.match(facts.installed.text, /could not tell/i);
+    assert.doesNotMatch(facts.installed.text, /did not find/i);
+  }
+  // A non-string or empty value is no observation at all.
+  for (const observation of ['', 7, {}, []]) assert.equal(describeClientIdentity({ item, coreClients: CORE, observation }).installed.state, 'not-checked');
+});
+
+test('installedStateOf maps exactly the states the Core diagnostic contract defines', () => {
+  assert.deepEqual(['runnable', 'binary', 'broken', 'config-only', 'absent'].map(installedStateOf), ['found', 'found-not-run', 'found-failed', 'config-only', 'not-found']);
+  assert.deepEqual([undefined, null, '', 7, 'present', 'other'].map(installedStateOf), ['not-checked', 'not-checked', 'not-checked', 'not-checked', 'unknown', 'unknown']);
+});
+
+test('only a program Core found counts as detected; configuration alone, absence and unknown do not', () => {
+  assert.deepEqual(['runnable', 'binary', 'broken', 'config-only', 'absent', 'present', undefined].map(programWasFound), [true, true, true, false, false, false, false]);
 });
 
 test('a non-adapter item has no identity to describe', () => {

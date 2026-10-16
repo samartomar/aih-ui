@@ -6,6 +6,7 @@ import { readTrials, recordTrial, TRIAL_MECHANISMS_NONE } from './trials.mjs';
 import { readWorkspace, editWorkspace, planBinding, bindCheckout, unbindCheckout, verifyBindings, exportWorkspace } from './workspace.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { runOrganizationAuthor } from './organization-author.mjs';
+import { nativeClientIds } from '@aihq/core/harness';
 const encode = value => new TextEncoder().encode(value);
 const bytesOf = value => Array.isArray(value) ? Uint8Array.from(value) : undefined;
 const WORKSPACE_OPERATIONS = ['workspace-read', 'workspace-edit', 'workspace-plan', 'workspace-bind', 'workspace-unbind', 'workspace-verify', 'workspace-export'];
@@ -103,8 +104,9 @@ export async function createMixedService(maintained, { suppliedInventories, fami
         if (operation === 'improvements-check') {
           // The same host-configured source as the maintenance check; unreachable (null or a failure) is unknown, never "nothing changed".
           const candidateInventories = maintenanceSource ? await Promise.resolve().then(() => maintenanceSource()).catch(() => null) : null;
+          // Core's support list is the installed Core's own, read here; nothing the request carries can state it.
           return checkImprovements({ envelopeBytes, inventories: all, candidateInventories: candidateInventories ?? null, candidateSource: maintenanceSource ? 'configured' : 'unconfigured',
-            clients: body.clients ?? [], labels: body.labels ?? {}, coreClients: body.coreClients, goal: body.goal, now });
+            clients: body.clients ?? [], labels: body.labels ?? {}, coreClients: [...nativeClientIds], goal: body.goal, now });
         }
         // Reading trials writes nothing. This host can enforce no bound, so it has no mechanisms and every bound is advisory.
         if (operation === 'trials-read') return readTrials({ envelopeBytes, mechanisms: TRIAL_MECHANISMS_NONE });

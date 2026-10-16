@@ -7,7 +7,7 @@ import { clientNodes, offersClient, publishedClients } from './app/core-targets.
 import { adapterClientIds } from './app/client-identity.js';
 import { createAuthoringClient, importLimitError } from './app/authoring-client.js';
 import { loadSetup } from './app/settings-client.js';
-import { ADDED_BY_YOU, KNOWN_STACK, MANIFEST_BYTE_LIMIT, addDetection, choiceReason, clientPrompt, describePolicy, detectStack, provenanceText, suggestStarters, wantsContent }
+import { ADDED_BY_YOU, KNOWN_STACK, MANIFEST_BYTE_LIMIT, addDetection, choiceReason, clientPrompt, describePolicy, detectStack, observationsFrom, provenanceText, reconcileClient, suggestStarters, wantsContent }
   from './app/guided-rules.js';
 
 const $ = id => document.getElementById(id);
@@ -22,9 +22,8 @@ const REVIEW_SCHEMA = 'urn:aihq:workbench:review-decisions:1.0.0';
 const DOWNLOAD_NAME = 'guided-setup.journey.json';
 
 let listSource = 'supported by Core';
-// Core's nativeClientIds when it published them, readiness presence by client id once a check has run.
-let coreList = null;
-const presence = new Map();
+// Core's nativeClientIds when it published them, and the tool states the latest readiness check reported by client id.
+let coreList = null, observed = {};
 let detections = [], folderChosen = false, published = [], publishedLabels = {}, suggestion = null, busy = false, suggesting = false, started = false;
 // The inputs the current suggestion was made from, and a counter that changes whenever that suggestion stops applying.
 let snapshot = null, generation = 0, savedShown = false;
@@ -41,7 +40,7 @@ const ensureClient = () => clientPromise ??= (async () => {
 const goal = () => $('goal').value.trim();
 const selectedClients = () => [...clients].filter(([, state]) => state.checked).map(([id]) => id).sort();
 const messagesOf = result => (result?.diagnostics ?? []).map(item => item.message).filter(Boolean);
-const inputsNow = () => ({ goal: goal(), detections, clients: selectedClients(), projectInspected: folderChosen });
+const inputsNow = () => ({ goal: goal(), detections, clients: selectedClients(), projectInspected: folderChosen, observations: observed });
 const sameInputs = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const STALE_MESSAGE = 'Your inputs changed; suggest again to update the choices.';
 const SUPERSEDED_SAVE = 'Nothing was saved: a newer action replaced this one. Try again.';
@@ -132,6 +131,7 @@ function renderClients() {
     const box = el('input'); box.type = 'checkbox'; box.checked = state.checked;
     box.addEventListener('change', () => {
       state.checked = box.checked;
+      state.autoTicked = false;
       state.added = box.checked && !state.setup && !state.detected;
       renderClients();
     });
@@ -146,7 +146,7 @@ function renderClients() {
   checkStale();
   if (!rows.length) $('clients').append(el('li', 'text-on-surface-variant', 'No AI clients are known yet. Neither Core nor the installed Catalog lists them for this Workbench.'));
 }
-const clientState = id => { if (!clients.has(id)) clients.set(id, { setup: false, detected: false, broken: false, added: false, checked: false, unlisted: false }); return clients.get(id); };
+const clientState = id => { if (!clients.has(id)) clients.set(id, { setup: false, detected: false, broken: false, added: false, checked: false, unlisted: false, autoTicked: false }); return clients.get(id); };
 
 async function loadClients() {
   try {
@@ -181,14 +181,16 @@ async function detectClients() {
     const response = await fetch('/api/readiness-check', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ targets: published, network: 'off' }) });
     const payload = await response.json();
     if (!response.ok || payload.status !== 'ok') throw new Error(messagesOf(payload).join(' ') || payload.message || `The host answered ${response.status}.`);
-    // Core reports a found client as present, or broken when it is installed but its check failed.
-    for (const tool of payload.value?.projection?.tools ?? []) if (typeof tool?.id === 'string' && typeof tool.presence === 'string') presence.set(tool.id, tool.presence);
-    const found = (payload.value?.projection?.tools ?? []).filter(tool => ['present', 'broken'].includes(tool.presence) && typeof tool.id === 'string');
-    for (const tool of found) { const state = clientState(tool.id); state.detected = true; state.broken = tool.presence === 'broken'; state.checked = true; state.added = false; }
+    // Core states each client as runnable or binary (found), broken (found, but its check failed), config-only, or absent.
+    // This check replaces every earlier answer: a client it does not report as found is no longer detected.
+    observed = observationsFrom(payload.value?.projection?.tools);
+    for (const id of Object.keys(observed)) clientState(id);
+    for (const [id, state] of clients) clients.set(id, reconcileClient(state, observed[id]));
     renderClients();
-    const broken = found.filter(tool => tool.presence === 'broken').map(tool => tool.id);
+    const found = Object.keys(observed).filter(id => clients.get(id)?.detected).sort();
+    const broken = found.filter(id => clients.get(id).broken);
     $('clients-status').textContent = found.length
-      ? `Found ${found.map(tool => tool.id).join(', ')} on this machine.${broken.length ? ` ${broken.join(', ')} did not pass its check; use Fix what's broken to see why.` : ''} Nothing was changed.`
+      ? `Found ${found.join(', ')} on this machine.${broken.length ? ` ${broken.join(', ')} did not pass its check; use Fix what's broken to see why.` : ''} Nothing was changed.`
       : 'No supported AI client was found on this machine. Nothing was changed.';
   } catch (error) {
     $('clients-status').textContent = `The check did not run: ${error.message} You can still tick the clients you use.`;
@@ -237,7 +239,7 @@ async function suggest() {
     if (!sameInputs(inputsNow(), inputs)) { $('suggest-status').textContent = STALE_MESSAGE; return; }
     generation += 1;
     snapshot = inputs;
-    suggestion = suggestStarters({ ...inputs, catalogItems: client.catalog.items, coreClients: coreList, observations: Object.fromEntries(presence) });
+    suggestion = suggestStarters({ ...inputs, catalogItems: client.catalog.items, coreClients: coreList });
     picked.clear();
     for (const choice of suggestion.choices) picked.set(choice.itemId, true);
     $('suggestion').hidden = false;

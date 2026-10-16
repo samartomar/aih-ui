@@ -13,9 +13,10 @@
  * an item id is never read as a client.
  */
 
-import { adapterFor, describeClientIdentity } from './client-identity.js';
+import { adapterFor, describeClientIdentity, programWasFound } from './client-identity.js';
 
-export const GUIDED_RULES_VERSION = '1.0.0';
+// 1.1.0: the client rule matches adapters by Catalog clientId; an adapter without one is not suggested.
+export const GUIDED_RULES_VERSION = '1.1.0';
 export const ADDED_BY_YOU = 'added by you';
 
 const MAX_GOAL = 300;
@@ -265,6 +266,25 @@ export function suggestStarters({ goal, detections = [], clients = [], catalogIt
     message: 'We could not match your goal or project to a starter set with confidence. Nothing is preselected. Try describing what you want to do in other words, add what your project uses, or browse the catalog yourself.' };
   return { rulesVersion: GUIDED_RULES_VERSION, status: 'confident', choices,
     message: `We matched ${choices.length} starter choices to your goal and project. Review each one; nothing is installed by saving.` };
+}
+
+/** One readiness check's tool states as client id -> state, keeping only strings. Whatever the check did not report is absent. */
+export function observationsFrom(tools) {
+  return Object.fromEntries((Array.isArray(tools) ? tools : []).filter(tool => typeof tool?.id === 'string' && typeof tool.presence === 'string')
+    .map(tool => [tool.id, tool.presence]));
+}
+
+/**
+ * A client's page state after a check. Whether it is detected comes only from that check: a client the check
+ * reports absent, or does not report, is no longer detected, and a tick the check itself made goes with it.
+ * A tick the person made, or a saved setup choice, stays.
+ */
+export function reconcileClient(state, observation) {
+  const found = programWasFound(observation);
+  const next = { ...state, detected: found, broken: found && observation === 'broken' };
+  if (found) return { ...next, autoTicked: state.autoTicked || !state.checked, checked: true, added: false };
+  const checked = state.autoTicked ? false : state.checked;
+  return { ...next, autoTicked: false, checked, added: checked && !state.setup };
 }
 
 const detectionLine = detection => `${detection.label} (${detection.kind}, ${provenanceText(detection)})`;

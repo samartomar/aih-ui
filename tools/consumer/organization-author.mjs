@@ -86,6 +86,7 @@ function draftOf({ read, record }, index) {
   return { projection: projectJourneyEnvelope(read.envelope), policyId: record.policyId ?? null, source: record.source ? structuredClone(record.source) : null,
     entries: views, targets: record.targets.map(target => ({ ...target })), unresolved: unresolvedOf(record, views) };
 }
+// Mirrors Core's diagnostic `reason`, which Core carries at the top level of a diagnostic.
 const unknownClient = (path, subject) => ({ code: 'INPUT_INVALID', reason: 'unknown-client', path,
   message: `The organization ${subject} names a client that Core does not know.` });
 function savedClientDiagnostics(record) {

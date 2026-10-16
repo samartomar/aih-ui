@@ -41,7 +41,7 @@ export function projectDismissals(envelope) {
 // them; `goal` is an optional request. `candidateInventories` is null/undefined when the host's update source could not be
 // read, and `candidateSource` says whether the host has one at all ('unconfigured' is unknown, never checked). A caller that
 // supplies neither has no update source, so earlier callers keep their meaning.
-// `coreClients` (optional) is Core's nativeClientIds; it only fills the `client` facts of an adapter suggestion, a display field a recorded suggestion never carries.
+// `coreClients` (optional) is the host's own reading of Core's nativeClientIds, never a request field; it only fills the `client` facts of an adapter suggestion, a display field a recorded suggestion never carries.
 export async function checkImprovements({ envelopeBytes, inventories, candidateInventories, candidateSource = candidateInventories === undefined ? 'unconfigured' : 'configured', clients = [], labels = {}, coreClients, goal, now } = {}) {
   const loaded = await load(envelopeBytes);
   if (loaded.status !== 'ok') return loaded;
@@ -55,7 +55,6 @@ export async function checkImprovements({ envelopeBytes, inventories, candidateI
   if (!Array.isArray(clients) || clients.length > 32 || clients.some(client => typeof client !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(client))) return fail('/clients', 'Supply at most 32 AI client ids.');
   if (!labels || typeof labels !== 'object' || Array.isArray(labels) || Object.keys(labels).length > 32
     || Object.entries(labels).some(([id, label]) => !/^[a-z0-9][a-z0-9-]{0,63}$/.test(id) || typeof label !== 'string' || label.length < 1 || label.length > 128 || /[\u0000-\u001f\u007f]/.test(label))) return fail('/labels', 'Supply at most 32 client labels of 1 to 128 characters, without control characters.');
-  if (coreClients !== undefined && (!Array.isArray(coreClients) || coreClients.length > 64 || coreClients.some(client => typeof client !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(client)))) return fail('/coreClients', 'Supply at most 64 Core client ids.');
   if (goal !== undefined && (typeof goal !== 'string' || goal.length > MAX_GOAL)) return fail('/goal', `Supply a goal of at most ${MAX_GOAL} characters.`);
   const requested = goal !== undefined && goal.trim() !== '';
   const items = inventories.flatMap(entry => entry.release.items.map(item => ({ ...item, root: { releaseSha256: entry.release.sha256 } })));
