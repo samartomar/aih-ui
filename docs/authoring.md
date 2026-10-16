@@ -289,7 +289,8 @@ sources and requires explicit changes to its roots/input records.
 Consumer refusal codes include INTENT_VERSION_UNSUPPORTED,
 INTENT_POLICY_CONTRADICTION, SOURCE_REVISION_UNAVAILABLE,
 SOURCE_IDENTITY_MISMATCH, ORIGIN_UNAVAILABLE, FIELD_SEMANTICS_UNSUPPORTED,
-POLICY_BOUND_EXCEEDED, REVIEW_BINDING_UNAVAILABLE and REVIEW_RECONSIDER_REQUIRED.
+POLICY_BOUND_EXCEEDED and REVIEW_BINDING_UNAVAILABLE (a new decision without a complete checked binding, or
+review records changed outside the review workflow).
 Underlying failures retain `details:{owner:"core"|"catalog",diagnostics:[...]}`
 when wrapped; public Catalog resolver diagnostics retain their shape directly.
 Paths are JSON pointers; message prose is explanatory. The consumer limits
@@ -318,7 +319,7 @@ The draft operations work on the exact recorded choices:
 | --- | --- |
 | `openDraft({bytes,inventories})` | `bytes` is a policy or a journey envelope. Returns `{envelopeBytes,envelope,projection,intent,editing,unresolved,roots,savedIntentBytes,compile,diagnostics}`. `compile` is `{status:"available"}` or `{status:"refused",reasons}`; an envelope with an unsupported required record always advertises `JOURNEY_RECORD_UNSUPPORTED` as the reason. Unsupported semantics refuse with the original bytes and produce no envelope. |
 | `editDraft({envelopeBytes,inventories,operation})` | New envelope revision. Operations: `remove-root`, `remove-origin` (with `keep`), `select`, `replace`, `skip`, `unskip`. Returns the `openDraft` value plus `changes`. |
-| `compileDraft({envelopeBytes,inventories,roots?})` | `{policyBytes,intent,policy,scope,reviewsReconsidered}` for a resolved, dependency-correct scope; the only executable output. |
+| `compileDraft({envelopeBytes,inventories,roots?})` | `{policyBytes,intent,policy,scope,reviewJudgments,reviewSummary}` for a resolved, dependency-correct scope; the only executable output. |
 
 `select` and `replace` fill `itemSha256` from the checked inventory; a different
 supplied hash is `SOURCE_IDENTITY_MISMATCH`. `replace` keeps the choice's
@@ -327,8 +328,8 @@ that a retained choice still requires is refused as `DEPENDENCY_RETAINED` with
 `details.dependents`. `skip` needs a resolvable item; a recorded skip can always
 be removed. `compileDraft` refuses an unresolved scope as `SCOPE_UNRESOLVED`
 with `details:{unresolved,blocked}`. A scoped compile keeps origins used by the
-kept roots plus `direct`; decisions about content outside the scope keep their
-history and are reported in `reviewsReconsidered`. Pins, provenance and inputs in
+kept roots plus `direct`; saved review decisions are kept exactly as recorded and
+their applicability is reported in `reviewJudgments`. Pins, provenance and inputs in
 a draft are retained facts pruned to what the kept choices reach; identities are
 added only from supplied checked inventories. A choice added in a draft is not in the
 saved policy's recorded graph, so its required closure is resolved live. An
@@ -397,7 +398,7 @@ The `/authoring` page and `aih-ui/authoring` share these effect-free operations:
 
 ```js
 import {
-  inspectReviewEvidence, recordReview, reconsiderReviews, compareReviewBindings
+  inspectReviewEvidence, recordReview, reconsiderReviews, compareReviewBindings, describeReviewJudgments
 } from 'aih-ui/authoring';
 const target = { releaseSha256: inventory.release.sha256, itemId };
 const inspected = await inspectReviewEvidence({ evidenceBytes, inventory, itemId });
@@ -462,18 +463,33 @@ the policy's byte-array JSON transport, and lets the user select which to inspec
 Headless readers keep the owning Scan byte bounds. Reopen checks each current
 binding again. A changed report Scan ID alone does not invalidate an unchanged
 relevant observation. Changed detector/rule/configuration/profile/scope/coverage,
-finding or reviewed material requires reconsideration; missing bytes preserve
-the original and return `REVIEW_BINDING_UNAVAILABLE`. Direct edits to review
-records during ordinary composition are refused. `recordReview` creates exact
-current decisions only after checked binding; its optional `decision.supersedes`
-moves an active prior record into history or references retained history.
+finding or reviewed material changes a judgment's **applicability**; it never
+forces another personal review and never blocks editing. Reading, composing,
+editing and drafting return `reviewJudgments`, one entry per saved record, in
+order: `{recordId,state,owner,actor,disposition,reason,recordedAt,subject,finding,evidence,applicability,applicabilityReason,origin}`.
+`subject`, `finding` and `evidence` are the original stored values, never replaced
+by current evidence. `applicability` is `applies`, `changed` (reason
+`subject-not-selected`, `subject-changed` or `evidence-changed`), `unverified`
+(reason `evidence-not-supplied` or `source-unavailable`) or
+`reconsideration-requested` for a reconsider record. `origin` is `recipient` only
+when the optional `recipient:{kind,id}` equals the record's `owner`; otherwise,
+including an absent or invalid recipient, it is `imported`. `reviewSummary` is
+`{recipientDecisions,importedDecisions,applies,changed,unverified}` over current
+records, so an imported judgment is never counted as the recipient's decision.
+`describeReviewJudgments` and `compareReviewBindings` (whose results gain an
+additive `reason`) expose the same derivation. Direct edits to review records
+during ordinary composition are refused. `recordReview` creates exact current
+decisions only after the new decision's own checked binding, and is not blocked by
+other records; its optional `decision.supersedes` moves an active prior record
+into history or references retained history.
 
-`reconsiderReviews({policyBytes,inventories,reviewEvidence?,comparisons?})` proposes
-moving changed/unavailable original records unchanged into history and adding
-reconsider records that supersede them. Supported content edits do the same when
-their candidate removes or changes a reviewed subject. History and the original
-reviewed subject remain intact. Unrelated policy metadata, evidence, managed
-selections and removals continue through ordinary Core validation.
+`reconsiderReviews({policyBytes,inventories,reviewEvidence?,comparisons?})` is an
+explicit, optional operation for an organization that requires review during its
+authoring process: it moves changed/unavailable original records unchanged into
+history and adds reconsider records that supersede them. No edit, composition or
+draft operation invokes it. History and the original reviewed subject remain
+intact. Unrelated policy metadata, evidence, managed selections and removals
+continue through ordinary Core validation.
 
 For an explicitly selected new release with unchanged relevant item material,
 supply `comparisons:[{recordId,target:{releaseSha256,itemId}}]` to authoring and

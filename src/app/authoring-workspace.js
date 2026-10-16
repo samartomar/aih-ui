@@ -243,9 +243,8 @@ export function createAuthoringWorkspace(client) {
     const result = await client.compileDraft(roots); diagnostics.textContent = JSON.stringify(result, null, 2);
     if (result.status === 'superseded') return showStatus('Compile superseded by a newer draft change. Compile again.');
     if (result.status !== 'ok') return showStatus(`Compile refused. ${readable(failure(result))} ${client.compiled ? 'The previously compiled policy remains the current executable policy.' : 'No executable policy was produced; your draft is unchanged.'}`);
-    const { scope, reviewsReconsidered } = result.value, count = `${scope.length} ${scope.length === 1 ? 'choice' : 'choices'}`;
-    showStatus(`Compiled ${count}${client.compiled?.whole ? '' : ' (resolved choices only)'}. This compiled policy is now the current executable policy; the draft envelope is unchanged and can still be saved.`
-      + (reviewsReconsidered?.length ? ` ${reviewsReconsidered.length} recorded review decision(s) need reconsideration.` : ''));
+    const { scope } = result.value, count = `${scope.length} ${scope.length === 1 ? 'choice' : 'choices'}`;
+    showStatus(`Compiled ${count}${client.compiled?.whole ? '' : ' (resolved choices only)'}. This compiled policy is now the current executable policy; the draft envelope is unchanged and can still be saved.`);
   };
   const compileAll = button('Compile whole draft', safe(() => compileScope())); compileAll.id = 'policy-draft-compile-all';
   const compileResolved = button('Compile resolved choices only', safe(() => compileScope(client.draft.roots.filter(root => root.status === 'resolved').map(refOf)))); compileResolved.id = 'policy-draft-compile-resolved';

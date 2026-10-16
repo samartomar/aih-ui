@@ -164,7 +164,10 @@ test('review history is preserved without inventing current evidence decisions',
   const policy = JSON.parse(new TextDecoder().decode(saved.value.policyBytes)); policy.metadata['aih.workbench'] = forged;
   const originalBytes = encode(JSON.stringify(policy));
   const reopened = await readAuthoring({ policyBytes: originalBytes, inventories });
-  assert.equal(reopened.value.editing, 'unavailable'); assert.equal(reopened.value.diagnostics[0].code, 'REVIEW_BINDING_UNAVAILABLE');
+  // #24: an unverifiable historical judgment no longer makes the saved policy uneditable; it is reported as unverified and imported.
+  assert.equal(reopened.value.editing, 'available'); assert.deepEqual(reopened.value.diagnostics, []);
+  assert.equal(reopened.value.reviewJudgments[0].applicability, 'unverified'); assert.equal(reopened.value.reviewJudgments[0].applicabilityReason, 'evidence-not-supplied');
+  assert.equal(reopened.value.reviewJudgments[0].origin, 'imported');
   assert.deepEqual(reopened.value.originalBytes, originalBytes);
 });
 test('malformed/oversized authoring and serialized reader handles refuse without partial policies', async () => {

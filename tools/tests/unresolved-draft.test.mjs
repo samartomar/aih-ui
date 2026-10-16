@@ -117,7 +117,7 @@ test('a delayed draft edit cannot propose after a newer draft change', async t =
 test('a successful compile publishes the executable policy while the draft stays savable', async t => {
   const compiled = encode({ schema: 'urn:aihq:core:execution-policy:1.3.0', mode: 'project', selections: [{ id: 'shared' }] });
   const scope = [{ releaseSha256: 'a'.repeat(64), itemId: 'shared', scope: 'project' }];
-  const calls = service(t, ok(draftValue(1, root('mine', 'unresolved'), root('shared'))), ok({ policyBytes: [...compiled], intent: { roots: [root('shared')] }, scope, reviewsReconsidered: [] }));
+  const calls = service(t, ok(draftValue(1, root('mine', 'unresolved'), root('shared'))), ok({ policyBytes: [...compiled], intent: { roots: [root('shared')] }, scope }));
   const client = createAuthoringClient(); client.importBytes(envelope); await client.reopen();
   const result = await client.compileDraft(scope);
   assert.equal(calls[1].url, '/api/authoring-draft-compile'); assert.deepEqual(calls[1].body.roots, scope);
@@ -219,4 +219,21 @@ test('the client import constants equal the journey module they mirror', async (
   assert.equal(limits.policy, number(journey, /MAX_SAVED_INTENT_BYTES\s*=\s*([\d_]+)/));
   assert.equal(limits.envelope, number(journey, /MAX_ENVELOPE_BYTES\s*=\s*([\d_]+)/));
   assert.ok(limits.policy > 0 && limits.envelope > limits.policy);
+});
+
+// #24: saved judgments are a derived display; the client keeps the latest ones and labels them for the stated identity without gating anything.
+test('the client sends the reviewing identity with every request and keeps the latest saved judgments', async t => {
+  const judgment = { recordId: 'decision-1', state: 'current', applicability: 'changed', applicabilityReason: 'evidence-changed', origin: 'imported', owner: { kind: 'organization', id: 'team' } };
+  const reviewSummary = { recipientDecisions: 0, importedDecisions: 1, applies: 0, changed: 1, unverified: 0 };
+  const calls = service(t, { status: 'ok', value: { editing: 'available', intent: { roots: [] }, reviewJudgments: [judgment], reviewSummary } });
+  const client = createAuthoringClient(); client.importBytes(policy);
+  client.setRecipient({ kind: 'individual', id: 'me', extra: 'dropped' });
+  assert.deepEqual(client.recipient, { kind: 'individual', id: 'me' });
+  const result = await client.reopen();
+  assert.deepEqual(calls[0].body.recipient, { kind: 'individual', id: 'me' });
+  assert.equal(result.value.editing, 'available');
+  assert.deepEqual(client.reviewJudgments, [judgment]); assert.deepEqual(client.reviewSummary, reviewSummary);
+  assert.deepEqual(client.intent, { roots: [] }, 'A changed judgment never makes the reopened policy uneditable.');
+  client.setRecipient(undefined);
+  assert.equal(client.recipient, undefined);
 });
