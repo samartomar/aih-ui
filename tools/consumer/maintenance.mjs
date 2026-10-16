@@ -108,6 +108,7 @@ export async function recordMaintenance({ envelopeBytes, operation, now } = {}) 
     record = { id: MAINTENANCE_CHECK_RECORD_ID, schema: MAINTENANCE_CHECK_RECORD_SCHEMA, required: false, checkedAt: operation.checkedAt, categories: operation.categories };
     const problem = checkProblem(record);
     if (problem !== null) return fail(`/operation${problem}`, 'Supply a valid maintenance check.');
+    if (Date.parse(record.checkedAt) > Date.parse(now)) return fail('/operation/checkedAt', 'A check cannot be recorded as made later than the record time.');
     note = structuredClone(record);
   } else if (operation.type === 'clear') {
     if (!only(operation, ['type', 'id'])) return fail('/operation', 'Supply {type,id}.');

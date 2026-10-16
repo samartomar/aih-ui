@@ -623,6 +623,16 @@ test('malformed note-check records and operations are refused with the path', as
   }
 });
 
+test('a check time later than the record time is refused, an equal or earlier one is recorded', async () => {
+  const s = await scenario(), categories = [{ category: 'content', state: 'checked' }];
+  for (const checkedAt of ['2026-10-15T12:00:01Z', '2026-10-15T12:00:00.5Z', '2099-01-01T00:00:00Z']) {
+    const refused = await recordMaintenance({ envelopeBytes: s.envelopeBytes, operation: { type: 'note-check', checkedAt, categories }, now: NOW });
+    assert.equal(refused.status, 'refused', checkedAt); assert.equal(refused.diagnostics[0].code, 'INPUT_INVALID');
+    assert.equal(refused.diagnostics[0].path, '/operation/checkedAt'); assert.deepEqual(refused.originalBytes, s.envelopeBytes);
+  }
+  for (const checkedAt of [NOW, '2026-10-15T11:59:59.9Z']) assert.equal((await record(s.envelopeBytes, { type: 'note-check', checkedAt, categories })).envelope.records.find(r => r.id === 'maintenance-check').checkedAt, checkedAt);
+});
+
 test('validator internals are not part of the public journey entry', () => {
   for (const name of ['isUtcTimestamp', 'dispositionProblem', 'dispositionId', 'DISPOSITION_CATEGORIES', 'DISPOSITION_SUBJECT_KINDS', 'DISPOSITION_CANDIDATE_KINDS', 'DISPOSITIONS'])
     assert.equal(name in journey, false, name);

@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createAuthoringClient } from '../../src/app/authoring-client.js';
-import { groupUpdates, updateLabel, dispositionText, factText, categoryLine, updatesState, checkedLine, UPDATES_NOTE, createUpdatesView } from '../../src/app/updates-view.js';
+import { readFile } from 'node:fs/promises';
+import { groupUpdates, updateLabel, dispositionText, factText, categoryLine, updatesState, checkedLine, UPDATES_NOTE, DISPOSITION_RECORD, createUpdatesView } from '../../src/app/updates-view.js';
 
 const subject = { kind: 'selection', itemId: 'notes', releaseSha256: 'a', itemSha256: 'b' };
 const update = (id, disposition, attention = null) => ({ id, category: 'content', subject, scope: 'project', candidate: { ...subject, kind: 'content-revision', releaseSha256: id },
@@ -334,4 +335,65 @@ test('offline rows follow the current envelope: a cleared choice shows no choice
   // With no response at all the current envelope's own dispositions are authoritative.
   const failed = updatesState(success, null, ['content'], []);
   assert.equal(failed.value.updates.find(row => row.id === 'old').disposition, null);
+});
+
+test('a queued choice never records into a different artifact opened while an earlier one is pending', async t => {
+  let first;
+  const other = { ...draft, envelopeBytes: [5], savedIntentBytes: [6] };
+  const calls = service(t, ok(draft), new Promise(resolve => { first = resolve; }), ok(other));
+  const client = createAuthoringClient(); await client.openDraft(Uint8Array.of(1));
+  const one = client.recordDisposition({ type: 'clear', id: 'one' }), two = client.recordDisposition({ type: 'clear', id: 'two' });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  await client.openDraft(Uint8Array.of(5));
+  first(ok({ envelopeBytes: [2], projection: { revision: { sequence: 2 } }, dispositions: [] }));
+  assert.deepEqual(await one, { status: 'superseded' });
+  assert.deepEqual(await two, { status: 'superseded' });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(calls.map(call => call.url), ['/api/authoring-draft-open', '/api/authoring-maintenance-record', '/api/authoring-draft-open'], 'nothing was sent for the queued choice');
+  assert.deepEqual(client.draft.envelopeBytes, Uint8Array.of(5)); assert.deepEqual(client.draft.savedIntentBytes, Uint8Array.of(6));
+});
+
+test('a queued choice is also superseded by a new draft, an import and an opened policy', async t => {
+  for (const change of [client => client.importBytes(Uint8Array.of(8)), client => client.publish({ policyBytes: [4], intent: policy })]) {
+    let first;
+    const calls = service(t, ok(draft), new Promise(resolve => { first = resolve; }));
+    const client = createAuthoringClient(); await client.openDraft(Uint8Array.of(1));
+    const one = client.recordDisposition({ type: 'clear', id: 'one' }), two = client.recordDisposition({ type: 'clear', id: 'two' });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    change(client); first(ok({ envelopeBytes: [2], projection: { revision: { sequence: 2 } }, dispositions: [] }));
+    assert.deepEqual([(await one).status, (await two).status], ['superseded', 'superseded']);
+    assert.equal(calls.length, 2);
+  }
+});
+
+test('a failed follow-up check does not keep a preserved choice that was just revisited', async () => {
+  const skipped = { id: 'old', category: 'content', subject, scope: 'project', candidate: { ...subject, kind: 'content-revision', releaseSha256: 'old' }, disposition: 'skip', schema: DISPOSITION_RECORD };
+  const open = { ...draft, envelope: { records: [{ id: 'draft', schema: 'urn:draft', required: true }, skipped] } };
+  let next = ok(offlineValue({ preserved: [{ record: skipped, state: 'unknown' }] }));
+  const client = { draft: open, revision: 1, checkMaintenance: async () => next,
+    recordDisposition: async operation => { assert.deepEqual(operation, { type: 'clear', id: 'old' }); open.envelope = { records: open.envelope.records.filter(record => record.id !== 'old') }; return ok({}); } };
+  const built = view(client); await built.open();
+  assert.match(textOf(built.node), /Preserved choices/);
+  const revisit = elements(built.node).find(node => node.tag === 'button' && node.textContent === 'Revisit');
+  next = null;
+  await revisit.listeners.click();
+  assert.doesNotMatch(textOf(built.node), /Preserved choices/); assert.doesNotMatch(textOf(built.node), /Skipped this exact revision/);
+  assert.equal(elements(built.node).some(node => node.tag === 'button' && node.textContent === 'Revisit'), false);
+});
+
+test('the UI pins the shipped disposition record URN and the consumer attention rule for offline rows', async () => {
+  const schema = JSON.parse(await readFile(new URL('../../schemas/journey-record-maintenance-disposition-1.0.0.json', import.meta.url), 'utf8'));
+  assert.equal(DISPOSITION_RECORD, schema.$id);
+  // The same cases as tools/consumer/maintenance.test.mjs "defer until a date": the date is reached on or after 2026-11-01, never when undated.
+  const cases = [['2026-10-31T23:59:59Z', '2026-11-01', null], ['2026-11-01T00:00:00Z', '2026-11-01', 'defer-date-reached'], ['2027-01-01T10:00:00Z', '2026-11-01', 'defer-date-reached'],
+    ['2099-01-01T00:00:00Z', undefined, null]];
+  for (const [checkedAt, deferUntil, attention] of cases) {
+    const success = updatesState(null, ok({ ...checked, checkedAt, updates: [update('old', 'skip')] }), ['content']);
+    const record = { id: 'old', schema: DISPOSITION_RECORD, category: 'content', subject, scope: 'project', candidate: { ...subject, releaseSha256: 'old' }, disposition: 'defer', ...(deferUntil ? { deferUntil } : {}) };
+    const row = updatesState(success, null, ['content'], [record]).value.updates[0];
+    assert.equal(row.attention, attention, `${checkedAt} ${deferUntil}`); assert.equal(row.promoted, attention !== null);
+  }
+  // No recorded choice at all is a new revision, as the consumer reports a first check.
+  const row = updatesState(updatesState(null, ok(checked), ['content']), null, ['content'], []).value.updates.find(entry => entry.id === 'old');
+  assert.equal(row.attention, 'new'); assert.equal(row.promoted, true);
 });

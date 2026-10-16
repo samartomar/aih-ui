@@ -28,7 +28,8 @@ export function createAuthoringClient() {
   let catalog, bytes = new Uint8Array(), intent, candidate, draftValue, compiled, revision = 0, catalogRevision = 0, hostRevision = 0, reviewEvidence = [];
   const notify = () => { for (const listener of listeners) listener(); };
   // Choices are recorded strictly one after another, each from the envelope the previous one produced.
-  let recording;
+  // `artifact` changes whenever a different policy or draft is opened, so a queued choice never reaches it.
+  let recording, artifact = 0;
   // What an update check or record reads: the open draft's envelope, else the ordinary policy that is open.
   const maintenanceInput = () => draftValue ? { envelopeBytes: [...draftValue.envelopeBytes] } : intent ? { bytes: [...bytes] } : undefined;
   async function request(operation, body = {}) {
@@ -83,10 +84,10 @@ export function createAuthoringClient() {
       return result;
     },
     publish(value) {
-      revision++; candidate = undefined; draftValue = undefined; compiled = undefined;
+      artifact++; revision++; candidate = undefined; draftValue = undefined; compiled = undefined;
       bytes = Uint8Array.from(value.policyBytes); intent = value.intent; notify();
     },
-    importBytes(value) { revision++; bytes = value.slice(); intent = undefined; candidate = undefined; draftValue = undefined; compiled = undefined; notify(); },
+    importBytes(value) { artifact++; revision++; bytes = value.slice(); intent = undefined; candidate = undefined; draftValue = undefined; compiled = undefined; notify(); },
     // While a draft is open every edit goes through the draft operations: the recorded
     // choices are never composed as an executable policy until an explicit compile.
     async propose(operation) { return draftValue ? this.proposeDraft(operation) : this.proposeRequest('edit', { operation }); },
@@ -99,6 +100,7 @@ export function createAuthoringClient() {
       notify(); return result;
     },
     async openDraft(input = bytes) {
+      artifact++;
       const attempt = ++revision; candidate = undefined; notify();
       return openAttempt(attempt, input);
     },
@@ -113,7 +115,9 @@ export function createAuthoringClient() {
     },
     // Also records the note of a successful check. A choice on an ordinary policy turns it into a saved draft.
     recordDisposition(operation) {
+      const target = artifact;
       const run = async () => {
+        if (target !== artifact) return { status: 'superseded' };
         const input = maintenanceInput(), current = draftValue;
         if (!input) return refusal('INPUT_INVALID', 'Open a draft or a saved policy before recording an update choice.');
         const attempt = ++revision; candidate = undefined; notify();

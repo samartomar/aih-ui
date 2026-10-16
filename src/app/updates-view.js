@@ -1,5 +1,5 @@
 // Mirrors MAINTENANCE_DISPOSITION_RECORD_SCHEMA in tools/consumer/maintenance-record.mjs, the source of truth; the page cannot import it.
-const DISPOSITION_RECORD = 'urn:aihq:workbench:journey-record:maintenance-disposition:1.0.0';
+export const DISPOSITION_RECORD = 'urn:aihq:workbench:journey-record:maintenance-disposition:1.0.0';
 const CATEGORIES = ['content', 'software', 'client', 'environment'];
 const LABELS = { content: 'Content', software: 'Software', client: 'Client', environment: 'Environment' };
 const REASONS = { 'sources-unavailable': 'sources are unavailable', 'no-configured-source': 'no update source is configured on this host', 'no-supported-reader': 'no supported reader in this Workbench', 'check-failed': 'the check could not be completed', 'not-checked': 'not checked yet' };
@@ -55,7 +55,9 @@ export function updatesState(previous, result, selected, dispositions) {
   const updates = value ? [...(value.updates ?? []), ...rederived] : rederived;
   // A choice already shown as a retained row is not listed a second time as an unknown preserved one.
   const shown = new Set(updates.map(row => row.disposition?.id).filter(Boolean));
-  const preserved = (value?.preserved ?? previous?.value?.preserved ?? []).filter(entry => !shown.has(entry.record?.id));
+  // Without a response the kept entries answer to the envelope's current choices: a revisited one is gone.
+  const answered = value || !dispositions ? () => true : entry => dispositions.some(record => record.id === entry.record?.id);
+  const preserved = (value?.preserved ?? previous?.value?.preserved ?? []).filter(entry => !shown.has(entry.record?.id) && answered(entry));
   return { value: { ...value, updates, preserved, categories, lastCheck, checkedAt: stale ? seen : categories.some(row => row.state === 'checked') ? value?.checkedAt : undefined },
     unknown: unknownCategories.length > 0, stale, failed: !value || !categories.some(row => row.state === 'checked') };
 }
