@@ -136,7 +136,7 @@ export function createAuthoringClient() {
           revision++;
           draftValue = result.value.draft ? { ...asDraft(result.value.draft), fromPolicy: false }
             : asDraft({ ...current, ...result.value, savedIntentBytes: current.savedIntentBytes });
-          compiled = undefined; intent = undefined; bytes = draftValue.savedIntentBytes.slice();
+          compiled = undefined; intent = undefined; bytes = draftValue.savedIntentBytes.slice(); keepJudgments(result.value.draft ?? draftValue);
         }
         notify(); return result;
       };
