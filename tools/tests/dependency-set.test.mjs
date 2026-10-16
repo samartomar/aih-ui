@@ -13,8 +13,8 @@ test('each root displays its required closure, including transitive and shared d
   ] };
   const original = structuredClone(input);
   assert.deepEqual(dependencyRows(input), [
-    { root: first, dependencies: [{ item: shared, kind: 'required' }, { item: nested, kind: 'required' }] },
-    { root: second, dependencies: [{ item: shared, kind: 'required' }] }
+    { root: first, dependencies: [{ item: shared }, { item: nested }] },
+    { root: second, dependencies: [{ item: shared }] }
   ]);
   assert.deepEqual(input, original);
 });

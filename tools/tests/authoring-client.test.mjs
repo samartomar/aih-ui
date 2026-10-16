@@ -53,3 +53,16 @@ test('only the latest host request can present a prepared approval', async t => 
   pending[0].resolve(response({ status: 'ready', sessionId: 'stale-session' }));
   assert.deepEqual(await preparation, { status: 'superseded' });
 });
+test('refreshing judgments keeps a compiled draft policy and its executable intent', async t => {
+  const previous = globalThis.fetch; t.after(() => { globalThis.fetch = previous; });
+  const envelope = new TextEncoder().encode(JSON.stringify({ schema: 'urn:aihq:workbench:journey-envelope:1.0.0' }));
+  const draft = { envelopeBytes: [...envelope], savedIntentBytes: [1], projection: { revision: { sequence: 2 } }, intent: { roots: [{ itemId: 'a' }] }, reviewJudgments: [] };
+  const judged = [{ recordId: 'r', applicability: 'changed' }], bodies = [];
+  const replies = [draft, { policyBytes: [2], intent: { roots: [{ itemId: 'a' }] }, scope: [{ itemId: 'a' }] }, { editing: 'available', reviewJudgments: judged, reviewSummary: { changed: 1 } }];
+  globalThis.fetch = async (url, init) => { bodies.push([url, JSON.parse(init.body)]); return response({ status: 'ok', value: replies.shift() }); };
+  const client = createAuthoringClient(); client.importBytes(envelope); await client.reopen(); await client.compileDraft();
+  client.setReviewEvidence([Uint8Array.of(9)]); await client.refreshJudgments();
+  assert.deepEqual(client.bytes, Uint8Array.of(2)); assert.ok(client.compiled); assert.deepEqual(client.intent, { roots: [{ itemId: 'a' }] });
+  assert.deepEqual(client.reviewJudgments, judged);
+  assert.equal(bodies.at(-1)[0], '/api/authoring-read'); assert.deepEqual(bodies.at(-1)[1].policyBytes, [2]); assert.deepEqual(bodies.at(-1)[1].reviewEvidence, [[9]]);
+});

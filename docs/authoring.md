@@ -317,7 +317,7 @@ The draft operations work on the exact recorded choices:
 
 | Function | Result |
 | --- | --- |
-| `openDraft({bytes,inventories})` | `bytes` is a policy or a journey envelope. Returns `{envelopeBytes,envelope,projection,intent,editing,unresolved,roots,savedIntentBytes,compile,diagnostics}`. `compile` is `{status:"available"}` or `{status:"refused",reasons}`; an envelope with an unsupported required record always advertises `JOURNEY_RECORD_UNSUPPORTED` as the reason. Unsupported semantics refuse with the original bytes and produce no envelope. |
+| `openDraft({bytes,inventories})` | `bytes` is a policy or a journey envelope. Returns `{envelopeBytes,envelope,projection,intent,editing,unresolved,roots,savedIntentBytes,compile,diagnostics,reviewJudgments,reviewSummary}`. Each root carries `status` and `dependencies`, its displayed required closure as `{releaseSha256,itemId,scope}`. `compile` is `{status:"available"}` or `{status:"refused",reasons}`; an envelope with an unsupported required record always advertises `JOURNEY_RECORD_UNSUPPORTED` as the reason. Unsupported semantics refuse with the original bytes and produce no envelope. |
 | `editDraft({envelopeBytes,inventories,operation})` | New envelope revision. Operations: `remove-root`, `remove-origin` (with `keep`), `select`, `replace`, `skip`, `unskip`. Returns the `openDraft` value plus `changes`. |
 | `compileDraft({envelopeBytes,inventories,roots?})` | `{policyBytes,intent,policy,scope,reviewJudgments,reviewSummary}` for a resolved, dependency-correct scope; the only executable output. |
 
@@ -476,8 +476,11 @@ when the optional `recipient:{kind,id}` equals the record's `owner`; otherwise,
 including an absent or invalid recipient, it is `imported`. `reviewSummary` is
 `{recipientDecisions,importedDecisions,applies,changed,unverified}` over current
 records, so an imported judgment is never counted as the recipient's decision.
-`describeReviewJudgments` and `compareReviewBindings` (whose results gain an
-additive `reason`) expose the same derivation. Direct edits to review records
+`describeReviewJudgments` and `compareReviewBindings` expose the same derivation;
+comparison results gain `reason`, and a selected subject whose release is not
+supplied is now `unavailable` (`source-unavailable`) rather than `changed`. If the
+judgments cannot be described (for example malformed `comparisons`), results carry
+`reviewJudgmentDiagnostics` instead; editing is unaffected. Direct edits to review records
 during ordinary composition are refused. `recordReview` creates exact current
 decisions only after the new decision's own checked binding, and is not blocked by
 other records; its optional `decision.supersedes` moves an active prior record

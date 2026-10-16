@@ -332,6 +332,19 @@ export function createAuthoringWorkspace(client) {
     return true;
   }
 
+  function appendDependencySets(roots, inclusions, label) {
+    for (const { root, dependencies } of dependencyRows({ roots, inclusions })) {
+      const row = el('div', 'space-y-1');
+      row.append(el('p', 'font-mono text-[10px]', label(root)));
+      for (const { item } of dependencies) {
+        const dependency = el('p', 'pl-3 font-mono text-[10px] text-on-surface-variant', `Required dependency: ${item.itemId} · ${item.scope}`);
+        dependency.dataset.dependencyOf = root.itemId; row.append(dependency);
+      }
+      if (!dependencies.length) row.append(el('p', 'pl-3 text-[10px] text-outline', 'No required dependencies.'));
+      proposed.append(row);
+    }
+    proposed.append(el('p', 'text-on-surface-variant', 'Accepting approves each item together with its displayed required dependencies in one step. No separate dependency approval is needed. This does not authorize host execution.'));
+  }
   function present(result) {
     diagnostics.textContent = JSON.stringify(result, null, 2);
     if (result.status !== 'ok') { showStatus(failure(result)); return; }
@@ -342,21 +355,11 @@ export function createAuthoringWorkspace(client) {
     if (candidate?.envelopeBytes) {
       const open = candidate.roots.filter(root => root.status === 'unresolved').length;
       proposed.append(el('p', 'font-medium', `Proposed draft revision ${candidate.projection.revision.sequence}: ${candidate.roots.length} explicit choices; ${open} unresolved. Not an executable policy.`));
-      for (const root of candidate.roots) proposed.append(el('p', 'font-mono text-[10px]', `${root.itemId} — ${root.status}`));
+      appendDependencySets(candidate.roots, candidate.roots.flatMap(root => (root.dependencies ?? []).map(item => ({ root, item }))), root => `${root.itemId} — ${root.status}`);
       showStatus('Review the proposed draft change, then accept. Your current draft is retained until acceptance.');
     } else if (candidate) {
       proposed.append(el('p', 'font-medium', `Proposed policy: ${candidate.intent.roots.length} explicit choices; ${candidate.intent.pins.length} pinned items including dependencies.`));
-      for (const { root, dependencies } of dependencyRows({ roots: candidate.intent.roots, inclusions: candidate.inclusions })) {
-        const row = el('div', 'space-y-1');
-        row.append(el('p', 'font-mono text-[10px]', root.itemId));
-        for (const { item, kind } of dependencies) {
-          const dependency = el('p', 'pl-3 font-mono text-[10px] text-on-surface-variant', `${kind === 'required' ? 'Required' : 'Optional'} dependency: ${item.itemId} · ${item.scope}`);
-          dependency.dataset.dependencyOf = root.itemId; row.append(dependency);
-        }
-        if (!dependencies.length) row.append(el('p', 'pl-3 text-[10px] text-outline', 'No required dependencies.'));
-        proposed.append(row);
-      }
-      proposed.append(el('p', 'text-on-surface-variant', 'Accepting approves each item together with its displayed required dependencies in one step. No separate dependency approval is needed. This does not authorize host execution.'));
+      appendDependencySets(candidate.intent.roots, candidate.inclusions, root => root.itemId);
       showStatus('Review the proposed choices and dependencies, then accept. Your current saved artifact is retained until acceptance.');
     }
     render();

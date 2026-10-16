@@ -9,7 +9,7 @@ const reasonText = {
 };
 const applicabilityText = judgment => ({
   applies: 'Applies to the supplied evidence',
-  changed: `Evidence changed since this judgment — kept as recorded, bound to its original evidence (${reasonText[judgment.applicabilityReason] ?? judgment.applicabilityReason})`,
+  changed: `Applicability changed since this judgment — kept as recorded, bound to its original evidence (${reasonText[judgment.applicabilityReason] ?? judgment.applicabilityReason})`,
   unverified: `Applicability not checked — ${reasonText[judgment.applicabilityReason] ?? judgment.applicabilityReason}`,
   'reconsideration-requested': 'Reconsideration requested',
 })[judgment.applicability] ?? judgment.applicability;
@@ -52,8 +52,7 @@ export function createEvidenceReview(client, onProposal) {
   action('Reconsider saved reviews (optional)', async () => onProposal(await client.proposeRequest('reconsider-reviews'))));
   // Applicability is derived from the supplied evidence and identity, so either change re-reads the saved judgments.
   const refresh = async () => {
-    if (!client.bytes.length) return true;
-    const result = await client.reopen();
+    const result = await client.refreshJudgments();
     if (result.status === 'refused') { status.textContent = result.diagnostics?.map(value => value.message).join(' ') ?? result.status; return false; }
     return true;
   };

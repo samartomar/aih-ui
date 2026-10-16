@@ -5,7 +5,7 @@ export function dependencyRows({ roots, inclusions = [] }) {
     const seen = new Set([key(root)]), dependencies = [];
     for (const inclusion of inclusions) {
       if (key(inclusion.root) !== key(root) || seen.has(key(inclusion.item))) continue;
-      seen.add(key(inclusion.item)); dependencies.push({ item: inclusion.item, kind: 'required' });
+      seen.add(key(inclusion.item)); dependencies.push({ item: inclusion.item });
     }
     return { root, dependencies };
   });

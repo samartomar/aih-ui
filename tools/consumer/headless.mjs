@@ -447,7 +447,9 @@ function analyzeDraft({ intent, policy, inventories, live = true }) {
       ...exclusionEntries.filter(e => root.originIds.includes(e.ref.originId))];
     const refusal = refusals.get(rootKey(root));
     if (!blockers.length && refusal) return { ...structuredClone(root), status: 'refused', refusal: { owner: 'catalog', diagnostics: structuredClone(refusal) } };
-    return { ...structuredClone(root), status: blockers.length ? 'unresolved' : 'resolved',
+    // Closure keys are rootKey values; the displayed dependency set is the root's required closure.
+    const dependencies = [...closures.get(rootKey(root))].filter(k => k !== rootKey(root)).map(k => { const [releaseSha256, itemId, scope] = k.split('/'); return { releaseSha256, itemId, scope }; });
+    return { ...structuredClone(root), status: blockers.length ? 'unresolved' : 'resolved', dependencies,
       ...(blockers.length ? { blockedBy: blockers.map(({ kind, ref, reason }) => ({ kind, ref, reason })) } : {}) };
   });
   return { index, graph, closures, resolvable, skips, unavailableNodes, undeterminedRoots, refusals, mismatches, unresolved, roots };
@@ -504,7 +506,9 @@ async function presentDraft({ envelopeBytes, envelope, savedIntentBytes, support
   return ok({ envelopeBytes: envelopeBytes.slice(), envelope, projection: projectJourneyEnvelope(envelope), supported, intent, editing: analysis.unresolved.length ? 'unresolved' : 'available',
     unresolved: analysis.unresolved, roots: analysis.roots, savedIntentBytes: savedIntentBytes.slice(),
     compile: compiled.status === 'ok' ? { status: 'available' } : { status: 'refused', reasons: compiled.diagnostics },
-    diagnostics: [...availabilityDiagnostics(analysis.unresolved), ...journeyDiagnostics], ...await reviewView({ intent, inventories, reviewEvidence, comparisons, recipient }), ...(changes ? { changes } : {}) });
+    diagnostics: [...availabilityDiagnostics(analysis.unresolved), ...journeyDiagnostics],
+    ...(compiled.status === 'ok' && compiled.value.reviewJudgments ? { reviewJudgments: compiled.value.reviewJudgments, reviewSummary: compiled.value.reviewSummary } : await reviewView({ intent, inventories, reviewEvidence, comparisons, recipient })),
+    ...(changes ? { changes } : {}) });
 }
 // `bytes` is a saved policy or a journey envelope; either reopens every recorded choice.
 export async function openDraft({ bytes, inventories, reviewEvidence = [], comparisons = [], recipient } = {}) {

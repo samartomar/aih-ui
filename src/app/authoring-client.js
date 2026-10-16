@@ -128,6 +128,15 @@ export function createAuthoringClient() {
       revision++; draftValue = candidate; candidate = undefined; compiled = undefined; intent = undefined; keepJudgments(draftValue);
       bytes = draftValue.savedIntentBytes.slice(); notify();
     },
+    // Re-derives saved judgments for the current evidence and identity without touching the
+    // policy, draft or compiled bytes; a compiled policy is read as itself.
+    async refreshJudgments() {
+      const attempt = revision, result = draftValue && !intent
+        ? await request('draft-open', { bytes: [...draftValue.envelopeBytes], policyBytes: undefined }) : bytes.length ? await request('read') : undefined;
+      if (!result || attempt !== revision) return result ?? { status: 'ok' };
+      if (result.status === 'ok') { keepJudgments(result.value); notify(); }
+      return result;
+    },
     // An edited draft or imported envelope revalidates itself, so edits are never replaced by the
     // original policy. An untouched draft of a plain policy is just that policy: it revalidates as
     // one, and becomes ordinary editing again once every recorded source resolves.
