@@ -26,14 +26,20 @@ const sortedUnique = values => values.every((value, index) => index === 0 || val
 // a repository path such as `src/home/index.ts`, a route such as `/v1/orders/` and text such as `serves api/root/health` stay valid.
 const start = String.raw`(?:^|[\s"'(=,;])`;
 const alone = String.raw`(?<![A-Za-z0-9._-])(?<!:/)`;
-const LOCAL_ROOTS = 'home|Users|root|srv|opt|mnt|Volumes|var|tmp|etc|private|media|usr|run|data|proc|dev|sys|Library|Applications|System|workspace|workspaces|app|code|builds|nix|scratch|work|src';
+const LOCAL_ROOTS = 'home|Users|root|srv|opt|mnt|Volumes|var|tmp|etc|private|media|usr|run|data|proc|dev|sys|Library|Applications|System|workspace|workspaces|builds|nix|scratch';
+// Container roots that are also common route prefixes (`/app/health`, `/src/list`): a path needs two segments below them.
+const CONTAINER_ROOTS = 'app|code|work|src';
 // File names that hold credentials, refused as an absolute path at any depth.
-const SECRET_FILES = String.raw`id_rsa|id_dsa|id_ecdsa|id_ed25519|\.env|\.netrc|\.npmrc|\.pypirc|\.pgpass|\.git-credentials|credentials`;
-const LOCAL_OR_SECRET = [/(?<![A-Za-z0-9])[A-Za-z]:[\\/]/, /\\\\/, /\bfile:/i, new RegExp(String.raw`${start}~[\\/]`), new RegExp(String.raw`${alone}/(?:${LOCAL_ROOTS})/[^\s/]`, 'i'), new RegExp(String.raw`${alone}/(?:[^\s/]+/)*(?:${SECRET_FILES})(?![\w.-])`, 'i'),
+const SECRET_FILES = String.raw`id_rsa|id_dsa|id_ecdsa|id_ed25519|\.env|\.netrc|\.npmrc|\.pypirc|\.pgpass|\.git-credentials|\.aws/credentials|credentials\.json`;
+// An assignment name: `client_secret=` counts, `max_token=` is a different name only for the eight-character rule below.
+const named = String.raw`(?<![A-Za-z0-9])`;
+const LOCAL_OR_SECRET = [/(?<![A-Za-z0-9])[A-Za-z]:[\\/]/, /\\\\/, /\bfile:/i, new RegExp(String.raw`${start}~[\\/]`), new RegExp(String.raw`${alone}/(?:${LOCAL_ROOTS})/[^\s/]`, 'i'),
+  new RegExp(String.raw`${alone}/(?:${CONTAINER_ROOTS})/[^\s/]+/[^\s/]`, 'i'), new RegExp(String.raw`${alone}/(?:[^\s/]+/)*(?:${SECRET_FILES})(?![\w.-])`, 'i'),
   new RegExp(String.raw`${alone}/[\w-][\w.-]*\.(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{1,8}(?![\w/-])`), /:\/\/[^\s/?#]*@/,
   /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}/, /\bgithub_pat_/, /\bglpat-/, /\bxox[abprs]-/, /\bsk-[A-Za-z0-9]{20,}/, /\bAKIA[0-9A-Z]{16}\b/,
   // A password or secret assignment holds a credential whatever its length; a token or key assignment once its value is eight or more characters.
-  /\b(?:secret|password|passwd|pwd)\s*=\s*[^\s&]/i, /\b(?:access_token|token|api[_-]?key|apikey)\s*=\s*[^\s&]{8,}/i];
+  // Configuration words (`secret=true`, `password = required`) are not credentials.
+  new RegExp(String.raw`${named}(?:secret|password|passwd|pwd)\s*=\s*(?!(?:true|false|required|none|null)\b)\S`, 'i'), /\b(?:access_token|token|api[_-]?key|apikey)\s*=\s*\S{8,}/i];
 // `password: value`: a value of six or more characters that holds a digit or a symbol (not a plain word such as "reset").
 const labelledSecret = value => [...value.matchAll(/\b(?:password|passwd|secret|api[_-]?key)\s*:\s*(\S+)/gi)].some(([, found]) => { const token = found.replace(/[.,;)\]"']+$/, ''); return token.length >= 6 && /[^A-Za-z]/.test(token); });
 export const unsafeText = value => typeof value === 'string' && (LOCAL_OR_SECRET.some(pattern => pattern.test(value)) || labelledSecret(value));

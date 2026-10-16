@@ -216,9 +216,9 @@ test('absolute local paths, URL userinfo and malformed fields are refused in eve
 
 test('the text guard refuses local roots at any depth, top-level files and credential values, and allows ordinary routes and prose', () => {
   const refused = ['/private.pem', 'see /private.pem.', '(/id_rsa.key)', 'checkout:/srv/checkouts/api', '/srv/checkouts/api', '/srv/x', 'at "/workspace/api"', 'x=/data/export', '/Library/Keychains/a', 'ssh://host/access?token=secret123', 'token=secret123abc',
-    'api_key=abcdefgh12', 'x&password=hunter2hunter2', 'password=P@ssw0rd!2026', 'password=hunter2', 'pwd = x1', 'secret=a', 'built from /app/src/config.json', 'cache in /code/project/build', '/builds/group/proj/out', '/nix/store/abc-x/bin', 'see /id_rsa', 'keys in /keys/team/.env', 'password: hunter2', 'secret : s3cr3t99', 'api-key: abc-1234', 'passwd: Hunter22.'];
+    'api_key=abcdefgh12', 'x&password=hunter2hunter2', 'password=P@ssw0rd!2026', 'password=hunter2', 'pwd = x1', 'secret=a', 'built from /app/src/config.json', 'cache in /code/project/build', '/builds/group/proj/out', '/nix/store/abc-x/bin', 'see /id_rsa', 'keys in /keys/team/.env', 'Deployment password=&P@ssw0rd!2026', 'client_secret=abc', 'in /home/me/.aws/credentials', 'uses /keys/credentials.json', 'password: hunter2', 'secret : s3cr3t99', 'api-key: abc-1234', 'passwd: Hunter22.'];
   const allowed = ['owns the /v1/orders/ endpoint', 'serves /api/health/live', 'Handles password: reset emails', 'limits max_token=4096', 'src/home/index.ts', 'profile: page', 'serves api/root/health', 'Owns /health only', 'calls /v1.2/orders',
-    'See https://example.com', 'https://example.com/home/x', 'token=short', 'The secret: rotated', 'src/srv/x.ts', 'a/private.pem'];
+    'See https://example.com', 'https://example.com/home/x', 'token=short', 'The secret: rotated', 'src/srv/x.ts', 'a/private.pem', 'owns the /v1/credentials endpoint', 'POST /auth/credentials', 'serves /app/health', 'routes /work/items', 'GET /code/review', 'GET /src/list', 'password = required', 'set secret=true in staging'];
   for (const text of refused) assert.equal(unsafeText(text), true, text);
   for (const text of allowed) assert.equal(unsafeText(text), false, text);
 });
@@ -579,6 +579,12 @@ test('the default export refuses unsafe text anywhere in the outgoing envelope o
   const unsafeIntent = (await edit(valueOf(written).envelopeBytes, { type: 'declare' })).envelopeBytes, refusedIntent = await exportWorkspace({ envelopeBytes: unsafeIntent });
   assert.equal(code(refusedIntent), 'WORKSPACE_EXPORT_UNSAFE'); assert.equal(refusedIntent.diagnostics[0].path, '/savedIntent/note'); assert.deepEqual(refusedIntent.originalBytes, unsafeIntent);
   assert.equal(JSON.stringify(refusedIntent.diagnostics).includes('srv'), false);
+  // A password whose value starts with `&` is still a password, in a declaration and in the saved intent.
+  assert.equal(code(await editWorkspace({ envelopeBytes: normal, operation: { type: 'set-label', label: 'Deployment password=&P@ssw0rd!2026' }, now: NOW })), 'INPUT_INVALID');
+  const ampersand = await writeJourneyEnvelope({ savedIntentBytes: encode(JSON.stringify({ ...policy, note: 'Deployment password=&P@ssw0rd!2026' })), records: read.records.filter(r => r.id === 'draft').map(({ savedIntentSha256: _bound, ...rest }) => rest) });
+  const ampersandBytes = (await edit(valueOf(ampersand).envelopeBytes, { type: 'declare' })).envelopeBytes, refusedAmpersand = await exportWorkspace({ envelopeBytes: ampersandBytes });
+  assert.equal(code(refusedAmpersand), 'WORKSPACE_EXPORT_UNSAFE'); assert.deepEqual(refusedAmpersand.originalBytes, ampersandBytes);
+  assert.equal(JSON.stringify(refusedAmpersand.diagnostics).includes('P@ss'), false);
   // Many offenders: at most 20 pointers.
   const many = await resign(normal, doc => { for (const root of doc.records.find(r => r.id === 'draft').intent.roots) { root.reason = 'x'; for (let n = 0; n < 30; n++) root.configuration[`note${n}`] = 'see /srv/a/b'; } });
   const crowded = await exportWorkspace({ envelopeBytes: many });
@@ -874,7 +880,7 @@ test('observeCheckout refuses in words a person can act on: ownership, too many 
     const paths = count => porcelain(...Array.from({ length: count }, (_, n) => `?? many/f${n}`));
     assert.equal(valueOf(await observeCheckout(root, fakeGit({ top: root, status: paths(2000) }))).workingState.clean, false);
     const crowded = await observeCheckout(root, fakeGit({ top: root, status: paths(2001) }));
-    assert.equal(code(crowded), 'CHECKOUT_UNAVAILABLE'); assert.equal(crowded.diagnostics[0].message, 'Too many changed files to identify the working state; commit or stash, then inspect again.');
+    assert.equal(code(crowded), 'CHECKOUT_UNAVAILABLE'); assert.equal(crowded.diagnostics[0].message, 'Too many changed files, or more than 256 MiB of changed content, to identify the working state; commit, stash or ignore them, then inspect again.');
     // Output that overruns the buffer is the same refusal.
     for (const error of [{ code: 'ENOBUFS' }, { code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' }]) {
       const overrun = (command, args, options) => args.includes('status') ? { status: null, stdout: '', stderr: '', error } : fakeGit({ top: root })(command, args, options);
@@ -956,7 +962,7 @@ test('an untracked folder is one entry that digests the paths and contents of it
     await writeFile(join(root, 'nested', '.git', 'HEAD'), 'ref'); assert.equal((await state({}, '?? nested/')).sha256, n1.sha256);
     // More than the limit of listed files is the usual refusal; the limit (20000) is lowered here so the folder stays small.
     const limited = await observeCheckout(root, fakeGit({ top: root, status: porcelain('?? build/') }), { listedEntries: 2100 });
-    assert.equal(code(limited), 'CHECKOUT_UNAVAILABLE'); assert.equal(limited.diagnostics[0].message, 'Too many changed files to identify the working state; commit or stash, then inspect again.');
+    assert.equal(code(limited), 'CHECKOUT_UNAVAILABLE'); assert.equal(limited.diagnostics[0].message, 'Too many changed files, or more than 256 MiB of changed content, to identify the working state; commit, stash or ignore them, then inspect again.');
     assert.equal((await observeCheckout(root, fakeGit({ top: root, status: porcelain('?? build/') }), { listedEntries: 2101 })).status, 'ok');
   } finally { await rm(root, { recursive: true, force: true }); }
 });

@@ -22,7 +22,7 @@ const unavailable = message => refuse('CHECKOUT_UNAVAILABLE', '/root', message);
 const notRepository = () => refuse('CHECKOUT_NOT_REPOSITORY', '/root', 'The folder is not a working checkout of a Git repository (a bare repository cannot be bound).');
 const sameFolder = (a, b) => process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
 const MAX_REMOTES = 32, MAX_FILTERS = 32, MAX_CHANGED_PATHS = 2000, MAX_CHANGED_BYTES = 256 * 1024 * 1024, MAX_LISTED_ENTRIES = 20000;
-const TOO_MANY_CHANGES = 'Too many changed files to identify the working state; commit or stash, then inspect again.';
+const TOO_MANY_CHANGES = 'Too many changed files, or more than 256 MiB of changed content, to identify the working state; commit, stash or ignore them, then inspect again.';
 const UNREADABLE = 'Git metadata could not be read for this folder.';
 const OWNED = 'Git refuses this folder because it is owned by another user (safe.directory).';
 // Git settings that point a command at some other repository, index, object store or extra configuration.
