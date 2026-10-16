@@ -5,7 +5,7 @@ import { checkIntentShape, rootKey, pinKey } from './intent-shape.mjs';
 import { migrateIntent } from './migrate-intent.mjs';
 import { inspectReviewEvidence, compareReviewBindings, reviewDiagnostics } from './review-bindings.mjs';
 import { checkReview } from './intent-shape.mjs';
-import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_SCHEMAS } from './journey.mjs';
+import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_KINDS } from './journey.mjs';
 export { inspectReviewEvidence, compareReviewBindings } from './review-bindings.mjs';
 export const AUTHORING_SCHEMA = 'urn:aihq:workbench:saved-intent:3.0.0';
 export const REVIEW_SCHEMA = 'urn:aihq:workbench:review-decisions:1.0.0';
@@ -714,7 +714,7 @@ export async function editDraft({ envelopeBytes, inventories, operation, reviewE
   const orphaned = intent.reviews.records.filter(r => r.state === 'current' && !reached.has(pinKey(r.subject)) && record.intent.pins.some(p => pinKey(p) === pinKey(r.subject)));
   if (orphaned.length) { preserveReconsideration(intent.reviews, orphaned.map(r => ({ recordId: r.id }))); changes.reviewsReconsidered = orphaned.map(r => r.id); }
   if (!checkIntentShape(intent)) return fail('FIELD_SEMANTICS_UNSUPPORTED', '/records/0/intent', 'Edited draft violates the supported saved-intent shape.');
-  const known = read.records.filter(r => r.schema in JOURNEY_RECORD_SCHEMAS).map(r => r === record ? { id: r.id, schema: r.schema, required: true, intent } : r);
+  const known = read.records.filter(r => Object.hasOwn(JOURNEY_RECORD_KINDS, r.schema)).map(r => r === record ? { id: r.id, schema: r.schema, required: true, intent } : r);
   const written = await writeJourneyEnvelope({ savedIntentBytes: read.savedIntentBytes, records: known, previous: read });
   if (written.status !== 'ok') return unchanged(written);
   const presented = await presentDraft({ inventories, reviewEvidence, comparisons, envelopeBytes: written.value.envelopeBytes, envelope: written.value.envelope,
