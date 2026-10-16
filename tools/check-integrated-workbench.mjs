@@ -29,6 +29,15 @@ const summary = { packages: await Promise.all(packages.map(async item => ({ ...i
 const maintenanceSource = join(consumerDir, 'maintenance-source.json');
 await writeFile(maintenanceSource, JSON.stringify({ revisions: ['current'] }));
 process.env.AIH_MAINTENANCE_SOURCE = maintenanceSource;
+// Disposable reviewed-batch host input. batchFixture owns policy/record construction;
+// this adapter receives only the resulting envelope and fixture directories.
+const { batchFixture } = await import(pathToFileURL(join(consumerDir, 'consumer/batch-fixture.mjs')));
+const batch = await batchFixture({ root: join(consumerDir, 'batch-fixture') });
+const batchEnvelopePath = join(consumerDir, 'batch-envelope.json');
+await writeFile(batchEnvelopePath, batch.envelopeBytes);
+const batchFixturePath = join(consumerDir, 'batch-host.json');
+await writeFile(batchFixturePath, JSON.stringify({ envelopePath: batchEnvelopePath, homes: batch.homes, materialRoot: batch.materialRoot, faults: batch.faults }));
+process.env.AIH_BATCH_FIXTURE = batchFixturePath;
 const started = await createWorkbench({ consumerDir, runDir, summary, settingsPath: join(consumerDir, 'prototype-settings.json') });
 summary.entryCount = started.catalog.items.length; await writeFile(join(runDir, 'summary.json'), JSON.stringify(summary));
 const address = await listen(started.server, 0), origin = `http://127.0.0.1:${address.port}`;
@@ -47,7 +56,9 @@ try {
   await runImprovementsBrowser({ origin, output: join(consumerDir, 'improvements-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, settingsPath: join(consumerDir, 'prototype-settings.json') });
   const { runWorkspaceBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/workspace-browser.mjs')));
   await runWorkspaceBrowser({ origin, output: join(consumerDir, 'workspace-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
-} finally { delete process.env.AIH_MAINTENANCE_SOURCE; await new Promise(resolve => started.server.close(resolve)); }
+  const { runBatchBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/batch-browser.mjs')));
+  await runBatchBrowser({ origin, output: join(consumerDir, 'batch-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, fixturePath: batchFixturePath });
+} finally { delete process.env.AIH_BATCH_FIXTURE; delete process.env.AIH_MAINTENANCE_SOURCE; await new Promise(resolve => started.server.close(resolve)); }
 
 // The normal application's startup must refuse an absent required family,
 // before it can serve a deceptively incomplete inventory. Only this isolated
