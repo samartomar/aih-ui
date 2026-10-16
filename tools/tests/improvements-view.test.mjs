@@ -1,0 +1,166 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createAuthoringClient } from '../../src/app/authoring-client.js';
+import * as improvements from '../../src/app/improvements-view.js';
+
+const { createImprovementsView, groupImprovements, promotionText, dismissOperation, restoreOperation } = improvements;
+const ok = value => ({ status: 'ok', value });
+const draft = { envelopeBytes: [1], savedIntentBytes: [9], projection: { revision: { sequence: 1 } }, intent: { roots: [] } };
+const record = { id: 'suggestion-one', revision: 'a'.repeat(64), rulesVersion: '1.0.0', scope: 'project',
+  change: { kind: 'add-item', itemId: 'test.item', content: { recipeSha256: 'b'.repeat(64), materials: [] } },
+  triggers: [{ ruleId: 'goal.test', key: 'goal:goal.test', text: 'Your goal mentions tests.' }], goal: 'tests',
+  references: [{ kind: 'request', ref: 'goal' }], facts: [{ kind: 'scope', text: 'Applies in this project only.' }], unknowns: ['Whether it improves your results is unknown until you try it.'] };
+const suggestion = { ...record, label: 'Test helper', description: 'Test advice', prompt: 'Suggested by the AIH Workbench improvement rules 1.0.0 (fixed rules; no AI model was used). Start your reply with “AI advice:”.', dismissal: null,
+  promotion: { reasons: ['a new reason applies', 'Shown again: content changed'] } };
+const checked = { rulesVersion: '1.0.0', checkedAt: '2026-10-16T12:00:00Z', leading: suggestion, alternatives: [], dismissed: [], preserved: [] };
+function service(t, ...script) {
+  const calls = [], previous = globalThis.fetch;
+  globalThis.fetch = async (url, options) => { calls.push({ url, body: JSON.parse(options.body) }); return { ok: true, json: async () => await script.shift() }; };
+  t.after(() => { globalThis.fetch = previous; }); return calls;
+}
+class Node {
+  constructor(tag, cls, text = '') { this.tag = tag; this.className = cls; this.textContent = text; this.children = []; this.listeners = {}; this.dataset = {}; }
+  append(...nodes) { this.children.push(...nodes); }
+  replaceChildren(...nodes) { this.children = nodes; }
+  setAttribute(name, value) { this[name] = value; }
+  addEventListener(name, action) { this.listeners[name] = action; }
+}
+const elements = node => [node, ...node.children.flatMap(elements)];
+const textOf = node => elements(node).map(node => node.textContent).join(' ');
+const find = (built, text) => elements(built.node).find(node => node.tag === 'button' && node.textContent === text);
+function view(client, options = {}) {
+  const el = (tag, cls, text) => new Node(tag, cls, text);
+  const button = (label, action) => { const node = el('button', '', label); node.addEventListener('click', action); return node; };
+  return createImprovementsView({ client, el, button, showStatus() {}, loadClients: async () => ['codex'], ...options });
+}
+
+test('groups leading, at most three alternatives, dismissed and preserved; explains promotions', () => {
+  const groups = groupImprovements({ ...checked, alternatives: [suggestion, suggestion, suggestion, suggestion], dismissed: [suggestion], preserved: [{ suggestion, dismissal: {}, state: 'not-current' }] });
+  assert.deepEqual(groups.map(({ label, rows }) => [label, rows.length]), [['Leading suggestion', 1], ['Alternatives', 3], ['Dismissed', 1], ['Preserved dismissals', 1]]);
+  assert.deepEqual(promotionText(suggestion), ['Shown again: a new reason applies', 'Shown again: content changed']);
+  assert.deepEqual(promotionText({}), []);
+});
+
+test('dismiss operations whitelist record fields and restore targets the stable suggestion id', () => {
+  assert.deepEqual(dismissOperation({ ...suggestion, schema: 'unused', required: false, recordedAt: 'unused', extra: 'unused' }), { type: 'dismiss', suggestion: record });
+  assert.deepEqual(dismissOperation(suggestion, 'Later'), { type: 'dismiss', suggestion: record, reason: 'Later' });
+  const { goal, ...withoutGoal } = record;
+  assert.deepEqual(dismissOperation({ ...withoutGoal, label: 'Renamed' }), { type: 'dismiss', suggestion: withoutGoal });
+  assert.deepEqual(restoreOperation(record.id), { type: 'restore', id: record.id });
+});
+
+test('client checks draft envelopes and ordinary policy bytes with clients and goal, and adopts records', async t => {
+  const adopted = { ...draft, envelopeBytes: [2] };
+  const calls = service(t, ok(checked), ok({ draft: adopted }), ok(checked), ok({ envelopeBytes: [3], envelope: { records: [] }, projection: { revision: { sequence: 3 } } }));
+  const client = createAuthoringClient(); client.publish({ policyBytes: [7], intent: { roots: [] } });
+  await client.checkImprovements({ clients: ['codex'], goal: 'tests' });
+  assert.equal(calls[0].url, '/api/authoring-improvements-check');
+  assert.deepEqual(calls[0].body, { reviewEvidence: [], bytes: [7], clients: ['codex'], goal: 'tests' });
+  await client.recordImprovement(dismissOperation(suggestion));
+  assert.equal(calls[1].url, '/api/authoring-improvements-record'); assert.deepEqual(calls[1].body.operation, dismissOperation(suggestion));
+  assert.deepEqual(client.draft.envelopeBytes, Uint8Array.of(2)); assert.deepEqual(client.bytes, Uint8Array.of(9)); assert.equal(client.intent, undefined);
+  await client.checkImprovements({ clients: ['claude'] });
+  assert.deepEqual(calls[2].body, { reviewEvidence: [], envelopeBytes: [2], clients: ['claude'] });
+  await client.recordImprovement(restoreOperation(record.id));
+  assert.deepEqual(client.draft.envelopeBytes, Uint8Array.of(3)); assert.deepEqual(client.draft.savedIntentBytes, Uint8Array.of(9));
+  const empty = createAuthoringClient();
+  assert.equal((await empty.checkImprovements({ clients: [] })).status, 'refused');
+  assert.equal((await empty.recordImprovement(restoreOperation('x'))).status, 'refused');
+});
+
+test('improvement and maintenance records share one serialized envelope queue', async t => {
+  let finish;
+  const calls = service(t, ok(draft), new Promise(resolve => { finish = resolve; }), ok({ envelopeBytes: [3] }));
+  const client = createAuthoringClient(); await client.openDraft(Uint8Array.of(1));
+  const first = client.recordImprovement(dismissOperation(suggestion));
+  const second = client.recordDisposition({ type: 'clear', id: 'old' });
+  assert.equal(calls.length, 2);
+  finish(ok({ envelopeBytes: [2] })); await first; await second;
+  assert.equal(calls[2].url, '/api/authoring-maintenance-record'); assert.deepEqual(calls[2].body.envelopeBytes, [2]);
+  assert.deepEqual(client.draft.envelopeBytes, Uint8Array.of(3));
+});
+
+test('improvement checks and records cannot replace a later imported artifact', async t => {
+  let finish;
+  const calls = service(t, new Promise(resolve => { finish = resolve; }));
+  const client = createAuthoringClient(); client.publish({ policyBytes: [7], intent: {} });
+  const checking = client.checkImprovements({ clients: [] }); client.importBytes(Uint8Array.of(8)); finish(ok(checked));
+  assert.deepEqual(await checking, { status: 'superseded' }); assert.equal(calls.length, 1);
+  client.publish({ policyBytes: [7], intent: {} });
+  let resolveRecord;
+  service(t, new Promise(resolve => { resolveRecord = resolve; }));
+  const recording = client.recordImprovement(dismissOperation(suggestion)); client.importBytes(Uint8Array.of(8)); resolveRecord(ok({ draft }));
+  assert.deepEqual(await recording, { status: 'superseded' }); assert.equal(client.draft, undefined);
+});
+
+test('COPY-ONLY: asking and copying writes the read-only prompt once with no transport or execution', async t => {
+  const client = { draft, revision: 1, checkImprovements: async () => ok(checked) };
+  const built = view(client); await built.open();
+  const forbidden = [], copies = [];
+  const replace = (name, value) => { const previous = Object.getOwnPropertyDescriptor(globalThis, name); Object.defineProperty(globalThis, name, { configurable: true, value }); t.after(() => { if (previous) Object.defineProperty(globalThis, name, previous); else delete globalThis[name]; }); };
+  replace('fetch', () => { forbidden.push('fetch'); });
+  replace('window', { open: () => { forbidden.push('open'); } });
+  replace('navigator', { clipboard: { writeText: async text => { copies.push(text); } }, sendBeacon: () => { forbidden.push('beacon'); } });
+  client.checkImprovements = () => { forbidden.push('check'); };
+  client.recordImprovement = () => { forbidden.push('record'); };
+  await find(built, 'Ask your AI client').listeners.click();
+  const textarea = elements(built.node).find(node => node.tag === 'textarea');
+  assert.equal(textarea.readOnly, true); assert.equal(textarea.value, suggestion.prompt);
+  assert.match(textOf(built.node), /AI advice — paste this into an AI client you already use/);
+  await find(built, 'Copy prompt').listeners.click();
+  assert.deepEqual(copies, [suggestion.prompt]); assert.match(copies[0], /Suggested by the AIH Workbench improvement rules/); assert.match(copies[0], /AI advice/);
+  assert.deepEqual(forbidden, []);
+});
+
+test('dismiss, show again and suggest use injected clients, goal and closed operations', async () => {
+  const calls = [];
+  const client = { draft, revision: 1, checkImprovements: async input => { calls.push(input); return ok({ ...checked, dismissed: [suggestion], preserved: [{ suggestion: record, dismissal: { reason: 'Later' }, state: 'not-current' }] }); },
+    recordImprovement: async operation => { calls.push(operation); return ok({}); } };
+  const built = view(client); await built.open();
+  assert.deepEqual(calls[0], { clients: ['codex'] });
+  for (const text of ['Leading suggestion', 'Dismissed', 'Preserved dismissals', 'Test helper', 'Your goal mentions tests.', 'Applies in this project only.', 'Whether it improves your results is unknown', 'Shown again: a new reason applies', 'Later']) assert.ok(textOf(built.node).includes(text), text);
+  assert.ok(elements(built.node).some(node => node.dataset.suggestionId === suggestion.id));
+  await find(built, 'Dismiss').listeners.click();
+  assert.deepEqual(calls[1], dismissOperation(suggestion)); assert.deepEqual(calls[2], { clients: ['codex'] });
+  await find(built, 'Show again').listeners.click();
+  assert.deepEqual(calls[3], restoreOperation(record.id)); assert.deepEqual(calls[4], { clients: ['codex'] });
+  elements(built.node).find(node => node.id === 'policy-improvements-goal').value = 'fewer regressions';
+  await find(built, 'Suggest').listeners.click();
+  assert.deepEqual(calls[5], { clients: ['codex'], goal: 'fewer regressions' });
+});
+
+test('view discards older checks and resets hidden artifact state', async () => {
+  let finish, count = 0;
+  const client = { intent: {}, revision: 1, checkImprovements: async () => ++count === 1 ? new Promise(resolve => { finish = resolve; }) : ok(checked) };
+  const built = view(client), first = built.open();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  await built.check(); finish(ok({ ...checked, leading: null })); await first;
+  assert.match(textOf(built.node), /Test helper/);
+  client.intent = undefined; built.render(); assert.equal(built.node.hidden, true);
+  client.intent = {}; built.render(); assert.doesNotMatch(textOf(built.node), /Test helper/);
+});
+
+test('an artifact change while settings load releases the pending Suggest control without checking stale input', async () => {
+  let finish;
+  const calls = [], client = { draft, revision: 1, checkImprovements: async input => { calls.push(input); return ok(checked); } };
+  const built = view(client, { loadClients: () => new Promise(resolve => { finish = resolve; }) });
+  const checking = built.open(); client.revision++; finish(['codex']); await checking;
+  assert.equal(find(built, 'Suggest').disabled, false); assert.deepEqual(calls, []);
+});
+
+test('default clients come from saved setup and check failures leave suggestions unknown', async t => {
+  const previous = globalThis.fetch, calls = [];
+  globalThis.fetch = async url => { calls.push(url); return { ok: true, json: async () => ({ ok: true, state: 'saved', settings: { clients: ['claude'] } }) }; };
+  t.after(() => { globalThis.fetch = previous; });
+  const client = { draft, revision: 1, checkImprovements: async input => { calls.push(input); return ok(checked); } };
+  const built = view(client, { loadClients: undefined }); await built.open();
+  assert.deepEqual(calls, ['/api/workbench-settings', { clients: ['claude'] }]);
+  client.checkImprovements = async () => { throw new Error('offline'); };
+  await built.check(); assert.match(textOf(built.node), /could not be completed.*unknown/);
+  assert.doesNotMatch(textOf(built.node), /Test helper|No improvements were suggested/);
+  // No saved setup, or an unreadable one, means no declared clients rather than a failed check.
+  globalThis.fetch = async url => { calls.push(url); return { ok: false, status: 404, json: async () => ({ ok: false, error: 'no setup' }) }; };
+  client.checkImprovements = async input => { calls.push(input); return ok(checked); };
+  calls.length = 0; await built.check();
+  assert.deepEqual(calls, ['/api/workbench-settings', { clients: [] }]);
+});

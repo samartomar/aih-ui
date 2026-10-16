@@ -36,6 +36,7 @@ const saved = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: 'u
 const journeyRecord = 'urn:aihq:workbench:journey-record:unresolved-draft:1.0.0', journeyEnvelope = 'urn:aihq:workbench:journey-envelope:1.0.0';
 const dispositionRecord = 'urn:aihq:workbench:journey-record:maintenance-disposition:1.0.0', checkRecord = 'urn:aihq:workbench:journey-record:maintenance-check:1.0.0';
 const organizationRecord = 'urn:aihq:workbench:journey-record:organization-draft:1.0.0';
+const suggestionRecord = 'urn:aihq:workbench:journey-record:improvement-suggestion:1.0.0', dismissalRecord = 'urn:aihq:workbench:journey-record:improvement-dismissal:1.0.0';
 const utcTimestamp = { type: 'string', pattern: '^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d+)?Z$' };
 const updateCategory = { enum: ['content', 'software', 'client', 'environment'] };
 const recordUrn = { type: 'string', pattern: String.raw`^urn:aihq:workbench:journey-record:[a-z0-9-]+:\d+\.\d+\.\d+$` };
@@ -84,6 +85,32 @@ const organizationDraft = { $schema: 'https://json-schema.org/draft/2020-12/sche
   id: { const: 'organization-draft' }, schema: { const: organizationRecord }, required: { const: true }, policyId: id, source: orgSource,
   entries: array(organizationEntry), targets: { type: 'array', maxItems: 64, items: organizationTarget }
 }, ['policyId', 'source']) };
+// Improvement suggestion: the suggestion a person dismissed, kept so a later check can tell whether anything material
+// changed. The reader (tools/consumer/improvement-record.mjs) also enforces what a schema cannot express, so a record
+// this schema accepts can still be refused when the Workbench opens it:
+//   - id is derived from (kind, item, scope); revision from the id, the content and the sorted trigger keys;
+//   - content.materials are sorted and unique, and trigger keys are unique;
+//   - recordedAt must be a real calendar timestamp.
+const suggestionText = (maxLength = 1000) => ({ type: 'string', minLength: 1, maxLength });
+const improvementSuggestion = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: suggestionRecord, ...shape({
+  id: { type: 'string', pattern: '^suggestion-[a-f0-9]{32}$' }, schema: { const: suggestionRecord }, required: { const: false },
+  rulesVersion: { type: 'string', pattern: String.raw`^\d+\.\d+\.\d+$` }, revision: hash, scope,
+  change: shape({ kind: { const: 'add-item' }, itemId: id, releaseSha256: hash, itemSha256: hash,
+    content: shape({ recipeSha256: hash, materials: { type: 'array', maxItems: 256, uniqueItems: true, items: hash } }) }),
+  triggers: { type: 'array', minItems: 1, maxItems: 16, items: shape({ ruleId: { type: 'string', pattern: '^[a-z][a-z0-9.-]{0,63}$' },
+    key: { type: 'string', pattern: '^[a-z][a-z0-9-]{0,31}:[\\w.@-]{1,180}$' }, text: suggestionText() }) },
+  goal: suggestionText(300),
+  references: { type: 'array', maxItems: 32, items: shape({ kind: { enum: ['setting', 'saved-reason', 'request', 'catalog-item'] }, ref: suggestionText(300) }) },
+  facts: { type: 'array', maxItems: 16, items: shape({ kind: { enum: ['overhead', 'scope', 'dependency'] }, text: suggestionText() }) },
+  unknowns: { type: 'array', maxItems: 16, items: suggestionText() },
+  recordedAt: utcTimestamp
+}, ['goal']) };
+// Improvement dismissal: one record per suggestion, binding the exact suggestion revision it dismissed. The reader also
+// requires its id to derive from the suggestion id and a suggestion record with the same id and revision in the same envelope.
+const improvementDismissal = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: dismissalRecord, ...shape({
+  id: { type: 'string', pattern: '^dismissal-[a-f0-9]{32}$' }, schema: { const: dismissalRecord }, required: { const: false },
+  suggestion: shape({ id: { type: 'string', pattern: '^suggestion-[a-f0-9]{32}$' }, revision: hash }), recordedAt: utcTimestamp, reason: suggestionText()
+}, ['reason']) };
 const journey = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: journeyEnvelope, ...shape({
   schema: { const: journeyEnvelope },
   id: { type: 'string', pattern: '^journey-[a-f0-9]{32}$' },
@@ -94,10 +121,10 @@ const journey = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: 
   records: array({ if: { required: ['schema'], properties: { schema: { const: journeyRecord } } },
     then: shape({ id, schema: { const: journeyRecord }, required: { const: true }, savedIntentSha256: hash, intent: { $ref: saved.$id } }),
     else: { type: 'object', required: ['id', 'schema', 'required'], additionalProperties: true, properties: { id, schema: recordUrn, required: { type: 'boolean' } } },
-    allOf: [dispositionRecord, checkRecord, organizationRecord].map(urn => ({ if: { required: ['schema'], properties: { schema: { const: urn } } }, then: { $ref: urn } })) })
+    allOf: [dispositionRecord, checkRecord, organizationRecord, suggestionRecord, dismissalRecord].map(urn => ({ if: { required: ['schema'], properties: { schema: { const: urn } } }, then: { $ref: urn } })) })
 }) };
 mkdirSync(new URL('../schemas/', import.meta.url), { recursive: true });
-for (const [name, schema] of [['saved-intent-3.0.0', saved], ['review-decisions-1.0.0', review], ['journey-envelope-1.0.0', journey], ['journey-record-maintenance-disposition-1.0.0', disposition], ['journey-record-maintenance-check-1.0.0', check], ['journey-record-organization-draft-1.0.0', organizationDraft]]) {
+for (const [name, schema] of [['saved-intent-3.0.0', saved], ['review-decisions-1.0.0', review], ['journey-envelope-1.0.0', journey], ['journey-record-maintenance-disposition-1.0.0', disposition], ['journey-record-maintenance-check-1.0.0', check], ['journey-record-organization-draft-1.0.0', organizationDraft], ['journey-record-improvement-suggestion-1.0.0', improvementSuggestion], ['journey-record-improvement-dismissal-1.0.0', improvementDismissal]]) {
   const path = new URL(`../schemas/${name}.json`, import.meta.url), expected = JSON.stringify(schema, null, 2) + '\n';
   if (process.argv.includes('--check')) {
     if (readFileSync(path, 'utf8').replaceAll('\r\n', '\n') !== expected) throw new Error(`Schema is stale: ${name}`);

@@ -4,6 +4,7 @@
 import { checkIntentShape } from './intent-shape.mjs';
 import { digestBytes, hash, object, only } from './intake.mjs';
 import { MAINTENANCE_DISPOSITION_RECORD_SCHEMA, MAINTENANCE_CHECK_RECORD_SCHEMA, dispositionProblem, dispositionId, checkProblem } from './maintenance-record.mjs';
+import { IMPROVEMENT_SUGGESTION_RECORD_SCHEMA, IMPROVEMENT_DISMISSAL_RECORD_SCHEMA, suggestionProblem, suggestionDerivedProblem, dismissalProblem, dismissalId as improvementDismissalId, unlinkedDismissal } from './improvement-record.mjs';
 import { ORGANIZATION_DRAFT_RECORD_SCHEMA, organizationDraftProblem, organizationDraftDerivedProblem } from './organization-draft-record.mjs';
 export const JOURNEY_SCHEMA_PREFIX = 'urn:aihq:workbench:journey-envelope:';
 export const JOURNEY_SCHEMA = `${JOURNEY_SCHEMA_PREFIX}1.0.0`;
@@ -16,6 +17,8 @@ export const JOURNEY_RECORD_SCHEMAS = { [DRAFT_RECORD_SCHEMA]: { kind: 'unresolv
 export const JOURNEY_RECORD_KINDS = { [DRAFT_RECORD_SCHEMA]: { kind: 'unresolved-draft', version: '1.0.0', required: true },
   [MAINTENANCE_DISPOSITION_RECORD_SCHEMA]: { kind: 'maintenance-disposition', version: '1.0.0', required: false },
   [MAINTENANCE_CHECK_RECORD_SCHEMA]: { kind: 'maintenance-check', version: '1.0.0', required: false },
+  [IMPROVEMENT_SUGGESTION_RECORD_SCHEMA]: { kind: 'improvement-suggestion', version: '1.0.0', required: false },
+  [IMPROVEMENT_DISMISSAL_RECORD_SCHEMA]: { kind: 'improvement-dismissal', version: '1.0.0', required: false },
   [ORGANIZATION_DRAFT_RECORD_SCHEMA]: { kind: 'organization-draft', version: '1.0.0', required: true } };
 const known = schema => Object.hasOwn(JOURNEY_RECORD_KINDS, schema);
 export const MAX_SAVED_INTENT_BYTES = 1_000_000;
@@ -76,6 +79,8 @@ function shapeProblem(envelope) {
     if (record.schema === DRAFT_RECORD_SCHEMA && (!only(record, ['id', 'schema', 'required', 'savedIntentSha256', 'intent']) || record.required !== true || !hash(record.savedIntentSha256) || !object(record.intent))) return path;
     if (record.schema === MAINTENANCE_DISPOSITION_RECORD_SCHEMA && dispositionProblem(record) !== null) return path;
     if (record.schema === MAINTENANCE_CHECK_RECORD_SCHEMA && checkProblem(record) !== null) return path;
+    if (record.schema === IMPROVEMENT_SUGGESTION_RECORD_SCHEMA && suggestionProblem(record) !== null) return path;
+    if (record.schema === IMPROVEMENT_DISMISSAL_RECORD_SCHEMA && dismissalProblem(record) !== null) return path;
     if (record.schema === ORGANIZATION_DRAFT_RECORD_SCHEMA && organizationDraftProblem(record) !== null) return path;
   }
   return null;
@@ -112,6 +117,11 @@ export async function readJourneyEnvelope(bytes) {
       if (!checkIntentShape(record.intent)) return refuse('FIELD_SEMANTICS_UNSUPPORTED', `/records/${index}/intent`, 'Draft intent violates the supported saved-intent shape.', originalBytes);
     } else if (record.schema === MAINTENANCE_DISPOSITION_RECORD_SCHEMA) {
       if (record.id !== await dispositionId(record)) return refuse('INPUT_INVALID', `/records/${index}/id`, 'Disposition id must derive from its category, subject, scope and candidate.', originalBytes);
+    } else if (record.schema === IMPROVEMENT_SUGGESTION_RECORD_SCHEMA) {
+      const problem = await suggestionDerivedProblem(record);
+      if (problem !== null) return refuse('INPUT_INVALID', `/records/${index}${problem}`, 'Suggestion id and revision must derive from its item, scope, content and trigger keys.', originalBytes);
+    } else if (record.schema === IMPROVEMENT_DISMISSAL_RECORD_SCHEMA) {
+      if (record.id !== await improvementDismissalId(record)) return refuse('INPUT_INVALID', `/records/${index}/id`, 'Dismissal id must derive from the suggestion it dismisses.', originalBytes);
     } else if (record.schema === ORGANIZATION_DRAFT_RECORD_SCHEMA) {
       const problem = await organizationDraftDerivedProblem(record);
       if (problem !== null) return refuse('INPUT_INVALID', `/records/${index}${problem}`, 'Entry and target ids must derive from their item, scope and target.', originalBytes);
@@ -120,6 +130,8 @@ export async function readJourneyEnvelope(bytes) {
       diagnostics.push({ code: 'JOURNEY_RECORD_UNSUPPORTED', path: `/records/${index}`, message: `Required record ${record.id} has unsupported schema ${record.schema}; it can be read but not changed.` });
     } else diagnostics.push({ code: 'JOURNEY_RECORD_PRESERVED', severity: 'info', path: `/records/${index}`, message: `Optional record ${record.id} has unknown schema ${record.schema}; it is preserved unchanged.` });
   }
+  const unlinked = unlinkedDismissal(envelope.records);
+  if (unlinked >= 0) return refuse('INPUT_INVALID', `/records/${unlinked}/suggestion`, 'A dismissal needs the suggestion record, with the same id and revision, in the same envelope.', originalBytes);
   return ok({ envelope, savedIntentBytes, records: envelope.records, supported, originalBytes }, diagnostics);
 }
 // `records` are the known records to write; unknown optional records from `previous`
@@ -145,6 +157,19 @@ export async function writeJourneyEnvelope({ savedIntentBytes, records, previous
       written.push(structuredClone(record));
       continue;
     }
+    if (record?.schema === IMPROVEMENT_SUGGESTION_RECORD_SCHEMA) {
+      const problem = suggestionProblem(record) ?? await suggestionDerivedProblem(record);
+      if (problem !== null) return refuse('INPUT_INVALID', `${path}${problem}`, 'Supply a closed improvement-suggestion record with derived id and revision.');
+      written.push(structuredClone(record));
+      continue;
+    }
+    if (record?.schema === IMPROVEMENT_DISMISSAL_RECORD_SCHEMA) {
+      const problem = dismissalProblem(record);
+      if (problem !== null) return refuse('INPUT_INVALID', `${path}${problem}`, 'Supply a closed improvement-dismissal record.');
+      if (record.id !== await improvementDismissalId(record)) return refuse('INPUT_INVALID', `${path}/id`, 'Dismissal id must derive from the suggestion it dismisses.');
+      written.push(structuredClone(record));
+      continue;
+    }
     if (record?.schema === ORGANIZATION_DRAFT_RECORD_SCHEMA) {
       const problem = organizationDraftProblem(record) ?? await organizationDraftDerivedProblem(record);
       if (problem !== null) return refuse('INPUT_INVALID', `${path}${problem}`, 'Supply a closed organization-draft record with derived entry and target ids.');
@@ -158,6 +183,8 @@ export async function writeJourneyEnvelope({ savedIntentBytes, records, previous
     if (!checkIntentShape(record.intent)) return refuse('FIELD_SEMANTICS_UNSUPPORTED', `${path}/intent`, 'Draft intent violates the supported saved-intent shape.');
     written.push({ id: record.id, schema: record.schema, required: true, savedIntentSha256: sha256, intent: structuredClone(record.intent) });
   }
+  const unlinked = unlinkedDismissal(written);
+  if (unlinked >= 0) return refuse('INPUT_INVALID', `/records/${unlinked}/suggestion`, 'A dismissal needs the suggestion record, with the same id and revision, in the same list.');
   const preserved = (previous?.envelope.records ?? []).filter(record => !known(record.schema)).map(record => structuredClone(record));
   const all = [...written, ...preserved];
   if (new Set(all.map(record => record.id)).size !== all.length) return refuse('INPUT_INVALID', '/records', 'Record ids must be unique.');

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:aihq:workbench:journey-record:improvement-dismissal:1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "schema",
+    "required",
+    "suggestion",
+    "recordedAt"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^dismissal-[a-f0-9]{32}$"
+    },
+    "schema": {
+      "const": "urn:aihq:workbench:journey-record:improvement-dismissal:1.0.0"
+    },
+    "required": {
+      "const": false
+    },
+    "suggestion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "revision"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^suggestion-[a-f0-9]{32}$"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "recordedAt": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d+)?Z$"
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+    }
+  }
+}
