@@ -100,6 +100,9 @@ node('apply').addEventListener('click', () => perform(async () => {
   attempted = true; reviewed = null; node('review-section').hidden = true;
   try {
     const result = await api('batch-run', { batchId: current.id });
+    // Running an opaque process spent the person's Run again choice in a newer batch. Show the batch as the host now holds it
+    // (the choice unticked, the process kept); a box is never ticked by anything but the person.
+    if (result.current) renderBatch(result.current.projection, result.current.batchId);
     renderReport(result.report); node('status').textContent = 'Run finished. Inspect every observed outcome; Recover reinspects and prepares fresh work.';
   } catch (error) {
     // A refusal is the host saying nothing was applied: show why (the conflicts, when it names them) and let the person review again.

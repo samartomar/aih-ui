@@ -295,10 +295,15 @@ describe('reviewed batch against Core', () => {
     };
     const everything = async () => [await tree(f.homes.a), await tree(f.homes.b)];
     const start = await everything();
-    const host = hostOf(f, { faults: { 'b-core': 'stale-target' }, hostFor: capture('first') });
-    const report = await host.runBatch({ envelopeBytes: first.envelopeBytes, batchId: first.record.id, approve: { batchId: first.record.id } });
+    const host = hostOf(f, { faults: { 'b-core': 'stale-target' }, hostFor: capture('first') }), saved = [];
+    const report = await host.runBatch({ envelopeBytes: first.envelopeBytes, batchId: first.record.id, approve: { batchId: first.record.id }, persist: async bytes => { saved.push(bytes); }, now: NOW });
     assert.equal(report.status, 'ok', JSON.stringify(report.diagnostics));
     assert.deepEqual(outcomes(report), ['failed', 'cancelled', 'completed', 'unknown']);
+    // Running the opaque process spent its consent first: the saved record now keeps it, and the report names that record.
+    assert.equal(saved.length, 1);
+    const spent = valueOf(await readBatch({ envelopeBytes: saved[0] }));
+    assert.equal(report.consumedBy, spent.record.id); assert.equal(spent.record.supersedes, first.record.id); assert.equal(spent.current, true);
+    assert.deepEqual(spent.record.actions.map(a => [a.id, a.retain === true]), [['b-core', false], ['b-dependent', false], ['a-extra', false], ['b-proc', true]]);
     const actions = byId(report);
     assert.equal(actions['b-proc'].reason, 'exit-code');
     assert.equal(actions['b-proc'].core.completion, 'incomplete'); assert.equal(actions['b-proc'].core.operations[0].effectsUncertain, true);
@@ -315,13 +320,13 @@ describe('reviewed batch against Core', () => {
     const lying = { ...report, actions: report.actions.map(a => ({ ...a, outcome: 'completed' })) };
     // Kept verifiable work is never re-run, even when the caller asks for it; a name that is no action is refused too.
     for (const rerun of [['a-extra'], ['ghost']]) {
-      const refusedRerun = await reopened.recoverBatch({ envelopeBytes: first.envelopeBytes, batchId: first.record.id, rerun, now: '2026-10-16T10:00:00Z' });
+      const refusedRerun = await reopened.recoverBatch({ envelopeBytes: saved[0], batchId: spent.record.id, rerun, now: '2026-10-16T10:00:00Z' });
       assert.equal(refusedRerun.status, 'refused', rerun[0]); assert.equal(refusedRerun.diagnostics[0].code, 'BATCH_RERUN_REFUSED'); assert.equal(refusedRerun.diagnostics[0].path, '/rerun/0');
     }
     // b-proc is an opaque process Core cannot show as done, so recovery runs it again only because the person said so.
-    const recovered = await reopened.recoverBatch({ envelopeBytes: first.envelopeBytes, batchId: first.record.id, outcome: lying, rerun: ['b-proc'], now: '2026-10-16T10:00:00Z' });
+    const recovered = await reopened.recoverBatch({ envelopeBytes: saved[0], batchId: spent.record.id, outcome: lying, rerun: ['b-proc'], now: '2026-10-16T10:00:00Z' });
     assert.equal(recovered.status, 'ok', JSON.stringify(recovered.diagnostics));
-    assert.equal(recovered.record.supersedes, first.record.id);
+    assert.equal(recovered.record.supersedes, spent.record.id);
     assert.deepEqual(recovered.record.actions.map(a => [a.id, a.retain === true]), [['b-core', false], ['b-dependent', false], ['a-extra', true], ['b-proc', false]]);
     assert.deepEqual(recovered.record.inputs, first.record.inputs, 'the shared input a retained selection still uses stays declared');
     assert.deepEqual(recovered.record.actions[2].inputs, ['shared']);
@@ -330,10 +335,11 @@ describe('reviewed batch against Core', () => {
     assert.deepEqual(recovered.review.scopes[0].retained, ['a-extra']);
     const read = valueOf(await readBatch({ envelopeBytes: recovered.envelopeBytes }));
     assert.equal(read.record.id, recovered.record.id); assert.equal(read.current, true);
-    assert.deepEqual(read.batches.map(b => [b.id, b.current]), [[first.record.id, false], [recovered.record.id, true]]);
-    // A fresh run (no fault) completes the remaining actions and keeps earlier effects and the edit.
-    const again = await reopened.runBatch({ envelopeBytes: recovered.envelopeBytes, batchId: recovered.record.id, approve: { batchId: recovered.record.id } });
+    assert.deepEqual(read.batches.map(b => [b.id, b.current]), [[first.record.id, false], [spent.record.id, false], [recovered.record.id, true]]);
+    // A fresh run (no fault) completes the remaining actions and keeps earlier effects and the edit; the process spends the new choice.
+    const again = await reopened.runBatch({ envelopeBytes: recovered.envelopeBytes, batchId: recovered.record.id, approve: { batchId: recovered.record.id }, persist: async bytes => { saved.push(bytes); }, now: NOW });
     assert.equal(again.status, 'ok', JSON.stringify(again.diagnostics));
+    assert.equal(saved.length, 2); assert.equal(again.consumedBy, valueOf(await readBatch({ envelopeBytes: saved[1] })).record.id);
     assert.deepEqual(outcomes(again), ['completed', 'completed', 'untouched', 'completed']);
     assert.equal(byId(again)['a-extra'].reason, 'retained-earlier-result');
     assert.deepEqual(again.counts, { completed: 3, failed: 0, untouched: 1, cancelled: 0, unknown: 0 });
@@ -367,6 +373,83 @@ describe('reviewed batch against Core', () => {
     assert.deepEqual(outcomes(report), ['untouched', 'cancelled']);
     assert.deepEqual(report.actions.map(a => a.reason), ['retained-unverifiable', 'dependency-unverifiable']);
     assert.ok(same(before, await tree(f.homes.b)), 'neither the process nor its dependent ran');
+  });
+
+  // ---- Single-use consent: planning, or ticking Run again, is the person's choice to run an opaque process once. ----
+  const processOnly = async f => valueOf(await planBatch({ ...f.plan, scopes: [f.plan.scopes[1]], inputs: [], actions: [f.action('b-proc', 'scope-b', 'b-proc')] }));
+  const run = (host, envelopeBytes, record, extra = {}) => host.runBatch({ envelopeBytes, batchId: record.id, approve: { batchId: record.id }, now: NOW, ...extra });
+  const recordIn = async bytes => valueOf(await readBatch({ envelopeBytes: bytes })).record;
+
+  it('spends the consent to run an opaque process before it runs, so a reload cannot run it again without a fresh choice', async () => {
+    const f = await batchFixture(await scratch(), { applyEarlier: false });
+    await writeFile(f.procMarker, 'ok');
+    const planned = await processOnly(f), saved = [], persist = async bytes => { saved.push(bytes); };
+    const report = await run(hostOf(f), planned.envelopeBytes, planned.record, { persist });
+    assert.equal(report.status, 'ok', JSON.stringify(report.diagnostics));
+    assert.deepEqual(outcomes(report), ['completed']);
+    assert.equal(await f.procCount(), 1);
+    assert.equal(saved.length, 1);
+    const spent = valueOf(await readBatch({ envelopeBytes: saved[0] }));
+    assert.equal(report.consumedBy, spent.record.id); assert.equal(spent.record.supersedes, planned.record.id); assert.equal(spent.current, true);
+    assert.deepEqual(spent.record.actions.map(a => [a.id, a.retain === true]), [['b-proc', true]]);
+    // Reload: a new host that has only the persisted bytes. Review, then Apply, does not run the process again.
+    const reloaded = hostOf(f);
+    const review = await reloaded.reviewBatch({ envelopeBytes: saved[0] });
+    assert.equal(review.batchId, spent.record.id); assert.equal(review.ready, true); assert.deepEqual(review.scopes[0].retained, ['b-proc']);
+    const reapplied = await run(reloaded, saved[0], spent.record, { persist });
+    assert.equal(reapplied.status, 'ok', JSON.stringify(reapplied.diagnostics));
+    assert.deepEqual(reapplied.actions.map(a => [a.outcome, a.reason]), [['untouched', 'retained-unverifiable']]);
+    assert.equal(reapplied.consumedBy, undefined);
+    assert.equal(await f.procCount(), 1, 'the process did not run again'); assert.equal(saved.length, 1, 'nothing more was spent');
+    // The record the consent was spent from is superseded, so running it again is refused outright.
+    const stale = await run(reloaded, saved[0], planned.record, { persist });
+    assert.equal(stale.status, 'refused'); assert.equal(stale.diagnostics[0].code, 'BATCH_SUPERSEDED');
+    assert.equal(await f.procCount(), 1);
+    // A fresh explicit choice, made after the last attempt, is a recovery that names the action; it runs once and spends again.
+    const chosen = await reloaded.recoverBatch({ envelopeBytes: saved[0], batchId: spent.record.id, rerun: ['b-proc'], now: NOW });
+    assert.equal(chosen.status, 'ok', JSON.stringify(chosen.diagnostics));
+    assert.deepEqual(chosen.record.actions.map(a => [a.id, a.retain === true]), [['b-proc', false]]);
+    const second = await run(reloaded, chosen.envelopeBytes, chosen.record, { persist });
+    assert.deepEqual(outcomes(second), ['completed']);
+    assert.equal(await f.procCount(), 2);
+    const respent = await recordIn(saved[1]);
+    assert.equal(second.consumedBy, respent.id); assert.deepEqual(respent.actions.map(a => a.retain === true), [true]);
+    assert.equal((await run(hostOf(f), saved[1], respent, { persist })).actions[0].reason, 'retained-unverifiable');
+    assert.equal(await f.procCount(), 2);
+  });
+
+  it('does not run an opaque process whose consent could not be recorded, and holds its dependents', async () => {
+    const f = await batchFixture(await scratch(), { applyEarlier: false });
+    await writeFile(f.procMarker, 'ok');
+    const chain = valueOf(await planBatch({ ...f.plan, scopes: [f.plan.scopes[1]], inputs: [], actions: [f.action('b-proc', 'scope-b', 'b-proc'), f.action('b-after-proc', 'scope-b', 'b-after-proc', ['b-proc'])] }));
+    const before = await tree(f.homes.b);
+    for (const [name, extra] of [['persist throws', { persist: async () => { throw new Error('disk full'); } }], ['no persist callback', {}]]) {
+      const report = await run(hostOf(f), chain.envelopeBytes, chain.record, extra);
+      assert.equal(report.status, 'ok', JSON.stringify(report.diagnostics));
+      assert.deepEqual(report.actions.map(a => [a.id, a.outcome, a.reason]), [['b-proc', 'failed', 'consent-not-recorded'], ['b-after-proc', 'cancelled', 'dependency-failed']], name);
+      assert.equal(report.consumedBy, undefined, name); assert.equal(report.actions[0].core, undefined, `${name}: nothing was applied`);
+      assert.equal(await f.procCount(), 0, `${name}: the process did not run`);
+    }
+    assert.ok(same(before, await tree(f.homes.b)), 'neither the process nor its dependent wrote anything');
+  });
+
+  it('spends each opaque process its own consent in turn, as a chain of superseding records', async () => {
+    const f = await batchFixture(await scratch(), { applyEarlier: false });
+    await writeFile(f.procMarker, 'ok');
+    const policy = JSON.parse(decode(f.savedPolicyBytes)), original = policy.selections.find(s => s.id === 'b-proc');
+    const other = { ...structuredClone(original), id: 'b-proc-two', managementId: 'b-proc-two' }; other.recipe.inline.id = 'b-proc-two';
+    policy.selections.push(other);
+    const action = async selection => ({ id: selection.id, scope: 'scope-b', category: 'client', selection: { id: selection.id, sha256: await digestBytes(encode(stable(selection))) }, inputs: [], requires: [] });
+    const planned = valueOf(await planBatch({ ...f.plan, savedPolicyBytes: encode(JSON.stringify(policy)), scopes: [f.plan.scopes[1]], inputs: [], actions: [await action(original), await action(other)] }));
+    const saved = [], report = await run(hostOf(f), planned.envelopeBytes, planned.record, { persist: async bytes => { saved.push(bytes); } });
+    assert.equal(report.status, 'ok', JSON.stringify(report.diagnostics));
+    assert.deepEqual(outcomes(report), ['completed', 'completed']);
+    assert.equal(await f.procCount(), 2); assert.equal(saved.length, 2);
+    const [one, two] = await Promise.all(saved.map(recordIn));
+    assert.deepEqual([one.supersedes, two.supersedes], [planned.record.id, one.id]);
+    assert.deepEqual(one.actions.map(a => a.retain === true), [true, false]); assert.deepEqual(two.actions.map(a => a.retain === true), [true, true]);
+    assert.equal(report.consumedBy, two.id);
+    assert.deepEqual(valueOf(await readBatch({ envelopeBytes: saved[1] })).batches.map(b => [b.id, b.current]), [[planned.record.id, false], [one.id, false], [two.id, true]]);
   });
 
   it('a retained result that no longer stands is a failure that stops the batch', async () => {

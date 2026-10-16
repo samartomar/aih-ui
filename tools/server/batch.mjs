@@ -1,12 +1,12 @@
 // The fixture file is host configuration. HTTP can name only a batch and a choice,
 // never a target, home, material root, fault, policy or prepared handle.
 import { fork } from 'node:child_process';
-import { readFile, writeFile, rename, rm } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { randomUUID } from 'node:crypto';
 import { callService } from './service-client.mjs';
 import { homeEnvironment } from '../consumer/home-environment.mjs';
+import { replaceEnvelope } from '../consumer/envelope-file.mjs';
 
 const MAX_BODY = 64 * 1024;
 const ROUTES = { '/api/batch': 'GET', '/api/batch-review': 'POST', '/api/batch-run': 'POST', '/api/batch-recover': 'POST', '/api/batch-continuation': 'POST' };
@@ -29,15 +29,10 @@ async function readBody(request) {
     return value !== null && typeof value === 'object' && !Array.isArray(value) ? { value } : { malformed: true };
   } catch { return { malformed: true }; }
 }
-async function replaceEnvelope(path, bytes) {
-  const temporary = `${path}.${randomUUID()}.tmp`;
-  try { await writeFile(temporary, bytes, { flag: 'wx', mode: 0o600 }); await rename(temporary, path); }
-  finally { await rm(temporary, { force: true }); }
-}
 
 export function createBatchAdapter(consumerDir) {
   const fixturePath = process.env.AIH_BATCH_FIXTURE;
-  let queue = Promise.resolve(), closed = false, listed, child = null, childHome = null;
+  let queue = Promise.resolve(), closed = false, listed, child = null, childKey = null;
   const pending = new Map();
   let counter = 0;
   // The batch module lives in the installed consumer, so its constants are read from there once, never repeated here.
@@ -46,15 +41,16 @@ export function createBatchAdapter(consumerDir) {
   const settleAll = reason => {
     for (const [id, entry] of pending) { clearTimeout(entry.timer); entry.reject(problem(reason, 'BATCH_HOST_UNAVAILABLE')); pending.delete(id); }
   };
-  // Core runs in a forked child whose account home is the fixture's `coreHome`, never the developer's. Killing the child
-  // drops nothing durable: the envelope file is the only state, and every request starts from its bytes.
+  // Core runs in a forked child whose account home is the fixture's `coreHome`, never the developer's. The child also gets the
+  // envelope file's path (from the fixture, never a request) so that it can make a spent Run again choice durable before a process
+  // runs. Killing the child drops nothing durable: the envelope file is the only state, and every request starts from its bytes.
   const stop = reason => {
-    const dying = child; child = null; childHome = null;
+    const dying = child; child = null; childKey = null;
     if (dying) { dying.removeAllListeners(); dying.on('error', () => {}); dying.kill(); }
     settleAll(reason);
   };
-  function start(coreHome) {
-    const env = { ...process.env, ...homeEnvironment(coreHome), AIH_BATCH_CORE_HOME: coreHome };
+  function start(coreHome, envelopePath) {
+    const env = { ...process.env, ...homeEnvironment(coreHome), AIH_BATCH_CORE_HOME: coreHome, AIH_BATCH_ENVELOPE: envelopePath };
     const next = fork(join(consumerDir, 'consumer/batch-child.mjs'), [], { cwd: consumerDir, env, windowsHide: true,
       serialization: 'json', stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
     next.stderr.resume();
@@ -63,13 +59,14 @@ export function createBatchAdapter(consumerDir) {
       if (!entry) return;
       clearTimeout(entry.timer); pending.delete(message.id); entry.resolve(message.result);
     });
-    const gone = () => { if (child === next) { child = null; childHome = null; settleAll('The batch host stopped.'); } };
+    const gone = () => { if (child === next) { child = null; childKey = null; settleAll('The batch host stopped.'); } };
     next.on('exit', gone); next.on('error', gone);
     return next;
   }
-  const call = (coreHome, op, body) => new Promise((resolve, reject) => {
-    if (child && childHome !== coreHome) stop('The batch host was restarted for a different Core home.');
-    if (!child) { child = start(coreHome); childHome = coreHome; }
+  const call = (coreHome, envelopePath, op, body) => new Promise((resolve, reject) => {
+    const key = JSON.stringify([coreHome, envelopePath]);
+    if (child && childKey !== key) stop('The batch host was restarted for a different Core home or envelope file.');
+    if (!child) { child = start(coreHome, envelopePath); childKey = key; }
     const id = ++counter;
     const timer = setTimeout(() => stop(`The batch host did not answer ${op} in time.`), TIMEOUT_MS[op]);
     pending.set(id, { resolve, reject, timer });
@@ -109,10 +106,18 @@ export function createBatchAdapter(consumerDir) {
       return { status: 'ok', batchId: edited.value.record.id, projection: edited.value.projection };
     }
     const materialRoots = Object.fromEntries(record.inputs.map(input => [input.id, config.materialRoot]));
-    const ask = (op, extra) => call(config.coreHome, op, { envelope: Buffer.from(envelopeBytes).toString('base64'), batchId: record.id,
+    const ask = (op, extra) => call(config.coreHome, config.envelopePath, op, { envelope: Buffer.from(envelopeBytes).toString('base64'), batchId: record.id,
       clients: clients.targets, materialRoots, faults: config.faults, ...extra });
     if (pathname === '/api/batch-review') { const review = await ask('review'); return review.status === 'ok' ? { status: 'ok', batchId: record.id, review } : review; }
-    if (pathname === '/api/batch-run') { const report = await ask('run', { approve: { batchId: record.id } }); return report.status === 'ok' ? { status: 'ok', batchId: record.id, report } : report; }
+    if (pathname === '/api/batch-run') {
+      const report = await ask('run', { approve: { batchId: record.id }, now: new Date().toISOString() });
+      if (report.status !== 'ok') return report;
+      // Running an opaque process spends the person's choice in a superseding batch the child already wrote to the envelope file.
+      // The page is shown that record as it now stands, read from the file, never rebuilt from what it sent.
+      const after = await readBatch({ envelopeBytes: new Uint8Array(await readFile(config.envelopePath)) });
+      if (after.status !== 'ok') return passed(after);
+      return { status: 'ok', batchId: record.id, report, current: { batchId: after.value.record.id, projection: after.value.projection } };
+    }
     const recovered = await ask('recover', { now: new Date().toISOString(), rerun: body.rerun });
     if (recovered.status !== 'ok') return recovered;
     await replaceEnvelope(config.envelopePath, new Uint8Array(Buffer.from(recovered.envelope, 'base64')));

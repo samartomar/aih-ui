@@ -2,6 +2,8 @@
 // prepares fresh work through the current host interface; no prepared handle is stored, returned or reloaded, and a batch record
 // never holds one. There is no atomic multi-scope promise: each action ends as completed, failed, untouched, cancelled or
 // unknown, as Core and the folder reported it. `faults` and `clients` are host configuration, never request input.
+// The person's choice to run an opaque process (planning it, or recovering with `rerun`) is single use: the host records it as
+// spent, in a superseding batch handed to the caller's `persist`, before the process can run (see runBatch).
 import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, rm } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
@@ -168,7 +170,11 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
       const { value } = await inspect(opened.value);
       return { status: 'ok', diagnostics: opened.value.diagnostics, batchId: opened.value.record.id, ...value, ready: value.ready && opened.value.supported };
     },
-    async runBatch({ envelopeBytes, batchId, approve } = {}) {
+    // `persist(envelopeBytes)` makes a superseding batch durable and resolves once it is. It is how the person's consent to run an
+    // action Core cannot verify is spent: just before such an action is applied, the host writes the current batch again with that
+    // action kept (`retain`), and only if that was persisted does the action run. Without a `persist` that works, it is `failed`
+    // (`consent-not-recorded`) and nothing is applied for it. The report's `consumedBy` is the latest batch written that way.
+    async runBatch({ envelopeBytes, batchId, approve, persist, now = new Date().toISOString() } = {}) {
       const opened = await open(envelopeBytes, batchId);
       if (opened.status !== 'ok') return opened;
       const { record, policy, current } = opened.value;
@@ -180,7 +186,18 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
       const before = await Promise.all(record.scopes.map(scope => snapshot(scope.target.root, targets)));
       const hosts = new Map(record.scopes.map(scope => [scope.id, hostAt(scope.target.root)]));
       const results = new Map(), satisfied = result => result.outcome === 'completed' || result.reason === 'retained-earlier-result';
-      let broke = false;
+      let broke = false, latest = { bytes: envelopeBytes, record };
+      const spend = async action => {
+        if (typeof persist !== 'function') return false;
+        try {
+          const planned = await planBatch({ envelopeBytes: latest.bytes, scopes: latest.record.scopes, inputs: latest.record.inputs, continuation: latest.record.continuation, categories: latest.record.categories,
+            actions: latest.record.actions.map(other => other.id === action.id ? { ...other, retain: true } : other), now, supersedes: latest.record.id });
+          if (planned.status !== 'ok') return false;
+          await persist(planned.value.envelopeBytes);
+          latest = { bytes: planned.value.envelopeBytes, record: planned.value.record };
+          return true;
+        } catch { return false; }
+      };
       for (const action of record.actions) {
         const host = hosts.get(action.scope), selection = selectionOf(policy, action);
         const end = (outcome, reason, core) => { const result = { id: action.id, scope: action.scope, outcome, reason: reason ?? null, ...(core ? { core } : {}) }; results.set(action.id, result); broke ||= outcome === 'failed' || outcome === 'unknown'; return result; };
@@ -198,6 +215,7 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
         if (drift) { end('failed', 'shared-input-changed'); continue; }
         const prepared = await prepareSelections(host, policy, [selection]);
         if (prepared.status !== 'ready') { end('failed', `prepare-${prepared.status}`, { completion: null, runId: null, operations: [], diagnostics: codes(prepared.diagnostics) }); continue; }
+        if (!isVerifiable(selection) && !await spend(action)) { end('failed', 'consent-not-recorded'); continue; }
         let restore = async () => {}, result;
         try {
           if (faults[action.id] === 'stale-target') restore = await staleTargets(operationsOf(prepared, [action]));
@@ -210,7 +228,8 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
       const actions = record.actions.map(action => results.get(action.id));
       const counts = { completed: 0, failed: 0, untouched: 0, cancelled: 0, unknown: 0 };
       for (const result of actions) counts[result.outcome]++;
-      return { status: 'ok', diagnostics: [], batchId: record.id, actions, scopes: record.scopes.map((scope, index) => ({ id: scope.id, unrelated: unrelatedOutcome(before[index], after[index]) })), counts, atomic: false };
+      return { status: 'ok', diagnostics: [], batchId: record.id, actions, scopes: record.scopes.map((scope, index) => ({ id: scope.id, unrelated: unrelatedOutcome(before[index], after[index]) })), counts, atomic: false,
+        ...(latest.record.id === record.id ? {} : { consumedBy: latest.record.id }) };
     },
     // Reinspects current state and writes a superseding batch. The caller's `outcome` is accepted for display only and never
     // trusted: a verifiable action is retained only when a fresh Prepare shows its result still stands or the person changed what Core

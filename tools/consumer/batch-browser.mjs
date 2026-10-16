@@ -1,7 +1,8 @@
 // Reviewed-batch demonstration in installed Chromium against the real Workbench. Two disposable client homes: A (existing, with the
 // person's own files) and B (added). Everything the person does goes through the page. Filesystem and host-configuration changes
 // below are test setup (removing the unowned file, creating the process marker, clearing the stale-target fault), never page
-// capabilities: the page and its HTTP routes can name only the current batch and the continuation choice.
+// capabilities: the page and its HTTP routes can name only the current batch and the continuation choice. The process counts its own
+// executions in `procRuns`, so the journey can show that a reload never runs it again.
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile, lstat, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -10,7 +11,7 @@ const NOTE = 'Listed by Core; not checked as installed or connected';
 const ATOMIC = 'there is no all-or-nothing promise';
 const RERUN = 'Core cannot confirm whether this earlier process ran; run it again only if you know it is safe.';
 const exists = path => lstat(path).then(() => true, error => { if (error.code === 'ENOENT') return false; throw error; });
-export async function runBatchBrowser({ origin, output, playwrightModule, fixturePath, conflictFile, procMarker, userFiles }) {
+export async function runBatchBrowser({ origin, output, playwrightModule, fixturePath, conflictFile, procMarker, procRuns, userFiles }) {
   const started = Date.now();
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
@@ -43,6 +44,7 @@ export async function runBatchBrowser({ origin, output, playwrightModule, fixtur
     return { label: cells[0], scope: cells[1], outcome: tr.dataset.outcome, shown: cells[2], reason: cells[3] };
   }));
   const byLabel = (all, label) => all.filter(row => row.label === label);
+  const processRuns = () => readFile(procRuns, 'utf8').then(text => text.length, error => { if (error.code === 'ENOENT') return 0; throw error; });
   const userBytes = async () => Object.fromEntries(await Promise.all(Object.keys(userFiles).map(async path => [path, await readFile(path, 'utf8')])));
   let evidence;
   try {
@@ -112,7 +114,7 @@ export async function runBatchBrowser({ origin, output, playwrightModule, fixtur
     assert.equal((await act('review', 'batch-review')).review.ready, true);
     await page.locator('#batch-apply:enabled').waitFor();
     const before = await userBytes();
-    const report = (await act('apply', 'batch-run')).report;
+    const partial = await act('apply', 'batch-run'), report = partial.report;
     const failed = await rows();
     assert.equal(report.atomic, false);
     assert.equal(await page.locator('#batch-review-section').isHidden(), true, 'A finished run does not leave its review looking current.');
@@ -132,6 +134,14 @@ export async function runBatchBrowser({ origin, output, playwrightModule, fixtur
     assert.equal(await exists(join(homeA, '.claude', 'a-extra.md')), true, 'The independent action completed.');
     assert.equal(await exists(join(homeB, '.codex', 'b-core.md')), false, 'The failed action left nothing behind.');
     assert.equal(await exists(join(homeB, '.codex', 'b-dependent.md')), false, 'The cancelled action wrote nothing.');
+    // Running the opaque process spent the person's choice to run it: the saved batch now keeps it, and the page shows that batch.
+    assert.equal(await processRuns(), 1, 'The process ran once.');
+    const spentId = partial.current.batchId;
+    assert.equal(report.consumedBy, spentId); assert.notEqual(spentId, chosenId);
+    assert.equal(partial.current.projection.supersedes, chosenId);
+    assert.equal((await text('id')).trim(), spentId);
+    assert.deepEqual(partial.current.projection.actions.filter(action => action.retain).map(action => action.id), ['b-proc']);
+    assert.equal(await page.locator('#batch-rerun-b-proc').isChecked(), false, 'The spent choice is not shown as chosen.');
     await shot('batch-4-partial-failure.png');
 
     // (d) The person fixes the cause (test setup: the process marker, and the fault is cleared). Recover reinspects, keeps A's
@@ -140,8 +150,8 @@ export async function runBatchBrowser({ origin, output, playwrightModule, fixtur
     await writeFile(procMarker, 'ok\n');
     await writeFile(fixturePath, JSON.stringify({ ...config, faults: {} }));
     const kept = await act('recover', 'batch-recover');
-    assert.notEqual(kept.batchId, chosenId);
-    assert.equal(kept.projection.supersedes, chosenId);
+    assert.notEqual(kept.batchId, spentId);
+    assert.equal(kept.projection.supersedes, spentId);
     assert.deepEqual(kept.projection.actions.filter(action => action.retain).map(action => action.id), ['a-extra', 'b-proc']);
     assert.deepEqual(kept.projection.actions.filter(action => action.unverifiable).map(action => action.id), ['b-proc'], 'only the process is unverifiable');
     assert.equal(kept.review.ready, true);
@@ -162,7 +172,7 @@ export async function runBatchBrowser({ origin, output, playwrightModule, fixtur
     assert.equal((await text('id')).trim(), recovered.batchId);
     await page.locator('#batch-apply:enabled').waitFor();
     await shot('batch-5-recovered-fresh-review.png');
-    const fresh = (await act('apply', 'batch-run')).report;
+    const second = await act('apply', 'batch-run'), fresh = second.report;
     const done = await rows();
     assert.equal(fresh.batchId, recovered.batchId);
     for (const id of ['b-core', 'b-dependent', 'b-proc']) assert.equal(byLabel(done, id)[0].outcome, 'completed', id);
@@ -171,13 +181,19 @@ export async function runBatchBrowser({ origin, output, playwrightModule, fixtur
     assert.deepEqual(await userBytes(), before);
     assert.equal(await exists(join(homeB, '.codex', 'b-core.md')), true);
     assert.equal(await exists(join(homeB, '.codex', 'b-dependent.md')), true);
+    assert.equal(await processRuns(), 2, 'The chosen process ran once more.');
+    const respentId = second.current.batchId;
+    assert.equal(fresh.consumedBy, respentId); assert.equal(second.current.projection.supersedes, recovered.batchId);
+    assert.equal(await page.locator('#batch-rerun-b-proc').isChecked(), false, 'The choice was spent by the run.');
     await shot('batch-6-recovered-complete.png');
 
-    // (e) Reload: the superseding batch reopens from the envelope file alone. Nothing from the run, session or review survives.
+    // (e) Reload: the batch the run left reopens from the envelope file alone. Nothing from the run, session or review survives,
+    // and the spent Run again choice does not either: the process is kept, unticked, and applying the batch does not run it again.
     await page.reload();
-    assert.equal(await opened(), recovered.batchId);
-    assert.match(await text('supersedes'), new RegExp(`Supersedes ${kept.batchId}`));
-    assert.equal(await page.locator('#batch-rerun-b-proc').isChecked(), true, 'The Run again choice is part of the saved batch.');
+    assert.equal(await opened(), respentId);
+    assert.match(await text('supersedes'), new RegExp(`Supersedes ${recovered.batchId}`));
+    assert.equal(await page.locator('#batch-rerun-b-proc').isChecked(), false, 'A spent Run again choice is not restored on reload.');
+    assert.match(await text('actions'), /Kept without running: Core cannot confirm this earlier work/);
     assert.equal(await page.locator('#batch-continuation').inputValue(), 'continue-independent');
     assert.equal(await page.locator('#batch-review-section').isHidden(), true);
     assert.equal(await page.locator('#batch-outcome-section').isHidden(), true);
@@ -187,6 +203,10 @@ export async function runBatchBrowser({ origin, output, playwrightModule, fixtur
     assert.equal((await act('review', 'batch-review')).review.ready, true);
     await page.locator('#batch-apply:enabled').waitFor();
     await shot('batch-7-reopened.png');
+    const reapplied = await act('apply', 'batch-run'), reran = await rows();
+    assert.equal(reapplied.report.consumedBy, undefined, 'Nothing was spent by the reapplied batch.');
+    assert.deepEqual([byLabel(reran, 'b-proc')[0].outcome, byLabel(reran, 'b-proc')[0].reason], ['untouched', 'retained-unverifiable']);
+    assert.equal(await processRuns(), 2, 'Reload and Apply did not run the process again.');
     // Recover again after the process ran: the earlier Run again is not carried into a new attempt; the process is kept.
     const again = await act('recover', 'batch-recover');
     assert.deepEqual(again.projection.actions.filter(action => action.retain).map(action => action.id).sort(), ['a-extra', 'b-core', 'b-dependent', 'b-proc']);
@@ -196,7 +216,7 @@ export async function runBatchBrowser({ origin, output, playwrightModule, fixtur
     const refusedLogs = errors.filter(message => /status of 409/.test(message));
     assert.equal(refusedLogs.length, 1, JSON.stringify(errors));
     assert.deepEqual(errors.filter(message => !refusedLogs.includes(message)), []);
-    evidence = { status: 'passed', screenshots, batches: { initial: firstId, chosen: chosenId, kept: kept.batchId, recovered: recovered.batchId }, partial: failed, recovered: done, timingsMs: timings };
+    evidence = { status: 'passed', screenshots, batches: { initial: firstId, chosen: chosenId, spent: spentId, kept: kept.batchId, recovered: recovered.batchId, respent: respentId }, processRuns: await processRuns(), partial: failed, recovered: done, reapplied: reran, timingsMs: timings };
     await writeFile(join(output, 'batch-evidence.json'), JSON.stringify(evidence, null, 2));
   } catch (error) {
     await page.screenshot({ path: join(output, 'batch-failure.png'), fullPage: true }).catch(() => {});

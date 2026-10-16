@@ -3,7 +3,7 @@
 // (ownership records, recovery manifests, snapshots, run history). Only the folders under `root` are touched; the two scopes
 // are project scopes.
 import { createHash } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHost } from './host.mjs';
 import { stable } from './headless.mjs';
@@ -16,7 +16,7 @@ const recipe = (id, directory, kind) => ({ schema: 'urn:aihq:core:recipe:1.3.0',
   materials: kind === 'material' ? [{ id: 'shared', source: { kind: 'local', input: 'shared' }, path: 'shared.txt', sha256: sha(SHARED), byteLength: SHARED.length }] : [],
   targets: ['project'], prerequisites: [], checks: [],
   operations: [kind === 'process'
-    ? { id: 'run', purpose: 'Exit as configured', kind: 'process.run', scope: 'project', executable: { name: 'node' }, args: [{ literal: '-e' }, { literal: 'process.exit(require("fs").existsSync("proc-ok") ? 0 : 3)' }],
+    ? { id: 'run', purpose: 'Exit as configured', kind: 'process.run', scope: 'project', executable: { name: 'node' }, args: [{ literal: '-e' }, { literal: 'const fs = require("fs"); fs.appendFileSync("../proc-runs", "x"); process.exit(fs.existsSync("proc-ok") ? 0 : 3)' }],
       cwd: { root: 'project', segments: [] }, env: {}, acceptedExitCodes: [0], effects: ['exit code only'], requires: [], checks: [] }
     : { id: 'write', purpose: 'Write fixture', kind: 'file.write', scope: 'project', target: { root: 'project', segments: [{ literal: directory }, { literal: `${id}.md` }] },
       ...(kind === 'material' ? { material: 'shared' } : { content: { literal: `content of ${id}` } }), requires: [], checks: [] }] });
@@ -30,9 +30,10 @@ async function inHome(home, work) {
 }
 // `applyEarlier: false` skips applying A's earlier selection through Core (the pure tests need no applied state).
 // `conflict` makes B's first action target a file the person already owns. B's process action exits non-zero until the file
-// `procMarker` exists in B's home, so a test decides when it succeeds.
+// `procMarker` exists in B's home, so a test decides when it succeeds. Each execution of it appends one character to `procRuns`
+// (beside the two homes, so no scope's files change); `procCount()` is how many times the process has actually run.
 export async function batchFixture(root, { conflict = false, applyEarlier = true } = {}) {
-  const homes = { a: join(root, 'home-a'), b: join(root, 'home-b') }, materialRoot = join(root, 'material'), coreHome = join(root, 'core-home');
+  const homes = { a: join(root, 'home-a'), b: join(root, 'home-b') }, materialRoot = join(root, 'material'), coreHome = join(root, 'core-home'), procRuns = join(root, 'proc-runs');
   for (const dir of [coreHome, join(homes.a, '.claude'), join(homes.a, 'notes'), join(homes.b, '.codex'), materialRoot]) await mkdir(dir, { recursive: true });
   await writeFile(join(materialRoot, 'shared.txt'), SHARED);
   const userFiles = { [join(homes.a, 'notes', 'user.md')]: 'my own notes\n', [join(homes.a, '.claude', 'user-settings.json')]: '{"theme":"mine"}\n' };
@@ -61,5 +62,5 @@ export async function batchFixture(root, { conflict = false, applyEarlier = true
       action('a-extra', 'scope-a', 'a-extra', [], ['shared']), action('b-proc', 'scope-b', 'b-proc')] };
   const planned = await planBatch(plan);
   if (planned.status !== 'ok') throw new Error(`Fixture plan refused: ${JSON.stringify(planned.diagnostics)}`);
-  return { homes, coreHome, materialRoot, userFiles, savedPolicyBytes, plan, envelopeBytes: planned.value.envelopeBytes, batchId: planned.value.record.id, action, materialRoots: { shared: materialRoot }, procMarker: join(homes.b, 'proc-ok'), conflictFile };
+  return { homes, coreHome, materialRoot, userFiles, savedPolicyBytes, plan, envelopeBytes: planned.value.envelopeBytes, batchId: planned.value.record.id, action, materialRoots: { shared: materialRoot }, procMarker: join(homes.b, 'proc-ok'), procRuns, procCount: () => readFile(procRuns, 'utf8').then(text => text.length, error => { if (error.code === 'ENOENT') return 0; throw error; }), conflictFile };
 }

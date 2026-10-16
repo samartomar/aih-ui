@@ -11,7 +11,8 @@ export const outcomeTone = outcome => ({ completed: 'success', failed: 'error', 
 export const scopeRows = (projection, clients) => (projection?.scopes ?? []).map(scope => ({ ...scope,
   label: clients?.labels?.[scope.client] ?? scope.client, note: clients?.targets?.includes(scope.client) === false
     ? 'Not listed by Core; not checked as installed or connected' : CLIENT_NOTE }));
-// `runAgain`: the choice is offered only after a recovery, and only for work Core cannot confirm (an opaque process); chosen means it is scheduled.
+// `runAgain`: the choice is offered only after a recovery or a run, and only for work Core cannot confirm (an opaque process). `runAgainChecked`
+// is what the saved batch says and nothing else: the process is scheduled. Running it spends that, so the next batch keeps it, unticked.
 export const actionRows = projection => (projection?.actions ?? []).map(action => ({ ...action,
   dependencies: action.requires?.length ? action.requires.map(id => `${id} → ${action.id}`).join(', ') : 'No dependencies', retained: action.retain === true,
   runAgain: Boolean(projection.supersedes) && action.unverifiable === true, runAgainChecked: action.unverifiable === true && action.retain !== true }));
