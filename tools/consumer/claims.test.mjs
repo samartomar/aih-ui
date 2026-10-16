@@ -55,7 +55,9 @@ test('installed Core is the reviewed packed artifact the adapter runs against', 
   assert.equal(createHash('sha256').update(await readFile(reviewed.tarball)).digest('hex'), reviewed.sha256);
   const installed = JSON.parse(await readFile(new URL('node_modules/@aihq/core/package.json', consumer), 'utf8'));
   assert.equal(installed.name, '@aihq/core');
-  assert.ok(reviewed.tarball.includes(`aihq-core-${installed.version}-`), `${installed.version} is the packed version`);
+  // Reviewed archives carry a digest suffix; CI's own pack is named <name>-<version>.tgz.
+  const packed = reviewed.tarball.split(/[\/]/).at(-1);
+  assert.ok(packed.startsWith(`aihq-core-${installed.version}-`) || packed === `aihq-core-${installed.version}.tgz`, `${installed.version} is the packed version`);
   const { claimSet } = readinessReport({ records: [world().machine([check('npm/version', 'npm', 'passed')])] });
   assert.equal(validateClaimSet(claimSet).valid, true);
 });
