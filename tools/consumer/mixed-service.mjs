@@ -1,7 +1,8 @@
 import { intakeDeclaration, digestBytes } from './intake.mjs';
-import { composeAuthoring, readAuthoring, reconcileAuthoring, editAuthoring, freshAuthoring, stable, refuse, inspectReviewEvidence, recordReview, reconsiderReviews } from './headless.mjs';
+import { composeAuthoring, readAuthoring, reconcileAuthoring, editAuthoring, freshAuthoring, stable, refuse, inspectReviewEvidence, recordReview, reconsiderReviews, openDraft, editDraft, compileDraft } from './headless.mjs';
 import { noteFixture } from './note-fixture.mjs';
 const encode = value => new TextEncoder().encode(value);
+const bytesOf = value => Array.isArray(value) ? Uint8Array.from(value) : undefined;
 export async function createMixedService(maintained, { suppliedInventories, familyInventories = [] } = {}) {
   async function supplied(snapshot, id = 'notes') {
     const input = { id, kind: 'local', locator: { input: id }, resolvedIdentity: { sha256: await digestBytes(snapshot.declarationBytes) } };
@@ -40,7 +41,12 @@ export async function createMixedService(maintained, { suppliedInventories, fami
       const evidenceBytes = Number.isSafeInteger(body.evidenceIndex) ? reviewEvidence[body.evidenceIndex] : Uint8Array.from(body.evidenceBytes ?? []);
       if (operation === 'new') return composeAuthoring({ intent: freshAuthoring(), inventories: all,
         ...(body.mode === 'enterprise' ? { basePolicyBytes: encode(JSON.stringify({ schema: 'urn:aihq:core:execution-policy:1.3.0', mode: 'enterprise', selections: [], metadata: { 'aih.workbench': freshAuthoring() } })) } : {}) });
-      if (operation === 'read') return readAuthoring({ policyBytes, inventories: body.availability === 'missing' ? maintainedInventories : all, ...reviewContext });
+      const available = body.availability === 'missing' ? maintainedInventories : all;
+      if (operation === 'read') return readAuthoring({ policyBytes, inventories: available, ...reviewContext });
+      // Unresolved drafts travel as a journey envelope; bytes stay arrays of numbers over JSON.
+      if (operation === 'draft-open') return openDraft({ bytes: bytesOf(body.bytes), inventories: available, ...reviewContext });
+      if (operation === 'draft-edit') return editDraft({ envelopeBytes: bytesOf(body.envelopeBytes), inventories: available, operation: body.operation, ...reviewContext });
+      if (operation === 'draft-compile') return compileDraft({ envelopeBytes: bytesOf(body.envelopeBytes), inventories: available, ...(Array.isArray(body.roots) ? { roots: body.roots } : {}), ...reviewContext });
       if (operation === 'compose') return composeAuthoring({ basePolicyBytes: policyBytes, intent: body.intent, inventories: all, ...reviewContext });
       if (operation === 'edit') return editAuthoring({ policyBytes, inventories: all, operation: body.operation, ...reviewContext });
       if (operation === 'reconcile') return reconcileAuthoring({ savedPolicyBytes: policyBytes, inventories: all, candidateInventories: candidates(body.candidateMode), ...reviewContext });

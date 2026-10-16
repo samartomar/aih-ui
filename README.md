@@ -7,12 +7,14 @@ The Policy Workbench user interface for AIH, built as an independent application
 - The screens, interaction and presentation of the Policy Workbench.
 - Consumer draft editing, selection interactions, composition through public Catalog and Core validators, and policy import/export. This is application workflow; Core retains policy validity, organization authority and execution semantics.
 - Versioned consumer saved intent: explicit roots, exact template origins, optional skips, configuration, source provenance and content pins. `metadata.aih.workbench` is a consumer convention. Catalog remains the dependency/configuration validator; Core remains the policy and execution authority.
+- The versioned Workbench journey envelope (`aih-ui/journey`, `schemas/journey-envelope/1.0.0.json`): a non-executable record that keeps unresolved authoring drafts beside the exact saved-intent bytes they reference. Later record kinds are added as new versioned record schemas.
 - Portable human evidence-review decisions, history and reconsideration through the same supported UI/headless boundary. Exact checked evidence bindings remain separate from producer authentication and execution authority.
 - Current host-selected Enterprise authority presentation and explicit recovery through public Core Prepare/Apply and managed-removal APIs; shared with the Node-only `aih-ui/execution-host` boundary.
 - Explicit browser folder selection, bounded recognition of personal SKILL.md content through Catalog's public producer, and ephemeral client-scoped material grants. Saved intent records exact choices and provenance; fresh pages require explicit folder rebinding.
 - `src/` owns the live screens, design tokens, and presentation. Tailwind utilities are compiled locally from the classes used in `src/`.
 - `prototype/` is retained as a separate design reference. The running page does not import it.
 - Local onboarding preferences (experience, organization context, requested assistance and explicit AI clients). These are UI settings, not policy artifacts or enterprise authorization.
+- The machine-readiness check and host-configured npm repair: Core inspection and repair results projected as failed, unknown, applied, configured or verified, with no project, saved intent or policy. See [machine readiness](docs/readiness.md).
 
 ## What it must never contain
 
@@ -52,6 +54,8 @@ Optional host configuration uses the existing `AIH_CONSUMER_PROJECT`,
 environment inputs. Without a configured host, Prepare/Apply and managed removal
 remain unavailable with an explanation. `AIH_UI_SETTINGS_PATH` selects an
 isolated local setup store for tests; HTTP inputs cannot choose that path.
+
+The machine-readiness host tests run Core only against a disposable fixture home and PATH, never the owner's clients or configuration; see [machine readiness](docs/readiness.md) for the mapping, routes and host inputs.
 
 Pack each local package with `npm pack`, install the tarballs into a throwaway consumer project, and run the scenario there. Do not use `npm link`: it hides packaging errors such as a wrong `exports` map or a missing file.
 

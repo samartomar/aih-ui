@@ -274,7 +274,9 @@ route cannot recover unavailable historical bytes or automatically migrate them.
 page. A removal can carry `keep:[{releaseSha256,itemId,scope}]` for previously
 selected items. A kept orphan becomes a direct root with its original explicit
 configuration; there is no competing Keep flag. Removing an origin preserves
-other origins and shared requirements. All candidates require explicit acceptance.
+other origins and shared requirements. `select` may omit `itemSha256`: it is
+filled from the checked inventory and a different supplied hash is refused as
+`SOURCE_IDENTITY_MISMATCH`. All candidates require explicit acceptance.
 
 `reconcileAuthoring({savedPolicyBytes,inventories,candidateInventories})` returns
 `value:{status:"unchanged"|"needs-decisions",affectedRoots,retainedRoots,choices}`
@@ -294,6 +296,91 @@ Paths are JSON pointers; message prose is explanatory. The consumer limits
 intent to 850,000 UTF-8 bytes, 4,096 entries per choice array and 32 inventories;
 Core's independent policy bounds also apply. Reduce selected state after a bound
 refusal; no partial artifact is produced.
+
+## Unresolved drafts and the journey envelope
+
+When the only problem is that an exact source, release, template snapshot or
+input record is not among the supplied inventories, `readAuthoring` returns
+`editing:"unresolved"` instead of `"unavailable"`. The original `intent` and
+`originalBytes` are unchanged, `unresolved` lists what is missing and `roots`
+marks every choice `resolved`, `unresolved` (availability) or `refused` (Catalog contradiction). Each unresolved entry is
+`{kind:"root"|"dependency"|"origin"|"exclusion"|"input",ref,reason,dependents}`;
+`reason` is `revision-unavailable` when a different revision of the same package
+or input is supplied and `source-unavailable` otherwise. A different
+revision is never substituted. Unsupported semantics, contradictions, identity mismatches
+and review-binding problems stay `"unavailable"`. `editAuthoring`,
+`composeAuthoring` and `reconcileAuthoring` still refuse an unresolved document
+because they produce or compare executable policies.
+
+The draft operations work on the exact recorded choices:
+
+| Function | Result |
+| --- | --- |
+| `openDraft({bytes,inventories})` | `bytes` is a policy or a journey envelope. Returns `{envelopeBytes,envelope,projection,intent,editing,unresolved,roots,savedIntentBytes,compile,diagnostics}`. `compile` is `{status:"available"}` or `{status:"refused",reasons}`; an envelope with an unsupported required record always advertises `JOURNEY_RECORD_UNSUPPORTED` as the reason. Unsupported semantics refuse with the original bytes and produce no envelope. |
+| `editDraft({envelopeBytes,inventories,operation})` | New envelope revision. Operations: `remove-root`, `remove-origin` (with `keep`), `select`, `replace`, `skip`, `unskip`. Returns the `openDraft` value plus `changes`. |
+| `compileDraft({envelopeBytes,inventories,roots?})` | `{policyBytes,intent,policy,scope,reviewsReconsidered}` for a resolved, dependency-correct scope; the only executable output. |
+
+`select` and `replace` fill `itemSha256` from the checked inventory; a different
+supplied hash is `SOURCE_IDENTITY_MISMATCH`. `replace` keeps the choice's
+origins, configuration, reason and every exclusion. Removing an unavailable item
+that a retained choice still requires is refused as `DEPENDENCY_RETAINED` with
+`details.dependents`. `skip` needs a resolvable item; a recorded skip can always
+be removed. `compileDraft` refuses an unresolved scope as `SCOPE_UNRESOLVED`
+with `details:{unresolved,blocked}`. A scoped compile keeps origins used by the
+kept roots plus `direct`; decisions about content outside the scope keep their
+history and are reported in `reviewsReconsidered`. Pins, provenance and inputs in
+a draft are retained facts pruned to what the kept choices reach; identities are
+added only from supplied checked inventories. A choice added in a draft is not in the
+saved policy's recorded graph, so its required closure is resolved live. An
+availability gap and a contradiction are kept apart:
+
+- **Availability gap.** Required content lives in a release or item that is not
+  among the supplied inventories (a dependency's inventory is no longer supplied).
+  The choice is `unresolved` and names each missing dependency with
+  `source-unavailable` or `revision-unavailable`. Supplying the content resolves it.
+- **Contradiction.** Everything the choice needs is supplied but Catalog refuses it
+  (an invalid configuration, a recorded skip of a required item, a conflicting
+  set). The choice is `refused`, not `unresolved`: it carries
+  `refusal:{owner:"catalog",diagnostics}` with Catalog's own diagnostics, is never
+  listed in `unresolved`, and `compileDraft` of any scope containing it returns
+  those diagnostics. The draft stays openable and can be fixed (for example with
+  `select` and a valid configuration) or the choice removed.
+
+`editDraft` refuses an edit that would introduce such a contradiction for content
+that is fully supplied, returning Catalog's diagnostics and the original envelope
+bytes with no new revision, exactly as ordinary authoring would. Availability gaps
+remain editable. While any choice's closure is undetermined, every recorded pin
+and its provenance and inputs are retained, because an item behind a missing one
+cannot be seen; they are pruned again once the closure resolves.
+
+`aih-ui/journey` is a pure module (bytes in, bytes out; Web Crypto digests only).
+Its envelope, [schema](../schemas/journey-envelope-1.0.0.json), is versioned
+separately from saved intent:
+
+```json
+{ "schema": "urn:aihq:workbench:journey-envelope:1.0.0",
+  "id": "journey-<32 hex>", "executable": false,
+  "revision": { "sequence": 1, "sha256": "<hex>", "previousSha256": "<hex, from 2>" },
+  "savedIntent": { "type": "urn:aihq:core:execution-policy-bytes", "mediaType": "application/json",
+                   "sha256": "<hex>", "byteLength": 0, "base64": "<exact original bytes>" },
+  "records": [{ "id": "draft", "schema": "urn:aihq:workbench:journey-record:unresolved-draft:1.0.0",
+                "required": true, "savedIntentSha256": "<hex>", "intent": {} }] }
+```
+
+The envelope is never an execution policy. `id` derives from the first
+revision's saved-intent digest and stays stable; `revision.sha256` covers the
+canonical envelope without itself. The saved-intent bytes are carried verbatim, so
+a reopened journey yields the same meaning and the original bytes. Functions:
+`readJourneyEnvelope(bytes)`, `writeJourneyEnvelope({savedIntentBytes,records,previous})`
+and `projectJourneyEnvelope(envelope)`. Every record has `id`, a versioned
+`schema` URN and `required`. An unknown optional record is preserved verbatim and
+reported as `JOURNEY_RECORD_PRESERVED`; an unknown required record reads as
+`supported:false` with `JOURNEY_RECORD_UNSUPPORTED` and every change or compile
+refuses. Other codes: `JOURNEY_VERSION_UNSUPPORTED`, `JOURNEY_REVISION_MISMATCH`,
+`JOURNEY_REFERENCE_MISMATCH`, `INPUT_INVALID`, `FIELD_SEMANTICS_UNSUPPORTED`.
+Refusals keep the original bytes and no refused read or write rewrites them.
+Bounds: 1,000,000 saved-intent bytes and 2,000,000 envelope bytes. The page accepts
+an imported envelope up to the envelope bound and a policy up to 1,000,000 bytes.
 
 ## Evidence and review lifecycle
 

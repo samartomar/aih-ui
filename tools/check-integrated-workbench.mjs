@@ -33,6 +33,8 @@ try {
   assert.equal(foreign.status, 403, 'The ordinary authoring adapter refuses a foreign origin.');
   const { runIntegratedBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/integrated-browser.mjs')));
   await runIntegratedBrowser({ origin, output: join(consumerDir, 'prototype-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
+  const { runUnresolvedDraftBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/unresolved-draft-browser.mjs')));
+  await runUnresolvedDraftBrowser({ origin, output: join(consumerDir, 'unresolved-draft-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
 } finally { await new Promise(resolve => started.server.close(resolve)); }
 
 // The normal application's startup must refuse an absent required family,

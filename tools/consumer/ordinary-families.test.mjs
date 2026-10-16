@@ -1,10 +1,19 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, writeFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
+import { access, readFile, realpath, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { startConsumer } from './server.mjs';
 import { readAuthoring } from './headless.mjs';
 import { installedFamilies } from './installed-families.mjs';
+import { isolatedConsumer } from './isolated-consumer.mjs';
+
+// Tests may rewrite only a disposable copy; the shared installed Catalog stays byte-identical.
+const sharedManifest = fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'));
+const digest = async () => createHash('sha256').update(await readFile(sharedManifest)).digest('hex');
+const sharedDigest = await digest();
+after(async () => assert.equal(await digest(), sharedDigest, 'Shared installed Catalog manifest was modified'));
 
 test('ordinary authoring exposes all four packaged families with empty initial choices', async () => {
   const started = await startConsumer();
@@ -23,17 +32,27 @@ test('ordinary authoring exposes all four packaged families with empty initial c
 });
 
 test('ordinary launch refuses a package that omits a required family export', async () => {
-  const manifest = fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'));
-  const original = await readFile(manifest);
-  const value = JSON.parse(original);
-  delete value.exports['./release-anthropic.json'];
-  await writeFile(manifest, JSON.stringify(value));
+  const copy = await isolatedConsumer();
   try {
+    const value = JSON.parse(await readFile(copy.catalogManifest));
+    delete value.exports['./release-anthropic.json'];
+    await writeFile(copy.catalogManifest, JSON.stringify(value));
+    // The copied server must resolve the copied Catalog, never the shared install.
+    const probe = join(copy.root, 'consumer', 'resolved-catalog.mjs');
+    await writeFile(probe, "export default import.meta.resolve('@aihq/catalog/package.json');\n");
+    const resolved = (await import(pathToFileURL(probe).href)).default;
+    assert.equal(fileURLToPath(resolved), await realpath(copy.catalogManifest));
+    assert.notEqual(await realpath(copy.catalogManifest), await realpath(sharedManifest));
+    const { startConsumer: startCopied } = await import(copy.serverUrl);
+    assert.notEqual(startCopied, startConsumer);
     await assert.rejects(async () => {
-      const started = await startConsumer();
+      const started = await startCopied();
       await new Promise(resolve => started.server.close(resolve));
     }, /anthropic/i);
-  } finally { await writeFile(manifest, original); }
+    assert.equal(await digest(), sharedDigest, 'Refusal test modified the shared installed Catalog manifest');
+  } finally { await copy.dispose(); }
+  await assert.rejects(access(copy.root), { code: 'ENOENT' });
+  await access(sharedManifest);
 });
 
 test('four-family choices retain exact pins, required dependencies and Matt origin on fresh reopen', async () => {
