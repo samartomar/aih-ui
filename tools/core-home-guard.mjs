@@ -52,8 +52,9 @@ export function compareCoreHome(before, after) {
     else if (after.entries.get(path) !== signature) changed++;
   }
   // Anything that could not be read cannot prove itself unchanged, so it is counted on its own and fails the comparison.
-  const unreadable = [before, after].reduce((sum, { exists, target, entries }) =>
-    sum + (exists && target === null ? 1 : 0) + [...entries.values()].filter(signature => signature === 'unreadable').length, 0);
+  // Each path counts once, however many snapshots could not read it.
+  const unreadable = new Set([before, after].flatMap(({ entries }) => [...entries].filter(([, signature]) => signature === 'unreadable').map(([path]) => path))).size
+    + ([before, after].some(({ exists, target }) => exists && target === null) ? 1 : 0);
   for (const path of after.entries.keys()) {
     if (!before.entries.has(path)) added++;
   }

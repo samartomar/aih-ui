@@ -152,7 +152,7 @@ test('unreadable directories are recorded rather than silently omitted', { skip:
     }
     const partial = snapshotCoreHome(home);
     assert.equal(partial.entries.get('private-dir'), 'unreadable');
-    assert.deepEqual(compareCoreHome(partial, snapshotCoreHome(home)), counts(0, 0, 0, 2));
+    assert.deepEqual(compareCoreHome(partial, snapshotCoreHome(home)), counts(0, 0, 0, 1));
     chmodSync(root, 0);
     const snapshot = snapshotCoreHome(home);
     assert.equal(snapshot.exists, true);
