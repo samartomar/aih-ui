@@ -27,7 +27,8 @@ export async function batchFixture(root, { conflict = false, applyEarlier = true
   await writeFile(join(materialRoot, 'shared.txt'), SHARED);
   const userFiles = { [join(homes.a, 'notes', 'user.md')]: 'my own notes\n', [join(homes.a, '.claude', 'user-settings.json')]: '{"theme":"mine"}\n' };
   for (const [path, text] of Object.entries(userFiles)) await writeFile(path, text);
-  if (conflict) await writeFile(join(homes.b, '.codex', 'b-core.md'), 'already mine\n');
+  const conflictFile = join(homes.b, '.codex', 'b-core.md');
+  if (conflict) await writeFile(conflictFile, 'already mine\n');
   const selections = [selection('a-earlier', '.claude', 'text'), selection('a-extra', '.claude', 'material'), selection('b-core', '.codex', 'material'),
     selection('b-dependent', '.codex', 'material', ['b-core']), selection('b-proc', '', 'process')];
   const savedPolicyBytes = new TextEncoder().encode(JSON.stringify({ schema: 'urn:aihq:core:execution-policy:1.3.0', mode: 'vibe', selections }, null, 2));
@@ -35,6 +36,7 @@ export async function batchFixture(root, { conflict = false, applyEarlier = true
   if (applyEarlier) {
     const earlier = createHost({ projectRoot: homes.a, controls: { logging: 'off' } });
     const ready = await earlier.prepareSession({ policyText: JSON.stringify({ schema: 'urn:aihq:core:execution-policy:1.3.0', mode: 'vibe', selections: [selections[0]] }) });
+    if (ready.status !== 'ready') throw new Error(`Fixture setup was not ready: ${JSON.stringify(ready.diagnostics)}`);
     const applied = await earlier.applyApproved({ sessionId: ready.sessionId, reviewDigest: ready.review.reviewDigest });
     if (applied.completion !== 'complete') throw new Error(`Fixture setup did not complete: ${JSON.stringify(applied)}`);
   }
@@ -47,5 +49,5 @@ export async function batchFixture(root, { conflict = false, applyEarlier = true
       action('a-extra', 'scope-a', 'a-extra', [], ['shared']), action('b-proc', 'scope-b', 'b-proc')] };
   const planned = await planBatch(plan);
   if (planned.status !== 'ok') throw new Error(`Fixture plan refused: ${JSON.stringify(planned.diagnostics)}`);
-  return { homes, materialRoot, userFiles, savedPolicyBytes, plan, envelopeBytes: planned.value.envelopeBytes, batchId: planned.value.record.id, materialRoots: { shared: materialRoot }, procMarker: join(homes.b, 'proc-ok') };
+  return { homes, materialRoot, userFiles, savedPolicyBytes, plan, envelopeBytes: planned.value.envelopeBytes, batchId: planned.value.record.id, materialRoots: { shared: materialRoot }, procMarker: join(homes.b, 'proc-ok'), conflictFile };
 }

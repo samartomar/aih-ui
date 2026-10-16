@@ -1,110 +1,164 @@
-// Disposable fixture journey. Filesystem changes below are test setup, never page capabilities.
+// Reviewed-batch demonstration in installed Chromium against the real Workbench. Two disposable client homes: A (existing, with the
+// person's own files) and B (added). Everything the person does goes through the page. Filesystem and host-configuration changes
+// below are test setup (removing the unowned file, creating the process marker, clearing the stale-target fault), never page
+// capabilities: the page and its HTTP routes can name only the current batch and the continuation choice.
 import assert from 'node:assert/strict';
-import { mkdir, readFile, writeFile, rm, lstat } from 'node:fs/promises';
-import { dirname, isAbsolute, join, relative } from 'node:path';
+import { mkdir, readFile, writeFile, lstat, rm } from 'node:fs/promises';
+import { join } from 'node:path';
 
-const within = (root, path) => { const part = relative(root, path); return part !== '' && part !== '..' && !part.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(part); };
-export async function runBatchBrowser({ origin, output, playwrightModule, fixturePath }) {
+const NOTE = 'Listed by Core; not checked as installed or connected';
+const ATOMIC = 'there is no all-or-nothing promise';
+const exists = path => lstat(path).then(() => true, error => { if (error.code === 'ENOENT') return false; throw error; });
+export async function runBatchBrowser({ origin, output, playwrightModule, fixturePath, conflictFile, procMarker, userFiles }) {
+  const started = Date.now();
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
   const config = JSON.parse(await readFile(fixturePath, 'utf8'));
-  const roots = Object.values(config.homes);
-  const request = async (path, body) => {
-    const response = await fetch(origin + '/api/' + path, body ? { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify(body) } : {});
-    const answer = await response.json();
-    assert.equal(response.status, 200, JSON.stringify(answer)); assert.equal(answer.status, 'ok', JSON.stringify(answer));
-    return answer;
-  };
-  const initial = await request('batch');
-  // A setup-only inspection identifies a real file target, then unowned content
-  // supplies the conflict variant. No path or fault enters an HTTP request.
-  const inspected = await request('batch-review', { batchId: initial.batchId });
-  assert.equal(inspected.review.ready, true, JSON.stringify(inspected.review));
-  const candidates = inspected.review.scopes.flatMap(scope => scope.operations ?? []).filter(operation =>
-    typeof operation.target === 'string' && roots.some(root => within(root, operation.target)) && operation.effects !== 'already-satisfied');
-  let conflictTarget;
-  for (const operation of candidates) {
-    if (await lstat(operation.target).then(() => false, error => { if (error.code === 'ENOENT') return true; throw error; })) { conflictTarget = operation.target; break; }
-  }
-  assert.ok(conflictTarget, 'Fixture must offer an absent file target for the conflict variant.');
-  await mkdir(dirname(conflictTarget), { recursive: true });
-  await writeFile(conflictTarget, 'Unowned fixture content: review must block this target.\n', { flag: 'wx' });
-  assert.ok(candidates[0]?.action, 'Fixture review must associate each target with an action.');
-  if (!Object.keys(config.faults ?? {}).length) {
-    config.faults = { [candidates[0].action]: 'stale-target' };
-    await writeFile(fixturePath, JSON.stringify(config));
-  }
+  const [homeA, homeB] = [config.homes.a, config.homes.b];
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
-  const page = await context.newPage(); page.setDefaultTimeout(8000);
-  const errors = [], screenshots = [];
+  const page = await context.newPage(); page.setDefaultTimeout(30_000);
+  const errors = [], screenshots = [], timings = {};
   page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  const shot = async name => { await page.screenshot({ path: join(output, name), fullPage: true }); screenshots.push(name); };
+  const text = id => page.locator(`#batch-${id}`).innerText();
+  const disabled = id => page.locator(`#batch-${id}`).isDisabled();
+  // One page action and the host answer it produced, with the page settled afterwards.
   const act = async (id, route) => {
     const answered = page.waitForResponse(response => new URL(response.url()).pathname === `/api/${route}` && response.request().method() === 'POST');
+    const began = Date.now();
     await page.locator(`#batch-${id}`).click();
     const response = await answered, answer = await response.json();
     assert.equal(response.status(), 200, JSON.stringify(answer));
     await page.locator('#batch-status').filter({ hasNotText: 'Working…' }).waitFor();
+    timings[`${route}-${Object.keys(timings).length}`] = Date.now() - began;
     return answer;
   };
-  const shot = async name => { await page.screenshot({ path: join(output, name), fullPage: true }); screenshots.push(name); };
-  let report, recovered;
+  const opened = async () => { await page.locator('#batch-review:enabled').waitFor(); return (await text('id')).trim(); };
+  // The table rows as observed: label, scope, outcome, reason.
+  const rows = () => page.locator('#batch-outcomes tr').evaluateAll(trs => trs.map(tr => {
+    const cells = [...tr.children].map(cell => cell.innerText.trim());
+    return { label: cells[0], scope: cells[1], outcome: tr.dataset.outcome, shown: cells[2], reason: cells[3] };
+  }));
+  const byLabel = (all, label) => all.filter(row => row.label === label);
+  const userBytes = async () => Object.fromEntries(await Promise.all(Object.keys(userFiles).map(async path => [path, await readFile(path, 'utf8')])));
+  let evidence;
   try {
-    await page.goto(origin + '/batch.html');
-    await page.locator('#batch-review:enabled').waitFor();
-    assert.ok((await page.locator('#batch-scopes').innerText()).includes('Listed by Core; not checked as installed or connected'));
-    assert.equal(await page.locator('#batch-apply').isDisabled(), true);
-    await act('review', 'batch-review');
-    assert.ok((await page.locator('#batch-conflicts').innerText()).length > 0);
-    assert.equal(await page.locator('#batch-apply').isDisabled(), true);
-    await shot('batch-conflict.png');
-    await rm(conflictTarget);
-    // The fixture permits independent work. Exercise the person's saved choice,
-    // including review invalidation and reopen from durable envelope bytes.
-    const selected = page.waitForResponse(response => response.url().endsWith('/api/batch-continuation'));
+    assert.equal(await exists(conflictFile), true, 'The conflict variant starts with B\'s target already owned by the person.');
+    const client = await (await fetch(`${origin}/api/batch`)).json();
+    assert.equal(client.status, 'ok', JSON.stringify(client));
+    const label = id => client.clients.labels[id] ?? id;
+
+    // (a) The reviewed batch: scopes with Core's labels, actions, edges, checks, the continuation choice.
+    await page.goto(`${origin}/batch.html`);
+    const firstId = await opened();
+    assert.match(firstId, /^batch-[a-f0-9]{32}$/);
+    const scopes = await text('scopes');
+    for (const scope of client.projection.scopes) assert.ok(scopes.includes(label(scope.client)) && scopes.includes(scope.id), `scope ${scope.id} shows its Core client label`);
+    assert.equal(scopes.split(NOTE).length - 1, client.projection.scopes.length, 'every scope says listing is not installed/connected');
+    const actions = await text('actions');
+    for (const action of client.projection.actions) assert.ok(actions.includes(action.id));
+    assert.ok(actions.includes('b-core → b-dependent'), 'the dependency edge is shown');
+    const checks = await text('checks');
+    for (const kind of ['shared-input', 'unrelated-state', 'conflict', 'core-review']) assert.ok(checks.includes(kind), `disclosed check ${kind}`);
+    assert.equal(await page.locator('#batch-continuation').inputValue(), 'stop');
+    assert.ok((await page.locator('#batch-content').innerText()).includes(ATOMIC));
+    assert.equal(await disabled('apply'), true, 'Apply is not available before a review.');
+    await shot('batch-1-reviewed-batch.png');
+
+    // (b) Review shows the conflict before anything is applied.
+    const conflicted = await act('review', 'batch-review');
+    assert.equal(conflicted.review.ready, false);
+    const conflicts = await text('conflicts');
+    assert.ok(conflicts.includes('b-core') && conflicts.includes('STATE_CONFLICT'), conflicts);
+    assert.match(await text('review-summary'), /1 conflict\(s\)\. Apply is blocked\./);
+    assert.equal(await disabled('apply'), true);
+    assert.equal(await exists(join(homeB, '.codex', 'b-dependent.md')), false, 'Review writes nothing.');
+    await shot('batch-2-conflict-before-apply.png');
+
+    // (c) The person resolves the conflict (test setup removes the unowned file) and chooses to continue independent work.
+    await rm(conflictFile);
+    const chosen = page.waitForResponse(response => new URL(response.url()).pathname === '/api/batch-continuation');
     await page.locator('#batch-continuation').selectOption('continue-independent');
-    assert.equal((await selected).status(), 200);
-    await page.locator('#batch-review:enabled').waitFor();
-    assert.equal(await page.locator('#batch-apply').isDisabled(), true);
-    const chosenId = (await page.locator('#batch-id').innerText()).trim();
-    await page.reload(); await page.locator('#batch-review:enabled').waitFor();
-    assert.equal((await page.locator('#batch-id').innerText()).trim(), chosenId);
-    assert.equal(await page.locator('#batch-continuation').inputValue(), 'continue-independent');
-    await act('review', 'batch-review');
+    assert.equal((await chosen).status(), 200);
+    await page.locator('#batch-status').filter({ hasText: 'Continuation choice saved' }).waitFor();
+    const chosenId = (await text('id')).trim();
+    assert.notEqual(chosenId, firstId, 'The saved choice is part of the content-derived batch id.');
+    assert.equal(await page.locator('#batch-review-section').isHidden(), true, 'A changed batch needs a fresh review.');
+    assert.equal(await disabled('apply'), true);
+    assert.equal((await act('review', 'batch-review')).review.ready, true);
+    assert.match(await text('review-summary'), /No conflicts reported/);
     await page.locator('#batch-apply:enabled').waitFor();
-    await shot('batch-review.png');
-    report = (await act('apply', 'batch-run')).report;
-    assert.deepEqual([...new Set(report.actions.map(action => action.outcome))].sort(), ['cancelled', 'completed', 'failed', 'unknown', 'untouched']);
+    await shot('batch-3-review-ready.png');
+    const before = await userBytes();
+    const report = (await act('apply', 'batch-run')).report;
+    const failed = await rows();
     assert.equal(report.atomic, false);
-    assert.ok(report.scopes.every(scope => scope.unrelated.outcome === 'untouched'), 'Unrelated state stays byte-identical in both fixture scopes.');
-    assert.equal(await page.locator('#batch-outcomes tr').count(), report.actions.length + report.scopes.length);
-    await shot('batch-partial-failure.png');
-    // Remove only the directory created by the configured stale-target fault.
-    // Successful outputs and unrelated state remain in place for reinspection.
-    const configured = JSON.parse(await readFile(fixturePath, 'utf8'));
-    for (const action of Object.keys(configured.faults ?? {})) {
-      for (const operation of candidates.filter(operation => operation.action === action)) {
-        assert.ok(roots.some(root => within(root, operation.target)));
-        if (await lstat(operation.target).then(stat => stat.isDirectory(), () => false)) await rm(operation.target, { recursive: true });
-      }
-    }
-    await writeFile(fixturePath, JSON.stringify({ ...configured, faults: {} }));
-    recovered = await act('recover', 'batch-recover');
-    assert.notEqual(recovered.batchId, report.batchId);
-    assert.equal(recovered.projection.supersedes, report.batchId);
-    await page.reload(); await page.locator('#batch-review:enabled').waitFor();
-    assert.equal((await page.locator('#batch-id').innerText()).trim(), recovered.batchId);
-    assert.equal(await page.locator('#batch-apply').isDisabled(), true, 'Reload never restores a prepared handle.');
-    await act('review', 'batch-review');
+    assert.equal(await page.locator('#batch-review-section').isHidden(), true, 'A finished run does not leave its review looking current.');
+    assert.equal(failed.length, report.actions.length + report.scopes.length);
+    const one = label => { const found = byLabel(failed, label); assert.equal(found.length, 1, label); return found[0]; };
+    assert.deepEqual([one('b-core').outcome, one('b-core').reason], ['failed', 'REVIEW_STALE'], JSON.stringify(failed));
+    assert.deepEqual([one('b-dependent').outcome, one('b-dependent').reason], ['cancelled', 'dependency-failed']);
+    assert.equal(one('a-extra').outcome, 'completed');
+    assert.equal(one('b-proc').outcome, 'unknown');
+    assert.match(one('b-proc').reason, /exit-code/);
+    const unrelated = byLabel(failed, 'Unrelated state');
+    assert.deepEqual(unrelated.map(row => [row.scope, row.outcome]), [['scope-a', 'untouched'], ['scope-b', 'untouched']]);
+    assert.deepEqual([...new Set(failed.map(row => row.outcome))].sort(), ['cancelled', 'completed', 'failed', 'unknown', 'untouched']);
+    assert.match(await text('counts'), /1 completed, 1 failed, 0 untouched, 1 cancelled, 1 unknown/);
+    assert.ok((await text('atomic-note')).includes(ATOMIC));
+    assert.deepEqual(await userBytes(), before, 'The person\'s own files are byte-identical.');
+    assert.equal(await exists(join(homeA, '.claude', 'a-extra.md')), true, 'The independent action completed.');
+    assert.equal(await exists(join(homeB, '.codex', 'b-core.md')), false, 'The failed action left nothing behind.');
+    assert.equal(await exists(join(homeB, '.codex', 'b-dependent.md')), false, 'The cancelled action wrote nothing.');
+    await shot('batch-4-partial-failure.png');
+
+    // (d) The person fixes the cause (test setup: the process marker, and the fault is cleared). Recover reinspects, keeps A's
+    // finished work and prepares a superseding batch, reviewed fresh; running it completes only the remaining work.
+    await writeFile(procMarker, 'ok\n');
+    await writeFile(fixturePath, JSON.stringify({ ...config, faults: {} }));
+    const recovered = await act('recover', 'batch-recover');
+    assert.notEqual(recovered.batchId, chosenId);
+    assert.equal(recovered.projection.supersedes, chosenId);
+    assert.deepEqual(recovered.projection.actions.filter(action => action.retain).map(action => action.id), ['a-extra']);
+    assert.match(await text('supersedes'), new RegExp(`Supersedes ${chosenId}`));
+    assert.equal(recovered.review.ready, true);
+    assert.equal((await text('id')).trim(), recovered.batchId);
     await page.locator('#batch-apply:enabled').waitFor();
+    await shot('batch-5-recovered-fresh-review.png');
     const fresh = (await act('apply', 'batch-run')).report;
+    const done = await rows();
     assert.equal(fresh.batchId, recovered.batchId);
-    assert.ok(fresh.actions.some(action => action.outcome === 'untouched' && action.reason === 'retained-earlier-result'));
-    await shot('batch-recovered.png');
+    for (const id of ['b-core', 'b-dependent', 'b-proc']) assert.equal(byLabel(done, id)[0].outcome, 'completed', id);
+    assert.deepEqual([byLabel(done, 'a-extra')[0].outcome, byLabel(done, 'a-extra')[0].reason], ['untouched', 'retained-earlier-result']);
+    assert.equal(byLabel(done, 'Unrelated state').every(row => row.outcome === 'untouched'), true);
+    assert.deepEqual(await userBytes(), before);
+    assert.equal(await exists(join(homeB, '.codex', 'b-core.md')), true);
+    assert.equal(await exists(join(homeB, '.codex', 'b-dependent.md')), true);
+    await shot('batch-6-recovered-complete.png');
+
+    // (e) Reload: the superseding batch reopens from the envelope file alone. Nothing from the run, session or review survives.
+    await page.reload();
+    assert.equal(await opened(), recovered.batchId);
+    assert.match(await text('supersedes'), new RegExp(`Supersedes ${chosenId}`));
+    assert.equal(await page.locator('#batch-continuation').inputValue(), 'continue-independent');
+    assert.equal(await page.locator('#batch-review-section').isHidden(), true);
+    assert.equal(await page.locator('#batch-outcome-section').isHidden(), true);
+    assert.equal(await disabled('apply'), true, 'Reload never restores a prepared handle; a fresh review is needed.');
+    const saved = await readFile(config.envelopePath, 'utf8');
+    assert.doesNotMatch(saved, /sessionId|reviewDigest|runId|"outcome"/, 'The envelope holds no session, review digest or outcome.');
+    assert.equal((await act('review', 'batch-review')).review.ready, true);
+    await page.locator('#batch-apply:enabled').waitFor();
+    await shot('batch-7-reopened.png');
+
     assert.deepEqual(errors, []);
-    await writeFile(join(output, 'batch-evidence.json'), JSON.stringify({ status: 'passed', screenshots, report, recovered: recovered.batchId, fresh, errors }, null, 2));
+    evidence = { status: 'passed', screenshots, batches: { initial: firstId, chosen: chosenId, recovered: recovered.batchId }, partial: failed, recovered: done, timingsMs: timings };
+    await writeFile(join(output, 'batch-evidence.json'), JSON.stringify(evidence, null, 2));
   } catch (error) {
     await page.screenshot({ path: join(output, 'batch-failure.png'), fullPage: true }).catch(() => {});
     throw error;
   } finally { await browser.close(); }
+  console.log(`Reviewed batch journey passed in ${((Date.now() - started) / 1000).toFixed(1)} s: ${output}`);
+  return evidence;
 }

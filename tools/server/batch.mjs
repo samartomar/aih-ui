@@ -32,7 +32,7 @@ async function replaceEnvelope(path, bytes) {
 
 export function createBatchAdapter(consumerDir) {
   const fixturePath = process.env.AIH_BATCH_FIXTURE;
-  let queue = Promise.resolve(), closed = false;
+  let queue = Promise.resolve(), closed = false, listed;
   // Reads, edits and execution share a queue. Durable bytes are read again for
   // every request, and no review session survives a request or a reload.
   const exclusive = operation => {
@@ -44,8 +44,8 @@ export function createBatchAdapter(consumerDir) {
     if (closed) throw problem('The batch adapter is closed.', 'BATCH_HOST_UNAVAILABLE');
     if (!fixturePath) return { status: 'unavailable', message: 'No batch host is configured.' };
     const config = JSON.parse(await readFile(fixturePath, 'utf8'));
-    if (![config.envelopePath, config.materialRoot, config.homes?.a, config.homes?.b].every(path => typeof path === 'string' && isAbsolute(path))) {
-      throw problem('Batch fixture requires absolute envelopePath, materialRoot and homes.a/homes.b.', 'BATCH_HOST_UNAVAILABLE');
+    if (![config.envelopePath, config.materialRoot].every(path => typeof path === 'string' && isAbsolute(path))) {
+      throw problem('Batch fixture requires absolute envelopePath and materialRoot.', 'BATCH_HOST_UNAVAILABLE');
     }
     const load = name => import(pathToFileURL(join(consumerDir, 'consumer', name)).href);
     const [{ readBatch, projectBatch, setContinuation }, { createBatchHost }] = await Promise.all([load('batch.mjs'), load('batch-host.mjs')]);
@@ -53,8 +53,10 @@ export function createBatchAdapter(consumerDir) {
     const current = valueOf(await readBatch({ envelopeBytes }));
     const record = current.record;
     if (!record?.id) throw problem('The envelope has no current reviewed batch.', 'BATCH_REFUSED');
-    const clients = callService(consumerDir, { op: 'coreTargets' });
-    if (!clients.ok) throw problem(clients.error ?? 'Core client list unavailable.', 'BATCH_HOST_UNAVAILABLE');
+    // Core's published client list is fixed for the installed archive, so it is asked for once.
+    listed ??= callService(consumerDir, { op: 'coreTargets' });
+    const clients = listed;
+    if (!clients.ok) { listed = undefined; throw problem(clients.error ?? 'Core client list unavailable.', 'BATCH_HOST_UNAVAILABLE'); }
     const projection = projectBatch(record);
     if (pathname === '/api/batch') return { status: 'ok', batchId: record.id, projection, clients: { targets: clients.targets, labels: clients.labels }, note: CLIENT_NOTE };
     if (body.batchId !== record.id) throw problem('The current batch changed. Reopen and review it again.', 'BATCH_CHANGED');
@@ -63,7 +65,7 @@ export function createBatchAdapter(consumerDir) {
       await replaceEnvelope(config.envelopePath, edited.envelopeBytes);
       return { status: 'ok', batchId: edited.record.id, projection: projectBatch(edited.record) };
     }
-    const host = createBatchHost({ scopeRoots: config.homes, clients: clients.targets,
+    const host = createBatchHost({ clients: clients.targets,
       materialRoots: Object.fromEntries(record.inputs.map(input => [input.id, config.materialRoot])), controls: { logging: 'off' }, faults: config.faults });
     try {
       if (pathname === '/api/batch-review') return { status: 'ok', batchId: record.id, review: valueOf(await host.reviewBatch({ envelopeBytes, batchId: record.id })) };

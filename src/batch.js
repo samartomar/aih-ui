@@ -1,10 +1,9 @@
 import { el } from './app/dom.js';
-import { scopeRows, actionRows, canApply, outcomeRows, outcomeCounts, outcomeTone, ATOMIC_NOTE } from './app/batch-view.js';
+import { scopeRows, actionRows, canApply, outcomeRows, outcomeCounts, outcomeTone, conflictText, ATOMIC_NOTE } from './app/batch-view.js';
 
 const node = id => document.getElementById(`batch-${id}`);
 const TONES = { success: 'text-secondary', error: 'text-error', warning: 'text-tertiary', neutral: 'text-on-surface-variant' };
 let current = null, clients = null, reviewed = null, busy = false, attempted = false;
-const details = value => typeof value === 'string' ? value : JSON.stringify(value);
 function controls() {
   node('review').disabled = busy || !current || attempted;
   node('continuation').disabled = busy || !current || attempted;
@@ -44,7 +43,7 @@ function renderReview(review, batchId) {
   node('review-section').hidden = false;
   node('review-summary').textContent = review.conflicts?.length ? `${review.conflicts.length} conflict(s). Apply is blocked.`
     : review.ready ? 'No conflicts reported. Ready for your approval.' : 'Review is not ready. Apply is blocked.';
-  node('conflicts').replaceChildren(...(review.conflicts ?? []).map(conflict => el('li', 'break-all', details(conflict))));
+  node('conflicts').replaceChildren(...(review.conflicts ?? []).map(conflict => el('li', 'break-all', conflictText(conflict))));
   node('reviewed-scopes').replaceChildren(...(review.scopes ?? []).map(scope => {
     const row = el('li', 'border border-wb-border rounded p-2');
     row.append(el('p', 'font-medium', `Scope ${scope.id} · preparation ${scope.prepare}`));
@@ -89,7 +88,7 @@ node('continuation').addEventListener('change', () => perform(async () => {
 }));
 node('apply').addEventListener('click', () => perform(async () => {
   if (!canApply(reviewed, current.id) || attempted) throw new Error('Review this batch before applying.');
-  attempted = true; reviewed = null;
+  attempted = true; reviewed = null; node('review-section').hidden = true;
   try {
     const result = await api('batch-run', { batchId: current.id });
     renderReport(result.report); node('status').textContent = 'Run finished. Inspect every observed outcome; Recover reinspects and prepares fresh work.';

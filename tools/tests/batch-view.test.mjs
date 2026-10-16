@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { scopeRows, actionRows, canApply, outcomeRows, outcomeCounts, outcomeTone, ATOMIC_NOTE, CLIENT_NOTE } from '../../src/app/batch-view.js';
+import { scopeRows, actionRows, canApply, outcomeRows, outcomeCounts, outcomeTone, conflictText, ATOMIC_NOTE, CLIENT_NOTE } from '../../src/app/batch-view.js';
 
 test('scopes use only Core labels and disclose what listing establishes', () => {
   assert.deepEqual(scopeRows({ scopes: [{ id: 'a', role: 'existing', client: 'one' }, { id: 'b', role: 'added', client: 'other' }] }, { labels: { one: 'Client One' } })
@@ -47,4 +47,18 @@ test('missing observations remain unknown and missing data does not claim succes
   assert.deepEqual(outcomeRows(null), []);
   assert.equal(outcomeRows({ actions: [{ id: 'x', scope: 'a' }] })[0].outcome, 'unknown');
   assert.equal(outcomeCounts(null).every(row => row.count === 0), true);
+});
+
+test('conflicts read as sentences naming the scope, action and target, and unknown kinds stay visible', () => {
+  assert.equal(conflictText({ kind: 'core-conflict', scope: 'b', action: 'x', target: '/t/x.md', code: 'STATE_CONFLICT', reason: 'existing-content' }),
+    'Scope b: action x cannot write /t/x.md; Core reports STATE_CONFLICT:existing-content.');
+  assert.match(conflictText({ kind: 'client-not-listed', scope: 'b', client: 'zed' }), /zed is not in Core's published client list/);
+  assert.match(conflictText({ kind: 'nested-roots', scopes: ['a', 'b'] }), /Scopes a and b have overlapping folders/);
+  assert.match(conflictText({ kind: 'core-review', scope: 'b', status: 'invalid' }), /no Core code reported/);
+  assert.equal(conflictText({ kind: 'future-kind', n: 1 }), '{"kind":"future-kind","n":1}');
+});
+
+test('a state without a host reason is described, and an unknown one says it was not reported', () => {
+  const rows = outcomeRows({ actions: [{ id: 'x', scope: 'a', outcome: 'completed' }, { id: 'y', scope: 'a', outcome: 'unknown' }], scopes: [{ id: 'a', unrelated: { outcome: 'untouched', files: 2 } }] });
+  assert.deepEqual(rows.map(row => row.reason), ['Core reported the work complete', 'Not reported', 'No change observed']);
 });
