@@ -2,7 +2,7 @@
 // host-configured npm repair. Like host.mjs, live prepared handles never leave this module:
 // callers get serializable records and an opaque session id, approval is digest-bound and
 // one-shot, and nothing here is built from browser-supplied paths or inputs.
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { apply, inspect, prepare } from '@aihq/core';
 import { targets as coreTargets } from '@aihq/core/harness';
 import { projectInspection, projectRepairOutcome, projectRepairPreparation, readinessGuidance } from './readiness.mjs';
@@ -10,6 +10,10 @@ import { projectInspection, projectRepairOutcome, projectRepairPreparation, read
 const KNOWN_TARGETS = new Set(coreTargets.map(target => target.id));
 const NETWORKS = ['declared', 'off'];
 const MAX_SESSIONS = 8;
+const MAX_RECORDS = 64;
+const RECORD_SCHEMA = 'urn:aih-ui:readiness-record:1.0.0';
+const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const coreIdentity = inspection => inspection.package ? { name: inspection.package.name, version: inspection.package.version } : null;
 const CONTROLS = Object.freeze({ logging: 'off' });
 const failure = (code, message) => ({ status: 'error', diagnostics: [{ code, message }] });
 const invalid = message => failure('INVALID_REQUEST', message);
@@ -45,19 +49,46 @@ export function createReadinessHost({ repairs = [] } = {}) {
   const sessions = new Map();
   // The latest machine check lets a repair outcome say which targets its recheck did not cover.
   let latestCheck = null;
+  let latestCheckId = null;
+  const journal = [];
+  let lastStamp = 0;
+  const stamp = () => {
+    lastStamp = Math.max(Date.now(), lastStamp + 1);
+    return new Date(lastStamp).toISOString();
+  };
+  const append = record => {
+    journal.push(structuredClone(record));
+    if (journal.length > MAX_RECORDS) journal.shift();
+  };
   const request = repair => ({ useCase: 'repair', repairs: [{ id: repair.id, targets: [...repair.targets], inputs: structuredClone(repair.inputs) }], network: repair.network });
   const operationView = operation => ({ id: operation.id, purpose: operation.purpose, kind: operation.kind, scope: operation.scope,
     effects: operation.effects, target: operation.details?.target ?? null });
 
   return {
+    records() { return structuredClone(journal); },
+
+    async report() {
+      try {
+        const { readinessReport } = await import('./claims.mjs');
+        const records = structuredClone(journal);
+        const { claimSet, projection } = readinessReport({ records });
+        return { status: 'ok', value: { records: records.length, claimSet, projection } };
+      } catch (error) { return failure('REPORT_FAILED', error.message); }
+    },
+
     async check(body = {}) {
       if (!isRecord(body)) return invalid('The request must be an object');
       const { targets, network } = body;
       if (targets !== undefined && targetsError(targets)) return invalid(targetsError(targets));
       if (network !== undefined && !NETWORKS.includes(network)) return invalid('network must be declared or off');
       try {
-        const projection = projectInspection(await inspect({ ...(targets ? { targets } : {}), ...(network ? { network } : {}) }));
+        const result = await inspect({ ...(targets ? { targets } : {}), ...(network ? { network } : {}) });
+        const capturedAt = stamp();
+        const projection = projectInspection(result);
+        const id = randomUUID();
+        append({ schema: RECORD_SCHEMA, id, kind: 'machine-check', capturedAt, sha256: digest(result), core: coreIdentity(result), check: projection });
         latestCheck = projection;
+        latestCheckId = id;
         return { status: 'ok', value: { projection, guidance: readinessGuidance([projection]) } };
       } catch (error) { return failure('CHECK_FAILED', `Machine check failed: ${error.message}`); }
     },
@@ -93,16 +124,24 @@ export function createReadinessHost({ repairs = [] } = {}) {
       const { handle, repair } = session;
       // Taken now, so a check that finishes while the repair runs is never labelled as before it.
       const before = latestCheck;
+      const beforeId = latestCheckId;
       try {
         const run = await apply(handle, { approved: true, origin: 'interactive', reviewDigest: session.reviewDigest }, CONTROLS);
+        const appliedAt = stamp();
         // The same condition is checked again by a fresh preparation (its handle is discarded)
         // and by inspecting the repair's targets; either may be unavailable without hiding the run.
         const fresh = await prepare(request(repair), CONTROLS).then(serialize, () => undefined);
         const inspection = await inspect({ targets: [...repair.targets], network: repair.network }).catch(error => ({ status: 'incomplete',
           diagnostics: [{ code: 'RECHECK_FAILED', message: `Recheck failed: ${error.message}` }] }));
+        const recheckedAt = stamp();
         const outcome = projectRepairOutcome({ run, recheck: fresh, inspection, repair, latestCheck: before });
         // The recheck covers only the repair's targets; machine readiness stays with the latest
         // machine check, which predates this repair and is labelled so.
+        append({ schema: RECORD_SCHEMA, id: randomUUID(), kind: 'repair', capturedAt: recheckedAt,
+          sha256: digest({ run, recheck: fresh, inspection }), core: coreIdentity(inspection),
+          repair: { repairId: repair.id, targets: [...repair.targets], before: beforeId,
+            run: typeof run.runId === 'string' && typeof run.schema === 'string' ? { id: run.runId, schema: run.schema } : null,
+            appliedAt, recheckedAt, outcome } });
         const recheck = outcome.condition;
         const machine = before ? { ...before, beforeRepair: true } : null;
         return { status: 'ok', value: { outcome, recheck, machine, guidance: readinessGuidance([...(machine ? [machine] : []), outcome, recheck]) } };
