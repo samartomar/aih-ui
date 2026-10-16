@@ -1,5 +1,5 @@
 // Workbench checks must leave the real account's Core records untouched.
-import { lstatSync, readdirSync } from 'node:fs';
+import { lstatSync, readdirSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 
 export function snapshotCoreHome(home) {
@@ -35,7 +35,10 @@ export function snapshotCoreHome(home) {
     for (const name of names) walk(join(path, name), relative ? `${relative}/${name}` : name);
   }
 
-  walk(root, '');
+  // A linked `.aih/core` is still the home Core writes to, so the walk starts at its target. Links inside are not followed.
+  let start = root;
+  try { start = realpathSync(root); } catch {}
+  walk(start, '');
   return { root, exists, entries };
 }
 
@@ -44,8 +47,9 @@ export function compareCoreHome(before, after) {
   let removed = 0;
   let changed = before.exists === after.exists ? 0 : 1;
   for (const [path, signature] of before.entries) {
+    // An unreadable entry cannot prove itself unchanged, so it always counts as changed.
     if (!after.entries.has(path)) removed++;
-    else if (after.entries.get(path) !== signature) changed++;
+    else if (after.entries.get(path) !== signature || signature === 'unreadable') changed++;
   }
   for (const path of after.entries.keys()) {
     if (!before.entries.has(path)) added++;

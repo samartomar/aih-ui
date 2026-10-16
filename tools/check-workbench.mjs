@@ -33,8 +33,13 @@ const realCache = process.platform === 'win32' ? (process.env.LOCALAPPDATA ?? jo
   : process.platform === 'darwin' ? join(homedir(), 'Library', 'Caches') : (process.env.XDG_CACHE_HOME ?? join(homedir(), '.cache'));
 const isolated = { ...process.env, ...homeEnvironment(join(output, 'account-home')),
   PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH ?? join(realCache, 'ms-playwright') };
-// Listing metadata only, never contents: the run fails if the real home's Core records change.
+// Listing metadata only, never contents: the run fails if the real home's Core records change. It runs on exit, so a
+// stage that throws (a timeout, say) is still checked.
 const realCoreBefore = snapshotCoreHome(homedir());
+process.on('exit', () => {
+  const realCoreChange = compareCoreHome(realCoreBefore, snapshotCoreHome(homedir()));
+  if (!realCoreChange.unchanged) { console.error(describeCoreHomeChange(realCoreChange)); process.exitCode = 1; }
+});
 const tests = ['ordinary-families', 'authoring-page', 'authoring-v3', 'reviews', 'personal-folder', 'journey', 'maintenance', 'readiness', 'readiness-host', 'claims', 'authority-source', 'organization-author', 'guided-setup', 'core-targets', 'improvements', 'workspace'];
 const result = spawnSync(process.execPath, ['--test', ...tests.map(name => join(output, `consumer/${name}.test.mjs`))], {
   cwd: output, encoding: 'utf8', windowsHide: true, maxBuffer: 20_000_000, timeout: 120_000,
@@ -82,5 +87,3 @@ if (process.exitCode === 0) {
   if (unit.error) throw unit.error;
   process.exitCode = unit.status ?? 1;
 }
-const realCore = compareCoreHome(realCoreBefore, snapshotCoreHome(homedir()));
-if (!realCore.unchanged) { console.error(describeCoreHomeChange(realCore)); process.exitCode = 1; }

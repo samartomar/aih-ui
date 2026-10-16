@@ -21,7 +21,7 @@ const counts = (added = 0, removed = 0, changed = 0) => ({
   unchanged: added + removed + changed === 0, added, removed, changed,
 });
 
-test('missing root equals missing root', (t) => {
+test('missing root equals missing root', t => {
   const { home, root } = fixture(t, false);
   const before = snapshotCoreHome(home);
   assert.equal(before.root, root);
@@ -30,7 +30,7 @@ test('missing root equals missing root', (t) => {
   assert.deepEqual(compareCoreHome(before, snapshotCoreHome(home)), counts());
 });
 
-test('identical recursive trees are unchanged and paths use forward slashes', (t) => {
+test('identical recursive trees are unchanged and paths use forward slashes', t => {
   const { home, root } = fixture(t);
   mkdirSync(join(root, 'records'));
   const file = join(root, 'records', 'private.json');
@@ -47,16 +47,16 @@ test('identical recursive trees are unchanged and paths use forward slashes', (t
 });
 
 for (const [name, setup, mutate, expected] of [
-  ['added file', () => {}, (root) => writeFileSync(join(root, 'private.json'), 'x'), counts(1)],
-  ['removed file', (root) => writeFileSync(join(root, 'private.json'), 'x'),
-    (root) => rmSync(join(root, 'private.json')), counts(0, 1)],
-  ['size change', (root) => writeFileSync(join(root, 'private.json'), 'x'),
-    (root) => writeFileSync(join(root, 'private.json'), 'longer'), counts(0, 0, 1)],
-  ['mtime change', (root) => writeFileSync(join(root, 'private.json'), 'x'),
-    (root) => utimesSync(join(root, 'private.json'), new Date(0), new Date(10000)), counts(0, 0, 1)],
-  ['new directory', () => {}, (root) => mkdirSync(join(root, 'private-dir')), counts(1)],
+  ['added file', () => {}, root => writeFileSync(join(root, 'private.json'), 'x'), counts(1)],
+  ['removed file', root => writeFileSync(join(root, 'private.json'), 'x'),
+    root => rmSync(join(root, 'private.json')), counts(0, 1)],
+  ['size change', root => writeFileSync(join(root, 'private.json'), 'x'),
+    root => writeFileSync(join(root, 'private.json'), 'longer'), counts(0, 0, 1)],
+  ['mtime change', root => writeFileSync(join(root, 'private.json'), 'x'),
+    root => utimesSync(join(root, 'private.json'), new Date(0), new Date(10000)), counts(0, 0, 1)],
+  ['new directory', () => {}, root => mkdirSync(join(root, 'private-dir')), counts(1)],
 ]) {
-  test(`${name} is counted`, (t) => {
+  test(`${name} is counted`, t => {
     const { home, root } = fixture(t);
     setup(root);
     const before = snapshotCoreHome(home);
@@ -65,7 +65,7 @@ for (const [name, setup, mutate, expected] of [
   });
 }
 
-test('root appearance and disappearance each count as a change', (t) => {
+test('root appearance and disappearance each count as a change', t => {
   const { home, root } = fixture(t, false);
   const absent = snapshotCoreHome(home);
   mkdirSync(root, { recursive: true });
@@ -75,7 +75,7 @@ test('root appearance and disappearance each count as a change', (t) => {
   assert.deepEqual(compareCoreHome(present, snapshotCoreHome(home)), counts(0, 0, 1));
 });
 
-test('description discloses counts only', (t) => {
+test('description discloses counts only', t => {
   const { home, root } = fixture(t);
   const before = snapshotCoreHome(home);
   writeFileSync(join(root, 'private-name.json'), 'secret contents');
@@ -87,7 +87,7 @@ test('description discloses counts only', (t) => {
     "The real account home's .aih/core changed: 3 added, 2 removed, 1 changed.");
 });
 
-test('symlinks, including a symlink root, are never traversed', { skip: process.platform === 'win32' }, (t) => {
+test('links inside are not traversed, but a linked root is walked', { skip: process.platform === 'win32' }, t => {
   const { home, root } = fixture(t);
   const outside = join(home, 'outside');
   mkdirSync(outside);
@@ -102,11 +102,12 @@ test('symlinks, including a symlink root, are never traversed', { skip: process.
   symlinkSync(outside, root);
   const linked = snapshotCoreHome(home);
   assert.equal(linked.exists, true);
-  assert.equal(linked.entries.size, 1);
-  assert.equal(JSON.parse(linked.entries.get('')).type, 'link');
+  assert.deepEqual([...linked.entries.keys()], ['not-inspected']);
+  writeFileSync(join(outside, 'added-through-link'), 'x');
+  assert.deepEqual(compareCoreHome(linked, snapshotCoreHome(home)), counts(1));
 });
 
-test('an unreadable file needs no content read', { skip: process.platform === 'win32' }, (t) => {
+test('an unreadable file needs no content read', { skip: process.platform === 'win32' }, t => {
   const { home, root } = fixture(t);
   const file = join(root, 'private.json');
   writeFileSync(file, 'secret');
@@ -115,7 +116,7 @@ test('an unreadable file needs no content read', { skip: process.platform === 'w
   assert.equal(JSON.parse(snapshot.entries.get('private.json')).type, 'file');
 });
 
-test('unreadable directories are recorded rather than silently omitted', { skip: process.platform === 'win32' }, (t) => {
+test('unreadable directories are recorded rather than silently omitted', { skip: process.platform === 'win32' }, t => {
   const { home, root } = fixture(t);
   const dir = join(root, 'private-dir');
   mkdirSync(dir);
@@ -128,7 +129,9 @@ test('unreadable directories are recorded rather than silently omitted', { skip:
     } catch (error) {
       assert.equal(error.code, 'EACCES');
     }
-    assert.equal(snapshotCoreHome(home).entries.get('private-dir'), 'unreadable');
+    const partial = snapshotCoreHome(home);
+    assert.equal(partial.entries.get('private-dir'), 'unreadable');
+    assert.deepEqual(compareCoreHome(partial, snapshotCoreHome(home)), counts(0, 0, 1));
     chmodSync(root, 0);
     const snapshot = snapshotCoreHome(home);
     assert.equal(snapshot.exists, true);
