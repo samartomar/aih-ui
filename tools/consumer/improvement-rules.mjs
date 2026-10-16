@@ -36,7 +36,8 @@ function firstPhrase(source, phrases) {
 }
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 // Semantic-version precedence (build metadata ignored), or undefined when either side is absent or not a version.
-const SEMVER = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
+const NUMBER = '0|[1-9]\\d*', PART = `(?:${NUMBER}|\\d*[A-Za-z-][0-9A-Za-z-]*)`;
+const SEMVER = new RegExp(`^(${NUMBER})\\.(${NUMBER})\\.(${NUMBER})(?:-(${PART}(?:\\.${PART})*))?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$`);
 function precedence(a, b) {
   const [x, y] = [SEMVER.exec(a ?? ''), SEMVER.exec(b ?? '')];
   if (!x || !y) return undefined;
@@ -102,7 +103,9 @@ function changedItems(intent, inventories, candidates, offered) {
   const saved = [...new Set([...intent.roots, ...intent.pins, ...intent.provenance].map(entry => entry.releaseSha256))].sort(compare)
     .flatMap(sha => inventories.filter(entry => entry.release.sha256 === sha).slice(0, 1));
   const changed = new Map();
-  const newest = [...candidates].sort((a, b) => -(precedence(a.release.package?.version, b.release.package?.version) ?? 0) || compare(a.release.sha256, b.release.sha256));
+  // Only versioned candidates can revise a saved source; dropping the rest first keeps the order total.
+  const newest = candidates.filter(entry => SEMVER.test(entry.release.package?.version ?? ''))
+    .sort((a, b) => precedence(b.release.package.version, a.release.package.version) || compare(a.release.sha256, b.release.sha256));
   for (const candidate of newest) {
     const { release } = candidate, sources = saved.filter(entry => revises(intent, entry, candidate));
     if (!sources.length) continue;

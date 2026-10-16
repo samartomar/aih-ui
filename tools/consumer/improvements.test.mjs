@@ -299,11 +299,14 @@ test('a new item named by a goal rule is suggested from the newest later candida
   assert.deepEqual(only.triggers, [{ ruleId: 'change.new', key: 'change:new@1.1.0-rc.2',
     text: `“Label mattpocock.code-review” is new in review-notes-catalog 1.1.0-rc.2, ${SAVED_FROM}; your saved goal “add tests and review code” mentions “review”.` }]);
   // A rollback, the same version, a prerelease of it, no version or a non-version is never called newer.
-  for (const version of ['0.9.0', '1.0.0', '1.0.0-rc.1', undefined, 'next'])
+  for (const version of ['0.9.0', '1.0.0', '1.0.0-rc.1', undefined, 'next', '01.1.0', '1.1.0-01', '1.1.0-rc..1', '1.1', '1.1.0+'])
     assert.deepEqual(await withChanges({ before: [item('x.root')], intent, candidates: [releaseOf(10, version, items)] }), [], String(version));
   // Several later revisions: the newest is the one suggested, whatever order the source lists them in.
   const [newest] = await withChanges({ before: [item('x.root')], intent, candidates: [releaseOf(10, '1.1.0', items), releaseOf(12, '1.10.0', items), releaseOf(11, '1.2.0', items), releaseOf(13, '1.10.0-rc.1', items)] });
   assert.equal(newest.change.releaseSha256, hex(12)); assert.match(changeTrigger(newest).text, /new in review-notes-catalog 1\.10\.0,/);
+  // An unversioned candidate among them changes nothing about which is newest.
+  const [mixed] = await withChanges({ before: [item('x.root')], intent, candidates: [releaseOf(1, '1.1.0', items), releaseOf(2, 'next', items), releaseOf(3, '1.10.0', items)] });
+  assert.equal(mixed.change.releaseSha256, hex(3)); assert.equal(changeTrigger(mixed).key, 'change:new@1.10.0');
   // The first matching root in item id order supplies the goal.
   const two = intentOf({ roots: [rootOf('z.root', savedReason('goal.review', 'review code')), rootOf('a.root', savedReason('goal.review', 'quality reviews'))] });
   const [first] = await withChanges({ before: [item('a.root'), item('z.root')], after: [item('mattpocock.code-review')], intent: two });
