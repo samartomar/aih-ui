@@ -2,6 +2,8 @@
 // the preview's host process with a disposable fixture home and PATH (createReadinessFixture),
 // so the developer's real clients, .npmrc and environment are never read for repair or changed.
 // Port 4196 only (AIH_REPORT_PORT may override it; 4173 is refused).
+// AIH_REPORT_REQUIRE_VERIFIED=1 demands exactly one verified repair; run it behind an intercepting
+// proxy whose CA file is given in AIH_REPORT_CA_FILE.
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtemp, mkdir, stat, writeFile, rm } from 'node:fs/promises';
@@ -25,7 +27,10 @@ const inside = (root, path) => { const rel = relative(root, path); return rel !=
 // The repair Core reviews and applies must live in the disposable fixture, never in the real home.
 assert.ok(inside(work, fixture.home) && resolve(fixture.home) !== resolve(homedir()), 'the fixture home must be disposable and not the real home');
 const repairsFile = join(work, 'repairs.json');
-await writeFile(repairsFile, JSON.stringify({ repairs: [{ key: 'npm-ca', id: 'node-npm-ca', targets: ['npm'], inputs: { caFile: fixture.caFile }, network: 'declared' }] }));
+// AIH_REPORT_CA_FILE names the CA of an intercepting proxy the run is behind, so its repair can be verified.
+const caFile = resolve(process.env.AIH_REPORT_CA_FILE ?? fixture.caFile);
+assert.ok(existsSync(caFile), 'AIH_REPORT_CA_FILE must name an existing CA certificate file');
+await writeFile(repairsFile, JSON.stringify({ repairs: [{ key: 'npm-ca', id: 'node-npm-ca', targets: ['npm'], inputs: { caFile }, network: 'declared' }] }));
 
 // The real home's .npmrc is compared by metadata only; its content is never read.
 const realNpmrc = join(homedir(), '.npmrc');
