@@ -1,9 +1,10 @@
 // Host-owned observation of one local checkout (Node only; package export `aih-ui/workspace-host`). It reads Git metadata
 // (remotes, HEAD, branch, worktree) and a digest of the working state: the `git status` output, the staged changes (index
-// against HEAD, as blob ids and modes), a sha256 of the bytes of every changed file and, for an untracked folder, a listing of
-// its files' relative paths, sizes and modification times. All of it is computed here and never stored or returned, so editing a
-// file that is already modified, or staging another version of it, changes the digest. Submodule state is not part of the
-// identity (`--ignore-submodules=all`, so a submodule's own configuration is never consulted). No network access and no write to
+// against HEAD, as blob ids and modes), a sha256 of the bytes of every changed file and, for an untracked folder, the relative
+// paths and content digests of its files. All of it is computed here and never stored or returned, so editing a file that is
+// already modified, or staging another version of it, changes the digest; an unmerged checkout is refused. Submodule state is not
+// part of the identity (`--ignore-submodules=all`, so a submodule's own configuration is never consulted). No network access (lazy
+// fetching in a partial clone is switched off and status detects no renames, which would need missing objects) and no write to
 // config, refs or objects: optional locks are off, fsmonitor and the untracked cache are disabled, every content filter the
 // repository's own configuration (local, worktree or an include of them) defines is switched off for the call, remotes come from
 // that same repository configuration only and inherited GIT_* repository and config variables are dropped. Remote URLs are
@@ -26,7 +27,9 @@ const UNREADABLE = 'Git metadata could not be read for this folder.';
 const OWNED = 'Git refuses this folder because it is owned by another user (safe.directory).';
 // Git settings that point a command at some other repository, index, object store or extra configuration.
 const INHERITED = /^(?:GIT_DIR|GIT_WORK_TREE|GIT_INDEX_FILE|GIT_OBJECT_DIRECTORY|GIT_ALTERNATE_OBJECT_DIRECTORIES|GIT_COMMON_DIR|GIT_NAMESPACE|GIT_CONFIG|GIT_CONFIG_PARAMETERS|GIT_CONFIG_COUNT|GIT_CONFIG_KEY_.*|GIT_CONFIG_VALUE_.*)$/i;
-const environment = () => ({ ...Object.fromEntries(Object.entries(process.env).filter(([name]) => !INHERITED.test(name))), GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0' });
+const environment = () => ({ ...Object.fromEntries(Object.entries(process.env).filter(([name]) => !INHERITED.test(name))), GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0',
+  // A partial clone would otherwise fetch a missing object, through a transport the repository's own configuration can name.
+  GIT_NO_LAZY_FETCH: '1' });
 const READ_ONLY = ['--no-optional-locks', '-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false'];
 // The default process runner: `{ status, stdout, stderr }`, plus `error` when the process could not run, timed out or overran its output.
 const run = (command, args, options) => new Promise(done => {
@@ -79,6 +82,8 @@ function filterOverrides(entries) {
   if (names.size > MAX_FILTERS || [...names].some(name => /[=\n\0]/.test(name))) return null;
   return [...names].flatMap(name => ['clean', 'smudge', 'process'].flatMap(attribute => ['-c', `filter.${name}.${attribute}=`]).concat(['-c', `filter.${name}.required=false`]));
 }
+// Whether `status --porcelain=v1 -z` lists an unmerged entry (DD, AU, UD, UA, DU, AA or UU).
+const unmerged = porcelain => porcelain.toString('utf8').split('\0').some(entry => /^(?:DD|AU|UD|UA|DU|AA|UU) /.test(entry));
 // Paths listed by `status --porcelain=v1 -z`: each entry is `XY path`, and a rename or copy entry is followed by its original path.
 // An untracked folder is one entry with a trailing slash.
 function changedPaths(porcelain) {
@@ -91,8 +96,8 @@ function changedPaths(porcelain) {
   }
   return [...paths];
 }
-// sha256 of the relative path, size and modification time of every file below an untracked folder (no content; nested `.git` entries
-// and links are not followed); undefined when the folder holds more than the entry limit.
+// sha256 of the relative path and content digest of every file below an untracked folder (nested `.git` entries are skipped and
+// links digest their target string); undefined when the folder holds more than the entry limit or the byte budget is spent.
 async function folderListing(folder, budget) {
   const lines = [], pending = [['', folder]];
   try {
@@ -102,8 +107,9 @@ async function folderListing(folder, budget) {
         if (item.name === '.git') continue;
         if (++budget.entries > budget.limit) return undefined;
         if (item.isDirectory()) { pending.push([`${prefix}${item.name}/`, join(current, item.name)]); continue; }
-        const info = await lstat(join(current, item.name));
-        lines.push(`${prefix}${item.name}\0${info.size}\0${info.mtimeMs}\0`);
+        const digest = await entryDigest(join(current, item.name), budget);
+        if (digest === undefined) return undefined;
+        lines.push(`${prefix}${item.name}\0${digest}\0`);
       }
     }
   } catch { return sha256('unreadable'); }
@@ -119,8 +125,16 @@ async function contentDigest(checkout, real, path, budget) {
   try {
     const parent = await realpath(dirname(full)), inside = sameFolder(parent, real) || (sameFolder(parent.slice(0, real.length), real) && parent[real.length] === sep);
     if (!inside) return sha256('outside');
-    if (info.isSymbolicLink()) return sha256(`symlink:${await readlink(full)}`);
     if (info.isDirectory()) return path.endsWith('/') ? folderListing(full, budget) : sha256('directory');
+    return entryDigest(full, budget, info);
+  } catch { return sha256('unreadable'); }
+}
+// sha256 of one entry that is not a folder: a symlink digests its target string and is never followed, a regular file its bytes (read
+// in bounded chunks against the shared byte budget), anything else only its kind. `undefined` when the byte budget is spent.
+async function entryDigest(full, budget, known) {
+  try {
+    const info = known ?? await lstat(full);
+    if (info.isSymbolicLink()) return sha256(`symlink:${await readlink(full)}`);
     if (!info.isFile()) return sha256('special');
     budget.bytes += info.size;
     if (budget.bytes > MAX_CHANGED_BYTES) return undefined;
@@ -175,10 +189,12 @@ export async function observeCheckout(root, spawn = run, { listedEntries = MAX_L
   if (overrides === null) return unavailable('The checkout configures content filters that this Workbench cannot switch off for a read; remove them from the repository configuration and inspect again.');
   const revision = head.status === 0 && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(head.stdout.trim()) ? head.stdout.trim() : null;
   // What is staged: the index against HEAD (blob ids and modes, never content), or the whole index when HEAD is not born yet.
-  const [status, staged] = await Promise.all([git(spawn, checkout, ['status', '--porcelain=v1', '-z', '--untracked-files=normal', '--ignore-submodules=all'], { encoding: 'buffer', overrides }),
+  const [status, staged] = await Promise.all([git(spawn, checkout, ['status', '--porcelain=v1', '-z', '--untracked-files=normal', '--ignore-submodules=all', '--no-renames'], { encoding: 'buffer', overrides }),
     git(spawn, checkout, head.status === 0 ? ['diff', '--cached', '--raw', '-z', '--no-renames', '--abbrev=40', '--no-ext-diff', '--ignore-submodules=all', 'HEAD', '--'] : ['ls-files', '-s', '-z'], { encoding: 'buffer', overrides })]);
   if (tooBig(status) || tooBig(staged)) return unavailable(TOO_MANY_CHANGES);
   if (status.error || staged.error || status.status !== 0 || staged.status !== 0) return unavailable(refusedOwnership(status) ? OWNED : UNREADABLE);
+  // Conflict stages are not in the staged diff, so an unmerged checkout has no identifiable working state.
+  if (unmerged(status.stdout)) return unavailable('The checkout has unresolved merge conflicts; resolve them, then inspect again.');
   const workingState = await workingStateOf(checkout, status.stdout, staged.stdout, listedEntries);
   if (workingState === null) return unavailable(TOO_MANY_CHANGES);
   const name = branch.status === 0 ? branch.stdout.trim() : '';

@@ -216,7 +216,7 @@ test('absolute local paths, URL userinfo and malformed fields are refused in eve
 
 test('the text guard refuses local roots at any depth, top-level files and credential values, and allows ordinary routes and prose', () => {
   const refused = ['/private.pem', 'see /private.pem.', '(/id_rsa.key)', 'checkout:/srv/checkouts/api', '/srv/checkouts/api', '/srv/x', 'at "/workspace/api"', 'x=/data/export', '/Library/Keychains/a', 'ssh://host/access?token=secret123', 'token=secret123abc',
-    'api_key=abcdefgh12', 'x&password=hunter2hunter2', 'password: hunter2', 'secret : s3cr3t99', 'api-key: abc-1234', 'passwd: Hunter22.'];
+    'api_key=abcdefgh12', 'x&password=hunter2hunter2', 'password=P@ssw0rd!2026', 'password=hunter2', 'pwd = x1', 'secret=a', 'built from /app/src/config.json', 'cache in /code/project/build', '/builds/group/proj/out', '/nix/store/abc-x/bin', 'see /id_rsa', 'keys in /keys/team/.env', 'password: hunter2', 'secret : s3cr3t99', 'api-key: abc-1234', 'passwd: Hunter22.'];
   const allowed = ['owns the /v1/orders/ endpoint', 'serves /api/health/live', 'Handles password: reset emails', 'limits max_token=4096', 'src/home/index.ts', 'profile: page', 'serves api/root/health', 'Owns /health only', 'calls /v1.2/orders',
     'See https://example.com', 'https://example.com/home/x', 'token=short', 'The secret: rotated', 'src/srv/x.ts', 'a/private.pem'];
   for (const text of refused) assert.equal(unsafeText(text), true, text);
@@ -816,12 +816,15 @@ test('observeCheckout never runs a command the repository configures (fsmonitor,
       assert.equal(command, 'git');
       assert.deepEqual(args.slice(0, 5), ['--no-optional-locks', '-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false']);
       assert.equal(options.windowsHide, true); assert.equal(options.env.GIT_TERMINAL_PROMPT, '0'); assert.equal(options.env.GIT_OPTIONAL_LOCKS, '0');
+      // A partial clone must never fetch a missing object: that fetch runs a transport the repository's own configuration can name.
+      assert.equal(options.env.GIT_NO_LAZY_FETCH, '1');
       assert.deepEqual(Object.keys(options.env).filter(key => /^GIT_(?:DIR|WORK_TREE|INDEX_FILE|CONFIG.*)$/i.test(key)), []);
     }
     for (const call of calls.filter(call => call.args.includes('--get-regexp'))) { assert.ok(call.args.includes('--includes') && call.args.includes('--show-scope')); assert.equal(call.args.includes('--local'), false); }
     const status = calls.find(call => call.args.includes('status')).args;
     for (const setting of ['filter.x.clean=', 'filter.x.smudge=', 'filter.x.process=', 'filter.x.required=false', 'filter.p.clean=', 'filter.p.process=', 'filter.p.required=false']) assert.ok(status.includes(setting), setting);
     assert.ok(status.includes('--untracked-files=normal') && status.includes('--ignore-submodules=all'));
+    assert.ok(status.includes('--no-renames'), 'rename detection would read objects a partial clone does not have');
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
@@ -928,7 +931,7 @@ test('the working state covers the content of changed files and what is staged, 
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-test('an untracked folder is one entry that digests a listing of its files (path, size, time; no content), and a big folder can still be bound', async () => {
+test('an untracked folder is one entry that digests the paths and contents of its files, and a big folder can still be bound', async () => {
   const { writeFile, utimes, mkdir: makeDir } = await import('node:fs/promises'), root = await temporary();
   try {
     const state = async (options, ...entries) => valueOf(await observeCheckout(root, fakeGit({ top: root, status: porcelain(...entries) }), options)).workingState;
@@ -938,14 +941,14 @@ test('an untracked folder is one entry that digests a listing of its files (path
     const big = await state({}, '?? build/');
     assert.equal(big.clean, false);
     assert.equal((await state({}, '?? build/')).sha256, big.sha256, 'the same listing is the same state');
-    // Same size and time but other bytes: the listing does not read content. A new file, a different size and a different time are each a change.
+    // Same size and time but other bytes is a change: the listing digests content. A new file is a change; a different time alone is not.
     const old = new Date('2020-01-01T00:00:00Z'), small = join(root, 'small'); await makeDir(join(small, 'deep'), { recursive: true });
     const stamp = async (name, text, date = old) => { await writeFile(join(small, name), text); await utimes(join(small, name), date, date); };
     await stamp('f0.o', 'x'); await stamp('deep/f1.o', 'x');
     const first = await state({}, '?? small/');
-    await stamp('f0.o', 'y'); assert.equal((await state({}, '?? small/')).sha256, first.sha256, 'content is not read');
+    await stamp('f0.o', 'y'); assert.notEqual((await state({}, '?? small/')).sha256, first.sha256, 'content inside an untracked folder counts');
     await stamp('f0.o', 'yy'); const longer = await state({}, '?? small/'); assert.notEqual(longer.sha256, first.sha256);
-    await stamp('f0.o', 'yy', new Date('2021-01-01T00:00:00Z')); const later = await state({}, '?? small/'); assert.notEqual(later.sha256, longer.sha256);
+    await stamp('f0.o', 'yy', new Date('2021-01-01T00:00:00Z')); const later = await state({}, '?? small/'); assert.equal(later.sha256, longer.sha256, 'touching a file changes nothing');
     await stamp('deep/new.o', 'x'); assert.notEqual((await state({}, '?? small/')).sha256, later.sha256);
     // A file at the top of the checkout keeps its content digest, and a nested `.git` is not listed.
     await writeFile(join(root, 'top.txt'), 'one'); const t1 = await state({}, '?? top.txt'); await writeFile(join(root, 'top.txt'), 'two'); assert.notEqual((await state({}, '?? top.txt')).sha256, t1.sha256);
@@ -1088,4 +1091,16 @@ test('no operation touches a folder, the network, a timer or the clock: the modu
   } finally { globalThis.fetch = realFetch; globalThis.setTimeout = realTimeout; }
   assert.deepEqual(calls, []);
   assert.ok(s);
+});
+
+test('an unmerged checkout is refused, because its conflict stages are not identified', async () => {
+  const root = await temporary();
+  try {
+    for (const entry of ['UU a.txt', 'AA a.txt', 'DU a.txt']) {
+      const refused = await observeCheckout(root, fakeGit({ top: root, status: porcelain(entry) }));
+      assert.equal(code(refused), 'CHECKOUT_UNAVAILABLE', entry);
+      assert.equal(refused.diagnostics[0].message, 'The checkout has unresolved merge conflicts; resolve them, then inspect again.');
+    }
+    assert.equal((await observeCheckout(root, fakeGit({ top: root, status: porcelain('MM a.txt') }))).status, 'ok');
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
