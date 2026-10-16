@@ -15,6 +15,7 @@ The Policy Workbench user interface for AIH, built as an independent application
 - `prototype/` is retained as a separate design reference. The running page does not import it.
 - Local onboarding preferences (experience, organization context, requested assistance and explicit AI clients). These are UI settings, not policy artifacts or enterprise authorization.
 - The machine-readiness check and host-configured npm repair: Core inspection and repair results projected as failed, unknown, applied, configured or verified, with no project, saved intent or policy. See [machine readiness](docs/readiness.md).
+- Guided personal setup (`src/guided.html`): a goal sentence, an optional project folder inspected only in the browser and the chosen AI clients become explained starter choices from the served Catalog, a copyable prompt and a saved unresolved-draft envelope. The rules are fixed and local (`src/app/guided-rules.js`); no folder content, model call or upload is involved.
 
 ## What it must never contain
 
@@ -104,6 +105,7 @@ src/
     policy-workspace.js role-specific policy workspace presentation
     authoring-client.js page-scoped authoring state and exact byte transport
     authoring-workspace.js project proposals, files, intake and host presentation
+    guided-rules.js     guided setup detection, starter rules and plain-language text (pure; no DOM)
     evidence-review.js checked evidence and portable human review decisions
   styles/               Workbench design tokens and presentation rules
     tokens.css          dark and light colour roles
