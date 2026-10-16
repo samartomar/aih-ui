@@ -34,7 +34,19 @@ const saved = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: 'u
 // These URNs mirror tools/consumer/journey.mjs (journey.test.mjs asserts they agree); that module needs the
 // installed @aihq packages, which this repo-root script does not have.
 const journeyRecord = 'urn:aihq:workbench:journey-record:unresolved-draft:1.0.0', journeyEnvelope = 'urn:aihq:workbench:journey-envelope:1.0.0';
+const dispositionRecord = 'urn:aihq:workbench:journey-record:maintenance-disposition:1.0.0';
 const recordUrn = { type: 'string', pattern: String.raw`^urn:aihq:workbench:journey-record:[a-z0-9-]+:\d+\.\d+\.\d+$` };
+// Maintenance disposition: an optional record of what a person chose to do about one exact available update.
+// Its id derives from (category, subject, scope, candidate), which a schema cannot express; the reader checks it.
+const dispositionRef = kind => shape({ kind, releaseSha256: hash, itemId: id, itemSha256: hash });
+const disposition = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: dispositionRecord, ...shape({
+  id: { type: 'string', pattern: '^disposition-[a-f0-9]{32}$' }, schema: { const: dispositionRecord }, required: { const: false },
+  category: { enum: ['content', 'software', 'client', 'environment'] },
+  subject: dispositionRef({ enum: ['selection'] }), scope, candidate: dispositionRef({ enum: ['content-revision'] }),
+  disposition: { enum: ['keep-current', 'skip', 'defer'] },
+  recordedAt: { type: 'string', pattern: '^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d+)?Z$' },
+  reason: string, deferUntil: { type: 'string', pattern: '^\\d{4}-\\d\\d-\\d\\d$' }
+}, ['reason', 'deferUntil']), allOf: [{ if: { required: ['deferUntil'] }, then: { properties: { disposition: { const: 'defer' } } } }] };
 const journey = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: journeyEnvelope, ...shape({
   schema: { const: journeyEnvelope },
   id: { type: 'string', pattern: '^journey-[a-f0-9]{32}$' },
@@ -44,10 +56,11 @@ const journey = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: 
     byteLength: { type: 'integer', minimum: 0, maximum: 1000000 }, base64: { type: 'string', maxLength: 1333336, pattern: '^[A-Za-z0-9+/]*={0,2}$' } }),
   records: array({ if: { required: ['schema'], properties: { schema: { const: journeyRecord } } },
     then: shape({ id, schema: { const: journeyRecord }, required: { const: true }, savedIntentSha256: hash, intent: { $ref: saved.$id } }),
-    else: { type: 'object', required: ['id', 'schema', 'required'], additionalProperties: true, properties: { id, schema: recordUrn, required: { type: 'boolean' } } } })
+    else: { type: 'object', required: ['id', 'schema', 'required'], additionalProperties: true, properties: { id, schema: recordUrn, required: { type: 'boolean' } } },
+    allOf: [{ if: { required: ['schema'], properties: { schema: { const: dispositionRecord } } }, then: { $ref: dispositionRecord } }] })
 }) };
 mkdirSync(new URL('../schemas/', import.meta.url), { recursive: true });
-for (const [name, schema] of [['saved-intent-3.0.0', saved], ['review-decisions-1.0.0', review], ['journey-envelope-1.0.0', journey]]) {
+for (const [name, schema] of [['saved-intent-3.0.0', saved], ['review-decisions-1.0.0', review], ['journey-envelope-1.0.0', journey], ['journey-record-maintenance-disposition-1.0.0', disposition]]) {
   const path = new URL(`../schemas/${name}.json`, import.meta.url), expected = JSON.stringify(schema, null, 2) + '\n';
   if (process.argv.includes('--check')) {
     if (readFileSync(path, 'utf8').replaceAll('\r\n', '\n') !== expected) throw new Error(`Schema is stale: ${name}`);

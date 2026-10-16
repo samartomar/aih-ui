@@ -98,6 +98,25 @@ export function createAuthoringClient() {
       const attempt = ++revision; candidate = undefined; notify();
       return openAttempt(attempt, input);
     },
+    async checkMaintenance(categories) {
+      if (!draftValue) return refusal('INPUT_INVALID', 'Open a draft before checking available updates.');
+      const attempt = revision;
+      try {
+        const result = await request('maintenance-check', { envelopeBytes: [...draftValue.envelopeBytes], categories, policyBytes: undefined });
+        return attempt === revision ? result : { status: 'superseded' };
+      } catch (error) { if (attempt !== revision) return { status: 'superseded' }; throw error; }
+    },
+    async recordDisposition(operation) {
+      if (!draftValue) return refusal('INPUT_INVALID', 'Open a draft before recording an update choice.');
+      const current = draftValue, attempt = ++revision; candidate = undefined; notify();
+      const result = await request('maintenance-record', { envelopeBytes: [...current.envelopeBytes], operation, policyBytes: undefined });
+      if (attempt !== revision) return { status: 'superseded' };
+      if (result.status === 'ok') {
+        revision++; draftValue = asDraft({ ...current, ...result.value, savedIntentBytes: current.savedIntentBytes });
+        compiled = undefined; intent = undefined; bytes = draftValue.savedIntentBytes.slice();
+      }
+      notify(); return result;
+    },
     async compileDraft(roots) {
       if (!draftValue) return refusal('INPUT_INVALID', 'Open a draft before compiling it.');
       const attempt = ++revision; candidate = undefined; notify();

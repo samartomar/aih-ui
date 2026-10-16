@@ -8,7 +8,17 @@ export const JOURNEY_SCHEMA = `${JOURNEY_SCHEMA_PREFIX}1.0.0`;
 export const JOURNEY_ACCEPTED_SCHEMAS = [JOURNEY_SCHEMA];
 export const SAVED_INTENT_TYPE = 'urn:aihq:core:execution-policy-bytes';
 export const DRAFT_RECORD_SCHEMA = 'urn:aihq:workbench:journey-record:unresolved-draft:1.0.0';
+export const MAINTENANCE_DISPOSITION_RECORD_SCHEMA = 'urn:aihq:workbench:journey-record:maintenance-disposition:1.0.0';
+// Records that bind the saved intent they sit beside.
 export const JOURNEY_RECORD_SCHEMAS = { [DRAFT_RECORD_SCHEMA]: { kind: 'unresolved-draft', version: '1.0.0' } };
+// Every kind this version interprets, with the `required` value its writer must use.
+export const JOURNEY_RECORD_KINDS = { [DRAFT_RECORD_SCHEMA]: { kind: 'unresolved-draft', version: '1.0.0', required: true },
+  [MAINTENANCE_DISPOSITION_RECORD_SCHEMA]: { kind: 'maintenance-disposition', version: '1.0.0', required: false } };
+const known = schema => Object.hasOwn(JOURNEY_RECORD_KINDS, schema);
+export const DISPOSITION_CATEGORIES = ['content', 'software', 'client', 'environment'];
+export const DISPOSITION_SUBJECT_KINDS = ['selection'];
+export const DISPOSITION_CANDIDATE_KINDS = ['content-revision'];
+export const DISPOSITIONS = ['keep-current', 'skip', 'defer'];
 export const MAX_SAVED_INTENT_BYTES = 1_000_000;
 export const MAX_ENVELOPE_BYTES = 2_000_000;
 // True for an envelope of any version, so an unsupported one is refused as such rather than read as a policy.
@@ -26,6 +36,34 @@ const stable = value => JSON.stringify(value, (_key, member) => member && typeof
 const ok = (value, diagnostics = []) => ({ status: 'ok', value, diagnostics });
 const refuse = (code, path, message, originalBytes) => ({ status: 'refused', diagnostics: [{ code, path, message }], ...(originalBytes ? { originalBytes: originalBytes.slice() } : {}) });
 const encode = value => new TextEncoder().encode(value);
+const utc = value => typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(value)
+  && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 19) === value.slice(0, 19);
+export const isUtcTimestamp = utc;
+const calendarDate = value => typeof value === 'string' && /^\d{4}-\d\d-\d\d$/.test(value)
+  && !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+const dispositionRef = (value, kinds) => only(value, ['kind', 'releaseSha256', 'itemId', 'itemSha256']) && kinds.includes(value.kind)
+  && hash(value.releaseSha256) && typeof value.itemId === 'string' && idPattern.test(value.itemId) && hash(value.itemSha256);
+// JSON pointer (relative to the record) of the first violation of the closed disposition shape, else null.
+export function dispositionProblem(record) {
+  if (!only(record, ['id', 'schema', 'required', 'category', 'subject', 'scope', 'candidate', 'disposition', 'recordedAt'], ['reason', 'deferUntil'])) return '';
+  if (record.schema !== MAINTENANCE_DISPOSITION_RECORD_SCHEMA) return '/schema';
+  if (typeof record.id !== 'string' || !/^disposition-[a-f0-9]{32}$/.test(record.id)) return '/id';
+  if (record.required !== false) return '/required';
+  if (!DISPOSITION_CATEGORIES.includes(record.category)) return '/category';
+  if (!dispositionRef(record.subject, DISPOSITION_SUBJECT_KINDS)) return '/subject';
+  if (!['project', 'user'].includes(record.scope)) return '/scope';
+  if (!dispositionRef(record.candidate, DISPOSITION_CANDIDATE_KINDS)
+    || (record.candidate.releaseSha256 === record.subject.releaseSha256 && record.candidate.itemSha256 === record.subject.itemSha256)) return '/candidate';
+  if (!DISPOSITIONS.includes(record.disposition)) return '/disposition';
+  if (!utc(record.recordedAt)) return '/recordedAt';
+  if (record.reason !== undefined && (typeof record.reason !== 'string' || record.reason.length < 1 || record.reason.length > 1000)) return '/reason';
+  if (record.deferUntil !== undefined && (record.disposition !== 'defer' || !calendarDate(record.deferUntil))) return '/deferUntil';
+  return null;
+}
+// One record per exact (category, subject, scope, candidate); setting it again replaces it.
+export async function dispositionId({ category, subject, scope, candidate }) {
+  return `disposition-${(await digestBytes(encode(stable({ category, subject, scope, candidate })))).slice(0, 32)}`;
+}
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 export function encodeBase64(bytes) {
   let text = '';
@@ -65,6 +103,7 @@ function shapeProblem(envelope) {
     const path = `/records/${index}`;
     if (!object(record) || typeof record.id !== 'string' || !idPattern.test(record.id) || typeof record.schema !== 'string' || !recordSchemaUrn.test(record.schema) || typeof record.required !== 'boolean') return path;
     if (record.schema === DRAFT_RECORD_SCHEMA && (!only(record, ['id', 'schema', 'required', 'savedIntentSha256', 'intent']) || record.required !== true || !hash(record.savedIntentSha256) || !object(record.intent))) return path;
+    if (record.schema === MAINTENANCE_DISPOSITION_RECORD_SCHEMA && dispositionProblem(record) !== null) return path;
   }
   return null;
 }
@@ -98,6 +137,8 @@ export async function readJourneyEnvelope(bytes) {
   for (const [index, record] of envelope.records.entries()) {
     if (record.schema === DRAFT_RECORD_SCHEMA) {
       if (!checkIntentShape(record.intent)) return refuse('FIELD_SEMANTICS_UNSUPPORTED', `/records/${index}/intent`, 'Draft intent violates the supported saved-intent shape.', originalBytes);
+    } else if (record.schema === MAINTENANCE_DISPOSITION_RECORD_SCHEMA) {
+      if (record.id !== await dispositionId(record)) return refuse('INPUT_INVALID', `/records/${index}/id`, 'Disposition id must derive from its category, subject, scope and candidate.', originalBytes);
     } else if (record.required) {
       supported = false;
       diagnostics.push({ code: 'JOURNEY_RECORD_UNSUPPORTED', path: `/records/${index}`, message: `Required record ${record.id} has unsupported schema ${record.schema}; it can be read but not changed.` });
@@ -115,14 +156,21 @@ export async function writeJourneyEnvelope({ savedIntentBytes, records, previous
   const sha256 = await digestBytes(savedIntentBytes), written = [];
   for (const [index, record] of records.entries()) {
     const path = `/records/${index}`;
+    if (record?.schema === MAINTENANCE_DISPOSITION_RECORD_SCHEMA) {
+      const problem = dispositionProblem(record);
+      if (problem !== null) return refuse('INPUT_INVALID', `${path}${problem}`, 'Supply a closed maintenance-disposition record.');
+      if (record.id !== await dispositionId(record)) return refuse('INPUT_INVALID', `${path}/id`, 'Disposition id must derive from its category, subject, scope and candidate.');
+      written.push(structuredClone(record));
+      continue;
+    }
     if (!only(record, ['id', 'schema', 'required', 'intent'], ['savedIntentSha256']) || typeof record.id !== 'string' || !idPattern.test(record.id)) return refuse('INPUT_INVALID', path, 'Supply {id,schema,required,intent} records.');
-    if (!(record.schema in JOURNEY_RECORD_SCHEMAS)) return refuse('JOURNEY_RECORD_UNSUPPORTED', `${path}/schema`, 'Only supported record schemas can be written.');
+    if (!Object.hasOwn(JOURNEY_RECORD_SCHEMAS, record.schema)) return refuse('JOURNEY_RECORD_UNSUPPORTED', `${path}/schema`, 'Only supported record schemas can be written.');
     if (record.required !== true) return refuse('INPUT_INVALID', `${path}/required`, 'The unresolved-draft record is required.');
     if (record.savedIntentSha256 !== undefined && record.savedIntentSha256 !== sha256) return refuse('JOURNEY_REFERENCE_MISMATCH', `${path}/savedIntentSha256`, 'Record references different saved-intent bytes.');
     if (!checkIntentShape(record.intent)) return refuse('FIELD_SEMANTICS_UNSUPPORTED', `${path}/intent`, 'Draft intent violates the supported saved-intent shape.');
     written.push({ id: record.id, schema: record.schema, required: true, savedIntentSha256: sha256, intent: structuredClone(record.intent) });
   }
-  const preserved = (previous?.envelope.records ?? []).filter(record => !(record.schema in JOURNEY_RECORD_SCHEMAS)).map(record => structuredClone(record));
+  const preserved = (previous?.envelope.records ?? []).filter(record => !known(record.schema)).map(record => structuredClone(record));
   const all = [...written, ...preserved];
   if (new Set(all.map(record => record.id)).size !== all.length) return refuse('INPUT_INVALID', '/records', 'Record ids must be unique.');
   const sequence = previous ? previous.envelope.revision.sequence + 1 : 1;
@@ -138,5 +186,5 @@ export async function writeJourneyEnvelope({ savedIntentBytes, records, previous
 export function projectJourneyEnvelope(envelope) {
   return { id: envelope.id, schema: envelope.schema, revision: { ...envelope.revision }, executable: false,
     savedIntent: { sha256: envelope.savedIntent.sha256, byteLength: envelope.savedIntent.byteLength },
-    records: envelope.records.map(record => ({ id: record.id, schema: record.schema, required: record.required, supported: record.schema in JOURNEY_RECORD_SCHEMAS })) };
+    records: envelope.records.map(record => ({ id: record.id, schema: record.schema, required: record.required, supported: known(record.schema) })) };
 }

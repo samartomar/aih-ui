@@ -1,9 +1,10 @@
 import { intakeDeclaration, digestBytes } from './intake.mjs';
 import { composeAuthoring, readAuthoring, reconcileAuthoring, editAuthoring, freshAuthoring, stable, refuse, inspectReviewEvidence, recordReview, reconsiderReviews, openDraft, editDraft, compileDraft } from './headless.mjs';
+import { checkMaintenance, recordMaintenance } from './maintenance.mjs';
 import { noteFixture } from './note-fixture.mjs';
 const encode = value => new TextEncoder().encode(value);
 const bytesOf = value => Array.isArray(value) ? Uint8Array.from(value) : undefined;
-export async function createMixedService(maintained, { suppliedInventories, familyInventories = [] } = {}) {
+export async function createMixedService(maintained, { suppliedInventories, familyInventories = [], maintenanceSource } = {}) {
   async function supplied(snapshot, id = 'notes') {
     const input = { id, kind: 'local', locator: { input: id }, resolvedIdentity: { sha256: await digestBytes(snapshot.declarationBytes) } };
     const result = await intakeDeclaration({ input, ...snapshot, materialSource: { kind: 'local', input: id } });
@@ -47,6 +48,13 @@ export async function createMixedService(maintained, { suppliedInventories, fami
       if (operation === 'draft-open') return openDraft({ bytes: bytesOf(body.bytes), inventories: available, ...reviewContext });
       if (operation === 'draft-edit') return editDraft({ envelopeBytes: bytesOf(body.envelopeBytes), inventories: available, operation: body.operation, ...reviewContext });
       if (operation === 'draft-compile') return compileDraft({ envelopeBytes: bytesOf(body.envelopeBytes), inventories: available, ...(Array.isArray(body.roots) ? { roots: body.roots } : {}), ...reviewContext });
+      // Host-configured source only; unreachable (null or a failure) is offline, never an empty update list.
+      if (operation === 'maintenance-check') {
+        const candidateInventories = maintenanceSource ? await Promise.resolve().then(() => maintenanceSource()).catch(() => null) : all;
+        return checkMaintenance({ envelopeBytes: bytesOf(body.envelopeBytes), inventories: all, candidateInventories: candidateInventories ?? null,
+          ...(body.categories !== undefined ? { categories: body.categories } : {}), now: new Date().toISOString() });
+      }
+      if (operation === 'maintenance-record') return recordMaintenance({ envelopeBytes: bytesOf(body.envelopeBytes), operation: body.operation, now: new Date().toISOString() });
       if (operation === 'compose') return composeAuthoring({ basePolicyBytes: policyBytes, intent: body.intent, inventories: all, ...reviewContext });
       if (operation === 'edit') return editAuthoring({ policyBytes, inventories: all, operation: body.operation, ...reviewContext });
       if (operation === 'reconcile') return reconcileAuthoring({ savedPolicyBytes: policyBytes, inventories: all, candidateInventories: candidates(body.candidateMode), ...reviewContext });

@@ -1,7 +1,29 @@
 // Reuse the installed application's authoring host; it owns validation and grants.
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
+
+// Demo/test host input: a small JSON file { "revisions": ["updated"] } naming note-fixture variants to publish
+// as newer revisions of the same `notes` input. Read at each check; anything unreadable is offline (null).
+const MAINTENANCE_SOURCE_BYTES = 4096, MAINTENANCE_REVISIONS = ['current', 'updated', 'additional'];
+async function fileMaintenanceSource(consumerDir, path) {
+  const load = name => import(pathToFileURL(join(consumerDir, 'consumer', name)).href);
+  const [{ noteFixture }, { intakeDeclaration, digestBytes }] = await Promise.all([load('note-fixture.mjs'), load('intake.mjs')]);
+  return async () => {
+    try {
+      if ((await stat(path)).size > MAINTENANCE_SOURCE_BYTES) return null;
+      const { revisions } = JSON.parse(await readFile(path, 'utf8'));
+      if (!Array.isArray(revisions) || revisions.length > 8 || revisions.some(name => !MAINTENANCE_REVISIONS.includes(name))) return null;
+      return await Promise.all([...new Set(revisions)].map(async name => {
+        const snapshot = await noteFixture(name);
+        const input = { id: 'notes', kind: 'local', locator: { input: 'notes' }, resolvedIdentity: { sha256: await digestBytes(snapshot.declarationBytes) } };
+        const result = await intakeDeclaration({ input, ...snapshot, materialSource: { kind: 'local', input: 'notes' } });
+        if (result.status !== 'ok') throw new Error('maintenance revision refused');
+        return result.value;
+      }));
+    } catch { return null; }
+  };
+}
 
 export async function createAuthoringAdapter(consumerDir) {
   const { startConsumer } = await import(pathToFileURL(join(consumerDir, 'consumer/server.mjs')).href);
@@ -10,7 +32,8 @@ export async function createAuthoringAdapter(consumerDir) {
     controls: await selectedJson('AIH_CONSUMER_CONTROLS'),
     organizationSource: await selectedJson('AIH_ORGANIZATION_SOURCE'),
     reviewTrust: await selectedJson('AIH_REVIEW_TRUST'),
-    previousCatalogRoot: process.env.AIH_CONSUMER_PREVIOUS_CATALOG });
+    previousCatalogRoot: process.env.AIH_CONSUMER_PREVIOUS_CATALOG,
+    ...(process.env.AIH_MAINTENANCE_SOURCE ? { maintenanceSource: await fileMaintenanceSource(consumerDir, process.env.AIH_MAINTENANCE_SOURCE) } : {}) });
   return {
     catalog: async () => (await fetch(host.origin + '/api/authoring-catalog')).json(),
     close: () => host.server.close(),

@@ -142,7 +142,24 @@
               "type": "boolean"
             }
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "schema"
+              ],
+              "properties": {
+                "schema": {
+                  "const": "urn:aihq:workbench:journey-record:maintenance-disposition:1.0.0"
+                }
+              }
+            },
+            "then": {
+              "$ref": "urn:aihq:workbench:journey-record:maintenance-disposition:1.0.0"
+            }
+          }
+        ]
       }
     }
   }

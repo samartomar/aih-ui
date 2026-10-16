@@ -1,4 +1,5 @@
 import { el } from './dom.js';
+import { createUpdatesView } from './updates-view.js';
 import { authorityFromResult, changeSummary, compareRevision, reviewFreshness, revisionOf, setupInstructions, sourceRows, staleReviewMessage } from './authority-source.js';
 import { isJourneyEnvelope, importLimitError } from './authoring-client.js';
 
@@ -252,6 +253,7 @@ export function createAuthoringWorkspace(client) {
   const draftActions = el('div', 'flex flex-wrap gap-2'); draftActions.append(draftSave, compileAll, compileResolved);
   draftSection.append(draftTitle, draftNote, draftRoots, draftMissing, draftChanges, draftActions, draftSaveNote, compileNote, draftStatus);
   choices.after(draftSection);
+  const updates = createUpdatesView({ client, el, button, showStatus }); draftSection.after(updates.node);
   const itemLabel = ref => client.catalog?.items.find(item => item.id === ref.itemId && item.root.releaseSha256 === ref.releaseSha256)?.label ?? ref.itemId ?? ref.templateId ?? ref.id;
   const blocker = entry => {
     const what = entry.kind === 'root' ? 'its exact source' : entry.kind === 'dependency' ? `required item ${itemLabel(entry.ref)}`
@@ -324,6 +326,7 @@ export function createAuthoringWorkspace(client) {
     if (result.status !== 'ok' || !client.draft) return false;
     const draft = client.draft, open = draft.roots.filter(root => root.status === 'unresolved').length;
     original = draft.savedIntentBytes.slice(); optional = [];
+    updates.open();
     render();
     showStatus(draft.editing === 'unresolved'
       ? `Unresolved draft opened: ${draft.roots.length} saved ${draft.roots.length === 1 ? 'choice' : 'choices'} kept, ${open} unresolved. Nothing was dropped and no other revision was substituted. Rebind the saved sources in Sources & Catalogs and validate again, or edit the draft and compile its resolved choices. Availability: ${[...new Set(draft.diagnostics.map(diagnostic => diagnostic.code))].join(', ')}.`
@@ -378,7 +381,7 @@ export function createAuthoringWorkspace(client) {
       const exclusion = { originId: intent?.origins.find(origin => origin.kind === 'direct')?.id ?? intent?.origins[0]?.id, ...suggestion.to };
       accepted.append(button(`${suggestion.skipped ? 'Clear skip' : 'Skip optional'} ${suggestion.to.itemId}`, safe(async () => present(await client.propose({ type: suggestion.skipped ? 'unskip' : 'skip', exclusion })))));
     }
-    renderDraft();
+    renderDraft(); updates.render();
     host.textContent = draft && !intent ? 'Prepare and Apply are unavailable: this draft is not an executable policy. Compile a resolved scope first; the compiled policy is then reviewed with the exact host effects.'
       : client.catalog?.executionAvailable
       ? 'Execution host connected. Prepare and Apply require target review; Enterprise also requires current organization authority.'
