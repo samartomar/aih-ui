@@ -79,7 +79,7 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
   const safe = action => async () => { try { await action(); } catch (error) { report(error.message); } };
   const identify = (control, id) => { control.id = id; return control; };
   const action = (label, id, run) => identify(button(label, safe(run)), id);
-  const fieldClass = 'bg-wb-input text-on-surface border border-wb-border rounded p-1';
+  const fieldClass = 'bg-wb-input text-on-surface border border-wb-border rounded p-1 max-w-full text-[11px]';
   function input(label, id, value = '') {
     const control = identify(el('input', fieldClass), id); control.type = 'text'; control.value = value; control.setAttribute('aria-label', label); return control;
   }
