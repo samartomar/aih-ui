@@ -44,7 +44,7 @@ const LOCAL_OR_SECRET = [/(?<![A-Za-z0-9])[A-Za-z]:[\\/]/, /\\\\/, /\bfile:/i, n
 // `password: value`: a value of six or more characters that holds a digit or a symbol (not a plain word such as "reset").
 const labelledSecret = value => [...value.matchAll(/\b(?:password|passwd|secret|api[_-]?key)\s*:\s*(\S+)/gi)].some(([, found]) => { const token = found.replace(/[.,;)\]"']+$/, ''); return token.length >= 6 && /[^A-Za-z]/.test(token); });
 export const unsafeText = value => typeof value === 'string' && (LOCAL_OR_SECRET.some(pattern => pattern.test(value)) || labelledSecret(value));
-const plain = (value, max) => typeof value === 'string' && value.length >= 1 && value.length <= max && !/[\x00-\x1f\x7f]/.test(value);
+export const plain = (value, max) => typeof value === 'string' && value.length >= 1 && value.length <= max && !/[\x00-\x1f\x7f]/.test(value);
 const text = (value, max) => plain(value, max) && !unsafeText(value);
 export const isSlug = value => typeof value === 'string' && slugPattern.test(value);
 // A path inside the repository: never absolute, never above or inside a special segment.
@@ -111,7 +111,7 @@ export function identityOf(value) {
   return (typed ? remoteIdentity(`https://${text}`) : remoteIdentity(text) ?? remoteIdentity(`https://${text}`))?.identity ?? null;
 }
 // ---- Checkout roots ------------------------------------------------------------------------------------------------
-const absoluteRoot = value => plain(value, 1024) && /^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(value);
+export const absoluteRoot = value => plain(value, 1024) && /^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(value);
 const rootKey = root => { const key = root.replaceAll('\\', '/').replace(/\/+$/, ''); return /^(?:[A-Za-z]:|\/\/)/.test(key) ? key.toLowerCase() : key; };
 // Whether two spellings name the same folder (drive and UNC paths compare case-insensitively).
 export const sameRoot = (a, b) => rootKey(a) === rootKey(b);

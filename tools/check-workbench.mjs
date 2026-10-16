@@ -46,6 +46,7 @@ if (process.exitCode === 0) {
   process.exitCode = browser.status ?? 1;
 }
 if (process.exitCode === 0) {
+  // The reviewed-batch journey runs several fresh Core prepares and applies, in a disposable account home, so this stage takes longer.
   const integrated = spawnSync(process.execPath, [join(repo, 'tools/check-integrated-workbench.mjs'), output], {
     cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 300_000,
   });

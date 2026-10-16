@@ -5,19 +5,44 @@ import { digestBytes } from './intake.mjs';
 import { refuse, stable } from './headless.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { isUtcTimestamp, UPDATE_CATEGORIES } from './maintenance-record.mjs';
-import { batchProblem, batchDerivedProblem, batchId, deriveChecks, BATCH_RECORD_SCHEMA, CONTINUATIONS } from './batch-record.mjs';
+import { batchProblem, batchDerivedProblem, batchId, deriveChecks, BATCH_RECORD_SCHEMA, BATCH_ID_PATTERN, CONTINUATIONS, MAX_ACTIONS } from './batch-record.mjs';
 export const BATCH_SCHEMA = BATCH_RECORD_SCHEMA;
-export { CONTINUATIONS, UPDATE_CATEGORIES };
+export { BATCH_ID_PATTERN, CONTINUATIONS, MAX_ACTIONS, UPDATE_CATEGORIES };
 const isBatch = record => record.schema === BATCH_RECORD_SCHEMA;
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 const sameBytes = (a, b) => a instanceof Uint8Array && a.length === b.length && a.every((byte, index) => byte === b[index]);
 const unique = value => Array.isArray(value) ? [...new Set(value)].sort(compare) : value;
-// Display projection: ids, labels and counts only; never bytes, sessions or outcomes.
-export function projectBatch(record) {
+// Operations whose result a fresh Prepare can show as already in place. A `process.run` is opaque: Core's published interface cannot
+// establish that an earlier process ran, so an action holding one is never judged by inspection.
+const FILE_LIKE = ['file.write', 'config.entries', 'text.block', 'file.remove', 'hook.group'];
+const inlineRecipe = selection => {
+  const recipe = selection?.recipe, inline = recipe?.inline;
+  return recipe && Object.keys(recipe).length === 1 && inline && typeof inline === 'object' && !Array.isArray(inline) ? inline : null;
+};
+// Whether a fresh Prepare can tell if this selection's result stands (false when its recipe cannot be inspected).
+export const isVerifiable = selection => {
+  const operations = inlineRecipe(selection)?.operations;
+  return Array.isArray(operations) && operations.length > 0 && operations.every(operation => FILE_LIKE.includes(operation?.kind));
+};
+// The shared inputs a selection reads: the local sources of the materials its inline recipe declares (an archive is pinned by its own
+// digest). Null when the recipe cannot be inspected through its declared fields.
+function recipeInputs(selection) {
+  const materials = inlineRecipe(selection)?.materials, found = new Set();
+  if (!Array.isArray(materials)) return null;
+  for (const material of materials) {
+    const source = material?.source;
+    if (source?.kind === 'local' && typeof source.input === 'string') found.add(source.input);
+    else if (source?.kind !== 'archive') return null;
+  }
+  return [...found].sort(compare);
+}
+// Display projection: ids, labels and counts only; never bytes, sessions or outcomes. `unverifiable` names the actions
+// whose result Core cannot confirm (see isVerifiable); it needs the saved policy, so only the readers that hold it supply it.
+export function projectBatch(record, unverifiable = []) {
   return { id: record.id, ...(record.supersedes !== undefined ? { supersedes: record.supersedes } : {}), recordedAt: record.recordedAt, categories: [...record.categories], continuation: record.continuation,
     scopes: record.scopes.map(scope => ({ id: scope.id, role: scope.role, client: scope.client, root: scope.target.root })),
     inputs: record.inputs.map(input => ({ id: input.id, sha256: input.sha256, byteLength: input.byteLength })),
-    actions: record.actions.map(action => ({ id: action.id, scope: action.scope, category: action.category, selection: { ...action.selection }, inputs: [...action.inputs], requires: [...action.requires], retain: action.retain === true })),
+    actions: record.actions.map(action => ({ id: action.id, scope: action.scope, category: action.category, selection: { ...action.selection }, inputs: [...action.inputs], requires: [...action.requires], retain: action.retain === true, unverifiable: unverifiable.includes(action.id) })),
     checks: record.checks.map(check => ({ ...check })) };
 }
 // The selections of the saved policy bytes, or null when they are not a policy object with a selection list.
@@ -27,6 +52,7 @@ function selectionsOf(policyBytes) {
     return Array.isArray(policy?.selections) ? policy.selections : null;
   } catch { return null; }
 }
+const unverifiableOf = (record, policyBytes) => { const selections = selectionsOf(policyBytes) ?? []; return record.actions.filter(action => !isVerifiable(selections.find(selection => selection?.id === action.selection.id))).map(action => action.id); };
 // {path,message} of the first disagreement between the record and the saved policy it binds, else null.
 async function policyProblem(record, policyBytes) {
   const selections = selectionsOf(policyBytes);
@@ -35,10 +61,14 @@ async function policyProblem(record, policyBytes) {
     const selection = selections.find(candidate => candidate?.id === action.selection.id);
     if (!selection || await digestBytes(new TextEncoder().encode(stable(selection))) !== action.selection.sha256)
       return { path: `/actions/${index}/selection`, message: 'The action must bind a selection of the saved policy by id and digest.' };
-    // Core `requires` between selections of the same scope are mirrored as action requires, so the reviewed order cannot hide them.
+    const inputs = recipeInputs(selection);
+    if (!inputs) return { path: `/actions/${index}/selection`, message: 'The recipe of this selection cannot be inspected through its declared fields, so a batch cannot check its shared inputs.' };
+    if (JSON.stringify(inputs) !== JSON.stringify(action.inputs)) return { path: `/actions/${index}/inputs`, message: `The action's inputs must be exactly the shared material its recipe reads: ${inputs.join(', ') || 'none'}.` };
+    // The host prepares one action at a time without Core's `requires`, so each must be carried by an action of the same scope that the action requires.
     for (const required of Array.isArray(selection.requires) ? selection.requires : []) {
       const needed = record.actions.find(other => other.scope === action.scope && other.selection.id === required);
-      if (needed && !action.requires.includes(needed.id)) return { path: `/actions/${index}/requires`, message: `The selection requires ${required}, so the action must require ${needed.id}.` };
+      if (!needed) return { path: `/actions/${index}/requires`, message: `The selection requires ${required}, which no action of scope ${action.scope} carries.` };
+      if (!action.requires.includes(needed.id)) return { path: `/actions/${index}/requires`, message: `The selection requires ${required}, so the action must require ${needed.id}.` };
     }
   }
   return null;
@@ -74,7 +104,7 @@ async function assemble({ read, policyBytes, fields, replaces = [], envelopeByte
   const written = await writeJourneyEnvelope({ savedIntentBytes: policyBytes, records, previous: read.envelope ? read : undefined });
   if (written.status !== 'ok') return { ...written, ...(envelopeBytes ? { originalBytes: envelopeBytes.slice() } : {}) };
   const { envelope, envelopeBytes: bytes } = written.value;
-  return { status: 'ok', diagnostics: [], value: { envelopeBytes: bytes, envelope, record: copy(record), projection: projectBatch(record) } };
+  return { status: 'ok', diagnostics: [], value: { envelopeBytes: bytes, envelope, record: copy(record), projection: projectBatch(record, unverifiableOf(record, policyBytes)) } };
 }
 const emptyRead = { records: [], savedIntentBytes: null };
 // A person's plan. With `envelopeBytes` the batch is added to that envelope (its saved policy is the one the actions bind); without
@@ -91,7 +121,8 @@ export async function planBatch({ envelopeBytes, savedPolicyBytes, scopes, input
   if (!(policyBytes instanceof Uint8Array)) return refuse('INPUT_INVALID', '/savedPolicyBytes', 'Supply the saved execution policy bytes.', envelopeBytes);
   return assemble({ read, policyBytes, fields: { scopes, inputs, actions, continuation, categories, now, supersedes }, envelopeBytes });
 }
-// The record (latest unless `batchId` names one), its projection and whether another batch has superseded it.
+// The record (latest unless `batchId` names one), its projection, whether another batch has superseded it and whether the
+// envelope is `supported` (an unknown required record makes it read-only: it can be reviewed, never run, recovered or changed).
 export async function readBatch({ envelopeBytes, batchId: wanted } = {}) {
   const loaded = await load(envelopeBytes);
   if (loaded.status !== 'ok') return loaded;
@@ -100,7 +131,7 @@ export async function readBatch({ envelopeBytes, batchId: wanted } = {}) {
   if (!record) return refuse('BATCH_NOT_FOUND', '/batchId', wanted !== undefined ? 'No recorded batch has that id.' : 'The envelope records no reviewed batch.', envelopeBytes);
   const bound = await policyProblem(record, loaded.value.savedIntentBytes);
   if (bound) return refuse('INPUT_INVALID', bound.path, bound.message, envelopeBytes);
-  return { status: 'ok', diagnostics: loaded.diagnostics, value: { record: structuredClone(record), projection: projectBatch(record), current: current.includes(record), savedPolicyBytes: loaded.value.savedIntentBytes.slice(),
+  return { status: 'ok', diagnostics: loaded.diagnostics, value: { record: structuredClone(record), projection: projectBatch(record, unverifiableOf(record, loaded.value.savedIntentBytes)), current: current.includes(record), supported: loaded.value.supported, savedPolicyBytes: loaded.value.savedIntentBytes.slice(),
     batches: batches.map(other => ({ id: other.id, ...(other.supersedes !== undefined ? { supersedes: other.supersedes } : {}), current: current.includes(other) })) } };
 }
 // The person's independent-continuation choice. Content derives the id, so this writes a new record in place of the old one

@@ -171,17 +171,20 @@ const localBinding = { $schema: 'https://json-schema.org/draft/2020-12/schema', 
 //     the checks are exactly the set the batch discloses (one per input, two per scope, one per action);
 //   - categories, scopes, inputs, action inputs, action requires and checks are sorted by id and unique, and no two scopes share a root;
 //   - action order is the reviewed execution order: every required action appears earlier (so there is no cycle);
+//   - action ids are unique, and a superseding batch names a different batch than itself;
 //   - every action scope, category and input is declared, and every declared scope, category and input is used;
 //   - recordedAt must be a real calendar timestamp.
-// Selection digests and Core `requires` mirroring are checked against the envelope's saved policy when the batch is read.
+// Against the envelope's saved policy, when the batch is read: each selection is bound by id and digest, every Core `requires` of a
+// selection is covered by an action of the same scope that the action requires, and an action's inputs are exactly the local material
+// sources its inline recipe declares.
 const batchSlug = { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,63}$' }, batchIdPattern = { type: 'string', pattern: '^batch-[a-f0-9]{32}$' };
 const batchAction = shape({ id: batchSlug, scope: batchSlug, category: updateCategory, selection: shape({ id, sha256: hash }),
   inputs: { type: 'array', maxItems: 64, uniqueItems: true, items: batchSlug }, requires: { type: 'array', maxItems: 256, uniqueItems: true, items: batchSlug }, retain: { const: true } }, ['retain']);
 const reviewedBatch = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: batchRecord, ...shape({
   id: batchIdPattern, schema: { const: batchRecord }, required: { const: false }, recordedAt: utcTimestamp,
   categories: { type: 'array', minItems: 1, maxItems: 4, uniqueItems: true, items: updateCategory }, continuation: { enum: ['stop', 'continue-independent'] },
-  scopes: { type: 'array', minItems: 1, maxItems: 16, items: shape({ id: batchSlug, role: { enum: ['existing', 'added'] }, client: { type: 'string', minLength: 1, maxLength: 128 },
-    target: shape({ kind: { const: 'project' }, root: { type: 'string', minLength: 1, maxLength: 1024, pattern: String.raw`^(?:[A-Za-z]:[\\/]|\\\\|/)` } }) }) },
+  scopes: { type: 'array', minItems: 1, maxItems: 16, items: shape({ id: batchSlug, role: { enum: ['existing', 'added'] }, client: { type: 'string', minLength: 1, maxLength: 128, pattern: String.raw`^[^\x00-\x1f\x7f]+$` },
+    target: shape({ kind: { const: 'project' }, root: { type: 'string', minLength: 1, maxLength: 1024, pattern: String.raw`^(?:[A-Za-z]:[\\/]|\\\\|/)[^\x00-\x1f\x7f]*$` } }) }) },
   inputs: { type: 'array', maxItems: 64, items: shape({ id: batchSlug, kind: { const: 'material' }, sha256: hash, byteLength: { type: 'integer', minimum: 0 } }) },
   actions: { type: 'array', minItems: 1, maxItems: 256, items: batchAction },
   checks: { type: 'array', maxItems: 512, items: shape({ id: { type: 'string', pattern: '^check-[a-f0-9]{32}$' }, kind: { enum: ['shared-input', 'unrelated-state', 'conflict', 'core-review'] }, subject: batchSlug }) },

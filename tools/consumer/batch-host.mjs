@@ -8,7 +8,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { nativeClientIds } from '@aihq/core/harness';
 import { createHost } from './host.mjs';
 import { refuse, stable } from './headless.mjs';
-import { readBatch, planBatch } from './batch.mjs';
+import { readBatch, planBatch, isVerifiable } from './batch.mjs';
 const MAX_MATERIAL_FILES = 2000, MAX_SNAPSHOT_ENTRIES = 2000, MAX_SNAPSHOT_BYTES = 256 * 1024 * 1024;
 const FAULTS = ['stale-target'];
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -99,7 +99,12 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
   async function open(envelopeBytes, batchId) {
     const read = await readBatch({ envelopeBytes, batchId });
     if (read.status !== 'ok') return read;
-    return { status: 'ok', value: { record: read.value.record, current: read.value.current, policy: JSON.parse(new TextDecoder().decode(read.value.savedPolicyBytes)) } };
+    return { status: 'ok', value: { record: read.value.record, current: read.value.current, supported: read.value.supported, diagnostics: read.diagnostics, policy: JSON.parse(new TextDecoder().decode(read.value.savedPolicyBytes)) } };
+  }
+  // An envelope with a required record this Workbench does not know is read-only: it may be reviewed, never run, recovered or changed.
+  function unsupported({ diagnostics }, envelopeBytes) {
+    const first = diagnostics.find(diagnostic => diagnostic.code === 'JOURNEY_RECORD_UNSUPPORTED');
+    return refuse('JOURNEY_RECORD_UNSUPPORTED', first?.path ?? '/records', first?.message ?? 'The envelope holds a required record this Workbench does not support.', envelopeBytes);
   }
   const selectionOf = (policy, action) => policy.selections.find(selection => selection.id === action.selection.id);
   async function checkInput(record, id) {
@@ -160,12 +165,14 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
     async reviewBatch({ envelopeBytes, batchId } = {}) {
       const opened = await open(envelopeBytes, batchId);
       if (opened.status !== 'ok') return opened;
-      return { status: 'ok', diagnostics: [], batchId: opened.value.record.id, ...(await inspect(opened.value)).value };
+      const { value } = await inspect(opened.value);
+      return { status: 'ok', diagnostics: opened.value.diagnostics, batchId: opened.value.record.id, ...value, ready: value.ready && opened.value.supported };
     },
     async runBatch({ envelopeBytes, batchId, approve } = {}) {
       const opened = await open(envelopeBytes, batchId);
       if (opened.status !== 'ok') return opened;
       const { record, policy, current } = opened.value;
+      if (!opened.value.supported) return unsupported(opened.value, envelopeBytes);
       if (approve?.batchId !== record.id) return refuse('BATCH_APPROVAL_REQUIRED', '/approve', 'Approval must name the exact batch id that was reviewed.', envelopeBytes);
       if (!current) return refuse('BATCH_SUPERSEDED', '/batchId', 'A later batch superseded this one; review and run the current batch.', envelopeBytes);
       const { value: review, targets } = await inspect(opened.value);
@@ -178,9 +185,15 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
         const host = hosts.get(action.scope), selection = selectionOf(policy, action);
         const end = (outcome, reason, core) => { const result = { id: action.id, scope: action.scope, outcome, reason: reason ?? null, ...(core ? { core } : {}) }; results.set(action.id, result); broke ||= outcome === 'failed' || outcome === 'unknown'; return result; };
         const unmet = action.requires.map(id => results.get(id)).find(result => !satisfied(result));
-        if (unmet) { end('cancelled', `dependency-${unmet.outcome}`); continue; }
+        if (unmet) { end('cancelled', unmet.reason === 'retained-unverifiable' ? 'dependency-unverifiable' : `dependency-${unmet.outcome}`); continue; }
         if (record.continuation === 'stop' && broke) { end('untouched', 'stopped-by-choice'); continue; }
-        if (action.retain === true) { end('untouched', await observeRetained(host, policy, selection)); continue; }
+        if (action.retain === true) {
+          // Only an inspectable result can be shown to stand. One that no longer does is a failure, not a quiet skip.
+          if (!isVerifiable(selection)) end('untouched', 'retained-unverifiable');
+          else if (await observeRetained(host, policy, selection) === 'retained-earlier-result') end('untouched', 'retained-earlier-result');
+          else end('failed', 'retained-result-missing');
+          continue;
+        }
         const drift = (await Promise.all(action.inputs.map(id => checkInput(record, id)))).find(entry => !entry.ok);
         if (drift) { end('failed', 'shared-input-changed'); continue; }
         const prepared = await prepareSelections(host, policy, [selection]);
@@ -200,14 +213,23 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
       return { status: 'ok', diagnostics: [], batchId: record.id, actions, scopes: record.scopes.map((scope, index) => ({ id: scope.id, unrelated: unrelatedOutcome(before[index], after[index]) })), counts, atomic: false };
     },
     // Reinspects current state and writes a superseding batch. The caller's `outcome` is accepted for display only and never
-    // trusted: an action is retained only when a fresh Prepare shows its result still stands or the person changed what Core manages.
-    async recoverBatch({ envelopeBytes, batchId, now } = {}) {
+    // trusted: a verifiable action is retained only when a fresh Prepare shows its result still stands or the person changed what Core
+    // manages. An unverifiable one (an opaque process) is retained too, and runs again only if the person names it in `rerun`.
+    async recoverBatch({ envelopeBytes, batchId, rerun = [], now } = {}) {
       const opened = await open(envelopeBytes, batchId);
       if (opened.status !== 'ok') return opened;
       const { record, policy, current } = opened.value;
+      if (!opened.value.supported) return unsupported(opened.value, envelopeBytes);
       if (!current) return refuse('BATCH_SUPERSEDED', '/batchId', 'Only the current batch can be recovered.', envelopeBytes);
+      if (!Array.isArray(rerun)) return refuse('INPUT_INVALID', '/rerun', 'Supply the actions to run again as a list of action ids.', envelopeBytes);
       const hosts = new Map(record.scopes.map(scope => [scope.id, hostAt(scope.target.root)]));
-      const kept = await Promise.all(record.actions.map(async action => (await observeRetained(hosts.get(action.scope), policy, selectionOf(policy, action))) === 'retained-earlier-result'));
+      const stands = action => observeRetained(hosts.get(action.scope), policy, selectionOf(policy, action)).then(seen => seen === 'retained-earlier-result');
+      for (const [index, id] of rerun.entries()) {
+        const action = record.actions.find(candidate => candidate.id === id);
+        if (!action) return refuse('BATCH_RERUN_REFUSED', `/rerun/${index}`, 'No action of this batch has that id.', envelopeBytes);
+        if (isVerifiable(selectionOf(policy, action)) && await stands(action)) return refuse('BATCH_RERUN_REFUSED', `/rerun/${index}`, 'Finished work Core can verify is kept, never run again.', envelopeBytes);
+      }
+      const kept = await Promise.all(record.actions.map(action => isVerifiable(selectionOf(policy, action)) ? stands(action) : !rerun.includes(action.id)));
       const actions = record.actions.map(({ retain: _retain, ...action }, index) => kept[index] ? { ...action, retain: true } : action);
       const planned = await planBatch({ envelopeBytes, scopes: record.scopes, inputs: record.inputs, actions, continuation: record.continuation, categories: record.categories, now, supersedes: record.id });
       if (planned.status !== 'ok') return planned;

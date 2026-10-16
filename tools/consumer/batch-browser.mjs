@@ -8,6 +8,7 @@ import { join } from 'node:path';
 
 const NOTE = 'Listed by Core; not checked as installed or connected';
 const ATOMIC = 'there is no all-or-nothing promise';
+const RERUN = 'Core cannot confirm whether this earlier process ran; run it again only if you know it is safe.';
 const exists = path => lstat(path).then(() => true, error => { if (error.code === 'ENOENT') return false; throw error; });
 export async function runBatchBrowser({ origin, output, playwrightModule, fixturePath, conflictFile, procMarker, userFiles }) {
   const started = Date.now();
@@ -91,6 +92,25 @@ export async function runBatchBrowser({ origin, output, playwrightModule, fixtur
     assert.match(await text('review-summary'), /No conflicts reported/);
     await page.locator('#batch-apply:enabled').waitFor();
     await shot('batch-3-review-ready.png');
+
+    // Shared material drifts after the review. The host answers the run itself: a 409 that keeps its codes and the conflict list,
+    // the page shows them and applies nothing, and a fresh review of the restored material is ready again.
+    const sharedFile = join(config.materialRoot, 'shared.txt'), sharedBytes = await readFile(sharedFile);
+    await writeFile(sharedFile, 'drifted after the review');
+    const refusing = page.waitForResponse(response => new URL(response.url()).pathname === '/api/batch-run');
+    await page.locator('#batch-apply').click();
+    const refusal = await refusing, refused = await refusal.json();
+    assert.equal(refusal.status(), 409, JSON.stringify(refused));
+    assert.equal(refused.diagnostics[0].code, 'BATCH_CONFLICTS');
+    assert.ok(refused.review.conflicts.some(conflict => conflict.kind === 'shared-input' && conflict.input === 'shared' && conflict.reason === 'changed'), JSON.stringify(refused.review.conflicts));
+    await page.locator('#batch-status').filter({ hasText: 'Nothing was applied' }).waitFor();
+    assert.match(await text('conflicts'), /Shared input shared is changed/);
+    assert.equal(await disabled('apply'), true, 'The refused review leaves Apply blocked.');
+    assert.equal(await exists(join(homeA, '.claude', 'a-extra.md')), false, 'A refused run applies nothing.');
+    await shot('batch-3b-run-refused.png');
+    await writeFile(sharedFile, sharedBytes);
+    assert.equal((await act('review', 'batch-review')).review.ready, true);
+    await page.locator('#batch-apply:enabled').waitFor();
     const before = await userBytes();
     const report = (await act('apply', 'batch-run')).report;
     const failed = await rows();
@@ -115,14 +135,29 @@ export async function runBatchBrowser({ origin, output, playwrightModule, fixtur
     await shot('batch-4-partial-failure.png');
 
     // (d) The person fixes the cause (test setup: the process marker, and the fault is cleared). Recover reinspects, keeps A's
-    // finished work and prepares a superseding batch, reviewed fresh; running it completes only the remaining work.
+    // finished work and prepares a superseding batch, reviewed fresh. b-proc is an opaque process Core cannot show as done, so
+    // recovery keeps it and the person chooses Run again for it (it ended unknown); running then completes only the remaining work.
     await writeFile(procMarker, 'ok\n');
     await writeFile(fixturePath, JSON.stringify({ ...config, faults: {} }));
-    const recovered = await act('recover', 'batch-recover');
-    assert.notEqual(recovered.batchId, chosenId);
-    assert.equal(recovered.projection.supersedes, chosenId);
-    assert.deepEqual(recovered.projection.actions.filter(action => action.retain).map(action => action.id), ['a-extra']);
-    assert.match(await text('supersedes'), new RegExp(`Supersedes ${chosenId}`));
+    const kept = await act('recover', 'batch-recover');
+    assert.notEqual(kept.batchId, chosenId);
+    assert.equal(kept.projection.supersedes, chosenId);
+    assert.deepEqual(kept.projection.actions.filter(action => action.retain).map(action => action.id), ['a-extra', 'b-proc']);
+    assert.deepEqual(kept.projection.actions.filter(action => action.unverifiable).map(action => action.id), ['b-proc'], 'only the process is unverifiable');
+    assert.equal(kept.review.ready, true);
+    assert.equal(await page.locator('#batch-actions input[data-action]').count(), 1, 'Run again is offered for the unverifiable action only.');
+    assert.equal(await page.locator('#batch-rerun-b-proc').isChecked(), false);
+    assert.equal((await text('actions')).split(RERUN).length - 1, 1, 'the warning is shown once, beside the choice');
+    await shot('batch-5a-recovered-process-kept.png');
+    const choosing = page.waitForResponse(response => new URL(response.url()).pathname === '/api/batch-recover');
+    await page.locator('#batch-rerun-b-proc').click();
+    const choice = await choosing, recovered = await choice.json();
+    assert.equal(choice.status(), 200, JSON.stringify(recovered));
+    await page.locator('#batch-status').filter({ hasText: 'Recovered from' }).waitFor();
+    assert.equal(recovered.projection.supersedes, kept.batchId);
+    assert.deepEqual(recovered.projection.actions.filter(action => action.retain).map(action => action.id), ['a-extra'], 'the chosen process is scheduled again; the finished file work stays kept');
+    assert.match(await text('supersedes'), new RegExp(`Supersedes ${kept.batchId}`));
+    assert.equal(await page.locator('#batch-rerun-b-proc').isChecked(), true);
     assert.equal(recovered.review.ready, true);
     assert.equal((await text('id')).trim(), recovered.batchId);
     await page.locator('#batch-apply:enabled').waitFor();
@@ -141,7 +176,8 @@ export async function runBatchBrowser({ origin, output, playwrightModule, fixtur
     // (e) Reload: the superseding batch reopens from the envelope file alone. Nothing from the run, session or review survives.
     await page.reload();
     assert.equal(await opened(), recovered.batchId);
-    assert.match(await text('supersedes'), new RegExp(`Supersedes ${chosenId}`));
+    assert.match(await text('supersedes'), new RegExp(`Supersedes ${kept.batchId}`));
+    assert.equal(await page.locator('#batch-rerun-b-proc').isChecked(), true, 'The Run again choice is part of the saved batch.');
     assert.equal(await page.locator('#batch-continuation').inputValue(), 'continue-independent');
     assert.equal(await page.locator('#batch-review-section').isHidden(), true);
     assert.equal(await page.locator('#batch-outcome-section').isHidden(), true);
@@ -152,8 +188,11 @@ export async function runBatchBrowser({ origin, output, playwrightModule, fixtur
     await page.locator('#batch-apply:enabled').waitFor();
     await shot('batch-7-reopened.png');
 
-    assert.deepEqual(errors, []);
-    evidence = { status: 'passed', screenshots, batches: { initial: firstId, chosen: chosenId, recovered: recovered.batchId }, partial: failed, recovered: done, timingsMs: timings };
+    // The browser logs the one deliberately refused run (409) as a console error; nothing else may be logged.
+    const refusedLogs = errors.filter(message => /status of 409/.test(message));
+    assert.equal(refusedLogs.length, 1, JSON.stringify(errors));
+    assert.deepEqual(errors.filter(message => !refusedLogs.includes(message)), []);
+    evidence = { status: 'passed', screenshots, batches: { initial: firstId, chosen: chosenId, kept: kept.batchId, recovered: recovered.batchId }, partial: failed, recovered: done, timingsMs: timings };
     await writeFile(join(output, 'batch-evidence.json'), JSON.stringify(evidence, null, 2));
   } catch (error) {
     await page.screenshot({ path: join(output, 'batch-failure.png'), fullPage: true }).catch(() => {});

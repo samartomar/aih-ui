@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { scopeRows, actionRows, canApply, outcomeRows, outcomeCounts, outcomeTone, conflictText, ATOMIC_NOTE, CLIENT_NOTE } from '../../src/app/batch-view.js';
+import { scopeRows, actionRows, canApply, outcomeRows, outcomeCounts, outcomeTone, conflictText, diagnosticsText, ATOMIC_NOTE, CLIENT_NOTE, RERUN_NOTE } from '../../src/app/batch-view.js';
 
 test('scopes use only Core labels and disclose what listing establishes', () => {
   assert.deepEqual(scopeRows({ scopes: [{ id: 'a', role: 'existing', client: 'one' }, { id: 'b', role: 'added', client: 'other' }] }, { labels: { one: 'Client One' } })
@@ -61,4 +61,18 @@ test('conflicts read as sentences naming the scope, action and target, and unkno
 test('a state without a host reason is described, and an unknown one says it was not reported', () => {
   const rows = outcomeRows({ actions: [{ id: 'x', scope: 'a', outcome: 'completed' }, { id: 'y', scope: 'a', outcome: 'unknown' }], scopes: [{ id: 'a', unrelated: { outcome: 'untouched', files: 2 } }] });
   assert.deepEqual(rows.map(row => row.reason), ['Core reported the work complete', 'Not reported', 'No change observed']);
+});
+
+test('only an unverifiable action of a recovered batch offers Run again, with the plain warning, and a scheduled one shows as chosen', () => {
+  assert.equal(RERUN_NOTE, 'Core cannot confirm whether this earlier process ran; run it again only if you know it is safe.');
+  const actions = [{ id: 'proc', requires: [], retain: true, unverifiable: true }, { id: 'again', requires: [], unverifiable: true }, { id: 'file', requires: [], retain: true, unverifiable: false }];
+  assert.deepEqual(actionRows({ supersedes: 'batch-x', actions }).map(row => [row.id, row.runAgain, row.runAgainChecked]), [['proc', true, false], ['again', true, true], ['file', false, false]]);
+  assert.deepEqual(actionRows({ actions }).map(row => row.runAgain), [false, false, false], 'a batch nothing has recovered offers no choice');
+});
+
+test('a refused answer shows its codes and messages, and the conflicts of a refused run are kept', () => {
+  const refused = { status: 'refused', diagnostics: [{ code: 'BATCH_CONFLICTS', message: 'Conflicts were found before apply; nothing was applied.' }, { code: 'JOURNEY_RECORD_UNSUPPORTED' }], review: { conflicts: [{ kind: 'shared-input', input: 'shared', reason: 'changed' }] } };
+  assert.equal(diagnosticsText(refused), 'BATCH_CONFLICTS: Conflicts were found before apply; nothing was applied. JOURNEY_RECORD_UNSUPPORTED');
+  assert.equal(diagnosticsText({}), 'The batch host gave no reason.');
+  assert.equal(conflictText(refused.review.conflicts[0]), 'Shared input shared is changed.');
 });

@@ -69,7 +69,9 @@ test('malformed batch records refuse the envelope', async () => {
     'category not selected': { at: '/actions/0/category', mutate: record => { record.actions[0].category = 'content'; } },
     'continuation': { at: '/continuation', mutate: record => { record.continuation = 'carry-on'; } },
     'derived check id': { at: '/checks', mutate: record => { record.checks[0].id = `check-${'1'.repeat(32)}`; }, rederive: false },
-    'retain is only true': { at: '/actions/0/retain', mutate: record => { record.actions[0].retain = false; } }
+    'retain is only true': { at: '/actions/0/retain', mutate: record => { record.actions[0].retain = false; } },
+    'control character in a client': { at: '/scopes', mutate: record => { record.scopes[0].client = 'claude'; } },
+    'control character in a root': { at: '/scopes', mutate: record => { record.scopes[0].target.root += ''; } }
   };
   for (const [name, { at, mutate, rederive = true }] of Object.entries(cases)) {
     // Re-derive the id after the edit so the rule under test, not the id, is what refuses.
@@ -99,6 +101,36 @@ test('planning binds real selections of the saved policy and mirrors Core requir
   assert.equal(other.status, 'refused'); assert.equal(other.diagnostics[0].code, 'JOURNEY_REFERENCE_MISMATCH');
 });
 
+test('planning refuses a selection whose Core requires no action of the batch covers', async () => {
+  const f = await pure(), plan = f.plan;
+  // b-dependent needs b-core in Core's policy; with b-core gone from the batch the host would run it without its prerequisite.
+  const uncovered = await planBatch({ ...plan, actions: plan.actions.filter(a => a.id !== 'b-core').map(a => a.id === 'b-dependent' ? { ...a, requires: [] } : a) });
+  assert.equal(uncovered.status, 'refused'); assert.equal(uncovered.diagnostics[0].code, 'INPUT_INVALID');
+  assert.equal(uncovered.diagnostics[0].path, '/actions/0/requires'); assert.match(uncovered.diagnostics[0].message, /b-core/);
+  // A prerequisite in another scope is not the prerequisite: each scope is prepared and applied on its own.
+  const elsewhere = await planBatch({ ...plan, actions: plan.actions.map(a => a.id === 'b-core' ? { ...a, scope: 'scope-a' } : a) });
+  assert.equal(elsewhere.status, 'refused'); assert.equal(elsewhere.diagnostics[0].path, '/actions/1/requires');
+});
+
+test('planning binds shared inputs to exactly the material sources the recipe of the selection uses', async () => {
+  const f = await pure(), plan = f.plan;
+  const refused = async (input, path) => { const result = await planBatch(input); assert.equal(result.status, 'refused'); assert.equal(result.diagnostics[0].code, 'INPUT_INVALID'); assert.equal(result.diagnostics[0].path, path); return result; };
+  await refused({ ...plan, actions: plan.actions.map(a => a.id === 'b-core' ? { ...a, inputs: [] } : a) }, '/actions/0/inputs');
+  await refused({ ...plan, actions: plan.actions.map(a => a.id === 'b-proc' ? { ...a, inputs: ['shared'] } : a) }, '/actions/3/inputs');
+  // A selection whose recipe cannot be inspected through its declared fields is unsupported in a batch, not assumed to need nothing.
+  const edited = async (id, change) => {
+    const policy = JSON.parse(decode(plan.savedPolicyBytes)), selection = policy.selections.find(s => s.id === id);
+    change(selection);
+    const sha256 = await digestBytes(encode(stable(selection)));
+    return { ...plan, savedPolicyBytes: encode(JSON.stringify(policy)), actions: plan.actions.map(a => a.selection.id === id ? { ...a, selection: { id, sha256 } } : a) };
+  };
+  await refused(await edited('b-proc', selection => { selection.recipe = { reference: 'elsewhere' }; }), '/actions/3/selection');
+  await refused(await edited('b-core', selection => { selection.recipe.inline.materials = selection.recipe.inline.materials.map(({ source: _source, ...material }) => material); }), '/actions/0/selection');
+  // An archive material is pinned by its own digest in the selection, so it needs no shared input.
+  const archived = await edited('a-extra', selection => { selection.recipe.inline.materials[0].source = { kind: 'archive', url: 'https://example.invalid/shared.tgz', sha256: 'c'.repeat(64), byteLength: 12 }; });
+  valueOf(await planBatch({ ...archived, actions: archived.actions.map(a => a.id === 'a-extra' ? { ...a, inputs: [] } : a) }));
+});
+
 test('the continuation choice is a person edit: a new record replaces the old one and unknown optional records are kept', async () => {
   const f = await pure();
   const edited = valueOf(await setContinuation({ envelopeBytes: f.envelopeBytes, batchId: f.batchId, continuation: 'continue-independent', now: '2026-10-16T09:30:00Z' }));
@@ -122,8 +154,36 @@ test('the shipped batch schema is closed and wired into the envelope schema', as
   assert.equal(schema.additionalProperties, false);
   assert.equal(schema.properties.required.const, false);
   for (const forbidden of ['sessionId', 'reviewDigest', 'handle', 'runId', 'outcome']) assert.equal(forbidden in schema.properties, false, forbidden);
+  for (const [name, pattern, good] of [['client', schema.properties.scopes.items.properties.client.pattern, 'claude'], ['root', schema.properties.scopes.items.properties.target.properties.root.pattern, 'C:\\work\\a']]) {
+    assert.ok(new RegExp(pattern).test(good), name);
+    for (const bad of ['\x00', '\x1f', '\x7f']) assert.equal(new RegExp(pattern).test(good + bad), false, `${name} refuses U+${bad.charCodeAt(0).toString(16)}`);
+  }
   assert.deepEqual([...schema.required].sort(), Object.keys(schema.properties).filter(k => k !== 'supersedes').sort());
   assert.ok(envelope.properties.records.items.allOf.some(entry => entry.if.properties.schema.const === BATCH_RECORD_SCHEMA && entry.then.$ref === BATCH_RECORD_SCHEMA));
+});
+
+test('an unsupported required record keeps the batch readable but never runnable or recoverable', async () => {
+  const f = await pure();
+  const future = await resign(f.envelopeBytes, doc => { doc.records.push({ id: 'future', schema: 'urn:aihq:workbench:journey-record:future:1.0.0', required: true }); });
+  const read = await readBatch({ envelopeBytes: future });
+  assert.equal(read.status, 'ok'); assert.equal(read.value.supported, false);
+  assert.deepEqual(read.diagnostics.map(d => [d.code, d.path]), [['JOURNEY_RECORD_UNSUPPORTED', '/records/1']]);
+  assert.equal(valueOf(await readBatch({ envelopeBytes: f.envelopeBytes })).supported, true);
+  // A host whose Prepare is always clean, so only the unsupported record can stop the review, and any Prepare after a refusal shows.
+  let prepares = 0;
+  const host = createBatchHost({ materialRoots: f.materialRoots, hostFor: () => ({ prepareSession: async () => { prepares++; return { status: 'ready', diagnostics: [], review: { operations: [] } }; } }) });
+  for (const [name, call] of [['run', () => host.runBatch({ envelopeBytes: future, batchId: f.batchId, approve: { batchId: f.batchId } })], ['recover', () => host.recoverBatch({ envelopeBytes: future, batchId: f.batchId, now: NOW })]]) {
+    const refused = await call();
+    assert.equal(refused.status, 'refused', name); assert.equal(refused.diagnostics[0].code, 'JOURNEY_RECORD_UNSUPPORTED', name);
+    assert.deepEqual(refused.originalBytes, future, `${name} keeps the original bytes`);
+  }
+  assert.equal(prepares, 0, 'a refusal prepares nothing');
+  const review = await host.reviewBatch({ envelopeBytes: future, batchId: f.batchId });
+  assert.equal(review.status, 'ok'); assert.equal(review.ready, false);
+  assert.deepEqual(review.diagnostics.map(d => d.code), ['JOURNEY_RECORD_UNSUPPORTED']);
+  assert.ok(prepares > 0 && review.conflicts.length === 0, 'the review still inspects read-only and finds no conflict of its own');
+  const clean = await host.reviewBatch({ envelopeBytes: f.envelopeBytes, batchId: f.batchId });
+  assert.equal(clean.ready, true); assert.deepEqual(clean.diagnostics, []);
 });
 
 // ---- Against Core: fixture client homes under a scratch folder; each scenario has its own. Core's Prepare (about 0.6 s per selection) and Apply (about 2.7 s) dominate the time. ----
@@ -251,7 +311,13 @@ describe('reviewed batch against Core', () => {
     // A new host instance, from the envelope bytes alone. It is not trusted with the report: a lying outcome changes nothing.
     const reopened = hostOf(f, { hostFor: capture('second') });
     const lying = { ...report, actions: report.actions.map(a => ({ ...a, outcome: 'completed' })) };
-    const recovered = await reopened.recoverBatch({ envelopeBytes: first.envelopeBytes, batchId: first.record.id, outcome: lying, now: '2026-10-16T10:00:00Z' });
+    // Kept verifiable work is never re-run, even when the caller asks for it; a name that is no action is refused too.
+    for (const rerun of [['a-extra'], ['ghost']]) {
+      const refusedRerun = await reopened.recoverBatch({ envelopeBytes: first.envelopeBytes, batchId: first.record.id, rerun, now: '2026-10-16T10:00:00Z' });
+      assert.equal(refusedRerun.status, 'refused', rerun[0]); assert.equal(refusedRerun.diagnostics[0].code, 'BATCH_RERUN_REFUSED'); assert.equal(refusedRerun.diagnostics[0].path, '/rerun/0');
+    }
+    // b-proc is an opaque process Core cannot show as done, so recovery runs it again only because the person said so.
+    const recovered = await reopened.recoverBatch({ envelopeBytes: first.envelopeBytes, batchId: first.record.id, outcome: lying, rerun: ['b-proc'], now: '2026-10-16T10:00:00Z' });
     assert.equal(recovered.status, 'ok', JSON.stringify(recovered.diagnostics));
     assert.equal(recovered.record.supersedes, first.record.id);
     assert.deepEqual(recovered.record.actions.map(a => [a.id, a.retain === true]), [['b-core', false], ['b-dependent', false], ['a-extra', true], ['b-proc', false]]);
@@ -281,5 +347,35 @@ describe('reviewed batch against Core', () => {
     const lost = await createHost({ projectRoot: f.homes.b, controls: CONTROLS }).applyApproved({ sessionId: sessions[0], reviewDigest: 'a'.repeat(64) });
     assert.equal(lost.status, 'lost');
     noHandles([report, recovered, again]);
+  });
+
+  it('recovery keeps an unverifiable process unless the person runs it again, and its dependents wait for it', async () => {
+    const f = await batchFixture(await scratch(), { applyEarlier: false });
+    const chain = valueOf(await planBatch({ ...f.plan, scopes: [f.plan.scopes[1]], inputs: [], actions: [f.action('b-proc', 'scope-b', 'b-proc'), f.action('b-after-proc', 'scope-b', 'b-after-proc', ['b-proc'])] }));
+    assert.deepEqual(chain.projection.actions.map(a => [a.id, a.unverifiable]), [['b-proc', true], ['b-after-proc', false]]);
+    const host = hostOf(f), before = await tree(f.homes.b);
+    const recovered = await host.recoverBatch({ envelopeBytes: chain.envelopeBytes, batchId: chain.record.id, now: NOW });
+    assert.equal(recovered.status, 'ok', JSON.stringify(recovered.diagnostics));
+    assert.deepEqual(recovered.record.actions.map(a => [a.id, a.retain === true]), [['b-proc', true], ['b-after-proc', false]]);
+    assert.deepEqual(recovered.retained, ['b-proc']);
+    assert.deepEqual(recovered.review.scopes[0].operations.map(o => o.action), ['b-after-proc']);
+    assert.ok(same(before, await tree(f.homes.b)), 'recovery applies nothing');
+    const report = await host.runBatch({ envelopeBytes: recovered.envelopeBytes, batchId: recovered.record.id, approve: { batchId: recovered.record.id } });
+    assert.equal(report.status, 'ok', JSON.stringify(report.diagnostics));
+    assert.deepEqual(outcomes(report), ['untouched', 'cancelled']);
+    assert.deepEqual(report.actions.map(a => a.reason), ['retained-unverifiable', 'dependency-unverifiable']);
+    assert.ok(same(before, await tree(f.homes.b)), 'neither the process nor its dependent ran');
+  });
+
+  it('a retained result that no longer stands is a failure that stops the batch', async () => {
+    const f = await batchFixture(await scratch(), { applyEarlier: false });
+    const planned = valueOf(await planBatch({ ...f.plan, actions: [{ ...f.action('a-extra', 'scope-a', 'a-extra', [], ['shared']), retain: true }, f.action('b-core', 'scope-b', 'b-core', [], ['shared'])] }));
+    const before = await tree(f.homes.b);
+    const report = await hostOf(f).runBatch({ envelopeBytes: planned.envelopeBytes, batchId: planned.record.id, approve: { batchId: planned.record.id } });
+    assert.equal(report.status, 'ok', JSON.stringify(report.diagnostics));
+    assert.deepEqual(outcomes(report), ['failed', 'untouched']);
+    assert.deepEqual(report.actions.map(a => a.reason), ['retained-result-missing', 'stopped-by-choice']);
+    assert.deepEqual(report.counts, { completed: 0, failed: 1, untouched: 1, cancelled: 0, unknown: 0 });
+    assert.ok(same(before, await tree(f.homes.b)), 'the stopped action wrote nothing');
   });
 });

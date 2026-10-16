@@ -20,7 +20,7 @@ const SERVED = new Set([".html", ".js", ".css", ".json", ".svg"]);
 const SERVICE = new Set([".mjs"]);
 
 /** Entry points the page cannot start without. */
-const REQUIRED_PAGE_ASSETS = ["index.html", "main.js", "batch.html", "batch.js", "app/batch-view.js"];
+const REQUIRED_PAGE_ASSETS = ["index.html", "main.js"];
 
 function walk(root, extensions, prefix = "", found = []) {
   for (const item of readdirSync(join(root, prefix), { withFileTypes: true })) {

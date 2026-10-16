@@ -40,7 +40,7 @@ export async function batchFixture(root, { conflict = false, applyEarlier = true
   const conflictFile = join(homes.b, '.codex', 'b-core.md');
   if (conflict) await writeFile(conflictFile, 'already mine\n');
   const selections = [selection('a-earlier', '.claude', 'text'), selection('a-extra', '.claude', 'material'), selection('b-core', '.codex', 'material'),
-    selection('b-dependent', '.codex', 'material', ['b-core']), selection('b-proc', '', 'process')];
+    selection('b-dependent', '.codex', 'material', ['b-core']), selection('b-proc', '', 'process'), selection('b-after-proc', '.codex', 'text', ['b-proc'])];
   const savedPolicyBytes = new TextEncoder().encode(JSON.stringify({ schema: 'urn:aihq:core:execution-policy:1.3.0', mode: 'vibe', selections }, null, 2));
   // A's earlier setup: applied before the batch, not part of it.
   if (applyEarlier) {
@@ -61,5 +61,5 @@ export async function batchFixture(root, { conflict = false, applyEarlier = true
       action('a-extra', 'scope-a', 'a-extra', [], ['shared']), action('b-proc', 'scope-b', 'b-proc')] };
   const planned = await planBatch(plan);
   if (planned.status !== 'ok') throw new Error(`Fixture plan refused: ${JSON.stringify(planned.diagnostics)}`);
-  return { homes, coreHome, materialRoot, userFiles, savedPolicyBytes, plan, envelopeBytes: planned.value.envelopeBytes, batchId: planned.value.record.id, materialRoots: { shared: materialRoot }, procMarker: join(homes.b, 'proc-ok'), conflictFile };
+  return { homes, coreHome, materialRoot, userFiles, savedPolicyBytes, plan, envelopeBytes: planned.value.envelopeBytes, batchId: planned.value.record.id, action, materialRoots: { shared: materialRoot }, procMarker: join(homes.b, 'proc-ok'), conflictFile };
 }

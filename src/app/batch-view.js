@@ -1,6 +1,8 @@
 // Plain presentation facts only. The host observes effects; this module never infers them.
 export const CLIENT_NOTE = 'Listed by Core; not checked as installed or connected';
 export const ATOMIC_NOTE = 'Each scope is applied separately; there is no all-or-nothing promise.';
+export const RERUN_NOTE = 'Core cannot confirm whether this earlier process ran; run it again only if you know it is safe.';
+export const UNSUPPORTED_NOTE = 'This envelope holds a required record this Workbench does not support. You can review the batch, but not run, recover or change it.';
 const OUTCOMES = ['completed', 'failed', 'untouched', 'cancelled', 'unknown'];
 // What a state means when the host gave no reason: said plainly, never left blank or guessed.
 const DEFAULT_REASON = { completed: 'Core reported the work complete', untouched: 'No change observed' };
@@ -9,8 +11,12 @@ export const outcomeTone = outcome => ({ completed: 'success', failed: 'error', 
 export const scopeRows = (projection, clients) => (projection?.scopes ?? []).map(scope => ({ ...scope,
   label: clients?.labels?.[scope.client] ?? scope.client, note: clients?.targets?.includes(scope.client) === false
     ? 'Not listed by Core; not checked as installed or connected' : CLIENT_NOTE }));
+// `runAgain`: the choice is offered only after a recovery, and only for work Core cannot confirm (an opaque process); chosen means it is scheduled.
 export const actionRows = projection => (projection?.actions ?? []).map(action => ({ ...action,
-  dependencies: action.requires?.length ? action.requires.map(id => `${id} → ${action.id}`).join(', ') : 'No dependencies', retained: action.retain === true }));
+  dependencies: action.requires?.length ? action.requires.map(id => `${id} → ${action.id}`).join(', ') : 'No dependencies', retained: action.retain === true,
+  runAgain: Boolean(projection.supersedes) && action.unverifiable === true, runAgainChecked: action.unverifiable === true && action.retain !== true }));
+// What the host said when it refused or failed, code first, as one line.
+export const diagnosticsText = result => (result?.diagnostics ?? []).map(item => [item.code, item.message].filter(Boolean).join(': ')).join(' ') || 'The batch host gave no reason.';
 export const canApply = (review, batchId) => Boolean(batchId && review?.batchId === batchId && review.ready === true
   && Array.isArray(review.conflicts) && review.conflicts.length === 0);
 export function outcomeRows(report) {

@@ -11,21 +11,23 @@ import { homeEnvironment } from '../consumer/home-environment.mjs';
 const MAX_BODY = 64 * 1024;
 const ROUTES = { '/api/batch': 'GET', '/api/batch-review': 'POST', '/api/batch-run': 'POST', '/api/batch-recover': 'POST', '/api/batch-continuation': 'POST' };
 const TIMEOUT_MS = { review: 120_000, run: 300_000, recover: 120_000 };
-const CLIENT_NOTE = 'Listed by Core; not checked as installed or connected';
+// Decisions the page renders from the body: a refusal is a conflict with the current state (409), unavailable means no host is configured.
+const HTTP_STATUS = { ok: 200, unavailable: 200, refused: 409 };
 const reply = (response, code, value) => response.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }).end(JSON.stringify(value));
 const problem = (message, code = 'INVALID_REQUEST') => Object.assign(new Error(message), { code });
-const valueOf = result => {
-  if (result?.status && result.status !== 'ok') throw problem(result.diagnostics?.map(item => item.message ?? item.reason ?? item.code).join('; ') || 'Batch operation refused.', 'BATCH_REFUSED');
-  return result?.value ?? result;
-};
+const refusal = (code, message) => ({ status: 'refused', diagnostics: [{ code, message }] });
+// A module or host answer goes to the page as it is (codes, paths, `review`); only bytes the page never needs are dropped.
+const passed = ({ originalBytes: _held, ...rest }) => rest;
+const statusOf = result => HTTP_STATUS[result?.status] ?? (result?.diagnostics?.[0]?.code === 'INVALID_REQUEST' ? 400 : 500);
 async function readBody(request) {
   const chunks = []; let size = 0;
+  // Drain an oversized body instead of returning mid-stream, so the client receives the 413.
   for await (const chunk of request) { size += chunk.length; if (size <= MAX_BODY) chunks.push(chunk); }
-  if (size > MAX_BODY) throw problem(`The request body is larger than ${MAX_BODY} bytes.`, 'PAYLOAD_TOO_LARGE');
-  let body;
-  try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw problem('The request body must be a JSON object.'); }
-  if (!body || typeof body !== 'object' || Array.isArray(body)) throw problem('The request body must be a JSON object.');
-  return body;
+  if (size > MAX_BODY) return { tooLarge: true };
+  try {
+    const value = JSON.parse(Buffer.concat(chunks).toString('utf8') || 'null');
+    return value !== null && typeof value === 'object' && !Array.isArray(value) ? { value } : { malformed: true };
+  } catch { return { malformed: true }; }
 }
 async function replaceEnvelope(path, bytes) {
   const temporary = `${path}.${randomUUID()}.tmp`;
@@ -38,6 +40,9 @@ export function createBatchAdapter(consumerDir) {
   let queue = Promise.resolve(), closed = false, listed, child = null, childHome = null;
   const pending = new Map();
   let counter = 0;
+  // The batch module lives in the installed consumer, so its constants are read from there once, never repeated here.
+  let batchModule;
+  const loadBatch = () => batchModule ??= import(pathToFileURL(join(consumerDir, 'consumer', 'batch.mjs')).href);
   const settleAll = reason => {
     for (const [id, entry] of pending) { clearTimeout(entry.timer); entry.reject(problem(reason, 'BATCH_HOST_UNAVAILABLE')); pending.delete(id); }
   };
@@ -56,8 +61,7 @@ export function createBatchAdapter(consumerDir) {
     next.on('message', message => {
       const entry = pending.get(message?.id);
       if (!entry) return;
-      clearTimeout(entry.timer); pending.delete(message.id);
-      if (message.error) entry.reject(problem(message.error, 'BATCH_HOST_UNAVAILABLE')); else entry.resolve(message.result);
+      clearTimeout(entry.timer); pending.delete(message.id); entry.resolve(message.result);
     });
     const gone = () => { if (child === next) { child = null; childHome = null; settleAll('The batch host stopped.'); } };
     next.on('exit', gone); next.on('error', gone);
@@ -80,40 +84,39 @@ export function createBatchAdapter(consumerDir) {
   };
   async function operate(pathname, body) {
     if (closed) throw problem('The batch adapter is closed.', 'BATCH_HOST_UNAVAILABLE');
-    if (!fixturePath) return { status: 'unavailable', message: 'No batch host is configured.' };
+    if (!fixturePath) return { status: 'unavailable', diagnostics: [{ code: 'BATCH_HOST_UNCONFIGURED', message: 'No batch host is configured.' }] };
     const config = JSON.parse(await readFile(fixturePath, 'utf8'));
     if (![config.envelopePath, config.materialRoot].every(path => typeof path === 'string' && isAbsolute(path))) {
       throw problem('Batch fixture requires absolute envelopePath and materialRoot.', 'BATCH_HOST_UNAVAILABLE');
     }
     // Core writes protected records into the current account's home; with no disposable home named, nothing starts.
     if (typeof config.coreHome !== 'string' || !isAbsolute(config.coreHome)) throw problem('No isolated Core home is configured.', 'BATCH_HOST_UNAVAILABLE');
-    const load = name => import(pathToFileURL(join(consumerDir, 'consumer', name)).href);
-    const { readBatch, projectBatch, setContinuation } = await load('batch.mjs');
+    const { readBatch, setContinuation } = await loadBatch();
     const envelopeBytes = new Uint8Array(await readFile(config.envelopePath));
-    const current = valueOf(await readBatch({ envelopeBytes }));
-    const record = current.record;
-    if (!record?.id) throw problem('The envelope has no current reviewed batch.', 'BATCH_REFUSED');
+    const read = await readBatch({ envelopeBytes });
+    if (read.status !== 'ok') return passed(read);
+    const { record, projection, supported } = read.value;
     // Core's published client list is fixed for the installed archive, so it is asked for once.
     listed ??= callService(consumerDir, { op: 'coreTargets' });
     const clients = listed;
     if (!clients.ok) { listed = undefined; throw problem(clients.error ?? 'Core client list unavailable.', 'BATCH_HOST_UNAVAILABLE'); }
-    const projection = projectBatch(record);
-    if (pathname === '/api/batch') return { status: 'ok', batchId: record.id, projection, clients: { targets: clients.targets, labels: clients.labels }, note: CLIENT_NOTE };
-    if (body.batchId !== record.id) throw problem('The current batch changed. Reopen and review it again.', 'BATCH_CHANGED');
+    if (pathname === '/api/batch') return { status: 'ok', batchId: record.id, projection, supported, clients: { targets: clients.targets, labels: clients.labels } };
+    if (body.batchId !== record.id) return refusal('BATCH_CHANGED', 'The current batch changed. Reopen and review it again.');
     if (pathname === '/api/batch-continuation') {
-      const edited = valueOf(await setContinuation({ envelopeBytes, batchId: record.id, continuation: body.continuation, now: new Date().toISOString() }));
-      await replaceEnvelope(config.envelopePath, edited.envelopeBytes);
-      return { status: 'ok', batchId: edited.record.id, projection: projectBatch(edited.record) };
+      const edited = await setContinuation({ envelopeBytes, batchId: record.id, continuation: body.continuation, now: new Date().toISOString() });
+      if (edited.status !== 'ok') return passed(edited);
+      await replaceEnvelope(config.envelopePath, edited.value.envelopeBytes);
+      return { status: 'ok', batchId: edited.value.record.id, projection: edited.value.projection };
     }
     const materialRoots = Object.fromEntries(record.inputs.map(input => [input.id, config.materialRoot]));
     const ask = (op, extra) => call(config.coreHome, op, { envelope: Buffer.from(envelopeBytes).toString('base64'), batchId: record.id,
       clients: clients.targets, materialRoots, faults: config.faults, ...extra });
-    if (pathname === '/api/batch-review') return { status: 'ok', batchId: record.id, review: valueOf(await ask('review')) };
-    if (pathname === '/api/batch-run') return { status: 'ok', batchId: record.id, report: valueOf(await ask('run', { approve: { batchId: record.id } })) };
-    const recovered = valueOf(await ask('recover', { now: new Date().toISOString() }));
-    const replacement = new Uint8Array(Buffer.from(recovered.envelope, 'base64'));
-    await replaceEnvelope(config.envelopePath, replacement);
-    return { status: 'ok', batchId: recovered.record.id, projection: projectBatch(recovered.record), review: recovered.review };
+    if (pathname === '/api/batch-review') { const review = await ask('review'); return review.status === 'ok' ? { status: 'ok', batchId: record.id, review } : review; }
+    if (pathname === '/api/batch-run') { const report = await ask('run', { approve: { batchId: record.id } }); return report.status === 'ok' ? { status: 'ok', batchId: record.id, report } : report; }
+    const recovered = await ask('recover', { now: new Date().toISOString(), rerun: body.rerun });
+    if (recovered.status !== 'ok') return recovered;
+    await replaceEnvelope(config.envelopePath, new Uint8Array(Buffer.from(recovered.envelope, 'base64')));
+    return { status: 'ok', batchId: recovered.record.id, projection: recovered.projection, review: recovered.review };
   }
   return {
     close() { closed = true; stop('The batch adapter was closed.'); },
@@ -132,16 +135,21 @@ export function createBatchAdapter(consumerDir) {
         let body;
         if (request.method === 'POST') {
           if (!/^application\/json\s*(;|$)/i.test(request.headers['content-type'] ?? '')) { fail(415, 'Content-Type must be application/json.', 'UNSUPPORTED_MEDIA_TYPE'); return true; }
-          body = await readBody(request);
-          const keys = pathname === '/api/batch-continuation' ? ['batchId', 'continuation'] : ['batchId'];
-          if (Object.keys(body).some(key => !keys.includes(key)) || !/^batch-[a-f0-9]{32}$/.test(body.batchId ?? '')
-            || (keys.includes('continuation') && !['stop', 'continue-independent'].includes(body.continuation))) throw problem('Only the current batchId and the supported continuation choice are accepted.');
+          const read = await readBody(request).catch(() => ({ aborted: true }));
+          if (read.aborted) { fail(400, 'The request body could not be read.', 'INVALID_REQUEST'); return true; }
+          if (read.tooLarge) { fail(413, `The request body is larger than ${MAX_BODY} bytes.`, 'PAYLOAD_TOO_LARGE'); return true; }
+          if (read.malformed) { fail(400, 'The request body must be a JSON object.', 'INVALID_REQUEST'); return true; }
+          body = read.value;
+          const { BATCH_ID_PATTERN, CONTINUATIONS, MAX_ACTIONS } = await loadBatch();
+          const keys = { '/api/batch-continuation': ['batchId', 'continuation'], '/api/batch-recover': ['batchId', 'rerun'] }[pathname] ?? ['batchId'];
+          const names = body.rerun === undefined || (Array.isArray(body.rerun) && body.rerun.length <= MAX_ACTIONS && body.rerun.every(id => typeof id === 'string' && id.length <= 64));
+          if (Object.keys(body).some(key => !keys.includes(key)) || !BATCH_ID_PATTERN.test(body.batchId ?? '') || !names
+            || (keys.includes('continuation') && !CONTINUATIONS.includes(body.continuation))) { fail(400, 'Only the current batchId, the supported continuation choice and the actions to run again are accepted.', 'INVALID_REQUEST'); return true; }
         }
-        reply(response, 200, await exclusive(() => operate(pathname, body)));
+        const result = await exclusive(() => operate(pathname, body));
+        reply(response, statusOf(result), result);
       } catch (error) {
-        const code = error.code ?? 'BATCH_HOST_UNAVAILABLE';
-        fail(({ INVALID_REQUEST: 400, PAYLOAD_TOO_LARGE: 413, BATCH_CHANGED: 409, BATCH_REFUSED: 409 })[code] ?? 502,
-          error.message, code);
+        fail(error.code === 'INVALID_REQUEST' ? 400 : 502, error.message, error.code ?? 'BATCH_HOST_UNAVAILABLE');
       }
       return true;
     },
