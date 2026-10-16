@@ -1,7 +1,7 @@
 import { el, collectIds } from "./dom.js";
 import { clientNodes, publishedClients } from "./core-targets.js";
-import { CAPABILITIES, newSetupSettings, experienceLabel, organizationErrors, settingsErrors } from "./setup-model.js";
-import { setupSummary } from "./setup-summary.js";
+import { CAPABILITIES, REVIEWER_KINDS, newSetupSettings, experienceLabel, organizationErrors, settingsErrors } from "./setup-model.js";
+import { reviewerText, setupSummary } from "./setup-summary.js";
 import { loadSetup, saveSetup, updateSetup } from "./settings-client.js";
 
 const STEP_TITLES = { experience: "How will you use the Workbench?", role: "What is your enterprise role?", organization: "Your organization", capabilities: "Choose optional AIH assistance", clients: "Which AI clients do you use?", review: "Review your local setup" };
@@ -21,6 +21,7 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
   let saving = false;
   let retryLoad = false;
   let loadSequence = 0;
+  let reviewerKind = "individual";
   const fields = new Map();
   const steps = () => [
     ...(!editing ? ["experience", ...(draft.experience === "enterprise" ? ["role"] : [])] : []),
@@ -131,6 +132,50 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
     const unlisted = draft.clients.filter((client) => !targets.includes(client));
     if (unlisted.length) elements.setupContent.append(el("p", "setup-notice mt-4", `Saved clients no longer listed by this Core stay selected: ${unlisted.join(", ")}. Skip clients clears all selections.`));
   }
+  function renderReviewer() {
+    const wrapper = el("div", "space-y-1.5 mb-6");
+    const kind = el("select", "setup-input");
+    kind.id = "setup-field-reviewer-kind";
+    kind.name = "reviewerKind";
+    for (const value of REVIEWER_KINDS) kind.append(new Option(value, value));
+    reviewerKind = draft.reviewer?.kind ?? reviewerKind;
+    kind.value = reviewerKind;
+    const caption = el("label", "block text-on-surface font-medium", "Reviewing as (optional)");
+    caption.htmlFor = "setup-field-reviewer-id";
+    const input = el("input", "setup-input");
+    input.id = "setup-field-reviewer-id";
+    input.name = "reviewerId";
+    input.type = "text";
+    input.maxLength = 254;
+    input.autocomplete = "off";
+    input.placeholder = "Your name or team";
+    input.value = draft.reviewer?.id ?? "";
+    input.setAttribute("aria-describedby", "setup-field-reviewer-hint");
+    const kindLabel = el("label", "sr-only", "Reviewer kind");
+    kindLabel.htmlFor = kind.id;
+    // Empty identity means not set: the key is dropped, never saved empty.
+    const sync = () => {
+      reviewerKind = kind.value;
+      const id = input.value.trim();
+      if (id) draft.reviewer = { kind: reviewerKind, id }; else delete draft.reviewer;
+      input.removeAttribute("aria-invalid");
+      const shown = elements.setupContent.querySelector("[data-setup-reviewer]");
+      if (shown) shown.textContent = reviewerText(draft);
+      error(null);
+    };
+    kind.addEventListener("change", sync);
+    input.addEventListener("input", sync);
+    fields.set("reviewer", input);
+    const help = el("p", "text-outline text-[11px] leading-relaxed", "Only labels saved review judgments as yours. It is kept in the local setup file, used only by this Workbench's local service on this computer, and is never written into a policy or draft you export or sent to another service. Leave empty to show every saved judgment as imported.");
+    help.id = "setup-field-reviewer-hint";
+    const row = el("div", "setup-reviewer");
+    row.setAttribute("role", "group");
+    caption.id = "setup-field-reviewer-caption";
+    row.setAttribute("aria-labelledby", caption.id);
+    row.append(kindLabel, kind, input);
+    wrapper.append(caption, row, help);
+    return wrapper;
+  }
   function renderProgress() {
     elements.setupProgress.replaceChildren();
     steps().forEach((key, index) => {
@@ -191,7 +236,7 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
         : draft.role === "developer"
           ? "Your role and assistance preferences persist. Open the admin-supplied organization policy in the Policy workspace after setup; it is not chosen or approved by this profile."
           : "Your organization details and preferences persist. Policy authority and connected assistance are follow-on work.";
-      elements.setupContent.append(setupSummary(draft, location));
+      elements.setupContent.append(renderReviewer(), setupSummary(draft, location));
     }
     elements.setupTitle.focus();
     elements.setupContent.scrollTop = 0;
@@ -234,6 +279,7 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
     loading = true;
     retryLoad = false;
     savedProblem = null;
+    reviewerKind = "individual";
     step = 0;
     if (!elements.setupDialog.open) elements.setupDialog.showModal();
     render();

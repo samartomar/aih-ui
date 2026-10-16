@@ -1,6 +1,8 @@
 import { el } from "./dom.js";
 import { CAPABILITIES, experienceLabel } from "./setup-model.js";
 
+export const reviewerText = (settings) => settings.reviewer ? `${settings.reviewer.kind} ${settings.reviewer.id}` : "Not set — saved review judgments show as imported";
+
 /** Read-only review, shared by the last wizard step and the header's setup view. */
 export function setupSummary(settings, location) {
   const section = el("div", "space-y-4");
@@ -9,6 +11,7 @@ export function setupSummary(settings, location) {
     const group = el("div");
     group.append(el("dt", "text-outline", label), el("dd", "text-on-surface break-words", value));
     list.append(group);
+    return group.lastChild;
   };
   row("Experience", experienceLabel(settings));
   if (settings.role === "admin" && settings.organization) {
@@ -20,6 +23,7 @@ export function setupSummary(settings, location) {
   }
   row("Optional AIH requests", CAPABILITIES.filter((item) => settings.capabilities.includes(item.id)).map((item) => item.title).join(", ") || "None selected");
   row("AI clients", settings.clients.join(", ") || "None selected");
+  row("Reviewing as", reviewerText(settings)).dataset.setupReviewer = "";
   section.append(list);
   section.append(el("p", "setup-notice", "This saves local preferences only. It does not install or connect tools, read your code or policy repository, send data to integrations, or verify enterprise approval. Optional assistance is not connected in this version."));
   const file = el("label", "block space-y-2");

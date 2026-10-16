@@ -38,7 +38,7 @@ export async function createMixedService(maintained, { suppliedInventories, fami
     async run(operation, body) {
       const policyBytes = body.policyBytes ? Uint8Array.from(body.policyBytes) : undefined;
       const reviewEvidence = (body.reviewEvidence ?? []).map(bytes => Uint8Array.from(bytes)), comparisons = body.comparisons ?? [];
-      const reviewContext = { reviewEvidence, comparisons };
+      const reviewContext = { reviewEvidence, comparisons, ...(body.recipient !== undefined ? { recipient: body.recipient } : {}) };
       const evidenceBytes = Number.isSafeInteger(body.evidenceIndex) ? reviewEvidence[body.evidenceIndex] : Uint8Array.from(body.evidenceBytes ?? []);
       if (operation === 'new') return composeAuthoring({ intent: freshAuthoring(), inventories: all,
         ...(body.mode === 'enterprise' ? { basePolicyBytes: encode(JSON.stringify({ schema: 'urn:aihq:core:execution-policy:1.3.0', mode: 'enterprise', selections: [], metadata: { 'aih.workbench': freshAuthoring() } })) } : {}) });

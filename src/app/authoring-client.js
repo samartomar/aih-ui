@@ -25,8 +25,10 @@ const asDraft = ({ originalBytes: _kept, ...value }) => ({ ...value,
 export function createAuthoringClient() {
   const headers = { 'x-aih-client': crypto.randomUUID() };
   const listeners = new Set();
-  let catalog, bytes = new Uint8Array(), intent, candidate, draftValue, compiled, revision = 0, catalogRevision = 0, hostRevision = 0, reviewEvidence = [];
+  let catalog, bytes = new Uint8Array(), intent, candidate, draftValue, compiled, revision = 0, catalogRevision = 0, hostRevision = 0, reviewEvidence = [], recipient, judgments = [], judgmentSummary;
   const notify = () => { for (const listener of listeners) listener(); };
+  // Saved judgments are a derived display of the latest read, publish or accept; they never gate editing.
+  const keepJudgments = value => { judgments = value?.reviewJudgments ?? []; judgmentSummary = value?.reviewSummary; };
   // Choices are recorded strictly one after another, each from the envelope the previous one produced.
   // `artifact` changes whenever a different policy or draft is opened, so a queued choice never reaches it.
   let recording, artifact = 0;
@@ -35,7 +37,7 @@ export function createAuthoringClient() {
   async function request(operation, body = {}) {
     const response = await fetch(`/api/authoring-${operation}`, {
       method: 'POST', headers: { ...headers, 'content-type': 'application/json' },
-      body: JSON.stringify({ policyBytes: [...bytes], reviewEvidence: reviewEvidence.map(value => [...value]), ...body }),
+      body: JSON.stringify({ policyBytes: [...bytes], reviewEvidence: reviewEvidence.map(value => [...value]), ...(recipient ? { recipient } : {}), ...body }),
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error ?? JSON.stringify(result));
@@ -47,7 +49,7 @@ export function createAuthoringClient() {
   async function openAttempt(attempt, input) {
     const result = await request('draft-open', { bytes: [...input], policyBytes: undefined });
     if (attempt !== revision) return { status: 'superseded' };
-    if (result.status === 'ok') { draftValue = { ...asDraft(result.value), fromPolicy: !isJourneyEnvelope(input) }; bytes = draftValue.savedIntentBytes.slice(); intent = undefined; compiled = undefined; }
+    if (result.status === 'ok') { draftValue = { ...asDraft(result.value), fromPolicy: !isJourneyEnvelope(input) }; bytes = draftValue.savedIntentBytes.slice(); intent = undefined; compiled = undefined; keepJudgments(result.value); }
     notify(); return result;
   }
   return {
@@ -55,6 +57,7 @@ export function createAuthoringClient() {
     get bytes() { return bytes.slice(); }, get candidate() { return candidate; },
     get revision() { return revision; },
     get draft() { return draftValue; }, get compiled() { return compiled; },
+    get reviewJudgments() { return judgments; }, get reviewSummary() { return judgmentSummary; }, get recipient() { return recipient; },
     invalidate() { revision++; candidate = undefined; notify(); return revision; },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     request,
@@ -64,6 +67,8 @@ export function createAuthoringClient() {
       return attempt === hostRevision && draft === revision ? result : { status: 'superseded' };
     },
     setReviewEvidence(values) { revision++; candidate = undefined; reviewEvidence = values.map(value => value.slice()); notify(); },
+    // Only labels saved judgments as yours or imported; it never changes what is recorded.
+    setRecipient(value) { revision++; candidate = undefined; recipient = value ? { kind: value.kind, id: value.id } : undefined; notify(); },
     async loadCatalog({ expectedRevision } = {}) {
       const attempt = ++catalogRevision;
       const response = await fetch('/api/authoring-catalog', { headers });
@@ -87,9 +92,9 @@ export function createAuthoringClient() {
     },
     publish(value) {
       artifact++; revision++; candidate = undefined; draftValue = undefined; compiled = undefined;
-      bytes = Uint8Array.from(value.policyBytes); intent = value.intent; notify();
+      bytes = Uint8Array.from(value.policyBytes); intent = value.intent; keepJudgments(value); notify();
     },
-    importBytes(value) { artifact++; revision++; bytes = value.slice(); intent = undefined; candidate = undefined; draftValue = undefined; compiled = undefined; notify(); },
+    importBytes(value) { artifact++; revision++; bytes = value.slice(); intent = undefined; keepJudgments(); candidate = undefined; draftValue = undefined; compiled = undefined; notify(); },
     // While a draft is open every edit goes through the draft operations: the recorded
     // choices are never composed as an executable policy until an explicit compile.
     async propose(operation) { return draftValue ? this.proposeDraft(operation) : this.proposeRequest('edit', { operation }); },
@@ -131,7 +136,7 @@ export function createAuthoringClient() {
           revision++;
           draftValue = result.value.draft ? { ...asDraft(result.value.draft), fromPolicy: false }
             : asDraft({ ...current, ...result.value, savedIntentBytes: current.savedIntentBytes });
-          compiled = undefined; intent = undefined; bytes = draftValue.savedIntentBytes.slice();
+          compiled = undefined; intent = undefined; bytes = draftValue.savedIntentBytes.slice(); keepJudgments(result.value.draft ?? draftValue);
         }
         notify(); return result;
       };
@@ -147,7 +152,8 @@ export function createAuthoringClient() {
       if (attempt !== revision) return { status: 'superseded' };
       if (result.status === 'ok') {
         bytes = Uint8Array.from(result.value.policyBytes); intent = result.value.intent;
-        compiled = { scope: result.value.scope, whole: result.value.scope.length === draftValue.intent.roots.length, reviewsReconsidered: result.value.reviewsReconsidered ?? [] };
+        compiled = { scope: result.value.scope, whole: result.value.scope.length === draftValue.intent.roots.length };
+        keepJudgments(result.value);
       }
       notify(); return result;
     },
@@ -161,8 +167,18 @@ export function createAuthoringClient() {
     accept() {
       if (!candidate) return;
       if (!candidate.envelopeBytes) return this.publish(candidate);
-      revision++; draftValue = candidate; candidate = undefined; compiled = undefined; intent = undefined;
+      revision++; draftValue = candidate; candidate = undefined; compiled = undefined; intent = undefined; keepJudgments(draftValue);
       bytes = draftValue.savedIntentBytes.slice(); notify();
+    },
+    // Re-derives saved judgments for the current evidence and identity without touching the
+    // policy, draft or compiled bytes; a compiled policy is read as itself.
+    async refreshJudgments() {
+      const attempt = revision, result = draftValue && !intent
+        ? await request('draft-open', { bytes: [...draftValue.envelopeBytes], policyBytes: undefined }) : bytes.length ? await request('read') : undefined;
+      if (!result) return { status: 'ok' };
+      if (attempt !== revision) return { status: 'superseded' };
+      if (result.status === 'ok') { keepJudgments(result.value); notify(); }
+      return result;
     },
     // An edited draft or imported envelope revalidates itself, so edits are never replaced by the
     // original policy. An untouched draft of a plain policy is just that policy: it revalidates as
@@ -176,6 +192,7 @@ export function createAuthoringClient() {
       const result = await request('read');
       if (attempt !== revision) return { status: 'superseded' };
       if (result.status === 'ok' && result.value.editing === 'unresolved') return openAttempt(attempt, bytes);
+      if (result.status === 'ok') keepJudgments(result.value);
       if (result.status === 'ok' && result.value.editing === 'available') intent = result.value.intent;
       notify(); return result;
     },

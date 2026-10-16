@@ -3,10 +3,10 @@ import { parsePolicy, deriveRecipeIdentity } from '@aihq/core/contracts';
 import { isCheckedRelease, listItems, configureItem, resolveSelections, validateSelectionSet } from '@aihq/catalog/reader';
 import { checkIntentShape, rootKey, pinKey } from './intent-shape.mjs';
 import { migrateIntent } from './migrate-intent.mjs';
-import { inspectReviewEvidence, compareReviewBindings, reviewDiagnostics } from './review-bindings.mjs';
+import { inspectReviewEvidence, compareReviewBindings, describeReviewJudgments, summarizeReviewJudgments } from './review-bindings.mjs';
 import { checkReview } from './intent-shape.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_KINDS } from './journey.mjs';
-export { inspectReviewEvidence, compareReviewBindings } from './review-bindings.mjs';
+export { inspectReviewEvidence, compareReviewBindings, describeReviewJudgments, summarizeReviewJudgments } from './review-bindings.mjs';
 export const AUTHORING_SCHEMA = 'urn:aihq:workbench:saved-intent:3.0.0';
 export const REVIEW_SCHEMA = 'urn:aihq:workbench:review-decisions:1.0.0';
 export const stable = value => JSON.stringify(value, (_key, member) => member && typeof member === 'object' && !Array.isArray(member)
@@ -98,7 +98,13 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
   if (!parsed.valid) return refuse('INPUT_INVALID', '', 'Core refused the composed execution policy.', undefined, { owner: 'core', diagnostics: parsed.diagnostics });
   return ok({ policyBytes, intent: next, policy, inclusions: resolved.inclusions, optional: resolved.optional });
 }
-export async function readAuthoring({ policyBytes, inventories, reviewEvidence = [], comparisons = [] }) {
+// Saved judgments are always reported as derived applicability; a failure to describe them never gates editing.
+async function reviewView({ intent, inventories, reviewEvidence, comparisons, recipient }) {
+  if (!checkIntentShape(intent)) return {};
+  const described = await describeReviewJudgments({ intent, inventories, reviewEvidence, comparisons, recipient });
+  return described.status === 'ok' ? { reviewJudgments: described.value, reviewSummary: summarizeReviewJudgments(described.value) } : { reviewJudgmentDiagnostics: described.diagnostics };
+}
+export async function readAuthoring({ policyBytes, inventories, reviewEvidence = [], comparisons = [], recipient }) {
   if (!(policyBytes instanceof Uint8Array)) return refuse('INPUT_INVALID', '/policyBytes', 'Supply original UTF-8 bytes.');
   const originalBytes = policyBytes.slice();
   let parsed;
@@ -120,20 +126,16 @@ export async function readAuthoring({ policyBytes, inventories, reviewEvidence =
     try { analysis = analyzeDraft({ intent, policy, inventories, live: false }); } catch { /* invalid inventories are reported by build */ }
     const note = migration ? { migration: { from: policy.metadata['aih.workbench'].schema, to: AUTHORING_SCHEMA } } : {};
     if (analysis?.mismatches.length) return ok({ policy, intent, editing: 'unavailable', originalBytes, diagnostics: analysis.mismatches, ...note });
-    if (analysis?.unresolved.length) {
-      const diagnostics = availabilityDiagnostics(analysis.unresolved), scope = availableReviewScope({ intent, inventories, comparisons });
-      diagnostics.push(...await reviewDiagnostics({ intent: scope.intent, inventories, reviewEvidence, comparisons: scope.comparisons }));
-      const review = diagnostics.some(d => !['SOURCE_REVISION_UNAVAILABLE', 'ORIGIN_UNAVAILABLE'].includes(d.code));
-      return ok({ policy, intent, editing: review ? 'unavailable' : 'unresolved', originalBytes, diagnostics,
-        ...(review ? {} : { unresolved: analysis.unresolved, roots: analysis.roots }), ...note });
-    }
+    if (analysis?.unresolved.length) return ok({ policy, intent, editing: 'unresolved', originalBytes, diagnostics: availabilityDiagnostics(analysis.unresolved),
+      unresolved: analysis.unresolved, roots: analysis.roots, ...await reviewView({ intent, inventories, reviewEvidence, comparisons, recipient }), ...note });
   }
   const rebuilt = await build({ intent, inventories, base: policy, capture: migration?.capture === true, historicalV2: migration?.historicalV2 === true });
   const diagnostics = rebuilt.status === 'refused' ? rebuilt.diagnostics : stable(projected(rebuilt.value.policy.selections)) !== stable(projected(policy.selections))
     ? [{ code: 'INTENT_POLICY_CONTRADICTION', path: '/selections', message: 'Intent contradicts executable selections.' }] : [];
-  if (!diagnostics.length) diagnostics.push(...await reviewDiagnostics({ intent, inventories, reviewEvidence, comparisons }));
-  return ok({ policy, intent: rebuilt.status === 'ok' ? rebuilt.value.intent : intent, editing: diagnostics.length ? 'unavailable' : 'available', originalBytes, diagnostics,
+  const current = rebuilt.status === 'ok' ? rebuilt.value.intent : intent;
+  return ok({ policy, intent: current, editing: diagnostics.length ? 'unavailable' : 'available', originalBytes, diagnostics,
     ...(rebuilt.status === 'ok' ? { inclusions: rebuilt.value.inclusions, optional: rebuilt.value.optional } : {}),
+    ...await reviewView({ intent: current, inventories, reviewEvidence, comparisons, recipient }),
     ...(migration ? { migration: { from: policy.metadata['aih.workbench'].schema, to: AUTHORING_SCHEMA } } : {}) });
 }
 export async function reconcileAuthoring({ savedPolicyBytes, inventories, candidateInventories, reviewEvidence = [], comparisons = [] }) {
@@ -172,45 +174,25 @@ export async function reconcileAuthoring({ savedPolicyBytes, inventories, candid
   return { ...ok({ status: choices.length ? 'needs-decisions' : 'unchanged', affectedRoots, retainedRoots, choices }), originalBytes: savedPolicyBytes.slice() };
 }
 export async function composeAuthoring(options) { return composeReviewed(options); }
-async function composeReviewed({ basePolicyBytes, intent, inventories, reviewEvidence = [], comparisons = [] }, reviewTransition = false) {
+async function composeReviewed({ basePolicyBytes, intent, inventories, reviewEvidence = [], comparisons = [], recipient }, reviewTransition = false) {
   if (intent && new TextEncoder().encode(JSON.stringify(intent)).length > 850_000) return refuse('POLICY_BOUND_EXCEEDED', '/metadata/aih.workbench', 'Intent exceeds 850,000 UTF-8 bytes; reduce selected state.', basePolicyBytes);
   if (intent?.reviews?.schema && intent.reviews.schema !== REVIEW_SCHEMA) return refuse('INTENT_VERSION_UNSUPPORTED', '/metadata/aih.workbench/reviews/schema', 'Unsupported review document version.', basePolicyBytes);
   if (!checkIntentShape(intent)) return refuse('FIELD_SEMANTICS_UNSUPPORTED', '/metadata/aih.workbench', 'Malformed or unknown authoring semantics.', basePolicyBytes);
   let base;
   if (basePolicyBytes) {
-    let original = await readAuthoring({ policyBytes: basePolicyBytes, inventories, reviewEvidence, comparisons });
-    // A comparison may name the proposed new release. Validate the original
-    // against its own still-selected subject before evaluating the candidate.
-    if (original.status === 'ok' && original.value.editing !== 'available' && comparisons.length) {
-      const prior = await readAuthoring({ policyBytes: basePolicyBytes, inventories, reviewEvidence });
-      if (prior.status === 'ok' && prior.value.editing === 'available') original = prior;
-    }
+    const original = await readAuthoring({ policyBytes: basePolicyBytes, inventories });
     if (original.status === 'refused') return original;
-    if (original.value.editing !== 'available' && !(reviewTransition && original.value.diagnostics.every(d => ['REVIEW_BINDING_UNAVAILABLE', 'REVIEW_RECONSIDER_REQUIRED'].includes(d.code)))) return { status: 'refused', diagnostics: refusalDiagnostics(original.value), originalBytes: basePolicyBytes.slice() };
+    if (original.value.editing !== 'available') return { status: 'refused', diagnostics: refusalDiagnostics(original.value), originalBytes: basePolicyBytes.slice() };
     base = original.value.policy;
     if (!reviewTransition && stable(intent.reviews) !== stable(original.value.intent.reviews)) return refuse('REVIEW_BINDING_UNAVAILABLE', '/reviews', 'Use the checked evidence review workflow to change decisions.', basePolicyBytes);
   }
-  return buildReviewed({ intent, inventories, base, originalBytes: basePolicyBytes, reviewEvidence, comparisons, reviewTransition });
+  return buildReviewed({ intent, inventories, base, originalBytes: basePolicyBytes, reviewEvidence, comparisons, recipient });
 }
-async function buildReviewed({ intent, inventories, base, originalBytes, reviewEvidence, comparisons, reviewTransition = false }) {
-  let result = await build({ intent, inventories, base, capture: true });
-  if (result.status === 'ok') {
-    const compared = await compareReviewBindings({ intent: result.value.intent, inventories, reviewEvidence, comparisons });
-    if (compared.status !== 'ok') return { ...compared, ...(originalBytes ? { originalBytes: originalBytes.slice() } : {}) };
-    const changed = compared.value.filter(comparison => comparison.state === 'changed');
-    if (changed.length && base && !reviewTransition) {
-      const reconsidered = structuredClone(result.value.intent);
-      preserveReconsideration(reconsidered.reviews, changed);
-      result = await build({ intent: reconsidered, inventories, base, capture: true });
-    } else if (compared.value.some(comparison => comparison.state !== 'unchanged')) return { status: 'refused', diagnostics: await reviewDiagnostics({ intent: result.value.intent, inventories, reviewEvidence, comparisons }), ...(originalBytes ? { originalBytes: originalBytes.slice() } : {}) };
-  }
-  // A changed subject can coexist with an unavailable binding on another
-  // record. Revalidate every surviving current decision after rebuilding.
-  if (result.status === 'ok') {
-    const diagnostics = await reviewDiagnostics({ intent: result.value.intent, inventories, reviewEvidence, comparisons });
-    if (diagnostics.length) return { status: 'refused', diagnostics, ...(originalBytes ? { originalBytes: originalBytes.slice() } : {}) };
-  }
-  return result.status === 'refused' && originalBytes ? { ...result, originalBytes: originalBytes.slice() } : result;
+// Saved judgments are never refused or converted here: their applicability is reported beside the result.
+async function buildReviewed({ intent, inventories, base, originalBytes, reviewEvidence, comparisons, recipient }) {
+  const result = await build({ intent, inventories, base, capture: true });
+  if (result.status === 'ok') return ok({ ...result.value, ...await reviewView({ intent: result.value.intent, inventories, reviewEvidence, comparisons, recipient }) });
+  return originalBytes ? { ...result, originalBytes: originalBytes.slice() } : result;
 }
 // Use Core's public identity semantics for exact supplied recipe snapshots.
 // This describes content, not human approval or observation custody.
@@ -228,8 +210,8 @@ export async function describeAuthoringSubject({ inventory, itemId }) {
   if (identity.status !== 'ok') return identity;
   return ok({ releaseSha256: inventory.release.sha256, itemId, itemSha256: item.itemSha256, recipeIdentity: identity.value.recipeIdentity, materials: identity.value.materials });
 }
-export async function editAuthoring({ policyBytes, inventories, operation, reviewEvidence = [], comparisons = [] }) {
-  const original = await readAuthoring({ policyBytes, inventories, reviewEvidence, comparisons });
+export async function editAuthoring({ policyBytes, inventories, operation, reviewEvidence = [], comparisons = [], recipient }) {
+  const original = await readAuthoring({ policyBytes, inventories });
   if (original.status !== 'ok') return original;
   if (original.value.editing !== 'available') return { status: 'refused', diagnostics: refusalDiagnostics(original.value), originalBytes: policyBytes.slice() };
   // An omitted hash is filled from the checked inventory; a supplied one is verified by composition.
@@ -272,16 +254,16 @@ export async function editAuthoring({ policyBytes, inventories, operation, revie
       add({ ...ref, itemSha256: pin.itemSha256, configuration: selection.configuration, originIds: ['direct'] });
     }
   } catch (error) { return refuse('INTENT_POLICY_CONTRADICTION', '/operation', error.message, policyBytes); }
-  return composeAuthoring({ basePolicyBytes: policyBytes, intent, inventories, reviewEvidence, comparisons });
+  return composeAuthoring({ basePolicyBytes: policyBytes, intent, inventories, reviewEvidence, comparisons, recipient });
 }
 
 // These are the only mutation paths for reviews on an existing document.
 // Portable human records describe a decision; they do not authenticate a person.
-export async function recordReview({ policyBytes, inventories, evidenceBytes, target, finding, decision, reviewEvidence = [], comparisons = [] }) {
+export async function recordReview({ policyBytes, inventories, evidenceBytes, target, finding, decision, reviewEvidence = [], comparisons = [], recipient }) {
   if (!Array.isArray(reviewEvidence) || reviewEvidence.length > 32 || reviewEvidence.some(bytes => !(bytes instanceof Uint8Array))) return refuse('REVIEW_BINDING_UNAVAILABLE', '/reviewEvidence', 'Supply at most 32 original evidence byte arrays.', policyBytes);
-  const read = await readAuthoring({ policyBytes, inventories, reviewEvidence, comparisons });
+  const read = await readAuthoring({ policyBytes, inventories });
   if (read.status !== 'ok') return read;
-  if (read.value.diagnostics.some(d => !['REVIEW_BINDING_UNAVAILABLE', 'REVIEW_RECONSIDER_REQUIRED'].includes(d.code))) return { status: 'refused', diagnostics: read.value.diagnostics, originalBytes: policyBytes.slice() };
+  if (read.value.editing !== 'available') return { status: 'refused', diagnostics: refusalDiagnostics(read.value), originalBytes: policyBytes.slice() };
   const intent = structuredClone(read.value.intent), inventory = inventories.find(entry => entry.release.sha256 === target?.releaseSha256);
   if (!inventory || !intent.pins.some(pin => pin.releaseSha256 === target.releaseSha256 && pin.itemId === target.itemId)) return refuse('REVIEW_BINDING_UNAVAILABLE', '/target', 'Review target must be an exact selected item.', policyBytes);
   const inspected = await inspectReviewEvidence({ evidenceBytes, inventory, itemId: target.itemId });
@@ -295,7 +277,7 @@ export async function recordReview({ policyBytes, inventories, evidenceBytes, ta
   intent.reviews.records.push({ ...structuredClone(decision), subject: inspected.value.subject, finding: binding.finding, evidence: binding.evidence, state: 'current' });
   if (!checkReview(intent.reviews)) return refuse('FIELD_SEMANTICS_UNSUPPORTED', '/decision', 'Invalid review fields, identity, UTC timestamp or supersession.', policyBytes);
   const otherEvidence = reviewEvidence.filter(bytes => bytes.length !== evidenceBytes.length || bytes.some((byte, index) => byte !== evidenceBytes[index]));
-  return composeReviewed({ basePolicyBytes: policyBytes, intent, inventories, reviewEvidence: [evidenceBytes, ...otherEvidence], comparisons }, true);
+  return composeReviewed({ basePolicyBytes: policyBytes, intent, inventories, reviewEvidence: [evidenceBytes, ...otherEvidence], comparisons, recipient }, true);
 }
 
 function preserveReconsideration(reviews, changed) {
@@ -308,15 +290,16 @@ function preserveReconsideration(reviews, changed) {
     reviews.records.push({ ...record, id: `reconsider-${ordinal}`, state: 'reconsider', supersedes: record.id });
   }
 }
-export async function reconsiderReviews({ policyBytes, inventories, reviewEvidence = [], comparisons = [] }) {
-  const read = await readAuthoring({ policyBytes, inventories, reviewEvidence, comparisons });
+// Optional and explicit: an organization may require review. Nothing invokes it implicitly.
+export async function reconsiderReviews({ policyBytes, inventories, reviewEvidence = [], comparisons = [], recipient }) {
+  const read = await readAuthoring({ policyBytes, inventories });
   if (read.status !== 'ok') return read;
-  if (read.value.diagnostics.some(d => !['REVIEW_BINDING_UNAVAILABLE', 'REVIEW_RECONSIDER_REQUIRED'].includes(d.code))) return { status: 'refused', diagnostics: read.value.diagnostics, originalBytes: policyBytes.slice() };
+  if (read.value.editing !== 'available') return { status: 'refused', diagnostics: refusalDiagnostics(read.value), originalBytes: policyBytes.slice() };
   const intent = structuredClone(read.value.intent);
   const compared = await compareReviewBindings({ intent, inventories, reviewEvidence, comparisons });
   if (compared.status !== 'ok') return { ...compared, originalBytes: policyBytes.slice() };
   preserveReconsideration(intent.reviews, compared.value.filter(result => result.state !== 'unchanged'));
-  const result = await composeReviewed({ basePolicyBytes: policyBytes, intent, inventories, reviewEvidence, comparisons }, true);
+  const result = await composeReviewed({ basePolicyBytes: policyBytes, intent, inventories, reviewEvidence, comparisons, recipient }, true);
   return result.status === 'ok' ? { ...result, value: { ...result.value, comparisons: compared.value }, originalBytes: policyBytes.slice() } : result;
 }
 
@@ -337,15 +320,6 @@ function availabilityDiagnostics(unresolved) {
   const suffix = { 'revision-unavailable': ' (a different revision is supplied and is not substituted)' };
   return unresolved.map(({ kind, ref, reason }) => ({ code: kind === 'origin' ? 'ORIGIN_UNAVAILABLE' : 'SOURCE_REVISION_UNAVAILABLE', path: paths[kind],
     message: `Exact ${what[kind] ?? 'source/item'} unavailable: ${describeRef(ref)}${suffix[reason] ?? ''}` }));
-}
-// Current decisions on subjects whose release is not supplied cannot be compared
-// and are reported through their unresolved choices, not as binding failures.
-function availableReviewScope({ intent, inventories, comparisons }) {
-  const supplied = new Set(inventories.map(e => e.release.sha256));
-  const subject = record => (comparisons.find(c => c?.recordId === record.id)?.target ?? record.subject).releaseSha256;
-  const dropped = new Set(intent.reviews.records.filter(r => r.state === 'current' && !supplied.has(subject(r))).map(r => r.id));
-  if (!dropped.size) return { intent, comparisons };
-  return { intent: { ...intent, reviews: { ...intent.reviews, records: intent.reviews.records.filter(r => !dropped.has(r.id)) } }, comparisons: comparisons.filter(c => !dropped.has(c?.recordId)) };
 }
 // Recorded dependency graph: policy selections joined to saved pins by recipe digest and scope.
 function recordedGraph(policy, pins) {
@@ -473,7 +447,9 @@ function analyzeDraft({ intent, policy, inventories, live = true }) {
       ...exclusionEntries.filter(e => root.originIds.includes(e.ref.originId))];
     const refusal = refusals.get(rootKey(root));
     if (!blockers.length && refusal) return { ...structuredClone(root), status: 'refused', refusal: { owner: 'catalog', diagnostics: structuredClone(refusal) } };
-    return { ...structuredClone(root), status: blockers.length ? 'unresolved' : 'resolved',
+    // Closure keys are rootKey values; the displayed dependency set is the root's required closure.
+    const dependencies = [...closures.get(rootKey(root))].filter(k => k !== rootKey(root)).map(k => { const [releaseSha256, itemId, scope] = k.split('/'); return { releaseSha256, itemId, scope }; });
+    return { ...structuredClone(root), status: blockers.length ? 'unresolved' : 'resolved', dependencies,
       ...(blockers.length ? { blockedBy: blockers.map(({ kind, ref, reason }) => ({ kind, ref, reason })) } : {}) };
   });
   return { index, graph, closures, resolvable, skips, unavailableNodes, undeterminedRoots, refusals, mismatches, unresolved, roots };
@@ -491,7 +467,7 @@ async function loadDraft(envelopeBytes) {
   return { status: 'ok', value: { read: read.value, record, policy: parsed.document }, diagnostics: read.diagnostics };
 }
 // Compose and Core-validate an executable policy for the requested roots only.
-async function compileScope({ policy, intent, inventories, analysis, roots, reviewEvidence, comparisons, originalBytes }) {
+async function compileScope({ policy, intent, inventories, analysis, roots, reviewEvidence, comparisons, recipient, originalBytes }) {
   const requested = roots ?? intent.roots.map(rootRef), keys = new Set(intent.roots.map(rootKey));
   if (!Array.isArray(requested) || requested.some(r => !isRef(r) || !keys.has(rootKey(r)))) return refuse('INPUT_INVALID', '/roots', 'Requested scope must name choices that exist in the draft.', originalBytes);
   const want = new Set(requested.map(rootKey)), whole = intent.roots.every(r => want.has(rootKey(r)));
@@ -512,33 +488,32 @@ async function compileScope({ policy, intent, inventories, analysis, roots, revi
     scoped = { ...scoped, origins, roots: structuredClone(kept), exclusions, pins: intent.pins.filter(p => pinKeys.has(pinKey(p))),
       provenance: intent.provenance.filter(p => releases.has(p.releaseSha256)), inputs: intent.inputs.filter(i => releases.has(i.releaseSha256)) };
   }
-  const result = await buildReviewed({ intent: scoped, inventories, base: policy, originalBytes, reviewEvidence, comparisons });
+  const result = await buildReviewed({ intent: scoped, inventories, base: policy, originalBytes, reviewEvidence, comparisons, recipient });
   if (result.status !== 'ok') return result;
-  const before = new Set(scoped.reviews.records.filter(r => r.state === 'reconsider').map(r => r.id));
-  return ok({ policyBytes: result.value.policyBytes, intent: result.value.intent, policy: result.value.policy, scope: requested.map(rootRef),
-    reviewsReconsidered: result.value.intent.reviews.records.filter(r => r.state === 'reconsider' && !before.has(r.id)).map(r => r.id) });
+  const { policyBytes, intent: compiled, policy: composed, reviewJudgments, reviewSummary, reviewJudgmentDiagnostics } = result.value;
+  return ok({ policyBytes, intent: compiled, policy: composed, scope: requested.map(rootRef),
+    ...(reviewJudgments ? { reviewJudgments, reviewSummary } : { reviewJudgmentDiagnostics }) });
 }
-async function presentDraft({ envelopeBytes, envelope, savedIntentBytes, supported, policy, intent, inventories, reviewEvidence, comparisons, journeyDiagnostics = [], changes }) {
+async function presentDraft({ envelopeBytes, envelope, savedIntentBytes, supported, policy, intent, inventories, reviewEvidence, comparisons, recipient, journeyDiagnostics = [], changes }) {
   let analysis;
   try { analysis = analyzeDraft({ intent, policy, inventories }); }
   catch (error) { return refuse('SOURCE_IDENTITY_MISMATCH', '/inventories', error.message, envelopeBytes); }
   if (analysis.mismatches.length) return { status: 'refused', diagnostics: analysis.mismatches, originalBytes: envelopeBytes.slice() };
-  const scope = availableReviewScope({ intent, inventories, comparisons });
-  const review = await reviewDiagnostics({ intent: scope.intent, inventories, reviewEvidence, comparisons: scope.comparisons });
-  if (review.length) return { status: 'refused', diagnostics: review, originalBytes: envelopeBytes.slice() };
   // Unsupported required records cannot be interpreted, so nothing may be compiled from this envelope.
   const unsupported = journeyDiagnostics.filter(d => d.code === 'JOURNEY_RECORD_UNSUPPORTED');
-  const compiled = supported ? await compileScope({ policy, intent, inventories, analysis, reviewEvidence, comparisons, originalBytes: envelopeBytes })
+  const compiled = supported ? await compileScope({ policy, intent, inventories, analysis, reviewEvidence, comparisons, recipient, originalBytes: envelopeBytes })
     : { status: 'refused', diagnostics: unsupported.length ? unsupported : [{ code: 'JOURNEY_RECORD_UNSUPPORTED', path: '/records', message: 'The envelope has required records this version cannot interpret; compile is unavailable.' }] };
   return ok({ envelopeBytes: envelopeBytes.slice(), envelope, projection: projectJourneyEnvelope(envelope), supported, intent, editing: analysis.unresolved.length ? 'unresolved' : 'available',
     unresolved: analysis.unresolved, roots: analysis.roots, savedIntentBytes: savedIntentBytes.slice(),
     compile: compiled.status === 'ok' ? { status: 'available' } : { status: 'refused', reasons: compiled.diagnostics },
-    diagnostics: [...availabilityDiagnostics(analysis.unresolved), ...journeyDiagnostics], ...(changes ? { changes } : {}) });
+    diagnostics: [...availabilityDiagnostics(analysis.unresolved), ...journeyDiagnostics],
+    ...(compiled.status === 'ok' && compiled.value.reviewJudgments ? { reviewJudgments: compiled.value.reviewJudgments, reviewSummary: compiled.value.reviewSummary } : await reviewView({ intent, inventories, reviewEvidence, comparisons, recipient })),
+    ...(changes ? { changes } : {}) });
 }
 // `bytes` is a saved policy or a journey envelope; either reopens every recorded choice.
-export async function openDraft({ bytes, inventories, reviewEvidence = [], comparisons = [] } = {}) {
+export async function openDraft({ bytes, inventories, reviewEvidence = [], comparisons = [], recipient } = {}) {
   if (!(bytes instanceof Uint8Array)) return refuse('INPUT_INVALID', '/bytes', 'Supply original policy or journey envelope bytes.');
-  const context = { inventories, reviewEvidence, comparisons };
+  const context = { inventories, reviewEvidence, comparisons, recipient };
   if (isJourneyEnvelope(bytes)) {
     const loaded = await loadDraft(bytes);
     if (loaded.status !== 'ok') return loaded;
@@ -553,7 +528,7 @@ export async function openDraft({ bytes, inventories, reviewEvidence = [], compa
   return presentDraft({ ...context, envelopeBytes: written.value.envelopeBytes, envelope: written.value.envelope, savedIntentBytes: bytes, supported: true, policy: read.value.policy, intent: read.value.intent });
 }
 // The only executable output of a draft. Unresolved or dependency-incorrect scopes refuse.
-export async function compileDraft({ envelopeBytes, inventories, roots, reviewEvidence = [], comparisons = [] } = {}) {
+export async function compileDraft({ envelopeBytes, inventories, roots, reviewEvidence = [], comparisons = [], recipient } = {}) {
   const loaded = await loadDraft(envelopeBytes);
   if (loaded.status !== 'ok') return loaded;
   const { read, record, policy } = loaded.value;
@@ -562,10 +537,10 @@ export async function compileDraft({ envelopeBytes, inventories, roots, reviewEv
   try { analysis = analyzeDraft({ intent: record.intent, policy, inventories }); }
   catch (error) { return refuse('SOURCE_IDENTITY_MISMATCH', '/inventories', error.message, envelopeBytes); }
   if (analysis.mismatches.length) return { status: 'refused', diagnostics: analysis.mismatches, originalBytes: envelopeBytes.slice() };
-  return compileScope({ policy, intent: record.intent, inventories, analysis, roots, reviewEvidence, comparisons, originalBytes: envelopeBytes });
+  return compileScope({ policy, intent: record.intent, inventories, analysis, roots, reviewEvidence, comparisons, recipient, originalBytes: envelopeBytes });
 }
 // Safe edits of the recorded choices; each success is a new envelope revision.
-export async function editDraft({ envelopeBytes, inventories, operation, reviewEvidence = [], comparisons = [] } = {}) {
+export async function editDraft({ envelopeBytes, inventories, operation, reviewEvidence = [], comparisons = [], recipient } = {}) {
   const loaded = await loadDraft(envelopeBytes);
   if (loaded.status !== 'ok') return loaded;
   const { read, record, policy } = loaded.value;
@@ -578,7 +553,7 @@ export async function editDraft({ envelopeBytes, inventories, operation, reviewE
   catch (error) { return fail('SOURCE_IDENTITY_MISMATCH', '/inventories', error.message); }
   if (before.mismatches.length) return unchanged({ status: 'refused', diagnostics: before.mismatches });
   const { index } = before, intent = structuredClone(record.intent);
-  const changes = { removedRoots: [], removedOrigins: [], removedExclusions: [], addedRoots: [], removedPins: [], reviewsReconsidered: [] };
+  const changes = { removedRoots: [], removedOrigins: [], removedExclusions: [], addedRoots: [], removedPins: [] };
   const closureOf = root => before.closures.get(rootKey(root)) ?? reach(before.graph, rootKey(root));
   const dependentsOf = (key, retained) => retained.filter(r => rootKey(r) !== key && closureOf(r).has(key));
   const required = (target, dependents) => fail('DEPENDENCY_RETAINED', '/operation/root',
@@ -710,14 +685,11 @@ export async function editDraft({ envelopeBytes, inventories, operation, reviewE
     return existing ? [existing] : entry?.input ? [entry.input] : [];
   }));
   changes.removedPins = record.intent.pins.filter(p => !reached.has(pinKey(p))).map(p => ({ releaseSha256: p.releaseSha256, itemId: p.itemId }));
-  // Decisions about content that left the draft keep their history and ask for reconsideration.
-  const orphaned = intent.reviews.records.filter(r => r.state === 'current' && !reached.has(pinKey(r.subject)) && record.intent.pins.some(p => pinKey(p) === pinKey(r.subject)));
-  if (orphaned.length) { preserveReconsideration(intent.reviews, orphaned.map(r => ({ recordId: r.id }))); changes.reviewsReconsidered = orphaned.map(r => r.id); }
   if (!checkIntentShape(intent)) return fail('FIELD_SEMANTICS_UNSUPPORTED', '/records/0/intent', 'Edited draft violates the supported saved-intent shape.');
   const known = read.records.filter(r => Object.hasOwn(JOURNEY_RECORD_KINDS, r.schema)).map(r => r === record ? { id: r.id, schema: r.schema, required: true, intent } : r);
   const written = await writeJourneyEnvelope({ savedIntentBytes: read.savedIntentBytes, records: known, previous: read });
   if (written.status !== 'ok') return unchanged(written);
-  const presented = await presentDraft({ inventories, reviewEvidence, comparisons, envelopeBytes: written.value.envelopeBytes, envelope: written.value.envelope,
+  const presented = await presentDraft({ inventories, reviewEvidence, comparisons, recipient, envelopeBytes: written.value.envelopeBytes, envelope: written.value.envelope,
     savedIntentBytes: read.savedIntentBytes, supported: true, policy, intent, changes });
   return presented.status === 'ok' ? presented : unchanged(presented);
 }
