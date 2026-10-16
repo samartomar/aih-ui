@@ -195,7 +195,9 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
     if (result.status !== 'ok') { handoff.append(el('pre', 'whitespace-pre-wrap', failure(result))); report(failure(result)); return; }
     const value = result.value, location = value.handoff;
     handoff.append(el('p', 'font-medium', handoffText(location)));
-    for (const field of ['repository', 'path', 'ref']) handoff.append(identify(el('p', 'break-all', location[field]), `org-handoff-${field}`));
+    for (const [field, label] of [['repository', 'Repository'], ['path', 'Path'], ['ref', 'Ref']]) {
+      const fact = el('p', 'break-all'); fact.append(el('span', 'text-on-surface-variant', `${label}: `), identify(el('span', 'font-mono', location[field]), `org-handoff-${field}`)); handoff.append(fact);
+    }
     for (const [kind, text] of [['git', location.gitSteps], ['pr', location.prSteps]]) {
       handoff.append(identify(el('pre', 'whitespace-pre-wrap break-words', text), `org-handoff-${kind}`), action(`Copy ${kind === 'git' ? 'git' : 'PR'} steps`, `org-handoff-copy-${kind}`, async () => { await navigator.clipboard.writeText(text); report('Steps copied.'); }));
     }
