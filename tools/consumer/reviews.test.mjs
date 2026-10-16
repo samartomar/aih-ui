@@ -12,6 +12,7 @@ import { generateKeyPairSync, createHash } from 'node:crypto';
 import { intakeDeclaration, digestBytes } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import * as authoring from './headless.mjs';
+import { writeJourneyEnvelope, readJourneyEnvelope } from './journey.mjs';
 import { inspectAuthenticatedReviewEvidence } from './review-host.mjs';
 const encode = value => new TextEncoder().encode(JSON.stringify(value));
 export async function reviewFixture({ configured = false } = {}) {
@@ -377,6 +378,50 @@ test('imported judgments are labelled imported and are not counted as the recipi
     assert.equal(edited.status, 'ok', JSON.stringify(edited.diagnostics));
     assert.equal(edited.value.reviewJudgments[0].origin, 'recipient');
     assert.deepEqual(edited.value.intent.reviews, saved.value.intent.reviews);
+  } finally { await f.cleanup(); }
+});
+test('reviewing identity labels judgments but never changes exported policy, saved intent or journey bytes', async () => {
+  const f = await reviewFixture();
+  try {
+    const evidence = await f.scan(), saved = await recorded(f, evidence), sentinel = 'settings-only-sentinel';
+    const context = { inventories: f.inventories, reviewEvidence: [evidence.bytes] }, policyBytes = saved.value.policyBytes;
+    const check = async (name, run, options, fields, judgments = true) => {
+      const baseline = await run(options);
+      assert.equal(baseline.status, 'ok', `${name}: ${JSON.stringify(baseline.diagnostics)}`);
+      if (judgments) assert.equal(baseline.value.reviewJudgments[0].origin, 'imported', name);
+      for (const recipient of [{ kind: 'individual', id: sentinel }, decision.owner]) {
+        const result = await run({ ...options, recipient });
+        assert.equal(result.status, 'ok', `${name}: ${JSON.stringify(result.diagnostics)}`);
+        if (judgments) {
+          assert.equal(result.value.reviewJudgments[0].origin, recipient.id === sentinel ? 'imported' : 'recipient', name);
+          assert.deepEqual(result.value.reviewJudgments[0].owner, decision.owner, name);
+        }
+        for (const field of fields) {
+          assert.ok(result.value[field] instanceof Uint8Array, `${name}.${field}`);
+          assert.equal(new TextDecoder('utf-8', { fatal: true }).decode(result.value[field]).includes(sentinel), false, `${name}.${field}`);
+          assert.deepEqual(result.value[field], baseline.value[field], `${name}.${field}`);
+        }
+        if (fields.includes('envelopeBytes')) {
+          const reopened = await readJourneyEnvelope(result.value.envelopeBytes);
+          assert.equal(reopened.status, 'ok', `${name}: ${JSON.stringify(reopened.diagnostics)}`);
+          assert.equal(new TextDecoder('utf-8', { fatal: true }).decode(reopened.value.savedIntentBytes).includes(sentinel), false, `${name}.embeddedSavedIntentBytes`);
+        }
+      }
+      return baseline;
+    };
+    await check('readAuthoring', authoring.readAuthoring, { ...context, policyBytes }, ['originalBytes']);
+    await check('composeAuthoring', authoring.composeAuthoring, { ...context, basePolicyBytes: policyBytes, intent: saved.value.intent }, ['policyBytes']);
+    await check('editAuthoring', authoring.editAuthoring, { ...context, policyBytes, operation: unrelatedSelect(f) }, ['policyBytes']);
+    await check('recordReview', authoring.recordReview, { ...context, policyBytes: f.saved.value.policyBytes, evidenceBytes: evidence.bytes,
+      target: { releaseSha256: f.inventory.release.sha256, itemId: f.item.id }, finding: saved.value.intent.reviews.records[0].finding, decision }, ['policyBytes']);
+    const changed = await changedEvidence(f);
+    await check('reconsiderReviews', authoring.reconsiderReviews, { ...context, policyBytes, reviewEvidence: [changed.bytes] }, ['policyBytes']);
+    const opened = await check('openDraft(policy)', authoring.openDraft, { ...context, bytes: policyBytes }, ['envelopeBytes', 'savedIntentBytes']);
+    await check('openDraft(envelope)', authoring.openDraft, { ...context, bytes: opened.value.envelopeBytes }, ['envelopeBytes', 'savedIntentBytes']);
+    const edited = await check('editDraft', authoring.editDraft, { ...context, envelopeBytes: opened.value.envelopeBytes, operation: unrelatedSelect(f) }, ['envelopeBytes', 'savedIntentBytes']);
+    await check('compileDraft', authoring.compileDraft, { ...context, envelopeBytes: edited.value.envelopeBytes }, ['policyBytes']);
+    // The envelope writer has no recipient parameter; passing the context must not serialize it either.
+    await check('writeJourneyEnvelope', writeJourneyEnvelope, { savedIntentBytes: opened.value.savedIntentBytes, records: opened.value.envelope.records }, ['envelopeBytes'], false);
   } finally { await f.cleanup(); }
 });
 test('accepted-risk judgment keeps actor, reason and exact binding through an edit and an evidence change', async () => {
