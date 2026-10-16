@@ -2,8 +2,9 @@
 // prepares fresh work through the current host interface; no prepared handle is stored, returned or reloaded, and a batch record
 // never holds one. There is no atomic multi-scope promise: each action ends as completed, failed, untouched, cancelled or
 // unknown, as Core and the folder reported it. `faults` and `clients` are host configuration, never request input.
-// The person's choice to run an opaque process (planning it, or recovering with `rerun`) is single use: the host records it as
-// spent, in a superseding batch handed to the caller's `persist`, before the process can run (see runBatch).
+// The person's choice to run an opaque process is used once. Planning it is the first choice: the host records it as spent, in a
+// superseding batch handed to the caller's `persist`, before the process can run (see runBatch). Choosing Run again for a kept
+// process is not stored at all: it is the `rerun` argument of one review or run, and nothing about it survives that call.
 import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, rm } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
@@ -101,7 +102,8 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
   async function open(envelopeBytes, batchId) {
     const read = await readBatch({ envelopeBytes, batchId });
     if (read.status !== 'ok') return read;
-    return { status: 'ok', value: { record: read.value.record, current: read.value.current, supported: read.value.supported, diagnostics: read.diagnostics, policy: JSON.parse(new TextDecoder().decode(read.value.savedPolicyBytes)) } };
+    return { status: 'ok', value: { record: read.value.record, current: read.value.current, supported: read.value.supported, diagnostics: read.diagnostics, policy: JSON.parse(new TextDecoder().decode(read.value.savedPolicyBytes)),
+      revision: JSON.parse(new TextDecoder().decode(envelopeBytes)).revision.sha256 } };
   }
   // An envelope with a required record this Workbench does not know is read-only: it may be reviewed, never run, recovered or changed.
   function unsupported({ diagnostics }, envelopeBytes) {
@@ -109,6 +111,19 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
     return refuse('JOURNEY_RECORD_UNSUPPORTED', first?.path ?? '/records', first?.message ?? 'The envelope holds a required record this Workbench does not support.', envelopeBytes);
   }
   const selectionOf = (policy, action) => policy.selections.find(selection => selection.id === action.selection.id);
+  // The actions the person chose to run again in this one call: each must be kept (`retain`) and be work Core cannot verify, an
+  // opaque process. Anything else refuses the whole call. The answer is the set of ids, or the refusal.
+  function chosenAgain({ record, policy }, rerun, envelopeBytes) {
+    if (rerun === undefined) return new Set();
+    if (!Array.isArray(rerun) || !rerun.every(id => typeof id === 'string')) return refuse('INPUT_INVALID', '/rerun', 'Supply the actions to run again as a list of action ids.', envelopeBytes);
+    for (const [index, id] of rerun.entries()) {
+      const action = record.actions.find(candidate => candidate.id === id), at = `/rerun/${index}`;
+      if (!action) return refuse('BATCH_RERUN_REFUSED', at, 'No action of this batch has that id.', envelopeBytes);
+      if (isVerifiable(selectionOf(policy, action))) return refuse('BATCH_RERUN_REFUSED', at, 'Finished work Core can verify is kept, never run again.', envelopeBytes);
+      if (action.retain !== true) return refuse('BATCH_RERUN_REFUSED', at, 'Only an action kept without running can be run again; this one runs when the batch is applied.', envelopeBytes);
+    }
+    return new Set(rerun);
+  }
   async function checkInput(record, id) {
     const input = record.inputs.find(candidate => candidate.id === id), root = materialRoots[id];
     if (!root) return { id, ok: false, reason: 'unavailable' };
@@ -116,16 +131,16 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
     catch { return { id, ok: false, reason: 'unavailable' }; }
   }
   // The fresh review: one Prepare per scope of its live actions, and every conflict found across scopes. Writes nothing.
-  async function inspect({ record, policy }) {
+  async function inspect({ record, policy }, again = new Set()) {
     const conflicts = [], targets = new Set(), owners = new Map();
     const scopes = await Promise.all(record.scopes.map(async scope => {
       const mine = record.actions.filter(action => action.scope === scope.id), live = [], seen = new Set();
-      for (const action of mine.filter(action => action.retain !== true)) {
+      for (const action of mine.filter(action => action.retain !== true || again.has(action.id))) {
         if (seen.has(action.selection.id)) conflicts.push({ kind: 'duplicate-selection', scope: scope.id, action: action.id });
         else { seen.add(action.selection.id); live.push(action); }
       }
       const prepared = live.length ? await prepareSelections(hostAt(scope.target.root), policy, live.map(action => selectionOf(policy, action))) : { status: 'skipped', diagnostics: [] };
-      return { scope, live, prepared, operations: operationsOf(prepared, live), retained: mine.filter(action => action.retain === true).map(action => action.id) };
+      return { scope, live, prepared, operations: operationsOf(prepared, live), retained: mine.filter(action => action.retain === true && !again.has(action.id)).map(action => action.id) };
     }));
     for (const { scope, prepared, operations } of scopes) {
       if (prepared.status !== 'ready' && prepared.status !== 'skipped') {
@@ -159,42 +174,52 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
       'shared-input': subject => inputs.find(entry => entry.id === subject).ok ? 'passed' : 'failed',
       'unrelated-state': subject => snapshots[record.scopes.findIndex(scope => scope.id === subject)].state === 'known' ? 'passed' : 'unknown',
       conflict: subject => flagged('scope', subject) ? 'failed' : 'passed',
-      'core-review': subject => { const action = record.actions.find(candidate => candidate.id === subject); return action.retain === true ? 'skipped' : flagged('action', subject) || flagged('scope', action.scope) ? 'failed' : 'passed'; }
+      'core-review': subject => { const action = record.actions.find(candidate => candidate.id === subject); return action.retain === true && !again.has(subject) ? 'skipped' : flagged('action', subject) || flagged('scope', action.scope) ? 'failed' : 'passed'; }
     };
     return { targets, value: { scopes: reviewed, conflicts, checks: record.checks.map(check => ({ ...check, state: state[check.kind](check.subject) })), ready: conflicts.length === 0 } };
   }
   return {
-    async reviewBatch({ envelopeBytes, batchId } = {}) {
+    // `rerun` names the kept opaque actions this review should show as work to run again (see chosenAgain).
+    async reviewBatch({ envelopeBytes, batchId, rerun } = {}) {
       const opened = await open(envelopeBytes, batchId);
       if (opened.status !== 'ok') return opened;
-      const { value } = await inspect(opened.value);
+      const again = chosenAgain(opened.value, rerun, envelopeBytes);
+      if (!(again instanceof Set)) return again;
+      const { value } = await inspect(opened.value, again);
       return { status: 'ok', diagnostics: opened.value.diagnostics, batchId: opened.value.record.id, ...value, ready: value.ready && opened.value.supported };
     },
-    // `persist(envelopeBytes)` makes a superseding batch durable and resolves once it is. It is how the person's consent to run an
-    // action Core cannot verify is spent: just before such an action is applied, the host writes the current batch again with that
-    // action kept (`retain`), and only if that was persisted does the action run. Without a `persist` that works, it is `failed`
-    // (`consent-not-recorded`) and nothing is applied for it. The report's `consumedBy` is the latest batch written that way.
-    async runBatch({ envelopeBytes, batchId, approve, persist, now = new Date().toISOString() } = {}) {
+    // `persist(envelopeBytes, { expectedRevisionSha256 })` makes a superseding batch durable and resolves once it is. It is how the
+    // person's consent to run an action Core cannot verify is spent: just before a first attempt at such an action is applied, the
+    // host writes the current batch again with that action kept (`retain`), and only if that was persisted does the action run.
+    // Contract: `persist` must atomically refuse (throw) unless the stored envelope's revision digest is `expectedRevisionSha256`
+    // (the revision of the bytes this run started from, then of each batch it wrote), so a copy that was already spent and replaced
+    // cannot spend the same consent again. Without a `persist` that works, the action is `failed` (`consent-not-recorded`) and
+    // nothing is applied for it. The report's `consumedBy` is the latest batch written that way.
+    // `rerun` names kept opaque actions to run in this call alone (see chosenAgain); they spend nothing, because the batch already
+    // keeps them, and an unnamed kept one stays untouched.
+    async runBatch({ envelopeBytes, batchId, approve, persist, rerun, now = new Date().toISOString() } = {}) {
       const opened = await open(envelopeBytes, batchId);
       if (opened.status !== 'ok') return opened;
       const { record, policy, current } = opened.value;
       if (!opened.value.supported) return unsupported(opened.value, envelopeBytes);
       if (approve?.batchId !== record.id) return refuse('BATCH_APPROVAL_REQUIRED', '/approve', 'Approval must name the exact batch id that was reviewed.', envelopeBytes);
       if (!current) return refuse('BATCH_SUPERSEDED', '/batchId', 'A later batch superseded this one; review and run the current batch.', envelopeBytes);
-      const { value: review, targets } = await inspect(opened.value);
+      const again = chosenAgain(opened.value, rerun, envelopeBytes);
+      if (!(again instanceof Set)) return again;
+      const { value: review, targets } = await inspect(opened.value, again);
       if (!review.ready) return { ...refuse('BATCH_CONFLICTS', '', 'Conflicts were found before apply; nothing was applied.'), review };
       const before = await Promise.all(record.scopes.map(scope => snapshot(scope.target.root, targets)));
       const hosts = new Map(record.scopes.map(scope => [scope.id, hostAt(scope.target.root)]));
       const results = new Map(), satisfied = result => result.outcome === 'completed' || result.reason === 'retained-earlier-result';
-      let broke = false, latest = { bytes: envelopeBytes, record };
+      let broke = false, latest = { bytes: envelopeBytes, record, revision: opened.value.revision };
       const spend = async action => {
         if (typeof persist !== 'function') return [{ code: 'BATCH_CONSENT_UNRECORDABLE', reason: 'no-persist' }];
         try {
           const planned = await planBatch({ envelopeBytes: latest.bytes, scopes: latest.record.scopes, inputs: latest.record.inputs, continuation: latest.record.continuation, categories: latest.record.categories,
             actions: latest.record.actions.map(other => other.id === action.id ? { ...other, retain: true } : other), now, supersedes: latest.record.id });
           if (planned.status !== 'ok') return codes(planned.diagnostics);
-          await persist(planned.value.envelopeBytes);
-          latest = { bytes: planned.value.envelopeBytes, record: planned.value.record };
+          await persist(planned.value.envelopeBytes, { expectedRevisionSha256: latest.revision });
+          latest = { bytes: planned.value.envelopeBytes, record: planned.value.record, revision: planned.value.envelope.revision.sha256 };
           return null;
         } catch (error) { return [{ code: 'BATCH_CONSENT_UNRECORDABLE', reason: error?.code ?? 'persist-failed' }]; }
       };
@@ -204,7 +229,7 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
         const unmet = action.requires.map(id => results.get(id)).find(result => !satisfied(result));
         if (unmet) { end('cancelled', unmet.reason === 'retained-unverifiable' ? 'dependency-unverifiable' : `dependency-${unmet.outcome}`); continue; }
         if (record.continuation === 'stop' && broke) { end('untouched', 'stopped-by-choice'); continue; }
-        if (action.retain === true) {
+        if (action.retain === true && !again.has(action.id)) {
           // Only an inspectable result can be shown to stand. One that no longer does is a failure, not a quiet skip.
           if (!isVerifiable(selection)) end('untouched', 'retained-unverifiable');
           else if (await observeRetained(host, policy, selection) === 'retained-earlier-result') end('untouched', 'retained-earlier-result');
@@ -215,7 +240,7 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
         if (drift) { end('failed', 'shared-input-changed'); continue; }
         const prepared = await prepareSelections(host, policy, [selection]);
         if (prepared.status !== 'ready') { end('failed', `prepare-${prepared.status}`, { completion: null, runId: null, operations: [], diagnostics: codes(prepared.diagnostics) }); continue; }
-        const unspent = isVerifiable(selection) ? null : await spend(action);
+        const unspent = isVerifiable(selection) || action.retain === true ? null : await spend(action);
         if (unspent) { end('failed', 'consent-not-recorded', { completion: null, runId: null, operations: [], diagnostics: unspent }); continue; }
         let restore = async () => {}, result;
         try {
@@ -234,22 +259,18 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
     },
     // Reinspects current state and writes a superseding batch. The caller's `outcome` is accepted for display only and never
     // trusted: a verifiable action is retained only when a fresh Prepare shows its result still stands or the person changed what Core
-    // manages. An unverifiable one (an opaque process) is retained too, and runs again only if the person names it in `rerun`.
-    async recoverBatch({ envelopeBytes, batchId, rerun = [], now } = {}) {
+    // manages. An unverifiable one (an opaque process) is always retained: it runs again only when the person names it in the
+    // `rerun` of a review or run, so recovery takes no `rerun` and a caller that still sends one is refused.
+    async recoverBatch({ envelopeBytes, batchId, rerun, now } = {}) {
       const opened = await open(envelopeBytes, batchId);
       if (opened.status !== 'ok') return opened;
       const { record, policy, current } = opened.value;
       if (!opened.value.supported) return unsupported(opened.value, envelopeBytes);
       if (!current) return refuse('BATCH_SUPERSEDED', '/batchId', 'Only the current batch can be recovered.', envelopeBytes);
-      if (!Array.isArray(rerun)) return refuse('INPUT_INVALID', '/rerun', 'Supply the actions to run again as a list of action ids.', envelopeBytes);
+      if (rerun !== undefined) return refuse('INPUT_INVALID', '/rerun', 'Recovery keeps every action Core cannot verify; choose Run again when reviewing or applying.', envelopeBytes);
       const hosts = new Map(record.scopes.map(scope => [scope.id, hostAt(scope.target.root)]));
       const stands = action => observeRetained(hosts.get(action.scope), policy, selectionOf(policy, action)).then(seen => seen === 'retained-earlier-result');
-      for (const [index, id] of rerun.entries()) {
-        const action = record.actions.find(candidate => candidate.id === id);
-        if (!action) return refuse('BATCH_RERUN_REFUSED', `/rerun/${index}`, 'No action of this batch has that id.', envelopeBytes);
-        if (isVerifiable(selectionOf(policy, action)) && await stands(action)) return refuse('BATCH_RERUN_REFUSED', `/rerun/${index}`, 'Finished work Core can verify is kept, never run again.', envelopeBytes);
-      }
-      const kept = await Promise.all(record.actions.map(action => isVerifiable(selectionOf(policy, action)) ? stands(action) : !rerun.includes(action.id)));
+      const kept = await Promise.all(record.actions.map(action => isVerifiable(selectionOf(policy, action)) ? stands(action) : true));
       const actions = record.actions.map(({ retain: _retain, ...action }, index) => kept[index] ? { ...action, retain: true } : action);
       const planned = await planBatch({ envelopeBytes, scopes: record.scopes, inputs: record.inputs, actions, continuation: record.continuation, categories: record.categories, now, supersedes: record.id });
       if (planned.status !== 'ok') return planned;

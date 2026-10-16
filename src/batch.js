@@ -20,6 +20,15 @@ async function api(path, body) {
   if (!response.ok || result.status !== 'ok') throw Object.assign(new Error(diagnosticsText(result)), { result });
   return result;
 }
+// The actions the person has ticked Run again for, sent with a review or a run and nowhere else.
+const ticked = () => [...node('actions').querySelectorAll('input[data-action]:checked')].map(box => box.dataset.action);
+const untick = () => { for (const box of node('actions').querySelectorAll('input[data-action]')) box.checked = false; };
+const withChoice = () => { const rerun = ticked(); return rerun.length ? { rerun } : {}; };
+// A changed choice changes what would run, so the review no longer describes it.
+function changed() {
+  reviewed = null; node('review-section').hidden = true; controls();
+  node('status').textContent = 'Run again choice changed. Review this batch again before applying.';
+}
 function renderBatch(projection, batchId) {
   current = { ...projection, id: batchId };
   node('content').hidden = false;
@@ -38,8 +47,9 @@ function renderBatch(projection, batchId) {
     if (action.retained) row.append(el('p', 'text-on-surface-variant', action.unverifiable ? 'Kept without running: Core cannot confirm this earlier work.' : 'Retained earlier result; fresh inspection preserves it.'));
     if (action.runAgain) {
       const label = el('label', 'flex items-start gap-2'), box = el('input');
-      box.type = 'checkbox'; box.id = `batch-rerun-${action.id}`; box.dataset.action = action.id; box.checked = action.runAgainChecked;
-      box.addEventListener('change', () => perform(async () => { try { await recover({ choices: true }); } catch (error) { box.checked = !box.checked; throw error; } }));
+      // Never ticked from the saved batch or an earlier run: only the person's tick, in this page session, chooses it.
+      box.type = 'checkbox'; box.id = `batch-rerun-${action.id}`; box.dataset.action = action.id; box.checked = false;
+      box.addEventListener('change', () => changed());
       const words = el('span'); words.append(el('span', 'font-medium', 'Run again'), el('span', 'block text-on-surface-variant', RERUN_NOTE));
       label.append(box, words); row.append(label);
     }
@@ -84,7 +94,7 @@ async function perform(task) {
 node('atomic-note').textContent = ATOMIC_NOTE;
 node('review').addEventListener('click', () => perform(async () => {
   reviewed = null;
-  const result = await api('batch-review', { batchId: current.id });
+  const result = await api('batch-review', { batchId: current.id, ...withChoice() });
   renderReview(result.review, result.batchId); node('status').textContent = 'Review finished. Nothing was applied.';
 }));
 node('continuation').addEventListener('change', () => perform(async () => {
@@ -99,9 +109,10 @@ node('apply').addEventListener('click', () => perform(async () => {
   if (!canApply(reviewed, current.id) || attempted) throw new Error('Review this batch before applying.');
   attempted = true; reviewed = null; node('review-section').hidden = true;
   try {
-    const result = await api('batch-run', { batchId: current.id });
-    // Running an opaque process spent the person's Run again choice in a newer batch. Show the batch as the host now holds it
-    // (the choice unticked, the process kept); a box is never ticked by anything but the person.
+    const result = await api('batch-run', { batchId: current.id, ...withChoice() });
+    // The run used up the choice. Show the batch as the host now holds it (a first attempt at a process spent its consent into a
+    // newer batch); every box is unticked, and a box is never ticked by anything but the person.
+    untick();
     if (result.current) renderBatch(result.current.projection, result.current.batchId);
     renderReport(result.report); node('status').textContent = result.current ? 'Run finished. Inspect every observed outcome; Recover reinspects and prepares fresh work.'
       : 'Run finished, but the saved batch could not be read again. Inspect every observed outcome, then reload before acting on this batch.';
@@ -112,18 +123,18 @@ node('apply').addEventListener('click', () => perform(async () => {
       if (error.result.review) renderReview(error.result.review, current.id);
       throw new Error(`Nothing was applied. ${error.message}`);
     }
+    untick();
     renderReport({ batchId: current.id,
       actions: (current.actions ?? []).map(action => ({ id: action.id, scope: action.scope, outcome: 'unknown', reason: 'host-answer-unavailable' })),
       scopes: (current.scopes ?? []).map(scope => ({ id: scope.id, unrelated: { outcome: 'unknown', reason: 'host-answer-unavailable' } })) });
     throw new Error(`Run outcome unavailable: ${error.message} Effects are unknown. Recover to reinspect current state.`);
   }
 }));
-// Recovery reinspects and writes a superseding batch. Work Core cannot confirm is kept unless the person ticks Run again for it;
-// only ticking re-plans with those choices, so the Recover button never carries an earlier Run again into a new attempt.
-async function recover({ choices = false } = {}) {
+// Recovery reinspects and writes a superseding batch. Work Core cannot confirm is kept; Run again is chosen when reviewing or applying.
+async function recover() {
   reviewed = null; node('review-section').hidden = true;
-  const old = current.id, rerun = choices ? [...node('actions').querySelectorAll('input[data-action]:checked')].map(box => box.dataset.action) : [];
-  const result = await api('batch-recover', { batchId: old, ...(rerun.length ? { rerun } : {}) });
+  const old = current.id;
+  const result = await api('batch-recover', { batchId: old });
   renderBatch(result.projection, result.batchId); attempted = false;
   if (result.review) renderReview(result.review, result.batchId);
   node('status').textContent = `Recovered from ${old}. Fresh batch ${result.batchId} supersedes it.`;

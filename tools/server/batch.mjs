@@ -6,7 +6,7 @@ import { isAbsolute, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { callService } from './service-client.mjs';
 import { homeEnvironment } from '../consumer/home-environment.mjs';
-import { replaceEnvelope } from '../consumer/envelope-file.mjs';
+import { replaceEnvelope, revisionOf } from '../consumer/envelope-file.mjs';
 
 const MAX_BODY = 64 * 1024;
 const ROUTES = { '/api/batch': 'GET', '/api/batch-review': 'POST', '/api/batch-run': 'POST', '/api/batch-recover': 'POST', '/api/batch-continuation': 'POST' };
@@ -16,6 +16,10 @@ const HTTP_STATUS = { ok: 200, unavailable: 200, refused: 409 };
 const reply = (response, code, value) => response.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }).end(JSON.stringify(value));
 const problem = (message, code = 'INVALID_REQUEST') => Object.assign(new Error(message), { code });
 const refusal = (code, message) => ({ status: 'refused', diagnostics: [{ code, message }] });
+// A write the person's page asked for is refused, not forced, when the saved batch changed since the request read it.
+const CHANGED = ['BATCH_ENVELOPE_CHANGED', 'BATCH_ENVELOPE_BUSY'];
+const replacing = (path, bytes, read) => replaceEnvelope(path, bytes, { expectedRevisionSha256: revisionOf(read) })
+  .then(() => null, error => CHANGED.includes(error.code) ? refusal('BATCH_CHANGED', 'The current batch changed. Reopen and review it again.') : Promise.reject(error));
 // A module or host answer goes to the page as it is (codes, paths, `review`); only bytes the page never needs are dropped.
 const passed = ({ originalBytes: _held, ...rest }) => rest;
 const statusOf = result => HTTP_STATUS[result?.status] ?? (result?.diagnostics?.[0]?.code === 'INVALID_REQUEST' ? 400 : 500);
@@ -102,27 +106,28 @@ export function createBatchAdapter(consumerDir) {
     if (pathname === '/api/batch-continuation') {
       const edited = await setContinuation({ envelopeBytes, batchId: record.id, continuation: body.continuation, now: new Date().toISOString() });
       if (edited.status !== 'ok') return passed(edited);
-      await replaceEnvelope(config.envelopePath, edited.value.envelopeBytes);
-      return { status: 'ok', batchId: edited.value.record.id, projection: edited.value.projection };
+      const refused = await replacing(config.envelopePath, edited.value.envelopeBytes, envelopeBytes);
+      return refused ?? { status: 'ok', batchId: edited.value.record.id, projection: edited.value.projection };
     }
     const materialRoots = Object.fromEntries(record.inputs.map(input => [input.id, config.materialRoot]));
     const ask = (op, extra) => call(config.coreHome, config.envelopePath, op, { envelope: Buffer.from(envelopeBytes).toString('base64'), batchId: record.id,
       clients: clients.targets, materialRoots, faults: config.faults, ...extra });
-    if (pathname === '/api/batch-review') { const review = await ask('review'); return review.status === 'ok' ? { status: 'ok', batchId: record.id, review } : review; }
+    // Run again is a choice for this one request: the ids it names go to the host and are saved nowhere.
+    if (pathname === '/api/batch-review') { const review = await ask('review', { rerun: body.rerun }); return review.status === 'ok' ? { status: 'ok', batchId: record.id, review } : review; }
     if (pathname === '/api/batch-run') {
-      const report = await ask('run', { approve: { batchId: record.id }, now: new Date().toISOString() });
+      const report = await ask('run', { approve: { batchId: record.id }, rerun: body.rerun, now: new Date().toISOString() });
       if (report.status !== 'ok') return report;
-      // Running an opaque process spends the person's choice in a superseding batch the child already wrote to the envelope file.
+      // Running an opaque process for the first time spends the person's consent in a superseding batch the child already wrote to the envelope file.
       // The page is shown that record as it now stands, read from the file, never rebuilt from what it sent.
       // Work has run by now, so a failed re-read never turns the report into a refusal: the report is returned without `current`.
       const after = await readFile(config.envelopePath).then(bytes => readBatch({ envelopeBytes: new Uint8Array(bytes) }), error => ({ status: 'error', diagnostics: [{ code: 'BATCH_ENVELOPE_UNREADABLE', message: error.message }] }));
       if (after.status !== 'ok') return { status: 'ok', batchId: record.id, report, diagnostics: after.diagnostics };
       return { status: 'ok', batchId: record.id, report, current: { batchId: after.value.record.id, projection: after.value.projection } };
     }
-    const recovered = await ask('recover', { now: new Date().toISOString(), rerun: body.rerun });
+    const recovered = await ask('recover', { now: new Date().toISOString() });
     if (recovered.status !== 'ok') return recovered;
-    await replaceEnvelope(config.envelopePath, new Uint8Array(Buffer.from(recovered.envelope, 'base64')));
-    return { status: 'ok', batchId: recovered.record.id, projection: recovered.projection, review: recovered.review };
+    const refused = await replacing(config.envelopePath, new Uint8Array(Buffer.from(recovered.envelope, 'base64')), envelopeBytes);
+    return refused ?? { status: 'ok', batchId: recovered.record.id, projection: recovered.projection, review: recovered.review };
   }
   return {
     close() { closed = true; stop('The batch adapter was closed.'); },
@@ -147,7 +152,7 @@ export function createBatchAdapter(consumerDir) {
           if (read.malformed) { fail(400, 'The request body must be a JSON object.', 'INVALID_REQUEST'); return true; }
           body = read.value;
           const { BATCH_ID_PATTERN, CONTINUATIONS, MAX_ACTIONS } = await loadBatch();
-          const keys = { '/api/batch-continuation': ['batchId', 'continuation'], '/api/batch-recover': ['batchId', 'rerun'] }[pathname] ?? ['batchId'];
+          const keys = { '/api/batch-continuation': ['batchId', 'continuation'], '/api/batch-review': ['batchId', 'rerun'], '/api/batch-run': ['batchId', 'rerun'] }[pathname] ?? ['batchId'];
           const names = body.rerun === undefined || (Array.isArray(body.rerun) && body.rerun.length <= MAX_ACTIONS && body.rerun.every(id => typeof id === 'string' && id.length <= 64));
           if (Object.keys(body).some(key => !keys.includes(key)) || !BATCH_ID_PATTERN.test(body.batchId ?? '') || !names
             || (keys.includes('continuation') && !CONTINUATIONS.includes(body.continuation))) { fail(400, 'Only the current batchId, the supported continuation choice and the actions to run again are accepted.', 'INVALID_REQUEST'); return true; }

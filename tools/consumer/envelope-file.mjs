@@ -1,11 +1,37 @@
 // The one way a journey envelope file is replaced: the new bytes are written to a private temporary file beside it and renamed over
 // it, so a reader sees the old envelope or the new one, never a partial write. Used by the batch adapter and by the batch child,
-// which persists the superseding batch that spends a Run again choice before the process can run.
-import { writeFile, rename, rm } from 'node:fs/promises';
+// which persists the superseding batch that spends the consent to run an opaque process before it can run.
+// The replace is a compare-and-swap on `expectedRevisionSha256`, which is required: under an exclusive lock (`<path>.lock`, created exclusively and
+// removed afterwards) the stored envelope's revision digest must be the expected one, else nothing is written
+// (`BATCH_ENVELOPE_CHANGED`; `BATCH_ENVELOPE_BUSY` while another writer holds the lock). A lock left by a writer that died is
+// broken once it is older than LOCK_STALE_MS, which is far longer than a replace takes.
+import { readFile, stat, writeFile, rename, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 
-export async function replaceEnvelope(path, bytes) {
+const LOCK_STALE_MS = 15_000;
+const failure = (code, message) => Object.assign(new Error(message), { code });
+export const revisionOf = bytes => { try { return JSON.parse(Buffer.from(bytes).toString('utf8'))?.revision?.sha256 ?? null; } catch { return null; } };
+
+async function lock(path) {
+  for (let attempt = 0; ; attempt++) {
+    try { await writeFile(path, String(process.pid), { flag: 'wx', mode: 0o600 }); return; }
+    catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      const age = await stat(path).then(found => Date.now() - found.mtimeMs, () => 0);
+      if (attempt > 0 || age < LOCK_STALE_MS) throw failure('BATCH_ENVELOPE_BUSY', 'Another change to the saved batch is in progress.');
+      await rm(path, { force: true });
+    }
+  }
+}
+
+export async function replaceEnvelope(path, bytes, { expectedRevisionSha256 } = {}) {
+  if (typeof expectedRevisionSha256 !== 'string') throw new TypeError('Name the revision digest the stored envelope must have.');
+  await lock(`${path}.lock`);
   const temporary = `${path}.${randomUUID()}.tmp`;
-  try { await writeFile(temporary, bytes, { flag: 'wx', mode: 0o600 }); await rename(temporary, path); }
-  finally { await rm(temporary, { force: true }); }
+  try {
+    const stored = await readFile(path).then(revisionOf, () => null);
+    if (stored === null || stored !== expectedRevisionSha256) throw failure('BATCH_ENVELOPE_CHANGED', 'The saved batch changed since it was read.');
+    await writeFile(temporary, bytes, { flag: 'wx', mode: 0o600 });
+    await rename(temporary, path);
+  } finally { await rm(temporary, { force: true }); await rm(`${path}.lock`, { force: true }); }
 }

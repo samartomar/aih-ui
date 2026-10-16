@@ -63,11 +63,14 @@ test('a state without a host reason is described, and an unknown one says it was
   assert.deepEqual(rows.map(row => row.reason), ['Core reported the work complete', 'Not reported', 'No change observed']);
 });
 
-test('only an unverifiable action of a recovered batch offers Run again, with the plain warning, and a scheduled one shows as chosen', () => {
+test('only a kept unverifiable action offers Run again, with the plain warning, and no row says it is already chosen', () => {
   assert.equal(RERUN_NOTE, 'Core cannot confirm whether this earlier process ran; run it again only if you know it is safe.');
-  const actions = [{ id: 'proc', requires: [], retain: true, unverifiable: true }, { id: 'again', requires: [], unverifiable: true }, { id: 'file', requires: [], retain: true, unverifiable: false }];
-  assert.deepEqual(actionRows({ supersedes: 'batch-x', actions }).map(row => [row.id, row.runAgain, row.runAgainChecked]), [['proc', true, false], ['again', true, true], ['file', false, false]]);
-  assert.deepEqual(actionRows({ actions }).map(row => row.runAgain), [false, false, false], 'a batch nothing has recovered offers no choice');
+  const actions = [{ id: 'proc', requires: [], retain: true, unverifiable: true }, { id: 'planned', requires: [], unverifiable: true }, { id: 'file', requires: [], retain: true, unverifiable: false }, { id: 'new-file', requires: [] }];
+  for (const supersedes of [undefined, 'batch-x']) {
+    const rows = actionRows({ supersedes, actions });
+    assert.deepEqual(rows.map(row => [row.id, row.runAgain]), [['proc', true], ['planned', false], ['file', false], ['new-file', false]], 'offered by the kept process, whether or not the batch supersedes another');
+    assert.ok(rows.every(row => !('runAgainChecked' in row)), 'the saved batch never says a choice was made');
+  }
 });
 
 test('a refused answer shows its codes and messages, and the conflicts of a refused run are kept', () => {

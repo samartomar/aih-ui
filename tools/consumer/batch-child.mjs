@@ -3,7 +3,8 @@
 // account's `~/.aih/core`. It talks to the parent only over Node IPC: { id, op, body } in, { id, result } out, where a
 // failure is a result of its own ({ status: 'error', diagnostics }). Envelope bytes cross as base64, since the IPC channel
 // is JSON. Nothing here is built from a request. The envelope file's path is host configuration in the environment; with it the
-// child persists the superseding batch that spends a Run again choice, with the parent's atomic replace, before a process runs.
+// child persists the superseding batch that spends the consent to run a process, as a compare-and-swap on the stored revision
+// (see envelope-file), before the process runs.
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { createBatchHost } from './batch-host.mjs';
@@ -17,7 +18,7 @@ async function perform(op, { envelope, batchId, approve, rerun, now, clients, ma
   // The parent names the home it chose; a child that resolves any other home refuses to touch Core at all.
   if (!process.env.AIH_BATCH_CORE_HOME || !same(homedir(), process.env.AIH_BATCH_CORE_HOME)) return failure('BATCH_HOME_INVALID', 'The batch host is not running in the isolated Core home.');
   const host = createBatchHost({ clients, materialRoots, controls: { logging: 'off' }, faults });
-  const path = process.env.AIH_BATCH_ENVELOPE, persist = path ? bytes => replaceEnvelope(path, bytes) : undefined;
+  const path = process.env.AIH_BATCH_ENVELOPE, persist = path ? (bytes, { expectedRevisionSha256 }) => replaceEnvelope(path, bytes, { expectedRevisionSha256 }) : undefined;
   try {
     const result = await host[operations[op]]({ envelopeBytes: new Uint8Array(Buffer.from(envelope, 'base64')), batchId, approve, rerun, now, persist });
     // A refusal's `originalBytes` is the envelope the parent already holds; neither it nor the bytes themselves belong in the answer.
