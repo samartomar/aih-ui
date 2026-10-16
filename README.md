@@ -103,14 +103,29 @@ digests and the source commit each was packed from. Relative paths resolve
 against the manifest's own folder. `previousCatalog` is optional: a second
 Catalog artifact used as `AIH_CONSUMER_PREVIOUS_CATALOG`.
 
+Each `sha256` is 64 lowercase hex characters and each `commit` 7 to 40. For
+example, with the three tarballs beside the manifest:
+
 ```json
 {
   "schema": "urn:aih-ui:candidate-manifest:1.0.0",
-  "candidate": "a label for this candidate",
+  "candidate": "Core dev.37, Catalog 0.1.0 main, Scan 0.5.0",
   "packages": {
-    "core":    { "tarball": "aihq-core-….tgz",    "sha256": "<64 hex>", "commit": "<7–40 hex>" },
-    "catalog": { "tarball": "aihq-catalog-….tgz", "sha256": "<64 hex>", "commit": "<7–40 hex>" },
-    "scan":    { "tarball": "aihq-scan-….tgz",    "sha256": "<64 hex>", "commit": "<7–40 hex>" }
+    "core": {
+      "tarball": "aihq-core-1.0.0-dev.37-main-dd5c9a5-sha256-e04c0d3cd9d4844f5f85a4f79718e6a3790738bcbc6331794c979b159973b4d1.tgz",
+      "sha256": "e04c0d3cd9d4844f5f85a4f79718e6a3790738bcbc6331794c979b159973b4d1",
+      "commit": "dd5c9a5"
+    },
+    "catalog": {
+      "tarball": "aihq-catalog-0.1.0-main-29f4b8c7-sha256-9e84545b0cc0fefb9845d554ec53bd9c8a6d9910caf838be4e581ac85d47383a.tgz",
+      "sha256": "9e84545b0cc0fefb9845d554ec53bd9c8a6d9910caf838be4e581ac85d47383a",
+      "commit": "29f4b8c77af5fdbb9483f01469cae5f20205b0b4"
+    },
+    "scan": {
+      "tarball": "aihq-scan-0.5.0-main-9bbed5ae-sha256-a15f445acf940b7556d59c5d8ff61fae531085cac1bf3e062287f2175591f707.tgz",
+      "sha256": "a15f445acf940b7556d59c5d8ff61fae531085cac1bf3e062287f2175591f707",
+      "commit": "9bbed5ae"
+    }
   }
 }
 ```
