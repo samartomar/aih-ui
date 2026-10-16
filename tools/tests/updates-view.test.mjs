@@ -55,6 +55,15 @@ test('failed and offline checks retain rows and their actual check time, never c
   assert.match(checkedLine(updatesState(null, null, ['content'])), /could not be completed.*updates are unknown/i);
 });
 
+test('an offline check lists each retained choice once, not again as an unknown preserved choice', () => {
+  const success = updatesState(null, ok(checked), ['content']);
+  const offline = ok({ ...checked, updates: [], categories: [{ category: 'content', selected: true, state: 'unknown', reason: 'sources-unavailable' }],
+    preserved: [{ record: checked.updates[0].disposition, state: 'unknown' }, { record: { id: 'elsewhere', disposition: 'skip' }, state: 'unknown' }] });
+  const state = updatesState(success, offline, ['content']);
+  assert.deepEqual(state.value.updates, checked.updates);
+  assert.deepEqual(state.value.preserved.map(entry => entry.record.id), ['elsewhere']);
+});
+
 test('check sends exactly the selected categories and discards responses after a draft change', async t => {
   let resolve; const late = new Promise(done => { resolve = done; });
   const calls = service(t, ok(draft), late);

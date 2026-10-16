@@ -5,7 +5,9 @@ import { readFile, stat } from 'node:fs/promises';
 
 // Demo/test host input: a small JSON file { "revisions": ["updated"] } naming note-fixture variants to publish
 // as newer revisions of the same `notes` input. Read at each check; anything unreadable is offline (null).
-const MAINTENANCE_SOURCE_BYTES = 4096, MAINTENANCE_REVISIONS = ['current', 'updated', 'additional'];
+// `newer` is the `updated` content one version later: a second revision of the same package and item. `additional`
+// is a different package and item, so it is offered as its own content, never as a revision of the review note.
+const MAINTENANCE_SOURCE_BYTES = 4096, MAINTENANCE_REVISIONS = ['current', 'updated', 'newer', 'additional'];
 async function fileMaintenanceSource(consumerDir, path) {
   const load = name => import(pathToFileURL(join(consumerDir, 'consumer', name)).href);
   const [{ noteFixture }, { intakeDeclaration, digestBytes }] = await Promise.all([load('note-fixture.mjs'), load('intake.mjs')]);
@@ -15,7 +17,12 @@ async function fileMaintenanceSource(consumerDir, path) {
       const { revisions } = JSON.parse(await readFile(path, 'utf8'));
       if (!Array.isArray(revisions) || revisions.length > 8 || revisions.some(name => !MAINTENANCE_REVISIONS.includes(name))) return null;
       return await Promise.all([...new Set(revisions)].map(async name => {
-        const snapshot = await noteFixture(name);
+        const snapshot = await noteFixture(name === 'newer' ? 'updated' : name);
+        if (name === 'newer') {
+          const declaration = JSON.parse(new TextDecoder().decode(snapshot.declarationBytes));
+          declaration.package.version = '1.0.2';
+          snapshot.declarationBytes = new TextEncoder().encode(JSON.stringify(declaration));
+        }
         const input = { id: 'notes', kind: 'local', locator: { input: 'notes' }, resolvedIdentity: { sha256: await digestBytes(snapshot.declarationBytes) } };
         const result = await intakeDeclaration({ input, ...snapshot, materialSource: { kind: 'local', input: 'notes' } });
         if (result.status !== 'ok') throw new Error('maintenance revision refused');

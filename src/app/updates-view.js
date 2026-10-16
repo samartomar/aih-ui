@@ -39,7 +39,9 @@ export function updatesState(previous, result, selected) {
   const retained = (previous?.value?.updates ?? []).filter(row => unknownCategories.includes(row.category));
   const stale = !value || retained.length > 0 || !!(previous?.value?.checkedAt && categories.some(row => row.category === 'content' && row.state === 'unknown'));
   const updates = value ? [...(value.updates ?? []), ...retained.filter(old => !value.updates?.some(row => row.id === old.id))] : previous?.value?.updates ?? [];
-  const preserved = value?.preserved ?? previous?.value?.preserved ?? [];
+  // A choice already shown as a retained row is not listed a second time as an unknown preserved one.
+  const shown = new Set(updates.map(row => row.disposition?.id).filter(Boolean));
+  const preserved = (value?.preserved ?? previous?.value?.preserved ?? []).filter(entry => !shown.has(entry.record?.id));
   return { value: { ...value, updates, preserved, categories, checkedAt: stale ? previous?.value?.checkedAt : categories.some(row => row.state === 'checked') ? value?.checkedAt : undefined },
     unknown: unknownCategories.length > 0, stale, failed: !value || !categories.some(row => row.state === 'checked') };
 }
