@@ -8,7 +8,8 @@
  * It installs the manifest's three tarballs (and the optional previous Catalog) into a fresh run directory, seeds the sample
  * data, points the Workbench's existing host configuration at it, serves the Workbench, and records itself in state/server.json
  * (the launcher wrote the record as "starting"; this rewrites it as "ready"). It ends when state/stop-request appears or on
- * SIGINT/SIGTERM once it is serving; while it is still installing, stop ends its process tree after checking its command line. The launcher gave it exactly the environment it runs with: the candidate's
+ * SIGINT/SIGTERM (neither can be handled while npm blocks it during installation, so stop then ends its process tree after
+ * checking its command line). The launcher gave it exactly the environment it runs with: the candidate's
  * disposable account home (HOME, USERPROFILE, APPDATA, XDG_*) so Core's records land there and never in the real account's, its
  * own temporary directory, and no AIH_* host setting but the ones this process sets from the samples it made. A sample that
  * could not be made leaves its host input unset, so the product shows its own "not configured" state.
@@ -70,7 +71,7 @@ async function main() {
     say('stopped');
     process.exit(0);
   };
-  // Watched from the start, so a candidate that is still installing can be stopped as well.
+  // The stop request is read once the event loop is free; while npm installs, stop ends the tree after its identity check instead.
   if (!seedOnly) {
     rmSync(layout.stopRequest, { force: true });
     setInterval(() => { if (existsSync(layout.stopRequest)) shutdown('stop requested'); }, 500);

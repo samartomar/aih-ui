@@ -50,9 +50,9 @@ test('auth is redacted only as a whole word of a name, so authority and author a
   }
 });
 test('redacts name: value pairs outside JSON, bare npm tokens, JWTs and AWS access keys, and keeps URLs and plain text', () => {
-  const npm = `npm_${'a1B2c3D4e5'.repeat(3)}`, jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.c2lnbmF0dXJl', aws = 'AKIAIOSFODNN7EXAMPLE';
-  const result = redact(`password: hunter2\napi_key: key-value\nproxy: http://host:8080/path\nnote: nothing secret here\nfound ${npm} and ${jwt} and ${aws} today\nnpm_short`);
-  for (const secret of ['hunter2', 'key-value', npm, jwt, aws]) assert.ok(!result.includes(secret), secret);
+  const npm = `npm_${'a1B2c3D4e5'.repeat(3)}`, jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.c2lnbmF0dXJl', aws = 'AKIAIOSFODNN7EXAMPLE', temporary = 'ASIAIOSFODNN7EXAMPLE';
+  const result = redact(`password: hunter2\napi_key: key-value\nproxy: http://host:8080/path\nnote: nothing secret here\nfound ${npm} and ${jwt} and ${aws} and ${temporary} today\nnpm_short`);
+  for (const secret of ['hunter2', 'key-value', npm, jwt, aws, temporary]) assert.ok(!result.includes(secret), secret);
   for (const kept of ['proxy: http://host:8080/path', 'note: nothing secret here', 'npm_short', 'found ', ' today']) assert.ok(result.includes(kept), kept);
 });
 
