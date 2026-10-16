@@ -38,7 +38,7 @@ export async function createMixedService(maintained, { suppliedInventories, fami
     const adopted = async result => {
       if (result.status !== 'ok') return result;
       const opened = await adopt(result.value.envelopeBytes);
-      return opened.status === 'ok' ? { status: 'ok', diagnostics: [], value: { draft: opened.value, projection: result.value.workspace } } : { ...opened, originalBytes: envelopeBytes.slice() };
+      return opened.status === 'ok' ? { status: 'ok', diagnostics: [], value: { draft: opened.value, projection: result.value.workspace, ...(result.value.binding ? { binding: result.value.binding } : {}) } } : { ...opened, originalBytes: envelopeBytes.slice() };
     };
     if (operation === 'workspace-read') return readWorkspace({ envelopeBytes });
     if (operation === 'workspace-edit') return adopted(await editWorkspace({ envelopeBytes, operation: body.operation, now }));

@@ -53,7 +53,8 @@ export function createWorkspaceView({ client, el, button, showStatus, download =
   const body = el('div', 'space-y-2');
   node.append(el('h3', 'font-medium', 'Workspace'), status, body);
   let projection, checked, pending = false, recording = false, attempt = 0, unsupported = false, message = '';
-  const folders = new Map(), plans = new Map();
+  // Statuses observed in this page session (Verify, or the fresh observation a bind records); writes keep them.
+  const folders = new Map(), plans = new Map(), statuses = new Map();
   const safe = action => async () => { try { await action(); } catch (error) { showStatus(error.message); } };
   const diagnostic = result => result?.diagnostics?.map(row => row.message).join(' ') || result?.error || 'The workspace request could not be completed.';
   const isUnsupported = result => result?.diagnostics?.some(row => row.code === 'WORKSPACE_VERSION_UNSUPPORTED');
@@ -86,7 +87,7 @@ export function createWorkspaceView({ client, el, button, showStatus, download =
     // This view owns these nodes; no traversal into another component's subtree.
     for (const control of form) control.disabled = locked();
   }
-  function retire() { projection = undefined; unsupported = false; plans.clear(); folders.clear(); }
+  function retire() { projection = undefined; unsupported = false; plans.clear(); folders.clear(); statuses.clear(); }
   async function request(call, { write = false, receive } = {}) {
     const current = ++attempt, revision = client.revision;
     pending = true; recording = write; message = ''; render();
@@ -133,7 +134,7 @@ export function createWorkspaceView({ client, el, button, showStatus, download =
       text(row, binding.checkout?.root ?? binding.root ?? 'Unknown folder'); observation(row, binding.observed);
       text(row, `Result: ${binding.verification?.result ?? 'Unknown'}`);
       for (const reason of binding.verification?.reasons ?? []) text(row, reasonText(reason));
-      text(row, bindingStatusText(typeof binding.status === 'string' ? binding.status : binding.status?.status));
+      text(row, bindingStatusText(statuses.get(binding.id) ?? (typeof binding.status === 'string' ? binding.status : binding.status?.status)));
       row.append(action('Rebind (moved)', () => inspect(member, folder, binding.id)), action('Remove binding', () => request(() => client.unbindCheckout(binding.id), { write: true, receive: value => { projection = value.projection; } })));
       card.append(row);
     }
@@ -145,7 +146,7 @@ export function createWorkspaceView({ client, el, button, showStatus, download =
       if (plan.outcome === 'refused') text(card, plan.refusal?.message ?? 'This checkout cannot be bound to this member.');
       else if (plan.outcome === 'ready' || plan.outcome === 'confirm') card.append(action(plan.outcome === 'confirm' ? 'Confirm and bind' : 'Bind checkout', () => {
         const body = { ...input, ...(plan.outcome === 'confirm' ? { confirmation: { observationSha256: plan.observationSha256, reasons: plan.reasons } } : {}) };
-        return request(() => client.bindCheckout(body), { write: true, receive: value => { projection = value.projection; } });
+        return request(() => client.bindCheckout(body), { write: true, receive: value => { projection = value.projection; if (value.binding) statuses.set(value.binding.id, 'current'); } });
       }));
     }
     return card;
@@ -162,6 +163,7 @@ export function createWorkspaceView({ client, el, button, showStatus, download =
     if (!projection) return;
     setFormDisabled([declarationLabel, ...Object.values(memberFields)]);
     if (!projection.workspace) {
+      if (unsupported) return;
       // Replace only the action: the label input keeps its value.
       declareForm.replaceChildren(declareForm.children[0], action('Declare workspace', () => edit({ type: 'declare', ...(trim(declarationLabel.value) ? { label: trim(declarationLabel.value) } : {}) })));
       body.append(declareForm); return;
@@ -174,7 +176,7 @@ export function createWorkspaceView({ client, el, button, showStatus, download =
     const relationshipForm = el('div', 'space-y-1');
     const memberIds = (projection.members ?? []).map(member => member.id);
     const relationshipFields = {
-      from: field(relationshipForm, 'From member', memberIds), to: field(relationshipForm, 'To member', memberIds),
+      from: field(relationshipForm, 'From member', memberIds), to: field(relationshipForm, 'To member', memberIds, memberIds[1]),
       kind: field(relationshipForm, 'Relationship kind', ['depends-on', 'consumes-api', 'deploys', 'shares-contract']),
       provenanceKind: field(relationshipForm, 'Provenance kind', ['owner', 'contract', 'instruction']), ref: field(relationshipForm, 'Provenance reference (optional)'),
     };
@@ -192,7 +194,7 @@ export function createWorkspaceView({ client, el, button, showStatus, download =
       // The service returns statuses beside the projection; keep its recorded facts and overlay only status.
       for (const member of projection.members ?? []) for (const binding of member.bindings ?? []) {
         const status = value.statuses?.[binding.id];
-        if (status) binding.status = typeof status === 'string' ? status : status.status;
+        if (status) statuses.set(binding.id, typeof status === 'string' ? status : status.status);
       }
     } })), action('Export for sharing', () => request(() => client.exportWorkspace(), { receive: value => download(value.envelopeBytes, 'workspace.share.json') })));
     text(body, SHARE_NOTE);

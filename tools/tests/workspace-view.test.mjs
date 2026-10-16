@@ -193,3 +193,23 @@ test('declaration and relationship forms issue owner choices and show incomplete
   await find(built, 'Add relationship').listeners.click();
   assert.deepEqual(calls[2], { type: 'set-relationship', relationship: { from: 'api', to: 'api', kind: 'depends-on', provenance: { kind: 'owner' } } });
 });
+
+test('a fresh bind or verify status survives later writes; an unsupported declaration offers no declare form', async () => {
+  const bound = { id: 'binding-one', checkout: { root: '/tmp/api' }, observed, verification: { result: 'matched', reasons: [] } };
+  const withBinding = { ...projection, members: [{ ...projection.members[0], bindings: [bound] }, { ...projection.members[0], id: 'ui', identity: 'github.com/acme/ui' }] };
+  const { client } = clientFor({ outcome: 'ready', reasons: [], observed });
+  client.bindCheckout = async () => ok({ projection: withBinding, binding: bound });
+  client.editWorkspace = async () => ok({ projection: withBinding });
+  const built = view(client); await built.open();
+  elements(built.node).find(node => node.textContent === '' && node.tag === 'input' && node['aria-label'] === 'Checkout folder for api').value = '/tmp/api';
+  await find(built, 'Inspect checkout').listeners.click(); await find(built, 'Bind checkout').listeners.click();
+  assert.match(textOf(built.node), /Verified: matches the recorded checkout/);
+  await find(built, 'Mark relationships complete').listeners.click();
+  assert.match(textOf(built.node), /Verified: matches the recorded checkout/, 'an unrelated write keeps the status this page observed');
+  assert.equal(elements(built.node).find(node => node['aria-label'] === 'To member').value, 'ui', 'a relationship defaults to two different members');
+
+  const unsupported = { client: { draft, revision: 1, readWorkspace: async () => ok({ ...projection, workspace: null, members: [], unsupported: [{ id: 'workspace-declaration', schema: 'urn:aihq:workbench:journey-record:workspace-declaration:2.0.0' }] }) } };
+  const locked = view(unsupported.client); await locked.open();
+  assert.equal(find(locked, 'Declare workspace'), undefined);
+  assert.match(textOf(locked.node), /does not support/);
+});
