@@ -21,7 +21,7 @@ const decode = bytes => new TextDecoder().decode(bytes), encode = value => new T
 const ROOT = 'mattpocock.implement';
 const SAVED_REASON = 'guided-setup rules 1.0.0: goal.build. Goal: add tests to my app. Project: JavaScript.';
 const TOKEN = 'fixture-token';
-const READS = ['read', 'draft-open', 'maintenance-check', 'improvements-check', 'workspace-read'];
+const READS = ['read', 'draft-open', 'maintenance-check', 'improvements-check', 'workspace-read', 'trials-read'];
 const WORKSPACE_WRITES = ['workspace-edit', 'workspace-bind', 'workspace-unbind'];
 const ALLOWED = [...READS, 'workspace-edit', 'workspace-plan', 'workspace-bind', 'workspace-verify', 'workspace-export'];
 // The page shell links its web fonts (static HTML, not the Workspace section): the only requests that may leave the origin.

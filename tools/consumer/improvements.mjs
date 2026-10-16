@@ -8,6 +8,7 @@ import { refuse } from './headless.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { isUtcTimestamp } from './maintenance-record.mjs';
 import { IMPROVEMENT_SUGGESTION_RECORD_SCHEMA, IMPROVEMENT_DISMISSAL_RECORD_SCHEMA, SUGGESTION_FIELDS, suggestionProblem, suggestionDerivedProblem, dismissalProblem, dismissalId } from './improvement-record.mjs';
+import { TRIAL_RECORD_SCHEMA } from './trial-record.mjs';
 import { IMPROVEMENT_RULES_VERSION, FRICTION_UNKNOWN, suggestImprovements, classifyImprovement, lead, improvementPrompt, MAX_GOAL } from './improvement-rules.mjs';
 export const IMPROVEMENT_SUGGESTION_SCHEMA = IMPROVEMENT_SUGGESTION_RECORD_SCHEMA;
 export const IMPROVEMENT_DISMISSAL_SCHEMA = IMPROVEMENT_DISMISSAL_RECORD_SCHEMA;
@@ -97,7 +98,9 @@ export async function recordImprovement({ envelopeBytes, operation, now } = {}) 
     record = dismissals.find(r => r.suggestion.id === operation.id);
     if (!record) return fail('/operation/id', 'No recorded dismissal is for that suggestion.');
     nextDismissals = dismissals.filter(r => r !== record);
-    nextSuggestions = suggestions.filter(r => r.id !== operation.id);
+    // A trial still needs the suggestion it was planned from, so only the dismissal goes then.
+    const planned = read.records.some(r => r.schema === TRIAL_RECORD_SCHEMA && r.suggestion?.id === operation.id);
+    nextSuggestions = suggestions.filter(r => r.id !== operation.id || planned);
   } else {
     if (!only(operation, ['type', 'suggestion'], ['reason'])) return fail('/operation', 'Supply {type,suggestion,reason?}.');
     const { suggestion } = operation;

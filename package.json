@@ -20,6 +20,8 @@
     "./improvements": "./tools/consumer/improvements.mjs",
     "./schemas/journey-record-improvement-suggestion/1.0.0.json": "./schemas/journey-record-improvement-suggestion-1.0.0.json",
     "./schemas/journey-record-improvement-dismissal/1.0.0.json": "./schemas/journey-record-improvement-dismissal-1.0.0.json",
+    "./trials": "./tools/consumer/trials.mjs",
+    "./schemas/journey-record-improvement-trial/1.0.0.json": "./schemas/journey-record-improvement-trial-1.0.0.json",
     "./workspace": "./tools/consumer/workspace.mjs",
     "./workspace-host": "./tools/consumer/workspace-host.mjs",
     "./schemas/journey-record-workspace-declaration/1.0.0.json": "./schemas/journey-record-workspace-declaration-1.0.0.json",

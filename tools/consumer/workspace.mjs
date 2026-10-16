@@ -341,7 +341,7 @@ export async function verifyBindings({ envelopeBytes, observations = {} } = {}) 
 }
 // ---- Default sharing export ----------------------------------------------------------------------------------------
 // The kinds of record this build knows to be portable: everything the sharing export may carry. Any other kind of record, known or not, stays local.
-const PORTABLE_KINDS = ['unresolved-draft', 'maintenance-disposition', 'maintenance-check', 'improvement-suggestion', 'improvement-dismissal', 'organization-draft', 'workspace-declaration'];
+const PORTABLE_KINDS = ['unresolved-draft', 'maintenance-disposition', 'maintenance-check', 'improvement-suggestion', 'improvement-dismissal', 'improvement-trial', 'organization-draft', 'workspace-declaration'];
 const isPortable = record => Object.hasOwn(JOURNEY_RECORD_KINDS, record.schema) && PORTABLE_KINDS.includes(JOURNEY_RECORD_KINDS[record.schema].kind);
 const isLocal = record => record.schema.startsWith('urn:aihq:workbench:journey-record:local-binding:');
 // A reviewed batch (of any version) holds absolute target roots, so it is local state like a binding and never part of the default export.

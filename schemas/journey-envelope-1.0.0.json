@@ -263,6 +263,21 @@
             "then": {
               "$ref": "urn:aihq:workbench:journey-record:reviewed-batch:1.0.0"
             }
+          },
+          {
+            "if": {
+              "required": [
+                "schema"
+              ],
+              "properties": {
+                "schema": {
+                  "const": "urn:aihq:workbench:journey-record:improvement-trial:1.0.0"
+                }
+              }
+            },
+            "then": {
+              "$ref": "urn:aihq:workbench:journey-record:improvement-trial:1.0.0"
+            }
           }
         ]
       }

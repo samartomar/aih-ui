@@ -1,0 +1,720 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:aihq:workbench:journey-record:improvement-trial:1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "schema",
+    "required",
+    "revision",
+    "suggestion",
+    "change",
+    "scope",
+    "baseline",
+    "task",
+    "quality",
+    "conditions",
+    "bounds",
+    "unknowns",
+    "state",
+    "proposedAt",
+    "observations"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^trial-[a-f0-9]{32}$"
+    },
+    "schema": {
+      "const": "urn:aihq:workbench:journey-record:improvement-trial:1.0.0"
+    },
+    "required": {
+      "const": false
+    },
+    "revision": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "suggestion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "revision"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^suggestion-[a-f0-9]{32}$"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "itemId",
+        "releaseSha256",
+        "itemSha256"
+      ],
+      "properties": {
+        "kind": {
+          "const": "add-item"
+        },
+        "itemId": {
+          "type": "string",
+          "pattern": "^[\\w.-]{1,180}$"
+        },
+        "releaseSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "itemSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "scope": {
+      "enum": [
+        "project",
+        "user"
+      ]
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "savedIntentSha256",
+        "draftSha256"
+      ],
+      "properties": {
+        "savedIntentSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "draftSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "task": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome",
+        "checks"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "checks": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "text"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              }
+            }
+          }
+        }
+      }
+    },
+    "conditions": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+    },
+    "bounds": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "label",
+          "unit",
+          "value",
+          "enforcement"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "unit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "value": {
+            "type": "number",
+            "minimum": 0
+          },
+          "enforcement": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "advisory"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "mechanism"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "enforced"
+                  },
+                  "mechanism": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "label"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                      },
+                      "label": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "unknowns": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 300
+      }
+    },
+    "state": {
+      "enum": [
+        "proposed",
+        "started",
+        "kept",
+        "revised",
+        "stopped"
+      ]
+    },
+    "proposedAt": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d+)?Z$"
+    },
+    "startedAt": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d+)?Z$"
+    },
+    "decidedAt": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d+)?Z$"
+    },
+    "observations": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "option",
+          "target",
+          "kind",
+          "source",
+          "recordedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+          },
+          "option": {
+            "enum": [
+              "baseline",
+              "trial"
+            ]
+          },
+          "target": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "dimension"
+                ],
+                "properties": {
+                  "dimension": {
+                    "enum": [
+                      "setup",
+                      "indexing",
+                      "runtime-context",
+                      "maintenance"
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "check"
+                ],
+                "properties": {
+                  "check": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                  }
+                }
+              }
+            ]
+          },
+          "kind": {
+            "enum": [
+              "measured",
+              "estimated",
+              "declared",
+              "unknown"
+            ]
+          },
+          "value": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "amount",
+              "unit"
+            ],
+            "properties": {
+              "amount": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  {
+                    "enum": [
+                      "passed",
+                      "failed"
+                    ]
+                  }
+                ]
+              },
+              "unit": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 32
+              }
+            }
+          },
+          "method": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^\\d+\\.\\d+\\.\\d+$"
+              }
+            }
+          },
+          "unknownReason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "source": {
+            "enum": [
+              "person",
+              "host"
+            ]
+          },
+          "recordedAt": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d+)?Z$"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "unknown"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "required": [
+                "unknownReason"
+              ],
+              "properties": {
+                "value": false,
+                "method": false
+              }
+            },
+            "else": {
+              "required": [
+                "value"
+              ],
+              "properties": {
+                "unknownReason": false
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "estimated"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "required": [
+                "method"
+              ]
+            },
+            "else": {
+              "properties": {
+                "method": false
+              }
+            }
+          }
+        ]
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome",
+        "evaluatedAt"
+      ],
+      "properties": {
+        "outcome": {
+          "enum": [
+            "qualifying-improvement",
+            "no-qualifying-improvement",
+            "inconclusive"
+          ]
+        },
+        "evaluatedAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d+)?Z$"
+        }
+      }
+    },
+    "narrower": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "qualification",
+        "acceptedAt"
+      ],
+      "properties": {
+        "qualification": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "acceptedAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d+)?Z$"
+        }
+      }
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+    },
+    "revises": {
+      "type": "string",
+      "pattern": "^trial-[a-f0-9]{32}$"
+    },
+    "revisedBy": {
+      "type": "string",
+      "pattern": "^trial-[a-f0-9]{32}$"
+    },
+    "adopted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "root",
+        "draftSha256"
+      ],
+      "properties": {
+        "root": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "releaseSha256",
+            "itemId",
+            "scope"
+          ],
+          "properties": {
+            "releaseSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "itemId": {
+              "type": "string",
+              "pattern": "^[\\w.-]{1,180}$"
+            },
+            "scope": {
+              "enum": [
+                "project",
+                "user"
+              ]
+            }
+          }
+        },
+        "draftSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "restoration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "effects",
+        "recordedAt"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "proposed",
+            "pending",
+            "completed",
+            "partial",
+            "unsupported"
+          ]
+        },
+        "effects": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          }
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "recordedAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d+)?Z$"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "state": {
+            "enum": [
+              "kept",
+              "revised",
+              "stopped"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "decidedAt",
+          "evidence"
+        ]
+      },
+      "else": {
+        "properties": {
+          "decidedAt": false,
+          "evidence": false,
+          "reason": false
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "state": {
+            "enum": [
+              "started",
+              "kept"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "startedAt"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "state": {
+            "const": "proposed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "startedAt": false,
+          "observations": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "state": {
+            "const": "kept"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "adopted"
+        ]
+      },
+      "else": {
+        "properties": {
+          "adopted": false
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "state": {
+            "const": "revised"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "revisedBy"
+        ]
+      },
+      "else": {
+        "properties": {
+          "revisedBy": false
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "state": {
+            "const": "stopped"
+          }
+        }
+      },
+      "then": {},
+      "else": {
+        "properties": {
+          "restoration": false
+        }
+      }
+    }
+  ]
+}

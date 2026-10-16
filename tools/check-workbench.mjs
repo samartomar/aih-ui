@@ -40,15 +40,25 @@ process.on('exit', () => {
   const realCoreChange = compareCoreHome(realCoreBefore, snapshotCoreHome(homedir()));
   if (!realCoreChange.unchanged) { console.error(describeCoreHomeChange(realCoreChange)); process.exitCode = 1; }
 });
-const tests = ['ordinary-families', 'authoring-page', 'authoring-v3', 'reviews', 'personal-folder', 'journey', 'maintenance', 'readiness', 'readiness-host', 'claims', 'authority-source', 'organization-author', 'guided-setup', 'core-targets', 'improvements', 'workspace', 'batch'];
-const result = spawnSync(process.execPath, ['--test', ...tests.map(name => join(output, `consumer/${name}.test.mjs`))], {
-  cwd: output, encoding: 'utf8', windowsHide: true, maxBuffer: 20_000_000, timeout: 120_000,
-  env: { ...isolated, AIH_REPO: repo }
-});
-writeFileSync(join(output, 'checks.log'), `${result.stdout ?? ''}${result.stderr ?? ''}`);
-process.stdout.write(result.stdout ?? ''); process.stderr.write(result.stderr ?? '');
-if (result.error) throw result.error;
-process.exitCode = result.status ?? 1;
+// The reviewed-batch suite alone takes about as long as all the others together, so it runs as its own group;
+// each group keeps the same limit.
+const testGroups = [
+  ['ordinary-families', 'authoring-page', 'authoring-v3', 'reviews', 'personal-folder', 'journey', 'maintenance', 'readiness', 'readiness-host', 'claims', 'authority-source', 'organization-author', 'guided-setup', 'core-targets', 'improvements', 'trials', 'workspace'],
+  ['batch']
+];
+let checksLog = '';
+for (const tests of testGroups) {
+  const result = spawnSync(process.execPath, ['--test', ...tests.map(name => join(output, `consumer/${name}.test.mjs`))], {
+    cwd: output, encoding: 'utf8', windowsHide: true, maxBuffer: 20_000_000, timeout: 120_000,
+    env: { ...isolated, AIH_REPO: repo }
+  });
+  checksLog += `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  writeFileSync(join(output, 'checks.log'), checksLog);
+  process.stdout.write(result.stdout ?? ''); process.stderr.write(result.stderr ?? '');
+  if (result.error) throw result.error;
+  process.exitCode = result.status ?? 1;
+  if (process.exitCode !== 0) break;
+}
 if (process.exitCode === 0) {
   const browser = spawnSync(process.execPath, [join(output, 'consumer/personal-folder-browser.mjs')], {
     cwd: output, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 180_000,

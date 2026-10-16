@@ -2,6 +2,7 @@ import { intakeDeclaration, digestBytes } from './intake.mjs';
 import { composeAuthoring, readAuthoring, reconcileAuthoring, editAuthoring, freshAuthoring, stable, refuse, inspectReviewEvidence, recordReview, reconsiderReviews, openDraft, editDraft, compileDraft } from './headless.mjs';
 import { checkMaintenance, recordMaintenance } from './maintenance.mjs';
 import { checkImprovements, recordImprovement } from './improvements.mjs';
+import { readTrials, recordTrial, TRIAL_MECHANISMS_NONE } from './trials.mjs';
 import { readWorkspace, editWorkspace, planBinding, bindCheckout, unbindCheckout, verifyBindings, exportWorkspace } from './workspace.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { runOrganizationAuthor } from './organization-author.mjs';
@@ -87,7 +88,7 @@ export async function createMixedService(maintained, { suppliedInventories, fami
       if (operation === 'draft-open') return openDraft({ bytes: bytesOf(body.bytes), inventories: available, ...reviewContext });
       if (operation === 'draft-edit') return editDraft({ envelopeBytes: bytesOf(body.envelopeBytes), inventories: available, operation: body.operation, ...reviewContext });
       if (operation === 'draft-compile') return compileDraft({ envelopeBytes: bytesOf(body.envelopeBytes), inventories: available, ...(Array.isArray(body.roots) ? { roots: body.roots } : {}), ...reviewContext });
-      if (['maintenance-check', 'maintenance-record', 'improvements-check', 'improvements-record', ...WORKSPACE_OPERATIONS].includes(operation)) {
+      if (['maintenance-check', 'maintenance-record', 'improvements-check', 'improvements-record', 'trials-read', 'trials-record', ...WORKSPACE_OPERATIONS].includes(operation)) {
         // With no draft open the saved policy is wrapped by the same pure open path (a sequence-1 envelope); a check writes nothing.
         // Improvements share this branch, so recording on an ordinary saved policy saves it as a draft.
         let envelopeBytes = bytesOf(body.envelopeBytes);
@@ -105,8 +106,11 @@ export async function createMixedService(maintained, { suppliedInventories, fami
           return checkImprovements({ envelopeBytes, inventories: all, candidateInventories: candidateInventories ?? null, candidateSource: maintenanceSource ? 'configured' : 'unconfigured',
             clients: body.clients ?? [], labels: body.labels ?? {}, goal: body.goal, now });
         }
-        if (operation === 'maintenance-record' || operation === 'improvements-record') {
-          const recorded = await (operation === 'maintenance-record' ? recordMaintenance : recordImprovement)({ envelopeBytes, operation: body.operation, now });
+        // Reading trials writes nothing. This host can enforce no bound, so it has no mechanisms and every bound is advisory.
+        if (operation === 'trials-read') return readTrials({ envelopeBytes, mechanisms: TRIAL_MECHANISMS_NONE });
+        if (operation === 'maintenance-record' || operation === 'improvements-record' || operation === 'trials-record') {
+          const recorded = await (operation === 'trials-record' ? recordTrial({ envelopeBytes, operation: body.operation, inventories: all, mechanisms: TRIAL_MECHANISMS_NONE, now })
+            : (operation === 'maintenance-record' ? recordMaintenance : recordImprovement)({ envelopeBytes, operation: body.operation, now }));
           if (recorded.status !== 'ok') return recorded;
           // The client adopts the new envelope exactly as an opened draft, so a recorded policy becomes a saved draft.
           const opened = await openDraft({ bytes: recorded.value.envelopeBytes, inventories: available, ...reviewContext });
