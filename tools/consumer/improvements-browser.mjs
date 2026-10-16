@@ -43,7 +43,8 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
   let observed, operations = [], requests = [], checkResponses = 0, setupRoute, previousSettings;
   const openPage = async () => {
     const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 1100 } });
-    await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
+    // A page-level clipboard stand-in: the journey observes what is copied without touching the machine's real clipboard.
+    await context.addInitScript(() => { window.__copied = []; Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async text => { window.__copied.push(text); } } }); });
     const page = await context.newPage(); observed = page; page.setDefaultTimeout(30_000);
     page.on('pageerror', error => errors.push(error.message));
     page.on('popup', popup => popups.push(popup.url()));
@@ -158,9 +159,9 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
     const requestsBefore = requests.length, popupsBefore = popups.length;
     await leading.getByRole('button', { name: 'Copy prompt', exact: true }).click();
     await first.locator('#policy-draft-status').filter({ hasText: 'Prompt copied.' }).waitFor();
+    // A short quiet period, so a request started by the copy would have been observed.
     await first.waitForTimeout(300);
-    // The Windows clipboard stores line breaks as CRLF; the text itself is the prompt shown.
-    assert.equal((await first.evaluate(() => navigator.clipboard.readText())).replaceAll('\r\n', '\n'), promptText, 'The clipboard holds exactly the prompt shown.');
+    assert.deepEqual(await first.evaluate(() => window.__copied), [promptText], 'Exactly the prompt shown is copied, once.');
     assert.deepEqual(requests.slice(requestsBefore), [], 'Copying makes no request of any kind.');
     assert.equal(popups.length, popupsBefore, 'Copying opens no window.');
     steps.copy = [];

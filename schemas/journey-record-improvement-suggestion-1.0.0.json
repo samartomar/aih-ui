@@ -12,6 +12,7 @@
     "scope",
     "change",
     "triggers",
+    "goal",
     "references",
     "facts",
     "unknowns",
@@ -73,7 +74,8 @@
           "additionalProperties": false,
           "required": [
             "recipeSha256",
-            "materials"
+            "materials",
+            "requires"
           ],
           "properties": {
             "recipeSha256": {
@@ -87,6 +89,38 @@
               "items": {
                 "type": "string",
                 "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "requires": {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "itemId",
+                  "recipeSha256",
+                  "materials"
+                ],
+                "properties": {
+                  "itemId": {
+                    "type": "string",
+                    "pattern": "^[\\w.-]{1,180}$"
+                  },
+                  "recipeSha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "materials": {
+                    "type": "array",
+                    "maxItems": 256,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    }
+                  }
+                }
               }
             }
           }

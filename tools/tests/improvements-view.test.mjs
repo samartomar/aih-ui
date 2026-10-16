@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { createAuthoringClient } from '../../src/app/authoring-client.js';
 import * as improvements from '../../src/app/improvements-view.js';
 
@@ -127,6 +128,18 @@ test('dismiss, show again and suggest use injected clients, goal and closed oper
   elements(built.node).find(node => node.id === 'policy-improvements-goal').value = 'fewer regressions';
   await find(built, 'Suggest').listeners.click();
   assert.deepEqual(calls[5], { clients: ['codex'], goal: 'fewer regressions' });
+  // A preserved dismissal's suggestion no longer arises: its action forgets the choice and is named so.
+  const buttons = elements(built.node).filter(node => node.tag === 'button').map(node => node.textContent);
+  assert.equal(buttons.filter(text => text === 'Show again').length, 1); assert.equal(buttons.filter(text => text === 'Forget dismissal').length, 1);
+  await find(built, 'Forget dismissal').listeners.click();
+  assert.deepEqual(calls[6], restoreOperation(record.id));
+});
+
+test('the UI pins the shipped suggestion and dismissal record URNs', async () => {
+  for (const [urn, name] of [[improvements.SUGGESTION_RECORD, 'suggestion'], [improvements.DISMISSAL_RECORD, 'dismissal']]) {
+    const schema = JSON.parse(await readFile(new URL(`../../schemas/journey-record-improvement-${name}-1.0.0.json`, import.meta.url), 'utf8'));
+    assert.equal(urn, schema.$id);
+  }
 });
 
 test('view discards older checks and resets hidden artifact state', async () => {
@@ -138,6 +151,17 @@ test('view discards older checks and resets hidden artifact state', async () => 
   assert.match(textOf(built.node), /Test helper/);
   client.intent = undefined; built.render(); assert.equal(built.node.hidden, true);
   client.intent = {}; built.render(); assert.doesNotMatch(textOf(built.node), /Test helper/);
+});
+
+test('suggestions checked for one revision are retired when the open policy changes, until suggested again', async () => {
+  const client = { draft, revision: 1, checkImprovements: async () => ok(checked) };
+  const built = view(client); await built.open();
+  assert.match(textOf(built.node), /Test helper/); assert.ok(find(built, 'Dismiss'));
+  client.revision = 2; built.render();
+  assert.doesNotMatch(textOf(built.node), /Test helper/); assert.equal(find(built, 'Dismiss'), undefined);
+  assert.match(textOf(built.node), /policy changed since the last check; Suggest again/);
+  await find(built, 'Suggest').listeners.click();
+  assert.match(textOf(built.node), /Test helper/); assert.doesNotMatch(textOf(built.node), /policy changed/);
 });
 
 test('an artifact change while settings load releases the pending Suggest control without checking stale input', async () => {

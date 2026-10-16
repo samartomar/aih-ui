@@ -32,7 +32,10 @@ function firstPhrase(source, phrases) {
   return best;
 }
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+// Fact text is shown and recorded; long Catalog labels are cut so the record limit can never refuse a dismissal.
+const clip = text => text.length <= 1000 ? text : `${text.slice(0, 999)}…`;
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const digestsOf = item => ({ recipeSha256: item.recipe.sha256, materials: [...new Set((item.materials ?? []).map(m => m.sha256))].sort() });
 const bytesOf = item => (item.recipe?.byteLength ?? 0) + (item.materials ?? []).reduce((sum, m) => sum + m.byteLength, 0);
 // The item's required items, transitively, that this policy does not already select.
 function needs(item, offered, selected) {
@@ -49,7 +52,7 @@ function needs(item, offered, selected) {
 function facts(item, scope, offered, selected) {
   const { found, missing } = needs(item, offered, selected), all = [item, ...found];
   const labels = found.map(i => i.label ?? i.id), shown = labels.slice(0, 8).join(', ') + (labels.length > 8 ? ` and ${labels.length - 8} more` : '');
-  const result = [{ kind: 'overhead', text: `Adds ${plural(all.reduce((n, i) => n + 1 + (i.materials ?? []).length, 0), 'file')}, ${all.reduce((n, i) => n + bytesOf(i), 0)} bytes in total, and needs ${plural(found.length, 'other item')}${found.length ? `: ${shown}` : ''}.` },
+  const result = [{ kind: 'overhead', text: clip(`Adds ${plural(all.reduce((n, i) => n + 1 + (i.materials ?? []).length, 0), 'file')}, ${all.reduce((n, i) => n + bytesOf(i), 0)} bytes in total, and needs ${plural(found.length, 'other item')}${found.length ? `: ${shown}` : ''}.`) },
     { kind: 'scope', text: scope === 'project' ? 'Applies in this project only; other repositories and AI clients are unchanged.'
       : 'Applies to your user account on this computer; every project of that account is affected.' }];
   for (const id of missing.slice(0, 4)) result.push({ kind: 'dependency', text: `Needs ${id}, which the supplied Catalog does not offer.` });
@@ -90,12 +93,14 @@ export async function suggestImprovements({ intent, items = [], clients = [], go
     if (phrase !== undefined) add(rule.itemId, `goal:${rule.id}`, rule.id, `You asked about “${asked}”, which mentions “${phrase}”.`, { kind: 'request', ref: 'goal' }, asked);
   }
   for (const client of [...new Set(clients)].sort(compare))
-    add(`${CLIENT_RULE.itemPrefix}${client}`, `client:${client}`, CLIENT_RULE.id, `You use ${client} (Workbench setup), but this policy does not give it the shared project instructions.`, { kind: 'setting', ref: 'clients' });
+    add(`${CLIENT_RULE.itemPrefix}${client}`, `client:${client}`, CLIENT_RULE.id, `You use ${client} (Workbench setup), but this policy does not give it the shared project instructions.`, { kind: 'setting', ref: 'clients' },
+      `Give ${client} the same shared project instructions as your other AI clients.`);
   const suggestions = [];
   for (const { item, triggers, references, goal: goalText } of candidates.values()) {
     const scope = item.scopes.includes('project') ? 'project' : item.scopes[0];
     const change = { kind: 'add-item', itemId: item.id, releaseSha256: item.root.releaseSha256, itemSha256: item.itemSha256,
-      content: { recipeSha256: item.recipe.sha256, materials: [...new Set((item.materials ?? []).map(m => m.sha256))].sort() } };
+      // Material content: the item and its whole required closure, whatever this policy already selects.
+      content: { ...digestsOf(item), requires: needs(item, offered, new Set()).found.slice(0, 64).map(needed => ({ itemId: needed.id, ...digestsOf(needed) })) } };
     const sorted = [...triggers.values()].sort((a, b) => compare(a.key, b.key)), id = await suggestionId({ change, scope });
     suggestions.push({ id, rulesVersion: IMPROVEMENT_RULES_VERSION, revision: await suggestionRevision({ id, change, triggers: sorted }), scope, change, triggers: sorted,
       ...(goalText !== undefined ? { goal: goalText } : {}), references: [...references.slice(0, 31), { kind: 'catalog-item', ref: item.id }],
@@ -115,7 +120,7 @@ export function lead(active) { return { leading: active[0] ?? null, alternatives
 export function classifyImprovement(current, saved) {
   if (current.revision === saved.revision) return { dismissed: true, reasons: [] };
   const known = new Set(saved.triggers.map(t => t.key)), reasons = current.triggers.filter(t => !known.has(t.key)).map(t => `Shown again: a new reason applies — ${t.text}`);
-  if (!sameContent(current.change.content, saved.change.content)) reasons.push("Shown again: the suggested item's content changed since you dismissed it.");
+  if (!sameContent(current.change.content, saved.change.content)) reasons.push("Shown again: the suggested item, or an item it needs, changed since you dismissed it.");
   return { dismissed: reasons.length === 0, reasons };
 }
 // Copy-only text for the person's own AI client. Labels, item ids, reasons, facts and unknowns only: never file

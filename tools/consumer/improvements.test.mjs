@@ -10,7 +10,7 @@ import { readJourneyEnvelope, writeJourneyEnvelope, JOURNEY_RECORD_KINDS } from 
 import { recordMaintenance } from './maintenance.mjs';
 import { digestBytes } from './intake.mjs';
 import { createMixedService } from './mixed-service.mjs';
-import { suggestionRevision } from './improvement-record.mjs';
+import { suggestionRevision, suggestionProblem } from './improvement-record.mjs';
 import { suggestImprovements, lead, classifyImprovement, improvementPrompt, GOAL_RULES, UNKNOWNS, IMPROVEMENT_RULES_VERSION, MAX_ALTERNATIVES } from './improvement-rules.mjs';
 import { checkImprovements, recordImprovement, projectDismissals, IMPROVEMENT_SUGGESTION_SCHEMA, IMPROVEMENT_DISMISSAL_SCHEMA } from './improvements.mjs';
 const encode = value => new TextEncoder().encode(value), decode = bytes => new TextDecoder().decode(bytes);
@@ -86,7 +86,7 @@ test('the client rule fires for each declared client whose item is offered, once
     const s = byItem(suggestions, id);
     assert.deepEqual(s.triggers, [{ ruleId: 'client.instructions', key: `client:${client}`, text: `You use ${client} (Workbench setup), but this policy does not give it the shared project instructions.` }]);
     assert.deepEqual(s.references, [{ kind: 'setting', ref: 'clients' }, { kind: 'catalog-item', ref: id }]);
-    assert.equal(s.goal, undefined);
+    assert.equal(s.goal, `Give ${s.change.itemId.slice('aihq.client.'.length)} the same shared project instructions as your other AI clients.`);
   }
 });
 
@@ -158,6 +158,28 @@ test('facts come from Catalog data and unknowns are always stated', async () => 
   assert.deepEqual(alone.facts.map(f => f.kind), ['overhead', 'scope']);
 });
 
+test('a change to an item the suggestion needs is material: a dismissed suggestion is shown again with that reason', async () => {
+  const needed = item('needed.context'), changedNeed = item('needed.context', { materials: [{ sha256: hex(8), byteLength: 99 }] });
+  const tdd = item('mattpocock.tdd', { dependencies: { requires: [{ itemId: 'needed.context' }], optional: [], conflicts: [] } });
+  const [before] = await suggestImprovements({ intent: intentOf(), items: [tdd, needed], clients: [], goal: 'add tests' });
+  assert.deepEqual(before.change.content.requires, [{ itemId: 'needed.context', recipeSha256: hex(1), materials: [hex(2), hex(3)] }]);
+  // Already selecting the needed item changes neither the content nor the revision.
+  const [selected] = await suggestImprovements({ intent: intentOf({ pins: [rootOf('needed.context')] }), items: [tdd, needed], clients: [], goal: 'add tests' });
+  assert.equal(selected.revision, before.revision);
+  const [after] = await suggestImprovements({ intent: intentOf(), items: [tdd, changedNeed], clients: [], goal: 'add tests' });
+  assert.equal(after.id, before.id); assert.notEqual(after.revision, before.revision);
+  assert.deepEqual(classifyImprovement(after, before), { dismissed: false, reasons: ['Shown again: the suggested item, or an item it needs, changed since you dismissed it.'] });
+});
+
+test('long Catalog labels never make a suggestion impossible to dismiss', async () => {
+  const needed = Array.from({ length: 9 }, (_, n) => item(`needed.${n}`, { label: 'L'.repeat(400) }));
+  const items = [item('mattpocock.tdd', { dependencies: { requires: needed.map(i => ({ itemId: i.id })), optional: [], conflicts: [] } }), ...needed];
+  const [suggestion] = await suggestImprovements({ intent: intentOf(), items, clients: [], goal: 'add tests' });
+  for (const fact of suggestion.facts) assert.ok(fact.text.length <= 1000, fact.text.length);
+  const { label: _label, description: _description, ...fields } = suggestion;
+  assert.equal(suggestionProblem({ ...fields, schema: IMPROVEMENT_SUGGESTION_SCHEMA, required: false, recordedAt: NOW }), null);
+});
+
 test('identity ignores labels, descriptions, release and item digests and rule wording; revision tracks only material change', async () => {
   const base = (await suggest({ goal: 'add tests' }))[0];
   const same = async (items, options = {}) => {
@@ -196,7 +218,7 @@ test('classification: unchanged or fewer reasons stay dismissed; a new reason or
   assert.equal(promoted.dismissed, false);
   assert.deepEqual(promoted.reasons, ['Shown again: a new reason applies — You asked about “tests and regressions”, which mentions “regressions”.']);
   const edited = { ...saved, revision: hex(5), change: { ...saved.change, content: { ...saved.change.content, recipeSha256: hex(77) } } };
-  assert.deepEqual(classifyImprovement(saved, edited), { dismissed: false, reasons: ["Shown again: the suggested item's content changed since you dismissed it."] });
+  assert.deepEqual(classifyImprovement(saved, edited), { dismissed: false, reasons: ['Shown again: the suggested item, or an item it needs, changed since you dismissed it.'] });
   const both = classifyImprovement({ ...wider, change: edited.change }, saved);
   assert.equal(both.reasons.length, 2);
 });
@@ -369,7 +391,7 @@ test('record operations are closed, validated and leave the envelope bytes uncha
   await refuseWith({ ...good, suggestion: { ...good.suggestion, revision: hex(7) } }, '/operation/suggestion/revision');
   await refuseWith({ ...good, suggestion: { ...good.suggestion, scope: 'team' } }, '/operation/suggestion/scope');
   const { goal: _goal, ...withoutGoal } = good.suggestion;
-  assert.equal((await recordImprovement({ envelopeBytes: s.envelopeBytes, operation: { ...good, suggestion: withoutGoal }, now: NOW })).status, 'ok');
+  await refuseWith({ ...good, suggestion: withoutGoal }, '/operation/suggestion');
   await refuseWith({ type: 'restore' }, '/operation');
   await refuseWith({ type: 'restore', id: good.suggestion.id }, '/operation/id');
   await refuseWith({ type: 'restore', id: good.suggestion.id, extra: 1 }, '/operation');
@@ -444,7 +466,7 @@ test('changed content shows a dismissed suggestion again, with the reason; a dis
   const written = valueOf(await writeJourneyEnvelope({ savedIntentBytes: read.savedIntentBytes, previous: read,
     records: [draft, older, { ...dismissal, suggestion: { id: older.id, revision: older.revision } }] }));
   const shown = await check(s, written.envelopeBytes);
-  assert.equal(shown.leading.id, checked.leading.id); assert.deepEqual(shown.leading.promotion, { reasons: ["Shown again: the suggested item's content changed since you dismissed it."] });
+  assert.equal(shown.leading.id, checked.leading.id); assert.deepEqual(shown.leading.promotion, { reasons: ['Shown again: the suggested item, or an item it needs, changed since you dismissed it.'] });
   // A request-only suggestion, dismissed, is preserved (never dropped) once the request is gone.
   const asked = await check(s, s.envelopeBytes, { goal: 'time to refactor' });
   const review = shownItem(asked, 'mattpocock.improve-codebase-architecture');
@@ -616,7 +638,7 @@ test('shipped suggestion and dismissal schemas agree structurally with the runti
   assert.equal(dismissalSchema.$id, IMPROVEMENT_DISMISSAL_SCHEMA); assert.equal(dismissalSchema.properties.schema.const, IMPROVEMENT_DISMISSAL_SCHEMA);
   for (const schema of [suggestionSchema, dismissalSchema]) { assert.equal(schema.additionalProperties, false); assert.equal(schema.properties.required.const, false); }
   assert.deepEqual(Object.keys(suggestionSchema.properties).sort(), Object.keys(suggestion).sort());
-  assert.deepEqual([...suggestionSchema.required].sort(), Object.keys(suggestion).filter(k => k !== 'goal').sort());
+  assert.deepEqual([...suggestionSchema.required].sort(), Object.keys(suggestion).sort());
   assert.deepEqual(Object.keys(dismissalSchema.properties).sort(), [...Object.keys(dismissal), 'reason'].filter((k, i, all) => all.indexOf(k) === i).sort());
   assert.deepEqual([...dismissalSchema.required].sort(), Object.keys(dismissal).filter(k => k !== 'reason').sort());
   assert.match(suggestion.id, new RegExp(suggestionSchema.properties.id.pattern)); assert.match(dismissal.id, new RegExp(dismissalSchema.properties.id.pattern));

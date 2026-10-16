@@ -89,14 +89,15 @@ const organizationDraft = { $schema: 'https://json-schema.org/draft/2020-12/sche
 // changed. The reader (tools/consumer/improvement-record.mjs) also enforces what a schema cannot express, so a record
 // this schema accepts can still be refused when the Workbench opens it:
 //   - id is derived from (kind, item, scope); revision from the id, the content and the sorted trigger keys;
-//   - content.materials are sorted and unique, and trigger keys are unique;
+//   - content.materials (also each required item's) are sorted and unique, content.requires is sorted by unique itemId, and trigger keys are unique;
 //   - recordedAt must be a real calendar timestamp.
 const suggestionText = (maxLength = 1000) => ({ type: 'string', minLength: 1, maxLength });
+const suggestionDigests = { type: 'array', maxItems: 256, uniqueItems: true, items: hash };
 const improvementSuggestion = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: suggestionRecord, ...shape({
   id: { type: 'string', pattern: '^suggestion-[a-f0-9]{32}$' }, schema: { const: suggestionRecord }, required: { const: false },
   rulesVersion: { type: 'string', pattern: String.raw`^\d+\.\d+\.\d+$` }, revision: hash, scope,
   change: shape({ kind: { const: 'add-item' }, itemId: id, releaseSha256: hash, itemSha256: hash,
-    content: shape({ recipeSha256: hash, materials: { type: 'array', maxItems: 256, uniqueItems: true, items: hash } }) }),
+    content: shape({ recipeSha256: hash, materials: suggestionDigests, requires: { type: 'array', maxItems: 64, items: shape({ itemId: id, recipeSha256: hash, materials: suggestionDigests }) } }) }),
   triggers: { type: 'array', minItems: 1, maxItems: 16, items: shape({ ruleId: { type: 'string', pattern: '^[a-z][a-z0-9.-]{0,63}$' },
     key: { type: 'string', pattern: '^[a-z][a-z0-9-]{0,31}:[\\w.@-]{1,180}$' }, text: suggestionText() }) },
   goal: suggestionText(300),
@@ -104,7 +105,7 @@ const improvementSuggestion = { $schema: 'https://json-schema.org/draft/2020-12/
   facts: { type: 'array', maxItems: 16, items: shape({ kind: { enum: ['overhead', 'scope', 'dependency'] }, text: suggestionText() }) },
   unknowns: { type: 'array', maxItems: 16, items: suggestionText() },
   recordedAt: utcTimestamp
-}, ['goal']) };
+}) };
 // Improvement dismissal: one record per suggestion, binding the exact suggestion revision it dismissed. The reader also
 // requires its id to derive from the suggestion id and a suggestion record with the same id and revision in the same envelope.
 const improvementDismissal = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: dismissalRecord, ...shape({

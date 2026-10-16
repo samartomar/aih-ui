@@ -83,9 +83,9 @@ export async function recordImprovement({ envelopeBytes, operation, now } = {}) 
   } else {
     if (!only(operation, ['type', 'suggestion'], ['reason'])) return fail('/operation', 'Supply {type,suggestion,reason?}.');
     const { suggestion } = operation;
-    if (!only(suggestion, SUGGESTION_FIELDS, ['goal'])) return fail('/operation/suggestion', `Supply only the suggestion's ${SUGGESTION_FIELDS.join(', ')} and optional goal.`);
+    if (!only(suggestion, SUGGESTION_FIELDS)) return fail('/operation/suggestion', `Supply only the suggestion's ${SUGGESTION_FIELDS.join(', ')}.`);
     const saved = { id: suggestion.id, schema: IMPROVEMENT_SUGGESTION_RECORD_SCHEMA, required: false, rulesVersion: suggestion.rulesVersion, revision: suggestion.revision, scope: suggestion.scope,
-      change: suggestion.change, triggers: suggestion.triggers, ...(suggestion.goal !== undefined ? { goal: suggestion.goal } : {}), references: suggestion.references, facts: suggestion.facts,
+      change: suggestion.change, triggers: suggestion.triggers, goal: suggestion.goal, references: suggestion.references, facts: suggestion.facts,
       unknowns: suggestion.unknowns, recordedAt: now };
     const problem = suggestionProblem(saved) ?? await suggestionDerivedProblem(saved);
     if (problem !== null) return fail(`/operation/suggestion${problem}`, 'Supply a valid improvement suggestion.');
