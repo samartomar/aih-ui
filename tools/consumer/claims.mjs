@@ -54,9 +54,10 @@ function assertNoLocalPath(value, what) {
 }
 // Every supplied string a claim keeps (ids, unit, amount, method, coverage) is checked, not a chosen few.
 function assertSupplied(list, name) {
+  // Keys are checked too, and never echoed: the label names only the entry.
   const walk = (value, at) => {
     if (typeof value === 'string') assertNoLocalPath(value, at);
-    else if (value && typeof value === 'object') for (const [key, inner] of Object.entries(value)) walk(inner, `${at} ${key}`);
+    else if (value && typeof value === 'object') for (const [key, inner] of Object.entries(value)) { assertNoLocalPath(key, at); walk(inner, at); }
   };
   list.forEach((entry, index) => walk(entry, `${name}[${index}]`));
 }
