@@ -54,7 +54,7 @@ export function projectRepairPreparation(preparation, repair) {
 // A post-repair inspection covers only the repair's targets, so it is never machine readiness.
 // `scopeVerified` says whether those targets verified; `notRechecked` lists every other target of
 // the latest machine check with its state there (null when no machine check was supplied).
-export function projectRecheck(inspection, { targets, latestCheck = null }) {
+function projectRecheck(inspection, { targets, latestCheck = null }) {
   const base = projectInspection(inspection);
   const scope = new Set(targets);
   let notRechecked = null;
@@ -96,6 +96,7 @@ export function projectRepairOutcome({ run, recheck, inspection, repair, latestC
     recheck: recheck ? projectRepairPreparation(recheck, repair) : null, unresolved, condition, diagnostics: diagnosticsOf(run), followUp: [...(run?.followUp ?? [])] };
 }
 
+// Browser assets cannot import this module; keep target/state wording in sync with notRecheckedLine in src/app/readiness-view.js, preserving channel-specific instructions.
 const notRecheckedText = projection => projection.notRechecked === null
   ? 'Other targets were not re-checked; run the machine check again before claiming machine readiness.'
   : projection.notRechecked.length ? `Not re-checked: ${projection.notRechecked.map(item => `${item.target} (${item.state} in the latest machine check)`).join(', ')}.`
