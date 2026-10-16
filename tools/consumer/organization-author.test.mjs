@@ -575,7 +575,7 @@ test('a required entry whose value only developers can declare is still part of 
     const { ref } = await catalogRefs(started);
     const d = await startDraft(started);
     await author(d, ref, { entries: [{ id: GUARD, obligation: 'required', inputs: { hookCommand: { allowDeclared: true } } }], targets: [{ scope: 'project' }] });
-    // Catalog says the hook needs its hook source; with no value to compose from, the author must approve that source explicitly.
+    // Catalog says the hook needs its hook source; with no value to compose from, its dependency set cannot be checked through Core.
     const waiting = await d.preview();
     assert.equal(waiting.value.candidate.status, 'incomplete');
     const open = waiting.value.candidate.unresolved.filter(item => item.entryId === d.entry(null, GUARD).id);
@@ -589,16 +589,15 @@ test('a required entry whose value only developers can declare is still part of 
     assert.deepEqual(project.selection, []);
     assert.deepEqual(project.fulfillment.map(({ itemId, status }) => ({ itemId, status })), [{ itemId: GUARD, status: 'not-fulfilled' }]);
 
-    await author(d, ref, { policyId: null, source: null, entries: [{ id: GUARD_SOURCE, obligation: 'permitted' }] });
-    const exported = await d.export();
-    assert.equal(exported.status, 'ok', JSON.stringify(exported));
-    const document = JSON.parse(decodeBytes(exported.value.candidateBytes));
-    assert.equal(parseOrganizationPolicy(JSON.stringify(document)).valid, true);
-    const guard = document.selections.find(entry => entry.obligation === 'required');
-    assert.deepEqual(guard.inputs, { hookCommand: { allowDeclared: true } });
-    const previewed = await d.preview();
-    assert.equal(previewed.value.candidate.status, 'valid');
-    assert.deepEqual(targetOf(previewed, 'project').fulfillment.map(({ itemId, status }) => ({ itemId, status })), [{ itemId: GUARD, status: 'not-fulfilled' }]);
+    // Approving the direct dependency is not enough: a prohibited transitive dependency would go unseen, so it stays unresolved.
+    await author(d, ref, { policyId: null, source: null, entries: [{ id: GUARD_SOURCE, obligation: 'permitted' }, { id: 'extensions.notices', obligation: 'prohibited', inputs: false }] });
+    const refused = await d.export();
+    assert.equal(refused.status, 'refused', JSON.stringify(refused));
+    assert.equal(refused.diagnostics[0].code, 'ORGANIZATION_DRAFT_UNRESOLVED');
+    const still = await d.preview();
+    assert.equal(still.value.candidate.status, 'incomplete');
+    assert.ok(still.value.candidate.unresolved.some(item => item.entryId === d.entry(null, GUARD).id));
+    assert.deepEqual(targetOf(still, 'project').fulfillment.filter(({ itemId }) => itemId === GUARD).map(({ status }) => status), ['not-fulfilled']);
   });
 });
 

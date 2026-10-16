@@ -287,10 +287,9 @@ async function assemble({ record, index, inventories }) {
       organizationId = managementIdOf({ scope: composeScope, packageName: hit.inventory.release.package.name, itemId: entry.item.itemId });
       if (entry.obligation !== 'prohibited') {
         omitted.push({ ...base, reason: 'needs-declared-value', message: `${label} requires ${missing.join(', ')} but Catalog declares no default and the baseline leaves the value to developers. The example selection leaves it out; Core still reports whether the requirement is fulfilled.` });
-        // Dependencies come from Catalog's composition, which needs a value. Without one, each required item must be approved by an entry of its own.
-        const approvals = (supported ? hit.item.dependencies?.requires ?? [] : []).map(dependency => dependency.itemId).filter(itemId => !record.entries.some(other => other.item.releaseSha256 === entry.item.releaseSha256
-          && other.item.itemId === itemId && other.scope === composeScope && ['permitted', 'required'].includes(other.obligation)));
-        if (approvals.length) problems.push({ path: `/entries/${position}/inputs/${missing[0]}`, entryId: entry.id, message: `${label} requires ${missing.join(', ')} and Catalog declares no default, so its dependencies (${approvals.join(', ')}) cannot be composed. Set a fixed value or choices so Catalog can compose its dependencies, or approve each with an entry of its own.` });
+        // Dependencies come from Catalog's composition, which needs a value. Without one, the full dependency set cannot be checked
+        // through Core (a transitive dependency may be prohibited), so an item with Catalog dependencies stays unresolved.
+        if (supported && (hit.item.dependencies?.requires ?? []).length) problems.push({ path: `/entries/${position}/inputs/${missing[0]}`, entryId: entry.id, message: `${label} requires ${missing.join(', ')} and Catalog declares no default, so its dependencies cannot be composed and checked. Set a fixed value or choices so Catalog can compose its dependencies.` });
       }
     }
     // An unsupported scope cannot be composed, so the entry is named by Workbench marker plus the id Catalog assigned at a supported scope.

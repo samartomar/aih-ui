@@ -9,7 +9,8 @@ export const ORGANIZATION_OBLIGATIONS = ['required', 'recommended', 'permitted',
 export const ORGANIZATION_SCOPES = ['project', 'user'];
 export const ORGANIZATION_REVISION_KINDS = ['branch', 'tag', 'commit'];
 export const MAX_ENTRIES = 4096, MAX_TARGETS = 64;
-export const idPattern = /^[\w.-]{1,180}$/, hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+export const idPattern = /^[\w.-]{1,180}$/;
+const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 // Same canonical JSON as headless `stable`; kept local so this module has no host dependency.
 const stable = value => JSON.stringify(value, (_key, member) => member && typeof member === 'object' && !Array.isArray(member)
   ? Object.fromEntries(Object.entries(member).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : member);
