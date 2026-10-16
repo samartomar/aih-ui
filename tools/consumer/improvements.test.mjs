@@ -31,7 +31,7 @@ const byItem = (suggestions, itemId) => suggestions.find(s => s.change.itemId ==
 const shownItem = (checked, itemId) => byItem([checked.leading, ...checked.alternatives, ...checked.dismissed].filter(Boolean), itemId);
 
 test('the rules version and goal table are fixed and every rule names a distinct, well-formed reason', () => {
-  assert.equal(IMPROVEMENT_RULES_VERSION, '1.0.0');
+  assert.equal(IMPROVEMENT_RULES_VERSION, '1.1.0');
   assert.deepEqual(GOAL_RULES.map(rule => [rule.id, rule.itemId]), [['goal.fix', 'mattpocock.diagnosing-bugs'], ['goal.test', 'mattpocock.tdd'], ['goal.regressions', 'mattpocock.tdd'],
     ['goal.review', 'mattpocock.code-review'], ['goal.refactor', 'mattpocock.improve-codebase-architecture'], ['goal.plan', 'mattpocock.grill-me'], ['goal.context', 'aihq.project-context']]);
   for (const rule of GOAL_RULES) assert.match(rule.id, /^[a-z][a-z0-9.-]{0,63}$/);
@@ -88,6 +88,17 @@ test('the client rule fires for each declared client whose item is offered, once
     assert.deepEqual(s.references, [{ kind: 'setting', ref: 'clients' }, { kind: 'catalog-item', ref: id }]);
     assert.equal(s.goal, `Give ${s.change.itemId.slice('aihq.client.'.length)} the same shared project instructions as your other AI clients.`);
   }
+});
+
+test('the client rule names a client by its published label, and the label never changes the suggestion identity', async () => {
+  const [plain] = await suggest({ clients: ['claude'] }), [named] = await suggest({ clients: ['claude'], labels: { claude: 'Claude Code', codex: 'Codex' } });
+  assert.deepEqual(named.triggers, [{ ruleId: 'client.instructions', key: 'client:claude', text: 'You use Claude Code (Workbench setup), but this policy does not give it the shared project instructions.' }]);
+  assert.equal(named.goal, 'Give Claude Code the same shared project instructions as your other AI clients.');
+  assert.equal(named.rulesVersion, '1.1.0');
+  // A label is wording: the same id and revision, so a dismissal made before a rename still applies.
+  assert.deepEqual([named.id, named.revision], [plain.id, plain.revision]);
+  assert.deepEqual(classifyImprovement(named, plain), { dismissed: true, reasons: [] });
+  assert.match(improvementPrompt(named), /- You use Claude Code \(Workbench setup\)/);
 });
 
 test('an item that is absent, a root, a pin of any release, or excluded is never suggested', async () => {
@@ -271,14 +282,14 @@ test('the rule table points at items the installed maintained Catalog really off
   const before = s.envelopeBytes.slice();
   const value = await check(s, s.envelopeBytes, { clients: ['claude', 'not-a-client'], goal: 'fewer regressions' });
   assert.deepEqual(s.envelopeBytes, before);
-  assert.equal(value.rulesVersion, '1.0.0'); assert.equal(value.checkedAt, NOW); assert.deepEqual(value.mutations, []);
+  assert.equal(value.rulesVersion, '1.1.0'); assert.equal(value.checkedAt, NOW); assert.deepEqual(value.mutations, []);
   assert.deepEqual(value.reads, ['envelope', 'supplied-inventories', 'declared-clients', 'request-goal']);
   // implement is the root; tdd arises from the saved goal and the request (two reasons), the client wiring from setup.
   assert.equal(value.leading.change.itemId, 'mattpocock.tdd');
   assert.deepEqual(value.leading.triggers.map(t => t.key), ['goal:goal.regressions', 'goal:goal.test']);
   assert.equal(value.leading.label, s.maintained.release.items.find(i => i.id === 'mattpocock.tdd').label);
   assert.equal(value.leading.scope, 'project'); assert.equal(value.leading.dismissal, null); assert.equal(value.leading.promotion, undefined);
-  assert.equal(value.leading.rulesVersion, '1.0.0'); assert.equal(value.leading.change.releaseSha256, s.maintained.release.sha256);
+  assert.equal(value.leading.rulesVersion, '1.1.0'); assert.equal(value.leading.change.releaseSha256, s.maintained.release.sha256);
   assert.match(value.leading.facts[0].text, /^Adds \d+ files, \d+ bytes in total, and needs 0 other items\.$/);
   assert.deepEqual(value.alternatives.map(a => a.change.itemId), ['aihq.client.claude']);
   assert.match(value.alternatives[0].facts[0].text, /^Adds \d+ files, \d+ bytes in total, and needs [1-9]\d* other items?: /);
@@ -417,7 +428,9 @@ test('check inputs are validated like the maintenance check', async () => {
   const s = await scenario();
   for (const [options, path] of [[{ now: 'today' }, '/now'], [{ inventories: [{ release: {} }] }, '/inventories'], [{ inventories: 'x' }, '/inventories'],
     [{ inventories: [...s.inventories, ...s.inventories] }, '/inventories'], [{ clients: 'claude' }, '/clients'], [{ clients: ['Claude'] }, '/clients'], [{ clients: [1] }, '/clients'],
-    [{ clients: Array.from({ length: 33 }, (_, i) => `c${i}`) }, '/clients'], [{ goal: 5 }, '/goal'], [{ goal: 'x'.repeat(301) }, '/goal']]) {
+    [{ clients: Array.from({ length: 33 }, (_, i) => `c${i}`) }, '/clients'], [{ goal: 5 }, '/goal'], [{ goal: 'x'.repeat(301) }, '/goal'],
+    [{ labels: ['Claude Code'] }, '/labels'], [{ labels: { Claude: 'Claude Code' } }, '/labels'], [{ labels: { claude: '' } }, '/labels'], [{ labels: { claude: 'x'.repeat(129) } }, '/labels'],
+    [{ labels: Object.fromEntries(Array.from({ length: 33 }, (_, i) => [`c${i}`, 'Client'])) }, '/labels']]) {
     const refused = await checkImprovements({ envelopeBytes: s.envelopeBytes, inventories: s.inventories, now: NOW, ...options });
     assert.equal(refused.status, 'refused', path); assert.equal(refused.diagnostics[0].path, path); assert.deepEqual(refused.originalBytes, s.envelopeBytes);
   }
@@ -576,7 +589,7 @@ test('the prompt is attributed, tells the AI to change nothing, and carries no p
   for (const suggestion of [checked.leading, ...checked.alternatives]) {
     const prompt = suggestion.prompt;
     assert.equal(prompt, improvementPrompt(suggestion));
-    assert.ok(prompt.includes('Suggested by the AIH Workbench improvement rules 1.0.0 (fixed rules; no AI model was used).'));
+    assert.ok(prompt.includes('Suggested by the AIH Workbench improvement rules 1.1.0 (fixed rules; no AI model was used).'));
     assert.match(prompt, /Do not install, change or run anything/); assert.match(prompt, /do not ask me to upload/);
     assert.ok(prompt.includes('Start your reply with “AI advice:”.'));
     assert.ok(prompt.includes(suggestion.label)); assert.ok(prompt.includes(suggestion.change.itemId));
@@ -598,8 +611,9 @@ test('the prompt is attributed, tells the AI to change nothing, and carries no p
 // ---- Host route through the mixed service ---------------------------------------------------------------------------
 test('host route: improvements-check and improvements-record through the mixed service, including an ordinary saved policy', async () => {
   const s = await scenario(), service = await createMixedService(s.maintained);
-  const checked = valueOf(await service.run('improvements-check', { envelopeBytes: [...s.envelopeBytes], clients: ['claude'], goal: 'fewer regressions' }));
+  const checked = valueOf(await service.run('improvements-check', { envelopeBytes: [...s.envelopeBytes], clients: ['claude'], labels: { claude: 'Claude Code' }, goal: 'fewer regressions' }));
   assert.equal(checked.leading.change.itemId, 'mattpocock.tdd'); assert.deepEqual(checked.mutations, []);
+  assert.match(checked.alternatives.find(a => a.change.itemId === 'aihq.client.claude').triggers[0].text, /^You use Claude Code \(Workbench setup\)/);
   assert.deepEqual(checked.reads, ['envelope', 'supplied-inventories', 'declared-clients', 'request-goal']);
   assert.equal(checked.checkedAt, new Date(checked.checkedAt).toISOString());
   const recorded = valueOf(await service.run('improvements-record', { envelopeBytes: [...s.envelopeBytes], operation: dismissOperation(checked.leading, 'Later.') }));

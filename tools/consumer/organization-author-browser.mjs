@@ -10,7 +10,9 @@ import { composeAuthoring, freshAuthoring } from './headless.mjs';
 const attacker = { provider: 'github', repository: { owner: 'attacker', name: 'redirect' }, path: 'evil.json', revision: { kind: 'branch', value: 'evil' } };
 const redirect = { organizationSource: attacker, source: attacker, repository: attacker.repository, path: attacker.path, revision: attacker.revision };
 const IMPLEMENT = 'mattpocock.implement', CODE_REVIEW = 'mattpocock.code-review', TDD = 'mattpocock.tdd', GRILLING = 'mattpocock.grilling';
-const PROJECT_TARGET = 'project · claude · github.com/fixture-org/app', USER_TARGET = 'user · claude';
+// A listed client displays as "Label (id)" and an unlisted one as its id, so a target is matched on the id alone.
+const targetText = (scope, client, repository = '') => new RegExp(`^${scope} · (?:.* \\()?${client}\\)?${repository ? ` · ${repository.replace(/\./g, '\\.')}` : ''}`);
+const PROJECT_TARGET = targetText('project', 'claude', 'github.com/fixture-org/app'), USER_TARGET = targetText('user', 'claude');
 const base = '/repos/fixture-org/authority/git/';
 
 // The developer's ordinary Enterprise policy: Implement at project scope (Catalog adds its Code Review dependency),
@@ -73,7 +75,7 @@ async function setFixedInput(page, itemId, scope, name, value) {
   await edit(page, () => input.locator('button[data-action="apply-input"]').click());
 }
 const addTarget = async (page, scope, client, repository = '') => {
-  await page.locator('#org-target-scope').selectOption(scope); await page.locator('#org-target-client').fill(client); await page.locator('#org-target-repository').fill(repository);
+  await page.locator('#org-target-scope').selectOption(scope); if (client) await page.locator('#org-target-client').selectOption(client); await page.locator('#org-target-repository').fill(repository);
   await edit(page, () => page.locator('#org-target-add').click());
 };
 const preview = async page => assert.match(await settle(page, () => page.locator('#org-preview').click()), /^Core preview returned candidate status/);
@@ -100,7 +102,7 @@ export async function runOrganizationAuthorBrowser({ page, output, fixture, refr
     await addTarget(page, 'project', 'claude', 'github.com/fixture-org/app'); await addTarget(page, 'user', 'claude');
     // Removing a row keeps keyboard focus in the list: it moves to the same action on the row now in that place.
     await addTarget(page, 'project', 'codex');
-    const removable = page.locator('#organization-author [data-target-id]').filter({ hasText: 'project · codex' }).locator('button[data-action="remove-target"]');
+    const removable = page.locator('#organization-author [data-target-id]').filter({ hasText: targetText('project', 'codex') }).locator('button[data-action="remove-target"]');
     await removable.focus(); await edit(page, () => page.keyboard.press('Enter'));
     assert.equal(await page.evaluate(() => document.activeElement?.dataset.action ?? document.activeElement?.id), 'remove-target');
     const implement = await labelOf(entryRow(page, IMPLEMENT, 'project')), codeReview = await labelOf(entryRow(page, CODE_REVIEW, 'project')), tdd = await labelOf(entryRow(page, TDD, 'user'));

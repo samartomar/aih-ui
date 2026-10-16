@@ -60,8 +60,8 @@ test('client checks draft envelopes and ordinary policy bytes with clients and g
   await client.recordImprovement(dismissOperation(suggestion));
   assert.equal(calls[1].url, '/api/authoring-improvements-record'); assert.deepEqual(calls[1].body.operation, dismissOperation(suggestion));
   assert.deepEqual(client.draft.envelopeBytes, Uint8Array.of(2)); assert.deepEqual(client.bytes, Uint8Array.of(9)); assert.equal(client.intent, undefined);
-  await client.checkImprovements({ clients: ['claude'] });
-  assert.deepEqual(calls[2].body, { reviewEvidence: [], envelopeBytes: [2], clients: ['claude'] });
+  await client.checkImprovements({ clients: ['claude'], labels: { claude: 'Claude Code' } });
+  assert.deepEqual(calls[2].body, { reviewEvidence: [], envelopeBytes: [2], clients: ['claude'], labels: { claude: 'Claude Code' } });
   await client.recordImprovement(restoreOperation(record.id));
   assert.deepEqual(client.draft.envelopeBytes, Uint8Array.of(3)); assert.deepEqual(client.draft.savedIntentBytes, Uint8Array.of(9));
   const empty = createAuthoringClient();

@@ -1,3 +1,5 @@
+import { publishedClients, clientText } from './core-targets.js';
+
 // These helpers translate author input and server results; policy decisions belong to the server.
 export function parseSelectors(text) {
   const values = text.split(',').map(value => value.trim()).filter(Boolean);
@@ -9,7 +11,7 @@ export function parsePermission(kind, text) {
   return kind === 'allowDeclared' ? { allowDeclared: true } : null;
 }
 export const enforcementText = value => ({ enforced: 'Enforced', advisory: 'Advisory' })[value] ?? '';
-export const targetLabel = target => [target.scope, target.client, target.repository].filter(Boolean).join(' · ');
+export const targetLabel = (target, labels = {}) => [target.scope, target.client && clientText(labels, target.client), target.repository].filter(Boolean).join(' · ');
 export const unresolvedLines = rows => (rows ?? []).map(row => `${row.path ?? row.entryId ?? 'Draft'}: ${row.message}`);
 export const handoffText = handoff => [handoff.repository, handoff.path, handoff.ref].join(' · ');
 const diagnosticsText = rows => (rows ?? []).map(row => `${row.code ?? row.path ?? 'Diagnostic'}${row.reason ? ` / ${row.reason}` : ''}: ${row.message}`).join('\n');
@@ -131,14 +133,40 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
     return edit({ kind: 'add-entry', releaseSha256: items.value.slice(0, slash), itemId: items.value.slice(slash + 1), scope: scope.value });
   }));
   const entries = block(), targets = block(), unresolved = identify(el('ul', 'space-y-1 text-on-surface-variant'), 'org-unresolved');
-  const targetScope = select('Target scope', 'org-target-scope', scopes, 'project'), targetClient = input('Target client', 'org-target-client'), repository = input('Target repository', 'org-target-repository');
-  const targetRow = line(); targetRow.append(labeled('Scope', targetScope), labeled('Client', targetClient), labeled('Repository', repository), action('Add target', 'org-target-add', () => edit({ kind: 'add-target', scope: targetScope.value, ...(targetClient.value ? { client: targetClient.value } : {}), ...(repository.value ? { repository: repository.value } : {}) })));
+  const targetScope = select('Target scope', 'org-target-scope', scopes, 'project'), targetClient = select('Target client', 'org-target-client', [['', 'Not declared']]), repository = input('Target repository', 'org-target-repository');
+  const clientStatus = identify(el('p', 'text-on-surface-variant'), 'org-target-client-status');
+  // Core's published AI clients (null before the summary arrives): the field offers only these, and Core's preview stays the authority on a client.
+  let coreTargets = null, clients = null;
+  const listed = () => clients?.ids ?? [], labels = () => clients?.labels ?? {};
+  const targetRow = line(); targetRow.append(labeled('Scope', targetScope), labeled('Client', targetClient), labeled('Repository', repository), action('Add target', 'org-target-add', () => {
+    if (targetClient.value && !listed().includes(targetClient.value)) throw new Error(`AI client "${targetClient.value}" is not one the installed Core lists. Choose a listed client, or leave it not declared.`);
+    return edit({ kind: 'add-target', scope: targetScope.value, ...(targetClient.value ? { client: targetClient.value } : {}), ...(repository.value ? { repository: repository.value } : {}) });
+  }));
   function renderCatalog() {
     const current = items.value; items.replaceChildren();
     for (const item of client.catalog?.items ?? []) { const option = el('option', '', `${item.label ?? item.id} · ${item.id}`); option.value = `${item.root.releaseSha256}/${item.id}`; items.append(option); }
     if ([...items.options].some(option => option.value === current)) items.value = current;
   }
   client.subscribe?.(renderCatalog); renderCatalog();
+  function renderClients() {
+    const current = targetClient.value, reason = typeof coreTargets?.reason === 'string' && coreTargets.reason ? coreTargets.reason : 'The installed @aihq/core publishes no supported AI clients.';
+    targetClient.replaceChildren();
+    for (const [key, text] of [['', 'Not declared'], ...listed().map(id => [id, clientText(labels(), id)])]) { const option = el('option', '', text); option.value = key; targetClient.append(option); }
+    targetClient.value = listed().includes(current) ? current : ''; targetClient.disabled = !listed().length;
+    clientStatus.textContent = coreTargets === null ? 'Core\'s AI client list has not arrived yet. A target can still be declared without a client.'
+      : listed().length ? 'These are the AI clients the installed Core lists. Listing a client does not mean it is installed, connected or admitted.'
+      : `Core's AI clients are unavailable: ${reason.replace(/.?$/, '.')} A target can still be declared without a client.`;
+  }
+  // A declared client the list does not carry stays in the draft as its id; Core decides at preview.
+  function renderTargets() {
+    targets.replaceChildren();
+    for (const target of session.value?.draft?.targets ?? []) {
+      const row = line(), label = targetLabel(target, labels()); row.dataset.targetId = target.id;
+      const remove = action(`Remove target ${label}`, `${target.id}-remove`, () => edit({ kind: 'remove-target', targetId: target.id })); remove.dataset.action = 'remove-target'; row.append(el('span', '', label), remove);
+      if (target.client && listed().length && !listed().includes(target.client)) row.append(el('span', 'text-on-surface-variant', 'Not listed by the installed Core; Core decides at preview.'));
+      targets.append(row);
+    }
+  }
   function renderDraft() {
     const draft = session.value?.draft;
     policyId.value = draft?.policyId ?? ''; const source = draft?.source;
@@ -171,11 +199,7 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
       }
       const remove = action(`Remove ${entry.label}`, `${entry.id}-remove`, () => edit({ kind: 'remove-entry', entryId: entry.id })); remove.dataset.action = 'remove-entry'; row.append(remove); entries.append(row);
     }
-    targets.replaceChildren();
-    for (const target of draft?.targets ?? []) {
-      const row = line(); row.dataset.targetId = target.id;
-      const remove = action(`Remove target ${targetLabel(target)}`, `${target.id}-remove`, () => edit({ kind: 'remove-target', targetId: target.id })); remove.dataset.action = 'remove-target'; row.append(el('span', '', targetLabel(target)), remove); targets.append(row);
-    }
+    renderTargets();
     unresolved.replaceChildren(...unresolvedLines(draft?.unresolved).map(text => el('li', '', text)));
     if (focusedId) {
       const control = [...node.querySelectorAll('[id]')].find(control => control.id === focusedId);
@@ -192,7 +216,7 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
     const titles = { selection: 'Example developer selection', enforced: 'Core admission', advisory: 'Core advisory', fulfillment: 'Core fulfillment', contradictions: 'Core contradictions', unsupported: 'Catalog scope support' };
     for (const target of rows) {
       const row = block(); row.dataset.previewTarget = target.target.id;
-      row.append(el('h4', 'font-medium', targetLabel(target.target)), el('p', '', target.status), el('pre', 'whitespace-pre-wrap', diagnosticsText(target.diagnostics)));
+      row.append(el('h4', 'font-medium', targetLabel(target.target, labels())), el('p', '', target.status), el('pre', 'whitespace-pre-wrap', diagnosticsText(target.diagnostics)));
       for (const [section, title] of Object.entries(titles)) {
         const part = block(); part.dataset.section = section; part.append(el('h5', 'font-medium', title), el('pre', 'whitespace-pre-wrap break-words', previewSectionText(section, target[section]))); row.append(part);
       }
@@ -216,7 +240,12 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
     report(location.activation);
   }
   const resultActions = line(); resultActions.append(action('Preview', 'org-preview', showPreview), action('Export candidate', 'org-export', exportCandidate));
-  node.append(el('summary', 'font-medium cursor-pointer', 'Organization baseline (organization author)'), el('p', 'text-on-surface-variant', 'An organization author sets obligations, targets and inputs; preview is computed by Core; exporting writes a candidate file and never publishes or activates authority.'), draftActions, policyRow, sourceRow, addRow, entries, el('h3', 'font-medium', 'Declared targets'), targets, targetRow, el('h3', 'font-medium', 'Unresolved choices'), unresolved, resultActions, preview, handoff, status);
-  function setTargets() {}
+  node.append(el('summary', 'font-medium cursor-pointer', 'Organization baseline (organization author)'), el('p', 'text-on-surface-variant', 'An organization author sets obligations, targets and inputs; preview is computed by Core; exporting writes a candidate file and never publishes or activates authority.'), draftActions, policyRow, sourceRow, addRow, entries, el('h3', 'font-medium', 'Declared targets'), targets, targetRow, clientStatus, el('h3', 'font-medium', 'Unresolved choices'), unresolved, resultActions, preview, handoff, status);
+  function setTargets(next) {
+    coreTargets = next ?? null; clients = publishedClients(coreTargets); renderClients();
+    const focusedId = node.contains(document.activeElement) ? document.activeElement.id : ''; renderTargets();
+    if (focusedId) [...node.querySelectorAll('[id]')].find(control => control.id === focusedId)?.focus();
+  }
+  renderClients();
   return { node, setTargets };
 }
