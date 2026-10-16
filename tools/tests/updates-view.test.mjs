@@ -397,3 +397,27 @@ test('the UI pins the shipped disposition record URN and the consumer attention 
   const row = updatesState(updatesState(null, ok(checked), ['content']), null, ['content'], []).value.updates.find(entry => entry.id === 'old');
   assert.equal(row.attention, 'new'); assert.equal(row.promoted, true);
 });
+
+test('a queued choice cannot cancel or land beside a new policy requested while an earlier choice is pending', async t => {
+  let first, created;
+  const fresh = { policyBytes: [4], intent: policy };
+  const calls = service(t, ok(draft), new Promise(resolve => { first = resolve; }), new Promise(resolve => { created = resolve; }));
+  const client = createAuthoringClient(); await client.openDraft(Uint8Array.of(1));
+  const one = client.recordDisposition({ type: 'clear', id: 'one' }), two = client.recordDisposition({ type: 'clear', id: 'two' });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const started = client.newDraft();
+  first(ok({ envelopeBytes: [2], projection: { revision: { sequence: 2 } }, dispositions: [] }));
+  assert.deepEqual([(await one).status, (await two).status], ['superseded', 'superseded']);
+  created(ok(fresh));
+  assert.equal((await started).status, 'ok', 'the new policy is not superseded by the queued choice');
+  assert.deepEqual(calls.map(call => call.url), ['/api/authoring-draft-open', '/api/authoring-maintenance-record', '/api/authoring-new']);
+  assert.equal(client.draft, undefined); assert.deepEqual(client.bytes, Uint8Array.of(4));
+});
+
+test('a recorded check later than the current check does not block noting the current one', async () => {
+  const notes = [];
+  const client = { draft, revision: 1, checkMaintenance: async () => ok({ ...checked, lastCheck: { checkedAt: '2099-01-01T00:00:00Z', categories: [{ category: 'content', state: 'checked' }] } }),
+    recordDisposition: async operation => { notes.push(operation); return ok({}); } };
+  const built = view(client); await built.open(); await built.noteCheck();
+  assert.deepEqual(notes.map(note => note.checkedAt), [checked.checkedAt]);
+});

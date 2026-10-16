@@ -78,6 +78,8 @@ export function createAuthoringClient() {
       if (result.status !== 'ok') throw new Error(JSON.stringify(result));
     },
     async newDraft(mode) {
+      // A new policy is a different artifact from the moment it is requested, so queued choices stop here.
+      artifact++;
       const attempt = this.invalidate(), result = await request('new', { mode });
       if (attempt !== revision) return { status: 'superseded' };
       if (result.status === 'ok') this.publish(result.value);

@@ -160,7 +160,8 @@ export function createUpdatesView({ client, el, button, showStatus }) {
     if (client.revision !== revision || result?.status === 'superseded') { render(); return; }
     state = updatesState(state, result, selection(), recordedChoices());
     const value = result?.status === 'ok' ? result.value : null, note = value?.lastCheck?.checkedAt;
-    if (note && (!recorded || note > recorded)) recorded = note;
+    // A recorded note later than this check (hand-edited or from a skewed clock) never blocks later notes.
+    if (note && note <= value.checkedAt && (!recorded || note > recorded)) recorded = note;
     if (value && value.categories.some(row => row.state === 'checked'))
       lastSuccess = { checkedAt: value.checkedAt, categories: value.categories.map(({ category, state: outcome, reason }) => ({ category, state: outcome, ...(reason ? { reason } : {}) })) };
     render();
