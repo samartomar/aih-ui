@@ -125,6 +125,10 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
     }
     return new Set(rerun);
   }
+  // A Run again choice is made against one stored revision of the batch. Any attempt at an opaque action records itself as a newer
+  // revision first, so a choice made before the last attempt names a revision that is no longer stored and is refused.
+  const staleChoice = (again, rerunRevision, { revision }, envelopeBytes) => again.size > 0 && rerunRevision !== revision
+    ? refuse('BATCH_RERUN_STALE', '/rerunRevision', 'The batch changed since the Run again choice was made; review it and choose again.', envelopeBytes) : null;
   async function checkInput(record, id) {
     const input = record.inputs.find(candidate => candidate.id === id), root = materialRoots[id];
     if (!root) return { id, ok: false, reason: 'unavailable' };
@@ -180,12 +184,15 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
     return { targets, value: { scopes: reviewed, conflicts, checks: record.checks.map(check => ({ ...check, state: state[check.kind](check.subject) })), ready: conflicts.length === 0 } };
   }
   return {
-    // `rerun` names the kept opaque actions this review should show as work to run again (see chosenAgain).
-    async reviewBatch({ envelopeBytes, batchId, rerun } = {}) {
+    // `rerun` names the kept opaque actions this review should show as work to run again (see chosenAgain), and `rerunRevision` the
+    // stored revision of the batch the choice was made against (see staleChoice).
+    async reviewBatch({ envelopeBytes, batchId, rerun, rerunRevision } = {}) {
       const opened = await open(envelopeBytes, batchId);
       if (opened.status !== 'ok') return opened;
       const again = chosenAgain(opened.value, rerun, envelopeBytes);
       if (!(again instanceof Set)) return again;
+      const stale = staleChoice(again, rerunRevision, opened.value, envelopeBytes);
+      if (stale) return stale;
       const { value } = await inspect(opened.value, again);
       return { status: 'ok', diagnostics: opened.value.diagnostics, batchId: opened.value.record.id, ...value, ready: value.ready && opened.value.supported };
     },
@@ -196,9 +203,11 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
     // (the revision of the bytes this run started from, then of each batch it wrote), so a copy that was already spent and replaced
     // cannot spend the same consent again. Without a `persist` that works, the action is `failed` (`consent-not-recorded`) and
     // nothing is applied for it. The report's `consumedBy` is the latest batch written that way.
-    // `rerun` names kept opaque actions to run in this call alone (see chosenAgain); they spend nothing, because the batch already
-    // keeps them, and an unnamed kept one stays untouched.
-    async runBatch({ envelopeBytes, batchId, approve, persist, rerun, now = new Date().toISOString() } = {}) {
+    // `rerun` names kept opaque actions to run in this call alone (see chosenAgain), and `rerunRevision` the stored revision of the batch
+    // the choice was made against; any other revision refuses the whole call (`BATCH_RERUN_STALE`). An unnamed kept action stays
+    // untouched. A named one is an attempt like the first: just before it is applied the host persists the same batch as the next
+    // envelope revision, so the choice cannot be used again and a second page holding the same choice is refused as stale.
+    async runBatch({ envelopeBytes, batchId, approve, persist, rerun, rerunRevision, now = new Date().toISOString() } = {}) {
       const opened = await open(envelopeBytes, batchId);
       if (opened.status !== 'ok') return opened;
       const { record, policy, current } = opened.value;
@@ -207,17 +216,22 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
       if (!current) return refuse('BATCH_SUPERSEDED', '/batchId', 'A later batch superseded this one; review and run the current batch.', envelopeBytes);
       const again = chosenAgain(opened.value, rerun, envelopeBytes);
       if (!(again instanceof Set)) return again;
+      const stale = staleChoice(again, rerunRevision, opened.value, envelopeBytes);
+      if (stale) return stale;
       const { value: review, targets } = await inspect(opened.value, again);
       if (!review.ready) return { ...refuse('BATCH_CONFLICTS', '', 'Conflicts were found before apply; nothing was applied.'), review };
       const before = await Promise.all(record.scopes.map(scope => snapshot(scope.target.root, targets)));
       const hosts = new Map(record.scopes.map(scope => [scope.id, hostAt(scope.target.root)]));
       const results = new Map(), satisfied = result => result.outcome === 'completed' || result.reason === 'retained-earlier-result';
       let broke = false, latest = { bytes: envelopeBytes, record, revision: opened.value.revision };
-      const spend = async action => {
+      // Records an attempt at an opaque action before it can run. A first attempt supersedes the batch with the action kept; a Run again
+      // attempt writes the batch as it is (same id and content, next revision), so its choice is spent the same way.
+      const attempt = async action => {
         if (typeof persist !== 'function') return [{ code: 'BATCH_CONSENT_UNRECORDABLE', reason: 'no-persist' }];
+        const first = action.retain !== true, { record: kept } = latest;
         try {
-          const planned = await planBatch({ envelopeBytes: latest.bytes, scopes: latest.record.scopes, inputs: latest.record.inputs, continuation: latest.record.continuation, categories: latest.record.categories,
-            actions: latest.record.actions.map(other => other.id === action.id ? { ...other, retain: true } : other), now, supersedes: latest.record.id });
+          const planned = await planBatch({ envelopeBytes: latest.bytes, scopes: kept.scopes, inputs: kept.inputs, continuation: kept.continuation, categories: kept.categories,
+            actions: first ? kept.actions.map(other => other.id === action.id ? { ...other, retain: true } : other) : kept.actions, now: first ? now : kept.recordedAt, supersedes: first ? kept.id : kept.supersedes });
           if (planned.status !== 'ok') return codes(planned.diagnostics);
           await persist(planned.value.envelopeBytes, { expectedRevisionSha256: latest.revision });
           latest = { bytes: planned.value.envelopeBytes, record: planned.value.record, revision: planned.value.envelope.revision.sha256 };
@@ -241,7 +255,7 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
         if (drift) { end('failed', 'shared-input-changed'); continue; }
         const prepared = await prepareSelections(host, policy, [selection]);
         if (prepared.status !== 'ready') { end('failed', `prepare-${prepared.status}`, { completion: null, runId: null, operations: [], diagnostics: codes(prepared.diagnostics) }); continue; }
-        const unspent = isVerifiable(selection) || action.retain === true ? null : await spend(action);
+        const unspent = isVerifiable(selection) ? null : await attempt(action);
         if (unspent) { end('failed', 'consent-not-recorded', { completion: null, runId: null, operations: [], diagnostics: unspent }); continue; }
         let restore = async () => {}, result;
         try {

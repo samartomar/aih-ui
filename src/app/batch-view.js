@@ -2,6 +2,7 @@
 export const CLIENT_NOTE = 'Listed by Core; not checked as installed or connected';
 export const ATOMIC_NOTE = 'Each scope is applied separately; there is no all-or-nothing promise.';
 export const RERUN_NOTE = 'Core cannot confirm whether this earlier process ran; run it again only if you know it is safe.';
+export const STALE_CHOICE_NOTE = 'The batch changed since Run again was chosen, so the choice was dropped. Review the batch and choose again.';
 export const UNSUPPORTED_NOTE = 'This envelope holds a required record this Workbench does not support. You can review the batch, but not run, recover or change it.';
 const OUTCOMES = ['completed', 'failed', 'untouched', 'cancelled', 'unknown'];
 // What a state means when the host gave no reason: said plainly, never left blank or guessed.
@@ -16,6 +17,10 @@ export const scopeRows = (projection, clients) => (projection?.scopes ?? []).map
 export const actionRows = projection => (projection?.actions ?? []).map(action => ({ ...action,
   dependencies: action.requires?.length ? action.requires.map(id => `${id} → ${action.id}`).join(', ') : 'No dependencies', retained: action.retain === true,
   runAgain: action.retain === true && action.unverifiable === true }));
+// A Run again choice names the stored revision of the batch it was made against; it is sent with a review or a run and nowhere else.
+export const rerunChoice = (ids, revision) => ids.length ? { rerun: ids, rerunRevision: revision } : {};
+// The host refused a choice made before the last attempt on the batch.
+export const isStaleChoice = result => (result?.diagnostics ?? []).some(item => item?.code === 'BATCH_RERUN_STALE');
 // What the host said when it refused or failed, code first, as one line.
 export const diagnosticsText = result => (result?.diagnostics ?? []).map(item => [item.code, item.message].filter(Boolean).join(': ')).join(' ') || 'The batch host gave no reason.';
 export const canApply = (review, batchId) => Boolean(batchId && review?.batchId === batchId && review.ready === true

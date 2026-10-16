@@ -2,8 +2,8 @@
 // person's own files) and B (added). Everything the person does goes through the page. Filesystem and host-configuration changes
 // below are test setup (removing the unowned file, creating the process marker, clearing the stale-target fault), never page
 // capabilities: the page and its HTTP routes can name only the current batch and the continuation choice. The fixture's `procCount`
-// counts the process's executions, so the journey can show that a reload never runs it again and that a Run
-// again choice made for one run is gone afterwards.
+// counts the process's executions, so the journey can show that a reload never runs it again, that a Run
+// again choice made for one run is gone afterwards and that a second page's older choice is refused.
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile, lstat, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -170,14 +170,15 @@ export async function runBatchBrowser({ origin, output, playwrightModule, fixtur
     assert.equal(await page.locator('#batch-review-section').isHidden(), true);
     const reviewing = page.waitForRequest(request => new URL(request.url()).pathname === '/api/batch-review');
     const choice = await act('review', 'batch-review');
-    assert.deepEqual((await reviewing).postDataJSON(), { batchId: kept.batchId, rerun: ['b-proc'] });
+    assert.deepEqual((await reviewing).postDataJSON(), { batchId: kept.batchId, rerun: ['b-proc'], rerunRevision: kept.revision });
     assert.equal(choice.review.ready, true);
     assert.deepEqual(choice.review.scopes.flatMap(scope => scope.operations.map(operation => operation.action)).sort(), ['b-core', 'b-dependent', 'b-proc'], 'the review shows the process as work to run');
     await page.locator('#batch-apply:enabled').waitFor();
     await shot('batch-5-run-again-reviewed.png');
     const running = page.waitForRequest(request => new URL(request.url()).pathname === '/api/batch-run');
     const second = await act('apply', 'batch-run'), fresh = second.report;
-    assert.deepEqual((await running).postDataJSON(), { batchId: kept.batchId, rerun: ['b-proc'] });
+    const sent = (await running).postDataJSON();
+    assert.deepEqual(sent, { batchId: kept.batchId, rerun: ['b-proc'], rerunRevision: kept.revision });
     const done = await rows();
     assert.equal(fresh.batchId, kept.batchId);
     for (const id of ['b-core', 'b-dependent', 'b-proc']) assert.equal(byLabel(done, id)[0].outcome, 'completed', id);
@@ -190,6 +191,15 @@ export async function runBatchBrowser({ origin, output, playwrightModule, fixtur
     assert.equal(fresh.consumedBy, undefined, 'The kept process was already spent; the choice saved nothing.');
     assert.equal(second.current.batchId, kept.batchId, 'The batch is the one that was run; nothing about the choice was written.');
     assert.equal(await page.locator('#batch-rerun-b-proc').isChecked(), false, 'The choice was used by the run.');
+    // That attempt recorded itself: the stored batch has a newer revision. A second page holding the same choice (test setup replays the
+    // request the page sent) is refused as stale before anything runs.
+    assert.notEqual(second.revision, kept.revision, 'The attempt moved the stored revision on.');
+    const replay = await fetch(`${origin}/api/batch-run`, { method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify(sent) });
+    const replayed = await replay.json();
+    assert.equal(replay.status, 409, JSON.stringify(replayed));
+    assert.deepEqual([replayed.diagnostics[0].code, replayed.diagnostics[0].path], ['BATCH_RERUN_STALE', '/rerunRevision']);
+    assert.equal(await processRuns(), 2, 'The older choice ran nothing.');
+    assert.equal((await (await fetch(`${origin}/api/batch`)).json()).revision, second.revision, 'The refused run left the stored revision as it was.');
     await shot('batch-6-recovered-complete.png');
 
     // (e) Reload: the batch reopens from the envelope file alone. Nothing from the run, session or review survives, and neither

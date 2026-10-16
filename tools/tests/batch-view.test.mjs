@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { scopeRows, actionRows, canApply, outcomeRows, outcomeCounts, outcomeTone, conflictText, diagnosticsText, ATOMIC_NOTE, CLIENT_NOTE, RERUN_NOTE } from '../../src/app/batch-view.js';
+import { scopeRows, actionRows, canApply, outcomeRows, outcomeCounts, outcomeTone, conflictText, diagnosticsText, rerunChoice, isStaleChoice, ATOMIC_NOTE, CLIENT_NOTE, RERUN_NOTE, STALE_CHOICE_NOTE } from '../../src/app/batch-view.js';
 
 test('scopes use only Core labels and disclose what listing establishes', () => {
   assert.deepEqual(scopeRows({ scopes: [{ id: 'a', role: 'existing', client: 'one' }, { id: 'b', role: 'added', client: 'other' }] }, { labels: { one: 'Client One' } })
@@ -78,4 +78,13 @@ test('a refused answer shows its codes and messages, and the conflicts of a refu
   assert.equal(diagnosticsText(refused), 'BATCH_CONFLICTS: Conflicts were found before apply; nothing was applied. JOURNEY_RECORD_UNSUPPORTED');
   assert.equal(diagnosticsText({}), 'The batch host gave no reason.');
   assert.equal(conflictText(refused.review.conflicts[0]), 'Shared input shared is changed.');
+});
+
+test('a Run again choice carries the revision it was made against, and a stale refusal is recognised so the page drops the choice', () => {
+  assert.deepEqual(rerunChoice(['proc'], 'rev-1'), { rerun: ['proc'], rerunRevision: 'rev-1' });
+  assert.deepEqual(rerunChoice([], 'rev-1'), {}, 'no tick, no choice and no revision');
+  const stale = { status: 'refused', diagnostics: [{ code: 'BATCH_RERUN_STALE', path: '/rerunRevision', message: 'The batch changed since the Run again choice was made; review it and choose again.' }] };
+  assert.equal(isStaleChoice(stale), true);
+  for (const other of [undefined, {}, { diagnostics: [{ code: 'BATCH_CONFLICTS' }] }, { diagnostics: [{ code: 'BATCH_CHANGED' }] }]) assert.equal(isStaleChoice(other), false);
+  assert.match(STALE_CHOICE_NOTE, /choice was dropped. Review the batch and choose again./);
 });

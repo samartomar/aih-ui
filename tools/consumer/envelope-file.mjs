@@ -10,6 +10,8 @@ import { readFile, stat, writeFile, rename, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 
 const LOCK_STALE_MS = 15_000;
+// A lock file another writer is creating, removing or holding open answers EEXIST, ENOENT or, on Windows, EPERM/EACCES/EBUSY: all mean another writer is at it.
+const contended = error => ['EEXIST', 'ENOENT', 'EPERM', 'EACCES', 'EBUSY'].includes(error.code);
 const failure = (code, message) => Object.assign(new Error(message), { code });
 export const revisionOf = bytes => { try { return JSON.parse(Buffer.from(bytes).toString('utf8'))?.revision?.sha256 ?? null; } catch { return null; } };
 
@@ -17,12 +19,12 @@ async function lock(path) {
   const token = randomUUID();
   for (let attempt = 0; attempt < 3; attempt++) {
     try { await writeFile(path, token, { flag: 'wx', mode: 0o600 }); return token; }
-    catch (error) { if (error.code !== 'EEXIST') throw error; }
-    const age = await stat(path).then(found => Date.now() - found.mtimeMs, error => { if (error.code === 'ENOENT') return null; throw error; });
+    catch (error) { if (!contended(error)) throw error; }
+    const age = await stat(path).then(found => Date.now() - found.mtimeMs, error => { if (contended(error)) return null; throw error; });
     if (age === null) continue;
     if (age < LOCK_STALE_MS) break;
     const aside = `${path}.${token}.stale`;
-    if (await rename(path, aside).then(() => true, error => { if (error.code === 'ENOENT') return false; throw error; })) await rm(aside, { force: true });
+    if (await rename(path, aside).then(() => true, error => { if (contended(error)) return false; throw error; })) await rm(aside, { force: true });
   }
   throw failure('BATCH_ENVELOPE_BUSY', 'Another change to the saved batch is in progress.');
 }

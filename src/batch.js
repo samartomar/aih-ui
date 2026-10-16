@@ -1,5 +1,5 @@
 import { el } from './app/dom.js';
-import { scopeRows, actionRows, canApply, outcomeRows, outcomeCounts, outcomeTone, conflictText, diagnosticsText, ATOMIC_NOTE, RERUN_NOTE, UNSUPPORTED_NOTE } from './app/batch-view.js';
+import { scopeRows, actionRows, canApply, outcomeRows, outcomeCounts, outcomeTone, conflictText, diagnosticsText, rerunChoice, isStaleChoice, ATOMIC_NOTE, RERUN_NOTE, STALE_CHOICE_NOTE, UNSUPPORTED_NOTE } from './app/batch-view.js';
 
 const node = id => document.getElementById(`batch-${id}`);
 const TONES = { success: 'text-secondary', error: 'text-error', warning: 'text-tertiary', neutral: 'text-on-surface-variant' };
@@ -20,17 +20,25 @@ async function api(path, body) {
   if (!response.ok || result.status !== 'ok') throw Object.assign(new Error(diagnosticsText(result)), { result });
   return result;
 }
-// The actions the person has ticked Run again for, sent with a review or a run and nowhere else.
+// The actions the person has ticked Run again for, sent with the stored revision they were chosen against (a review or a run, nowhere else).
 const ticked = () => [...node('actions').querySelectorAll('input[data-action]:checked')].map(box => box.dataset.action);
 const untick = () => { for (const box of node('actions').querySelectorAll('input[data-action]')) box.checked = false; };
-const withChoice = () => { const rerun = ticked(); return rerun.length ? { rerun } : {}; };
+const withChoice = () => rerunChoice(ticked(), current.revision);
+// A choice made before the last attempt on the batch is refused. It is dropped, never reused: show the batch as stored, every box unticked.
+async function dropStaleChoice(error) {
+  if (!isStaleChoice(error.result)) return false;
+  untick(); reviewed = null; node('review-section').hidden = true;
+  const result = await api('batch');
+  renderBatch(result.projection, result.batchId, result.revision);
+  return true;
+}
 // A changed choice changes what would run, so the review no longer describes it.
 function changed() {
   reviewed = null; node('review-section').hidden = true; controls();
   node('status').textContent = 'Run again choice changed. Review this batch again before applying.';
 }
-function renderBatch(projection, batchId) {
-  current = { ...projection, id: batchId };
+function renderBatch(projection, batchId, revision) {
+  current = { ...projection, id: batchId, revision };
   node('content').hidden = false;
   node('id').textContent = batchId;
   node('supersedes').textContent = projection.supersedes ? `Supersedes ${projection.supersedes}. Fresh work prepared from current state.` : '';
@@ -94,7 +102,7 @@ async function perform(task) {
 node('atomic-note').textContent = ATOMIC_NOTE;
 node('review').addEventListener('click', () => perform(async () => {
   reviewed = null;
-  const result = await api('batch-review', { batchId: current.id, ...withChoice() });
+  const result = await api('batch-review', { batchId: current.id, ...withChoice() }).catch(async error => { throw await dropStaleChoice(error) ? new Error(STALE_CHOICE_NOTE) : error; });
   renderReview(result.review, result.batchId); node('status').textContent = 'Review finished. Nothing was applied.';
 }));
 node('continuation').addEventListener('change', () => perform(async () => {
@@ -102,7 +110,7 @@ node('continuation').addEventListener('change', () => perform(async () => {
   reviewed = null; node('review-section').hidden = true;
   try {
     const result = await api('batch-continuation', { batchId: current.id, continuation: node('continuation').value });
-    renderBatch(result.projection, result.batchId); node('status').textContent = 'Continuation choice saved. Review this batch again before applying.';
+    renderBatch(result.projection, result.batchId, result.revision); node('status').textContent = 'Continuation choice saved. Review this batch again before applying.';
   } catch (error) { node('continuation').value = previous; throw error; }
 }));
 node('apply').addEventListener('click', () => perform(async () => {
@@ -113,13 +121,14 @@ node('apply').addEventListener('click', () => perform(async () => {
     // The run used up the choice. Show the batch as the host now holds it (a first attempt at a process spent its consent into a
     // newer batch); every box is unticked, and a box is never ticked by anything but the person.
     untick();
-    if (result.current) renderBatch(result.current.projection, result.current.batchId);
+    if (result.current) renderBatch(result.current.projection, result.current.batchId, result.revision); else current.revision = result.revision;
     renderReport(result.report); node('status').textContent = result.current ? 'Run finished. Inspect every observed outcome; Recover reinspects and prepares fresh work.'
       : 'Run finished, but the saved batch could not be read again. Inspect every observed outcome, then reload before acting on this batch.';
   } catch (error) {
     // A refusal is the host saying nothing was applied: show why (the conflicts, when it names them) and let the person review again.
     if (error.result?.status === 'refused') {
       attempted = false;
+      if (await dropStaleChoice(error)) throw new Error(`Nothing was applied. ${STALE_CHOICE_NOTE}`);
       if (error.result.review) renderReview(error.result.review, current.id);
       throw new Error(`Nothing was applied. ${error.message}`);
     }
@@ -135,7 +144,7 @@ async function recover() {
   reviewed = null; node('review-section').hidden = true;
   const old = current.id;
   const result = await api('batch-recover', { batchId: old });
-  renderBatch(result.projection, result.batchId); attempted = false;
+  renderBatch(result.projection, result.batchId, result.revision); attempted = false;
   if (result.review) renderReview(result.review, result.batchId);
   node('status').textContent = `Recovered from ${old}. Fresh batch ${result.batchId} supersedes it.`;
 }
@@ -143,6 +152,6 @@ node('recover').addEventListener('click', () => perform(() => recover()));
 await perform(async () => {
   const result = await api('batch'); clients = result.clients; supported = result.supported !== false;
   node('notice').textContent = supported ? '' : UNSUPPORTED_NOTE;
-  renderBatch(result.projection, result.batchId);
+  renderBatch(result.projection, result.batchId, result.revision);
   node('status').textContent = 'Reopened from the journey envelope. Review before applying, or Recover to reinspect earlier effects.';
 });
