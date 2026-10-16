@@ -74,7 +74,8 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
     const controls = el('div', 'space-y-1');
     const prompt = el('div', 'space-y-1'); prompt.hidden = true;
     const textarea = el('textarea', 'w-full bg-wb-input border border-wb-border rounded p-2 text-[11px]');
-    textarea.readOnly = true; textarea.value = suggestion.prompt; textarea.setAttribute('aria-label', `AI advice prompt for ${suggestion.label ?? suggestion.change.itemId}`);
+    // Tall enough to read the whole prompt before copying it.
+    textarea.readOnly = true; textarea.rows = 12; textarea.value = suggestion.prompt; textarea.setAttribute('aria-label', `AI advice prompt for ${suggestion.label ?? suggestion.change.itemId}`);
     prompt.append(el('p', 'text-on-surface-variant', PROMPT_NOTE), textarea, button('Copy prompt', safe(async () => {
       await navigator.clipboard.writeText(suggestion.prompt);
       showStatus('Prompt copied. Paste it into an AI client you already use.');
