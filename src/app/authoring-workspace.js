@@ -3,6 +3,7 @@ import { createUpdatesView } from './updates-view.js';
 import { createOrganizationAuthorView } from './organization-author.js';
 import { authorityFromResult, changeSummary, compareRevision, reviewFreshness, revisionOf, setupInstructions, sourceRows, staleReviewMessage } from './authority-source.js';
 import { isJourneyEnvelope, importLimitError } from './authoring-client.js';
+import { dependencyRows } from './dependency-set.js';
 
 const buttonClass = 'px-3 py-1.5 rounded bg-surface-container text-on-surface border border-wb-border hover:bg-surface-container-high';
 function button(label, action) {
@@ -36,7 +37,7 @@ export function createAuthoringWorkspace(client) {
   const status = el('p', 'text-on-surface-variant'); status.id = 'policy-status'; controls.after(status);
   const file = el('input'); file.type = 'file'; file.accept = 'application/json,.json'; file.id = 'policy-open'; file.setAttribute('aria-label', 'Open saved project policy');
   const accepted = el('div', 'space-y-2'); accepted.id = 'policy-roots'; roots.append(accepted);
-  const accept = button('Accept proposed changes', () => {
+  const accept = button('Accept choices with dependencies', () => {
     client.accept();
     showStatus(client.draft ? 'Draft change accepted. Save the draft to keep it; compile a resolved scope to produce an executable policy.' : 'Changes accepted. Review your policy and save the exact artifact.');
   });
@@ -251,9 +252,8 @@ export function createAuthoringWorkspace(client) {
     const result = await client.compileDraft(roots); diagnostics.textContent = JSON.stringify(result, null, 2);
     if (result.status === 'superseded') return showStatus('Compile superseded by a newer draft change. Compile again.');
     if (result.status !== 'ok') return showStatus(`Compile refused. ${readable(failure(result))} ${client.compiled ? 'The previously compiled policy remains the current executable policy.' : 'No executable policy was produced; your draft is unchanged.'}`);
-    const { scope, reviewsReconsidered } = result.value, count = `${scope.length} ${scope.length === 1 ? 'choice' : 'choices'}`;
-    showStatus(`Compiled ${count}${client.compiled?.whole ? '' : ' (resolved choices only)'}. This compiled policy is now the current executable policy; the draft envelope is unchanged and can still be saved.`
-      + (reviewsReconsidered?.length ? ` ${reviewsReconsidered.length} recorded review decision(s) need reconsideration.` : ''));
+    const { scope } = result.value, count = `${scope.length} ${scope.length === 1 ? 'choice' : 'choices'}`;
+    showStatus(`Compiled ${count}${client.compiled?.whole ? '' : ' (resolved choices only)'}. This compiled policy is now the current executable policy; the draft envelope is unchanged and can still be saved.`);
   };
   const compileAll = button('Compile whole draft', safe(() => compileScope())); compileAll.id = 'policy-draft-compile-all';
   const compileResolved = button('Compile resolved choices only', safe(() => compileScope(client.draft.roots.filter(root => root.status === 'resolved').map(refOf)))); compileResolved.id = 'policy-draft-compile-resolved';
@@ -343,6 +343,19 @@ export function createAuthoringWorkspace(client) {
     return true;
   }
 
+  function appendDependencySets(roots, inclusions, label) {
+    for (const { root, dependencies } of dependencyRows({ roots, inclusions })) {
+      const row = el('div', 'space-y-1');
+      row.append(el('p', 'font-mono text-[10px]', label(root)));
+      for (const { item } of dependencies) {
+        const dependency = el('p', 'pl-3 font-mono text-[10px] text-on-surface-variant', `Required dependency: ${item.itemId} · ${item.scope}`);
+        dependency.dataset.dependencyOf = root.itemId; row.append(dependency);
+      }
+      if (!dependencies.length) row.append(el('p', 'pl-3 text-[10px] text-outline', 'No required dependencies.'));
+      proposed.append(row);
+    }
+    proposed.append(el('p', 'text-on-surface-variant', 'Accepting approves each item together with its displayed required dependencies in one step. No separate dependency approval is needed. This does not authorize host execution.'));
+  }
   function present(result) {
     diagnostics.textContent = JSON.stringify(result, null, 2);
     if (result.status !== 'ok') { showStatus(failure(result)); return; }
@@ -353,11 +366,11 @@ export function createAuthoringWorkspace(client) {
     if (candidate?.envelopeBytes) {
       const open = candidate.roots.filter(root => root.status === 'unresolved').length;
       proposed.append(el('p', 'font-medium', `Proposed draft revision ${candidate.projection.revision.sequence}: ${candidate.roots.length} explicit choices; ${open} unresolved. Not an executable policy.`));
-      for (const root of candidate.roots) proposed.append(el('p', 'font-mono text-[10px]', `${root.itemId} — ${root.status}`));
+      appendDependencySets(candidate.roots, candidate.roots.flatMap(root => (root.dependencies ?? []).map(item => ({ root, item }))), root => `${root.itemId} — ${root.status}`);
       showStatus('Review the proposed draft change, then accept. Your current draft is retained until acceptance.');
     } else if (candidate) {
       proposed.append(el('p', 'font-medium', `Proposed policy: ${candidate.intent.roots.length} explicit choices; ${candidate.intent.pins.length} pinned items including dependencies.`));
-      for (const root of candidate.intent.roots) proposed.append(el('p', 'font-mono text-[10px]', root.itemId));
+      appendDependencySets(candidate.intent.roots, candidate.inclusions, root => root.itemId);
       showStatus('Review the proposed choices and dependencies, then accept. Your current saved artifact is retained until acceptance.');
     }
     render();

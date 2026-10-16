@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmdirSyn
 import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createSettingsStore } from "../server/settings.mjs";
-import { CAPABILITIES, emptySettings, newSetupSettings, settingsErrors } from "../../src/app/setup-model.js";
+import { CAPABILITIES, emptySettings, newSetupSettings, reviewerErrors, settingsErrors } from "../../src/app/setup-model.js";
 import { createApi } from "../server/api.mjs";
 import { createStaticServer, listen } from "../server/static.mjs";
 
@@ -205,4 +205,84 @@ test("settings update HTTP route enforces JSON, same origin and fixed persona", 
   const reopened = await fetch(`${base}/api/workbench-settings`).then((result) => result.json());
   assert.equal(reopened.location, settingsPath);
   assert.deepEqual(reopened.settings.capabilities, []);
+});
+
+const withReviewer = (settings, reviewer = { kind: "individual", id: "alice" }) => ({ ...settings, reviewer });
+
+test("an optional reviewing identity saves, reopens in a new store and clears on update", (t) => {
+  const { store, settingsPath } = fixture(t);
+  const saved = withReviewer(vibe());
+  assert.deepEqual(store.create(saved).settings, saved);
+  assert.deepEqual(createSettingsStore({ coreTargets, settingsPath }).read().settings, saved);
+  const organization = withReviewer(vibe(), { kind: "organization", id: "Platform Team" });
+  assert.deepEqual(store.update(organization).settings.reviewer, { kind: "organization", id: "Platform Team" });
+  assert.deepEqual(createSettingsStore({ coreTargets, settingsPath }).read().settings, organization);
+  const cleared = store.update(vibe());
+  assert.equal(cleared.ok, true);
+  assert.equal(Object.hasOwn(cleared.settings, "reviewer"), false);
+  const reopened = createSettingsStore({ coreTargets, settingsPath }).read();
+  assert.equal(reopened.state, "saved");
+  assert.equal(Object.hasOwn(JSON.parse(readFileSync(settingsPath, "utf8")), "reviewer"), false);
+  assert.deepEqual(reopened.settings, vibe());
+});
+
+test("a reviewing identity needs a known kind and a bounded trimmed identity, and refusals never write", (t) => {
+  const bad = [
+    { kind: "robot", id: "alice" }, { kind: "individual" }, { id: "alice" }, { kind: "individual", id: "" }, { kind: "individual", id: " " },
+    { kind: "individual", id: " alice" }, { kind: "individual", id: "alice " }, { kind: "individual", id: "a".repeat(255) },
+    { kind: "individual", id: "al\nice" }, { kind: "individual", id: "al\u0000ice" }, { kind: "individual", id: 7 },
+    { kind: "individual", id: "alice", extra: true }, null, "alice", [], undefined,
+  ];
+  const { store, settingsPath } = fixture(t);
+  for (const reviewer of bad) {
+    assert.ok(Object.keys(settingsErrors({ ...vibe(), reviewer })).length, JSON.stringify(reviewer));
+    assert.equal(store.create({ ...vibe(), reviewer }).ok, false);
+    assert.equal(existsSync(settingsPath), false);
+  }
+  assert.deepEqual(settingsErrors(withReviewer(vibe(), { kind: "individual", id: "a".repeat(254) })), {});
+  assert.deepEqual(settingsErrors(withReviewer(vibe(), { kind: "organization", id: "team one" })), {});
+  assert.ok(reviewerErrors({ kind: "individual", id: "" }).reviewer);
+  assert.deepEqual(reviewerErrors(undefined), {});
+  store.create(withReviewer(vibe()));
+  const before = readFileSync(settingsPath, "utf8");
+  for (const reviewer of bad) {
+    assert.equal(store.update({ ...vibe(), reviewer }).ok, false);
+    assert.equal(readFileSync(settingsPath, "utf8"), before);
+  }
+});
+
+test("a legacy settings file without a reviewer still reads as saved and gains none", (t) => {
+  const { store, settingsPath } = fixture(t);
+  const legacy = JSON.stringify(enterprise(), null, 2);
+  assert.equal(Object.keys(JSON.parse(legacy)).length, 7);
+  writeFileSync(settingsPath, `${legacy}\n`);
+  const read = store.read();
+  assert.equal(read.state, "saved");
+  assert.equal(Object.hasOwn(read.settings, "reviewer"), false);
+  assert.equal(store.updateClients({ clients: ["fixture-client-b"] }).ok, true);
+  assert.equal(Object.hasOwn(JSON.parse(readFileSync(settingsPath, "utf8")), "reviewer"), false);
+});
+
+test("a client change keeps the saved reviewing identity", (t) => {
+  const { store, settingsPath } = fixture(t);
+  store.create(withReviewer(enterprise()));
+  const updated = store.updateClients({ clients: ["fixture-client-b"] });
+  assert.deepEqual(updated.settings.reviewer, { kind: "individual", id: "alice" });
+  assert.deepEqual(createSettingsStore({ coreTargets, settingsPath }).read().settings, { ...withReviewer(enterprise()), clients: ["fixture-client-b"] });
+});
+
+test("the settings HTTP route saves and clears the reviewing identity", async (t) => {
+  const { store, directory } = fixture(t);
+  store.create(enterprise());
+  const api = createApi({ consumerDir: directory, runDir: directory, summary: { coreTargets }, settingsPath: join(directory, "settings.v1.json") });
+  const server = createStaticServer(directory, api);
+  const address = await listen(server, 0);
+  t.after(() => new Promise((resolveClose) => { server.closeAllConnections(); server.close(resolveClose); }));
+  const base = `http://127.0.0.1:${address.port}`;
+  const update = (settings) => fetch(`${base}/api/workbench-settings/update`, { method: "POST", headers: { "content-type": "application/json", origin: base }, body: JSON.stringify(settings) });
+  assert.equal((await update(withReviewer(enterprise(), { kind: "bad", id: "x" }))).status, 422);
+  assert.equal((await update(withReviewer(enterprise()))).status, 200);
+  assert.deepEqual((await fetch(`${base}/api/workbench-settings`).then((result) => result.json())).settings.reviewer, { kind: "individual", id: "alice" });
+  assert.equal((await update(enterprise())).status, 200);
+  assert.equal(Object.hasOwn((await fetch(`${base}/api/workbench-settings`).then((result) => result.json())).settings, "reviewer"), false);
 });

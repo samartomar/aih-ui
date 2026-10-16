@@ -1,9 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { startConsumer } from './server.mjs';
-import { mkdtemp, readFile, access } from 'node:fs/promises';
+import { installedFamilies } from './installed-families.mjs';
+import { freshAuthoring, composeAuthoring, editAuthoring } from './headless.mjs';
+import { mkdtemp, mkdir, readFile, writeFile, access } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 const bytes = text => [...new TextEncoder().encode(text)];
 export const folderFiles = (text = 'Personal instructions.') => [
   { path: 'LICENSE', bytes: bytes('MIT License\nCopyright 2026 Example\nPermission is hereby granted.') },
@@ -98,4 +102,57 @@ test('only the granted client can prepare personal material and acquisition neve
     await assert.rejects(access(marker));
     assert.equal(await readFile(join(projectRoot, 'script-executed')).catch(() => null), null);
   } finally { await new Promise(resolve => started.server.close(resolve)); }
+});
+
+// Core's apply records custody under the account home, so Prepare/Apply run in a child
+// whose home is disposable; the parent process never applies with the developer's home.
+const approvalChild = `import os from 'node:os'; import { readFileSync } from 'node:fs';
+const [hostUrl, familiesUrl, inputPath] = process.argv.slice(1), input = JSON.parse(readFileSync(inputPath, 'utf8'));
+if (os.homedir() !== input.home) throw new Error('Child home must be the disposable fixture home.');
+const { createHost } = await import(hostUrl), { installedFamilies } = await import(familiesUrl);
+const host = createHost({ projectRoot: input.projectRoot, materialRoots: { maintained: input.maintainedRoot }, recipeMaterials: (await installedFamilies()).flatMap(entry => entry.materials), controls: { logging: 'off' } });
+const prepared = await host.prepareSession({ policyText: input.policyText });
+const applied = prepared.sessionId ? await host.applyApproved({ sessionId: prepared.sessionId, reviewDigest: prepared.review.reviewDigest }) : undefined;
+process.stdout.write(JSON.stringify({ home: os.homedir(), prepared, applied }));`;
+test('one approval applies a selected item and its displayed required dependency set', async () => {
+  const inventories = await installedFamilies(), entry = inventories.find(entry => entry.family === 'Extensions');
+  const item = entry.release.items.find(item => item.id === 'extensions.matt.ask-matt');
+  assert.ok(item);
+  const fresh = await composeAuthoring({ intent: freshAuthoring(), inventories });
+  assert.equal(fresh.status, 'ok', JSON.stringify(fresh));
+  const selected = await editAuthoring({ policyBytes: fresh.value.policyBytes, inventories,
+    operation: { type: 'select', root: { releaseSha256: entry.release.sha256, itemId: item.id, scope: 'project', configuration: {} } } });
+  assert.equal(selected.status, 'ok', JSON.stringify(selected));
+  const { intent, inclusions, policy } = selected.value;
+  assert.equal(intent.roots.length, 1); assert.equal(intent.roots[0].itemId, item.id);
+  const dependencies = inclusions.filter(inclusion => inclusion.item.itemId !== item.id);
+  assert.ok(dependencies.length > 0);
+  assert.ok(dependencies.every(inclusion => inclusion.root.itemId === item.id));
+  assert.deepEqual(intent.pins.map(pin => pin.itemId).sort(), [item.id, ...dependencies.map(inclusion => inclusion.item.itemId)].sort());
+  assert.equal(policy.selections.length, intent.pins.length);
+  const rootSelection = policy.selections.find(selection => selection.recipe.reference.sha256 === item.recipe.sha256);
+  const dependencySelections = dependencies.map(({ item: ref }) => {
+    const required = inventories.find(entry => entry.release.sha256 === ref.releaseSha256).release.items.find(item => item.id === ref.itemId);
+    return policy.selections.find(selection => selection.recipe.reference.sha256 === required.recipe.sha256);
+  });
+  assert.deepEqual(rootSelection.requires.slice().sort(), dependencySelections.map(selection => selection.id).sort());
+  const scratch = await mkdtemp(join(tmpdir(), 'aih-single-approval-')), home = join(scratch, 'home'), projectRoot = join(scratch, 'project');
+  for (const directory of [projectRoot, join(home, 'AppData', 'Local'), join(home, 'AppData', 'Roaming'), join(home, '.config'), join(home, '.local', 'state'), join(home, '.local', 'share'), join(home, '.cache')]) await mkdir(directory, { recursive: true });
+  const inputPath = join(scratch, 'input.json');
+  await writeFile(inputPath, JSON.stringify({ home, projectRoot, maintainedRoot: dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'))), policyText: new TextDecoder().decode(selected.value.policyBytes) }));
+  const child = spawnSync(process.execPath, ['--input-type=module', '-e', approvalChild, new URL('./host.mjs', import.meta.url).href, new URL('./installed-families.mjs', import.meta.url).href, inputPath], {
+    encoding: 'utf8', windowsHide: true, timeout: 120_000, maxBuffer: 20_000_000,
+    env: { ...process.env, HOME: home, USERPROFILE: home, APPDATA: join(home, 'AppData', 'Roaming'), LOCALAPPDATA: join(home, 'AppData', 'Local'),
+      XDG_CONFIG_HOME: join(home, '.config'), XDG_STATE_HOME: join(home, '.local', 'state'), XDG_DATA_HOME: join(home, '.local', 'share'), XDG_CACHE_HOME: join(home, '.cache') } });
+  assert.equal(child.status, 0, child.stderr);
+  const { home: childHome, prepared, applied } = JSON.parse(child.stdout);
+  assert.equal(childHome, home);
+  assert.equal(prepared.status, 'ready', JSON.stringify(prepared));
+  assert.equal(typeof prepared.sessionId, 'string'); assert.equal(typeof prepared.review.reviewDigest, 'string');
+  for (const selection of [rootSelection, ...dependencySelections]) {
+    assert.ok(prepared.review.operations.some(operation => operation.id.startsWith(`${selection.id}/`)), `Review must cover ${selection.id}`);
+  }
+  assert.equal(applied.completion, 'complete', JSON.stringify(applied));
+  assert.deepEqual(applied.operations.map(operation => operation.id).sort(), prepared.review.operations.map(operation => operation.id).sort());
+  for (const operation of prepared.review.operations.filter(operation => operation.kind === 'file.write')) await access(operation.details.target);
 });
