@@ -6,8 +6,8 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const MAX_BODY = 64 * 1024;
-const TIMEOUT_MS = { check: 200_000, 'repair-prepare': 120_000, 'repair-apply': 120_000, repairs: 10_000 };
-const ROUTES = { '/api/readiness-check': ['POST', 'check'], '/api/readiness-repairs': ['GET', 'repairs'],
+const TIMEOUT_MS = { check: 200_000, 'repair-prepare': 120_000, 'repair-apply': 120_000, repairs: 10_000, report: 30_000 };
+const ROUTES = { '/api/readiness-report': ['GET', 'report'], '/api/readiness-check': ['POST', 'check'], '/api/readiness-repairs': ['GET', 'repairs'],
   '/api/readiness-repair-prepare': ['POST', 'repair-prepare'], '/api/readiness-repair-apply': ['POST', 'repair-apply'] };
 // lost and rejected are decisions the page renders from the body status, not transport failures.
 const HTTP_STATUS = { ok: 200, lost: 200, rejected: 200 };

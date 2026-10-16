@@ -76,6 +76,15 @@ Neither a repair outcome nor a recheck is worded as machine readiness. After a r
 the page's Result line and the guidance show the latest machine check, labelled as taken
 before the repair; only a new machine check can state that the machine is ready.
 
+## Readiness records
+
+The host keeps the latest 64 checks and repair outcomes in memory, never on disk.
+Each `urn:aih-ui:readiness-record:1.0.0` record carries a UUID, strictly increasing
+UTC timestamps, the Core package name/version when known, and a SHA-256 of the
+exact Core result records. Repairs link to the machine check held when apply
+started and carry Core's run identity, apply/recheck instants and projected outcome.
+`records()` returns a deep copy; restarting the host loses the journal.
+
 ## HTTP routes
 
 All JSON, same-origin. POST requires `content-type: application/json` and an `Origin`
@@ -84,6 +93,7 @@ equal to the page origin; bodies are limited to 64 KiB; responses are `no-store`
 | Route | Body | Result |
 | --- | --- | --- |
 | `POST /api/readiness-check` | `{ targets?, network? }` — Core target ids, `declared` or `off` | `{ status: 'ok', value: { projection, guidance } }` |
+| `GET /api/readiness-report` | — | `{ status: 'ok', value: { records, claimSet, projection } }` — normalized claims and Core's report projection |
 | `GET /api/readiness-repairs` | — | `{ status: 'ok', value: { repairs: [{ key, id, targets, network }] } }` — never paths or inputs |
 | `POST /api/readiness-repair-prepare` | `{ key }` | `{ status: 'ok', value: { sessionId?, reviewDigest?, operations, projection } }` |
 | `POST /api/readiness-repair-apply` | `{ sessionId, reviewDigest, approved: true }` | `{ status: 'ok', value: { outcome, recheck, machine, guidance } }` — `machine` is the latest machine check (`beforeRepair: true`) or `null` |

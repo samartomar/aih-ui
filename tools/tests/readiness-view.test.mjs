@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { READINESS_STATES, projectInspection, projectRepairPreparation, projectRepairOutcome } from '../consumer/readiness.mjs';
-import { stateLabel, stateTone, overallLine, rowsFor, summaryCounts } from '../../src/app/readiness-view.js';
+import { READINESS_STATES, projectInspection, projectRepairPreparation, projectRepairOutcome, readinessGuidance } from '../consumer/readiness.mjs';
+import { stateLabel, stateTone, overallLine, notRecheckedLine, rowsFor, summaryCounts } from '../../src/app/readiness-view.js';
 
 // Core-shaped records, in the style of tools/consumer/readiness.test.mjs.
 const options = { targets: { value: ['npm', 'jq'], origin: 'explicit' }, network: { value: 'declared', origin: 'default' } };
@@ -138,4 +138,33 @@ test('a verified repair recheck names its scope and never reads as machine readi
 test('helpers tolerate a missing projection', () => {
   assert.deepEqual(rowsFor(null), []);
   assert.match(overallLine(null), /^Not ready\b/);
+});
+
+test('not-verified rechecks preserve the full counts and check-status wording', () => {
+  const cases = [
+    [inspection([check('npm/version', 'npm', 'failed', 'version-exit'), check('npm/tls', 'npm', 'skipped', 'network-off')]), '1 failed, 1 unknown.'],
+    [inspection([]), 'nothing was checked.'],
+    [inspection([check('npm/version', 'npm', 'passed', 'version-ok')], { status: 'incomplete' }), 'the check was incomplete: not every condition could be confirmed.'],
+    [inspection([check('npm/version', 'npm', 'failed', 'version-exit')], { status: 'cancelled' }), 'the check was cancelled: 1 failed.'],
+  ];
+  for (const [result, expected] of cases) {
+    const condition = projectRepairOutcome({ inspection: result, repair }).condition;
+    assert.equal(overallLine(condition), `Recheck of the repair's targets only (npm): not verified — ${expected} Other targets were not re-checked; check this machine again before relying on it.`);
+  }
+});
+
+test('page and guidance preserve the same recheck scope with their existing channel instructions', () => {
+  const cases = [
+    [null, 'Other targets were not re-checked; check this machine again before relying on it.',
+      'Other targets were not re-checked; run the machine check again before claiming machine readiness.'],
+    [[], 'Check this machine again to confirm machine readiness.', 'Run the machine check again before claiming machine readiness.'],
+    [[{ target: 'jq', state: 'failed' }, { target: 'node', state: 'verified' }],
+      'Not re-checked: jq (failed in the latest machine check), node (verified in the latest machine check).',
+      'Not re-checked: jq (failed in the latest machine check), node (verified in the latest machine check).'],
+  ];
+  for (const [notRechecked, pageText, guidanceText] of cases) {
+    const condition = { ...projectRepairOutcome({ inspection: inspection([]), repair }).condition, notRechecked };
+    assert.equal(notRecheckedLine(condition), pageText);
+    assert.ok(readinessGuidance([condition]).includes(`\n${guidanceText}\n`));
+  }
 });
