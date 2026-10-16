@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html class="dark" lang="en" data-mode="dark">
+<head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Get started - aih Policy Workbench</title>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&amp;family=Geist+Mono:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles/tailwind.css">
+<link rel="stylesheet" href="/styles/tokens.css">
+<script src="/app/mode.js"></script>
+</head>
+<body class="bg-background font-body text-on-surface text-sm leading-normal antialiased">
+<header class="bg-wb-chrome border-b border-wb-border px-4 py-3 flex items-center justify-between">
+<h1 class="text-base font-semibold">Get started</h1>
+<a class="text-primary hover:underline" href="/" id="back-link">Back to the Workbench</a>
+</header>
+<main class="max-w-4xl mx-auto p-4 space-y-4">
+<p class="text-on-surface-variant">Pick what you want to do. Nothing is installed or changed from this page; saving only writes a setup file that you download.</p>
+
+<section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="entry-heading">
+<h2 class="font-semibold" id="entry-heading">What would you like to do?</h2>
+<div class="flex flex-wrap gap-3">
+<a class="px-3 py-1.5 rounded border border-wb-control-border hover:bg-surface-container font-medium" href="readiness.html" id="fix-link">Fix what's broken</a>
+<button class="px-3 py-1.5 rounded bg-primary-container text-on-primary font-medium" id="start-guided" type="button" aria-expanded="false" aria-controls="guided">Set up for a project</button>
+</div>
+<p class="text-xs text-on-surface-variant">"Fix what's broken" opens the machine check and repair page. It asks for no goal and no project folder.</p>
+</section>
+
+<div class="space-y-4" id="guided" hidden>
+<section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="goal-heading">
+<h2 class="font-semibold" id="goal-heading">1. Your goal</h2>
+<label class="block text-on-surface-variant" for="goal">In one sentence, what do you want your AI client to help you with?</label>
+<textarea class="w-full h-20 bg-wb-input border border-wb-control-border rounded px-2 py-1" id="goal" maxlength="300" placeholder="for example: fix the failing checkout tests in my app"></textarea>
+<p class="text-xs text-outline"><span id="goal-count">0</span> / 300 characters</p>
+</section>
+
+<section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="project-heading">
+<h2 class="font-semibold" id="project-heading">2. Your project (optional)</h2>
+<p class="text-on-surface-variant">Choosing a folder lets this page recognise what your project uses. The folder is read in this browser only. Nothing is uploaded or sent anywhere, and only a few manifest files at the top of the folder are read for names.</p>
+<label class="block text-on-surface-variant" for="folder">Project folder</label>
+<input class="block" id="folder" type="file" webkitdirectory multiple>
+<p class="text-xs text-on-surface-variant" id="folder-status" role="status" aria-live="polite">No folder chosen. You can skip this and add what your project uses by hand.</p>
+<ul class="space-y-2" id="detections"></ul>
+<div class="flex flex-wrap items-center gap-2">
+<label class="text-on-surface-variant" for="add-stack">Add something your project uses</label>
+<select class="bg-wb-input border border-wb-control-border rounded px-2 py-1" id="add-stack"></select>
+<button class="px-3 py-1 rounded border border-wb-control-border hover:bg-surface-container" id="add-stack-button" type="button">Add</button>
+</div>
+</section>
+
+<section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="clients-heading">
+<h2 class="font-semibold" id="clients-heading">3. Your AI clients</h2>
+<p class="text-on-surface-variant">Tick the AI clients you use. Each one says where it came from.</p>
+<ul class="space-y-1" id="clients"></ul>
+<div class="flex flex-wrap items-center gap-3">
+<button class="px-3 py-1.5 rounded border border-wb-control-border hover:bg-surface-container disabled:opacity-50" id="detect-clients" type="button">Detect AI clients on this machine</button>
+<span class="text-xs text-on-surface-variant" id="clients-status" role="status" aria-live="polite"></span>
+</div>
+<p class="text-xs text-outline">Detecting is a read-only check with the network off. It looks for the clients Core supports on this machine and changes nothing.</p>
+</section>
+
+<section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="suggest-heading">
+<h2 class="font-semibold" id="suggest-heading">4. Starter choices</h2>
+<div class="flex flex-wrap items-center gap-3">
+<button class="px-3 py-1.5 rounded bg-primary-container text-on-primary font-medium disabled:opacity-50" id="suggest" type="button">Suggest starter choices</button>
+<span class="text-on-surface-variant" id="suggest-status" role="status" aria-live="polite"></span>
+</div>
+<div class="space-y-3" id="suggestion" hidden>
+<p class="font-medium" id="suggestion-message"></p>
+<ul class="space-y-2" id="choices"></ul>
+<a class="text-primary hover:underline" href="/" id="browse-link" hidden>Browse the catalog</a>
+<div class="space-y-1" id="prompt-block" hidden>
+<label class="block text-on-surface-variant" for="prompt">Prompt for your AI client (read-only)</label>
+<textarea class="w-full h-40 bg-wb-input border border-wb-control-border rounded px-2 py-1 font-mono text-xs" id="prompt" readonly></textarea>
+<div class="flex flex-wrap items-center gap-3">
+<button class="px-3 py-1.5 rounded border border-wb-control-border hover:bg-surface-container" id="copy-prompt" type="button">Copy prompt for your AI client</button>
+<span class="text-xs text-on-surface-variant" id="copy-status" role="status" aria-live="polite">Copying only puts this text on your clipboard. It executes nothing and changes nothing.</span>
+</div>
+</div>
+</div>
+</section>
+
+<section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="save-heading" id="save-section" hidden>
+<h2 class="font-semibold" id="save-heading">5. Save</h2>
+<div class="flex flex-wrap items-center gap-3">
+<button class="px-3 py-1.5 rounded bg-primary-container text-on-primary font-medium disabled:opacity-50" id="save" type="button">Save choices to a draft</button>
+<button class="px-3 py-1.5 rounded border border-wb-control-border hover:bg-surface-container" id="download" type="button" hidden>Download setup file</button>
+</div>
+<p class="text-on-surface-variant" id="save-status" role="status" aria-live="polite"></p>
+<div class="space-y-2" id="saved" hidden>
+<h3 class="font-medium">What this setup says</h3>
+<ul class="space-y-2" id="saved-lines"></ul>
+<p class="text-xs text-on-surface-variant">This draft is not executable and nothing was installed.</p>
+</div>
+</section>
+</div>
+
+<section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="reopen-heading">
+<h2 class="font-semibold" id="reopen-heading">Reopen a saved setup</h2>
+<label class="block text-on-surface-variant" for="reopen-file">A setup file you downloaded from this page</label>
+<input class="block" id="reopen-file" type="file" accept=".json,application/json">
+<p class="text-on-surface-variant" id="reopen-status" role="status" aria-live="polite"></p>
+<div class="space-y-2" id="reopened" hidden>
+<ul class="space-y-2" id="reopen-lines"></ul>
+<p class="text-xs text-on-surface-variant">This draft is not executable and nothing was installed.</p>
+</div>
+</section>
+</main>
+<script type="module" src="/guided.js"></script>
+</body>
+</html>
