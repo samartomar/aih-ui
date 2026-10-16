@@ -8,8 +8,8 @@ export const ORGANIZATION_DRAFT_RECORD_ID = 'organization-draft';
 export const ORGANIZATION_OBLIGATIONS = ['required', 'recommended', 'permitted', 'prohibited'];
 export const ORGANIZATION_SCOPES = ['project', 'user'];
 export const ORGANIZATION_REVISION_KINDS = ['branch', 'tag', 'commit'];
-const MAX_ENTRIES = 4096, MAX_TARGETS = 64;
-const idPattern = /^[\w.-]{1,180}$/, hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+export const MAX_ENTRIES = 4096, MAX_TARGETS = 64;
+export const idPattern = /^[\w.-]{1,180}$/, hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 // Same canonical JSON as headless `stable`; kept local so this module has no host dependency.
 const stable = value => JSON.stringify(value, (_key, member) => member && typeof member === 'object' && !Array.isArray(member)
   ? Object.fromEntries(Object.entries(member).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : member);
@@ -19,7 +19,7 @@ export async function organizationTargetId({ scope, client, repository }) {
   return `target-${await digest({ scope, ...(client !== undefined ? { client } : {}), ...(repository !== undefined ? { repository } : {}) })}`;
 }
 // A source is copied into git and gh commands, so only characters that no shell treats specially are accepted.
-const OWNER = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/, NAME = /^[A-Za-z0-9._-]{1,100}$/, SEGMENT = /^[A-Za-z0-9._-]+$/, REF = /^[A-Za-z0-9._/-]{1,200}$/, COMMIT = /^[0-9a-f]{40}$/;
+const OWNER = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/, NAME = /^[A-Za-z0-9._][A-Za-z0-9._-]{0,99}$/, SEGMENT = /^[A-Za-z0-9._][A-Za-z0-9._-]*$/, REF = /^[A-Za-z0-9._/-]{1,200}$/, COMMIT = /^[0-9a-f]{40}$/;
 const dots = value => value === '.' || value === '..';
 const pathOk = value => typeof value === 'string' && value.length <= 512 && value.endsWith('.json') && value.split('/').every(part => SEGMENT.test(part) && !dots(part));
 const refOk = value => typeof value === 'string' && REF.test(value) && !value.includes('..') && !value.includes('//') && !value.startsWith('/') && !value.endsWith('/') && !value.startsWith('-');
@@ -33,7 +33,7 @@ export function organizationSourceProblem(source) {
   if (revision.kind === 'commit' ? typeof revision.value !== 'string' || !COMMIT.test(revision.value) : !refOk(revision.value)) return '';
   return null;
 }
-const boundedStrings = (value, count, length) => Array.isArray(value) && value.length >= 1 && value.length <= count
+export const boundedStrings = (value, count, length) => Array.isArray(value) && value.length >= 1 && value.length <= count
   && value.every(member => typeof member === 'string' && member.length >= 1 && member.length <= length) && new Set(value).size === value.length;
 // One permission per recipe input name; `fixed` carries any JSON value, so only its container is checked here.
 export function organizationPermissionProblem(permission) {

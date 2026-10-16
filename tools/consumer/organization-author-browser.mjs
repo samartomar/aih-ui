@@ -98,6 +98,11 @@ export async function runOrganizationAuthorBrowser({ page, output, fixture, refr
     await addEntry(page, GRILLING, 'project'); await setObligation(page, GRILLING, 'project', 'recommended');
     for (const [itemId, scope] of [[IMPLEMENT, 'project'], [TDD, 'user'], [GRILLING, 'project']]) await setFixedInput(page, itemId, scope, 'agentDirectory', '.claude');
     await addTarget(page, 'project', 'claude', 'github.com/fixture-org/app'); await addTarget(page, 'user', 'claude');
+    // Removing a row keeps keyboard focus in the list: it moves to the same action on the row now in that place.
+    await addTarget(page, 'project', 'codex');
+    const removable = page.locator('#organization-author [data-target-id]').filter({ hasText: 'project · codex' }).locator('button[data-action="remove-target"]');
+    await removable.focus(); await edit(page, () => page.keyboard.press('Enter'));
+    assert.equal(await page.evaluate(() => document.activeElement?.dataset.action ?? document.activeElement?.id), 'remove-target');
     const implement = await labelOf(entryRow(page, IMPLEMENT, 'project')), codeReview = await labelOf(entryRow(page, CODE_REVIEW, 'project')), tdd = await labelOf(entryRow(page, TDD, 'user'));
     states.push('drafted');
 

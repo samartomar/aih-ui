@@ -13,6 +13,8 @@ export const stable = value => JSON.stringify(value, (_key, member) => member &&
   ? Object.fromEntries(Object.entries(member).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : member);
 export const ok = value => ({ status: 'ok', value, diagnostics: [] });
 export const refuse = (code, path, message, originalBytes, details) => ({ status: 'refused', diagnostics: [{ code, path, message, ...(details ? { details } : {}) }], ...(originalBytes ? { originalBytes: originalBytes.slice() } : {}) });
+// The id ordinary Enterprise composition gives an item at a scope; also names an organization entry that is never composed.
+export const managementIdOf = ({ scope, packageName, itemId }) => `${scope}--${packageName.replace(/^@/, '').replaceAll('/', '.')}--${itemId}`;
 export function freshAuthoring() {
   return { schema: AUTHORING_SCHEMA, origins: [{ id: 'direct', kind: 'direct' }], roots: [], exclusions: [], pins: [], provenance: [], inputs: [], reviews: { schema: REVIEW_SCHEMA, records: [], history: [] } };
 }
@@ -70,7 +72,7 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
       .flatMap(r => r.originIds)
       .map(id => intent.origins.find(o => o.id === id)).filter(o => o?.kind === 'organization').map(o => o.organizationSelectionId));
     if (organizationIds.size > 1) return refuse('INTENT_POLICY_CONTRADICTION', '/origins', 'Conflicting organization selection identities.');
-    const managementId = prior?.managementId ?? `${selection.scope}--${entry.release.package.name.replace(/^@/, '').replaceAll('/', '.')}--${item.id}`;
+    const managementId = prior?.managementId ?? managementIdOf({ scope: selection.scope, packageName: entry.release.package.name, itemId: item.id });
     selections.push({ ...prior, id: prior?.id ?? selection.id, managementId, scope: selection.scope, configuration: configured.selection.configuration,
       ...(base?.mode === 'enterprise' ? { organizationSelectionId: [...organizationIds][0] ?? prior?.organizationSelectionId ?? managementId } : {}),
       requires: [], recipe: configured.selection.recipe });

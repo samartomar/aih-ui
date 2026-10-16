@@ -51,14 +51,14 @@
             },
             "name": {
               "type": "string",
-              "pattern": "^[A-Za-z0-9._-]{1,100}$"
+              "pattern": "^[A-Za-z0-9._][A-Za-z0-9._-]{0,99}$"
             }
           }
         },
         "path": {
           "type": "string",
           "maxLength": 512,
-          "pattern": "^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*\\.json$"
+          "pattern": "^[A-Za-z0-9._][A-Za-z0-9._-]*(?:/[A-Za-z0-9._][A-Za-z0-9._-]*)*\\.json$"
         },
         "revision": {
           "type": "object",

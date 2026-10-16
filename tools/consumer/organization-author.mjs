@@ -4,16 +4,14 @@
 // chooses what to ask it. Nothing here publishes, authenticates, signs or changes the active authority.
 import { parseOrganizationPolicy, previewOrganizationObligations } from '@aihq/core/contracts';
 import { isCheckedRelease, listItems } from '@aihq/catalog/reader';
-import { composeAuthoring, describeAuthoringSubject, freshAuthoring, refuse, ok } from './headless.mjs';
+import { composeAuthoring, describeAuthoringSubject, freshAuthoring, managementIdOf, refuse, ok, stable } from './headless.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { ORGANIZATION_DRAFT_RECORD_SCHEMA, ORGANIZATION_DRAFT_RECORD_ID, ORGANIZATION_OBLIGATIONS, ORGANIZATION_SCOPES,
-  organizationDraftProblem, organizationEntryId, organizationTargetId, organizationSourceProblem, organizationPermissionProblem } from './organization-draft-record.mjs';
+  organizationDraftProblem, organizationEntryId, organizationTargetId, organizationSourceProblem, organizationPermissionProblem, MAX_ENTRIES, MAX_TARGETS, idPattern, boundedStrings } from './organization-draft-record.mjs';
 export const ORGANIZATION_POLICY_SCHEMA = 'urn:aihq:core:organization-policy:1.1.0';
 const encode = value => new TextEncoder().encode(value);
 const ENTERPRISE_BASE = encode(JSON.stringify({ schema: 'urn:aihq:core:execution-policy:1.3.0', mode: 'enterprise', selections: [], metadata: { 'aih.workbench': freshAuthoring() } }));
 const PREVIEW_POLICY_ID = 'organization-baseline-preview';
-const MAX_ENTRIES = 4096, MAX_TARGETS = 64;
-const idPattern = /^[\w.-]{1,180}$/;
 const keyOf = ({ releaseSha256, itemId }) => `${releaseSha256}/${itemId}`;
 const bytesOf = value => Array.isArray(value) && value.every(byte => Number.isInteger(byte) && byte >= 0 && byte <= 255) ? Uint8Array.from(value) : undefined;
 const jsonValue = value => { try { return value !== undefined && JSON.stringify(value) !== undefined; } catch { return false; } };
@@ -95,8 +93,6 @@ async function present({ envelopeBytes, loaded, inventories, diagnostics = [] })
 const closed = (operation, keys, optional = []) => operation && typeof operation === 'object' && !Array.isArray(operation)
   && Object.keys(operation).every(key => key === 'kind' || [...keys, ...optional].includes(key)) && keys.every(key => Object.hasOwn(operation, key));
 const bad = (path, message, code = 'INPUT_INVALID') => ({ code, path, message });
-const stringList = (value, count, length) => Array.isArray(value) && value.length >= 1 && value.length <= count
-  && value.every(member => typeof member === 'string' && member.length >= 1 && member.length <= length) && new Set(value).size === value.length;
 const entryOf = (record, id) => record.entries.find(entry => entry.id === id);
 // Each editor mutates the cloned record and returns a refusal, or null when the edit applies.
 const EDITORS = {
@@ -153,7 +149,7 @@ const EDITORS = {
       const value = operation[field];
       if (value === undefined) continue;
       if (value === null) delete entry[field];
-      else if (!stringList(value, count, length)) return bad(`/operation/${field}`, `Supply 1 to ${count} unique values of 1 to ${length} characters, or null to clear.`);
+      else if (!boundedStrings(value, count, length)) return bad(`/operation/${field}`, `Supply 1 to ${count} unique values of 1 to ${length} characters, or null to clear.`);
       else entry[field] = [...value];
     }
     return null;
@@ -260,33 +256,46 @@ async function assemble({ record, index, inventories }) {
   for (const [position, entry] of record.entries.entries()) {
     const hit = found(index, entry);
     const label = labelOf(hit?.item, entry.item.itemId), base = { entryId: entry.id, itemId: entry.item.itemId, label };
-    const omit = (reason, message, path = `/entries/${position}`) => { omitted.push({ ...base, reason, message }); if (reason === 'needs-declared-value' || reason === 'cannot-compose') problems.push({ path, entryId: entry.id, message }); };
+    const omit = (reason, message, path = `/entries/${position}`) => { omitted.push({ ...base, reason, message }); if (reason === 'cannot-compose') problems.push({ path, entryId: entry.id, message }); };
     if (!hit) { omitted.push({ ...base, reason: 'item-unavailable', message: `${entry.item.itemId} is not available.` }); continue; }
     if (entry.obligation === undefined) { omitted.push({ ...base, reason: 'obligation-unset', message: `No obligation is chosen for ${label}.` }); continue; }
     const permissionsUnset = entry.obligation !== 'prohibited' && Object.keys(hit.item.inputs ?? {}).some(name => !entry.inputs[name]);
     if (permissionsUnset) { omitted.push({ ...base, reason: 'input-permission-unset', message: `Not every input of ${label} has a permission.` }); continue; }
-    const { configuration, missing } = exampleConfiguration(hit.item, entry);
-    if (missing.length) {
-      omit('needs-declared-value', `${label} requires ${missing.join(', ')} but Catalog declares no default. Set a fixed value or choices so its identity can be composed.`, `/entries/${position}/inputs/${missing[0]}`);
-      continue;
-    }
     const supported = hit.item.scopes.includes(entry.scope), composeScope = supported ? entry.scope : hit.item.scopes[0];
     if (composeScope === undefined) { omit('cannot-compose', `${label} declares no scope Catalog can compose it at.`); continue; }
     const ref = { ...entry.item, scope: composeScope };
-    const composed = await composeRoots([{ ...ref, configuration }], inventories);
-    const selection = composed.status === 'ok' ? selectionOf(composed.value, ref) : undefined;
-    const recipeIdentity = selection ? await identityOf(index, ref) : undefined;
-    if (!selection || !recipeIdentity) { omit('cannot-compose', composed.status === 'ok' ? `Catalog composed no selection for ${label}.` : catalogMessage(composed.diagnostics)); continue; }
-    const dependencies = [];
-    if (supported && entry.obligation !== 'prohibited') for (const inclusion of composed.value.inclusions) {
-      if (!sameRef(inclusion.root, ref) || sameRef(inclusion.item, ref)) continue;
-      const dependency = selectionOf(composed.value, inclusion.item), identity = dependency ? await identityOf(index, inclusion.item) : undefined;
-      if (!dependency || !identity) { omit('cannot-compose', `Catalog composed no selection for the dependency ${inclusion.item.itemId} of ${label}.`); continue; }
-      dependencies.push({ ref: inclusion.item, selectionId: dependency.organizationSelectionId, recipeIdentity: identity, configuration: structuredClone(dependency.configuration) });
+    // A prohibited entry never needs a configuration. Any other entry composes when its own permissions give it an example value.
+    const { configuration, missing } = entry.obligation === 'prohibited' ? { configuration: null, missing: [] } : exampleConfiguration(hit.item, entry);
+    const composes = entry.obligation !== 'prohibited' && !missing.length;
+    let selectionId, recipeIdentity, dependencies = [], organizationId;
+    if (composes) {
+      const composed = await composeRoots([{ ...ref, configuration }], inventories);
+      const selection = composed.status === 'ok' ? selectionOf(composed.value, ref) : undefined;
+      recipeIdentity = selection ? await identityOf(index, ref) : undefined;
+      if (!selection || !recipeIdentity) { omit('cannot-compose', composed.status === 'ok' ? `Catalog composed no selection for ${label}.` : catalogMessage(composed.diagnostics)); continue; }
+      organizationId = selection.organizationSelectionId;
+      if (supported) for (const inclusion of composed.value.inclusions) {
+        if (!sameRef(inclusion.root, ref) || sameRef(inclusion.item, ref)) continue;
+        const dependency = selectionOf(composed.value, inclusion.item), identity = dependency ? await identityOf(index, inclusion.item) : undefined;
+        if (!dependency || !identity) { omit('cannot-compose', `Catalog composed no selection for the dependency ${inclusion.item.itemId} of ${label}.`); continue; }
+        dependencies.push({ ref: inclusion.item, selectionId: dependency.organizationSelectionId, recipeIdentity: identity, configuration: structuredClone(dependency.configuration) });
+      }
+    } else {
+      // The identity is the recipe's own and the id is the one ordinary composition assigns, so neither needs a runnable configuration.
+      recipeIdentity = await identityOf(index, ref);
+      if (!recipeIdentity) { omit('cannot-compose', `Exact recipe bytes for ${label} are not available.`); continue; }
+      organizationId = managementIdOf({ scope: composeScope, packageName: hit.inventory.release.package.name, itemId: entry.item.itemId });
+      if (entry.obligation !== 'prohibited') {
+        omitted.push({ ...base, reason: 'needs-declared-value', message: `${label} requires ${missing.join(', ')} but Catalog declares no default and the baseline leaves the value to developers. The example selection leaves it out; Core still reports whether the requirement is fulfilled.` });
+        // Dependencies come from Catalog's composition, which needs a value. Without one, each required item must be approved by an entry of its own.
+        const approvals = (supported ? hit.item.dependencies?.requires ?? [] : []).map(dependency => dependency.itemId).filter(itemId => !record.entries.some(other => other.item.releaseSha256 === entry.item.releaseSha256
+          && other.item.itemId === itemId && other.scope === composeScope && ['permitted', 'required'].includes(other.obligation)));
+        if (approvals.length) problems.push({ path: `/entries/${position}/inputs/${missing[0]}`, entryId: entry.id, message: `${label} requires ${missing.join(', ')} and Catalog declares no default, so its dependencies (${approvals.join(', ')}) cannot be composed. Set a fixed value or choices so Catalog can compose its dependencies, or approve each with an entry of its own.` });
+      }
     }
     // An unsupported scope cannot be composed, so the entry is named by Workbench marker plus the id Catalog assigned at a supported scope.
-    const selectionId = supported ? selection.organizationSelectionId : `unsupported-${entry.scope}--${selection.organizationSelectionId}`;
-    authored.push({ entry, position, hit, label, supported, selectionId, recipeIdentity, configuration, dependencies });
+    selectionId = supported ? organizationId : `unsupported-${entry.scope}--${organizationId}`;
+    authored.push({ entry, position, hit, label, supported, selectionId, recipeIdentity, configuration: composes ? configuration : null, dependencies });
   }
   return { authored, omitted, problems };
 }
@@ -347,7 +356,7 @@ const withItem = (record, meta, index) => {
   const item = detail ? index.get(keyOf(detail))?.item : undefined;
   return { ...structuredClone(record), itemId: detail?.itemId ?? null, label: item?.label ?? detail?.itemId ?? null };
 };
-async function previewTarget({ target, built, inventories, inheritedContradictions }) {
+async function previewTarget({ target, built, compose, inheritedContradictions }) {
   const { candidate, assembled, index } = built, { parsed } = candidate;
   const meta = candidate.document.metadata['aih.workbench'].entries;
   const empty = { target: { ...target }, selection: [], advisory: [], fulfillment: [], contradictions: [...inheritedContradictions], unsupported: [], omitted: [] };
@@ -374,11 +383,13 @@ async function previewTarget({ target, built, inventories, inheritedContradictio
         message: `${kind} control unavailable: ${label} is ${entry.obligation} for ${entry.scope} scope, but Catalog publishes it only for ${published} scope. A developer in this target cannot select it, so Core reports it ${result.status}. Only the organization can revise this requirement; written guidance is not enforcement.` });
       continue;
     }
+    // An entry with no example value is already listed as omitted; Core's fulfillment below still reports it.
+    if (authored.configuration === null) continue;
     roots.push({ ...entry.item, scope: entry.scope, configuration: authored.configuration, label });
   }
   const selections = [], composedSelections = [];
   if (roots.length) {
-    const composed = await composeRoots(roots, inventories);
+    const composed = await compose(roots);
     if (composed.status !== 'ok') return { ...refused(composed.diagnostics), unsupported, omitted };
     const requirers = new Map();
     for (const inclusion of composed.value.inclusions) {
@@ -423,8 +434,15 @@ async function previewTargets({ built, inventories, targets }) {
   // A document-level contradiction is Core's finding about the whole document; every target carries it.
   const inherited = candidate.valid ? [] : candidate.diagnostics.filter(diagnostic => diagnostic.reason === 'obligation-contradiction').map(diagnostic => ({
     itemId: null, label: null, requiredBy: [], reason: 'obligation-contradiction', message: diagnostic.message, path: diagnostic.path }));
+  // Targets that select the same roots share one Catalog composition.
+  const composed = new Map();
+  const compose = roots => {
+    const key = stable(roots.map(({ label: _label, ...root }) => root));
+    if (!composed.has(key)) composed.set(key, composeRoots(roots, inventories));
+    return composed.get(key);
+  };
   const results = [];
-  for (const { id, ...target } of targets) results.push({ ...(await previewTarget({ target, built, inventories, inheritedContradictions: inherited })), target: { ...(id ? { id } : {}), ...target } });
+  for (const { id, ...target } of targets) results.push({ ...(await previewTarget({ target, built, compose, inheritedContradictions: inherited })), target: { ...(id ? { id } : {}), ...target } });
   return results;
 }
 const declaredOf = ({ scope, client, repository }) => ({ scope, ...(client !== undefined ? { client } : {}), ...(repository !== undefined ? { repository } : {}) });
@@ -480,6 +498,32 @@ function explanationOf({ record, candidate, built, handoff, sequence }) {
   lines.push('## Where it is read', '', `- Repository: \`${handoff.repository}\``, `- Path: \`${handoff.path}\``, `- Ref: \`${handoff.ref}\``, '', '## Activation', '', handoff.activation, '');
   return lines.join('\n');
 }
+// The consistency gate asks Core about every target the selectors can distinguish. At each scope with entries that is the product of
+// "undeclared" plus each client some entry names, and "undeclared" plus each repository some entry names; undeclared facts stay
+// unknown to Core. Declared targets are previewed anyway, so a combination equal to one is not repeated.
+const MAX_IMPLICIT_TARGETS = 1024;
+function implicitTargets(record) {
+  const declared = new Set(record.targets.map(target => JSON.stringify([target.scope, target.client ?? null, target.repository ?? null])));
+  const targets = [];
+  let combinations = 0;
+  for (const scope of ORGANIZATION_SCOPES) {
+    const entries = record.entries.filter(entry => entry.scope === scope);
+    if (!entries.length) continue;
+    const clients = [undefined, ...new Set(entries.flatMap(entry => entry.clients ?? []))], repositories = [undefined, ...new Set(entries.flatMap(entry => entry.repositories ?? []))];
+    combinations += clients.length * repositories.length;
+    if (combinations > MAX_IMPLICIT_TARGETS) continue;
+    for (const client of clients) for (const repository of repositories)
+      if (!declared.has(JSON.stringify([scope, client ?? null, repository ?? null]))) targets.push(declaredOf({ scope, client, repository }));
+  }
+  return { targets, combinations };
+}
+const targetWords = ({ scope, client, repository }) => `${scope} scope${client !== undefined ? `, client ${client}` : ''}${repository !== undefined ? `, repository ${repository}` : ''}`;
+// One sentence per distinct finding, naming the first few targets it appears for.
+function contradictionWords(contradictions) {
+  const byMessage = new Map();
+  for (const { message, target } of contradictions) byMessage.set(message, [...(byMessage.get(message) ?? []), targetWords(target)]);
+  return [...byMessage].map(([message, targets]) => `${message} (${[...new Set(targets)].slice(0, 3).join('; ')}${new Set(targets).size > 3 ? `; and ${new Set(targets).size - 3} more` : ''})`).join(' ');
+}
 async function exportCandidate({ envelopeBytes, inventories }) {
   const loaded = await load(envelopeBytes);
   if (loaded.status !== 'ok') return loaded;
@@ -488,14 +532,15 @@ async function exportCandidate({ envelopeBytes, inventories }) {
   if (built.unresolved.length) return refuse('ORGANIZATION_DRAFT_UNRESOLVED', '/records', `The draft still has ${built.unresolved.length} unresolved ${built.unresolved.length === 1 ? 'item' : 'items'}: ${built.unresolved.map(item => item.path).join(', ')}.`, envelopeBytes, { unresolved: built.unresolved });
   const { candidate } = built;
   if (!candidate.valid) return refuse('ORGANIZATION_CANDIDATE_INVALID', '', 'Core refused the candidate organization policy.', envelopeBytes, { owner: 'core', diagnostics: candidate.diagnostics });
-  // Every declared target is previewed, and so is each scope the baseline speaks to that no declared target covers on its own,
-  // so a contradiction cannot be exported just because nobody declared a target to find it.
-  const bare = target => target.client === undefined && target.repository === undefined;
-  const implicit = ORGANIZATION_SCOPES.filter(scope => built.assembled.authored.some(({ entry }) => entry.scope === scope && ['required', 'recommended'].includes(entry.obligation))
-    && !record.targets.some(target => target.scope === scope && bare(target))).map(scope => ({ scope }));
-  const previewed = await previewTargets({ built, inventories, targets: [...record.targets.map(target => ({ id: target.id, ...declaredOf(target) })), ...implicit] });
+  // Every declared target is previewed, and so is every target the baseline's selectors can tell apart that no declared target covers,
+  // so a contradiction cannot be exported just because nobody declared the target that shows it.
+  const implicit = implicitTargets(record);
+  if (implicit.combinations > MAX_IMPLICIT_TARGETS) return refuse('ORGANIZATION_CONSISTENCY_UNCHECKED', '/entries',
+    `The clients and repositories named by this baseline's entries combine into ${implicit.combinations} distinct targets, more than the ${MAX_IMPLICIT_TARGETS} the Workbench can check for contradictions. Narrow the selectors (fewer clients or repositories on fewer entries) so every combination can be checked.`,
+    envelopeBytes, { combinations: implicit.combinations, limit: MAX_IMPLICIT_TARGETS });
+  const previewed = await previewTargets({ built, inventories, targets: [...record.targets.map(target => ({ id: target.id, ...declaredOf(target) })), ...implicit.targets] });
   const contradictions = previewed.flatMap(target => target.contradictions.map(contradiction => ({ target: target.target, ...contradiction })));
-  if (contradictions.length) return refuse('ORGANIZATION_CANDIDATE_CONTRADICTION', '/targets', `The candidate contradicts itself for ${contradictions.length === 1 ? 'a declared target' : 'declared targets'}: ${[...new Set(contradictions.map(item => item.message))].join(' ')}`, envelopeBytes, { contradictions });
+  if (contradictions.length) return refuse('ORGANIZATION_CANDIDATE_CONTRADICTION', '/targets', `The candidate contradicts itself for ${contradictions.length === 1 ? 'a target' : 'targets'} developers can reach: ${contradictionWords(contradictions)}`, envelopeBytes, { contradictions });
   const sequence = read.envelope.revision.sequence, fileName = `${record.policyId}.organization-policy.json`, explanationFileName = `${record.policyId}.explanation.md`;
   const handoff = handoffOf({ record, sequence, fileName, explanationFileName });
   return ok({ fileName, candidateBytes: candidate.bytes, explanationFileName, explanation: explanationOf({ record, candidate, built, handoff, sequence }), handoff });

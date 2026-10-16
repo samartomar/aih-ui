@@ -91,7 +91,11 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
   const scopes = [['project', 'Project'], ['user', 'User']];
   const block = () => el('div', 'space-y-2 p-2 border border-wb-border rounded');
   const line = () => el('div', 'flex flex-wrap items-center gap-2');
-  function labeled(label, control) { const wrapper = el('label', 'space-y-1'); wrapper.append(el('span', 'text-on-surface-variant', label), control); return wrapper; }
+  // The accessible name keeps the visible label text (label in name).
+  function labeled(label, control) {
+    const name = control.getAttribute('aria-label');
+    if (name && !name.toLowerCase().includes(label.toLowerCase())) control.setAttribute('aria-label', `${label}, ${name}`);
+    const wrapper = el('label', 'space-y-1'); wrapper.append(el('span', 'text-on-surface-variant', label), control); return wrapper; }
   function download(bytes, name, type = 'application/json') {
     const url = URL.createObjectURL(new Blob([typeof bytes === 'string' ? bytes : Uint8Array.from(bytes)], { type }));
     const link = el('a'); link.href = url; link.download = name; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -140,7 +144,10 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
     policyId.value = draft?.policyId ?? ''; const source = draft?.source;
     owner.value = source?.repository.owner ?? ''; name.value = source?.repository.name ?? ''; path.value = source?.path ?? ''; refKind.value = source?.revision.kind ?? 'branch'; ref.value = source?.revision.value ?? '';
     // Rebuild rows only after an author action, restoring focus to its corresponding control.
-    const focusedId = node.contains(document.activeElement) ? document.activeElement.id : '';
+    const focused = node.contains(document.activeElement) ? document.activeElement : null, focusedId = focused?.id ?? '';
+    // A removed row takes its control with it: keep the place by focusing the same action on the row now there.
+    const focusedRow = focused?.closest('[data-entry-id],[data-target-id]'), focusedList = focusedRow?.parentElement;
+    const focusedIndex = focusedRow ? [...focusedList.children].indexOf(focusedRow) : -1, focusedAction = focused?.dataset.action;
     entries.replaceChildren();
     for (const entry of draft?.entries ?? []) {
       const row = block(); row.dataset.entryId = entry.id;
@@ -149,7 +156,7 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
       const obligation = select(`Obligation for ${entry.label}`, `${entry.id}-obligation`, [['', 'Unresolved'], ...['required', 'recommended', 'permitted', 'prohibited'].map(value => [value, value])], entry.obligation ?? ''); obligation.dataset.field = 'obligation';
       obligation.addEventListener('change', safe(() => edit({ kind: 'set-obligation', entryId: entry.id, obligation: obligation.value || null })));
       const badge = el('span', 'border border-wb-border rounded px-1', enforcementText(entry.enforcement)); badge.dataset.field = 'enforcement'; row.append(obligation, badge);
-      const clients = input(`Clients for ${entry.label}`, `${entry.id}-clients`, (entry.clients ?? []).join(', ')), repositories = input(`Repositories for ${entry.label}`, `${entry.id}-repositories`, (entry.repositories ?? []).join(', '));
+      const clients = input(`Clients (comma-separated) for ${entry.label}`, `${entry.id}-clients`, (entry.clients ?? []).join(', ')), repositories = input(`Repositories (comma-separated) for ${entry.label}`, `${entry.id}-repositories`, (entry.repositories ?? []).join(', '));
       clients.dataset.field = 'clients'; repositories.dataset.field = 'repositories';
       const apply = action('Apply selectors', `${entry.id}-selectors`, () => edit({ kind: 'set-selectors', entryId: entry.id, clients: parseSelectors(clients.value), repositories: parseSelectors(repositories.value) })); apply.dataset.action = 'apply-selectors';
       const selectors = line(); selectors.append(labeled('Clients (comma-separated)', clients), labeled('Repositories (comma-separated)', repositories), apply); row.append(selectors);
@@ -158,7 +165,7 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
         const permission = item.permission, kind = permission && ('fixed' in permission ? 'fixed' : 'choices' in permission ? 'choices' : 'allowDeclared');
         const kindControl = select(`Permission for ${entry.label} ${item.name}`, `${entry.id}-input-${index}-kind`, [['', 'Unresolved'], ['fixed', 'Fixed'], ['choices', 'Choices'], ['allowDeclared', 'Allow declared']], kind || ''); kindControl.dataset.field = 'permission-kind';
         const text = permission && ('fixed' in permission ? (typeof permission.fixed === 'string' ? permission.fixed : JSON.stringify(permission.fixed)) : permission.choices?.join(', '));
-        const value = input(`Value for ${entry.label} ${item.name}`, `${entry.id}-input-${index}-value`, text ?? ''); value.dataset.field = 'permission-value';
+        const value = input(`Value (choices comma-separated) for ${entry.label} ${item.name}`, `${entry.id}-input-${index}-value`, text ?? ''); value.dataset.field = 'permission-value';
         const applyInput = action('Apply input', `${entry.id}-input-${index}-apply`, () => edit({ kind: 'set-input', entryId: entry.id, name: item.name, permission: parsePermission(kindControl.value, value.value) })); applyInput.dataset.action = 'apply-input';
         inputRow.append(el('span', '', `${item.name}${item.required ? ' (required)' : ''}: ${item.description ?? ''}`), kindControl, labeled('Value (choices comma-separated)', value), applyInput); row.append(inputRow);
       }
@@ -170,7 +177,11 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
       const remove = action(`Remove target ${targetLabel(target)}`, `${target.id}-remove`, () => edit({ kind: 'remove-target', targetId: target.id })); remove.dataset.action = 'remove-target'; row.append(el('span', '', targetLabel(target)), remove); targets.append(row);
     }
     unresolved.replaceChildren(...unresolvedLines(draft?.unresolved).map(text => el('li', '', text)));
-    if (focusedId) { const control = [...node.querySelectorAll('[id]')].find(control => control.id === focusedId); control?.focus(); }
+    if (focusedId) {
+      const control = [...node.querySelectorAll('[id]')].find(control => control.id === focusedId);
+      const rows = focusedList ? [...focusedList.children] : [], near = rows[Math.min(focusedIndex, rows.length - 1)];
+      (control ?? (focusedAction && near?.querySelector(`[data-action="${focusedAction}"]`)) ?? node.querySelector(focusedList === targets ? '#org-target-add' : '#org-add-entry'))?.focus();
+    }
   }
   async function showPreview() {
     const result = await session.read('organization-preview'); if (result.status === 'superseded') return;

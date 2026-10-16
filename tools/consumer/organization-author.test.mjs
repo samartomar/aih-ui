@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { ORGANIZATION_DRAFT_RECORD_SCHEMA, organizationDraftProblem, organizationEntryId, organizationTargetId } from './organization-draft-record.mjs';
 import { digestBytes } from './intake.mjs';
-import { stable } from './headless.mjs';
+import { stable, managementIdOf } from './headless.mjs';
 import { startConsumer } from './server.mjs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -77,6 +77,7 @@ test('a source that is not shell-safe is never accepted into a record', async ()
   for (const unsafe of [
     source({ repository: { owner: 'acme;rm', name: 'policies' } }), source({ repository: { owner: '-acme', name: 'policies' } }),
     source({ repository: { owner: 'acme', name: '..' } }), source({ repository: { owner: 'acme', name: 'a b' } }),
+    source({ repository: { owner: 'acme', name: '-x' } }), source({ path: '-n.json' }), source({ path: '-rf/a.json' }), source({ path: 'org/-x.json' }),
     source({ path: '../policy.json' }), source({ path: '/policy.json' }), source({ path: 'org/$(id).json' }), source({ path: 'org/policy.txt' }), source({ path: 'a//b.json' }),
     source({ revision: { kind: 'branch', value: 'main; rm -rf /' } }), source({ revision: { kind: 'branch', value: '-main' } }), source({ revision: { kind: 'branch', value: 'a..b' } }),
     source({ revision: { kind: 'tag', value: '/v1' } }), source({ revision: { kind: 'tag', value: 'v1/' } }), source({ revision: { kind: 'commit', value: 'main' } }),
@@ -491,6 +492,137 @@ test('export refuses an unresolved or contradictory draft, naming what to resolv
     const previewInvalid = await d.preview();
     assert.equal(previewInvalid.value.candidate.status, 'invalid');
     assert.ok(previewInvalid.value.candidate.diagnostics.some(diagnostic => diagnostic.reason === 'unknown-client'));
+  });
+});
+
+// A contradiction that only a selector-restricted target reveals must not escape just because nobody declared that target.
+const restrictedContradiction = async (restrict, expectedTarget) => withConsumer({}, async started => {
+  const { ref } = await catalogRefs(started);
+  const d = await startDraft(started);
+  await author(d, ref, { entries: [{ id: 'mattpocock.implement', obligation: 'required', ...restrict.implement }, { id: 'mattpocock.code-review', obligation: 'prohibited', ...restrict.review }] });
+  assert.deepEqual(d.state.draft.targets, []);
+  assert.deepEqual(d.state.draft.unresolved, []);
+  const refused = await d.export();
+  assert.equal(refused.status, 'refused', JSON.stringify(refused));
+  assert.equal(refused.diagnostics[0].code, 'ORGANIZATION_CANDIDATE_CONTRADICTION');
+  const found = refused.diagnostics[0].details.contradictions;
+  assert.ok(found.some(item => item.itemId === 'mattpocock.code-review' && item.target.scope === 'project'
+    && item.target.client === expectedTarget.client && item.target.repository === expectedTarget.repository), JSON.stringify(found));
+  // The implicit targets only gate export: preview lists exactly the targets the author declared.
+  const previewed = await d.preview();
+  assert.equal(previewed.status, 'ok');
+  assert.deepEqual(previewed.value.targets, []);
+  // Declaring the target shows the same finding, and approving the dependency settles it with the selectors still in place.
+  await d.edit({ kind: 'add-target', scope: 'project', ...(expectedTarget.client ? { client: expectedTarget.client } : {}), ...(expectedTarget.repository ? { repository: expectedTarget.repository } : {}) });
+  assert.equal((await d.export()).diagnostics[0].code, 'ORGANIZATION_CANDIDATE_CONTRADICTION');
+  await d.edit({ kind: 'set-obligation', entryId: d.entry(null, 'mattpocock.code-review').id, obligation: 'permitted' });
+  const resolved = await d.export();
+  assert.equal(resolved.status, 'ok', JSON.stringify(resolved));
+});
+
+test('export refuses a contradiction only a client-restricted target reveals, without a declared claude target', async () => {
+  await restrictedContradiction({ implement: { clients: ['claude'] }, review: {} }, { client: 'claude' });
+});
+
+test('export refuses a contradiction only a repository-restricted target reveals, without a declared repository target', async () => {
+  await restrictedContradiction({ implement: { repositories: ['github.com/acme/app'] }, review: {} }, { repository: 'github.com/acme/app' });
+});
+
+test('export checks the combination of selectors that different entries name', async () => {
+  // The prohibition applies only to one repository and the requirement only to one client, so only their product contradicts.
+  await restrictedContradiction({ implement: { clients: ['claude'] }, review: { repositories: ['github.com/acme/app'] } }, { client: 'claude', repository: 'github.com/acme/app' });
+});
+
+test('export refuses, and never silently skips, a baseline whose selectors combine into more targets than can be checked', async () => {
+  await withConsumer({}, async started => {
+    const { ref } = await catalogRefs(started);
+    const d = await startDraft(started);
+    const repositories = Array.from({ length: 1100 }, (_, index) => `github.com/acme/app-${index}`);
+    await author(d, ref, { entries: [{ id: 'mattpocock.implement', obligation: 'required', repositories }] });
+    const refused = await d.export();
+    assert.equal(refused.status, 'refused', JSON.stringify(refused).slice(0, 500));
+    assert.equal(refused.diagnostics[0].code, 'ORGANIZATION_CONSISTENCY_UNCHECKED');
+    assert.match(refused.diagnostics[0].message, /narrow/i);
+    assert.deepEqual(refused.diagnostics[0].details, { combinations: 1101, limit: 1024 });
+    assert.deepEqual(refused.originalBytes, d.state.envelopeBytes);
+    // Narrowing the selectors lets every combination be checked.
+    await d.edit({ kind: 'set-selectors', entryId: d.entry(null, 'mattpocock.implement').id, repositories: repositories.slice(0, 3) });
+    assert.equal((await d.export()).status, 'ok');
+  });
+});
+
+// ---- Authority entries do not depend on a runnable example configuration ----------------------
+const GUARD = 'extensions.claude.hook.git-guard', GUARD_SOURCE = 'extensions.hook-source.git-guard';
+
+test('a prohibited entry needs neither input permissions nor a configuration to export', async () => {
+  await withConsumer({}, async started => {
+    const { ref } = await catalogRefs(started);
+    const d = await startDraft(started);
+    await author(d, ref, { entries: [{ id: GUARD, obligation: 'prohibited', inputs: false }] });
+    assert.deepEqual(d.state.draft.unresolved, []);
+    const exported = await d.export();
+    assert.equal(exported.status, 'ok', JSON.stringify(exported));
+    const document = JSON.parse(decodeBytes(exported.value.candidateBytes));
+    assert.equal(parseOrganizationPolicy(JSON.stringify(document)).valid, true);
+    assert.deepEqual(document.selections.map(entry => [entry.obligation, entry.scopes, entry.inputs]), [['prohibited', ['project'], {}]]);
+    const previewed = await d.preview();
+    assert.equal(previewed.value.candidate.status, 'valid');
+  });
+});
+
+test('a required entry whose value only developers can declare is still part of the document and Core fulfillment', async () => {
+  await withConsumer({}, async started => {
+    const { ref } = await catalogRefs(started);
+    const d = await startDraft(started);
+    await author(d, ref, { entries: [{ id: GUARD, obligation: 'required', inputs: { hookCommand: { allowDeclared: true } } }], targets: [{ scope: 'project' }] });
+    // Catalog says the hook needs its hook source; with no value to compose from, the author must approve that source explicitly.
+    const waiting = await d.preview();
+    assert.equal(waiting.value.candidate.status, 'incomplete');
+    const open = waiting.value.candidate.unresolved.filter(item => item.entryId === d.entry(null, GUARD).id);
+    assert.equal(open.length, 1, JSON.stringify(open));
+    assert.match(open[0].message, /fixed value or choices/);
+    assert.equal((await d.export()).diagnostics[0].code, 'ORGANIZATION_DRAFT_UNRESOLVED');
+    // It is in the example-less preview regardless: omitted from the selection, present in Core's own fulfillment.
+    const project = targetOf(waiting, 'project');
+    assert.equal(project.status, 'ok');
+    assert.deepEqual(project.omitted.filter(item => item.itemId === GUARD).map(item => item.reason), ['needs-declared-value']);
+    assert.deepEqual(project.selection, []);
+    assert.deepEqual(project.fulfillment.map(({ itemId, status }) => ({ itemId, status })), [{ itemId: GUARD, status: 'not-fulfilled' }]);
+
+    await author(d, ref, { policyId: null, source: null, entries: [{ id: GUARD_SOURCE, obligation: 'permitted' }] });
+    const exported = await d.export();
+    assert.equal(exported.status, 'ok', JSON.stringify(exported));
+    const document = JSON.parse(decodeBytes(exported.value.candidateBytes));
+    assert.equal(parseOrganizationPolicy(JSON.stringify(document)).valid, true);
+    const guard = document.selections.find(entry => entry.obligation === 'required');
+    assert.deepEqual(guard.inputs, { hookCommand: { allowDeclared: true } });
+    const previewed = await d.preview();
+    assert.equal(previewed.value.candidate.status, 'valid');
+    assert.deepEqual(targetOf(previewed, 'project').fulfillment.map(({ itemId, status }) => ({ itemId, status })), [{ itemId: GUARD, status: 'not-fulfilled' }]);
+  });
+});
+
+test('an entry named without composing it carries the id ordinary composition assigns', async () => {
+  await withConsumer({}, async started => {
+    const { ref, catalog } = await catalogRefs(started);
+    // The id Enterprise composition assigns an item is the shared helper's, so an entry that cannot be composed is still admitted by the same id.
+    const fresh = await post(started, 'new', { mode: 'enterprise' });
+    const intent = JSON.parse(decodeBytes(fresh.value.policyBytes)).metadata['aih.workbench'];
+    const item = catalog.items.find(entry => entry.id === 'mattpocock.implement');
+    intent.roots.push({ ...item.root, configuration: { agentDirectory: '.claude' }, originIds: ['direct'] });
+    const composed = await post(started, 'compose', { policyBytes: fresh.value.policyBytes, intent });
+    assert.equal(composed.status, 'ok', JSON.stringify(composed));
+    const selection = composed.value.policy.selections.find(candidate => candidate.recipe && candidate.managementId.endsWith('--mattpocock.implement'));
+    const provenance = composed.value.intent.provenance.find(entry => entry.releaseSha256 === item.root.releaseSha256);
+    assert.equal(managementIdOf({ scope: selection.scope, packageName: provenance.package.name, itemId: 'mattpocock.implement' }), selection.managementId);
+    assert.equal(selection.organizationSelectionId, selection.managementId);
+
+    // The same item as a prohibited entry (never composed) is named by that id.
+    const d = await startDraft(started);
+    await author(d, ref, { entries: [{ id: 'mattpocock.implement', obligation: 'prohibited', inputs: false }] });
+    const exported = await d.export();
+    assert.equal(exported.status, 'ok', JSON.stringify(exported));
+    assert.equal(JSON.parse(decodeBytes(exported.value.candidateBytes)).selections[0].selectionId, selection.organizationSelectionId);
   });
 });
 

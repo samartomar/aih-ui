@@ -65,14 +65,14 @@ const check = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: ch
 // Everything not yet decided is simply absent. The reader (tools/consumer/organization-draft-record.mjs) also enforces
 // what a schema cannot express, so a record this schema accepts can still be refused when the Workbench opens it:
 //   - entry and target ids are derived (sha256 of the stable item/scope or scope/client/repository, first 32 hex);
-//   - entry and target ids are unique, and a source path has no empty, "." or ".." segment;
+//   - entry and target ids are unique, a source path has no empty, "." or ".." segment, and a repository name is not "." or "..";
 //   - a branch or tag value has no "..", "//", leading "-" or leading/trailing "/".
 // Selector values, obligations and the exported document are validated by Core when previewed or exported.
 const orgStrings = (maxItems, maxLength) => ({ type: 'array', minItems: 1, maxItems, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength } });
 const orgPermission = { oneOf: [shape({ fixed: {} }), shape({ choices: { type: 'array', minItems: 1, maxItems: 256, uniqueItems: true } }), shape({ allowDeclared: { const: true } })] };
 const orgSource = shape({ provider: { const: 'github' },
-  repository: shape({ owner: { type: 'string', pattern: '^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$' }, name: { type: 'string', pattern: '^[A-Za-z0-9._-]{1,100}$' } }),
-  path: { type: 'string', maxLength: 512, pattern: '^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*\\.json$' },
+  repository: shape({ owner: { type: 'string', pattern: '^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$' }, name: { type: 'string', pattern: '^[A-Za-z0-9._][A-Za-z0-9._-]{0,99}$' } }),
+  path: { type: 'string', maxLength: 512, pattern: '^[A-Za-z0-9._][A-Za-z0-9._-]*(?:/[A-Za-z0-9._][A-Za-z0-9._-]*)*\\.json$' },
   revision: { ...shape({ kind: { enum: ['branch', 'tag', 'commit'] }, value: { type: 'string', minLength: 1, maxLength: 200, pattern: '^[A-Za-z0-9._/-]+$' } }),
     allOf: [{ if: { required: ['kind'], properties: { kind: { const: 'commit' } } }, then: { properties: { value: { pattern: '^[0-9a-f]{40}$' } } } }] } });
 const organizationEntry = shape({ id: { type: 'string', pattern: '^entry-[a-f0-9]{32}$' }, item: shape({ releaseSha256: hash, itemId: id, itemSha256: hash }), scope,

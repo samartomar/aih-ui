@@ -83,6 +83,7 @@ class Node {
   append(...nodes) { this.children.push(...nodes); }
   replaceChildren(...nodes) { this.children = nodes; }
   setAttribute(name, value) { this[name] = value; }
+  getAttribute(name) { return this[name] ?? null; }
   addEventListener(name, handler) { this.listeners[name] = handler; }
   get options() { return this.children; }
   contains(node) { return elements(this).includes(node); }
