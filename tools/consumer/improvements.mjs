@@ -8,12 +8,16 @@ import { refuse } from './headless.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { isUtcTimestamp } from './maintenance-record.mjs';
 import { IMPROVEMENT_SUGGESTION_RECORD_SCHEMA, IMPROVEMENT_DISMISSAL_RECORD_SCHEMA, SUGGESTION_FIELDS, suggestionProblem, suggestionDerivedProblem, dismissalProblem, dismissalId } from './improvement-record.mjs';
-import { IMPROVEMENT_RULES_VERSION, suggestImprovements, classifyImprovement, lead, improvementPrompt, MAX_GOAL } from './improvement-rules.mjs';
+import { IMPROVEMENT_RULES_VERSION, FRICTION_UNKNOWN, suggestImprovements, classifyImprovement, lead, improvementPrompt, MAX_GOAL } from './improvement-rules.mjs';
 export const IMPROVEMENT_SUGGESTION_SCHEMA = IMPROVEMENT_SUGGESTION_RECORD_SCHEMA;
 export const IMPROVEMENT_DISMISSAL_SCHEMA = IMPROVEMENT_DISMISSAL_RECORD_SCHEMA;
 export { IMPROVEMENT_RULES_VERSION, improvementPrompt };
 const isSuggestion = record => record.schema === IMPROVEMENT_SUGGESTION_RECORD_SCHEMA;
 const isDismissal = record => record.schema === IMPROVEMENT_DISMISSAL_RECORD_SCHEMA;
+const CANDIDATE_SOURCES = ['configured', 'unconfigured'];
+// What a check covered, in words: content changes depend on the host's update source; recurring friction has no published interface.
+const CONTENT_COVERAGE = { checked: 'Content changes since this policy was saved were checked against the configured update source.',
+  'no-configured-source': 'Content changes were not checked: no update source is configured.', 'sources-unavailable': 'Content changes were not checked: the update source could not be read.' };
 const byId = (a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 const checkedEntries = value => {
   try { return Array.isArray(value) && value.length <= 32 && value.every(entry => entry && isCheckedRelease(entry.release)) && new Set(value.map(entry => entry.release.sha256)).size === value.length; }
@@ -33,21 +37,29 @@ export function projectDismissals(envelope) {
 }
 // Bounded read: no scan, native check, model call, host prepare/apply or write. The host supplies `now`, the
 // checked inventories and the AI clients the person declared in Workbench setup, with the labels Harness publishes for
-// them; `goal` is an optional request.
-export async function checkImprovements({ envelopeBytes, inventories, clients = [], labels = {}, goal, now } = {}) {
+// them; `goal` is an optional request. `candidateInventories` is null/undefined when the host's update source could not be
+// read, and `candidateSource` says whether the host has one at all ('unconfigured' is unknown, never checked).
+export async function checkImprovements({ envelopeBytes, inventories, candidateInventories, candidateSource = 'configured', clients = [], labels = {}, goal, now } = {}) {
   const loaded = await load(envelopeBytes);
   if (loaded.status !== 'ok') return loaded;
   const { read, draft } = loaded.value;
   const fail = (path, message) => refuse('INPUT_INVALID', path, message, envelopeBytes);
   if (!isUtcTimestamp(now)) return fail('/now', 'Supply the check time as an ISO UTC timestamp.');
+  if (!CANDIDATE_SOURCES.includes(candidateSource)) return fail('/candidateSource', `Supply one of: ${CANDIDATE_SOURCES.join(', ')}.`);
   if (!checkedEntries(inventories)) return fail('/inventories', 'Supply at most 32 unique checked inventories.');
+  const reason = candidateSource === 'unconfigured' ? 'no-configured-source' : candidateInventories === null || candidateInventories === undefined ? 'sources-unavailable' : undefined;
+  if (reason === undefined && !checkedEntries(candidateInventories)) return fail('/candidateInventories', 'Supply at most 32 unique checked candidate inventories.');
   if (!Array.isArray(clients) || clients.length > 32 || clients.some(client => typeof client !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(client))) return fail('/clients', 'Supply at most 32 AI client ids.');
   if (!labels || typeof labels !== 'object' || Array.isArray(labels) || Object.keys(labels).length > 32
     || Object.entries(labels).some(([id, label]) => !/^[a-z0-9][a-z0-9-]{0,63}$/.test(id) || typeof label !== 'string' || label.length < 1 || label.length > 128 || /[\u0000-\u001f\u007f]/.test(label))) return fail('/labels', 'Supply at most 32 client labels of 1 to 128 characters, without control characters.');
   if (goal !== undefined && (typeof goal !== 'string' || goal.length > MAX_GOAL)) return fail('/goal', `Supply a goal of at most ${MAX_GOAL} characters.`);
   const requested = goal !== undefined && goal.trim() !== '';
   const items = inventories.flatMap(entry => entry.release.items.map(item => ({ ...item, root: { releaseSha256: entry.release.sha256 } })));
-  const current = await suggestImprovements({ intent: draft.intent, items, clients, labels, goal });
+  const text = CONTENT_COVERAGE[reason ?? 'checked'], coverage = [{ trigger: 'content-change', state: reason === undefined ? 'checked' : 'unknown', ...(reason !== undefined ? { reason } : {}), text },
+    { trigger: 'recurring-friction', state: 'unknown', reason: 'no-published-interface', text: FRICTION_UNKNOWN }];
+  // Unchecked content changes are said on each suggestion too; unknowns are not part of its identity.
+  const suggested = await suggestImprovements({ intent: draft.intent, items, inventories, candidates: reason === undefined ? candidateInventories : [], clients, labels, goal });
+  const current = reason === undefined ? suggested : suggested.map(suggestion => ({ ...suggestion, unknowns: [...suggestion.unknowns, text] }));
   const savedBy = new Map(read.records.filter(isSuggestion).map(record => [record.id, record]));
   const dismissals = new Map(read.records.filter(isDismissal).map(record => [record.suggestion.id, record]));
   const shown = (suggestion, dismissal, reasons = []) => ({ ...suggestion, prompt: improvementPrompt(suggestion), dismissal: dismissal ? structuredClone(dismissal) : null,
@@ -63,7 +75,7 @@ export async function checkImprovements({ envelopeBytes, inventories, clients = 
   const preserved = [...dismissals.values()].filter(dismissal => !matched.has(dismissal.id)).sort(byId)
     .map(dismissal => ({ dismissal: structuredClone(dismissal), suggestion: structuredClone(savedBy.get(dismissal.suggestion.id)), state: 'not-current' }));
   return { status: 'ok', diagnostics: loaded.diagnostics, value: { rulesVersion: IMPROVEMENT_RULES_VERSION, checkedAt: now,
-    reads: ['envelope', 'supplied-inventories', 'declared-clients', ...(requested ? ['request-goal'] : [])], mutations: [], ...lead(active), dismissed, preserved } };
+    reads: ['envelope', 'supplied-inventories', ...(reason === undefined ? ['candidate-inventories'] : []), 'declared-clients', ...(requested ? ['request-goal'] : [])], mutations: [], coverage, ...lead(active), dismissed, preserved } };
 }
 // Dismissing a suggestion, or showing it again on request, becomes a new envelope revision; the saved intent and the
 // draft are untouched. A dismissal binds the exact suggestion revision it dismissed.

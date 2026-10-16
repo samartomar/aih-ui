@@ -135,6 +135,27 @@ test('dismiss, show again and suggest use injected clients, goal and closed oper
   assert.deepEqual(calls[6], restoreOperation(record.id));
 });
 
+test('a check says once what it covered, with or without a suggestion, and not before a check or after the result is retired', async () => {
+  const coverage = [{ trigger: 'content-change', state: 'unknown', reason: 'no-configured-source', text: 'Content changes were not checked: no update source is configured.' },
+    { trigger: 'recurring-friction', state: 'unknown', reason: 'no-published-interface', text: 'Recurring friction is not checked: no published interface.' }];
+  const results = [ok({ ...checked, coverage }), ok({ ...checked, leading: null, coverage }), ok({ ...checked, leading: null })];
+  const client = { draft, revision: 1, checkImprovements: async () => results.shift() };
+  const built = view(client), area = () => elements(built.node).find(node => node.id === 'policy-improvements-coverage');
+  assert.equal(area().children.length, 0);
+  await built.open();
+  assert.deepEqual(area().children.map(node => node.textContent), coverage.map(entry => entry.text));
+  assert.equal(textOf(built.node).split(coverage[0].text).length, 2);
+  // Nothing suggested still says what was and was not checked.
+  await find(built, 'Suggest').listeners.click();
+  assert.ok(textOf(built.node).includes('No improvements were suggested by the fixed rules.'));
+  assert.deepEqual(area().children.map(node => node.textContent), coverage.map(entry => entry.text));
+  // A result without coverage shows none, and a changed policy retires the shown coverage with its suggestions.
+  await find(built, 'Suggest').listeners.click();
+  assert.equal(area().children.length, 0);
+  client.revision = 2; built.render();
+  assert.equal(area().children.length, 0);
+});
+
 test('the UI pins the shipped suggestion and dismissal record URNs', async () => {
   for (const [urn, name] of [[improvements.SUGGESTION_RECORD, 'suggestion'], [improvements.DISMISSAL_RECORD, 'dismissal']]) {
     const schema = JSON.parse(await readFile(new URL(`../../schemas/journey-record-improvement-${name}-1.0.0.json`, import.meta.url), 'utf8'));
