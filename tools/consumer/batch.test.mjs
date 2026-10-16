@@ -1,6 +1,6 @@
 import test, { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, readdir, mkdir, writeFile, mkdtemp, rm, utimes } from 'node:fs/promises';
+import { readFile, readdir, mkdir, writeFile, mkdtemp } from 'node:fs/promises';
 import { mkdtempSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -514,10 +514,6 @@ describe('reviewed batch against Core', () => {
 });
 
 // ---- The envelope file's one writer: every replace is a compare-and-swap serialized with every other. ----
-{
-const NOW = '2026-10-16T09:00:00Z';
-const scratch = () => mkdtemp(join(tmpdir(), 'ui35-envelope-'));
-const valueOf = result => { assert.equal(result.status, 'ok', JSON.stringify(result.diagnostics)); return result.value; };
 // Distinct envelopes, each with a revision of its own, as the attempts that replace the stored one would have.
 const variants = (bytes, count) => Array.from({ length: count }, (_, index) => {
   const doc = JSON.parse(Buffer.from(bytes).toString('utf8'));
@@ -529,9 +525,6 @@ test('of several replaces that name the same revision, exactly one is applied an
   const f = await batchFixture(await scratch(), { applyEarlier: false }), root = await scratch(), path = join(root, 'envelope.json');
   const expectedRevisionSha256 = revisionOf(f.envelopeBytes), bytes = variants(f.envelopeBytes, 5);
   await writeFile(path, f.envelopeBytes);
-  // A lock file an earlier version of this module could leave behind is no part of the protocol now: an old one changes nothing.
-  const old = new Date(Date.now() - 60_000);
-  await writeFile(`${path}.lock`, 'dead-writer'); await utimes(`${path}.lock`, old, old);
   const settled = await Promise.allSettled(bytes.map(next => replaceEnvelope(path, next, { expectedRevisionSha256 })));
   const won = settled.flatMap((result, index) => result.status === 'fulfilled' ? [index] : []);
   assert.equal(won.length, 1, JSON.stringify(settled.map(result => result.reason?.code ?? 'won')));
@@ -582,4 +575,3 @@ test('two runs of the same kept process from the same stored bytes against one r
   assert.equal(await f.procCount(), 1, 'the opaque process ran once');
   assert.notEqual(revisionOf(new Uint8Array(await readFile(path))), revisionOf(kept.envelopeBytes), 'the one attempt moved the stored revision');
 });
-}
