@@ -3,6 +3,7 @@
 // admission, advisory and fulfillment results, contradictions) comes from @aihq/core/contracts; this module only
 // chooses what to ask it. Nothing here publishes, authenticates, signs or changes the active authority.
 import { parseOrganizationPolicy, previewOrganizationObligations } from '@aihq/core/contracts';
+import { nativeClientIds } from '@aihq/core/harness';
 import { isCheckedRelease, listItems } from '@aihq/catalog/reader';
 import { composeAuthoring, describeAuthoringSubject, freshAuthoring, managementIdOf, refuse, ok, stable } from './headless.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
@@ -85,8 +86,16 @@ function draftOf({ read, record }, index) {
   return { projection: projectJourneyEnvelope(read.envelope), policyId: record.policyId ?? null, source: record.source ? structuredClone(record.source) : null,
     entries: views, targets: record.targets.map(target => ({ ...target })), unresolved: unresolvedOf(record, views) };
 }
+const unknownClient = (path, subject) => ({ code: 'INPUT_INVALID', reason: 'unknown-client', path,
+  message: `The organization ${subject} names a client that Core does not know.` });
+function savedClientDiagnostics(record) {
+  return [
+    ...record.entries.flatMap((entry, index) => (entry.clients ?? []).flatMap((client, position) => nativeClientIds.includes(client) ? [] : [unknownClient(`/entries/${index}/clients/${position}`, 'entry')])),
+    ...record.targets.flatMap((target, index) => target.client === undefined || nativeClientIds.includes(target.client) ? [] : [unknownClient(`/targets/${index}/client`, 'target')])
+  ];
+}
 async function present({ envelopeBytes, loaded, inventories, diagnostics = [] }) {
-  return { status: 'ok', diagnostics, value: { envelopeBytes: envelopeBytes.slice(), draft: draftOf(loaded, catalogIndex(inventories)) } };
+  return { status: 'ok', diagnostics: [...diagnostics, ...savedClientDiagnostics(loaded.record)], value: { envelopeBytes: envelopeBytes.slice(), draft: draftOf(loaded, catalogIndex(inventories)) } };
 }
 
 // ---- Edit operations ----------------------------------------------------------
@@ -150,7 +159,13 @@ const EDITORS = {
       if (value === undefined) continue;
       if (value === null) delete entry[field];
       else if (!boundedStrings(value, count, length)) return bad(`/operation/${field}`, `Supply 1 to ${count} unique values of 1 to ${length} characters, or null to clear.`);
-      else entry[field] = [...value];
+      else {
+        if (field === 'clients') {
+          const position = value.findIndex(client => !nativeClientIds.includes(client));
+          if (position !== -1) return unknownClient(`/operation/clients/${position}`, 'entry');
+        }
+        entry[field] = [...value];
+      }
     }
     return null;
   },
@@ -181,6 +196,8 @@ const EDITORS = {
       const value = operation[field];
       if (value !== undefined && (typeof value !== 'string' || value.length < 1 || value.length > length)) return bad(`/operation/${field}`, `Supply 1 to ${length} characters.`);
     }
+    // Core's nativeClientIds is the list Core checks a target client against; refuse with the reason Core gives.
+    if (operation.client !== undefined && !nativeClientIds.includes(operation.client)) return unknownClient('/operation/client', 'target');
     if (record.targets.length >= MAX_TARGETS) return bad('/operation', `A baseline previews at most ${MAX_TARGETS} targets.`, 'POLICY_BOUND_EXCEEDED');
     const target = { scope: operation.scope, ...(operation.client !== undefined ? { client: operation.client } : {}), ...(operation.repository !== undefined ? { repository: operation.repository } : {}) };
     const id = await organizationTargetId(target);
@@ -205,7 +222,7 @@ async function edit({ envelopeBytes, operation, inventories }) {
   if (!editor) return unchanged(refuse('INPUT_INVALID', '/operation/kind', `Supply one of: ${Object.keys(EDITORS).join(', ')}.`));
   const next = structuredClone(record);
   const problem = await editor(next, operation, { index: catalogIndex(inventories) });
-  if (problem) return unchanged(refuse(problem.code, problem.path, problem.message));
+  if (problem) return unchanged({ status: 'refused', diagnostics: [problem] });
   const shape = organizationDraftProblem(next);
   if (shape !== null) return unchanged(refuse('INPUT_INVALID', `/records/0${shape}`, 'The edit would leave the draft outside its closed shape.'));
   const written = await write({ savedIntentBytes: read.savedIntentBytes, record: next, previous: read });
@@ -538,6 +555,9 @@ async function exportCandidate({ envelopeBytes, inventories }) {
     `The clients and repositories named by this baseline's entries combine into ${implicit.combinations} distinct targets, more than the ${MAX_IMPLICIT_TARGETS} the Workbench can check for contradictions. Narrow the selectors (fewer clients or repositories on fewer entries) so every combination can be checked.`,
     envelopeBytes, { combinations: implicit.combinations, limit: MAX_IMPLICIT_TARGETS });
   const previewed = await previewTargets({ built, inventories, targets: [...record.targets.map(target => ({ id: target.id, ...declaredOf(target) })), ...implicit.targets] });
+  const refusedTarget = previewed.find(target => target.status === 'refused');
+  if (refusedTarget) return refuse('ORGANIZATION_TARGET_INVALID', '/targets', 'Core refused an organization preview target.', envelopeBytes,
+    { owner: 'core', target: refusedTarget.target, diagnostics: refusedTarget.diagnostics });
   const contradictions = previewed.flatMap(target => target.contradictions.map(contradiction => ({ target: target.target, ...contradiction })));
   if (contradictions.length) return refuse('ORGANIZATION_CANDIDATE_CONTRADICTION', '/targets', `The candidate contradicts itself for ${contradictions.length === 1 ? 'a target' : 'targets'} developers can reach: ${contradictionWords(contradictions)}`, envelopeBytes, { contradictions });
   const sequence = read.envelope.revision.sequence, fileName = `${record.policyId}.organization-policy.json`, explanationFileName = `${record.policyId}.explanation.md`;

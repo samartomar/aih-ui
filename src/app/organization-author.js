@@ -108,7 +108,7 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
   async function adopt(promise) {
     clearResults(); const result = await promise;
     if (result.status === 'superseded') return;
-    renderDraft(); report(result.status === 'ok' ? 'Organization draft updated. Save the draft to keep your changes.' : failure(result));
+    renderDraft(); report(result.status === 'ok' ? `Organization draft updated. Save the draft to keep your changes.${result.diagnostics?.length ? `\n${diagnosticsText(result.diagnostics)}` : ''}` : failure(result));
   }
   const edit = operation => adopt(session.edit(operation));
   const open = identify(el('input', fieldClass), 'org-draft-open'); open.type = 'file'; open.setAttribute('aria-label', 'Open organization draft');
@@ -136,7 +136,7 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
   const targetScope = select('Target scope', 'org-target-scope', scopes, 'project'), targetClient = select('Target client', 'org-target-client', [['', 'Not declared']]), repository = input('Target repository', 'org-target-repository');
   const clientStatus = identify(el('p', 'text-on-surface-variant'), 'org-target-client-status'); targetClient.setAttribute('aria-describedby', clientStatus.id);
   // Core's published AI clients (null before the summary arrives): the field offers only these, and Core's preview stays the authority on a client.
-  let coreTargets = null, clients = null;
+  let coreTargets = null, clients = null, entryClientFields = [];
   const listed = () => clients?.ids ?? [], labels = () => clients?.labels ?? {};
   const targetRow = line(); targetRow.append(labeled('Scope', targetScope), labeled('Client', targetClient), labeled('Repository', repository), action('Add target', 'org-target-add', () => {
     if (targetClient.value && !listed().includes(targetClient.value)) throw new Error(`AI client "${targetClient.value}" is not one the installed Core lists. Choose a listed client, or leave it not declared.`);
@@ -148,10 +148,21 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
     if ([...items.options].some(option => option.value === current)) items.value = current;
   }
   client.subscribe?.(renderCatalog); renderCatalog();
+  function fillEntryClients(control, selected) {
+    control.replaceChildren(); control.disabled = !listed().length;
+    // Unknown saved ids remain selected and labelled, but cannot be newly chosen.
+    for (const id of [...listed(), ...selected.filter(id => !listed().includes(id))]) {
+      const known = listed().includes(id), option = el('option', '', known ? clientText(labels(), id)
+        : `${id} (${clients ? 'not known to Core' : 'Core list unavailable; cannot check'})`);
+      option.value = id; option.selected = selected.includes(id); option.disabled = !known; control.append(option);
+    }
+  }
+  const selectedClients = control => [...control.options].filter(option => option.selected).map(option => option.value);
   function renderClients() {
     const current = targetClient.value, reason = typeof coreTargets?.reason === 'string' && coreTargets.reason ? coreTargets.reason : 'The installed @aihq/core publishes no supported AI clients.';
     targetClient.replaceChildren();
     for (const [key, text] of [['', 'Not declared'], ...listed().map(id => [id, clientText(labels(), id)])]) { const option = el('option', '', text); option.value = key; targetClient.append(option); }
+    for (const control of entryClientFields) fillEntryClients(control, selectedClients(control));
     targetClient.value = listed().includes(current) ? current : ''; targetClient.disabled = !listed().length;
     clientStatus.textContent = coreTargets === null ? 'Core\'s AI client list has not arrived yet. A target can still be declared without a client.'
       : listed().length ? 'These are the AI clients the installed Core lists. Listing a client does not mean it is installed, connected or admitted.'
@@ -163,7 +174,7 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
     for (const target of session.value?.draft?.targets ?? []) {
       const row = line(), label = targetLabel(target, labels()); row.dataset.targetId = target.id;
       const remove = action(`Remove target ${label}`, `${target.id}-remove`, () => edit({ kind: 'remove-target', targetId: target.id })); remove.dataset.action = 'remove-target'; row.append(el('span', '', label), remove);
-      if (target.client && listed().length && !listed().includes(target.client)) row.append(el('span', 'text-on-surface-variant', 'Not listed by the installed Core; Core decides at preview.'));
+      if (target.client && clients && !listed().includes(target.client)) row.append(el('span', 'text-on-surface-variant', 'Not listed by the installed Core; not known to Core. Core decides at preview.'));
       targets.append(row);
     }
   }
@@ -176,7 +187,7 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
     // A removed row takes its control with it: keep the place by focusing the same action on the row now there.
     const focusedRow = focused?.closest('[data-entry-id],[data-target-id]'), focusedList = focusedRow?.parentElement;
     const focusedIndex = focusedRow ? [...focusedList.children].indexOf(focusedRow) : -1, focusedAction = focused?.dataset.action;
-    entries.replaceChildren();
+    entries.replaceChildren(); entryClientFields = [];
     for (const entry of draft?.entries ?? []) {
       const row = block(); row.dataset.entryId = entry.id;
       row.append(el('h4', 'font-medium', `${entry.label} · ${entry.item.itemId} · ${entry.scope}`));
@@ -184,10 +195,19 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
       const obligation = select(`Obligation for ${entry.label}`, `${entry.id}-obligation`, [['', 'Unresolved'], ...['required', 'recommended', 'permitted', 'prohibited'].map(value => [value, value])], entry.obligation ?? ''); obligation.dataset.field = 'obligation';
       obligation.addEventListener('change', safe(() => edit({ kind: 'set-obligation', entryId: entry.id, obligation: obligation.value || null })));
       const badge = el('span', 'border border-wb-border rounded px-1', enforcementText(entry.enforcement)); badge.dataset.field = 'enforcement'; row.append(obligation, badge);
-      const clients = input(`Clients (comma-separated) for ${entry.label}`, `${entry.id}-clients`, (entry.clients ?? []).join(', ')), repositories = input(`Repositories (comma-separated) for ${entry.label}`, `${entry.id}-repositories`, (entry.repositories ?? []).join(', '));
-      clients.dataset.field = 'clients'; repositories.dataset.field = 'repositories';
-      const apply = action('Apply selectors', `${entry.id}-selectors`, () => edit({ kind: 'set-selectors', entryId: entry.id, clients: parseSelectors(clients.value), repositories: parseSelectors(repositories.value) })); apply.dataset.action = 'apply-selectors';
-      const selectors = line(); selectors.append(labeled('Clients (comma-separated)', clients), labeled('Repositories (comma-separated)', repositories), apply); row.append(selectors);
+      const clientChoices = select(`Clients for ${entry.label}`, `${entry.id}-clients`, []);
+      clientChoices.multiple = true;
+      clientChoices.setAttribute('aria-describedby', clientStatus.id);
+      fillEntryClients(clientChoices, entry.clients ?? []); entryClientFields.push(clientChoices);
+      const repositories = input(`Repositories (comma-separated) for ${entry.label}`, `${entry.id}-repositories`, (entry.repositories ?? []).join(', '));
+      clientChoices.dataset.field = 'clients'; repositories.dataset.field = 'repositories';
+      const apply = action('Apply selectors', `${entry.id}-selectors`, () => {
+        const selected = selectedClients(clientChoices);
+        // Leave saved client facts untouched on repository-only edits, including unavailable lists.
+        const changed = selected.length !== (entry.clients ?? []).length || selected.some(id => !entry.clients?.includes(id));
+        return edit({ kind: 'set-selectors', entryId: entry.id, ...(changed ? { clients: selected.length ? selected : null } : {}), repositories: parseSelectors(repositories.value) });
+      }); apply.dataset.action = 'apply-selectors';
+      const selectors = line(); selectors.append(labeled('Clients (none selected means any)', clientChoices), labeled('Repositories (comma-separated)', repositories), apply, action('Clear client restriction', `${entry.id}-clients-clear`, () => edit({ kind: 'set-selectors', entryId: entry.id, clients: null }))); row.append(selectors);
       for (const [index, item] of (entry.inputs ?? []).entries()) {
         const inputRow = line(); inputRow.dataset.inputName = item.name;
         const permission = item.permission, kind = permission && ('fixed' in permission ? 'fixed' : 'choices' in permission ? 'choices' : 'allowDeclared');

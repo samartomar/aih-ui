@@ -86,6 +86,7 @@ class Node {
   getAttribute(name) { return this[name] ?? null; }
   addEventListener(name, handler) { this.listeners[name] = handler; }
   get options() { return this.children; }
+  closest() { return null; }
   contains(node) { return elements(this).includes(node); }
   querySelectorAll() { return elements(this).filter(node => node.id); }
   focus() { document.activeElement = this; }
@@ -130,10 +131,10 @@ test('view renders accessible author controls and all six server preview section
 });
 
 // The target client field follows Core's published list; the server's preview stays the authority on an unknown client.
-async function mountTargets(t, targets = []) {
+async function mountTargets(t, targets = [], entries = []) {
   const previous = globalThis.document; globalThis.document = { activeElement: null };
   t.after(() => { globalThis.document = previous; });
-  const calls = [], draft = { entries: [], targets, unresolved: [] }, statuses = [];
+  const calls = [], draft = { entries, targets, unresolved: [] }, statuses = [];
   const client = { request: async (op, body) => { calls.push({ op, body }); return ok([1], draft); } };
   const el = (tag, cls, text) => new Node(tag, cls, text), button = (label, handler) => { const node = el('button', '', label); node.listeners.click = handler; return node; };
   const view = createOrganizationAuthorView({ client, el, button, showStatus: message => statuses.push(message) });
@@ -220,7 +221,7 @@ test('declared target rows show a listed client\'s label and keep an unlisted on
   view.setTargets(published);
   assert.match(textOf(row('target-one')), /project · Claude Code \(claude\)/); assert.doesNotMatch(textOf(row('target-one')), /Not listed/);
   assert.match(textOf(row('target-two')), /user · legacy/);
-  assert.match(textOf(row('target-two')), /Not listed by the installed Core; Core decides at preview\./);
+  assert.match(textOf(row('target-two')), /Not listed by the installed Core; not known to Core\. Core decides at preview\./);
   assert.equal(elements(row('target-one')).find(control => control.id === 'target-one-remove').textContent, 'Remove target project · Claude Code (claude)');
   assert.equal(calls.length, 0); // setTargets only re-renders; it requests nothing
 });
@@ -256,4 +257,49 @@ test('a failed edit does not poison the queue or replace the last successful env
   assert.deepEqual(session.value.envelopeBytes, [1]);
   await session.edit({ kind: 'set-policy-id', policyId: 'two' });
   assert.deepEqual(session.value.envelopeBytes, [2]);
+});
+
+const savedEntry = clients => ({ id: 'entry-clients', label: 'Notes', item: { itemId: 'notes' }, scope: 'project', available: true, clients, inputs: [] });
+test('entry clients offer only published choices, preserve unknown saved ids, and send selected ids', async t => {
+  const { view, find, calls } = await mountTargets(t, [], [savedEntry(['codex', 'legacy'])]);
+  view.setTargets(published);
+  const control = find('entry-clients-clients');
+  assert.equal(control.tag, 'select'); assert.equal(control.multiple, true);
+  assert.deepEqual(control.options.filter(option => !option.disabled).map(option => option.value), published.targets);
+  assert.deepEqual(control.options.filter(option => option.selected).map(option => option.value), ['codex', 'legacy']);
+  const unknown = control.options.find(option => option.value === 'legacy');
+  assert.equal(unknown.disabled, true); assert.match(unknown.textContent, /not known to Core/i);
+  assert.equal(calls.length, 0);
+  for (const option of control.options) option.selected = option.value === 'claude' || option.value === 'zed';
+  await find('entry-clients-selectors').listeners.click();
+  assert.deepEqual(calls.at(-1).body.operation, { kind: 'set-selectors', entryId: 'entry-clients', clients: ['claude', 'zed'], repositories: null });
+});
+test('entry clients stay visible but unavailable without a published list; repository edits preserve them', async t => {
+  const { view, find, calls } = await mountTargets(t, [], [savedEntry(['legacy'])]);
+  view.setTargets({ state: 'unavailable', reason: 'Core not installed' });
+  const control = find('entry-clients-clients');
+  assert.equal(control.tag, 'select'); assert.equal(control.disabled, true);
+  assert.deepEqual(control.options.map(option => option.value), ['legacy']);
+  assert.match(control.options[0].textContent, /cannot check/i);
+  assert.match(textOf(view.node), /Core not installed/);
+  find('entry-clients-repositories').value = 'github.com/acme/app';
+  await find('entry-clients-selectors').listeners.click();
+  assert.deepEqual(calls.at(-1).body.operation, { kind: 'set-selectors', entryId: 'entry-clients', repositories: ['github.com/acme/app'] });
+});
+
+test('an author can explicitly clear a saved unknown client restriction even without the Core list', async t => {
+  const { find, calls } = await mountTargets(t, [], [savedEntry(['legacy'])]);
+  await find('entry-clients-clients-clear').listeners.click();
+  assert.deepEqual(calls.at(-1).body.operation, { kind: 'set-selectors', entryId: 'entry-clients', clients: null });
+});
+
+test('refreshing the Core list preserves pending entry selectors and repository text', async t => {
+  const { view, find } = await mountTargets(t, [], [savedEntry(['codex'])]);
+  view.setTargets(published);
+  const control = find('entry-clients-clients');
+  for (const option of control.options) option.selected = option.value === 'zed';
+  find('entry-clients-repositories').value = 'github.com/acme/pending';
+  view.setTargets({ ...published, labels: {} });
+  assert.deepEqual(find('entry-clients-clients').options.filter(option => option.selected).map(option => option.value), ['zed']);
+  assert.equal(find('entry-clients-repositories').value, 'github.com/acme/pending');
 });

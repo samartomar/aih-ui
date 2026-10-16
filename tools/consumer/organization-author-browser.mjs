@@ -4,8 +4,11 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { nativeClientIds } from '@aihq/core/harness';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { composeAuthoring, freshAuthoring } from './headless.mjs';
+import { readJourneyEnvelope, writeJourneyEnvelope } from './journey.mjs';
+import { organizationTargetId } from './organization-draft-record.mjs';
 
 const attacker = { provider: 'github', repository: { owner: 'attacker', name: 'redirect' }, path: 'evil.json', revision: { kind: 'branch', value: 'evil' } };
 const redirect = { organizationSource: attacker, source: attacker, repository: attacker.repository, path: attacker.path, revision: attacker.revision };
@@ -99,6 +102,16 @@ export async function runOrganizationAuthorBrowser({ page, output, fixture, refr
     await addEntry(page, TDD, 'user'); await setObligation(page, TDD, 'user', 'required');
     await addEntry(page, GRILLING, 'project'); await setObligation(page, GRILLING, 'project', 'recommended');
     for (const [itemId, scope] of [[IMPLEMENT, 'project'], [TDD, 'user'], [GRILLING, 'project']]) await setFixedInput(page, itemId, scope, 'agentDirectory', '.claude');
+    // Both pickers offer Core-supported ids only; entry clients allow multiple choices.
+    assert.deepEqual(await page.locator('#org-target-client option').evaluateAll(options => options.map(option => option.value).filter(Boolean)), [...nativeClientIds]);
+    const clients = entryRow(page, IMPLEMENT, 'project').locator('select[data-field="clients"]');
+    assert.equal(await clients.getAttribute('multiple'), '');
+    assert.deepEqual(await clients.locator('option').evaluateAll(options => options.map(option => option.value)), [...nativeClientIds]);
+    await clients.selectOption(['claude', 'codex']);
+    await edit(page, () => entryRow(page, IMPLEMENT, 'project').locator('[data-action="apply-selectors"]').click());
+    assert.deepEqual(await clients.evaluate(control => [...control.selectedOptions].map(option => option.value)), ['claude', 'codex']);
+    await clients.selectOption([]);
+    await edit(page, () => entryRow(page, IMPLEMENT, 'project').locator('[data-action="apply-selectors"]').click());
     await addTarget(page, 'project', 'claude', 'github.com/fixture-org/app'); await addTarget(page, 'user', 'claude');
     // Removing a row keeps keyboard focus in the list: it moves to the same action on the row now in that place.
     await addTarget(page, 'project', 'codex');
@@ -119,6 +132,24 @@ export async function runOrganizationAuthorBrowser({ page, output, fixture, refr
     assert.match(await settle(page, () => page.locator('#org-draft-open').setInputFiles(draftPath)), /^Organization draft updated/);
     assert.deepEqual(await readDraft(page), before);
     assert.deepEqual(before.entries.map(entry => [entry.obligation, entry.badge]), [['required', 'Enforced'], ['prohibited', 'Enforced'], ['required', 'Enforced'], ['recommended', 'Advisory']]);
+    // Old saved client facts stay visible and labelled; opening does not rewrite them.
+    const read = await readJourneyEnvelope(new Uint8Array(await readFile(draftPath)));
+    assert.equal(read.status, 'ok');
+    const records = structuredClone(read.value.records), record = records.find(record => record.id === 'organization-draft');
+    record.entries[0].clients = ['not-a-client']; record.targets[0].client = 'not-a-client';
+    record.targets[0].id = await organizationTargetId(record.targets[0]);
+    const legacy = await writeJourneyEnvelope({ savedIntentBytes: read.value.savedIntentBytes, records, previous: read.value });
+    assert.equal(legacy.status, 'ok');
+    const legacyPath = join(output, 'organization-legacy-client.journey.json'); await writeFile(legacyPath, legacy.value.envelopeBytes);
+    assert.match(await settle(page, () => page.locator('#org-draft-open').setInputFiles(legacyPath)), /unknown-client/);
+    const unknown = entryRow(page, IMPLEMENT, 'project').locator('select[data-field="clients"] option[value="not-a-client"]');
+    assert.equal(await unknown.isDisabled(), true); assert.match(await unknown.textContent(), /not known to Core/);
+    assert.match(await page.locator('#organization-author [data-target-id]').first().textContent(), /not-a-client.*not known to Core/);
+    await preview(page); assert.match(await page.locator('#org-preview-results').textContent(), /Candidate: invalid[\s\S]*unknown-client/);
+    const keptPath = join(output, 'organization-legacy-client-saved.journey.json');
+    assert.deepEqual(await download(page, () => page.locator('#org-draft-save').click(), keptPath), legacy.value.envelopeBytes);
+    await edit(page, () => page.locator('#org-draft-open').setInputFiles(draftPath));
+    assert.deepEqual(await readDraft(page), before);
     states.push('reopened-unresolved'); await shot(page, output, 'organization-draft-unresolved', page.locator('#org-unresolved'));
 
     // 4. Preview: Core finds the contradiction on the project target and the unsupported control on the user target.
