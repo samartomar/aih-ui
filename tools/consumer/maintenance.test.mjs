@@ -9,6 +9,7 @@ import { createMixedService } from './mixed-service.mjs';
 import { mixedInventories } from './authoring-v3.test.mjs';
 import { intakeDeclaration, digestBytes } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
+import { declareReleaseOrder, RELEASE_ORDER_TEXT } from './release-order.mjs';
 const encode = value => new TextEncoder().encode(value), decode = bytes => new TextDecoder().decode(bytes);
 const NOW = '2026-10-15T12:00:00Z';
 const rootOf = (entry, itemId, extra = {}) => {
@@ -452,6 +453,72 @@ test('host route: maintenance-check and maintenance-record through the mixed ser
     { maintenanceSource: async () => { throw new Error('unreachable'); } });
   const failed = await throwing.run('maintenance-check', { envelopeBytes: bytes });
   assert.equal(failed.value.categories[0].reason, 'sources-unavailable');
+});
+
+test('a host-declared release order: newer and unknown candidates are offered with their relation, an older one is not offered', async () => {
+  const s = await scenario(), sha = entry => entry.release.sha256;
+  const run = positions => check({ envelopeBytes: s.envelopeBytes, inventories: s.inventories, candidateInventories: [s.updated, s.newer], releaseOrder: declareReleaseOrder(positions) });
+  const orders = value => Object.fromEntries(value.updates.map(u => [u.candidate.releaseSha256, u.order]));
+  const basis = 'host-declared';
+  // Without an order nothing is ranked and nothing is hidden.
+  const plain = await check({ envelopeBytes: s.envelopeBytes, inventories: s.inventories, candidateInventories: [s.updated, s.newer] });
+  assert.equal(plain.updates.length, 2); assert.equal(plain.updates.every(u => !('order' in u)), true);
+  assert.deepEqual(orders(await run([[sha(s.notes)], [sha(s.updated)], [sha(s.newer)]])), { [sha(s.updated)]: { relation: 'newer', basis }, [sha(s.newer)]: { relation: 'newer', basis } });
+  // Listed before the selected revision, a candidate is not an update under this order; the later one still is.
+  const older = await run([[sha(s.updated)], [sha(s.notes)], [sha(s.newer)]]);
+  assert.deepEqual(orders(older), { [sha(s.newer)]: { relation: 'newer', basis } });
+  assert.deepEqual((await run([[sha(s.newer)], [sha(s.updated)], [sha(s.notes)]])).updates, []);
+  // The selected revision is not in the source: offered, but its order is unknown.
+  assert.deepEqual(orders(await run([[sha(s.updated)], [sha(s.newer)]])), { [sha(s.updated)]: { relation: 'unknown', basis, reason: 'not-in-source' }, [sha(s.newer)]: { relation: 'unknown', basis, reason: 'not-in-source' } });
+  // A revision listed on both sides of the selected one is never called older or newer.
+  assert.deepEqual(orders(await run([[sha(s.notes)], [sha(s.updated)], [sha(s.notes)]])), { [sha(s.updated)]: { relation: 'unknown', basis, reason: 'ambiguous' }, [sha(s.newer)]: { relation: 'unknown', basis, reason: 'not-in-source' } });
+  // An earlier choice about a candidate the order no longer offers is kept, as one not offered in this check.
+  const skipped = await record(s.envelopeBytes, setOp(s, s.updated, 'skip'));
+  const kept = await check({ envelopeBytes: skipped.envelopeBytes, inventories: s.inventories, candidateInventories: [s.updated], releaseOrder: declareReleaseOrder([[sha(s.updated)], [sha(s.notes)]]) });
+  assert.deepEqual(kept.updates, []); assert.deepEqual(kept.preserved.map(p => [p.record.disposition, p.state]), [['skip', 'not-offered']]);
+});
+
+test('a release order that is not the closed host-declared shape is refused', async () => {
+  const s = await scenario();
+  const base = { envelopeBytes: s.envelopeBytes, inventories: s.inventories, candidateInventories: [s.updated], now: NOW };
+  for (const [releaseOrder, path] of [['newest-first', '/releaseOrder'], [{ basis: 'producer', ranks: {} }, '/releaseOrder/basis'], [{ basis: 'host-declared' }, '/releaseOrder/ranks'],
+    [{ basis: 'host-declared', ranks: { nope: [1, 1] } }, '/releaseOrder/ranks'], [{ basis: 'host-declared', ranks: {}, extra: 1 }, '/releaseOrder']]) {
+    const refused = await checkMaintenance({ ...base, releaseOrder });
+    assert.equal(refused.status, 'refused', JSON.stringify(releaseOrder)); assert.equal(refused.diagnostics[0].path, path); assert.deepEqual(refused.originalBytes, s.envelopeBytes);
+  }
+  assert.equal((await checkMaintenance({ ...base, releaseOrder: null })).status, 'ok');
+});
+
+test('host route: an update source object brings its description and the order of each update; a fixture list stays labelled as one', async () => {
+  const s = await scenario();
+  const [maintained] = s.inventories, base = { release: maintained.release, materials: maintained.materials, materialSource: maintained.materialSource };
+  const sha = entry => entry.release.sha256;
+  const sources = [{ position: 1, state: 'read', package: { name: 'notes', version: '1.0.0' }, releaseSha256: sha(s.notes), readAt: NOW }, { position: 2, state: 'offline', reason: 'unreadable' }];
+  let read = { kind: 'catalog-roots', inventories: [s.updated], releaseOrder: declareReleaseOrder([[sha(s.notes)], [sha(s.updated)]]), sources };
+  const service = await createMixedService(base, { maintenanceSource: async () => read });
+  const bytes = [...s.envelopeBytes];
+  const checked = await service.run('maintenance-check', { envelopeBytes: bytes });
+  assert.equal(checked.status, 'ok', JSON.stringify(checked.diagnostics));
+  assert.deepEqual(checked.value.updateSource, { kind: 'catalog-roots', order: 'host-declared', orderText: RELEASE_ORDER_TEXT, sources });
+  assert.deepEqual(checked.value.updates.map(u => [u.candidate.releaseSha256, u.order]), [[sha(s.updated), { relation: 'newer', basis: 'host-declared' }]]);
+  // A candidate listed before the selected revision is not an update under the host's order.
+  read = { ...read, releaseOrder: declareReleaseOrder([[sha(s.updated)], [sha(s.notes)]]) };
+  assert.deepEqual((await service.run('maintenance-check', { envelopeBytes: bytes })).value.updates, []);
+  // Every root unreadable is offline, not "no updates"; the sources are still reported.
+  read = { kind: 'catalog-roots', inventories: null, releaseOrder: declareReleaseOrder([[], []]), sources: [{ position: 1, state: 'offline', reason: 'invalid', lastReadAt: NOW }] };
+  const down = await service.run('maintenance-check', { envelopeBytes: bytes });
+  assert.deepEqual(down.value.categories[0], { category: 'content', selected: true, state: 'unknown', reason: 'sources-unavailable' });
+  assert.deepEqual(down.value.updateSource.sources, read.sources); assert.deepEqual(down.value.updates, []);
+  // A fixture list is its own kind: no order and no sources, so nothing is ranked.
+  const fixture = await createMixedService(base, { maintenanceSource: async () => [s.updated] });
+  const listed = await fixture.run('maintenance-check', { envelopeBytes: bytes });
+  assert.deepEqual(listed.value.updateSource, { kind: 'test-fixture', sources: [] }); assert.equal('order' in listed.value.updates[0], false);
+  // No source, an unreachable one, or content not selected: no source description at all.
+  const plain = await createMixedService(base);
+  assert.equal('updateSource' in (await plain.run('maintenance-check', { envelopeBytes: bytes })).value, false);
+  assert.equal('updateSource' in (await service.run('maintenance-check', { envelopeBytes: bytes, categories: ['software'] })).value, false);
+  const failing = await createMixedService(base, { maintenanceSource: async () => { throw new Error('unreachable'); } });
+  assert.equal('updateSource' in (await failing.run('maintenance-check', { envelopeBytes: bytes })).value, false);
 });
 
 test('shipped disposition schema agrees structurally with the runtime record', async t => {

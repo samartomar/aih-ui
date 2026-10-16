@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createAuthoringClient } from '../../src/app/authoring-client.js';
 import { readFile } from 'node:fs/promises';
-import { groupUpdates, updateLabel, dispositionText, factText, categoryLine, updatesState, checkedLine, UPDATES_NOTE, DISPOSITION_RECORD, createUpdatesView } from '../../src/app/updates-view.js';
+import { groupUpdates, updateSourceLines, orderLine, updateLabel, dispositionText, factText, categoryLine, updatesState, checkedLine, UPDATES_NOTE, DISPOSITION_RECORD, createUpdatesView } from '../../src/app/updates-view.js';
 
 const subject = { kind: 'selection', itemId: 'notes', releaseSha256: 'a', itemSha256: 'b' };
 const update = (id, disposition, attention = null) => ({ id, category: 'content', subject, scope: 'project', candidate: { ...subject, kind: 'content-revision', releaseSha256: id },
@@ -119,6 +119,46 @@ test('the DOM shows facts in every group, preserved states, and read-only/save c
   assert.equal(elements(built.node).filter(node => node.textContent === 'Evidence: Review needs reconsideration').length, 4);
   assert.match(UPDATES_NOTE, /opening.*Check now.*only read/i); assert.match(UPDATES_NOTE, /nothing is applied or scheduled/i);
   assert.match(UPDATES_NOTE, /date.*opened or checked/i); assert.match(UPDATES_NOTE, /save the draft/i);
+});
+
+const SHA = letter => letter.repeat(64);
+const catalogSource = { kind: 'catalog-roots', order: 'host-declared', orderText: "order declared by this host's update source", sources: [
+  { position: 1, state: 'read', package: { name: '@aihq/catalog', version: '0.1.0' }, releaseSha256: SHA('c'), readAt: '2026-10-16T10:00:00.000Z' },
+  { position: 2, state: 'offline', reason: 'unreadable', lastReadAt: '2026-10-16T09:00:00.000Z' }, { position: 3, state: 'offline', reason: 'package-mismatch' }] };
+
+test('the update source is described as a declaration of this host, and a fixture is never called a real source', () => {
+  assert.deepEqual(updateSourceLines(catalogSource).map(line => line.text), [
+    "Update source: 3 Catalog package roots configured by this host. Later entries are newer — order declared by this host's update source.",
+    `Source 1: @aihq/catalog 0.1.0 · release ${SHA('c')} — read 2026-10-16T10:00:00.000Z`,
+    'Source 2: offline (could not be read) — last read 2026-10-16T09:00:00.000Z',
+    'Source 3: offline (a different package from the one this Workbench installs) — never read in this session']);
+  assert.match(updateSourceLines({ ...catalogSource, sources: catalogSource.sources.slice(0, 1) })[0].text, /1 Catalog package root configured/);
+  assert.deepEqual(updateSourceLines({ kind: 'test-fixture', sources: [] }), [{ text: 'Test fixture source — not a real update source.' }]);
+  assert.deepEqual(updateSourceLines(undefined), []);
+  assert.equal(orderLine({ relation: 'newer', basis: 'host-declared' }), "Newer than your selected revision (order declared by this host's update source).");
+  assert.equal(orderLine({ relation: 'unknown', basis: 'host-declared', reason: 'not-in-source' }), "Order relative to your selected revision is unknown (the selected revision is not in this host's update source).");
+  assert.equal(orderLine({ relation: 'unknown', basis: 'host-declared', reason: 'ambiguous' }), 'Order relative to your selected revision is unknown (listed both before and after it).');
+  assert.equal(orderLine(undefined), '');
+});
+
+test('the DOM shows the update source above the category lines, with each update exact digests and order', async () => {
+  const withOrder = (id, order) => ({ ...update(id, null, 'new'), subject: { ...subject, releaseSha256: SHA('a'), itemSha256: SHA('b') }, candidate: { ...subject, kind: 'content-revision', releaseSha256: SHA('d'), itemSha256: SHA('e') }, ...(order ? { order } : {}) });
+  const values = [{ ...checked, updateSource: catalogSource, updates: [withOrder('newer', { relation: 'newer', basis: 'host-declared' }), withOrder('unknown', { relation: 'unknown', basis: 'host-declared', reason: 'ambiguous' }), withOrder('plain')] },
+    null, { ...checked, updateSource: { kind: 'test-fixture', sources: [] } }];
+  const client = { draft, revision: 1, checkMaintenance: async () => { const value = values.shift(); return value ? ok(value) : { status: 'refused' }; } };
+  const built = view(client); await built.open();
+  const source = elements(built.node).find(node => node.id === 'policy-updates-source');
+  assert.equal(source.hidden, false); assert.match(textOf(source), /Update source: 3 Catalog package roots configured by this host/);
+  assert.ok(built.node.children.indexOf(source) < built.node.children.findIndex(node => node.textContent?.startsWith('Content:') || node.children?.some(child => child.textContent?.startsWith('Content:'))));
+  const text = textOf(built.node);
+  for (const expected of [`Selected: release ${SHA('a')} · item ${SHA('b')}`, `Offered: release ${SHA('d')} · item ${SHA('e')}`, "Newer than your selected revision (order declared by this host's update source).",
+    'Order relative to your selected revision is unknown (listed both before and after it).']) assert.ok(text.includes(expected), expected);
+  assert.equal(text.split('Newer than your selected revision').length, 2);
+  // A failed check keeps the last description it had.
+  await built.check();
+  assert.match(textOf(elements(built.node).find(node => node.id === 'policy-updates-source')), /Source 2: offline/);
+  await built.check();
+  assert.equal(textOf(elements(built.node).find(node => node.id === 'policy-updates-source')).trim(), 'Test fixture source — not a real update source.');
 });
 
 for (const failure of [new Error('offline'), { ok: false, json: async () => ({ error: 'unavailable' }) }, { status: 'refused' }]) test(`view retains the last success after ${failure.message ?? failure.status ?? 'HTTP failure'}`, async t => {

@@ -6,6 +6,7 @@ import { isCheckedRelease } from '@aihq/catalog/reader';
 import { rootKey, pinKey } from './intent-shape.mjs';
 import { only } from './intake.mjs';
 import { refuse, stable } from './headless.mjs';
+import { releaseOrderProblem, orderRelation } from './release-order.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { isUtcTimestamp, dispositionProblem, dispositionId, checkProblem, MAINTENANCE_DISPOSITION_RECORD_SCHEMA, MAINTENANCE_CHECK_RECORD_SCHEMA,
   MAINTENANCE_CHECK_RECORD_ID, UPDATE_CATEGORIES } from './maintenance-record.mjs';
@@ -17,8 +18,8 @@ const isCheck = record => record.schema === MAINTENANCE_CHECK_RECORD_SCHEMA;
 const CANDIDATE_SOURCES = ['configured', 'unconfigured'];
 const byId = (a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
-const checkedEntries = value => {
-  try { return Array.isArray(value) && value.length <= 32 && value.every(entry => entry && isCheckedRelease(entry.release)) && new Set(value.map(entry => entry.release.sha256)).size === value.length; }
+const checkedEntries = (value, most = 32) => {
+  try { return Array.isArray(value) && value.length <= most && value.every(entry => entry && isCheckedRelease(entry.release)) && new Set(value.map(entry => entry.release.sha256)).size === value.length; }
   catch { return false; }
 };
 async function load(envelopeBytes) {
@@ -35,8 +36,9 @@ export function projectDispositions(envelope) {
 }
 // Bounded read: no scan, native check, model call, host prepare/apply or write. The host supplies
 // `now`; `candidateInventories` is null/undefined when the maintenance source could not be read, and
-// `candidateSource` says whether the host has one at all ('unconfigured' is unknown, never checked).
-export async function checkMaintenance({ envelopeBytes, inventories, candidateInventories, candidateSource = 'configured', categories = ['content'], now } = {}) {
+// `candidateSource` says whether the host has one at all ('unconfigured' is unknown, never checked). A `releaseOrder` the
+// host's update source declares says, per offered update, whether it is newer or of unknown order; an older one is not offered.
+export async function checkMaintenance({ envelopeBytes, inventories, candidateInventories, candidateSource = 'configured', releaseOrder, categories = ['content'], now } = {}) {
   const loaded = await load(envelopeBytes);
   if (loaded.status !== 'ok') return loaded;
   const { read, draft } = loaded.value, { intent } = draft;
@@ -44,6 +46,8 @@ export async function checkMaintenance({ envelopeBytes, inventories, candidateIn
   if (!isUtcTimestamp(now)) return fail('/now', 'Supply the check time as an ISO UTC timestamp.');
   if (!Array.isArray(categories) || !categories.length || categories.some(category => !UPDATE_CATEGORIES.includes(category))) return fail('/categories', `Supply one or more of: ${UPDATE_CATEGORIES.join(', ')}.`);
   if (!CANDIDATE_SOURCES.includes(candidateSource)) return fail('/candidateSource', `Supply one of: ${CANDIDATE_SOURCES.join(', ')}.`);
+  const orderProblem = releaseOrder === undefined || releaseOrder === null ? null : releaseOrderProblem(releaseOrder);
+  if (orderProblem !== null) return fail(`/releaseOrder${orderProblem}`, 'Supply the release order a host update source declares.');
   if (!checkedEntries(inventories)) return fail('/inventories', 'Supply at most 32 unique checked inventories.');
   const selected = new Set(categories), unconfigured = candidateSource === 'unconfigured', offline = candidateInventories === null || candidateInventories === undefined;
   const states = UPDATE_CATEGORIES.map(category => !selected.has(category) ? { category, selected: false, state: 'not-selected' }
@@ -51,7 +55,7 @@ export async function checkMaintenance({ envelopeBytes, inventories, candidateIn
     : unconfigured ? { category, selected: true, state: 'unknown', reason: 'no-configured-source' }
     : offline ? { category, selected: true, state: 'unknown', reason: 'sources-unavailable' } : { category, selected: true, state: 'checked' });
   const contentChecked = states.find(state => state.category === 'content').state === 'checked';
-  if (contentChecked && !checkedEntries(candidateInventories)) return fail('/candidateInventories', 'Supply at most 32 unique checked candidate inventories.');
+  if (contentChecked && !checkedEntries(candidateInventories, 40)) return fail('/candidateInventories', 'Supply at most 40 unique checked candidate inventories.');
   const recorded = read.records.filter(isDisposition), today = now.slice(0, 10), matched = new Set(), updates = [];
   for (const root of contentChecked ? intent.roots : []) {
     const entry = inventories.find(e => e.release.sha256 === root.releaseSha256);
@@ -62,6 +66,8 @@ export async function checkMaintenance({ envelopeBytes, inventories, candidateIn
     for (const offered of candidateInventories) {
       if (offered.release.sha256 === root.releaseSha256 || offered.release.package?.name !== current.name) continue;
       if (input ? offered.input?.kind !== input.kind || stable(offered.input?.locator) !== stable(input.locator) : offered.input) continue;
+      const order = orderRelation(releaseOrder ?? undefined, offered.release.sha256, root.releaseSha256);
+      if (order?.relation === 'older') continue;
       for (const item of offered.release.items.filter(i => i.id === root.itemId)) {
         const candidate = { kind: 'content-revision', releaseSha256: offered.release.sha256, itemId: item.id, itemSha256: item.itemSha256 };
         const id = await dispositionId({ category: 'content', subject, scope: root.scope, candidate }), disposition = recorded.find(r => r.id === id) ?? null;
@@ -76,7 +82,7 @@ export async function checkMaintenance({ envelopeBytes, inventories, candidateIn
             message: `Review decision ${review.id} (${review.disposition}) is bound to ${pinKey(review.subject) === pinKey(subject) ? 'the selected' : 'the offered'} revision and is ${review.state === 'reconsider' ? 'awaiting reconsideration' : 'current'}.` });
         updates.push({ id, category: 'content', subject, scope: root.scope, candidate, disposition, attention, promoted: attention !== null,
           package: { name: offered.release.package.name, ...(offered.release.package.version !== undefined ? { version: offered.release.package.version } : {}) },
-          currentPackage: structuredClone(current), facts });
+          currentPackage: structuredClone(current), ...(order ? { order } : {}), facts });
       }
     }
   }

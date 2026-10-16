@@ -43,7 +43,7 @@ process.on('exit', () => {
 // The reviewed-batch suite alone takes about as long as all the others together, so it runs as its own group.
 // Each group keeps the same limit: suites that would bring a group near it go in a new group instead.
 const testGroups = [
-  ['ordinary-families', 'release-order', 'authoring-page', 'authoring-v3', 'reviews', 'personal-folder', 'journey', 'maintenance', 'readiness', 'readiness-host', 'claims', 'authority-source', 'organization-author', 'guided-setup', 'core-targets', 'improvements', 'trials', 'workspace'],
+  ['ordinary-families', 'release-order', 'update-source', 'authoring-page', 'authoring-v3', 'reviews', 'personal-folder', 'journey', 'maintenance', 'readiness', 'readiness-host', 'claims', 'authority-source', 'organization-author', 'guided-setup', 'core-targets', 'improvements', 'trials', 'workspace'],
   ['batch'],
   ['intent-http', 'intent-page', 'organization', 'saved-intent', 'setup']
 ];
