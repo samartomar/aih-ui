@@ -88,6 +88,150 @@ material bytes, installed public validators and an actual browser download/fresh
 import, use [functional composition capacity](docs/functional-scale.md). Its
 synthetic recipes remain execution-disabled; it sets no latency target or item cap.
 
+## Owner-testing candidate
+
+`tools/candidate.mjs` runs one integrated Workbench candidate from exact packed
+artifacts, with every piece of state in one disposable data directory and
+sample data for each journey. It reuses `tools/preview.mjs` and
+`tools/packages.mjs`; the page, the server and the host inputs are the ordinary
+ones described above.
+
+### The candidate manifest
+
+A JSON file names the exact Core, Catalog and Scan tarballs, their SHA-256
+digests and the source commit each was packed from. Relative paths resolve
+against the manifest's own folder. `previousCatalog` is optional: a second
+Catalog artifact used as `AIH_CONSUMER_PREVIOUS_CATALOG`.
+
+```json
+{
+  "schema": "urn:aih-ui:candidate-manifest:1.0.0",
+  "candidate": "a label for this candidate",
+  "packages": {
+    "core":    { "tarball": "aihq-core-….tgz",    "sha256": "<64 hex>", "commit": "<7–40 hex>" },
+    "catalog": { "tarball": "aihq-catalog-….tgz", "sha256": "<64 hex>", "commit": "<7–40 hex>" },
+    "scan":    { "tarball": "aihq-scan-….tgz",    "sha256": "<64 hex>", "commit": "<7–40 hex>" }
+  }
+}
+```
+
+Start refuses a tarball whose digest differs from the manifest before it writes
+anything.
+
+### Start, stop, reset, report
+
+PowerShell, from the repository root:
+
+```powershell
+node tools/candidate.mjs start --manifest C:\path\to\candidate.json
+node tools/candidate.mjs status
+node tools/candidate.mjs stop
+node tools/candidate.mjs reset
+node tools/candidate.mjs report
+```
+
+POSIX shells:
+
+```sh
+node tools/candidate.mjs start --manifest /path/to/candidate.json
+node tools/candidate.mjs status
+node tools/candidate.mjs stop
+node tools/candidate.mjs reset
+node tools/candidate.mjs report
+```
+
+`--port <n>` chooses the port; the default is 4300. Start refuses 4173 and any
+port already in use. `--data <dir>` chooses the data directory; the default is
+`.aih-ui/candidate` in this checkout (ignored by Git). Use the same `--data` for
+every command.
+
+- **start** installs the three tarballs into a throwaway consumer inside the
+  data directory, creates any missing sample data, and starts the server as a
+  background process with no console window. It prints the URL, the candidate
+  identity (each package's version, SHA-256 and commit) and the data directory.
+  It then opens the page headless and checks that the package strip and the
+  provenance disclosure show the same identity as the manifest; a mismatch is
+  reported and start exits non-zero, leaving the server running. `--no-smoke`
+  skips that check. Its screenshots of each journey's start page are kept in
+  `logs/checks/`. Start without `--manifest` restarts the candidate already
+  recorded in the data directory.
+- **stop** ends only the candidate's own process tree, the one start recorded.
+- **reset** deletes the data directory, after checking that it carries the
+  marker start wrote and that the marker names this same folder. It refuses
+  while the candidate is running. The next start, with `--manifest` again,
+  recreates the sample data.
+- **report** writes a failure-report bundle under `reports/` in the data
+  directory: the candidate identity, Node and OS versions, the server and
+  transport logs, the journey records and host configuration, and recent check
+  logs, with secrets and the real home path redacted. Its `ISSUE.md` asks for the
+  steps, the expected result and the actual result. Check the bundle before
+  sharing it.
+
+Data persists across stop and start until reset.
+
+### What the data directory holds
+
+| Path | Purpose |
+| --- | --- |
+| `home/` | The candidate's account home. Core keeps its records in `home/.aih/core`. |
+| `config/` | Host configuration: settings, organization source, maintenance source, readiness repairs, batch host. |
+| `samples/` | Sample projects, repositories and fixtures, each with a `SAMPLE.md`. |
+| `samples/continuity/home-a/.claude`, `home-b/.codex` | The two controlled client configuration homes. |
+| `state/`, `logs/`, `reports/` | The running server's record, logs, and failure reports. |
+| `run/` | The installed consumer and served page, rebuilt by every start. |
+
+The real account home is never used. Start and stop each compare a metadata
+listing of the real home's `.aih/core` against the listing taken at start and
+print any change; nothing is deleted.
+
+### Sample data
+
+Everything under `samples/` is sample data created by the candidate. It is
+labelled as such and is not observed evidence.
+
+- **Personal setup:** `samples/projects/sample-js-app`, a small JavaScript
+  project, is the host-configured project (`AIH_CONSUMER_PROJECT`), so Prepare
+  and Apply write only there. `samples/saved-intents/` holds a saved policy to
+  reopen from Policy.
+- **Readiness and repair:** a disposable home and `PATH` with a broken `jq` and a
+  test-only CA certificate (`AIH_READINESS_HOME`, `AIH_READINESS_PATH`). The
+  `node-npm-ca` repair is host-configured (`AIH_READINESS_REPAIRS`). Verification
+  needs the public npm registry; offline, the honest outcome is **applied**, not
+  **verified**. The diagnosed `jq` failure has no Workbench repair. Core's npm
+  TLS check passes on this machine before the CA repair, so the repair shows
+  configuration and fresh verification rather than fixing a failed check.
+- **Organization authoring and consumption:** `samples/authority` is a local Git
+  repository holding `policy/organization.json`. Core's organization reader
+  reads GitHub only, so the candidate answers its GitHub requests for
+  `sample-org/sample-authority` from that local repository's real Git objects
+  through a loopback transport. No request reaches GitHub, and each answered
+  request is logged to `logs/authority-transport.log`. To publish an authored
+  baseline, commit the exported file into that repository, then refresh the
+  authority source in Policy.
+- **Continuity:** `samples/repositories/sample-web` and `sample-api` are two
+  local checkouts to declare and bind. The reviewed batch
+  (`samples/continuity`, `/batch.html`) has an existing Claude Code client and an
+  added Codex client. Three existing switches provoke partial failure: the
+  unowned file `home-b/.codex/b-core.md`, present at first;
+  `"faults": { "b-core": "stale-target" }` in `config/batch-host.json`; and the
+  absent `home-b/proc-ok` marker, which makes the process action fail.
+- **Maintenance and improvement** (`samples/maintenance/SAMPLE.md`):
+  `config/maintenance-source.json` starts with
+  `{ "revisions": ["current"] }`. Add `updated`, `newer`, `additional` or
+  `expanded` to publish newer sample revisions, then check for changes. Trials
+  need a reopened saved draft and AI clients chosen in setup.
+
+### Optional native clients
+
+The candidate needs no installed Claude Code or Codex. To point one at the
+candidate's controlled client home, start it from a separate shell with only
+that shell's environment changed: `CLAUDE_CONFIG_DIR` for Claude Code or
+`CODEX_HOME` for Codex, set to the client home in the table above. Supply
+credentials by reference only, through an API-key environment variable already
+set in that shell. Do not copy or link `~/.claude` or `~/.codex` files into the
+data directory; a linked credential file would let the client write through to
+the real home. Reset removes anything a client wrote there.
+
 ## How the page is put together
 
 `src/index.html` carries the markup; `src/main.js` composes three parts and
