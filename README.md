@@ -369,8 +369,9 @@ for a client Core does not list is shown as not Core-supported, and support is u
 Core publishes no list); and whether the client is **installed or connected**, which only an
 observed check supplies and is otherwise *not checked*. A check's answer is read in the words
 Core's diagnostic contract defines for a tool (`runnable`, `binary`, `broken`, `config-only`,
-`absent`): only an explicit `absent` reads as *the last check did not find it*, and any other
-or unrecognised value reads as *the check could not tell*. Guided setup replaces its earlier
+`absent`): each of these has its own wording (found; found but not run; found but its check
+failed; only its configuration found), only an explicit `absent` reads as *the last check did not
+find it*, and any unrecognised value reads as *the check could not tell*. Guided setup replaces its earlier
 answers on every re-check, so a client the new check does not find is no longer detected and a
 suggestion made from the old answer is withdrawn. The headless improvements check takes Core's
 list from the installed `@aihq/core/harness` on the host; a list in a request is ignored.
