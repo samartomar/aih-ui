@@ -9,6 +9,7 @@ import * as publicApi from './improvements.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { recordMaintenance } from './maintenance.mjs';
 import { digestBytes, intakeDeclaration } from './intake.mjs';
+import { declareReleaseOrder, RELEASE_ORDER_TEXT } from './release-order.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { createMixedService } from './mixed-service.mjs';
 import { nativeClientIds } from '@aihq/core/harness';
@@ -35,7 +36,7 @@ const byItem = (suggestions, itemId) => suggestions.find(s => s.change.itemId ==
 const shownItem = (checked, itemId) => byItem([checked.leading, ...checked.alternatives, ...checked.dismissed].filter(Boolean), itemId);
 
 test('the rules version and goal table are fixed and every rule names a distinct, well-formed reason', () => {
-  assert.equal(IMPROVEMENT_RULES_VERSION, '1.3.0');
+  assert.equal(IMPROVEMENT_RULES_VERSION, '1.4.0');
   assert.deepEqual(GOAL_RULES.map(rule => [rule.id, rule.itemId]), [['goal.fix', 'mattpocock.diagnosing-bugs'], ['goal.test', 'mattpocock.tdd'], ['goal.regressions', 'mattpocock.tdd'],
     ['goal.review', 'mattpocock.code-review'], ['goal.refactor', 'mattpocock.improve-codebase-architecture'], ['goal.plan', 'mattpocock.grill-me'], ['goal.context', 'aihq.project-context']]);
   for (const rule of GOAL_RULES) assert.match(rule.id, /^[a-z][a-z0-9.-]{0,63}$/);
@@ -131,7 +132,7 @@ test('the client rule names a client by its published label, and the label never
   const [plain] = await suggest({ clients: ['claude'] }), [named] = await suggest({ clients: ['claude'], labels: { claude: 'Claude Code', codex: 'Codex' } });
   assert.deepEqual(named.triggers, [{ ruleId: 'client.instructions', key: 'client:claude', text: 'You use Claude Code (Workbench setup), but this policy does not give it the shared project instructions.' }]);
   assert.equal(named.goal, 'Give Claude Code the same shared project instructions as your other AI clients.');
-  assert.equal(named.rulesVersion, '1.3.0');
+  assert.equal(named.rulesVersion, '1.4.0');
   // A label is wording: the same id and revision, so a dismissal made before a rename still applies.
   assert.deepEqual([named.id, named.revision], [plain.id, plain.revision]);
   assert.deepEqual(classifyImprovement(named, plain), { dismissed: true, reasons: [] });
@@ -293,6 +294,49 @@ const withChanges = ({ before, after = before, intent = changeIntent(), saved = 
 const changeTrigger = suggestion => suggestion?.triggers.find(t => t.key.startsWith('change:'));
 const SAVED_FROM = 'a newer revision of a source this policy was saved from';
 
+test('host-declared newer order gives equal-version changed content a reason and short release digest', async () => {
+  const before = [item('x.root'), item('mattpocock.tdd')], after = [revised(item('mattpocock.tdd'), 21)];
+  const releaseOrder = declareReleaseOrder([[hex(9)], [hex(10)]]);
+  const got = byItem(await withChanges({ before, candidates: [releaseOf(10, '1.0.0', after)], releaseOrder }), 'mattpocock.tdd');
+  assert.equal(changeTrigger(got)?.key, 'change:revised@1.0.0');
+  assert.ok(changeTrigger(got).text.includes(`newer by the ${RELEASE_ORDER_TEXT}`));
+  assert.ok(changeTrigger(got).text.includes(`release ${hex(10).slice(0, 12)}…`));
+  assert.equal(got.change.releaseSha256, hex(10));
+});
+
+test('host-declared older order overrides semver; unknown and absent orders keep semver behavior', async () => {
+  const before = [item('x.root'), item('mattpocock.tdd')], after = [revised(item('mattpocock.tdd'), 21)];
+  const older = declareReleaseOrder([[hex(10)], [hex(9)]]), missing = declareReleaseOrder([[hex(9)]]);
+  const ambiguous = declareReleaseOrder([[hex(9)], [hex(10)], [hex(9)]]);
+  for (const version of ['1.0.0', '1.1.0']) {
+    const got = await withChanges({ before, candidates: [releaseOf(10, version, after)], releaseOrder: older });
+    assert.equal(changeTrigger(byItem(got, 'mattpocock.tdd')), undefined);
+  }
+  for (const releaseOrder of [undefined, missing, ambiguous]) for (const version of ['1.0.0', '1.1.0']) {
+    const got = byItem(await withChanges({ before, candidates: [releaseOf(10, version, after)], releaseOrder }), 'mattpocock.tdd');
+    assert.equal(changeTrigger(got)?.key, version === '1.1.0' ? 'change:revised@1.1.0' : undefined);
+    if (changeTrigger(got)) assert.equal(changeTrigger(got).text.includes(RELEASE_ORDER_TEXT), false);
+  }
+});
+
+test('declared newer order can revise an unversioned release without changing the trigger key shape', async () => {
+  const before = [item('x.root')], after = [item('notes.plan', { label: 'Test plan note' })];
+  const [got] = await withChanges({ before, candidates: [releaseOf(10, undefined, after)], releaseOrder: declareReleaseOrder([[hex(9)], [hex(10)]]) });
+  assert.equal(changeTrigger(got)?.key, 'change:new');
+  assert.ok(changeTrigger(got).text.includes(RELEASE_ORDER_TEXT));
+  assert.equal(changeTrigger(got).text.includes('undefined'), false);
+});
+
+test('candidate order uses last declared position before semver and digest, regardless of input order', async () => {
+  const before = [item('x.root')], after = [item('notes.plan', { label: 'Test plan note' })];
+  const candidates = [releaseOf(10, '9.0.0', after), releaseOf(11, '1.0.0', after), releaseOf(12, '1.0.0', after)];
+  const releaseOrder = declareReleaseOrder([[hex(9)], [hex(11)], [hex(10)], [hex(11), hex(12)]]);
+  for (const ordered of [candidates, [...candidates].reverse()]) {
+    const [got] = await withChanges({ before, candidates: ordered, releaseOrder });
+    assert.equal(got.change.releaseSha256, hex(11));
+  }
+});
+
 test('a goal-relevant item that is new or revised in a newer revision of a saved source gets a change reason; nothing else does', async () => {
   const before = [item('x.root'), item('mattpocock.tdd'), item('notes.same', { label: 'Test notes' }), item('notes.edited', { label: 'Test checklist' }), item('notes.other', { label: 'Release notes' })];
   const after = [item('x.root'), revised(item('mattpocock.tdd'), 21), item('notes.same', { label: 'Test notes, renamed', description: 'Reworded.', itemSha256: hex(77) }),
@@ -310,7 +354,7 @@ test('a goal-relevant item that is new or revised in a newer revision of a saved
   assert.equal(changeTrigger(tdd).text, '“Label mattpocock.tdd” changed in review-notes-catalog 1.1.0 (its recipe or files differ from the revision this policy was saved from); your saved goal “add tests to my app” mentions “tests”.');
   assert.deepEqual(tdd.triggers.map(t => t.key), ['change:revised@1.1.0', 'goal:goal.test']);
   assert.deepEqual(tdd.references, [{ kind: 'saved-reason', ref: 'x.root' }, { kind: 'catalog-item', ref: 'mattpocock.tdd' }]);
-  assert.equal(tdd.goal, GOAL); assert.equal(tdd.rulesVersion, '1.3.0');
+  assert.equal(tdd.goal, GOAL); assert.equal(tdd.rulesVersion, '1.4.0');
   // The change describes the candidate item, the content the reason talks about.
   assert.deepEqual([tdd.change.releaseSha256, tdd.change.itemSha256, tdd.change.content.recipeSha256], [hex(10), hex(121), hex(21)]);
   const plan = byItem(got, 'notes.plan');
@@ -418,7 +462,7 @@ test('a change reason is shown once: dismissed with it, a goal suggestion stays 
   assert.deepEqual(classifyImprovement(advanced, shown, versionOf).reasons, ['Shown again: the suggested item, or an item it needs, changed since you dismissed it.']);
   assert.equal(classifyImprovement(dismissedGoal, shown).dismissed, false);
   // A later version with the same content is neither a new reason nor changed content.
-  const later = byItem(await withChanges({ before, candidates: [releaseOf(12, '1.3.0', after)] }), 'mattpocock.tdd');
+  const later = byItem(await withChanges({ before, candidates: [releaseOf(12, '1.4.0', after)] }), 'mattpocock.tdd');
   assert.notEqual(later.revision, shown.revision); assert.deepEqual(classifyImprovement(later, shown, versionOf), { dismissed: true, reasons: [] });
   // A revised client-rule item that is not relevant to a saved goal is neither a new reason nor changed content.
   const clientBefore = byItem(await withChanges({ before, clients: ['claude'] }), 'aihq.client.claude');
@@ -480,14 +524,14 @@ test('the rule table points at items the installed maintained Catalog really off
   const before = s.envelopeBytes.slice();
   const value = await check(s, s.envelopeBytes, { clients: ['claude', 'not-a-client'], goal: 'fewer regressions' });
   assert.deepEqual(s.envelopeBytes, before);
-  assert.equal(value.rulesVersion, '1.3.0'); assert.equal(value.checkedAt, NOW); assert.deepEqual(value.mutations, []);
+  assert.equal(value.rulesVersion, '1.4.0'); assert.equal(value.checkedAt, NOW); assert.deepEqual(value.mutations, []);
   assert.deepEqual(value.reads, ['envelope', 'supplied-inventories', 'declared-clients', 'request-goal']);
   // implement is the root; tdd arises from the saved goal and the request (two reasons), the client wiring from setup.
   assert.equal(value.leading.change.itemId, 'mattpocock.tdd');
   assert.deepEqual(value.leading.triggers.map(t => t.key), ['goal:goal.regressions', 'goal:goal.test']);
   assert.equal(value.leading.label, s.maintained.release.items.find(i => i.id === 'mattpocock.tdd').label);
   assert.equal(value.leading.scope, 'project'); assert.equal(value.leading.dismissal, null); assert.equal(value.leading.promotion, undefined);
-  assert.equal(value.leading.rulesVersion, '1.3.0'); assert.equal(value.leading.change.releaseSha256, s.maintained.release.sha256);
+  assert.equal(value.leading.rulesVersion, '1.4.0'); assert.equal(value.leading.change.releaseSha256, s.maintained.release.sha256);
   assert.match(value.leading.facts[0].text, /^Adds \d+ files, \d+ bytes in total, and needs 0 other items\.$/);
   assert.deepEqual(value.alternatives.map(a => a.change.itemId), ['aihq.client.claude']);
   assert.match(value.alternatives[0].facts[0].text, /^Adds \d+ files, \d+ bytes in total, and needs [1-9]\d* other items?: /);
@@ -781,9 +825,12 @@ async function intakeNotes(snapshot) {
 }
 const PLAN_ID = 'consumer-proof.test-plan';
 // The saved policy selects the current review note with a testing goal; the newer revision (1.0.1) revises that note and adds a second item.
-async function changeScenario() {
+async function changeScenario(version) {
   const found = await installed(), maintained = { release: found.release, materialSource: found.source };
-  const notes = await intakeNotes(await noteFixture()), snapshot = await noteFixture('updated'), declaration = JSON.parse(decode(snapshot.declarationBytes));
+  const saved = await noteFixture();
+  if (version) { const declaration = JSON.parse(decode(saved.declarationBytes)); declaration.package.version = version; saved.declarationBytes = encode(JSON.stringify(declaration)); }
+  const notes = await intakeNotes(saved), snapshot = await noteFixture('updated'), declaration = JSON.parse(decode(snapshot.declarationBytes));
+  if (version) declaration.package.version = version;
   const [first] = declaration.items, files = snapshot.sourceFiles[0].files, path = first.recipePath.replace('recipe.json', 'plan-recipe.json');
   files[path] = encode(JSON.stringify({ ...JSON.parse(decode(files[first.recipePath])), id: PLAN_ID }));
   declaration.items.push({ ...structuredClone(first), id: PLAN_ID, label: 'Test plan note', description: 'A plan for tests.', recipePath: path });
@@ -795,6 +842,52 @@ async function changeScenario() {
   const open = valueOf(await openDraft({ bytes: composed.policyBytes, inventories }));
   return { maintained, inventories, notes, next, noteId: note.id, envelopeBytes: open.envelopeBytes, policyBytes: composed.policyBytes };
 }
+
+test('checking equal-version packs forwards host order and names it in coverage and the suggestion', async () => {
+  const s = await changeScenario('0.1.0'), candidateInventories = [s.next];
+  const releaseOrder = declareReleaseOrder([[s.notes.release.sha256], [s.next.release.sha256]]);
+  const checked = await check(s, s.envelopeBytes, { candidateInventories, releaseOrder }), plan = shownItem(checked, PLAN_ID);
+  assert.equal(changeTrigger(plan)?.key, 'change:new@0.1.0');
+  assert.ok(changeTrigger(plan).text.includes(RELEASE_ORDER_TEXT));
+  assert.ok(changeTrigger(plan).text.includes(`release ${s.next.release.sha256.slice(0, 12)}…`));
+  assert.deepEqual(checked.coverage, [{ trigger: 'content-change', state: 'checked',
+    text: "Content changes since this policy was saved were checked against the configured update source using the release order declared by this host's update source." }, FRICTION]);
+  for (const order of [undefined, declareReleaseOrder([[s.next.release.sha256], [s.notes.release.sha256]]), declareReleaseOrder([[s.notes.release.sha256]])]) {
+    const got = await check(s, s.envelopeBytes, { candidateInventories, releaseOrder: order });
+    assert.equal(shownItem(got, PLAN_ID), undefined);
+  }
+  for (const options of [{}, { candidateInventories: null }, { candidateInventories: [], candidateSource: 'unconfigured' }]) {
+    const got = await check(s, s.envelopeBytes, { ...options, releaseOrder });
+    assert.equal(got.coverage[0].state, 'unknown');
+    assert.equal(got.coverage[0].text.includes('using the release order'), false);
+  }
+});
+
+test('candidate inventories accept forty releases while supplied inventories stay capped at thirty-two', async () => {
+  const s = await scenario(), candidates = [];
+  for (let i = 0; i < 41; i += 1) {
+    const snapshot = await noteFixture(), declaration = JSON.parse(decode(snapshot.declarationBytes));
+    declaration.package.version = `0.1.${i}`; snapshot.declarationBytes = encode(JSON.stringify(declaration));
+    candidates.push(await intakeNotes(snapshot));
+  }
+  const checked = await check(s, s.envelopeBytes, { candidateInventories: candidates.slice(0, 40) });
+  assert.equal(checked.coverage[0].state, 'checked');
+  for (const [path, options] of [['/candidateInventories', { candidateInventories: candidates }], ['/inventories', { inventories: candidates.slice(0, 33) }]]) {
+    const got = await checkImprovements({ envelopeBytes: s.envelopeBytes, inventories: s.inventories, now: NOW, ...options });
+    assert.equal(got.status, 'refused'); assert.equal(got.diagnostics[0].path, path);
+  }
+});
+
+test('invalid release orders are refused at the receiving boundary', async () => {
+  const s = await scenario();
+  for (const releaseOrder of [null, [], {}, { basis: 'producer', ranks: {} }, { basis: 'host-declared', ranks: { bad: [1, 2] } }]) {
+    const got = await checkImprovements({ envelopeBytes: s.envelopeBytes, inventories: s.inventories, now: NOW, releaseOrder });
+    assert.equal(got.status, 'refused');
+    assert.equal(got.diagnostics[0].code, 'INPUT_INVALID');
+    assert.equal(got.diagnostics[0].path, '/releaseOrder');
+    assert.deepEqual(got.originalBytes, s.envelopeBytes);
+  }
+});
 
 test('a real newer revision of the saved notes source offers its new goal-relevant item; a selected revised item and a dismissal hold', async () => {
   const s = await changeScenario(), candidateInventories = [s.next];
@@ -875,7 +968,7 @@ test('checking, dismissing and building the prompt never touch the network or a 
 });
 
 test('the improvement modules import only the allowed seams and contain no network, process or random calls', async () => {
-  const allowed = [/^\.\/intake\.mjs$/, /^\.\/journey\.mjs$/, /^\.\/headless\.mjs$/, /^\.\/intent-shape\.mjs$/, /^\.\/maintenance-record\.mjs$/, /^\.\/improvement-[a-z]+\.mjs$/, /^\.\/client-identity\.mjs$/, /^\.\/trial-record\.mjs$/, /^@aihq\/catalog\/reader$/];
+  const allowed = [/^\.\/intake\.mjs$/, /^\.\/journey\.mjs$/, /^\.\/headless\.mjs$/, /^\.\/intent-shape\.mjs$/, /^\.\/maintenance-record\.mjs$/, /^\.\/improvement-[a-z]+\.mjs$/, /^\.\/client-identity\.mjs$/, /^\.\/trial-record\.mjs$/, /^\.\/release-order\.mjs$/, /^@aihq\/catalog\/reader$/];
   for (const name of ['improvement-record.mjs', 'improvement-rules.mjs', 'improvements.mjs']) {
     const source = await readFile(new URL(`./${name}`, import.meta.url), 'utf8');
     const specifiers = [...source.matchAll(/^(?:import|export)\b[^;]*?\bfrom\s+'([^']+)'/gm)].map(match => match[1]);
@@ -886,7 +979,7 @@ test('the improvement modules import only the allowed seams and contain no netwo
       assert.doesNotMatch(source, forbidden, `${name} ${forbidden}`);
   }
   const rules = await readFile(new URL('./improvement-rules.mjs', import.meta.url), 'utf8');
-  assert.deepEqual([...rules.matchAll(/^import\b[^;]*?\bfrom\s+'([^']+)'/gm)].map(m => m[1]), ['./improvement-record.mjs', './client-identity.mjs']);
+  assert.deepEqual([...rules.matchAll(/^import\b[^;]*?\bfrom\s+'([^']+)'/gm)].map(m => m[1]), ['./improvement-record.mjs', './release-order.mjs', './client-identity.mjs']);
 });
 
 // ---- The copy-only prompt ------------------------------------------------------------------------------------------
@@ -897,7 +990,7 @@ test('the prompt is attributed, tells the AI to change nothing, and carries no p
   for (const suggestion of [checked.leading, ...checked.alternatives]) {
     const prompt = suggestion.prompt;
     assert.equal(prompt, improvementPrompt(suggestion));
-    assert.ok(prompt.includes('Suggested by the AIH Workbench improvement rules 1.3.0 (fixed rules; no AI model was used).'));
+    assert.ok(prompt.includes('Suggested by the AIH Workbench improvement rules 1.4.0 (fixed rules; no AI model was used).'));
     assert.match(prompt, /Do not install, change or run anything/); assert.match(prompt, /do not ask me to upload/);
     assert.ok(prompt.includes('Start your reply with “AI advice:”.'));
     assert.ok(prompt.includes(suggestion.label)); assert.ok(prompt.includes(suggestion.change.itemId));
