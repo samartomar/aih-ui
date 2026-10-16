@@ -23,7 +23,7 @@ const ADAPTER_PREFIX = 'aihq.client.';
 let listSource = 'supported by Core';
 let detections = [], folderChosen = false, published = [], suggestion = null, busy = false, suggesting = false, started = false;
 // The inputs the current suggestion was made from, and a counter that changes whenever that suggestion stops applying.
-let snapshot = null, generation = 0;
+let snapshot = null, generation = 0, savedShown = false;
 const clients = new Map(); // id -> { setup, detected, added, checked }
 const picked = new Map();  // itemId -> checked
 
@@ -47,9 +47,11 @@ function invalidate() {
   generation += 1;
   suggestion = null; snapshot = null;
   picked.clear();
-  $('suggestion').hidden = true; $('save-section').hidden = true;
+  $('suggestion').hidden = true;
   $('choices').replaceChildren(); $('prompt').value = '';
-  $('download').hidden = true; $('saved').hidden = true; $('save-status').textContent = '';
+  // A draft already saved stays true to what was saved; only new choices need a new suggestion.
+  if (savedShown) $('save-status').textContent = 'Saved to a draft from your earlier inputs. Suggest again to save new choices.';
+  else { $('save-section').hidden = true; $('download').hidden = true; $('saved').hidden = true; $('save-status').textContent = ''; }
   $('suggest-status').textContent = STALE_MESSAGE;
   syncButtons();
 }
@@ -63,7 +65,7 @@ function syncButtons() {
   $('save').disabled = busy || !suggestion || !suggestion.choices.some(choice => picked.get(choice.itemId));
   for (const id of ['goal', 'folder', 'add-stack', 'add-stack-button', 'reopen-file']) $(id).disabled = busy;
   $('detect-clients').disabled = busy || published.length === 0;
-  for (const control of [...$('detections').querySelectorAll('button'), ...$('clients').querySelectorAll('input')]) control.disabled = busy;
+  for (const control of [...$('detections').querySelectorAll('button'), ...$('clients').querySelectorAll('input'), ...$('choices').querySelectorAll('input')]) control.disabled = busy;
 }
 
 function showLines(list, lines) {
@@ -163,7 +165,7 @@ async function loadClients() {
       for (const id of result.settings.clients.filter(value => typeof value === 'string')) { const state = clientState(id); state.setup = true; state.checked = true; }
   } catch { /* no saved Workbench setup */ }
   renderClients();
-  $('detect-clients').disabled = published.length === 0;
+  syncButtons();
   if (!published.length) $('clients-status').textContent = 'Detecting is unavailable: neither Core nor the installed Catalog lists AI clients for this Workbench.';
 }
 
@@ -184,7 +186,7 @@ async function detectClients() {
       : 'No supported AI client was found on this machine. Nothing was changed.';
   } catch (error) {
     $('clients-status').textContent = `The check did not run: ${error.message} You can still tick the clients you use.`;
-  } finally { $('detect-clients').disabled = published.length === 0; }
+  } finally { syncButtons(); }
 }
 
 // Suggestions
@@ -236,7 +238,7 @@ async function suggest() {
     $('browse-link').hidden = suggestion.status === 'confident';
     $('prompt-block').hidden = false;
     $('save-section').hidden = suggestion.status !== 'confident';
-    $('download').hidden = true; $('saved').hidden = true; $('save-status').textContent = '';
+    $('download').hidden = true; $('saved').hidden = true; $('save-status').textContent = ''; savedShown = false;
     $('copy-status').textContent = 'Copying only puts this text on your clipboard. It executes nothing and changes nothing.';
     refreshPrompt();
     $('suggest-status').textContent = suggestion.status === 'confident' ? 'Suggestions are ready below.' : 'No confident suggestion.';
@@ -268,7 +270,7 @@ async function save() {
   const mine = generation, inputs = snapshot, rulesVersion = suggestion.rulesVersion;
   // A result belongs to the suggestion it started from; if that no longer applies the page already says so.
   const outdated = () => mine !== generation;
-  busy = true; syncButtons(); $('download').hidden = true; $('saved').hidden = true;
+  busy = true; savedShown = false; syncButtons(); $('download').hidden = true; $('saved').hidden = true;
   $('save-status').textContent = 'Saving choices to a draft…';
   try {
     const client = await ensureClient();
@@ -292,7 +294,7 @@ async function save() {
     if (opened.status === 'superseded') { $('save-status').textContent = SUPERSEDED_SAVE; return; }
     if (opened.status !== 'ok' || !client.draft) { showRefusal($('save-status'), 'Nothing was saved. The draft could not be opened:', messagesOf(opened)); return; }
     showLines($('saved-lines'), describePolicy({ roots: client.draft.roots, pins: client.draft.intent?.pins ?? [], catalogItems: client.catalog.items }));
-    $('saved').hidden = false; $('download').hidden = false;
+    $('saved').hidden = false; $('download').hidden = false; savedShown = true;
     $('save-status').textContent = 'Saved to a draft. Download the setup file to keep it; nothing was installed.';
   } catch (error) {
     if (!outdated()) $('save-status').textContent = `Nothing was saved: ${error.message}`;
@@ -302,7 +304,7 @@ async function save() {
 async function reopen(file) {
   $('reopened').hidden = true;
   // Reopening replaces the saved draft, so the earlier save result and download no longer apply.
-  $('saved').hidden = true; $('download').hidden = true;
+  $('saved').hidden = true; $('download').hidden = true; savedShown = false;
   if (!file) { $('reopen-status').textContent = ''; return; }
   const tooLarge = importLimitError(file.size);
   if (tooLarge) { $('reopen-status').textContent = tooLarge; return; }
