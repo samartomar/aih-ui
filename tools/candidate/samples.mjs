@@ -9,7 +9,9 @@ import { pathToFileURL } from 'node:url';
 import { authoritySource } from './local-authority.mjs';
 
 const SEEDED_SCHEMA = 'urn:aih-ui:candidate-seeded:1.0.0';
-const ROOT_ITEM = 'mattpocock.implement';
+const ROOT_ITEM = 'mattpocock.implement', NOTE_ITEM = 'consumer-proof.review-note';
+// The sample workspace's two members, by remote identity (the sample checkouts' `origin` remotes).
+const MEMBERS = ['sample-web', 'sample-api'].map(id => ({ id, identity: `github.com/sample-org/${id}`, label: id }));
 // The shape the guided setup records and the improvement rules read the goal from.
 const SAVED_REASON = 'guided-setup rules 1.0.0: goal.build. Goal: add tests to my app. Project: JavaScript.';
 const clear = (...paths) => Promise.all(paths.map(path => rm(path, { recursive: true, force: true, maxRetries: 3 })));
@@ -37,17 +39,56 @@ function commitAll(folder, message) {
 
 // A public export of an installed package, loaded from the consumer: this module lives in the repository, where the
 // packages are not installed, so the installed copy's own export map says where `./node` or `./reader` is.
+const exported = target => typeof target === 'string' ? target
+  : Array.isArray(target) ? target.map(exported).find(Boolean)
+    : target && typeof target === 'object' ? exported(target.import ?? target.node ?? target.default) : undefined;
 async function importInstalled(consumerDir, specifier) {
   const [scope, name, ...subpath] = specifier.split('/');
   const root = join(consumerDir, 'node_modules', scope, name);
-  const target = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).exports?.[`./${subpath.join('/')}`];
-  const file = typeof target === 'string' ? target : target?.import ?? target?.default;
+  const file = exported(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).exports?.[`./${subpath.join('/')}`]);
   if (!file) throw new Error(`${specifier} is not exported by the installed ${scope}/${name}.`);
   return import(pathToFileURL(join(root, file)).href);
 }
 
+// The installed Catalog's maintained release and families, and a saved draft opened from chosen roots through the same public
+// composition the Workbench uses (`more` adds inventories the draft's roots come from).
+async function authoringBase(consumerDir, load) {
+  const [{ composeAuthoring, freshAuthoring, openDraft }, { installedFamilies }, catalogNode, catalogReader] = await Promise.all([
+    load('headless.mjs'), load('installed-families.mjs'), importInstalled(consumerDir, '@aihq/catalog/node'), importInstalled(consumerDir, '@aihq/catalog/reader')]);
+  const maintained = await catalogNode.readInstalledRelease({ root: join(consumerDir, 'node_modules', '@aihq', 'catalog'), sourceInput: 'maintained' });
+  if (!maintained.valid) throw new Error(JSON.stringify(maintained.diagnostics));
+  const inventories = [{ release: maintained.release, materialSource: { kind: 'local', input: 'maintained' } }, ...await installedFamilies()];
+  const rootOf = (release, id, reason) => {
+    const item = catalogReader.listItems(release).find(entry => entry.id === id);
+    if (!item) throw new Error(`${id} is not offered by the installed Catalog.`);
+    return { releaseSha256: release.sha256, itemId: id, itemSha256: item.itemSha256, scope: 'project', configuration: {}, originIds: ['direct'], ...(reason ? { reason } : {}) };
+  };
+  async function draft(roots, more = []) {
+    const all = [...inventories, ...more], composed = await composeAuthoring({ intent: { ...freshAuthoring(), roots }, inventories: all });
+    if (composed.status !== 'ok') throw new Error(JSON.stringify(composed.diagnostics));
+    const opened = await openDraft({ bytes: composed.value.policyBytes, inventories: all });
+    if (opened.status !== 'ok') throw new Error(JSON.stringify(opened.diagnostics));
+    return opened.value.envelopeBytes;
+  }
+  return { maintained, rootOf, draft };
+}
+
+// The workspace the two sample checkouts belong to, declared through the published workspace module: members by remote identity, no local binding.
+async function declareWorkspace({ editWorkspace }, envelopeBytes) {
+  const now = new Date().toISOString();
+  let bytes = envelopeBytes;
+  for (const operation of [{ type: 'declare', label: 'Sample workspace' }, ...MEMBERS.map(member => ({ type: 'set-member', member }))]) {
+    const result = await editWorkspace({ envelopeBytes: bytes, operation, now });
+    if (result.status !== 'ok') throw new Error(JSON.stringify(result.diagnostics));
+    bytes = result.value.envelopeBytes;
+  }
+  return bytes;
+}
+
 export async function seedSamples({ layout, consumerDir }) {
   const load = name => import(pathToFileURL(join(consumerDir, 'consumer', name)).href);
+  let authoring;
+  const base = () => authoring ??= authoringBase(consumerDir, load);
   const recordPath = join(layout.samples, '.seeded.json');
   mkdirSync(layout.samples, { recursive: true });
   let record = { schema: SEEDED_SCHEMA, samples: {} };
@@ -86,27 +127,21 @@ ${folder}
 `));
   })) env.AIH_CONSUMER_PROJECT = layout.personalProject;
 
-  // Saved intent: the draft the guided setup would have saved, built through the same public composition the Workbench uses.
+  // Saved intent: the draft the guided setup would have saved, built through the same public composition the Workbench uses,
+  // with the sample workspace already declared (its two members named, nothing bound) when the published workspace module allows it.
   const intentFile = join(layout.savedIntents, 'sample-saved-intent.json');
   await sample('saved-intent', [intentFile, join(layout.savedIntents, 'SAMPLE.md')], async () => {
-    const [{ composeAuthoring, freshAuthoring, openDraft }, { installedFamilies }, catalogNode, catalogReader] = await Promise.all([
-      load('headless.mjs'), load('installed-families.mjs'), importInstalled(consumerDir, '@aihq/catalog/node'), importInstalled(consumerDir, '@aihq/catalog/reader')]);
-    let note = '';
+    let note = '', workspaceNote = '';
     try {
-      const maintained = await catalogNode.readInstalledRelease({ root: join(consumerDir, 'node_modules', '@aihq', 'catalog'), sourceInput: 'maintained' });
-      if (!maintained.valid) throw new Error(JSON.stringify(maintained.diagnostics));
-      const inventories = [{ release: maintained.release, materialSource: { kind: 'local', input: 'maintained' } }, ...await installedFamilies()];
-      const root = catalogReader.listItems(maintained.release).find(item => item.id === ROOT_ITEM);
-      if (!root) throw new Error(`${ROOT_ITEM} is not offered by the installed Catalog.`);
-      const intent = { ...freshAuthoring(), roots: [{ releaseSha256: maintained.release.sha256, itemId: ROOT_ITEM, itemSha256: root.itemSha256, scope: 'project',
-        configuration: {}, originIds: ['direct'], reason: SAVED_REASON }] };
-      const composed = await composeAuthoring({ intent, inventories });
-      if (composed.status !== 'ok') throw new Error(JSON.stringify(composed.diagnostics));
-      const opened = await openDraft({ bytes: composed.value.policyBytes, inventories });
-      if (opened.status !== 'ok') throw new Error(JSON.stringify(opened.diagnostics));
+      const { maintained, rootOf, draft } = await base();
+      let bytes = await draft([rootOf(maintained.release, ROOT_ITEM, SAVED_REASON)]);
+      try { bytes = await declareWorkspace(await load('workspace.mjs'), bytes); } catch (error) { workspaceNote = error.message; }
       mkdirSync(layout.savedIntents, { recursive: true });
-      writeFileSync(intentFile, opened.value.envelopeBytes);
+      writeFileSync(intentFile, bytes);
     } catch (error) { note = error.message; }
+    const workspaceText = workspaceNote
+      ? `The workspace could not be declared in this file (no bytes were faked); declare it on the page. Diagnostic:\n\n\`\`\`\n${workspaceNote}\n\`\`\``
+      : `It already declares the workspace "Sample workspace" with the members \`sample-web\` and \`sample-api\` (by remote identity; no checkout is bound). Binding each member to its checkout is yours to do:\n\n${layout.sampleWeb}\n${layout.sampleApi}`;
     write(join(layout.savedIntents, 'SAMPLE.md'), notice('Sample saved intent', 'A saved policy with Workbench metadata, to reopen instead of starting from nothing.', note
       ? `No saved intent could be composed from the installed packages, so none was written (no bytes were faked). Diagnostic:\n\n\`\`\`\n${note}\n\`\`\``
       : `
@@ -114,8 +149,10 @@ In the Workbench open **Policy**, choose **Open file**, pick this file and selec
 
 ${intentFile}
 
-It selects \`${ROOT_ITEM}\` for the goal "add tests to my app". Reopening checks it against the installed Catalog; the trial and
-maintenance journeys need a reopened saved draft like this one.`));
+It selects \`${ROOT_ITEM}\` for the goal "add tests to my app". Reopening checks it against the installed Catalog; the trial journey
+needs a reopened saved draft like this one (the maintenance journey has its own, ${layout.maintenanceDraft}).
+
+${workspaceText}`));
     return note ? `not composed: ${note}` : undefined;
   });
 
@@ -163,10 +200,10 @@ The developer side reads the new commit the next time it checks.
     write(layout.organizationSource, `${JSON.stringify(authoritySource(), null, 2)}\n`);
   })) env.AIH_ORGANIZATION_SOURCE = layout.organizationSource;
 
-  // Continuity: two sample checkouts to declare as a workspace, and a reviewed batch across two client homes.
-  if (await sample('continuity', [layout.continuity, join(layout.repositories, 'sample-web'), join(layout.repositories, 'sample-api'), layout.batchHost], async () => {
-    for (const name of ['sample-web', 'sample-api']) {
-      const folder = join(layout.repositories, name);
+  // Continuity: two sample checkouts to declare as a workspace, and a reviewed batch whose two client scopes are those checkouts.
+  if (await sample('continuity', [layout.continuity, layout.sampleWeb, layout.sampleApi, layout.batchHost], async () => {
+    // Both repositories exist, with one commit each, before the batch fixture writes into them.
+    for (const [name, folder] of [['sample-web', layout.sampleWeb], ['sample-api', layout.sampleApi]]) {
       mkdirSync(folder, { recursive: true });
       git(folder, 'init', '--quiet', '-b', 'main');
       git(folder, 'remote', 'add', 'origin', `https://github.com/sample-org/${name}.git`);
@@ -177,39 +214,71 @@ Its \`origin\` remote is \`https://github.com/sample-org/${name}.git\`. That add
       commitAll(folder, `${name} sample commit`);
     }
     const { batchFixture } = await load('batch-fixture.mjs');
-    const batch = await batchFixture(layout.continuity, { conflict: true });
+    const batch = await batchFixture(layout.continuity, { conflict: true, homes: { a: layout.sampleWeb, b: layout.sampleApi } });
     write(layout.batchEnvelope, Buffer.from(batch.envelopeBytes));
     // The process action exits 0 only while this marker exists; writing it here makes the first run succeed except for the conflict.
     write(batch.procMarker, '');
+    // What the fixture wrote is committed, so both checkouts start clean.
+    commitAll(layout.sampleWeb, 'Sample Claude Code setup');
+    commitAll(layout.sampleApi, 'Sample Codex starting state');
     write(layout.batchHost, `${JSON.stringify({ envelopePath: layout.batchEnvelope, homes: batch.homes, coreHome: batch.coreHome, materialRoot: batch.materialRoot, faults: {} }, null, 2)}\n`);
-    write(join(layout.continuity, 'SAMPLE.md'), notice('Continuity: workspace and reviewed batch', 'Declare a workspace across two checkouts, and add a second AI client to an existing one as one reviewed batch that can fail partway.', `
-**Workspace.** Declare a workspace of ${join(layout.repositories, 'sample-web')} and ${join(layout.repositories, 'sample-api')} and bind them as local checkouts.
+    write(join(layout.continuity, 'SAMPLE.md'), notice('Continuity: workspace and reviewed batch', 'Declare a workspace across two checkouts, and add a second AI client to one of them as one reviewed batch that can fail partway.', `
+**Workspace.** The sample saved intent (${intentFile}) declares the workspace of \`sample-web\` and \`sample-api\` when the installed packages allowed it; otherwise declare it on the page.
+Bind the members to their checkouts: ${layout.sampleWeb} and ${layout.sampleApi}. Both start clean.
 
-**Batch.** Client A is an existing Claude home and client B is an added Codex home, both under this folder. The saved batch adds B's actions.
+**The task.** Add the second client (Codex) to sample-api while sample-web keeps its existing Claude Code setup, as one reviewed batch on the Batch page.
+sample-web's Claude Code setup (\`.claude/\`) was applied before the batch and is not part of it; the batch adds Codex's files under \`${layout.clients.codex}\` and one shared file under \`${layout.clients.claude}\`.
+Every apply writes only inside the two sample checkouts and the batch's Core home (${batch.coreHome}); the one exception is a counter file, \`${join(layout.repositories, 'proc-runs')}\`,
+that the process action appends to beside the checkouts. Nothing is sent anywhere.
+
 Partial failure is provoked by the switches the batch host already has; nothing else is simulated:
 
-1. **Conflict (on now).** An unowned file already exists at \`${join(batch.homes.b, '.codex', 'b-core.md')}\`, so that action cannot proceed, and the batch reports what ran and what did not. Delete that file to let it proceed.
+1. **Conflict (on now).** An unowned file already exists at \`${batch.conflictFile}\`, so that action cannot proceed, and the batch reports what ran and what did not. Delete that file to let it proceed.
 2. **Stale target.** Set \`"faults": { "b-core": "stale-target" }\` in ${layout.batchHost}; the action then fails as if its target changed after review.
 3. **Process action.** The marker \`${batch.procMarker}\` is present, so the process action succeeds. Delete the marker and the action exits 3 (a partial failure); create it again and use "run again".
 `));
   })) env.AIH_BATCH_FIXTURE = layout.batchHost;
 
-  // Maintenance and improvement: the host's update source, published by editing a small file.
-  if (await sample('maintenance', [layout.maintenanceSource, join(layout.samples, 'maintenance')], () => {
+  // Maintenance and improvement: the host's update source, published by editing a small file, and the saved draft that selects its review note.
+  if (await sample('maintenance', [layout.maintenanceSource, join(layout.samples, 'maintenance'), layout.maintenanceDraft], async () => {
     write(layout.maintenanceSource, `${JSON.stringify({ revisions: ['current'] }, null, 2)}\n`);
+    // The same input the update source publishes revisions of (id `notes`), taken at its `current` revision as the page's service holds it.
+    let note = '';
+    try {
+      const [{ maintained, rootOf, draft }, { noteFixture }, { intakeDeclaration, digestBytes }] = await Promise.all([base(), load('note-fixture.mjs'), load('intake.mjs')]);
+      const snapshot = await noteFixture();
+      const input = { id: 'notes', kind: 'local', locator: { input: 'notes' }, resolvedIdentity: { sha256: await digestBytes(snapshot.declarationBytes) } };
+      const notes = await intakeDeclaration({ input, ...snapshot, materialSource: { kind: 'local', input: 'notes' } });
+      if (notes.status !== 'ok') throw new Error(JSON.stringify(notes.diagnostics));
+      const bytes = await draft([rootOf(maintained.release, ROOT_ITEM, SAVED_REASON), rootOf(notes.value.release, NOTE_ITEM)], [notes.value]);
+      mkdirSync(layout.savedIntents, { recursive: true });
+      writeFileSync(layout.maintenanceDraft, bytes);
+    } catch (error) { note = error.message; }
+    const draftText = note
+      ? `No maintenance draft could be built from the installed packages, so none was written (no bytes were faked). Diagnostic:\n\n\`\`\`\n${note}\n\`\`\`\n`
+      : `**The draft.** ${layout.maintenanceDraft} is a saved draft that selects the review note (\`${NOTE_ITEM}\`) the update source publishes revisions of, beside \`${ROOT_ITEM}\` for the goal "add tests to my app".`;
     write(join(layout.samples, 'maintenance', 'SAMPLE.md'), notice('Maintenance and improvement', 'A review note that can be updated, so the Workbench can show a newer revision and what improving a setup looks like.', `
-The update source is ${layout.maintenanceSource}, a file naming revisions of the review note to publish:
+${draftText}
+
+**The update source** is ${layout.maintenanceSource}, a file naming the revisions of the review note to publish; it is read at each check:
 
 \`\`\`json
-{ "revisions": ["updated"] }
+{ "revisions": ["current"] }
 \`\`\`
 
 Allowed names: \`current\`, \`updated\` (a newer revision of the note), \`newer\` (one version after \`updated\`), \`additional\` (a different package,
-offered as its own content, not a revision) and \`expanded\` (the same package one minor version later with two new notes). Edit the file and check
-for updates in the Workbench; the file is read at each check.
+offered as its own content, not a revision) and \`expanded\` (the same package one minor version later with two new notes).
 
-Trials need a **reopened saved draft** (see the sample saved intent) and **AI clients chosen in setup**.
+**Updates.** Keep \`current\` published and reopen the draft: in **Policy** choose **Open file**, pick the draft and select **Validate and reopen**.
+Then publish \`["current", "updated"]\` and use **Check now** under the updates: the new revision needs attention, and you can keep, skip or defer it.
+Publish \`["current", "updated", "newer"]\` to see a second revision with its own choice.
+
+**Suggestions.** Reopen the draft with \`["current"]\` published, then publish \`["expanded"]\` and ask for suggestions: with the goal "add tests",
+the test plan note is suggested and the unrelated style note is not.
+
+**Trials.** Choose AI clients in setup first (a trial needs them), then plan and propose a trial from a suggestion on the reopened draft.
 `));
+    return note ? `not built: ${note}` : undefined;
   })) env.AIH_MAINTENANCE_SOURCE = layout.maintenanceSource;
 
   env.AIH_UI_SETTINGS_PATH = layout.settings;

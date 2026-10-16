@@ -1,6 +1,7 @@
 // Where an owner-testing candidate keeps everything. One data directory holds the candidate's account home, its client
-// homes, host configuration, sample data, logs and reports; nothing is written outside it except the browser's own
-// downloads. Every path is derived from the data directory, so the launcher, the server process, reset and report agree.
+// homes, host configuration, sample data, temporary files, logs and reports; nothing is written outside it except the
+// browser's own profile and downloads. Every path is derived from the data directory, so the launcher, the server
+// process, reset and report agree.
 import { join, resolve } from 'node:path';
 
 export const DATA_MARKER_SCHEMA = 'urn:aih-ui:candidate-data:1.0.0';
@@ -12,7 +13,8 @@ export const RESERVED_PORTS = Object.freeze([4173]);
 export function candidateLayout(dataDir) {
   const root = resolve(dataDir);
   const config = join(root, 'config'), samples = join(root, 'samples'), state = join(root, 'state'), logs = join(root, 'logs');
-  const continuity = join(samples, 'continuity');
+  const continuity = join(samples, 'continuity'), repositories = join(samples, 'repositories');
+  const sampleWeb = join(repositories, 'sample-web'), sampleApi = join(repositories, 'sample-api');
   return Object.freeze({
     root,
     marker: join(root, 'candidate.json'),
@@ -31,13 +33,18 @@ export function candidateLayout(dataDir) {
     projects: join(samples, 'projects'),
     personalProject: join(samples, 'projects', 'sample-js-app'),
     savedIntents: join(samples, 'saved-intents'),
-    repositories: join(samples, 'repositories'),
+    maintenanceDraft: join(samples, 'saved-intents', 'sample-maintenance-draft.json'),
+    repositories,
+    sampleWeb,
+    sampleApi,
     authority: join(samples, 'authority'),
     readiness: join(samples, 'readiness'),
     continuity,
     batchEnvelope: join(continuity, 'batch-envelope.json'),
-    // The two controlled client configuration homes the continuity sample creates.
-    clients: Object.freeze({ claude: join(continuity, 'home-a', '.claude'), codex: join(continuity, 'home-b', '.codex') }),
+    // The two controlled client configuration folders the continuity sample uses: one inside each sample checkout.
+    clients: Object.freeze({ claude: join(sampleWeb, '.claude'), codex: join(sampleApi, '.codex') }),
+    // Temporary files of the server process (and every process it starts) land here, not in the account's.
+    tmp: join(root, 'tmp'),
     state,
     server: join(state, 'server.json'),
     stopRequest: join(state, 'stop-request'),

@@ -5,9 +5,10 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { dirname, join, parse, relative, resolve, isAbsolute } from 'node:path';
+import { dirname, isAbsolute, parse, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DATA_MARKER_SCHEMA, candidateLayout } from './layout.mjs';
+import { isAlive } from './process.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const refusal = (code, message) => Object.assign(new Error(message), { code });
@@ -46,29 +47,41 @@ export function claimDataDir(dataDir) {
 
 // The sub-directories every start needs before anything is written into them.
 export function ensureLayout(layout) {
-  for (const directory of [layout.config, layout.samples, layout.state, layout.logs, layout.checks, layout.reports, layout.home]) mkdirSync(directory, { recursive: true });
+  for (const directory of [layout.config, layout.samples, layout.state, layout.logs, layout.checks, layout.reports, layout.home, layout.tmp]) mkdirSync(directory, { recursive: true });
 }
 
-// The pid state/server.json names, when that process is still alive (a process we may not signal still counts as alive).
+// The pid state/server.json names, when that process is still alive (starting or ready; a process we may not signal still counts as alive).
 function recordedPid(layout) {
   let pid;
   try { ({ pid } = JSON.parse(readFileSync(layout.server, 'utf8'))); } catch { return null; }
-  if (!Number.isInteger(pid) || pid < 1) return null;
-  try { process.kill(pid, 0); return pid; } catch (error) { return error.code === 'EPERM' ? pid : null; }
+  return isAlive(pid) ? pid : null;
+}
+
+// The data directory as a plain directory this candidate made: a real directory (not a link) carrying a marker that names itself.
+function plainRoot(layout, action) {
+  let stat;
+  try { stat = lstatSync(layout.root); } catch { throw refusal('CANDIDATE_DATA_FOREIGN', `${layout.root} does not exist, so there is nothing to ${action}.`); }
+  if (stat.isSymbolicLink() || !stat.isDirectory()) throw refusal('CANDIDATE_DATA_FOREIGN', `${layout.root} is not a plain directory, so it is not used.`);
+  return real(layout.root);
+}
+function markedRoot(layout, realRoot) {
+  const marker = readMarker(layout, realRoot);
+  if (!marker) throw refusal('CANDIDATE_DATA_FOREIGN', `${layout.root} carries no valid candidate marker for this location, so it is not used.`);
+  return marker;
+}
+export function assertCandidateDir(dataDir, action = 'use') {
+  const layout = candidateLayout(dataDir), realRoot = plainRoot(layout, action);
+  return { layout, realRoot, marker: markedRoot(layout, realRoot) };
 }
 
 // `home` and `repoRoot` are parameters only so a test can stand in for them.
 export async function resetDataDir(dataDir, { home = homedir(), repoRoot = REPO_ROOT } = {}) {
-  const layout = candidateLayout(dataDir);
-  let stat;
-  try { stat = lstatSync(layout.root); } catch { throw refusal('CANDIDATE_DATA_FOREIGN', `${layout.root} does not exist, so there is nothing to reset.`); }
-  if (stat.isSymbolicLink() || !stat.isDirectory()) throw refusal('CANDIDATE_DATA_FOREIGN', `${layout.root} is not a plain directory, so it is not reset.`);
-  const realRoot = real(layout.root);
+  const layout = candidateLayout(dataDir), realRoot = plainRoot(layout, 'reset');
   if (same(parse(realRoot).root, realRoot)) throw refusal('CANDIDATE_DATA_PROTECTED', `${realRoot} is a filesystem root and is never reset.`);
   // The home, anything that contains it, and the repository (or anything that contains it) are never deleted.
   if (within(realRoot, realOrResolved(home))) throw refusal('CANDIDATE_DATA_PROTECTED', `${realRoot} is, or contains, the real home directory and is never reset.`);
   if (within(realRoot, realOrResolved(repoRoot))) throw refusal('CANDIDATE_DATA_PROTECTED', `${realRoot} is, or contains, the aih-ui repository and is never reset.`);
-  if (!readMarker(layout, realRoot)) throw refusal('CANDIDATE_DATA_FOREIGN', `${layout.root} carries no valid candidate marker for this location, so it is not reset.`);
+  markedRoot(layout, realRoot);
   const pid = recordedPid(layout);
   if (pid !== null) throw refusal('CANDIDATE_RUNNING', `The candidate still appears to be running (process ${pid}). Stop it first: node tools/candidate.mjs stop`);
   const entries = readdirSync(realRoot).length;

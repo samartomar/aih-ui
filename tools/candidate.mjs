@@ -11,20 +11,19 @@
  *
  * The data directory (default .aih-ui/candidate, git-ignored) holds everything the candidate writes. See tools/candidate/layout.mjs.
  */
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { homeEnvironment } from './consumer/home-environment.mjs';
-import { claimDataDir, ensureLayout, resetDataDir } from './candidate/data-dir.mjs';
+import { assertCandidateDir, claimDataDir, ensureLayout, resetDataDir } from './candidate/data-dir.mjs';
 import { checkRealHome, recordRealHome } from './candidate/guard.mjs';
 import { DEFAULT_PORT, candidateLayout } from './candidate/layout.mjs';
 import { absoluteManifest, candidateIdentity, readManifest, verifyManifest } from './candidate/manifest.mjs';
 import { assertPortAvailable } from './candidate/port.mjs';
-import { isAlive, readServerRecord, spawnServer, stopServer, waitForReady } from './candidate/process.mjs';
+import { isAlive, readServerRecord, runSeedOnly, serverEnvironment, spawnServer, stopServer, waitForReady } from './candidate/process.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const READY_TIMEOUT_MS = 5 * 60_000;
+const READY_TIMEOUT_MS = 5 * 60_000, SEED_TIMEOUT_MS = 10 * 60_000;
 const USAGE = 'usage: node tools/candidate.mjs <start|stop|reset|report|status> [--manifest <file>] [--data <dir>] [--port <n>] [--no-smoke]';
 const refusal = (code, message) => Object.assign(new Error(message), { code });
 const out = line => process.stdout.write(`${line}\n`);
@@ -62,26 +61,27 @@ function describeCandidate(record) {
   out(`data directory: ${record.dataDir}`);
 }
 
+// The recorded server, while its process is alive: starting or ready.
 const running = layout => { const record = readServerRecord(layout); return record && isAlive(record.pid) ? record : null; };
+const isStarting = record => record.state === 'starting';
 
 async function start({ manifest, data, port, smoke }) {
   const layout = candidateLayout(data);
   const manifestPath = manifest ? resolve(manifest) : layout.manifest;
   if (!manifest && !existsSync(layout.manifest)) throw refusal('CANDIDATE_USAGE', `start needs --manifest <file> (there is no earlier candidate in ${layout.root}).`);
+  const already = running(layout);
+  if (already) throw refusal('CANDIDATE_RUNNING', `The candidate is already ${isStarting(already) ? 'starting' : `running at ${already.url}`} (process ${already.pid}). Stop it first: node tools/candidate.mjs stop`);
   // Nothing is written until the tarballs are exactly the bytes the manifest names and the port is free.
   const read = readManifest(manifestPath);
   await verifyManifest(read);
   await assertPortAvailable(port);
-  const already = running(layout);
-  if (already) throw refusal('CANDIDATE_RUNNING', `The candidate is already running at ${already.url} (process ${already.pid}). Stop it first: node tools/candidate.mjs stop`);
   claimDataDir(layout.root);
   ensureLayout(layout);
   if (manifest) writeFileSync(layout.manifest, `${JSON.stringify(absoluteManifest(read), null, 2)}\n`);
   recordRealHome(layout, homedir());
-  // The candidate is reproducible from its manifest: no AIH_* host setting from this shell reaches it, and Core's records land in its own home.
-  const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith('AIH_')));
-  const pid = spawnServer({ layout, port, env: { ...inherited, ...homeEnvironment(layout.home), AIH_CANDIDATE_MANIFEST: layout.manifest } });
-  out(`starting the candidate (process ${pid}); installing the packages can take a few minutes...`);
+  // The candidate is reproducible from its manifest: no AIH_* host setting from this shell reaches it, Core's records land in its own home and its temporary files in its own directory.
+  const pid = spawnServer({ layout, port, env: serverEnvironment(layout) });
+  out(`starting the candidate (process ${pid}); installing the packages can take a few minutes. Stop it at any time with: node tools/candidate.mjs stop`);
   const record = await waitForReady(layout, pid, READY_TIMEOUT_MS);
   out('the candidate is ready');
   describeCandidate(record);
@@ -112,10 +112,28 @@ async function stop({ data }) {
   if (guard.unchanged === false) process.exitCode = 1;
 }
 
+// The candidate definition survives a reset: its manifest copy is read and re-verified first, written back afterwards, and the
+// sample data is made again from it (the server entry in seed-only mode), so the owner starts again from fresh samples.
 async function reset({ data }) {
+  const { layout } = assertCandidateDir(data, 'reset');
+  let kept = null, notKept = null;
+  if (existsSync(layout.manifest)) {
+    try { const read = readManifest(layout.manifest); await verifyManifest(read); kept = readFileSync(layout.manifest); }
+    catch (error) { notKept = error.message; }
+  }
   const result = await resetDataDir(data);
   out(`removed ${result.removed} (${result.entries} top-level ${result.entries === 1 ? 'entry' : 'entries'}) and made it empty again.`);
-  out('The sample data and the candidate home are made again the next time the candidate starts; start needs --manifest <file> again, because the manifest copy was removed too.');
+  if (!kept) {
+    out(`The candidate definition was not kept (${notKept ?? 'there was no manifest copy'}); the next start needs --manifest <file>, and makes the sample data then.`);
+    return;
+  }
+  writeFileSync(layout.manifest, kept);
+  ensureLayout(layout);
+  out('making the sample data again; installing the packages can take a few minutes...');
+  const seeded = await runSeedOnly({ layout, env: serverEnvironment(layout), timeoutMs: SEED_TIMEOUT_MS });
+  out(seeded.complete ? 'the sample data was recreated from the kept manifest.' : `some sample data could not be made (see ${layout.serverLog}); the next start tries again.`);
+  out('The candidate is not running; start it with: node tools/candidate.mjs start');
+  if (!seeded.complete) process.exitCode = 1;
 }
 
 async function report({ data }) {
@@ -126,6 +144,10 @@ async function report({ data }) {
 
 function status({ data }) {
   const layout = candidateLayout(data), record = running(layout);
+  if (record && isStarting(record)) {
+    out(`The candidate is starting (process ${record.pid}); installing the packages can take a few minutes. Stop it with: node tools/candidate.mjs stop`);
+    return;
+  }
   if (!record) {
     out('The candidate is not running.');
     if (existsSync(layout.manifest)) out(`Its manifest is kept in ${layout.manifest}; start it again with: node tools/candidate.mjs start`);

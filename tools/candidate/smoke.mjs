@@ -1,7 +1,9 @@
+// The owner-testing page check: the served packages match the candidate's manifest, and the Workbench's pages open and show them.
 import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
-const basename = path => typeof path === 'string' ? path.split(/[\\/]/).pop() : null;
+const refusal = (code, message) => Object.assign(new Error(message), { code });
+const nameOf = path => (typeof path === 'string' ? basename(path) : null);
 
 export function compareIdentity(identity, packagesSummary) {
   const mismatches = [];
@@ -10,8 +12,8 @@ export function compareIdentity(identity, packagesSummary) {
     const actual = packagesSummary?.packages?.find(pkg => pkg.packageName === expected.name);
     if (!actual) { mismatches.push(`Missing package ${expected.name}`); continue; }
     for (const field of ['sha256', 'commit', 'tarball']) {
-      const left = field === 'tarball' ? basename(expected[field]) : expected[field];
-      const right = field === 'tarball' ? basename(actual[field]) : actual[field];
+      const left = field === 'tarball' ? nameOf(expected[field]) : expected[field];
+      const right = field === 'tarball' ? nameOf(actual[field]) : actual[field];
       if (!left || left !== right) mismatches.push(`${expected.name}: ${field} differs`);
     }
   }
@@ -30,7 +32,7 @@ export function compareRenderedIdentity(identity, { stripText = '', provenanceTe
 
 export async function smokeCandidate({ origin, identity, output, playwrightModule }) {
   const base = new URL(origin);
-  if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password) throw Error('Expected an HTTP origin without credentials');
+  if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password) throw refusal('CANDIDATE_SMOKE_ORIGIN', 'Expected an HTTP origin without credentials.');
   origin = base.origin;
   await mkdir(output, { recursive: true });
   const mismatches = [], missing = [], screenshots = [], log = [];
@@ -38,7 +40,7 @@ export async function smokeCandidate({ origin, identity, output, playwrightModul
   let browser, expired = false, timer;
   const remaining = () => {
     const ms = deadline - Date.now();
-    if (expired || ms <= 0) throw Error('Smoke check exceeded 120 s deadline');
+    if (expired || ms <= 0) throw refusal('CANDIDATE_SMOKE_DEADLINE', 'Smoke check exceeded 120 s deadline');
     return Math.max(1, Math.min(5_000, ms));
   };
   const noteMissing = selector => { if (!missing.includes(selector)) missing.push(selector); };
@@ -134,7 +136,7 @@ export async function smokeCandidate({ origin, identity, output, playwrightModul
   }
   try {
     await Promise.race([run(), new Promise((_, reject) => {
-      timer = setTimeout(() => { expired = true; controller.abort(); reject(Error('Smoke check exceeded 120 s deadline')); }, Math.max(1, deadline - Date.now()));
+      timer = setTimeout(() => { expired = true; controller.abort(); reject(refusal('CANDIDATE_SMOKE_DEADLINE', 'Smoke check exceeded 120 s deadline')); }, Math.max(1, deadline - Date.now()));
     })]);
   } catch (error) { mismatches.push(`Smoke check failed: ${error.message}`); }
   finally {

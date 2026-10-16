@@ -5,7 +5,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdir
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, parse, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { claimDataDir, ensureLayout, resetDataDir } from '../candidate/data-dir.mjs';
+import { assertCandidateDir, claimDataDir, ensureLayout, resetDataDir } from '../candidate/data-dir.mjs';
 import { DATA_MARKER_SCHEMA, candidateLayout } from '../candidate/layout.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -125,4 +125,29 @@ test('reset refuses while the recorded server process is alive', async t => {
   writeFileSync(layout.server, JSON.stringify({ pid: 2 ** 22 + 12345 }));
   await resetDataDir(data);
   assert.equal(existsSync(join(layout.samples, 'sample.txt')), false);
+});
+
+test('reset refuses while a server is recorded as starting, as it does while ready', async t => {
+  const { data, layout } = populated(t);
+  writeFileSync(layout.server, JSON.stringify({ pid: process.pid, state: 'starting', dataDir: layout.root }));
+  await assert.rejects(resetDataDir(data), refused('CANDIDATE_RUNNING'));
+  assert.ok(existsSync(join(layout.samples, 'sample.txt')));
+});
+
+test('assertCandidateDir accepts a directory the candidate made and refuses anything else with a coded refusal', t => {
+  const { root, data, layout } = populated(t), other = join(root, 'other');
+  const checked = assertCandidateDir(data);
+  assert.equal(checked.layout.root, layout.root);
+  assert.equal(checked.marker.schema, DATA_MARKER_SCHEMA);
+  mkdirSync(other);
+  assert.throws(() => assertCandidateDir(other), refused('CANDIDATE_DATA_FOREIGN'));
+  assert.throws(() => assertCandidateDir(join(root, 'absent')), refused('CANDIDATE_DATA_FOREIGN'));
+  copyFileSync(layout.marker, candidateLayout(other).marker);
+  assert.throws(() => assertCandidateDir(other), refused('CANDIDATE_DATA_FOREIGN'));
+});
+
+test('the layout includes a temporary directory inside the data directory, made by ensureLayout', t => {
+  const { layout } = populated(t);
+  assert.equal(layout.tmp, join(layout.root, 'tmp'));
+  assert.ok(existsSync(layout.tmp));
 });

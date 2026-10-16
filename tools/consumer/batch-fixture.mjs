@@ -28,12 +28,13 @@ async function inHome(home, work) {
   try { return await work(); }
   finally { for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } }
 }
+// `homes` names the two scope folders (default `root/home-a` and `root/home-b`).
 // `applyEarlier: false` skips applying A's earlier selection through Core (the pure tests need no applied state).
 // `conflict` makes B's first action target a file the person already owns. B's process action exits non-zero until the file
 // `procMarker` exists in B's home, so a test decides when it succeeds. Each execution of it appends one character to `procRuns`
 // (beside the two homes, so no scope's files change); `procCount()` is how many times the process has actually run.
-export async function batchFixture(root, { conflict = false, applyEarlier = true } = {}) {
-  const homes = { a: join(root, 'home-a'), b: join(root, 'home-b') }, materialRoot = join(root, 'material'), coreHome = join(root, 'core-home'), procRuns = join(root, 'proc-runs');
+export async function batchFixture(root, { conflict = false, applyEarlier = true, homes = { a: join(root, 'home-a'), b: join(root, 'home-b') } } = {}) {
+  const materialRoot = join(root, 'material'), coreHome = join(root, 'core-home'), procRuns = join(root, 'proc-runs');
   for (const dir of [coreHome, join(homes.a, '.claude'), join(homes.a, 'notes'), join(homes.b, '.codex'), materialRoot]) await mkdir(dir, { recursive: true });
   await writeFile(join(materialRoot, 'shared.txt'), SHARED);
   const userFiles = { [join(homes.a, 'notes', 'user.md')]: 'my own notes\n', [join(homes.a, '.claude', 'user-settings.json')]: '{"theme":"mine"}\n' };

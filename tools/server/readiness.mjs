@@ -32,7 +32,7 @@ export function createReadinessAdapter(consumerDir) {
       ...(process.env.AIH_READINESS_PATH ? { PATH: process.env.AIH_READINESS_PATH } : {}) };
     const next = fork(join(consumerDir, 'consumer/readiness-child.mjs'), [], { cwd: consumerDir, env, windowsHide: true,
       serialization: 'json', stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
-    next.stderr.resume();
+    next.stderr.pipe(process.stderr, { end: false });
     next.on('message', message => {
       const entry = pending.get(message?.id);
       if (!entry) return;

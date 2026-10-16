@@ -147,7 +147,13 @@ every command.
 
 - **start** installs the three tarballs into a throwaway consumer inside the
   data directory, creates any missing sample data, and starts the server as a
-  background process with no console window. It prints the URL, the candidate
+  background process with no console window. The process is recorded at once as
+  **starting** (`status` shows it, `stop` ends it, `reset` refuses while it
+  lives) and rewritten as **ready** when it serves. It runs with this shell's
+  environment minus every `AIH_*` setting, plus the candidate home, a temporary
+  directory inside the data directory (`TEMP`, `TMP`, `TMPDIR`) and the
+  manifest; a sample that could not be made leaves its host input unset, so the
+  page shows its own "not configured" state. Start prints the URL, the candidate
   identity (each package's version, SHA-256 and commit) and the data directory.
   It then opens the page headless and checks that the package strip and the
   provenance disclosure show the same identity as the manifest; a mismatch is
@@ -155,15 +161,24 @@ every command.
   skips that check. Its screenshots of each journey's start page are kept in
   `logs/checks/`. Start without `--manifest` restarts the candidate already
   recorded in the data directory.
-- **stop** ends only the candidate's own process tree, the one start recorded.
+- **stop** ends only the candidate's own process tree, the one start recorded:
+  by a stop request first, also while it is still starting, and by force only
+  when its command line still names this candidate's server.
 - **reset** deletes the data directory, after checking that it carries the
   marker start wrote and that the marker names this same folder. It refuses
-  while the candidate is running. The next start, with `--manifest` again,
-  recreates the sample data.
+  while the candidate is starting or running. It keeps the candidate
+  definition: the manifest copy is re-verified first, written back, and the
+  sample data is made again from it (the server entry in a seed-only mode, which
+  installs the packages and can take a few minutes), so the next start serves
+  fresh samples. When no valid manifest copy exists the directory is still
+  emptied and the next start needs `--manifest`.
 - **report** writes a failure-report bundle under `reports/` in the data
   directory: the candidate identity, Node and OS versions, the server and
   transport logs, the journey records and host configuration, and recent check
-  logs, with secrets and the real home path redacted. Its `ISSUE.md` asks for the
+  logs, with secrets and the real home path redacted. When the candidate is
+  ready, it also saves its own readiness report and reviewed batch
+  (`records/live/`; anything unavailable is listed, never fatal). It refuses a
+  directory the candidate did not make. Its `ISSUE.md` asks for the
   steps, the expected result and the actual result. Check the bundle before
   sharing it.
 
@@ -176,8 +191,9 @@ Data persists across stop and start until reset.
 | `home/` | The candidate's account home. Core keeps its records in `home/.aih/core`. |
 | `config/` | Host configuration: settings, organization source, maintenance source, readiness repairs, batch host. |
 | `samples/` | Sample projects, repositories and fixtures, each with a `SAMPLE.md`. |
-| `samples/continuity/home-a/.claude`, `home-b/.codex` | The two controlled client configuration homes. |
-| `state/`, `logs/`, `reports/` | The running server's record, logs, and failure reports. |
+| `samples/repositories/sample-web/.claude`, `sample-api/.codex` | The two controlled client configuration folders, inside the two sample checkouts. |
+| `tmp/` | Temporary files of the server process and everything it starts. |
+| `state/`, `logs/`, `reports/` | The running server's record (starting or ready), logs, and failure reports. |
 | `run/` | The installed consumer and served page, rebuilt by every start. |
 
 The real account home is never used. Start and stop each compare a metadata
@@ -192,7 +208,8 @@ labelled as such and is not observed evidence.
 - **Personal setup:** `samples/projects/sample-js-app`, a small JavaScript
   project, is the host-configured project (`AIH_CONSUMER_PROJECT`), so Prepare
   and Apply write only there. `samples/saved-intents/` holds a saved policy to
-  reopen from Policy.
+  reopen from Policy; it already declares the sample workspace (below), and
+  `sample-maintenance-draft.json` is the draft for the maintenance journey.
 - **Readiness and repair:** a disposable home and `PATH` with a broken `jq` and a
   test-only CA certificate (`AIH_READINESS_HOME`, `AIH_READINESS_PATH`). The
   `node-npm-ca` repair is host-configured (`AIH_READINESS_REPAIRS`). Verification
@@ -209,17 +226,25 @@ labelled as such and is not observed evidence.
   baseline, commit the exported file into that repository, then refresh the
   authority source in Policy.
 - **Continuity:** `samples/repositories/sample-web` and `sample-api` are two
-  local checkouts to declare and bind. The reviewed batch
-  (`samples/continuity`, `/batch.html`) has an existing Claude Code client and an
-  added Codex client. Three existing switches provoke partial failure: the
-  unowned file `home-b/.codex/b-core.md`, present at first;
+  local checkouts, each with one commit and a clean tree, to bind to the
+  workspace the saved intent declares (members by remote identity, nothing
+  bound). The task is to add the second client (Codex) to sample-api while
+  sample-web keeps its Claude Code setup, as one reviewed batch
+  (`samples/continuity`, `/batch.html`) whose two client scopes are those
+  checkouts. An apply writes inside the two checkouts and the batch's Core home,
+  plus one counter file, `samples/repositories/proc-runs`. Three existing
+  switches provoke partial failure: the unowned file
+  `sample-api/.codex/b-core.md`, present at first;
   `"faults": { "b-core": "stale-target" }` in `config/batch-host.json`; and the
-  absent `home-b/proc-ok` marker, which makes the process action fail.
+  absent `sample-api/proc-ok` marker, which makes the process action fail.
 - **Maintenance and improvement** (`samples/maintenance/SAMPLE.md`):
   `config/maintenance-source.json` starts with
   `{ "revisions": ["current"] }`. Add `updated`, `newer`, `additional` or
-  `expanded` to publish newer sample revisions, then check for changes. Trials
-  need a reopened saved draft and AI clients chosen in setup.
+  `expanded` to publish newer sample revisions, then check for changes.
+  Reopen `samples/saved-intents/sample-maintenance-draft.json` in Policy (it
+  selects the review note the source publishes revisions of) to keep, skip or
+  defer an update and to get suggestions; trials also need AI clients chosen in
+  setup.
 
 ### Optional native clients
 

@@ -4,6 +4,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { homeEnvironment } from '../consumer/home-environment.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SERVE = join(REPO_ROOT, 'tools', 'candidate', 'serve.mjs');
@@ -23,31 +24,61 @@ export function logTail(layout, lines = 40) {
   try { return readFileSync(layout.serverLog, 'utf8').trimEnd().split('\n').slice(-lines).join('\n'); } catch { return '(no server log)'; }
 }
 
-export function spawnServer({ layout, port, env }) {
-  mkdirSync(layout.logs, { recursive: true });
-  mkdirSync(layout.state, { recursive: true });
+// Exactly the environment the server process gets: this process's, minus every AIH_* host setting, with the candidate's
+// disposable account home, its own temporary directory and the manifest it is built from.
+export function serverEnvironment(layout, base = process.env) {
+  const set = { ...homeEnvironment(layout.home), TEMP: layout.tmp, TMP: layout.tmp, TMPDIR: layout.tmp, AIH_CANDIDATE_MANIFEST: layout.manifest };
+  const fold = name => (process.platform === 'win32' ? name.toUpperCase() : name), replaced = new Set(Object.keys(set).map(fold));
+  const inherited = Object.entries(base).filter(([name]) => !name.toUpperCase().startsWith('AIH_') && !replaced.has(fold(name)));
+  return { ...Object.fromEntries(inherited), ...set };
+}
+
+// `env` is used as given: nothing of this process's environment is added back. `script` and `args` are only for tests.
+export function spawnServer({ layout, port, env, script = SERVE, args = [] }) {
+  for (const directory of [layout.logs, layout.state, layout.tmp]) mkdirSync(directory, { recursive: true });
   rmSync(layout.stopRequest, { force: true });
   rmSync(layout.server, { force: true });
   const log = openSync(layout.serverLog, 'a');
   try {
-    const child = spawn(process.execPath, [SERVE, '--data', layout.root, '--port', String(port)],
-      { cwd: REPO_ROOT, env: { ...process.env, ...env }, detached: true, windowsHide: true, stdio: ['ignore', log, log] });
+    const child = spawn(process.execPath, [script, '--data', layout.root, '--port', String(port), ...args],
+      { cwd: REPO_ROOT, env, detached: true, windowsHide: true, stdio: ['ignore', log, log] });
     child.on('error', error => { try { writeFileSync(layout.serverLog, `could not start the server process: ${error.message}\n`, { flag: 'a' }); } catch { /* reported by waitForReady */ } });
     child.unref();
     if (!child.pid) throw refusal('CANDIDATE_START_FAILED', 'The server process could not be started.');
+    // Recorded at once, so a candidate that is still installing can be seen and stopped; the server rewrites it as ready.
+    writeFileSync(layout.server, `${JSON.stringify({ pid: child.pid, state: 'starting', dataDir: layout.root, startedAt: new Date().toISOString() }, null, 2)}\n`);
     return child.pid;
   } finally { closeSync(log); }
+}
+
+// The server entry in seed-only mode: it installs the consumer, makes the sample data and exits without listening.
+// Resolves { complete }: false when it ran but a sample could not be made (exit 2); the next start retries that sample.
+export function runSeedOnly({ layout, env, timeoutMs, script = SERVE }) {
+  mkdirSync(layout.logs, { recursive: true });
+  const log = openSync(layout.serverLog, 'a');
+  return new Promise((done, fail) => {
+    let settled = false, timer;
+    const settle = (problem, complete = true) => {
+      if (settled) return;
+      settled = true; clearTimeout(timer); closeSync(log);
+      if (problem) fail(refusal('CANDIDATE_SEED_FAILED', `${problem} Last lines of ${layout.serverLog}:\n${logTail(layout)}`)); else done({ complete });
+    };
+    const child = spawn(process.execPath, [script, '--data', layout.root, '--seed-only'], { cwd: REPO_ROOT, env, windowsHide: true, stdio: ['ignore', log, log] });
+    timer = setTimeout(() => { killTree(child.pid); settle(`Making the sample data took longer than ${Math.round(timeoutMs / 1000)} s and was ended.`); }, timeoutMs);
+    child.on('error', error => settle(`The sample data could not be made: ${error.message}.`));
+    child.on('exit', code => (code === 0 || code === 2 ? settle(null, code === 0) : settle(`Making the sample data failed (exit ${code}).`)));
+  });
 }
 
 export async function waitForReady(layout, pid, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const record = readServerRecord(layout);
-    if (record?.pid === pid) {
+    if (record?.pid === pid && record.state === 'ready' && record.url) {
       try { if ((await fetch(`${record.url}api/packages`)).ok) return record; } catch { /* not answering yet */ }
     }
     if (!isAlive(pid)) throw refusal('CANDIDATE_START_FAILED', `The server process ended before it was ready. Last lines of ${layout.serverLog}:\n${logTail(layout)}`);
-    if (Date.now() > deadline) throw refusal('CANDIDATE_START_TIMEOUT', `The server was not ready after ${Math.round(timeoutMs / 1000)} s (process ${pid} is still running; node tools/candidate.mjs stop ends it). Last lines of ${layout.serverLog}:\n${logTail(layout)}`);
+    if (Date.now() > deadline) throw refusal('CANDIDATE_START_TIMEOUT', `The server was not ready after ${Math.round(timeoutMs / 1000)} s. It is still starting (process ${pid}); check it with: node tools/candidate.mjs status, or end it with: node tools/candidate.mjs stop. Last lines of ${layout.serverLog}:\n${logTail(layout)}`);
     await sleep(500);
   }
 }
@@ -97,7 +128,7 @@ export async function stopServer(layout, { graceMs = 30_000 } = {}) {
     how = 'ended after it did not stop on request';
   }
   cleanup();
-  return { running: true, pid: record.pid, message: `The candidate ${how} (process ${record.pid}).` };
+  return { running: true, pid: record.pid, message: `The candidate${record.state === 'starting' ? ' (it was still starting)' : ''} ${how} (process ${record.pid}).` };
 }
 
 export const stopRequested = layout => existsSync(layout.stopRequest);
