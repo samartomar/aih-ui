@@ -3,7 +3,7 @@ const $ = id => document.getElementById(id), documentFile = policyFile($('policy
 const clientHeaders = { 'x-aih-client': crypto.randomUUID() };
 const loadCatalog = async () => (await fetch('/api/authoring-catalog', { headers: clientHeaders })).json();
 const show = (id, value) => { $(id).textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2); };
-let catalog, candidate, history, currentIntent, currentOptional = [], revision = 0;
+let catalog, candidate, history, currentIntent, currentOptional = [], currentJudgments = [], revision = 0;
 let evidenceBytes, inspected, evidenceFiles = [];
 let prepared;
 const reviewContext = () => ({ reviewEvidence: evidenceFiles.map(file => [...file.bytes]) });
@@ -115,16 +115,16 @@ function render(intent = currentIntent, optional = currentOptional) {
   const selected = $('review-target').value; $('review-target').replaceChildren();
   for (const pin of intent.pins) { const option = document.createElement('option'); option.value = `${pin.releaseSha256}/${pin.itemId}`; option.textContent = `${pin.itemId} · ${pin.releaseSha256}`; $('review-target').append(option); }
   if (intent.pins.some(pin => `${pin.releaseSha256}/${pin.itemId}` === selected)) $('review-target').value = selected;
-  show('review-history', intent.reviews);
+  show('review-history', { reviews: intent.reviews, judgments: currentJudgments });
 }
-function publish(value) { documentFile.setBytes(Uint8Array.from(value.policyBytes)); currentIntent = value.intent; currentOptional = value.optional ?? []; updateFolderBindings(); render(); void checkAuthority(); }
+function publish(value) { documentFile.setBytes(Uint8Array.from(value.policyBytes)); currentIntent = value.intent; currentOptional = value.optional ?? []; currentJudgments = value.reviewJudgments ?? []; updateFolderBindings(); render(); void checkAuthority(); }
 async function propose(operation) {
   invalidate(); const attempt = revision;
   try { const result = await request('edit', { operation }); if (attempt !== revision) return; present(result); }
   catch (error) { if (attempt === revision) show('proposal', error.message); }
 }
 function present(result) {
-  show('proposal', result.status === 'ok' ? { roots: result.value.intent?.roots, inclusions: result.value.inclusions, optional: result.value.optional, reviews: result.value.intent?.reviews, comparisons: result.value.comparisons } : result);
+  show('proposal', result.status === 'ok' ? { roots: result.value.intent?.roots, inclusions: result.value.inclusions, optional: result.value.optional, reviews: result.value.intent?.reviews, judgments: result.value.reviewJudgments, comparisons: result.value.comparisons } : result);
   if (result.status === 'ok' && result.value.policyBytes) { candidate = result.value; $('accept').disabled = false; }
 }
 $('accept').onclick = () => { if (!candidate) return; const accepted = candidate; history = documentFile.bytes(); invalidate(); publish(accepted); $('history').disabled = false; show('proposal', 'Candidate accepted. Original artifact retained.'); };
@@ -140,7 +140,7 @@ const unresolvedSummary = value => ({ editing: 'unresolved', note: 'Every saved 
   unresolved: value.unresolved.map(entry => ({ kind: entry.kind, reason: entry.reason, ref: entry.ref.itemId ?? entry.ref.templateId ?? entry.ref.id, neededBy: entry.dependents.map(dependent => dependent.itemId) })),
   diagnostics: value.diagnostics });
 $('reopen').onclick = async () => { invalidate(); const attempt = revision, result = await request('read', { availability: $('candidate-mode').value }); if (attempt !== revision) return;
-  show('proposal', result.status === 'ok' && result.value.editing === 'unresolved' ? unresolvedSummary(result.value) : result); if (result.status === 'ok' && result.value.editing === 'available') { currentIntent = result.value.intent; currentOptional = result.value.optional ?? []; render(); } await checkAuthority(); };
+  show('proposal', result.status === 'ok' && result.value.editing === 'unresolved' ? unresolvedSummary(result.value) : result); if (result.status === 'ok' && result.value.editing === 'available') { currentIntent = result.value.intent; currentJudgments = result.value.reviewJudgments ?? []; currentOptional = result.value.optional ?? []; render(); } await checkAuthority(); };
 $('candidate-mode').onchange = invalidate; $('execution-mode').onchange = invalidate;
 $('refresh').onclick = async () => { invalidate(); const attempt = revision, result = await request('reconcile', { candidateMode: $('candidate-mode').value }); if (attempt !== revision) return;
   show('changes', result); $('choices').replaceChildren(); if (result.status !== 'ok') return;

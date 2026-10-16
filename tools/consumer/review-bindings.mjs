@@ -60,31 +60,46 @@ export async function compareReviewBindings({ intent, inventories, reviewEvidenc
     const target = comparisons.find(value => value.recordId === record.id)?.target ?? record.subject;
     const pin = intent.pins.find(pin => pin.releaseSha256 === target.releaseSha256 && pin.itemId === target.itemId);
     const inventory = inventories.find(entry => entry.release.sha256 === target.releaseSha256);
-    let state = 'unavailable', comparedSubject;
-    if (!pin || !inventory) state = 'changed';
+    let state = 'unavailable', reason = 'evidence-not-supplied', comparedSubject;
+    if (!pin) [state, reason] = ['changed', 'subject-not-selected'];
+    else if (!inventory) reason = 'source-unavailable';
     else {
       const subject = await describeAuthoringSubject({ inventory, itemId: target.itemId });
-      if (subject.status === 'ok') {
+      if (subject.status !== 'ok') reason = 'source-unavailable';
+      else {
         comparedSubject = subject.value;
-        if (comparedSubject.itemId !== record.subject.itemId || (comparedSubject.releaseSha256 === record.subject.releaseSha256 && comparedSubject.itemSha256 !== record.subject.itemSha256) || comparedSubject.recipeIdentity !== record.subject.recipeIdentity || stable(comparedSubject.materials) !== stable(record.subject.materials)) state = 'changed';
+        if (comparedSubject.itemId !== record.subject.itemId || (comparedSubject.releaseSha256 === record.subject.releaseSha256 && comparedSubject.itemSha256 !== record.subject.itemSha256) || comparedSubject.recipeIdentity !== record.subject.recipeIdentity || stable(comparedSubject.materials) !== stable(record.subject.materials)) [state, reason] = ['changed', 'subject-changed'];
         else for (const evidenceBytes of reviewEvidence) {
           const inspected = await inspectReviewEvidence({ evidenceBytes, inventory, itemId: target.itemId });
           if (inspected.status !== 'ok' || inspected.value.reportSupport !== 'supported' || inspected.value.sourceAssociation !== 'matched') continue;
-          state = 'changed';
-          if (inspected.value.bindings.some(binding => stable(binding.finding) === stable(record.finding) && stable(binding.evidence) === stable(record.evidence))) { state = 'unchanged'; break; }
+          [state, reason] = ['changed', 'evidence-changed'];
+          if (inspected.value.bindings.some(binding => stable(binding.finding) === stable(record.finding) && stable(binding.evidence) === stable(record.evidence))) { [state, reason] = ['unchanged', null]; break; }
         }
       }
     }
-    results.push({ recordId: record.id, state, reviewedSubject: record.subject, ...(comparedSubject ? { comparedSubject } : {}) });
+    results.push({ recordId: record.id, state, reason, reviewedSubject: record.subject, ...(comparedSubject ? { comparedSubject } : {}) });
   }
   return ok(results);
 }
 
-export async function reviewDiagnostics(options) {
-  const compared = await compareReviewBindings(options);
-  if (compared.status !== 'ok') return compared.diagnostics;
-  return compared.value.filter(result => result.state !== 'unchanged').map(result => ({
-    code: result.state === 'changed' ? 'REVIEW_RECONSIDER_REQUIRED' : 'REVIEW_BINDING_UNAVAILABLE', path: '/reviews/records', related: [result.recordId],
-    message: result.state === 'changed' ? 'Relevant subject/finding/evidence changed; retain history and reconsider.' : 'Required checked binding unavailable; retain original report and history.'
+// Applicability is a display of how a saved judgment relates to the supplied
+// evidence. It never gates editing and never rewrites the stored judgment.
+const validRecipient = value => !!value && typeof value === 'object' && ['individual', 'organization'].includes(value.kind)
+  && typeof value.id === 'string' && value.id.length > 0 && value.id.length <= 1000;
+export async function describeReviewJudgments({ intent, inventories, reviewEvidence = [], comparisons = [], recipient }) {
+  const compared = await compareReviewBindings({ intent, inventories, reviewEvidence, comparisons });
+  if (compared.status !== 'ok') return compared;
+  const self = validRecipient(recipient) ? recipient : undefined;
+  return ok(intent.reviews.records.map(record => {
+    const comparison = compared.value.find(value => value.recordId === record.id);
+    const applicability = comparison ? { unchanged: 'applies', changed: 'changed', unavailable: 'unverified' }[comparison.state] : 'reconsideration-requested';
+    return { recordId: record.id, state: record.state, owner: structuredClone(record.owner), actor: record.actor, disposition: record.disposition, reason: record.reason, recordedAt: record.recordedAt,
+      subject: structuredClone(record.subject), finding: structuredClone(record.finding), evidence: structuredClone(record.evidence), applicability, applicabilityReason: comparison?.reason ?? null,
+      origin: self && self.kind === record.owner.kind && self.id === record.owner.id ? 'recipient' : 'imported' };
   }));
+}
+export function summarizeReviewJudgments(judgments) {
+  const current = judgments.filter(judgment => judgment.state === 'current'), count = test => current.filter(test).length;
+  return { recipientDecisions: count(j => j.origin === 'recipient'), importedDecisions: count(j => j.origin === 'imported'),
+    applies: count(j => j.applicability === 'applies'), changed: count(j => j.applicability === 'changed'), unverified: count(j => j.applicability === 'unverified') };
 }
