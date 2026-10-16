@@ -4,6 +4,7 @@
 import { checkIntentShape } from './intent-shape.mjs';
 import { digestBytes, hash, object, only } from './intake.mjs';
 import { MAINTENANCE_DISPOSITION_RECORD_SCHEMA, MAINTENANCE_CHECK_RECORD_SCHEMA, dispositionProblem, dispositionId, checkProblem } from './maintenance-record.mjs';
+import { ORGANIZATION_DRAFT_RECORD_SCHEMA, organizationDraftProblem, organizationDraftDerivedProblem } from './organization-draft-record.mjs';
 export const JOURNEY_SCHEMA_PREFIX = 'urn:aihq:workbench:journey-envelope:';
 export const JOURNEY_SCHEMA = `${JOURNEY_SCHEMA_PREFIX}1.0.0`;
 export const JOURNEY_ACCEPTED_SCHEMAS = [JOURNEY_SCHEMA];
@@ -14,7 +15,8 @@ export const JOURNEY_RECORD_SCHEMAS = { [DRAFT_RECORD_SCHEMA]: { kind: 'unresolv
 // Every kind this version interprets, with the `required` value its writer must use.
 export const JOURNEY_RECORD_KINDS = { [DRAFT_RECORD_SCHEMA]: { kind: 'unresolved-draft', version: '1.0.0', required: true },
   [MAINTENANCE_DISPOSITION_RECORD_SCHEMA]: { kind: 'maintenance-disposition', version: '1.0.0', required: false },
-  [MAINTENANCE_CHECK_RECORD_SCHEMA]: { kind: 'maintenance-check', version: '1.0.0', required: false } };
+  [MAINTENANCE_CHECK_RECORD_SCHEMA]: { kind: 'maintenance-check', version: '1.0.0', required: false },
+  [ORGANIZATION_DRAFT_RECORD_SCHEMA]: { kind: 'organization-draft', version: '1.0.0', required: true } };
 const known = schema => Object.hasOwn(JOURNEY_RECORD_KINDS, schema);
 export const MAX_SAVED_INTENT_BYTES = 1_000_000;
 export const MAX_ENVELOPE_BYTES = 2_000_000;
@@ -74,6 +76,7 @@ function shapeProblem(envelope) {
     if (record.schema === DRAFT_RECORD_SCHEMA && (!only(record, ['id', 'schema', 'required', 'savedIntentSha256', 'intent']) || record.required !== true || !hash(record.savedIntentSha256) || !object(record.intent))) return path;
     if (record.schema === MAINTENANCE_DISPOSITION_RECORD_SCHEMA && dispositionProblem(record) !== null) return path;
     if (record.schema === MAINTENANCE_CHECK_RECORD_SCHEMA && checkProblem(record) !== null) return path;
+    if (record.schema === ORGANIZATION_DRAFT_RECORD_SCHEMA && organizationDraftProblem(record) !== null) return path;
   }
   return null;
 }
@@ -109,6 +112,9 @@ export async function readJourneyEnvelope(bytes) {
       if (!checkIntentShape(record.intent)) return refuse('FIELD_SEMANTICS_UNSUPPORTED', `/records/${index}/intent`, 'Draft intent violates the supported saved-intent shape.', originalBytes);
     } else if (record.schema === MAINTENANCE_DISPOSITION_RECORD_SCHEMA) {
       if (record.id !== await dispositionId(record)) return refuse('INPUT_INVALID', `/records/${index}/id`, 'Disposition id must derive from its category, subject, scope and candidate.', originalBytes);
+    } else if (record.schema === ORGANIZATION_DRAFT_RECORD_SCHEMA) {
+      const problem = await organizationDraftDerivedProblem(record);
+      if (problem !== null) return refuse('INPUT_INVALID', `/records/${index}${problem}`, 'Entry and target ids must derive from their item, scope and target.', originalBytes);
     } else if (record.required) {
       supported = false;
       diagnostics.push({ code: 'JOURNEY_RECORD_UNSUPPORTED', path: `/records/${index}`, message: `Required record ${record.id} has unsupported schema ${record.schema}; it can be read but not changed.` });
@@ -136,6 +142,12 @@ export async function writeJourneyEnvelope({ savedIntentBytes, records, previous
     if (record?.schema === MAINTENANCE_CHECK_RECORD_SCHEMA) {
       const problem = checkProblem(record);
       if (problem !== null) return refuse('INPUT_INVALID', `${path}${problem}`, 'Supply a closed maintenance-check record.');
+      written.push(structuredClone(record));
+      continue;
+    }
+    if (record?.schema === ORGANIZATION_DRAFT_RECORD_SCHEMA) {
+      const problem = organizationDraftProblem(record) ?? await organizationDraftDerivedProblem(record);
+      if (problem !== null) return refuse('INPUT_INVALID', `${path}${problem}`, 'Supply a closed organization-draft record with derived entry and target ids.');
       written.push(structuredClone(record));
       continue;
     }

@@ -373,7 +373,8 @@ test('writeJourneyEnvelope validates disposition records and the registry names 
   const good = await record(s.envelopeBytes, setOp(s, s.updated, 'skip'));
   const read = (await readJourneyEnvelope(s.envelopeBytes)).value, draft = read.records[0];
   assert.deepEqual(Object.keys(JOURNEY_RECORD_KINDS).sort(), ['urn:aihq:workbench:journey-record:maintenance-check:1.0.0',
-    'urn:aihq:workbench:journey-record:maintenance-disposition:1.0.0', 'urn:aihq:workbench:journey-record:unresolved-draft:1.0.0']);
+    'urn:aihq:workbench:journey-record:maintenance-disposition:1.0.0', 'urn:aihq:workbench:journey-record:organization-draft:1.0.0',
+    'urn:aihq:workbench:journey-record:unresolved-draft:1.0.0']);
   assert.equal(MAINTENANCE_DISPOSITION_SCHEMA, 'urn:aihq:workbench:journey-record:maintenance-disposition:1.0.0');
   assert.equal(JOURNEY_RECORD_KINDS[MAINTENANCE_DISPOSITION_SCHEMA].required, false);
   const accepted = await writeJourneyEnvelope({ savedIntentBytes: read.savedIntentBytes, records: [draft, good.record] });
@@ -481,7 +482,8 @@ test('shipped disposition schema agrees structurally with the runtime record', a
   // The envelope schema validates the record by reference and leaves the draft and open rules unchanged.
   const items = journey.properties.records.items;
   assert.deepEqual(items.allOf.map(rule => [rule.if.properties.schema.const, rule.then.$ref]),
-    [[MAINTENANCE_DISPOSITION_SCHEMA, MAINTENANCE_DISPOSITION_SCHEMA], [MAINTENANCE_CHECK_SCHEMA, MAINTENANCE_CHECK_SCHEMA]]);
+    [[MAINTENANCE_DISPOSITION_SCHEMA, MAINTENANCE_DISPOSITION_SCHEMA], [MAINTENANCE_CHECK_SCHEMA, MAINTENANCE_CHECK_SCHEMA],
+      ['urn:aihq:workbench:journey-record:organization-draft:1.0.0', 'urn:aihq:workbench:journey-record:organization-draft:1.0.0']]);
   // The check note: closed, fixed id, optional, categories drawn from the same registry.
   const note = (await record(s.envelopeBytes, { type: 'note-check', checkedAt: '2026-10-14T09:30:00Z',
     categories: [{ category: 'content', state: 'checked' }, { category: 'software', state: 'unknown', reason: 'no-supported-reader' }] })).envelope.records.find(r => r.id === 'maintenance-check');
