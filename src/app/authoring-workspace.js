@@ -1,6 +1,7 @@
 import { el } from './dom.js';
 import { authorityFromResult, changeSummary, compareRevision, reviewFreshness, revisionOf, setupInstructions, sourceRows, staleReviewMessage } from './authority-source.js';
 import { isJourneyEnvelope, importLimitError } from './authoring-client.js';
+import { dependencyRows } from './dependency-set.js';
 
 const buttonClass = 'px-3 py-1.5 rounded bg-surface-container text-on-surface border border-wb-border hover:bg-surface-container-high';
 function button(label, action) {
@@ -34,7 +35,7 @@ export function createAuthoringWorkspace(client) {
   const status = el('p', 'text-on-surface-variant'); status.id = 'policy-status'; controls.after(status);
   const file = el('input'); file.type = 'file'; file.accept = 'application/json,.json'; file.id = 'policy-open'; file.setAttribute('aria-label', 'Open saved project policy');
   const accepted = el('div', 'space-y-2'); accepted.id = 'policy-roots'; roots.append(accepted);
-  const accept = button('Accept proposed changes', () => {
+  const accept = button('Accept choices with dependencies', () => {
     client.accept();
     showStatus(client.draft ? 'Draft change accepted. Save the draft to keep it; compile a resolved scope to produce an executable policy.' : 'Changes accepted. Review your policy and save the exact artifact.');
   });
@@ -345,7 +346,17 @@ export function createAuthoringWorkspace(client) {
       showStatus('Review the proposed draft change, then accept. Your current draft is retained until acceptance.');
     } else if (candidate) {
       proposed.append(el('p', 'font-medium', `Proposed policy: ${candidate.intent.roots.length} explicit choices; ${candidate.intent.pins.length} pinned items including dependencies.`));
-      for (const root of candidate.intent.roots) proposed.append(el('p', 'font-mono text-[10px]', root.itemId));
+      for (const { root, dependencies } of dependencyRows({ roots: candidate.intent.roots, inclusions: candidate.inclusions })) {
+        const row = el('div', 'space-y-1');
+        row.append(el('p', 'font-mono text-[10px]', root.itemId));
+        for (const { item, kind } of dependencies) {
+          const dependency = el('p', 'pl-3 font-mono text-[10px] text-on-surface-variant', `${kind === 'required' ? 'Required' : 'Optional'} dependency: ${item.itemId} · ${item.scope}`);
+          dependency.dataset.dependencyOf = root.itemId; row.append(dependency);
+        }
+        if (!dependencies.length) row.append(el('p', 'pl-3 text-[10px] text-outline', 'No required dependencies.'));
+        proposed.append(row);
+      }
+      proposed.append(el('p', 'text-on-surface-variant', 'Accepting approves each item together with its displayed required dependencies in one step. No separate dependency approval is needed. This does not authorize host execution.'));
       showStatus('Review the proposed choices and dependencies, then accept. Your current saved artifact is retained until acceptance.');
     }
     render();
