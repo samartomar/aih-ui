@@ -5,7 +5,7 @@
 import { el } from './app/dom.js';
 import { createAuthoringClient, importLimitError } from './app/authoring-client.js';
 import { loadSetup } from './app/settings-client.js';
-import { ADDED_BY_YOU, KNOWN_STACK, MANIFEST_BYTE_LIMIT, addDetection, choiceReason, clientPrompt, describePolicy, detectStack, suggestStarters, wantsContent }
+import { ADDED_BY_YOU, KNOWN_STACK, MANIFEST_BYTE_LIMIT, addDetection, choiceReason, clientPrompt, describePolicy, detectStack, provenanceText, suggestStarters, wantsContent }
   from './app/guided-rules.js';
 
 const $ = id => document.getElementById(id);
@@ -21,7 +21,9 @@ const DOWNLOAD_NAME = 'guided-setup.journey.json';
 
 const ADAPTER_PREFIX = 'aihq.client.';
 let listSource = 'supported by Core';
-let detections = [], folderChosen = false, published = [], suggestion = null, busy = false, started = false;
+let detections = [], folderChosen = false, published = [], suggestion = null, busy = false, suggesting = false, started = false;
+// The inputs the current suggestion was made from, and a counter that changes whenever that suggestion stops applying.
+let snapshot = null, generation = 0;
 const clients = new Map(); // id -> { setup, detected, added, checked }
 const picked = new Map();  // itemId -> checked
 
@@ -35,7 +37,29 @@ const ensureClient = () => clientPromise ??= (async () => {
 const goal = () => $('goal').value.trim();
 const selectedClients = () => [...clients].filter(([, state]) => state.checked).map(([id]) => id).sort();
 const messagesOf = result => (result?.diagnostics ?? []).map(item => item.message).filter(Boolean);
-const provenanceText = detection => detection.provenance.includes(ADDED_BY_YOU) ? 'added by you' : `found in ${detection.provenance.join(', ')}`;
+const inputsNow = () => ({ goal: goal(), detections, clients: selectedClients(), projectInspected: folderChosen });
+const sameInputs = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const STALE_MESSAGE = 'Your inputs changed; suggest again to update the choices.';
+const SUPERSEDED_SAVE = 'Nothing was saved: a newer action replaced this one. Try again.';
+
+// A suggestion answers one set of inputs. Any change to them hides what was derived from it.
+function invalidate() {
+  generation += 1;
+  suggestion = null; snapshot = null;
+  picked.clear();
+  $('suggestion').hidden = true; $('save-section').hidden = true;
+  $('choices').replaceChildren(); $('prompt').value = '';
+  $('download').hidden = true; $('saved').hidden = true; $('save-status').textContent = '';
+  $('suggest-status').textContent = STALE_MESSAGE;
+  syncButtons();
+}
+function checkStale() {
+  if (suggestion && !sameInputs(inputsNow(), snapshot)) invalidate();
+}
+function syncButtons() {
+  $('suggest').disabled = busy || suggesting;
+  $('save').disabled = busy || !suggestion || !suggestion.choices.some(choice => picked.get(choice.itemId));
+}
 
 function showLines(list, lines) {
   list.replaceChildren(...lines.map(line => {
@@ -66,6 +90,7 @@ function renderDetections() {
   const placeholder = el('option', '', 'Choose…');
   placeholder.value = '';
   $('add-stack').replaceChildren(placeholder, ...options.map(known => { const option = el('option', '', `${known.label} (${known.kind})`); option.value = known.id; return option; }));
+  checkStale();
 }
 
 async function inspectFolder(fileList) {
@@ -105,8 +130,8 @@ function renderClients() {
     return item;
   });
   $('clients').replaceChildren(...rows);
-  // Clients can arrive after suggestions (saved setup, detection), so the prompt follows them.
-  refreshPrompt();
+  // Clients can arrive after suggestions (saved setup, detection); a suggestion made without them no longer applies.
+  checkStale();
   if (!rows.length) $('clients').append(el('li', 'text-on-surface-variant', 'No AI clients are known yet. Neither Core nor the installed Catalog lists them for this Workbench.'));
 }
 const clientState = id => { if (!clients.has(id)) clients.set(id, { setup: false, detected: false, broken: false, added: false, checked: false }); return clients.get(id); };
@@ -161,8 +186,8 @@ async function detectClients() {
 function refreshPrompt() {
   if (!suggestion) return;
   const chosen = suggestion.choices.filter(choice => picked.get(choice.itemId));
-  $('prompt').value = clientPrompt({ goal: goal(), detections, clients: selectedClients(), choices: chosen });
-  $('save').disabled = busy || !chosen.length;
+  $('prompt').value = clientPrompt({ goal: snapshot.goal, detections: snapshot.detections, clients: snapshot.clients, choices: chosen });
+  syncButtons();
 }
 
 function choiceCard(choice) {
@@ -180,6 +205,7 @@ function choiceCard(choice) {
     item.append(block);
   };
   section('What it helps with', [choice.helpsWith]);
+  section('What the catalog says', [choice.catalogDescription || 'The catalog gives no description for this item.']);
   section('What it needs', choice.needs);
   section('What it will change', choice.changes);
   section('Why suggested', [choice.why]);
@@ -187,11 +213,16 @@ function choiceCard(choice) {
 }
 
 async function suggest() {
-  $('suggest').disabled = true;
+  if (busy || suggesting) return;
+  suggesting = true; syncButtons();
+  const inputs = inputsNow();
   $('suggest-status').textContent = 'Matching your goal and project to the installed catalog…';
   try {
     const client = await ensureClient();
-    suggestion = suggestStarters({ goal: goal(), detections, clients: selectedClients(), catalogItems: client.catalog.items, projectInspected: folderChosen });
+    if (!sameInputs(inputsNow(), inputs)) { $('suggest-status').textContent = STALE_MESSAGE; return; }
+    generation += 1;
+    snapshot = inputs;
+    suggestion = suggestStarters({ ...inputs, catalogItems: client.catalog.items });
     picked.clear();
     for (const choice of suggestion.choices) picked.set(choice.itemId, true);
     $('suggestion').hidden = false;
@@ -206,7 +237,7 @@ async function suggest() {
     $('suggest-status').textContent = suggestion.status === 'confident' ? 'Suggestions are ready below.' : 'No confident suggestion.';
   } catch (error) {
     $('suggest-status').textContent = `The installed catalog could not be read: ${error.message}`;
-  } finally { $('suggest').disabled = false; }
+  } finally { suggesting = false; syncButtons(); }
 }
 
 async function copyPrompt() {
@@ -229,30 +260,38 @@ function download(bytes) {
 async function save() {
   const chosen = suggestion?.choices.filter(choice => picked.get(choice.itemId)) ?? [];
   if (!chosen.length) { $('save-status').textContent = 'Tick at least one starter choice to save.'; return; }
-  busy = true; $('save').disabled = true; $('download').hidden = true; $('saved').hidden = true;
+  const mine = generation, inputs = snapshot, rulesVersion = suggestion.rulesVersion;
+  // A result belongs to the suggestion it started from; if that no longer applies the page already says so.
+  const outdated = () => mine !== generation;
+  busy = true; syncButtons(); $('download').hidden = true; $('saved').hidden = true;
   $('save-status').textContent = 'Saving choices to a draft…';
   try {
     const client = await ensureClient();
+    if (outdated()) return;
     const items = new Map(client.catalog.items.map(item => [item.id, item]));
     const missing = chosen.find(choice => !items.get(choice.itemId)?.root);
     if (missing) { $('save-status').textContent = `Nothing was saved: the installed catalog no longer offers ${missing.label}.`; return; }
     const intent = { schema: INTENT_SCHEMA, origins: [{ id: 'direct', kind: 'direct' }],
       roots: chosen.map(choice => ({ ...items.get(choice.itemId).root, scope: choice.scope, configuration: {}, originIds: ['direct'],
-        reason: choiceReason({ goal: goal(), detections, choice, rulesVersion: suggestion.rulesVersion }) })),
+        reason: choiceReason({ goal: inputs.goal, detections: inputs.detections, choice, rulesVersion }) })),
       exclusions: [], pins: [], provenance: [], inputs: [], reviews: { schema: REVIEW_SCHEMA, records: [], history: [] } };
     const fresh = await client.newDraft();
+    if (outdated()) return;
+    if (fresh.status === 'superseded') { $('save-status').textContent = SUPERSEDED_SAVE; return; }
     if (fresh.status !== 'ok') { showRefusal($('save-status'), 'Nothing was saved. The host refused to start a draft.', messagesOf(fresh)); return; }
     const composed = await client.request('compose', { intent });
+    if (outdated()) return;
     if (composed.status !== 'ok') { showRefusal($('save-status'), 'Nothing was saved. The choices were refused:', messagesOf(composed)); return; }
     const opened = await client.openDraft(Uint8Array.from(composed.value.policyBytes));
-    if (opened.status === 'superseded') { $('save-status').textContent = 'Nothing was saved: a newer action replaced this one. Try again.'; return; }
+    if (outdated()) return;
+    if (opened.status === 'superseded') { $('save-status').textContent = SUPERSEDED_SAVE; return; }
     if (opened.status !== 'ok' || !client.draft) { showRefusal($('save-status'), 'Nothing was saved. The draft could not be opened:', messagesOf(opened)); return; }
     showLines($('saved-lines'), describePolicy({ roots: client.draft.roots, pins: client.draft.intent?.pins ?? [], catalogItems: client.catalog.items }));
     $('saved').hidden = false; $('download').hidden = false;
     $('save-status').textContent = 'Saved to a draft. Download the setup file to keep it; nothing was installed.';
   } catch (error) {
-    $('save-status').textContent = `Nothing was saved: ${error.message}`;
-  } finally { busy = false; refreshPrompt(); }
+    if (!outdated()) $('save-status').textContent = `Nothing was saved: ${error.message}`;
+  } finally { busy = false; refreshPrompt(); syncButtons(); }
 }
 
 async function reopen(file) {
@@ -298,7 +337,7 @@ function startGuided() {
 }
 
 $('start-guided').addEventListener('click', startGuided);
-$('goal').addEventListener('input', () => { $('goal-count').textContent = String($('goal').value.length); });
+$('goal').addEventListener('input', () => { $('goal-count').textContent = String($('goal').value.length); checkStale(); });
 $('folder').addEventListener('change', () => inspectFolder([...$('folder').files]));
 $('add-stack-button').addEventListener('click', () => { if ($('add-stack').value) { detections = addDetection(detections, $('add-stack').value); renderDetections(); } });
 $('detect-clients').addEventListener('click', detectClients);

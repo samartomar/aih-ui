@@ -147,6 +147,8 @@ const FILL_RULES = Object.freeze([
   Object.freeze({ id: 'fill.diagnose', item: 'mattpocock.diagnosing-bugs', helpsWith: GOAL_RULES[0].helpsWith }),
 ]);
 const MIN_CHOICES = 3, MAX_CHOICES = 5;
+/** Every fixed item id the goal, stack and fill rules can suggest (client adapters are chosen by the person and excluded). */
+export const RULE_TARGETS = Object.freeze([...new Set([...GOAL_RULES.map(rule => rule.item), STACK_TESTS.item, STACK_CONTEXT.item, ...FILL_RULES.map(rule => rule.item)])].sort());
 
 const goalWords = goal => String(goal ?? '').toLowerCase().slice(0, MAX_GOAL);
 function firstPhrase(text, phrases) {
@@ -159,7 +161,7 @@ function firstPhrase(text, phrases) {
 }
 const clientId = client => typeof client === 'string' ? client : client?.id;
 const clientIds = clients => [...new Set((clients ?? []).map(clientId).filter(id => typeof id === 'string' && id))].sort(compare);
-const provenanceText = detection => detection.provenance.includes(ADDED_BY_YOU) ? 'added by you' : `found in ${detection.provenance.join(', ')}`;
+export const provenanceText = detection => detection.provenance.includes(ADDED_BY_YOU) ? 'added by you' : `found in ${detection.provenance.join(', ')}`;
 const scopePhrase = scope => scope === 'user' ? 'for your user account' : 'in this project';
 
 function requiredClosure(itemId, byId) {
@@ -196,7 +198,7 @@ function changesFor(item, scope, byId) {
     .map(other => inline(other.description)).filter(Boolean);
   const files = [...new Set(descriptions.flatMap(description => description.match(/(?:\.[\w-]+\/)*[\w.-]+\.(?:md|mdc|json|toml|ya?ml|txt)\b|\.[\w-]+rules\b/g) ?? []))];
   const lines = descriptions.length ? descriptions.map(sentence) : [`Adds ${item.label || item.id} (${item.kind}).`];
-  if (files.length) lines.push(`Files it writes: ${files.join(', ')}.`);
+  if (files.length) lines.push(`Files named in its description: ${files.join(', ')}.`);
   lines.push(`Applies ${where}.`);
   return lines;
 }
@@ -204,6 +206,7 @@ function changesFor(item, scope, byId) {
 /**
  * goal: free text. detections: from detectStack, possibly edited. clients: ids (or { id }). catalogItems: the served items.
  * projectInspected (optional): true when a project folder was inspected; defaults to "some detection came from a file".
+ * An inspected project whose language was not recognised (and not added by hand) is never confident, even when the goal matched.
  */
 export function suggestStarters({ goal, detections = [], clients = [], catalogItems = [], projectInspected } = {}) {
   const byId = new Map((catalogItems ?? []).filter(item => item && typeof item.id === 'string').map(item => [item.id, item]));
@@ -225,7 +228,8 @@ export function suggestStarters({ goal, detections = [], clients = [], catalogIt
   const language = detections.find(detection => detection.kind === 'language');
   if (language) candidates.push({ ruleId: STACK_CONTEXT.id, itemId: STACK_CONTEXT.item, helpsWith: STACK_CONTEXT.helpsWith,
     why: `Your project uses ${language.label} (${provenanceText(language)}).` });
-  const evidence = goalMatched || Boolean(language);
+  const unrecognised = inspected && !language;
+  const evidence = !unrecognised && (goalMatched || Boolean(language));
   if (evidence) for (const rule of FILL_RULES)
     candidates.push({ ruleId: rule.id, itemId: rule.item, helpsWith: rule.helpsWith, fill: true,
       why: 'A common starter that goes with most goals and projects; your goal or project was recognised, but only a few choices matched it directly.' });
@@ -237,14 +241,16 @@ export function suggestStarters({ goal, detections = [], clients = [], catalogIt
     const item = byId.get(candidate.itemId);
     if (!item || taken.has(item.id) || covered.has(item.id)) continue;
     const scopes = Array.isArray(item.scopes) && item.scopes.length ? item.scopes : ['project'];
-    const scope = scopes.includes('project') && (inspected || scopes.length === 1) ? 'project' : scopes[0];
+    const scope = scopes.includes('project') && (inspected || scopes.length === 1) ? 'project' : scopes.find(value => value !== 'project') ?? scopes[0];
     const closure = requiredClosure(item.id, byId);
     taken.add(item.id); for (const id of closure) covered.add(id);
     choices.push({ itemId: item.id, label: item.label || item.id, scope, ruleId: candidate.ruleId, why: candidate.why,
-      helpsWith: inline(candidate.helpsWith) || `Adds ${item.label || item.id}.`, needs: needsFor(item, byId), changes: changesFor(item, scope, byId),
+      helpsWith: inline(candidate.helpsWith) || `Adds ${item.label || item.id}.`, catalogDescription: inline(item.description), needs: needsFor(item, byId), changes: changesFor(item, scope, byId),
       dependencies: closure.map(id => ({ itemId: id, label: labelOf(id, byId) })) });
   }
   // A choice added earlier may turn out to be required by a later one; that is fine, both are kept as roots.
+  if (unrecognised) return { rulesVersion: GUIDED_RULES_VERSION, status: 'no-confident-suggestion', choices: [],
+    message: 'Your project’s languages were not recognised, so nothing is preselected. Add what your project uses, or browse the catalog yourself.' };
   if (!evidence || choices.length < MIN_CHOICES) return { rulesVersion: GUIDED_RULES_VERSION, status: 'no-confident-suggestion', choices: [],
     message: 'We could not match your goal or project to a starter set with confidence. Nothing is preselected. Try describing what you want to do in other words, add what your project uses, or browse the catalog yourself.' };
   return { rulesVersion: GUIDED_RULES_VERSION, status: 'confident', choices,
@@ -288,27 +294,46 @@ export function choiceReason({ goal, detections = [], choice, rulesVersion = GUI
 }
 
 /**
- * roots: the open draft's roots ({ itemId, status, reason, ... }); pins: the intent's pins; catalogItems: served items.
- * One line per chosen item, per included dependency, and per root whose exact source is unavailable.
+ * roots: the open draft's roots ({ releaseSha256, itemId, status, reason, ... }); pins: the intent's pins; catalogItems: served items.
+ * An item is described only when a served item matches both the exact release and the item id; otherwise the line names the item id
+ * and says its exact source is not available here. One line per chosen item, per included dependency, and per unavailable root.
  */
 export function describePolicy({ roots = [], pins = [], catalogItems = [] } = {}) {
-  const byId = new Map((catalogItems ?? []).filter(item => item && typeof item.id === 'string').map(item => [item.id, item]));
+  const key = (releaseSha256, itemId) => `${releaseSha256}
+${itemId}`;
+  const exact = new Map();
+  for (const item of catalogItems ?? []) if (item && typeof item.id === 'string' && typeof item.root?.releaseSha256 === 'string') exact.set(key(item.root.releaseSha256, item.id), item);
+  const within = releaseSha256 => ({ get: id => exact.get(key(releaseSha256, id)) });
   const lines = [];
-  const rootIds = [...new Set(roots.map(root => root.itemId))];
+  const matched = [];
   for (const root of roots) {
-    const label = labelOf(root.itemId, byId);
-    const helps = inline(byId.get(root.itemId)?.description).replace(/[.!?]+$/, '') || 'no description is available here';
+    const item = root.status === 'unresolved' ? undefined : exact.get(key(root.releaseSha256, root.itemId));
     const saved = inline(root.reason);
-    lines.push({ kind: 'chosen', itemId: root.itemId, text: `You chose ${label} — ${helps}. ${saved ? `Saved reason: ${sentence(saved)}` : 'No reason was saved.'}` });
-    if (root.status === 'unresolved') lines.push({ kind: 'unknown', itemId: root.itemId,
-      text: `Unknown: the exact source of ${label} is not available here; your choice is kept exactly as saved.` });
+    const savedText = saved ? `Saved reason: ${sentence(saved)}` : 'No reason was saved.';
+    if (item) {
+      const helps = inline(item.description).replace(/[.!?]+$/, '') || 'no description is available here';
+      lines.push({ kind: 'chosen', itemId: root.itemId, text: `You chose ${item.label || item.id} — ${helps}. ${savedText}` });
+      matched.push(root);
+      continue;
+    }
+    lines.push({ kind: 'chosen', itemId: root.itemId, text: `You chose ${root.itemId} (its exact source is not available here). ${savedText}` });
+    lines.push({ kind: 'unknown', itemId: root.itemId,
+      text: `Unknown: the exact source of ${root.itemId} is not available here; your choice is kept exactly as saved.` });
   }
-  const pinned = [...new Set((pins ?? []).map(pin => pin?.itemId).filter(id => typeof id === 'string' && !rootIds.includes(id)))].sort(compare);
-  for (const itemId of pinned) {
-    const needing = rootIds.filter(id => requiredClosure(id, byId).includes(itemId));
-    const label = labelOf(itemId, byId);
-    const names = needing.map(id => labelOf(id, byId));
-    lines.push({ kind: 'included', itemId, text: names.length
+  const isRoot = new Set(roots.map(root => key(root.releaseSha256, root.itemId)));
+  const pinned = new Map();
+  for (const pin of pins ?? []) {
+    if (typeof pin?.itemId !== 'string') continue;
+    const id = key(pin.releaseSha256, pin.itemId);
+    if (!isRoot.has(id) && !pinned.has(id)) pinned.set(id, pin);
+  }
+  const ordered = [...pinned.values()].sort((a, b) => compare(a.itemId, b.itemId) || compare(String(a.releaseSha256), String(b.releaseSha256)));
+  for (const pin of ordered) {
+    const item = exact.get(key(pin.releaseSha256, pin.itemId));
+    const label = item ? item.label || item.id : pin.itemId;
+    const needing = item ? matched.filter(root => root.releaseSha256 === pin.releaseSha256 && requiredClosure(root.itemId, within(root.releaseSha256)).includes(pin.itemId)) : [];
+    const names = [...new Set(needing.map(root => exact.get(key(root.releaseSha256, root.itemId)).label || root.itemId))];
+    lines.push({ kind: 'included', itemId: pin.itemId, text: names.length
       ? `${label} is included because ${names.join(' and ')} ${names.length > 1 ? 'need' : 'needs'} it.`
       : `${label} is included as something your choices need.` });
   }

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ADDED_BY_YOU, GUIDED_RULES_VERSION, KNOWN_STACK, addDetection, choiceReason, clientPrompt, describePolicy, detectStack, suggestStarters, wantsContent }
+import { ADDED_BY_YOU, GUIDED_RULES_VERSION, KNOWN_STACK, RULE_TARGETS, addDetection, choiceReason, clientPrompt, describePolicy, detectStack, provenanceText, suggestStarters, wantsContent }
   from '../../src/app/guided-rules.js';
 
 const item = (id, kind, { scopes = ['project', 'user'], requires = [], inputs = {}, description = `${id} description.` } = {}) =>
@@ -49,16 +49,25 @@ const ROWS = [
   { name: 'at most five choices', files: [], goal: 'fix bugs, write tests, build a feature, review pull requests, refactor, plan, learn, research', clients: ['claude'], status: 'confident',
     expect: [['aihq.client.claude', 'client.claude'], ['mattpocock.diagnosing-bugs', 'goal.fix'], ['mattpocock.tdd', 'goal.test'], ['mattpocock.implement', 'goal.build'],
       ['mattpocock.improve-codebase-architecture', 'goal.refactor']] },
+  { name: 'inspected project with no recognised language is not confident even when the goal matches', files: [file('mix.exs', 'defmodule X do end')], goal: 'fix a bug',
+    clients: [], extra: { projectInspected: true }, status: 'no-confident-suggestion', expect: [], message: /languages were not recognised/ },
+  { name: 'a language added by hand makes an inspected project recognised', files: [file('mix.exs', 'defmodule X do end')], goal: 'fix a bug',
+    clients: [], extra: { projectInspected: true, addLanguage: 'python' }, status: 'confident',
+    expect: [['mattpocock.diagnosing-bugs', 'goal.fix'], ['aihq.project-context', 'stack.context'], ['mattpocock.code-review', 'fill.review']] },
+  { name: 'no folder inspected keeps goal-only suggestions', files: [], goal: 'fix a bug', clients: [], extra: { projectInspected: false }, status: 'confident',
+    expect: [['mattpocock.diagnosing-bugs', 'goal.fix'], ['mattpocock.code-review', 'fill.review'], ['mattpocock.tdd', 'fill.tdd']] },
   { name: 'clients alone are never confident', files: [], goal: '', clients: ['claude', 'codex'], status: 'no-confident-suggestion', expect: [] },
 ];
 for (const row of ROWS) {
   test(`suggestions: ${row.name}`, () => {
-    const result = run(row.files, row.goal, row.clients);
+    const { addLanguage, ...extra } = row.extra ?? {};
+    const detections = detectStack(row.files).detections;
+    const result = suggestStarters({ goal: row.goal, detections: addLanguage ? addDetection(detections, addLanguage) : detections, clients: row.clients, catalogItems: CATALOG, ...extra });
     assert.equal(result.status, row.status);
     assert.equal(result.rulesVersion, GUIDED_RULES_VERSION);
     assert.deepEqual(pairs(result), row.expect);
     for (const choice of result.choices) assert.ok(choice.why.trim().length > 0, `${choice.itemId} explains why`);
-    if (row.status === 'no-confident-suggestion') assert.match(result.message, /could not match your goal or project to a starter set with confidence/);
+    if (row.status === 'no-confident-suggestion') assert.match(result.message, row.message ?? /could not match your goal or project to a starter set with confidence/);
   });
 }
 
@@ -95,11 +104,12 @@ test('choices carry plain-language needs, changes, helps-with and dependencies f
 
 test('scope is project only when the item allows it and a folder was inspected, or the item is project-only', () => {
   const user = run([], 'fix a bug').choices.find(choice => choice.itemId === 'mattpocock.diagnosing-bugs');
-  assert.equal(user.scope, 'project', 'first scope of the item');
+  assert.equal(user.scope, 'user', 'a both-scope item without an inspected folder gets the non-project scope');
+  assert.equal(run(JS, 'fix a bug').choices.find(choice => choice.itemId === 'mattpocock.diagnosing-bugs').scope, 'project');
   const items = CATALOG.map(entry => entry.id === 'mattpocock.diagnosing-bugs' ? { ...entry, scopes: ['user', 'project'] } : entry);
   const notInspected = run([], 'fix a bug', [], items).choices[0];
   assert.equal(notInspected.scope, 'user');
-  const inspected = run([], 'fix a bug', [], items, { projectInspected: true }).choices[0];
+  const inspected = run(PY, 'fix a bug', [], items, { projectInspected: true }).choices.find(choice => choice.itemId === 'mattpocock.diagnosing-bugs');
   assert.equal(inspected.scope, 'project');
   const onlyProject = run([], 'plan', ['codex']).choices.find(choice => choice.itemId === 'aihq.client.codex');
   assert.equal(onlyProject.scope, 'project');
@@ -225,4 +235,55 @@ test('a client adapter is explained in plain words and names the files its depen
   assert.match(adapter.helpsWith, /claude/);
   assert.ok(adapter.changes.some(line => line.includes('CLAUDE.md')), adapter.changes.join('|'));
   assert.ok(adapter.changes.some(line => line.includes('AGENTS.md')), adapter.changes.join('|'));
+  assert.ok(adapter.changes.some(line => /^Files named in its description: /.test(line)), adapter.changes.join('|'));
+  assert.ok(!adapter.changes.some(line => line.startsWith('Files it writes')), 'file names come from description text and are not promised as writes');
+});
+
+test('catalog facts stay separate from rule text: each choice carries the catalog description as its own field', () => {
+  const { choices } = run(JS, 'fix the login bug', ['claude']);
+  for (const choice of choices) {
+    const catalogItem = CATALOG.find(entry => entry.id === choice.itemId);
+    assert.equal(choice.catalogDescription, catalogItem.description, choice.itemId);
+    assert.notEqual(choice.helpsWith, choice.catalogDescription);
+  }
+  const noDescription = CATALOG.map(entry => entry.id === 'mattpocock.diagnosing-bugs' ? { ...entry, description: undefined } : entry);
+  const bare = run([], 'fix a bug', [], noDescription).choices.find(choice => choice.itemId === 'mattpocock.diagnosing-bugs');
+  assert.equal(bare.catalogDescription, '');
+  assert.ok(bare.helpsWith.length > 0);
+});
+
+test('provenanceText is exported and reads the same in suggestions and the prompt', () => {
+  assert.equal(provenanceText({ provenance: [ADDED_BY_YOU] }), 'added by you');
+  assert.equal(provenanceText({ provenance: ['a.json', 'b.json'] }), 'found in a.json, b.json');
+});
+
+test('RULE_TARGETS lists every fixed item id the rules can suggest, frozen, sorted and de-duplicated', () => {
+  assert.ok(Object.isFrozen(RULE_TARGETS));
+  assert.deepEqual([...RULE_TARGETS], [...new Set(RULE_TARGETS)].sort());
+  assert.ok(RULE_TARGETS.every(id => !id.startsWith('aihq.client.')), 'client adapters are chosen by the person, not fixed by a rule');
+  const suggested = new Set();
+  for (const goal of ['fix a bug', 'write tests', 'build a feature', 'review a pull request', 'refactor', 'plan', 'learn', 'research', 'hmm'])
+    for (const choice of run(JS, goal).choices) suggested.add(choice.itemId);
+  assert.deepEqual([...suggested].sort(), [...RULE_TARGETS]);
+});
+
+test('describePolicy never describes an item by id alone: a different release is an unavailable source', () => {
+  const otherRelease = 'c'.repeat(64);
+  const sameId = CATALOG.map(entry => entry.id === 'mattpocock.tdd' ? { ...entry, description: 'Totally different thing.', root: { ...entry.root, releaseSha256: otherRelease } } : entry);
+  const roots = [{ releaseSha256: 'a'.repeat(64), itemId: 'mattpocock.tdd', scope: 'project', configuration: {}, status: 'resolved', reason: 'guided-setup rules 1.0.0: goal.test' }];
+  const lines = describePolicy({ roots, pins: [], catalogItems: sameId });
+  assert.deepEqual(lines.map(line => [line.kind, line.itemId]), [['chosen', 'mattpocock.tdd'], ['unknown', 'mattpocock.tdd']]);
+  assert.equal(lines[0].text, 'You chose mattpocock.tdd (its exact source is not available here). Saved reason: guided-setup rules 1.0.0: goal.test.');
+  assert.doesNotMatch(lines.map(line => line.text).join('|'), /Totally different thing|tdd description/);
+  const unresolved = describePolicy({ roots: [{ ...roots[0], status: 'unresolved' }], pins: [], catalogItems: CATALOG.filter(entry => entry.id === 'mattpocock.tdd') });
+  assert.equal(unresolved[0].text, 'You chose mattpocock.tdd (its exact source is not available here). Saved reason: guided-setup rules 1.0.0: goal.test.');
+  assert.ok(unresolved.some(line => line.kind === 'unknown'));
+});
+
+test('describePolicy: an included dependency pinned to another release falls back to its item id', () => {
+  const roots = [{ releaseSha256: 'a'.repeat(64), itemId: 'mattpocock.implement', scope: 'project', configuration: {}, status: 'resolved', reason: 'r' }];
+  const pins = [{ releaseSha256: 'd'.repeat(64), itemId: 'mattpocock.code-review' }];
+  const included = describePolicy({ roots, pins, catalogItems: CATALOG }).filter(line => line.kind === 'included');
+  assert.equal(included.length, 1);
+  assert.equal(included[0].text, 'mattpocock.code-review is included as something your choices need.');
 });

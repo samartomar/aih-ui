@@ -25,8 +25,13 @@ export async function runGuidedSetupBrowser({ origin, output, playwrightModule }
     return page;
   };
   // The prompt lists exactly the ticked clients, even when they load after suggestions.
+  // A client that arrives after suggestions invalidates them on purpose, so suggest again before comparing.
   const promptFollowsClients = async page => {
     await page.waitForLoadState('networkidle');
+    if (/inputs changed/.test(await page.locator('#suggest-status').innerText())) {
+      await page.locator('#suggest').click();
+      await page.locator('#suggest-status').filter({ hasText: /Suggestions are ready|No confident|could not/ }).waitFor();
+    }
     const ticked = await page.locator('#clients li').filter({ has: page.locator('input:checked') }).locator('span.font-mono').allInnerTexts();
     const line = (await page.locator('#prompt').inputValue()).split('\n').find(text => text.startsWith('AI clients I use:'));
     assert.equal(line, `AI clients I use: ${ticked.length ? ticked.sort().join(', ') : '(none chosen)'}`);
@@ -47,6 +52,13 @@ export async function runGuidedSetupBrowser({ origin, output, playwrightModule }
     await page.locator('#start-guided').click();
     await page.locator('#goal').fill(GOAL);
     await page.waitForLoadState('networkidle');
+    // Every item id the rules can suggest must be served by the installed catalog.
+    const ruleTargets = await page.evaluate(async () => (await import('/app/guided-rules.js')).RULE_TARGETS);
+    const served = await fetch(origin + '/api/authoring-catalog', { headers: { 'x-aih-client': '00000000-0000-4000-8000-000000000000' } });
+    assert.equal(served.ok, true, `The installed catalog is served (${served.status}).`);
+    const servedIds = new Set((await served.json()).items.map(item => item.id));
+    assert.ok(ruleTargets.length > 0, 'The rules name catalog items.');
+    assert.deepEqual(ruleTargets.filter(id => !servedIds.has(id)), [], 'Every rule target is served by the installed catalog.');
     const beforeFolder = requests.length;
     await page.locator('#folder').setInputFiles(join(FIXTURES, 'guided-project'));
     await page.locator('#folder-status').filter({ hasText: 'Nothing was uploaded' }).waitFor();
@@ -81,6 +93,17 @@ export async function runGuidedSetupBrowser({ origin, output, playwrightModule }
     await promptFollowsClients(page);
     await shot(page, '05-suggestions');
 
+    // Changing an input after suggestions hides the choices and save, and asks for a new suggestion before saving.
+    await page.locator('#goal').fill(`${GOAL} today`);
+    await page.locator('#save-section').waitFor({ state: 'hidden' });
+    assert.equal(await page.locator('#choices > li').count(), 0, 'Choices are cleared when the inputs change.');
+    assert.match(await page.locator('#suggest-status').innerText(), /Your inputs changed; suggest again to update the choices./);
+    await page.locator('#goal').fill(GOAL);
+    await page.locator('#suggest').click();
+    await page.locator('#suggest-status').filter({ hasText: /Suggestions are ready|No confident|could not/ }).waitFor();
+    assert.match(await page.locator('#suggest-status').innerText(), /Suggestions are ready/);
+    assert.equal(await page.locator('#save-section').isVisible(), true);
+
     await page.locator('#save').click();
     await page.locator('#save-status').filter({ hasText: /Saved to a draft|Nothing was saved/ }).waitFor();
     assert.match(await page.locator('#save-status').innerText(), /Saved to a draft/);
@@ -113,8 +136,11 @@ export async function runGuidedSetupBrowser({ origin, output, playwrightModule }
     await unknown.locator('#goal').fill('hmm, something nice');
     await unknown.locator('#folder').setInputFiles(join(FIXTURES, 'guided-unknown'));
     await unknown.locator('#folder-status').filter({ hasText: 'Nothing was uploaded' }).waitFor();
+    // Saved setup clients load in the background; suggest once they are in, as a person would after reading the page.
+    await unknown.waitForLoadState('networkidle');
     await unknown.locator('#suggest').click();
-    await unknown.locator('#suggest-status').filter({ hasText: 'No confident suggestion' }).waitFor();
+    await unknown.locator('#suggest-status').filter({ hasText: /No confident suggestion|inputs changed|could not/ }).waitFor();
+    assert.match(await unknown.locator('#suggest-status').innerText(), /No confident suggestion/);
     assert.equal(await unknown.locator('#choices > li').count(), 0);
     assert.equal(await unknown.locator('#browse-link').isVisible(), true);
     await promptFollowsClients(unknown);
@@ -124,7 +150,7 @@ export async function runGuidedSetupBrowser({ origin, output, playwrightModule }
     assert.deepEqual(requests.filter(request => !request.url.startsWith(origin) && !request.url.startsWith('data:') && !/fonts\.(googleapis|gstatic)\.com/.test(request.url)).map(request => request.url), []);
     assert.equal(requests.filter(request => request.body.includes(fixtureText.trim())).length, 0);
     assert.deepEqual(errors, []);
-    const evidence = { origin, goal: GOAL, clientsStatus, choices: count, reasons, screenshots: shots, requests: requests.map(({ method, url }) => `${method} ${url.replace(origin, '')}`) };
+    const evidence = { origin, goal: GOAL, clientsStatus, choices: count, ruleTargets, reasons, screenshots: shots, requests: requests.map(({ method, url }) => `${method} ${url.replace(origin, '')}`) };
     await writeFile(join(output, 'guided-setup-evidence.json'), JSON.stringify(evidence, null, 2) + '\n');
     return evidence;
   } finally { await browser.close(); }

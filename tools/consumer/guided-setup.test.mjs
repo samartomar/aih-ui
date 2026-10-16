@@ -10,7 +10,8 @@ import { noteFixture } from './note-fixture.mjs';
 
 const rootIds = ['mattpocock.tdd', 'mattpocock.implement', 'aihq.client.claude'];
 const dependencyIds = ['mattpocock.code-review', 'aihq.project-context-pointer.claude-md', 'aihq.project-context'];
-const reason = rule => `guided-setup rules 1.0.0 · rule ${rule} · goal: "add tests to my react app" · stack: React (package.json), TypeScript (tsconfig.json)`;
+// Mirrors the exact format choiceReason (src/app/guided-rules.js) writes for the guided fixture project.
+const reason = rule => `guided-setup rules 1.0.0: ${rule}. Goal: add tests to my react app. Project: JavaScript, TypeScript, React, Vitest.`;
 const reasons = [reason('goal.test'), reason('goal.build'), reason('client.claude')];
 const decode = bytes => new TextDecoder().decode(bytes);
 function valueOf(result) {
