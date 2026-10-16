@@ -24,9 +24,9 @@ export function overheadText(row) {
   const share = row.percentage === null ? 'no percentage: zero baseline' : `${Math.round(Math.abs(row.percentage) * 10) / 10}% ${row.percentage < 0 ? 'more' : 'less'} than the baseline`;
   return row.direction === 'unchanged' ? `${row.before} → ${row.after} ${row.unit}, unchanged` : `${row.before} → ${row.after} ${row.unit}, ${row.direction} of ${row.absoluteDifference} ${row.unit} (${share})`;
 }
-// Mirrors DIMENSION_LABELS in tools/consumer/trials.mjs, the source of truth; a row's own `label` is shown when present.
+// Mirrors DIMENSION_LABELS in tools/consumer/trials.mjs, the source of truth; the page cannot import it. A row's own `label` wins.
 const DIMENSIONS = { setup: 'Setup', indexing: 'Indexing', 'runtime-context': 'Runtime/context (configured material size, not usage)', maintenance: 'Maintenance' };
-// Mirrors RESTORATION_STATUSES in tools/consumer/trial-record.mjs; the page cannot import it.
+// Mirrors RESTORATION_STATUSES in tools/consumer/trial-record.mjs, the source of truth; the page cannot import it.
 const RESTORATION = ['proposed', 'pending', 'completed', 'partial', 'unsupported'];
 const COST_UNKNOWN = 'Model or service spending: no cost source is connected, so it is unknown.';
 // A bound the person has finished: a label, a unit and a finite value of zero or more.
