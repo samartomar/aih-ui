@@ -28,6 +28,6 @@
 <label>Finding <select id="review-finding"></select></label>
 <label>Decision ID <input id="review-id"></label><label>Owner <select id="review-owner-kind"><option value="individual">Individual</option><option value="organization">Organization</option></select></label><label>Owner identity <input id="review-owner"></label><label>Actor <input id="review-actor"></label>
 <label>Disposition <select id="review-disposition"><option value="false-alarm">False alarm</option><option value="accepted-risk">Accepted risk</option></select></label><label>Reason <textarea id="review-reason" rows="2"></textarea></label><label>Supersedes prior decision ID (optional) <input id="review-supersedes"></label>
-<button id="record-review" disabled>Review decision candidate</button><button id="reconsider-reviews">Preserve history and reconsider unavailable or changed decisions</button>
-<p>UTC time is recorded when proposing the decision. Accept the candidate to save it. Reopening a current decision requires its original checked report/artifact bytes again.</p><pre id="review-history"></pre></section>
+<button id="record-review" disabled>Review decision candidate</button><button id="reconsider-reviews">Optional: preserve history and request reconsideration of unavailable or changed decisions</button>
+<p>UTC time is recorded when proposing the decision. Accept the candidate to save it. Saved decisions stay as recorded and bound to their original evidence; changed or missing evidence is reported as applicability and never blocks editing.</p><pre id="review-history"></pre></section>
 </main><script type="module" src="/authoring.js"></script></body></html>

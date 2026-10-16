@@ -88,7 +88,7 @@ test('checked finding decision round-trips with original subject and exact revie
     assert.equal(record.state, 'current');
   } finally { await f.cleanup(); }
 });
-test('unrelated report changes retain exact decisions; trimming reviewed content retains history and requests reconsideration', async () => {
+test('unrelated report changes retain exact decisions; trimming reviewed content keeps the judgment and reports it as changed', async () => {
   const f = await reviewFixture();
   try {
     const first = await f.scan(), saved = await recorded(f, first);
@@ -102,24 +102,31 @@ test('unrelated report changes retain exact decisions; trimming reviewed content
     assert.deepEqual(reopened.value.intent.reviews, saved.value.intent.reviews);
     const trimmed = await authoring.editAuthoring({ policyBytes: saved.value.policyBytes, inventories: f.inventories, reviewEvidence: [next.bytes], operation: { type: 'remove-root', root: saved.value.intent.roots[0] } });
     assert.equal(trimmed.status, 'ok', JSON.stringify(trimmed.diagnostics));
-    assert.equal(trimmed.value.intent.reviews.records[0].state, 'reconsider');
-    assert.deepEqual(trimmed.value.intent.reviews.history, saved.value.intent.reviews.records);
-    assert.deepEqual(trimmed.value.intent.reviews.records[0].subject, saved.value.intent.reviews.records[0].subject);
+    // #24: trimming no longer converts the judgment to a reconsideration request; it stays current and is reported as changed.
+    assert.deepEqual(trimmed.value.intent.reviews, saved.value.intent.reviews);
+    assert.equal(trimmed.value.intent.reviews.records[0].state, 'current');
+    assert.equal(trimmed.value.reviewJudgments[0].applicability, 'changed');
+    assert.equal(trimmed.value.reviewJudgments[0].applicabilityReason, 'subject-not-selected');
   } finally { await f.cleanup(); }
 });
-test('changed detector scope requires reconsideration, preserves history and supports explicit supersession', async () => {
+test('changed detector scope reports changed applicability without gating; explicit reconsideration and supersession still work', async () => {
   const f = await reviewFixture();
   try {
     const first = await f.scan(), saved = await recorded(f, first);
     await writeFile(join(f.root, 'additional-covered.md'), '# Changed detector scope\n');
     const changed = await f.scan({ selection: { paths: 'all', excludedPaths: [] } });
     const read = await authoring.readAuthoring({ policyBytes: saved.value.policyBytes, inventories: f.inventories, reviewEvidence: [changed.bytes] });
-    assert.equal(read.value.editing, 'unavailable');
-    assert.equal(read.value.diagnostics[0].code, 'REVIEW_RECONSIDER_REQUIRED');
+    // #24: changed evidence is reported as applicability, not a gate; the judgment stays bound to its original evidence.
+    assert.equal(read.value.editing, 'available');
+    assert.deepEqual(read.value.diagnostics, []);
+    assert.equal(read.value.reviewJudgments[0].applicability, 'changed');
+    assert.equal(read.value.reviewJudgments[0].applicabilityReason, 'evidence-changed');
+    assert.deepEqual(read.value.intent.reviews, saved.value.intent.reviews);
     assert.deepEqual(read.value.originalBytes, saved.value.policyBytes);
     const reconsidered = await authoring.reconsiderReviews({ policyBytes: saved.value.policyBytes, inventories: f.inventories, reviewEvidence: [changed.bytes] });
     assert.equal(reconsidered.status, 'ok');
     assert.deepEqual(reconsidered.value.intent.reviews.history, saved.value.intent.reviews.records);
+    assert.equal(reconsidered.value.reviewJudgments[0].applicability, 'reconsideration-requested');
     const inspected = await authoring.inspectReviewEvidence({ evidenceBytes: changed.bytes, inventory: f.inventory, itemId: f.item.id });
     const replacement = await authoring.recordReview({ policyBytes: reconsidered.value.policyBytes, inventories: f.inventories, evidenceBytes: changed.bytes, target: { releaseSha256: f.inventory.release.sha256, itemId: f.item.id }, finding: inspected.value.bindings[0].finding,
       decision: { ...decision, id: 'decision-2', disposition: 'accepted-risk', supersedes: reconsidered.value.intent.reviews.records[0].id, reason: 'Changed fixture configuration explicitly reviewed.' } });
@@ -129,21 +136,26 @@ test('changed detector scope requires reconsideration, preserves history and sup
     assert.deepEqual(replacement.value.intent.reviews.history[0], saved.value.intent.reviews.records[0]);
   } finally { await f.cleanup(); }
 });
-test('missing evidence preserves executable policy and originals; field/version/binding violations refuse without partial artifacts', async () => {
+test('missing evidence preserves executable policy and originals; version/binding violations of a new decision refuse without partial artifacts', async () => {
   const f = await reviewFixture();
   try {
     const evidence = await f.scan(), saved = await recorded(f, evidence);
     const missing = await authoring.readAuthoring({ policyBytes: saved.value.policyBytes, inventories: f.inventories });
     assert.equal(missing.status, 'ok'); assert.equal(missing.value.policy.mode, 'vibe');
-    assert.equal(missing.value.diagnostics[0].code, 'REVIEW_BINDING_UNAVAILABLE');
+    // #24: missing evidence leaves editing available; the judgment is reported as unverified, never refused.
+    assert.equal(missing.value.editing, 'available'); assert.deepEqual(missing.value.diagnostics, []);
+    assert.equal(missing.value.reviewJudgments[0].applicability, 'unverified');
+    assert.equal(missing.value.reviewJudgments[0].applicabilityReason, 'evidence-not-supplied');
     assert.deepEqual(missing.value.originalBytes, saved.value.policyBytes);
     const record = saved.value.intent.reviews.records[0];
     for (const field of Object.keys(record.evidence)) {
       const policy = JSON.parse(new TextDecoder().decode(saved.value.policyBytes));
       policy.metadata['aih.workbench'].reviews.records[0].evidence[field] = 'incomparable';
       const read = await authoring.readAuthoring({ policyBytes: encode(policy), inventories: f.inventories, reviewEvidence: [evidence.bytes] });
-      assert.equal(read.value.editing, 'unavailable', field);
-      assert.equal(read.value.diagnostics[0].code, 'REVIEW_RECONSIDER_REQUIRED', field);
+      // #24: a binding that no longer matches the supplied evidence is applicability 'changed', not an editing refusal.
+      assert.equal(read.value.editing, 'available', field);
+      assert.equal(read.value.reviewJudgments[0].applicability, 'changed', field);
+      assert.equal(read.value.reviewJudgments[0].evidence[field], 'incomparable', field);
     }
     const unsupported = structuredClone(saved.value.intent); unsupported.reviews.schema = 'urn:aihq:workbench:review-decisions:1.1.0';
     const refused = await authoring.composeAuthoring({ basePolicyBytes: saved.value.policyBytes, intent: unsupported, inventories: f.inventories, reviewEvidence: [evidence.bytes] });
@@ -218,6 +230,7 @@ test('explicit unchanged subject comparison across a new release retains the ori
     const updated = await authoring.composeAuthoring({ basePolicyBytes: saved.value.policyBytes, intent, inventories, reviewEvidence: [evidence.bytes], comparisons });
     assert.equal(updated.status, 'ok', JSON.stringify(updated.diagnostics));
     assert.deepEqual(updated.value.intent.reviews, saved.value.intent.reviews);
+    assert.equal(updated.value.reviewJudgments[0].applicability, 'applies');
     const reopened = await authoring.readAuthoring({ policyBytes: updated.value.policyBytes, inventories, reviewEvidence: [evidence.bytes], comparisons });
     assert.equal(reopened.value.editing, 'available', JSON.stringify(reopened.value.diagnostics));
     const compared = await authoring.compareReviewBindings({ intent: reopened.value.intent, inventories, reviewEvidence: [evidence.bytes], comparisons });
@@ -236,7 +249,7 @@ test('synthetic required-input item remains inspectable and reviewable with supp
     assert.deepEqual(reopened.value.intent.roots[0].configuration, { directory: 'chosen' });
   } finally { await f.cleanup(); }
 });
-test('changed relevant annex bytes require reconsideration even with the same checked observation ID', async () => {
+test('changed relevant annex bytes report changed applicability even with the same checked observation ID', async () => {
   const f = await reviewFixture();
   try {
     const evidence = await f.scan(), saved = await recorded(f, evidence);
@@ -250,12 +263,14 @@ test('changed relevant annex bytes require reconsideration even with the same ch
     const changed = await prepareArtifact({ report, annexes });
     assert.notEqual(changed.scanId, evidence.scanId);
     const read = await authoring.readAuthoring({ policyBytes: saved.value.policyBytes, inventories: f.inventories, reviewEvidence: [changed.bytes] });
-    assert.equal(read.value.editing, 'unavailable');
-    assert.equal(read.value.diagnostics[0].code, 'REVIEW_RECONSIDER_REQUIRED');
+    // #24: changed supporting evidence is reported as applicability, not a gate.
+    assert.equal(read.value.editing, 'available');
+    assert.equal(read.value.reviewJudgments[0].applicability, 'changed');
+    assert.equal(read.value.reviewJudgments[0].applicabilityReason, 'evidence-changed');
     assert.deepEqual(read.value.intent.reviews, saved.value.intent.reviews);
   } finally { await f.cleanup(); }
 });
-test('a changed review cannot hide an unavailable binding on another current record during composition', async () => {
+test('composition across a new release succeeds and each current record reports its own applicability', async () => {
   const f = await reviewFixture();
   try {
     const evidence = await f.scan(), first = await recorded(f, evidence);
@@ -265,12 +280,15 @@ test('a changed review cannot hide an unavailable binding on another current rec
     const next = { ...await newNoteRelease(f), materials: [] }, inventories = [...f.inventories, next], intent = structuredClone(second.value.intent);
     intent.roots[0].releaseSha256 = next.release.sha256; intent.roots[0].itemSha256 = next.release.items[0].itemSha256; intent.inputs = [];
     const result = await authoring.composeAuthoring({ basePolicyBytes: second.value.policyBytes, intent, inventories, reviewEvidence: [evidence.bytes], comparisons: [{ recordId: 'second-review', target: { releaseSha256: next.release.sha256, itemId: f.item.id } }] });
-    assert.equal(result.status, 'refused'); assert.equal(result.value, undefined);
-    assert.equal(result.diagnostics[0].code, 'REVIEW_BINDING_UNAVAILABLE');
-    assert.deepEqual(result.originalBytes, second.value.policyBytes);
+    // #24: retired the refusal. One record's unavailable binding neither hides nor blocks another; each reports its own state.
+    assert.equal(result.status, 'ok', JSON.stringify(result.diagnostics));
+    assert.deepEqual(result.value.intent.reviews, second.value.intent.reviews);
+    const byId = Object.fromEntries(result.value.reviewJudgments.map(j => [j.recordId, j]));
+    assert.equal(byId[decision.id].applicability, 'changed'); assert.equal(byId[decision.id].applicabilityReason, 'subject-not-selected');
+    assert.equal(byId['second-review'].applicability, 'unverified'); assert.equal(byId['second-review'].applicabilityReason, 'source-unavailable');
   } finally { await f.cleanup(); }
 });
-test('explicit changed-subject comparison can retain history through composition and reconsideration', async () => {
+test('explicit changed-subject comparison reports changed applicability; explicit reconsideration retains history', async () => {
   const f = await reviewFixture();
   try {
     const evidence = await f.scan(), saved = await recorded(f, evidence), next = await newNoteRelease(f, 'updated');
@@ -279,9 +297,128 @@ test('explicit changed-subject comparison can retain history through composition
     const comparisons = [{ recordId: decision.id, target: { releaseSha256: next.release.sha256, itemId: f.item.id } }];
     const changed = await authoring.composeAuthoring({ basePolicyBytes: saved.value.policyBytes, intent, inventories, reviewEvidence: [evidence.bytes], comparisons });
     assert.equal(changed.status, 'ok', JSON.stringify(changed.diagnostics));
-    assert.equal(changed.value.intent.reviews.records[0].state, 'reconsider');
-    assert.deepEqual(changed.value.intent.reviews.history, saved.value.intent.reviews.records);
+    // #24: composition no longer converts the record; the changed subject is only reported.
+    assert.deepEqual(changed.value.intent.reviews, saved.value.intent.reviews);
+    assert.equal(changed.value.reviewJudgments[0].applicability, 'changed');
+    assert.equal(changed.value.reviewJudgments[0].applicabilityReason, 'subject-changed');
     const reconsidered = await authoring.reconsiderReviews({ policyBytes: saved.value.policyBytes, inventories, reviewEvidence: [], comparisons: [{ recordId: decision.id, target: { releaseSha256: f.inventory.release.sha256, itemId: f.item.id } }] });
     assert.equal(reconsidered.status, 'ok', JSON.stringify(reconsidered.diagnostics));
+    assert.equal(reconsidered.value.intent.reviews.records[0].state, 'reconsider');
+    assert.deepEqual(reconsidered.value.intent.reviews.history, saved.value.intent.reviews.records);
+  } finally { await f.cleanup(); }
+});
+
+// #24: historical judgments stay attributed and bound to their original evidence; imported ones are labelled.
+async function changedEvidence(f) {
+  await writeFile(join(f.root, 'additional-covered.md'), '# Changed detector scope\n');
+  return f.scan({ selection: { paths: 'all', excludedPaths: [] } });
+}
+const unrelatedSelect = f => {
+  const maintained = f.inventories[0].release, item = maintained.items[0];
+  return { type: 'select', root: { releaseSha256: maintained.sha256, itemId: item.id, scope: item.scopes[0], configuration: {} } };
+};
+test('historical judgment survives an unrelated edit after an evidence change, stays bound and reapplies with the original evidence', async () => {
+  const f = await reviewFixture();
+  try {
+    const first = await f.scan(), saved = await recorded(f, first), changed = await changedEvidence(f);
+    const edited = await authoring.editAuthoring({ policyBytes: saved.value.policyBytes, inventories: f.inventories, reviewEvidence: [changed.bytes], operation: unrelatedSelect(f) });
+    assert.equal(edited.status, 'ok', JSON.stringify(edited.diagnostics));
+    assert.deepEqual(edited.value.intent.reviews, saved.value.intent.reviews);
+    const record = edited.value.intent.reviews.records[0];
+    assert.equal(record.state, 'current');
+    for (const field of ['id', 'owner', 'actor', 'reason', 'recordedAt', 'disposition', 'subject', 'finding', 'evidence']) assert.deepEqual(record[field], saved.value.intent.reviews.records[0][field], field);
+    const [judgment] = edited.value.reviewJudgments;
+    assert.equal(judgment.applicability, 'changed'); assert.equal(judgment.applicabilityReason, 'evidence-changed');
+    assert.deepEqual(judgment.evidence, record.evidence); assert.deepEqual(judgment.subject, record.subject);
+    const reopened = await authoring.readAuthoring({ policyBytes: edited.value.policyBytes, inventories: f.inventories, reviewEvidence: [first.bytes] });
+    assert.equal(reopened.value.editing, 'available', JSON.stringify(reopened.value.diagnostics));
+    assert.equal(reopened.value.reviewJudgments[0].applicability, 'applies');
+    assert.equal(reopened.value.reviewJudgments[0].applicabilityReason, null);
+  } finally { await f.cleanup(); }
+});
+test('changed evidence forces no re-review: nothing refuses, converts or rewrites history', async () => {
+  const f = await reviewFixture();
+  try {
+    const first = await f.scan(), saved = await recorded(f, first), changed = await changedEvidence(f);
+    const read = await authoring.readAuthoring({ policyBytes: saved.value.policyBytes, inventories: f.inventories, reviewEvidence: [changed.bytes] });
+    assert.equal(read.value.editing, 'available');
+    assert.deepEqual(read.value.diagnostics, []);
+    assert.deepEqual(read.value.reviewSummary, { recipientDecisions: 0, importedDecisions: 1, applies: 0, changed: 1, unverified: 0 });
+    assert.deepEqual(read.value.intent.reviews.history, []);
+    assert.equal(read.value.intent.reviews.records[0].state, 'current');
+    // A fresh judgment on the new evidence is optional and is not blocked by the changed one.
+    const inspected = await authoring.inspectReviewEvidence({ evidenceBytes: changed.bytes, inventory: f.inventory, itemId: f.item.id });
+    const second = await authoring.recordReview({ policyBytes: saved.value.policyBytes, inventories: f.inventories, evidenceBytes: changed.bytes, target: { releaseSha256: f.inventory.release.sha256, itemId: f.item.id },
+      finding: inspected.value.bindings[0].finding, decision: { ...decision, id: 'decision-2', reason: 'Re-reviewed on the changed evidence.' } });
+    assert.equal(second.status, 'ok', JSON.stringify(second.diagnostics));
+    const byId = Object.fromEntries(second.value.reviewJudgments.map(j => [j.recordId, j.applicability]));
+    assert.deepEqual(byId, { [decision.id]: 'changed', 'decision-2': 'applies' });
+    assert.deepEqual(second.value.intent.reviews.history, []);
+  } finally { await f.cleanup(); }
+});
+test('imported judgments are labelled imported and are not counted as the recipient\'s decision', async () => {
+  const f = await reviewFixture();
+  try {
+    const evidence = await f.scan(), saved = await recorded(f, evidence), read = recipient => authoring.readAuthoring({ policyBytes: saved.value.policyBytes, inventories: f.inventories, reviewEvidence: [evidence.bytes], recipient });
+    const other = await read({ kind: 'individual', id: 'me' });
+    assert.equal(other.value.reviewJudgments[0].origin, 'imported');
+    assert.deepEqual(other.value.reviewJudgments[0].owner, decision.owner);
+    assert.equal(other.value.reviewSummary.recipientDecisions, 0); assert.equal(other.value.reviewSummary.importedDecisions, 1);
+    const own = await read({ kind: 'organization', id: 'team' });
+    assert.equal(own.value.reviewJudgments[0].origin, 'recipient');
+    assert.equal(own.value.reviewSummary.recipientDecisions, 1); assert.equal(own.value.reviewSummary.importedDecisions, 0);
+    // No recipient, or one that is invalid or only partly equal to the owner, never reads as the recipient's decision and is never an error.
+    for (const recipient of [undefined, { kind: 'individual', id: 'team' }, { kind: 'organization', id: '' }, { kind: 'provider', id: 'team' }, 'team', { kind: 'organization', id: 'x'.repeat(1001) }]) {
+      const result = await read(recipient);
+      assert.equal(result.status, 'ok'); assert.equal(result.value.reviewJudgments[0].origin, 'imported');
+      assert.equal(result.value.reviewSummary.recipientDecisions, 0);
+    }
+    const edited = await authoring.editAuthoring({ policyBytes: saved.value.policyBytes, inventories: f.inventories, reviewEvidence: [evidence.bytes], operation: unrelatedSelect(f), recipient: decision.owner });
+    assert.equal(edited.status, 'ok', JSON.stringify(edited.diagnostics));
+    assert.equal(edited.value.reviewJudgments[0].origin, 'recipient');
+    assert.deepEqual(edited.value.intent.reviews, saved.value.intent.reviews);
+  } finally { await f.cleanup(); }
+});
+test('accepted-risk judgment keeps actor, reason and exact binding through an edit and an evidence change', async () => {
+  const f = await reviewFixture();
+  try {
+    const first = await f.scan(), inspected = await authoring.inspectReviewEvidence({ evidenceBytes: first.bytes, inventory: f.inventory, itemId: f.item.id });
+    const risk = { ...decision, id: 'risk-1', disposition: 'accepted-risk', actor: 'risk-owner', owner: { kind: 'individual', id: 'risk-owner-id' }, reason: 'Accepted for this fixture until the license declaration is added.' };
+    const saved = await authoring.recordReview({ policyBytes: f.saved.value.policyBytes, inventories: f.inventories, evidenceBytes: first.bytes, target: { releaseSha256: f.inventory.release.sha256, itemId: f.item.id }, finding: inspected.value.bindings[0].finding, decision: risk });
+    assert.equal(saved.status, 'ok', JSON.stringify(saved.diagnostics));
+    const changed = await changedEvidence(f);
+    const edited = await authoring.editAuthoring({ policyBytes: saved.value.policyBytes, inventories: f.inventories, reviewEvidence: [changed.bytes], operation: unrelatedSelect(f), recipient: risk.owner });
+    assert.equal(edited.status, 'ok', JSON.stringify(edited.diagnostics));
+    const [judgment] = edited.value.reviewJudgments;
+    assert.equal(judgment.disposition, 'accepted-risk'); assert.equal(judgment.actor, 'risk-owner'); assert.equal(judgment.reason, risk.reason);
+    assert.deepEqual(judgment.owner, risk.owner);
+    assert.deepEqual(judgment.subject, inspected.value.subject);
+    assert.deepEqual(judgment.finding, inspected.value.bindings[0].finding);
+    assert.deepEqual(judgment.evidence, inspected.value.bindings[0].evidence);
+    assert.equal(judgment.applicability, 'changed'); assert.equal(judgment.origin, 'recipient');
+    assert.deepEqual(edited.value.intent.reviews.records[0], saved.value.intent.reviews.records[0]);
+  } finally { await f.cleanup(); }
+});
+test('drafts report saved judgments and neither refuse nor convert them when editing and compiling', async () => {
+  const f = await reviewFixture();
+  try {
+    const first = await f.scan(), saved = await recorded(f, first), changed = await changedEvidence(f);
+    const context = { inventories: f.inventories, reviewEvidence: [changed.bytes], recipient: decision.owner };
+    const opened = await authoring.openDraft({ bytes: saved.value.policyBytes, ...context });
+    // #24: a changed judgment no longer refuses the draft; it is reported beside it.
+    assert.equal(opened.status, 'ok', JSON.stringify(opened.diagnostics));
+    assert.equal(opened.value.reviewJudgments[0].applicability, 'changed'); assert.equal(opened.value.reviewJudgments[0].origin, 'recipient');
+    assert.equal(opened.value.compile.status, 'available');
+    const trimmed = await authoring.editDraft({ envelopeBytes: opened.value.envelopeBytes, operation: { type: 'remove-root', root: saved.value.intent.roots[0] }, ...context });
+    assert.equal(trimmed.status, 'ok', JSON.stringify(trimmed.diagnostics));
+    // #24: removing reviewed content no longer converts its judgment to a reconsideration request.
+    assert.equal('reviewsReconsidered' in trimmed.value.changes, false);
+    assert.deepEqual(trimmed.value.intent.reviews, saved.value.intent.reviews);
+    assert.equal(trimmed.value.reviewJudgments[0].applicabilityReason, 'subject-not-selected');
+    const compiled = await authoring.compileDraft({ envelopeBytes: trimmed.value.envelopeBytes, ...context });
+    assert.equal(compiled.status, 'ok', JSON.stringify(compiled.diagnostics));
+    assert.equal('reviewsReconsidered' in compiled.value, false);
+    assert.deepEqual(compiled.value.intent.reviews, saved.value.intent.reviews);
+    assert.equal(compiled.value.reviewJudgments[0].state, 'current');
   } finally { await f.cleanup(); }
 });
