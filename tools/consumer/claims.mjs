@@ -36,9 +36,10 @@ function outcomeFields(item) {
 
 // A check made with the trust this process started with and one made with the persisted configuration are not
 // the same condition, so they are never paired. A Core that reported its options but no configuration predates
-// the option and checked with the process's trust; only a recheck that failed before Core answered (no options at
-// all) is unknown, and it has no postcheck to pair.
-const configurationOf = check => check?.options?.configuration ?? (check?.options?.targets ? 'process' : null);
+// the option and checked with the process's trust; only a recheck that failed before Core answered (no effective
+// option reported) is unknown, and it has no postcheck to pair.
+const configurationOf = check => check?.options?.configuration
+  ?? (Object.values(check?.options ?? {}).some(value => value !== null) ? 'process' : null);
 const sameConfiguration = (a, b) => configurationOf(a) === null || configurationOf(b) === null || configurationOf(a) === configurationOf(b);
 
 function admit(records) {
