@@ -265,14 +265,14 @@ test('a goal-relevant item that is new or revised in a newer revision of a saved
   const got = await withChanges({ before, after });
   // New with a topic match, revised by the goal rule's item, revised with a topic match; unrelated, unchanged-but-renamed and irrelevant revisions say nothing.
   assert.deepEqual(got.map(s => s.change.itemId).sort(), ['mattpocock.tdd', 'notes.desc', 'notes.edited', 'notes.plan']);
-  assert.deepEqual(changeTrigger(byItem(got, 'notes.plan')), { ruleId: 'change.new', key: 'change:new',
+  assert.deepEqual(changeTrigger(byItem(got, 'notes.plan')), { ruleId: 'change.new', key: 'change:new@1.1.0',
     text: `“Test plan note” is new in review-notes-catalog 1.1.0, ${SAVED_FROM}; your saved goal “add tests to my app” mentions “tests”, and its label mentions “test”.` });
   assert.equal(changeTrigger(byItem(got, 'notes.desc')).text, `“Weekly summary” is new in review-notes-catalog 1.1.0, ${SAVED_FROM}; your saved goal “add tests to my app” mentions “tests”, and its description mentions “testing”.`);
-  assert.deepEqual(changeTrigger(byItem(got, 'notes.edited')), { ruleId: 'change.revised', key: 'change:revised',
+  assert.deepEqual(changeTrigger(byItem(got, 'notes.edited')), { ruleId: 'change.revised', key: 'change:revised@1.1.0',
     text: '“Test checklist” changed in review-notes-catalog 1.1.0 (its recipe or files differ from the revision this policy was saved from); your saved goal “add tests to my app” mentions “tests”, and its label mentions “test”.' });
   const tdd = byItem(got, 'mattpocock.tdd');
   assert.equal(changeTrigger(tdd).text, '“Label mattpocock.tdd” changed in review-notes-catalog 1.1.0 (its recipe or files differ from the revision this policy was saved from); your saved goal “add tests to my app” mentions “tests”.');
-  assert.deepEqual(tdd.triggers.map(t => t.key), ['change:revised', 'goal:goal.test']);
+  assert.deepEqual(tdd.triggers.map(t => t.key), ['change:revised@1.1.0', 'goal:goal.test']);
   assert.deepEqual(tdd.references, [{ kind: 'saved-reason', ref: 'x.root' }, { kind: 'catalog-item', ref: 'mattpocock.tdd' }]);
   assert.equal(tdd.goal, GOAL); assert.equal(tdd.rulesVersion, '1.2.0');
   // The change describes the candidate item, the content the reason talks about.
@@ -291,13 +291,19 @@ test('a goal-relevant item that is new or revised in a newer revision of a saved
   assert.equal(suggestionProblem({ ...fields, schema: IMPROVEMENT_SUGGESTION_SCHEMA, required: false, recordedAt: NOW }), null);
 });
 
-test('a new item named by a goal rule is suggested from the candidate; a release without a version says no version', async () => {
+test('a new item named by a goal rule is suggested from the newest later candidate; an older, equal or unversioned one says nothing', async () => {
   const intent = intentOf({ roots: [rootOf('x.root', savedReason('goal.review', 'add tests and review code'))] });
   const items = [item('x.root'), item('mattpocock.code-review')];
-  const [only] = await withChanges({ before: [item('x.root')], intent, candidates: [releaseOf(10, undefined, items)] });
+  const [only] = await withChanges({ before: [item('x.root')], intent, candidates: [releaseOf(10, '1.1.0-rc.2', items)] });
   assert.equal(only.change.itemId, 'mattpocock.code-review'); assert.equal(only.change.releaseSha256, hex(10));
-  assert.deepEqual(only.triggers, [{ ruleId: 'change.new', key: 'change:new',
-    text: `“Label mattpocock.code-review” is new in review-notes-catalog, ${SAVED_FROM}; your saved goal “add tests and review code” mentions “review”.` }]);
+  assert.deepEqual(only.triggers, [{ ruleId: 'change.new', key: 'change:new@1.1.0-rc.2',
+    text: `“Label mattpocock.code-review” is new in review-notes-catalog 1.1.0-rc.2, ${SAVED_FROM}; your saved goal “add tests and review code” mentions “review”.` }]);
+  // A rollback, the same version, a prerelease of it, no version or a non-version is never called newer.
+  for (const version of ['0.9.0', '1.0.0', '1.0.0-rc.1', undefined, 'next'])
+    assert.deepEqual(await withChanges({ before: [item('x.root')], intent, candidates: [releaseOf(10, version, items)] }), [], String(version));
+  // Several later revisions: the newest is the one suggested, whatever order the source lists them in.
+  const [newest] = await withChanges({ before: [item('x.root')], intent, candidates: [releaseOf(10, '1.1.0', items), releaseOf(12, '1.10.0', items), releaseOf(11, '1.2.0', items), releaseOf(13, '1.10.0-rc.1', items)] });
+  assert.equal(newest.change.releaseSha256, hex(12)); assert.match(changeTrigger(newest).text, /new in review-notes-catalog 1\.10\.0,/);
   // The first matching root in item id order supplies the goal.
   const two = intentOf({ roots: [rootOf('z.root', savedReason('goal.review', 'review code')), rootOf('a.root', savedReason('goal.review', 'quality reviews'))] });
   const [first] = await withChanges({ before: [item('a.root'), item('z.root')], after: [item('mattpocock.code-review')], intent: two });
@@ -335,7 +341,7 @@ test('novelty is measured against every saved source of the package: an item an 
   assert.deepEqual(await withChanges({ intent, saved, candidates: [releaseOf(10, '1.1.0', [item('x.root'), plan])] }), []);
   // Different from every saved revision that has it: revised.
   const [edited] = await withChanges({ intent, saved, candidates: [releaseOf(10, '1.1.0', [revised(plan, 31)])] });
-  assert.equal(changeTrigger(edited).key, 'change:revised');
+  assert.equal(changeTrigger(edited).key, 'change:revised@1.1.0');
 });
 
 test('selected, excluded and scope-less items are never suggested for a change, and a request goal creates no change reason', async () => {
@@ -366,7 +372,15 @@ test('a change reason is shown once: dismissed with it, a goal suggestion stays 
   assert.deepEqual(again.reasons, [`Shown again: a new reason applies — ${changeTrigger(shown).text}`, 'Shown again: the suggested item, or an item it needs, changed since you dismissed it.']);
   // Dismissed with the change reason, it stays dismissed on a recheck of the same candidate, and when the candidate is gone.
   assert.deepEqual(classifyImprovement(byItem(await withChanges({ before, after }), 'mattpocock.tdd'), shown), { dismissed: true, reasons: [] });
-  assert.deepEqual(classifyImprovement(dismissedGoal, shown), { dismissed: true, reasons: [] });
+  const versions = { [hex(9)]: '1.0.0', [hex(10)]: '1.1.0', [hex(11)]: '1.2.0' }, versionOf = sha => versions[sha];
+  assert.deepEqual(classifyImprovement(dismissedGoal, shown, versionOf), { dismissed: true, reasons: [] });
+  // Content as new as the dismissed candidate or newer, or of a version the host cannot tell, is a change since the dismissal.
+  const advanced = byItem(await withChanges({ before: after, saved: [releaseOf(11, '1.2.0', [after[0], revised(item('mattpocock.tdd'), 23), after[2]])], candidates: [] }), 'mattpocock.tdd');
+  assert.deepEqual(classifyImprovement(advanced, shown, versionOf).reasons, ['Shown again: the suggested item, or an item it needs, changed since you dismissed it.']);
+  assert.equal(classifyImprovement(dismissedGoal, shown).dismissed, false);
+  // A later version with the same content is neither a new reason nor changed content.
+  const later = byItem(await withChanges({ before, candidates: [releaseOf(12, '1.3.0', after)] }), 'mattpocock.tdd');
+  assert.notEqual(later.revision, shown.revision); assert.deepEqual(classifyImprovement(later, shown, versionOf), { dismissed: true, reasons: [] });
   // A revised client-rule item that is not relevant to a saved goal is neither a new reason nor changed content.
   const clientBefore = byItem(await withChanges({ before, clients: ['claude'] }), 'aihq.client.claude');
   const clientAfter = byItem(await withChanges({ before, after: [...after.slice(0, 2), revised(item('aihq.client.claude', { label: 'Claude wiring' }), 41)], clients: ['claude'] }), 'aihq.client.claude');
@@ -374,8 +388,19 @@ test('a change reason is shown once: dismissed with it, a goal suggestion stays 
   assert.deepEqual(classifyImprovement(clientAfter, clientBefore), { dismissed: true, reasons: [] });
   // Relevant by its label to the saved goal, the same revision is a reason and changed content.
   const relevant = byItem(await withChanges({ before, after: [...after.slice(0, 2), revised(item('aihq.client.claude', { label: 'Test the Claude wiring' }), 41)], clients: ['claude'] }), 'aihq.client.claude');
-  assert.equal(changeTrigger(relevant).key, 'change:revised');
+  assert.equal(changeTrigger(relevant).key, 'change:revised@1.1.0');
   assert.equal(classifyImprovement(relevant, clientBefore).dismissed, false);
+});
+
+test('a revision that changes only an item the suggested item needs is a revised change, and shows a dismissal again', async () => {
+  const needing = item('mattpocock.tdd', { dependencies: { requires: [{ itemId: 'dep.helper' }], optional: [], conflicts: [] } });
+  const before = [item('x.root'), needing, item('dep.helper')], after = [item('x.root'), needing, revised(item('dep.helper'), 24)];
+  const dismissedGoal = byItem(await withChanges({ before, candidates: [] }), 'mattpocock.tdd'), shown = byItem(await withChanges({ before, after }), 'mattpocock.tdd');
+  assert.equal(changeTrigger(shown).text, '“Label mattpocock.tdd” changed in review-notes-catalog 1.1.0 (an item it needs differs from the revision this policy was saved from); your saved goal “add tests to my app” mentions “tests”.');
+  assert.deepEqual(shown.change.content.requires.map(r => [r.itemId, r.recipeSha256]), [['dep.helper', hex(24)]]);
+  assert.deepEqual(classifyImprovement(shown, dismissedGoal).reasons, [`Shown again: a new reason applies — ${changeTrigger(shown).text}`, 'Shown again: the suggested item, or an item it needs, changed since you dismissed it.']);
+  // An unchanged item whose needed item is unchanged too says nothing.
+  assert.equal(changeTrigger(byItem(await withChanges({ before, after: before }), 'mattpocock.tdd')), undefined);
 });
 
 // ---- Records and the installed maintained Catalog ------------------------------------------------------------------
@@ -592,7 +617,9 @@ test('the update source inputs are validated like the maintenance check, and ign
 
 test('the check says whether content changes were checked; recurring friction is always unknown, naming the missing interface', async () => {
   const s = await scenario(), quiet = { goal: 'tests' };
-  const unread = await check(s, s.envelopeBytes, quiet), unconfigured = await check(s, s.envelopeBytes, { ...quiet, candidateSource: 'unconfigured' });
+  const unread = await check(s, s.envelopeBytes, { ...quiet, candidateSource: 'configured' }), unconfigured = await check(s, s.envelopeBytes, { ...quiet, candidateSource: 'unconfigured' });
+  // A caller that supplies no update source at all has none configured.
+  assert.deepEqual((await check(s, s.envelopeBytes, quiet)).coverage, unconfigured.coverage);
   const checked = await check(s, s.envelopeBytes, { ...quiet, candidateInventories: [] });
   assert.deepEqual(unread.coverage, [{ trigger: 'content-change', state: 'unknown', reason: 'sources-unavailable', text: UNREAD }, FRICTION]);
   assert.deepEqual(unconfigured.coverage, [{ trigger: 'content-change', state: 'unknown', reason: 'no-configured-source', text: UNCONFIGURED }, FRICTION]);
@@ -735,7 +762,7 @@ test('a real newer revision of the saved notes source offers its new goal-releva
   assert.equal(s.next.release.package.version, '1.0.1'); assert.equal(s.notes.release.package.version, '1.0.0');
   const value = await check(s, s.envelopeBytes, { candidateInventories }), plan = shownItem(value, PLAN_ID);
   assert.ok(plan);
-  assert.deepEqual(plan.triggers, [{ ruleId: 'change.new', key: 'change:new',
+  assert.deepEqual(plan.triggers, [{ ruleId: 'change.new', key: 'change:new@1.0.1',
     text: `“Test plan note” is new in review-notes-catalog 1.0.1, ${SAVED_FROM}; your saved goal “add tests to my app” mentions “tests”, and its label mentions “test”.` }]);
   assert.deepEqual(plan.references, [{ kind: 'saved-reason', ref: s.noteId }, { kind: 'catalog-item', ref: PLAN_ID }]);
   assert.equal(plan.change.releaseSha256, s.next.release.sha256); assert.equal(plan.change.itemSha256, s.next.release.items.find(i => i.id === PLAN_ID).itemSha256);
@@ -758,7 +785,7 @@ test('host route: improvements-check reads the configured update source and reco
   let source = async (...args) => { calls.push(args); return [s.next]; };
   const service = await createMixedService(s.maintained, { maintenanceSource: (...args) => source(...args) });
   const checked = valueOf(await service.run('improvements-check', { envelopeBytes: [...s.envelopeBytes] })), plan = shownItem(checked, PLAN_ID);
-  assert.deepEqual(calls, [[]]); assert.ok(plan); assert.equal(changeTrigger(plan).key, 'change:new');
+  assert.deepEqual(calls, [[]]); assert.ok(plan); assert.equal(changeTrigger(plan).key, 'change:new@1.0.1');
   assert.deepEqual(checked.coverage[0], { trigger: 'content-change', state: 'checked', text: CHECKED }); assert.ok(checked.reads.includes('candidate-inventories'));
   const recorded = valueOf(await service.run('improvements-record', { envelopeBytes: [...s.envelopeBytes], operation: dismissOperation(plan) }));
   assert.equal(recorded.dismissals.length, 1); assert.equal(calls.length, 1);

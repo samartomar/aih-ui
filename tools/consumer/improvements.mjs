@@ -38,8 +38,9 @@ export function projectDismissals(envelope) {
 // Bounded read: no scan, native check, model call, host prepare/apply or write. The host supplies `now`, the
 // checked inventories and the AI clients the person declared in Workbench setup, with the labels Harness publishes for
 // them; `goal` is an optional request. `candidateInventories` is null/undefined when the host's update source could not be
-// read, and `candidateSource` says whether the host has one at all ('unconfigured' is unknown, never checked).
-export async function checkImprovements({ envelopeBytes, inventories, candidateInventories, candidateSource = 'configured', clients = [], labels = {}, goal, now } = {}) {
+// read, and `candidateSource` says whether the host has one at all ('unconfigured' is unknown, never checked). A caller that
+// supplies neither has no update source, so earlier callers keep their meaning.
+export async function checkImprovements({ envelopeBytes, inventories, candidateInventories, candidateSource = candidateInventories === undefined ? 'unconfigured' : 'configured', clients = [], labels = {}, goal, now } = {}) {
   const loaded = await load(envelopeBytes);
   if (loaded.status !== 'ok') return loaded;
   const { read, draft } = loaded.value;
@@ -64,12 +65,14 @@ export async function checkImprovements({ envelopeBytes, inventories, candidateI
   const dismissals = new Map(read.records.filter(isDismissal).map(record => [record.suggestion.id, record]));
   const shown = (suggestion, dismissal, reasons = []) => ({ ...suggestion, prompt: improvementPrompt(suggestion), dismissal: dismissal ? structuredClone(dismissal) : null,
     ...(reasons.length ? { promotion: { reasons } } : {}) });
+  // Package versions of every supplied release, so a dismissed change can tell older content from newer.
+  const versions = new Map([...inventories, ...(reason === undefined ? candidateInventories : [])].map(entry => [entry.release.sha256, entry.release.package?.version]));
   const active = [], dismissed = [], matched = new Set();
   for (const suggestion of current) {
     const dismissal = dismissals.get(suggestion.id);
     if (!dismissal) { active.push(shown(suggestion, null)); continue; }
     matched.add(dismissal.id);
-    const { dismissed: stays, reasons } = classifyImprovement(suggestion, savedBy.get(dismissal.suggestion.id));
+    const { dismissed: stays, reasons } = classifyImprovement(suggestion, savedBy.get(dismissal.suggestion.id), sha => versions.get(sha));
     (stays ? dismissed : active).push(shown(suggestion, dismissal, reasons));
   }
   const preserved = [...dismissals.values()].filter(dismissal => !matched.has(dismissal.id)).sort(byId)
