@@ -134,7 +134,7 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
   }));
   const entries = block(), targets = block(), unresolved = identify(el('ul', 'space-y-1 text-on-surface-variant'), 'org-unresolved');
   const targetScope = select('Target scope', 'org-target-scope', scopes, 'project'), targetClient = select('Target client', 'org-target-client', [['', 'Not declared']]), repository = input('Target repository', 'org-target-repository');
-  const clientStatus = identify(el('p', 'text-on-surface-variant'), 'org-target-client-status');
+  const clientStatus = identify(el('p', 'text-on-surface-variant'), 'org-target-client-status'); targetClient.setAttribute('aria-describedby', clientStatus.id);
   // Core's published AI clients (null before the summary arrives): the field offers only these, and Core's preview stays the authority on a client.
   let coreTargets = null, clients = null;
   const listed = () => clients?.ids ?? [], labels = () => clients?.labels ?? {};
@@ -155,7 +155,7 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
     targetClient.value = listed().includes(current) ? current : ''; targetClient.disabled = !listed().length;
     clientStatus.textContent = coreTargets === null ? 'Core\'s AI client list has not arrived yet. A target can still be declared without a client.'
       : listed().length ? 'These are the AI clients the installed Core lists. Listing a client does not mean it is installed, connected or admitted.'
-      : `Core's AI clients are unavailable: ${reason.replace(/.?$/, '.')} A target can still be declared without a client.`;
+      : `Core's AI clients are unavailable: ${reason.replace(/\.?$/, '.')} A target can still be declared without a client.`;
   }
   // A declared client the list does not carry stays in the draft as its id; Core decides at preview.
   function renderTargets() {
@@ -242,9 +242,11 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
   const resultActions = line(); resultActions.append(action('Preview', 'org-preview', showPreview), action('Export candidate', 'org-export', exportCandidate));
   node.append(el('summary', 'font-medium cursor-pointer', 'Organization baseline (organization author)'), el('p', 'text-on-surface-variant', 'An organization author sets obligations, targets and inputs; preview is computed by Core; exporting writes a candidate file and never publishes or activates authority.'), draftActions, policyRow, sourceRow, addRow, entries, el('h3', 'font-medium', 'Declared targets'), targets, targetRow, clientStatus, el('h3', 'font-medium', 'Unresolved choices'), unresolved, resultActions, preview, handoff, status);
   function setTargets(next) {
-    coreTargets = next ?? null; clients = publishedClients(coreTargets); renderClients();
-    const focusedId = node.contains(document.activeElement) ? document.activeElement.id : ''; renderTargets();
-    if (focusedId) [...node.querySelectorAll('[id]')].find(control => control.id === focusedId)?.focus();
+    const focusedId = node.contains(document.activeElement) ? document.activeElement.id : '';
+    coreTargets = next ?? null; clients = publishedClients(coreTargets); renderClients(); renderTargets();
+    // A field the new list disables cannot keep focus; it moves to the row's action, as after a removed row.
+    const byId = id => [...node.querySelectorAll('[id]')].find(control => control.id === id), control = focusedId && byId(focusedId);
+    if (focusedId) (control && !control.disabled ? control : byId('org-target-add'))?.focus();
   }
   renderClients();
   return { node, setTargets };

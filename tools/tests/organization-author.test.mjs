@@ -87,6 +87,8 @@ class Node {
   addEventListener(name, handler) { this.listeners[name] = handler; }
   get options() { return this.children; }
   contains(node) { return elements(this).includes(node); }
+  querySelectorAll() { return elements(this).filter(node => node.id); }
+  focus() { document.activeElement = this; }
 }
 const elements = root => [root, ...root.children.flatMap(elements)];
 const textOf = root => elements(root).map(node => node.textContent).join(' ');
@@ -169,6 +171,7 @@ test('adding a target sends a listed or undeclared client and refuses one outsid
   assert.deepEqual(calls.at(-1).body.operation, { kind: 'add-target', scope: 'user', client: 'codex' });
   find('org-target-client').value = ''; await find('org-target-add').listeners.click();
   assert.deepEqual(calls.at(-1).body.operation, { kind: 'add-target', scope: 'user' });
+  // A real select cannot hold a value it has no option for; this proves the guard behind it.
   calls.length = 0; find('org-target-client').value = 'ghost'; await find('org-target-add').listeners.click();
   assert.equal(calls.length, 0);
   assert.match(find('org-status').textContent, /"ghost".*not.*Core lists/);
@@ -185,7 +188,11 @@ test('an unavailable or empty Core list leaves the field unavailable with Core\'
     assert.match(find('org-target-client-status').textContent, /still be declared without a client/);
   }
   view.setTargets({ state: 'unavailable', reason: 'Core is not installed.' });
-  assert.match(find('org-target-client-status').textContent, /Core is not installed\./);
+  assert.match(find('org-target-client-status').textContent, /Core is not installed\. A target/);
+  // Core's reason is usually a raw error message without a closing period; it is kept whole.
+  view.setTargets({ state: 'unavailable', reason: 'Core not installed' });
+  assert.match(find('org-target-client-status').textContent, /: Core not installed\. A target/);
+  assert.equal(find('org-target-client')['aria-describedby'], 'org-target-client-status');
   find('org-target-client').value = 'claude'; await find('org-target-add').listeners.click();
   assert.equal(calls.length, 0);
   find('org-target-client').value = ''; await find('org-target-add').listeners.click();
@@ -207,8 +214,6 @@ test('re-sending the list keeps a still-offered selection and drops one Core no 
 test('declared target rows show a listed client\'s label and keep an unlisted one as its id with a note', async t => {
   const targets = [{ id: 'target-one', scope: 'project', client: 'claude' }, { id: 'target-two', scope: 'user', client: 'legacy' }];
   const { view, find, calls } = await mountTargets(t, targets);
-  await find('org-target-add').listeners.click().catch(() => {}); // an edit re-renders the draft's rows
-  const rows = () => elements(find('org-target-add').parent ?? view.node).filter(control => control.dataset.targetId);
   const row = id => elements(view.node).find(control => control.dataset.targetId === id);
   assert.match(textOf(row('target-one')), /project · claude/); assert.doesNotMatch(textOf(row('target-one')), /Not listed/);
   assert.doesNotMatch(textOf(row('target-two')), /Not listed/); // no list yet: nothing can be called unlisted
@@ -217,7 +222,16 @@ test('declared target rows show a listed client\'s label and keep an unlisted on
   assert.match(textOf(row('target-two')), /user · legacy/);
   assert.match(textOf(row('target-two')), /Not listed by the installed Core; Core decides at preview\./);
   assert.equal(elements(row('target-one')).find(control => control.id === 'target-one-remove').textContent, 'Remove target project · Claude Code (claude)');
-  assert.equal(calls.filter(call => call.op === 'organization-edit').length, 1); // only the Add target click above; setTargets requests nothing
+  assert.equal(calls.length, 0); // setTargets only re-renders; it requests nothing
+});
+
+test('a list that disables the focused client field moves focus to Add target', async t => {
+  const { view, find } = await mountTargets(t);
+  view.setTargets(published); find('org-target-client').focus();
+  view.setTargets({ ...published, labels: {} });
+  assert.equal(document.activeElement, find('org-target-client'));
+  view.setTargets({ state: 'unavailable', reason: 'Core not installed' });
+  assert.equal(document.activeElement, find('org-target-add'));
 });
 
 test('a slow Open file read cannot replace a later New draft', async () => {

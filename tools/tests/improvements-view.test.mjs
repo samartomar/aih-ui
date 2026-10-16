@@ -177,14 +177,18 @@ test('changing published clients retires shown suggestions until another check',
   await built.check(); assert.match(textOf(built.node), /Test helper/);
 });
 
-test('changing targets discards pending checks and pluralises unlisted clients', async () => {
-  let finish;
-  const client = { intent: {}, revision: 1, checkImprovements: () => new Promise(resolve => { finish = resolve; }) };
+test('a list arriving during a check checks again under that list, and pluralises unlisted clients', async () => {
+  const finishes = [], calls = [];
+  const client = { intent: {}, revision: 1, checkImprovements: input => { calls.push(input); return new Promise(resolve => { finishes.push(resolve); }); } };
   const built = view(client, { loadClients: async () => ['gone', 'other'] });
   const running = built.open(); await new Promise(resolve => setTimeout(resolve, 0));
   built.setTargets({ state: 'published', targets: ['claude'], labels: {} });
-  finish(ok(checked)); await running;
-  assert.equal(find(built, 'Dismiss'), undefined); assert.equal(find(built, 'Suggest').disabled, false);
+  finishes[0](ok(checked)); await running; await new Promise(resolve => setTimeout(resolve, 0));
+  // The first answer was for the old list; the check made under the new list sends no unlisted client.
+  assert.deepEqual(calls.map(call => call.clients), [['gone', 'other'], []]);
+  assert.equal(find(built, 'Dismiss'), undefined); assert.match(textOf(built.node), /Checking improvements/);
+  finishes[1](ok(checked)); await new Promise(resolve => setTimeout(resolve, 0));
+  assert.notEqual(find(built, 'Dismiss'), undefined); assert.equal(find(built, 'Suggest').disabled, false);
   const note = elements(built.node).find(node => node.id === 'policy-improvements-unlisted');
   assert.equal(note.textContent, 'Saved AI clients gone, other are not listed by the installed Core, so no suggestions are made for them. Your saved setup is unchanged.');
   built.setTargets({ state: 'unavailable' }); assert.equal(note.hidden, true); assert.equal(note.textContent, '');

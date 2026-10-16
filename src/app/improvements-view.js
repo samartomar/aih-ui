@@ -140,7 +140,7 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
       if (revision !== client.revision) { pending = false; render(); return; }
       saved = loaded;
       const clients = saved.filter(id => offersClient(published?.ids ?? [], id));
-      const labels = Object.fromEntries(clients.filter(id => clientLabel(published?.labels ?? {}, id)).map(id => [id, clientLabel(published.labels, id)]));
+      const labels = Object.fromEntries(clients.flatMap(id => { const label = clientLabel(published?.labels ?? {}, id); return label ? [[id, label]] : []; }));
       result = await client.checkImprovements({ clients, ...(Object.keys(labels).length ? { labels } : {}), ...(requestedGoal ? { goal: requestedGoal } : {}) });
     } catch (error) { result = { status: 'refused', error: error.message }; }
     if (current !== attempt) return;
@@ -154,9 +154,11 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
   function open() { attempt++; value = undefined; changed = false; goal.value = ''; return check(); }
   render();
   function setTargets(coreTargets) {
-    published = publishedClients(coreTargets); attempt++; pending = false;
+    // A check in flight was made under the old list: it is discarded and made again under this one.
+    const rerun = pending; published = publishedClients(coreTargets); attempt++; pending = false;
     if (value) { value = undefined; changed = true; }
     render();
+    if (rerun) return check();
   }
   return { node, render, check, open, setTargets };
 }
