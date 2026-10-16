@@ -3,6 +3,7 @@
 // page only and nothing from it is sent anywhere. Rules live in app/guided-rules.js; Core
 // validates and composes through the same authoring operations as the policy workspace.
 import { el } from './app/dom.js';
+import { clientNodes, publishedClients } from './app/core-targets.js';
 import { createAuthoringClient, importLimitError } from './app/authoring-client.js';
 import { loadSetup } from './app/settings-client.js';
 import { ADDED_BY_YOU, KNOWN_STACK, MANIFEST_BYTE_LIMIT, addDetection, choiceReason, clientPrompt, describePolicy, detectStack, provenanceText, suggestStarters, wantsContent }
@@ -21,7 +22,7 @@ const DOWNLOAD_NAME = 'guided-setup.journey.json';
 
 const ADAPTER_PREFIX = 'aihq.client.';
 let listSource = 'supported by Core';
-let detections = [], folderChosen = false, published = [], suggestion = null, busy = false, suggesting = false, started = false;
+let detections = [], folderChosen = false, published = [], publishedLabels = {}, suggestion = null, busy = false, suggesting = false, started = false;
 // The inputs the current suggestion was made from, and a counter that changes whenever that suggestion stops applying.
 let snapshot = null, generation = 0, savedShown = false;
 const clients = new Map(); // id -> { setup, detected, added, checked }
@@ -131,7 +132,7 @@ function renderClients() {
       state.added = box.checked && !state.setup && !state.detected;
       renderClients();
     });
-    label.append(box, el('span', 'font-mono', id));
+    label.append(box, ...clientNodes(publishedLabels, id));
     const tags = [state.setup && 'chosen in your Workbench setup', state.detected && (state.broken ? 'found on this machine, but its check failed' : 'detected on this machine'), state.added && 'added by you'].filter(Boolean);
     item.append(label, el('span', 'text-xs text-on-surface-variant', tags.length ? tags.join(' · ') : listSource));
     return item;
@@ -146,8 +147,8 @@ const clientState = id => { if (!clients.has(id)) clients.set(id, { setup: false
 async function loadClients() {
   try {
     const summary = await (await fetch('/api/packages')).json();
-    if (summary.coreTargets?.state === 'published' && Array.isArray(summary.coreTargets.targets))
-      published = summary.coreTargets.targets.filter(target => typeof target === 'string');
+    const offered = publishedClients(summary.coreTargets);
+    if (offered) ({ ids: published, labels: publishedLabels } = offered);
   } catch { /* the setup choices below still work */ }
   // Without Core's published list, offer the clients the installed Catalog has an adapter for.
   if (!published.length) {

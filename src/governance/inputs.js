@@ -12,6 +12,7 @@
  */
 
 import { el, text } from "../app/dom.js";
+import { clientText, publishedClients } from "../app/core-targets.js";
 import { NOT_CONNECTED, NOT_PUBLISHED, NOT_SUPPLIED } from "../app/absence.js";
 import { row, codeRow } from "./rows.js";
 
@@ -68,7 +69,7 @@ function renderCatalog(box, catalog) {
 }
 
 /**
- * The Target field's options, built from @aihq/core's own SUPPORTED_CLIS.
+ * The Target field's options, built from @aihq/core's own nativeClientIds.
  *
  * The page keeps no list of AI CLIs: a Core that lists different targets
  * changes this field with no UI edit, and a Core that publishes no list leaves
@@ -77,15 +78,13 @@ function renderCatalog(box, catalog) {
  * fact, and no list of identities carries it.
  *
  * @param select  the `gov-target` element
- * @param coreTargets  the preview summary's { state, targets, source } or
+ * @param coreTargets  the preview summary's { state, targets, labels, source } or
  *                     { state, reason }, or null before the summary arrives
  */
 function setTargetOptions(select, coreTargets) {
   const chosen = select.value;
-  const targets =
-    coreTargets?.state === "published" && Array.isArray(coreTargets.targets)
-      ? coreTargets.targets.filter((target) => typeof target === "string" && target !== "")
-      : null;
+  const published = publishedClients(coreTargets);
+  const targets = published ? published.ids : null;
   select.replaceChildren();
 
   if (targets === null || targets.length === 0) {
@@ -103,7 +102,7 @@ function setTargetOptions(select, coreTargets) {
   }
 
   for (const target of targets) {
-    const option = el("option", "", target);
+    const option = el("option", "", clientText(published.labels, target));
     option.value = target;
     select.appendChild(option);
   }
@@ -112,7 +111,7 @@ function setTargetOptions(select, coreTargets) {
   // otherwise the first target Core lists stands, visibly, until they choose.
   select.value = targets.includes(chosen) ? chosen : targets[0];
   select.title =
-    `The ${targets.length} AI CLIs @aihq/core lists as targets (SUPPORTED_CLIS), in its own order. ` +
+    `The ${targets.length} AI clients @aihq/core lists as targets (nativeClientIds), in its own order, which is not a ranking. ` +
     `Whether the tool is installed or connected: ${NOT_CONNECTED}.`;
 }
 

@@ -31,6 +31,7 @@ import { buildCss } from "./build-css.mjs";
 import { installConsumer, resolvePackage } from "./packages.mjs";
 import { createWorkbench } from "./server/workbench.mjs";
 import { callService } from "./server/service-client.mjs";
+import { coreTargetsSummary } from "./server/core-targets-summary.mjs";
 import { assertReadable, pageAssets, serviceAssets } from "./server/assets.mjs";
 import { listen } from "./server/static.mjs";
 
@@ -98,16 +99,6 @@ function readInstalledPackages(consumerDir, packages) {
     }
     return { name, version: record.version };
   });
-}
-
-/** One service operation at startup; a failure is returned, never replaced. */
-function startupFact(consumerDir, op) {
-  const answer = callService(consumerDir, { op });
-  if (answer.ok) {
-    const { ok, ...value } = answer;
-    return { state: "published", ...value };
-  }
-  return { state: "unavailable", reason: answer.error };
 }
 
 /* ----------------------------------------------------------------------- main */
@@ -184,7 +175,6 @@ async function main() {
   // The authoring host reads the installed default and required family releases
   // through public Catalog APIs. No retired index-root export is required.
   const installedPackages = readInstalledPackages(consumerDir, packages);
-  const coreTargets = startupFact(consumerDir, 'coreTargets');
   // --- 4. page files into the run directory ---------------------------------
   for (const asset of page) {
     const target = join(runDir, asset.to);
@@ -197,9 +187,7 @@ async function main() {
       version: installedPackages.find(item => item.name === `@aihq/${pkg.name}`).version,
       tarball: basename(pkg.tarball), sha256: pkg.sha256, commit: pkg.commit, source: pkg.source,
     })),
-    coreTargets: coreTargets.state === 'published'
-      ? { state: 'published', source: '@aihq/core SUPPORTED_CLIS', targets: coreTargets.targets }
-      : { state: 'unavailable', reason: coreTargets.reason },
+    coreTargets: coreTargetsSummary(callService(consumerDir, { op: 'coreTargets' })),
   };
   const { server, catalog: currentCatalog } = await createWorkbench({ consumerDir, runDir, summary, settingsPath: process.env.AIH_UI_SETTINGS_PATH });
   summary.entryCount = currentCatalog.items.length;

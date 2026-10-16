@@ -338,11 +338,12 @@ index's own package block. These are local packages that can share a released
 version number, so each also shows its short checkpoint. Hashes, full commits, raw
 entry counts, the collection view and index admission are behind "provenance".
 
-The AI tools control lists the AI CLIs `@aihq/core` supports as targets, from its
-public `SUPPORTED_CLIS` export, read by the backend from the installed package. The
-page keeps no list of its own, so reinstalling a different Core changes the list and
-the version with no UI edit. It reads `<selected> of <supported>`. Supported,
-selected and connected are kept apart:
+The AI tools control lists the AI clients `@aihq/core` supports as targets, from its
+public `nativeClientIds` (exported by `@aihq/core/harness`), read by the backend from
+the installed package, with the display labels Harness publishes for those ids. The
+list's order is Core's, not a ranking. The page keeps no list of its own, so
+reinstalling a different Core changes the list and the version with no UI edit. It
+reads `<selected> of <supported>`. Supported, selected and connected are kept apart:
 
 - supported is Core's list;
 - selected is the user's explicit choice, saved in the workspace setup file -- not a policy;
@@ -351,8 +352,9 @@ selected and connected are kept apart:
 The Workbench design's `3 of 11` was sample data and is not restored as state.
 
 The Governance pane's **Target** field reads that same list and keeps no copy
-either: its options are Core's targets in Core's own order, so a Core listing
-different ones changes the field with no UI edit. A Core that publishes no list
+either: its options are Core's clients in Core's own order (not a ranking), shown
+with their Harness label where one is published, so a Core listing different ones
+changes the field with no UI edit. A Core that publishes no list
 leaves the field disabled reading **Not connected**, and nothing can be prepared
 — the page no longer falls back to a target nobody chose.
 
@@ -486,7 +488,7 @@ choices, including an intentionally empty list, are restored exactly on edit.
 Each explains its proposed benefit and the consequence of skipping. All are
 recorded preferences only: integrations are not installed or connected, no code
 is accessed, and no data is sent to those integrations. The separate client step
-uses Core's public `SUPPORTED_CLIS`; it never infers clients from capabilities.
+uses Core's public `nativeClientIds`; it never infers clients from capabilities.
 
 Completing setup atomically writes the version-1 `aih-ui-settings` record to
 `.aih-ui/settings.v1.json` under this repository, a fixed gitignored location.
@@ -865,7 +867,7 @@ tools/
     scan-verifier.mjs   the Scan verifier wiring and its trust boundary
     artifacts.mjs       exact-byte artifact I/O
     catalog-collections.mjs  Catalog's current collection view, via its reader
-    core-targets.mjs    Core's supported AI CLI targets, via its public export
+    core-targets.mjs    Core's supported AI client ids and labels, via its public export
     catalog-publisher.mjs  Catalog's publisher titles and descriptions, via its reader
     catalog-served.mjs  the catalog document the page is served, from the reader's result
     catalog-qualification.mjs  Catalog's publisher qualification, via its reader
@@ -889,14 +891,14 @@ does not provide these APIs.** The published versions predate them; only the loc
 tarballs carry the governance-input contract.
 
 The page also needs Catalog's collection view (`readCatalogCollectionsV1`) and
-Core's public `SUPPORTED_CLIS`. Until those reach the checkouts the preview reads
+Core's public `nativeClientIds`. Until those reach the checkouts the preview reads
 by default, point it at checkouts that have them:
 
 ```
 CORE_REPO=<core checkout> CATALOG_REPO=<catalog checkout> node tools/preview.mjs
 ```
 
-A Core without `SUPPORTED_CLIS` leaves the AI tools control reading **Not
+A Core without `nativeClientIds` leaves the AI tools control reading **Not
 published** and the Governance pane's Target field disabled reading **Not
 connected**; a Catalog without the collection view stops the preview.
 

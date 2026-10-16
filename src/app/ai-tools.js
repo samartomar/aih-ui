@@ -3,9 +3,11 @@
  *
  * Three different facts, kept apart:
  *
- *   - SUPPORTED: the targets @aihq/core lists in its public SUPPORTED_CLIS
- *     export, read by the backend from the installed package. The page keeps
- *     no list of its own, so a reinstalled Core changes this with no UI edit.
+ *   - SUPPORTED: the clients @aihq/core lists in its public nativeClientIds
+ *     (from @aihq/core/harness), read by the backend from the installed package,
+ *     with the labels Harness publishes for them. The page keeps no list of its
+ *     own, so a reinstalled Core changes this with no UI edit. The list's order
+ *     is Core's, not a ranking.
  *   - SELECTED: the user's explicit choice in the workspace's local setup file.
  *   - CONNECTED: whether a tool is installed or connected. Nothing supplies
  *     that yet, so it is never implied - not by the dot, not by the count.
@@ -17,10 +19,12 @@
 
 import { el, text } from "./dom.js";
 import { NOT_CONNECTED, NOT_PUBLISHED } from "./absence.js";
+import { clientNodes, publishedClients } from "./core-targets.js";
 
 /** @param elements { aiToolsTrigger, aiToolsCount, aiToolsPop, aiToolsList, aiToolsNote } */
 export function createAiTools({ elements, onSelectionChange }) {
   let supported = null;
+  let labels = {};
   let unavailableReason = null;
   let selected = [];
   let saving = false;
@@ -56,7 +60,7 @@ export function createAiTools({ elements, onSelectionChange }) {
       `Installed or connected: ${NOT_CONNECTED}.`;
 
     for (const target of supported) {
-      const row = el("label", "flex items-center gap-2 px-1.5 py-1 rounded hover:bg-surface-container cursor-pointer text-on-surface font-mono");
+      const row = el("label", "flex items-center gap-2 px-1.5 py-1 rounded hover:bg-surface-container cursor-pointer text-on-surface");
       const box = el("input", "rounded-sm w-3.5 h-3.5 accent-primary");
       box.type = "checkbox";
       box.checked = selected.includes(target);
@@ -75,11 +79,11 @@ export function createAiTools({ elements, onSelectionChange }) {
         elements.aiToolsList.querySelector(`input[data-target="${CSS.escape(target)}"]`)?.focus();
       });
       row.appendChild(box);
-      row.appendChild(el("span", "", target));
+      row.append(...clientNodes(labels, target));
       elements.aiToolsList.appendChild(row);
     }
 
-    note(`Supported: the ${supported.length} targets @aihq/core lists (SUPPORTED_CLIS).`);
+    note(`Supported: the ${supported.length} targets @aihq/core lists (nativeClientIds).`);
     note(saving ? "Saving client selection…" : "Selected: saved in this workspace's local setup file. It is not a policy.");
     if (saveError) {
       const failure = el("p", "text-error", `Selection was not saved: ${saveError}`);
@@ -114,13 +118,16 @@ export function createAiTools({ elements, onSelectionChange }) {
       selected = [...clients];
       render();
     },
-    /** @param coreTargets the summary's { state, targets } or { state, reason } */
+    /** @param coreTargets the summary's { state, targets, labels } or { state, reason } */
     setTargets(coreTargets) {
-      if (coreTargets?.state === "published" && Array.isArray(coreTargets.targets)) {
-        supported = coreTargets.targets.filter((target) => typeof target === "string");
+      const published = publishedClients(coreTargets);
+      if (published) {
+        supported = published.ids;
+        labels = published.labels;
         unavailableReason = null;
       } else {
         supported = null;
+        labels = {};
         unavailableReason = text(coreTargets?.reason);
       }
       render();

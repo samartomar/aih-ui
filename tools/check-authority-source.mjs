@@ -8,6 +8,7 @@ import { buildCss } from './build-css.mjs';
 import { createWorkbench } from './server/workbench.mjs';
 import { listen } from './server/static.mjs';
 import { callService } from './server/service-client.mjs';
+import { coreTargetsSummary } from './server/core-targets-summary.mjs';
 const [consumerInput, evidenceInput, ...args] = process.argv.slice(2);
 if (!consumerInput || !evidenceInput || (args.length && (args.length !== 2 || args[0] !== '--port'))) throw Error('Usage: node tools/check-authority-source.mjs <consumerDir> <evidenceDir> [--port N]');
 const port = Number(args[1] ?? 0);
@@ -20,9 +21,9 @@ for (const [assets, destination] of [[pageAssets(repo), runDir], [serviceAssets(
   for (const asset of assets) { const path = join(destination, asset.to); await mkdir(dirname(path), { recursive: true }); await copyFile(join(repo, asset.from), path); }
 }
 // The page reads the same package summary the integrated check serves.
-const packages = JSON.parse(await readFile(join(consumerDir, 'reviewed-packages.json'), 'utf8')), targets = callService(consumerDir, { op: 'coreTargets' });
+const packages = JSON.parse(await readFile(join(consumerDir, 'reviewed-packages.json'), 'utf8'));
 const summary = { packages: await Promise.all(packages.map(async item => ({ ...item, packageName: `@aihq/${item.name}`, version: JSON.parse(await readFile(join(consumerDir, `node_modules/@aihq/${item.name}/package.json`), 'utf8')).version }))),
-  coreTargets: targets.ok ? { state: 'published', source: '@aihq/core SUPPORTED_CLIS', targets: targets.targets } : { state: 'unavailable', reason: targets.error } };
+  coreTargets: coreTargetsSummary(callService(consumerDir, { op: 'coreTargets' })) };
 const { createGitHubFixture, enterpriseFixture } = await import(pathToFileURL(join(consumerDir, 'consumer/github-fixture.mjs')));
 const { openAuthorityPage, refreshAuthority, captureAuthority } = await import(pathToFileURL(join(consumerDir, 'consumer/authority-source-browser.mjs')));
 const { chromium } = await import(pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')));
