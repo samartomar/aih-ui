@@ -427,7 +427,8 @@ describe('reviewed batch against Core', () => {
       const report = await run(hostOf(f), chain.envelopeBytes, chain.record, extra);
       assert.equal(report.status, 'ok', JSON.stringify(report.diagnostics));
       assert.deepEqual(report.actions.map(a => [a.id, a.outcome, a.reason]), [['b-proc', 'failed', 'consent-not-recorded'], ['b-after-proc', 'cancelled', 'dependency-failed']], name);
-      assert.equal(report.consumedBy, undefined, name); assert.equal(report.actions[0].core, undefined, `${name}: nothing was applied`);
+      assert.equal(report.consumedBy, undefined, name);
+      assert.deepEqual([report.actions[0].core.runId, report.actions[0].core.diagnostics.map(d => d.code)], [null, ['BATCH_CONSENT_UNRECORDABLE']], `${name}: nothing was applied, and why`);
       assert.equal(await f.procCount(), 0, `${name}: the process did not run`);
     }
     assert.ok(same(before, await tree(f.homes.b)), 'neither the process nor its dependent wrote anything');

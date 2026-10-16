@@ -114,8 +114,9 @@ export function createBatchAdapter(consumerDir) {
       if (report.status !== 'ok') return report;
       // Running an opaque process spends the person's choice in a superseding batch the child already wrote to the envelope file.
       // The page is shown that record as it now stands, read from the file, never rebuilt from what it sent.
-      const after = await readBatch({ envelopeBytes: new Uint8Array(await readFile(config.envelopePath)) });
-      if (after.status !== 'ok') return passed(after);
+      // Work has run by now, so a failed re-read never turns the report into a refusal: the report is returned without `current`.
+      const after = await readFile(config.envelopePath).then(bytes => readBatch({ envelopeBytes: new Uint8Array(bytes) }), error => ({ status: 'error', diagnostics: [{ code: 'BATCH_ENVELOPE_UNREADABLE', message: error.message }] }));
+      if (after.status !== 'ok') return { status: 'ok', batchId: record.id, report, diagnostics: after.diagnostics };
       return { status: 'ok', batchId: record.id, report, current: { batchId: after.value.record.id, projection: after.value.projection } };
     }
     const recovered = await ask('recover', { now: new Date().toISOString(), rerun: body.rerun });

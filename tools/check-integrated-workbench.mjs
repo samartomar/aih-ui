@@ -61,7 +61,7 @@ try {
   await runWorkspaceBrowser({ origin, output: join(consumerDir, 'workspace-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
   const { runBatchBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/batch-browser.mjs')));
   await runBatchBrowser({ origin, output: join(consumerDir, 'batch-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, fixturePath: batchFixturePath,
-    conflictFile: batch.conflictFile, procMarker: batch.procMarker, procRuns: batch.procRuns, userFiles: batch.userFiles });
+    conflictFile: batch.conflictFile, procMarker: batch.procMarker, procCount: batch.procCount, userFiles: batch.userFiles });
 } finally { delete process.env.AIH_BATCH_FIXTURE; delete process.env.AIH_MAINTENANCE_SOURCE; await new Promise(resolve => started.server.close(resolve)); }
 
 // The normal application's startup must refuse an absent required family,

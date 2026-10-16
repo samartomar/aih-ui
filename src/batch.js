@@ -103,7 +103,8 @@ node('apply').addEventListener('click', () => perform(async () => {
     // Running an opaque process spent the person's Run again choice in a newer batch. Show the batch as the host now holds it
     // (the choice unticked, the process kept); a box is never ticked by anything but the person.
     if (result.current) renderBatch(result.current.projection, result.current.batchId);
-    renderReport(result.report); node('status').textContent = 'Run finished. Inspect every observed outcome; Recover reinspects and prepares fresh work.';
+    renderReport(result.report); node('status').textContent = result.current ? 'Run finished. Inspect every observed outcome; Recover reinspects and prepares fresh work.'
+      : 'Run finished, but the saved batch could not be read again. Inspect every observed outcome, then reload before acting on this batch.';
   } catch (error) {
     // A refusal is the host saying nothing was applied: show why (the conflicts, when it names them) and let the person review again.
     if (error.result?.status === 'refused') {

@@ -188,15 +188,15 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
       const results = new Map(), satisfied = result => result.outcome === 'completed' || result.reason === 'retained-earlier-result';
       let broke = false, latest = { bytes: envelopeBytes, record };
       const spend = async action => {
-        if (typeof persist !== 'function') return false;
+        if (typeof persist !== 'function') return [{ code: 'BATCH_CONSENT_UNRECORDABLE', reason: 'no-persist' }];
         try {
           const planned = await planBatch({ envelopeBytes: latest.bytes, scopes: latest.record.scopes, inputs: latest.record.inputs, continuation: latest.record.continuation, categories: latest.record.categories,
             actions: latest.record.actions.map(other => other.id === action.id ? { ...other, retain: true } : other), now, supersedes: latest.record.id });
-          if (planned.status !== 'ok') return false;
+          if (planned.status !== 'ok') return codes(planned.diagnostics);
           await persist(planned.value.envelopeBytes);
           latest = { bytes: planned.value.envelopeBytes, record: planned.value.record };
-          return true;
-        } catch { return false; }
+          return null;
+        } catch (error) { return [{ code: 'BATCH_CONSENT_UNRECORDABLE', reason: error?.code ?? 'persist-failed' }]; }
       };
       for (const action of record.actions) {
         const host = hosts.get(action.scope), selection = selectionOf(policy, action);
@@ -215,7 +215,8 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
         if (drift) { end('failed', 'shared-input-changed'); continue; }
         const prepared = await prepareSelections(host, policy, [selection]);
         if (prepared.status !== 'ready') { end('failed', `prepare-${prepared.status}`, { completion: null, runId: null, operations: [], diagnostics: codes(prepared.diagnostics) }); continue; }
-        if (!isVerifiable(selection) && !await spend(action)) { end('failed', 'consent-not-recorded'); continue; }
+        const unspent = isVerifiable(selection) ? null : await spend(action);
+        if (unspent) { end('failed', 'consent-not-recorded', { completion: null, runId: null, operations: [], diagnostics: unspent }); continue; }
         let restore = async () => {}, result;
         try {
           if (faults[action.id] === 'stale-target') restore = await staleTargets(operationsOf(prepared, [action]));

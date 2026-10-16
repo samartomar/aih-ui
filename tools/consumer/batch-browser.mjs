@@ -2,7 +2,7 @@
 // person's own files) and B (added). Everything the person does goes through the page. Filesystem and host-configuration changes
 // below are test setup (removing the unowned file, creating the process marker, clearing the stale-target fault), never page
 // capabilities: the page and its HTTP routes can name only the current batch and the continuation choice. The process counts its own
-// executions in `procRuns`, so the journey can show that a reload never runs it again.
+// executions, counted by the fixture's `procCount`, so the journey can show that a reload never runs it again.
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile, lstat, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -11,7 +11,7 @@ const NOTE = 'Listed by Core; not checked as installed or connected';
 const ATOMIC = 'there is no all-or-nothing promise';
 const RERUN = 'Core cannot confirm whether this earlier process ran; run it again only if you know it is safe.';
 const exists = path => lstat(path).then(() => true, error => { if (error.code === 'ENOENT') return false; throw error; });
-export async function runBatchBrowser({ origin, output, playwrightModule, fixturePath, conflictFile, procMarker, procRuns, userFiles }) {
+export async function runBatchBrowser({ origin, output, playwrightModule, fixturePath, conflictFile, procMarker, procCount, userFiles }) {
   const started = Date.now();
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
@@ -44,7 +44,7 @@ export async function runBatchBrowser({ origin, output, playwrightModule, fixtur
     return { label: cells[0], scope: cells[1], outcome: tr.dataset.outcome, shown: cells[2], reason: cells[3] };
   }));
   const byLabel = (all, label) => all.filter(row => row.label === label);
-  const processRuns = () => readFile(procRuns, 'utf8').then(text => text.length, error => { if (error.code === 'ENOENT') return 0; throw error; });
+  const processRuns = procCount;
   const userBytes = async () => Object.fromEntries(await Promise.all(Object.keys(userFiles).map(async path => [path, await readFile(path, 'utf8')])));
   let evidence;
   try {
