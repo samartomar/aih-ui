@@ -99,7 +99,12 @@ export async function createMixedService(maintained, { suppliedInventories, fami
         }
         const now = new Date().toISOString();
         if (WORKSPACE_OPERATIONS.includes(operation)) return runWorkspace(operation, body, { envelopeBytes, now, adopt: bytes => openDraft({ bytes, inventories: available, ...reviewContext }) });
-        if (operation === 'improvements-check') return checkImprovements({ envelopeBytes, inventories: all, clients: body.clients ?? [], labels: body.labels ?? {}, goal: body.goal, now });
+        if (operation === 'improvements-check') {
+          // The same host-configured source as the maintenance check; unreachable (null or a failure) is unknown, never "nothing changed".
+          const candidateInventories = maintenanceSource ? await Promise.resolve().then(() => maintenanceSource()).catch(() => null) : null;
+          return checkImprovements({ envelopeBytes, inventories: all, candidateInventories: candidateInventories ?? null, candidateSource: maintenanceSource ? 'configured' : 'unconfigured',
+            clients: body.clients ?? [], labels: body.labels ?? {}, goal: body.goal, now });
+        }
         if (operation === 'maintenance-record' || operation === 'improvements-record') {
           const recorded = await (operation === 'maintenance-record' ? recordMaintenance : recordImprovement)({ envelopeBytes, operation: body.operation, now });
           if (recorded.status !== 'ok') return recorded;

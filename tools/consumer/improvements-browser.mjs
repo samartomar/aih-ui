@@ -12,8 +12,10 @@ import { readInstalledRelease } from '@aihq/catalog/node';
 import { listItems } from '@aihq/catalog/reader';
 import { composeAuthoring, freshAuthoring, openDraft } from './headless.mjs';
 import { installedFamilies } from './installed-families.mjs';
+import { intakeDeclaration, digestBytes } from './intake.mjs';
+import { noteFixture } from './note-fixture.mjs';
 import { IMPROVEMENT_SUGGESTION_SCHEMA, IMPROVEMENT_DISMISSAL_SCHEMA } from './improvements.mjs';
-import { UNKNOWNS, IMPROVEMENT_RULES_VERSION } from './improvement-rules.mjs';
+import { UNKNOWNS, FRICTION_UNKNOWN, IMPROVEMENT_RULES_VERSION } from './improvement-rules.mjs';
 
 const decode = bytes => new TextDecoder().decode(bytes);
 const ROOT = 'mattpocock.implement', CLIENTS = ['claude', 'codex'];
@@ -21,7 +23,7 @@ const SAVED_REASON = 'guided-setup rules 1.0.0: goal.build. Goal: add tests to m
 const READS = ['read', 'draft-open', 'maintenance-check', 'improvements-check', 'workspace-read'];
 const OPENED = /Saved draft reopened|Unresolved draft opened/;
 
-export async function runImprovementsBrowser({ origin, output, playwrightModule, settingsPath }) {
+export async function runImprovementsBrowser({ origin, output, playwrightModule, settingsPath, sourcePath }) {
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
   // Explicit setup step, never a Workbench action: the draft guided setup would have saved, built headlessly.
@@ -40,9 +42,11 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
 
   const browser = await chromium.launch({ headless: true });
   const errors = [], failedResponses = [], popups = [];
-  let observed, operations = [], requests = [], checkResponses = 0, setupRoute, previousSettings;
+  let observed, operations = [], requests = [], checkResponses = 0, setupRoute, previousSettings, previousSource;
   const openPage = async () => {
     const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 1100 } });
+    // Headless evidence stays on the supplied local origin.
+    await context.route('**/*', route => new URL(route.request().url()).origin === new URL(origin).origin ? route.continue() : route.abort());
     // A page-level clipboard stand-in: the journey observes what is copied without touching the machine's real clipboard.
     await context.addInitScript(() => { window.__copied = []; Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async text => { window.__copied.push(text); } } }); });
     const page = await context.newPage(); observed = page; page.setDefaultTimeout(30_000);
@@ -227,10 +231,85 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
     const finalBytes = await saveDraft(reopened, join(output, 'shown-on-request.draft.json'));
     assert.deepEqual(records(finalBytes, IMPROVEMENT_DISMISSAL_SCHEMA), [], 'Showing it again removes the dismissal.');
 
+    // 8. Explicit headless setup: the saved guided goal plus a direct current notes selection.
+    // Intake exactly the snapshot/input the running mixed service holds, so release and item digests match.
+    assert.ok(sourcePath, 'The host supplies its file-backed update source for the content-change journey.');
+    previousSource = await readFile(sourcePath);
+    await writeFile(sourcePath, JSON.stringify({ revisions: ['current'] }));
+    const snapshot = await noteFixture();
+    const input = { id: 'notes', kind: 'local', locator: { input: 'notes' }, resolvedIdentity: { sha256: await digestBytes(snapshot.declarationBytes) } };
+    const notes = await intakeDeclaration({ input, ...snapshot, materialSource: { kind: 'local', input: 'notes' } });
+    assert.equal(notes.status, 'ok', JSON.stringify(notes.diagnostics));
+    const note = listItems(notes.value.release).find(item => item.id === 'consumer-proof.review-note');
+    assert.ok(note, 'The current notes release contains the review note.');
+    const contentInventories = [...inventories, notes.value];
+    const contentIntent = { ...intent, roots: [...intent.roots, { releaseSha256: notes.value.release.sha256,
+      itemId: note.id, itemSha256: note.itemSha256, scope: 'project', configuration: {}, originIds: ['direct'] }] };
+    const contentComposed = await composeAuthoring({ intent: contentIntent, inventories: contentInventories });
+    assert.equal(contentComposed.status, 'ok', JSON.stringify(contentComposed.diagnostics));
+    const contentOpened = await openDraft({ bytes: contentComposed.value.policyBytes, inventories: contentInventories });
+    assert.equal(contentOpened.status, 'ok', JSON.stringify(contentOpened.diagnostics));
+    const contentPath = join(output, 'content-change.draft.json');
+    await writeFile(contentPath, contentOpened.value.envelopeBytes);
+    const contentPage = await openPage();
+    steps.contentOpen = await openSaved(contentPage, contentPath);
+    assert.deepEqual(steps.contentOpen.filter(operation => !READS.includes(operation)), [], 'Opening for content changes only reads.');
+    assert.ok(steps.contentOpen.includes('improvements-check'));
+    const coverage = contentPage.locator('#policy-improvements-coverage');
+    assert.equal(await coverage.isVisible(), true, 'Coverage is visible.');
+    const currentCoverage = await coverage.innerText();
+    assert.match(currentCoverage, /content[- ]changes?/i);
+    assert.match(currentCoverage, /\bchecked\b/i, 'The configured current revision was checked.');
+    const cards = section(contentPage).locator('[data-suggestion-id]');
+    const testPlan = cards.filter({ hasText: 'Test plan note' });
+    const style = cards.filter({ hasText: 'Style note' });
+    assert.equal(await testPlan.count(), 0); assert.equal(await style.count(), 0);
+
+    await writeFile(sourcePath, JSON.stringify({ revisions: ['expanded'] }));
+    steps.contentSuggest = await suggestWith(contentPage, '');
+    assert.deepEqual(steps.contentSuggest, ['improvements-check'], 'Checking the newer content only reads.');
+    assert.equal(await testPlan.count(), 1, 'The goal-relevant new note is suggested.');
+    assert.equal(await style.count(), 0, 'The unrelated new note is never suggested.');
+    const contentId = await testPlan.getAttribute('data-suggestion-id');
+    const contentText = await testPlan.innerText();
+    const contentTriggers = await testPlan.locator('p').filter({ hasText: /is new in review-notes-catalog 1\.1\.0/ }).allInnerTexts();
+    assert.equal(contentTriggers.length, 1);
+    assert.match(contentText, /is new in review-notes-catalog 1\.1\.0/);
+    assert.match(contentText, /your saved goal “add tests to my app”/i);
+    assert.match(contentText, /mentions “tests”/);
+    for (const unknown of UNKNOWNS) assert.ok(contentText.includes(unknown), `Unknown shown: ${unknown}`);
+    assert.equal(await coverage.isVisible(), true);
+    const expandedCoverage = await coverage.innerText();
+    assert.match(expandedCoverage, /content[- ]changes?/i); assert.match(expandedCoverage, /\bchecked\b/i);
+    assert.ok(expandedCoverage.includes(FRICTION_UNKNOWN), 'The friction unknown names the missing interface.');
+
+    steps.contentDismiss = await act(contentPage, () => testPlan.getByRole('button', { name: 'Dismiss', exact: true }).click());
+    assert.ok(steps.contentDismiss.includes('improvements-record'));
+    assert.deepEqual(steps.contentDismiss.filter(operation => !['improvements-record', 'improvements-check'].includes(operation)), []);
+    steps.contentSameReason = await suggestWith(contentPage, '');
+    assert.deepEqual(steps.contentSameReason, ['improvements-check'], 'Suggesting the same content reason only reads.');
+    const dismissedContent = groupCards(contentPage, 'Dismissed').filter({ hasText: 'Test plan note' });
+    assert.equal(await dismissedContent.count(), 1);
+    assert.equal(await testPlan.count(), 1, 'There is no duplicate active card after dismissal.');
+    assert.equal(await dismissedContent.getAttribute('data-suggestion-id'), contentId);
+    const dismissedText = await dismissedContent.innerText();
+    assert.deepEqual(await dismissedContent.locator('p').filter({ hasText: /is new in review-notes-catalog 1\.1\.0/ }).allInnerTexts(), contentTriggers, 'The exact content-change reason stays the same.');
+    assert.match(dismissedText, /is new in review-notes-catalog 1\.1\.0/);
+    assert.match(dismissedText, /your saved goal “add tests to my app”/i);
+    assert.doesNotMatch(dismissedText, /Shown again/);
+    assert.equal(await style.count(), 0);
+    await contentPage.setViewportSize({ width: 1440, height: 2600 });
+    await contentPage.screenshot({ path: join(output, 'content-change.png'), fullPage: true });
+    screenshots.push('content-change.png');
+    const contentChange = { savedGoal: 'add tests to my app', savedNotesRelease: notes.value.release.sha256,
+      current: { revisions: ['current'], coverage: currentCoverage, testPlanSuggestions: 0, styleSuggestions: 0 },
+      expanded: { revisions: ['expanded'], coverage: expandedCoverage, suggestionId: contentId, text: contentText, styleSuggestions: 0 },
+      dismissed: { suggestionId: contentId, text: dismissedText, sameReasonStaysDismissed: true } };
+
     assert.deepEqual(errors, []); assert.deepEqual(failedResponses, []);
     await writeFile(join(output, 'improvements-evidence.json'), JSON.stringify({ status: 'passed', entry: '/', chromium: browser.version(), rulesVersion: IMPROVEMENT_RULES_VERSION,
       savedGoal: SAVED_REASON, clients: CLIENTS, clientSetup: setupRoute, screenshots, operations: steps, tddSuggestionId: { beforeReopen: tddId, afterReopen: tddAfterReopen },
-      copy: { requests: 0, popups: 0, clipboardEqualsPrompt: true }, errors, failedResponses }, null, 2));
+      contentChange, copy: { requests: 0, popups: 0, clipboardEqualsPrompt: true }, errors, failedResponses }, null, 2));
     console.log(`Improvements journey passed: ${output}`);
   } catch (error) {
     await observed?.screenshot({ path: join(output, 'improvements-failure.png'), fullPage: true }).catch(() => {});
@@ -238,6 +317,7 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
       text: await observed?.locator('body').innerText().catch(() => '') }, null, 2));
     throw error;
   } finally {
+    if (previousSource !== undefined) await writeFile(sourcePath, previousSource);
     if (previousSettings) await writeFile(settingsPath, JSON.stringify(previousSettings, null, 2) + '\n');
     await browser.close();
   }

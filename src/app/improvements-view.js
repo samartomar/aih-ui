@@ -42,6 +42,7 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
   const goalLabel = el('label', 'text-on-surface-variant', 'Optional goal'); goalLabel.setAttribute('for', goal.id);
   const status = el('p', 'text-on-surface-variant'); status.setAttribute('role', 'status');
   const unlisted = el('p', 'text-on-surface-variant'); unlisted.id = 'policy-improvements-unlisted';
+  const coverage = el('div', 'text-on-surface-variant text-[11px]'); coverage.id = 'policy-improvements-coverage';
   const groups = el('div', 'space-y-2');
   // `checked` is the client revision the shown suggestions answer; any later change to the open artifact retires them.
   // `recording` marks the revision change this view's own record request makes, which never retires its cards.
@@ -51,7 +52,7 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
   const safe = action => async () => { try { await action(); } catch (error) { showStatus(error.message); } };
   const suggest = button('Suggest', safe(() => check())); suggest.id = 'policy-improvements-suggest';
   const controls = el('div', 'flex flex-wrap items-center gap-2'); controls.append(goalLabel, goal, suggest);
-  node.append(el('h3', 'font-medium', 'Improvements'), el('p', 'text-on-surface-variant', IMPROVEMENTS_NOTE), controls, unlisted, status, groups);
+  node.append(el('h3', 'font-medium', 'Improvements'), el('p', 'text-on-surface-variant', IMPROVEMENTS_NOTE), controls, unlisted, status, coverage, groups);
 
   async function record(operation) {
     // While the choice is recorded the cards stay but are inert, so none acts on a policy that changes meanwhile;
@@ -89,7 +90,7 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
   function render() {
     node.hidden = !(client.draft || client.intent);
     if (value && !recording && checked !== client.revision) { value = undefined; changed = true; }
-    if (node.hidden) { attempt++; value = undefined; pending = false; failed = false; changed = false; saved = []; unlisted.hidden = true; unlisted.textContent = ''; goal.value = ''; groups.replaceChildren(); return; }
+    if (node.hidden) { attempt++; value = undefined; pending = false; failed = false; changed = false; saved = []; unlisted.hidden = true; unlisted.textContent = ''; goal.value = ''; coverage.replaceChildren(); groups.replaceChildren(); return; }
     const omitted = saved.filter(id => !offersClient(published?.ids ?? [], id));
     unlisted.hidden = !omitted.length;
     unlisted.textContent = !omitted.length ? '' : omitted.length === 1
@@ -97,6 +98,8 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
       : `Saved AI clients ${omitted.join(', ')} are not listed by the installed Core, so no suggestions are made for them. Your saved setup is unchanged.`;
     suggest.disabled = pending || recording;
     status.textContent = pending ? 'Checking improvements…' : failed ? 'The improvement check could not be completed; suggestions are unknown.' : changed ? 'The open policy or its inputs changed since the last check; Suggest again to update the suggestions.' : value ? `Checked ${value.checkedAt}.` : 'Suggest improvements using the fixed rules.';
+    // What the check covered, once per check, whether or not it found anything.
+    coverage.replaceChildren(...(value?.coverage ?? []).map(entry => el('p', '', entry.text)));
     groups.replaceChildren();
     for (const group of groupImprovements(value)) {
       if (!group.rows.length) continue;
