@@ -119,6 +119,8 @@ const improvementDismissal = { $schema: 'https://json-schema.org/draft/2020-12/s
 // evidence snapshot are separate facts. The reader (tools/consumer/trial-record.mjs) also enforces what a schema cannot express,
 // so a record this schema accepts can still be refused when the Workbench opens it:
 //   - id derives from the suggestion (id and revision), scope and proposedAt; each observation id derives from its option and target;
+//   - revision is the sha256 of the record's canonical JSON without revision (id included), recomputed by every write;
+//   - at least one bound is required (a trial with none is not bounded);
 //   - the suggestion record with the same id (any revision; the trial names the one it was planned from) must sit in the same envelope;
 //   - revises and revisedBy name another trial, never the record itself;
 //   - check ids and bound ids are unique, and there is at most one observation per (option, target);
@@ -137,11 +139,11 @@ const trialObservation = { ...shape({ id: trialSlug, option: { enum: ['baseline'
   allOf: [{ if: { properties: { kind: { const: 'unknown' } }, required: ['kind'] }, then: { required: ['unknownReason'], properties: { value: false, method: false } }, else: { required: ['value'], properties: { unknownReason: false } } },
     { if: { properties: { kind: { const: 'estimated' } }, required: ['kind'] }, then: { required: ['method'] }, else: { properties: { method: false } } }] };
 const improvementTrial = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: trialRecord, ...shape({
-  id: trialId, schema: { const: trialRecord }, required: { const: false }, suggestion: shape({ id: { type: 'string', pattern: '^suggestion-[a-f0-9]{32}$' }, revision: hash }),
+  id: trialId, schema: { const: trialRecord }, required: { const: false }, revision: hash, suggestion: shape({ id: { type: 'string', pattern: '^suggestion-[a-f0-9]{32}$' }, revision: hash }),
   change: shape({ kind: { const: 'add-item' }, itemId: id, releaseSha256: hash, itemSha256: hash }), scope,
   baseline: shape({ savedIntentSha256: hash, draftSha256: hash }), task: suggestionText(),
   quality: shape({ outcome: suggestionText(), checks: { type: 'array', minItems: 1, maxItems: 16, items: shape({ id: trialSlug, text: suggestionText(300) }) } }), conditions: suggestionText(),
-  bounds: { type: 'array', maxItems: 16, items: shape({ id: trialSlug, label: suggestionText(120), unit: suggestionText(32), value: { type: 'number', minimum: 0 },
+  bounds: { type: 'array', minItems: 1, maxItems: 16, items: shape({ id: trialSlug, label: suggestionText(120), unit: suggestionText(32), value: { type: 'number', minimum: 0 },
     enforcement: { oneOf: [shape({ kind: { const: 'advisory' } }), shape({ kind: { const: 'enforced' }, mechanism: shape({ id: trialSlug, label: suggestionText(120) }) })] } }) },
   unknowns: { type: 'array', maxItems: 16, items: suggestionText(300) }, state: { enum: ['proposed', 'started', 'kept', 'revised', 'stopped'] },
   proposedAt: utcTimestamp, startedAt: utcTimestamp, decidedAt: utcTimestamp, observations: { type: 'array', maxItems: 256, items: trialObservation },

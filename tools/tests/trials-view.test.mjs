@@ -51,6 +51,7 @@ test('overhead uses Core results, including unavailable values and zero baseline
   assert.equal(overheadText({ ...row, after: 24009, absoluteDifference: 0, direction: 'unchanged', percentage: 0 }), '24009 → 24009 bytes, unchanged');
   assert.equal(overheadText({ ...row, before: 0, after: 15, absoluteDifference: 15, percentage: null }), '0 → 15 bytes, increase of 15 bytes (no percentage: zero baseline)');
   assert.equal(overheadText({ status: 'not-observed' }), 'not observed');
+  assert.equal(overheadText({ status: 'not-observed', reason: 'not-observed' }), 'not observed');
   assert.equal(overheadText({ status: 'unavailable', reason: 'unsupported-unit', baseline: { value: { amount: 10, unit: 'min' } }, trial: { value: { amount: 15, unit: 'min' } } }), '10 min → 15 min — not compared by Core (unsupported-unit)');
 });
 test('propose operation whitelists suggestion fields and includes the plan', () => {
@@ -58,17 +59,40 @@ test('propose operation whitelists suggestion fields and includes the plan', () 
   const { label, prompt, ...saved } = suggestion;
   assert.deepEqual(proposeOperation(suggestion, form), { type: 'propose', suggestion: saved, ...form });
 });
-test('planning requires quality before proposing, supports rows and no cap wording', async () => {
+test('planning requires quality and a bound before proposing, supports rows and no cap wording', async () => {
   const built = view(); await built.open(); built.plan(suggestion);
   assert.equal(find(built, 'Propose trial').disabled, true);
   field(built, 'Acceptable outcome').value = 'Correct'; await field(built, 'Acceptable outcome').listeners.input();
   assert.equal(find(built, 'Propose trial').disabled, true);
   field(built, 'Quality check 1').value = 'Pass'; await field(built, 'Quality check 1').listeners.input();
+  assert.equal(find(built, 'Propose trial').disabled, true, 'quality alone is not enough: the prefilled bound has no value yet');
+  field(built, 'Bound 1 value').value = '2'; await field(built, 'Bound 1 value').listeners.input();
   assert.equal(find(built, 'Propose trial').disabled, false);
   assert.match(textOf(built.node), /No enforcement mechanism is available here, so no bound is a cap\./);
   await find(built, 'Add quality check').listeners.click(); assert.ok(field(built, 'Quality check 2'));
   await find(built, 'Propose trial').listeners.click();
   assert.equal(built.calls[0].type, 'propose'); assert.equal(built.calls[0].quality.checks[0].text, 'Pass');
+  assert.deepEqual(built.calls[0].bounds, [{ id: 'bound-1', label: 'Time box', value: 2, unit: 'hours', enforcement: { kind: 'advisory' } }]);
+});
+test('the plan starts with one advisory bound row and needs a labelled, non-negative, finite, united bound', async () => {
+  const built = view(); await built.open(); built.plan(suggestion);
+  assert.deepEqual(['Bound 1 label', 'Bound 1 value', 'Bound 1 unit', 'Bound 1 enforcement'].map(label => field(built, label).value), ['Time box', '', 'hours', 'advisory']);
+  assert.equal(field(built, 'Bound 2 label'), undefined);
+  field(built, 'Acceptable outcome').value = 'Correct'; await field(built, 'Acceptable outcome').listeners.input();
+  field(built, 'Quality check 1').value = 'Pass'; await field(built, 'Quality check 1').listeners.input();
+  const disabled = () => find(built, 'Propose trial').disabled;
+  const setBound = async (name, value) => { field(built, name).value = value; await field(built, name).listeners.input(); };
+  for (const bad of ['', '  ', '-1', 'abc', 'Infinity']) { await setBound('Bound 1 value', bad); assert.equal(disabled(), true, `value ${JSON.stringify(bad)}`); }
+  await setBound('Bound 1 value', '0'); assert.equal(disabled(), false, 'zero is a valid bound');
+  await setBound('Bound 1 label', ' '); assert.equal(disabled(), true); await setBound('Bound 1 label', 'Time box'); assert.equal(disabled(), false);
+  await setBound('Bound 1 unit', ''); assert.equal(disabled(), true); await setBound('Bound 1 unit', 'hours'); assert.equal(disabled(), false);
+  // Removing the only bound leaves the plan unproposable; a row left incomplete beside a complete one is not recorded.
+  await find(built, 'Remove bound').listeners.click(); assert.equal(disabled(), true);
+  await find(built, 'Add bound').listeners.click(); assert.equal(field(built, 'Bound 1 label').value, ''); assert.equal(disabled(), true);
+  await setBound('Bound 1 label', 'Spend'); await setBound('Bound 1 value', '5'); await setBound('Bound 1 unit', 'USD'); assert.equal(disabled(), false);
+  await find(built, 'Add bound').listeners.click(); assert.equal(disabled(), false);
+  await find(built, 'Propose trial').listeners.click();
+  assert.deepEqual(built.calls[0].bounds, [{ id: 'bound-2', label: 'Spend', value: 5, unit: 'USD', enforcement: { kind: 'advisory' } }]);
 });
 test('lifecycle controls follow state; stopped restoration leaves disposition unchanged', async () => {
   for (const state of ['proposed', 'started', 'kept', 'revised', 'stopped']) {
@@ -132,7 +156,6 @@ test('observations send quality results, estimation methods and explicit unknown
 });
 test('planning offers only mechanisms reported by the last read and keeps removed row ids unique', async () => {
   const built = view('proposed', { readTrials: async () => ok({ trials: [], mechanisms: [{ id: 'timer', label: 'Timer' }] }) }); await built.open(); built.plan(suggestion);
-  await find(built, 'Add bound').listeners.click();
   const enforcement = field(built, 'Bound 1 enforcement');
   assert.deepEqual(enforcement.children.map(n => n.textContent), ['Advisory (not enforced)', 'Enforced by Timer']);
   enforcement.value = 'timer'; field(built, 'Bound 1 label').value = 'Time'; field(built, 'Bound 1 value').value = '2'; field(built, 'Bound 1 unit').value = 'hours';
@@ -165,11 +188,16 @@ test('start, context measurement, keep, stop and narrower controls record closed
   const qualifying = view('started', { readTrials: async () => ok({ trials: [{ record: { ...record, state: 'started' }, suggestion, evaluation: { ...evaluation, outcome: 'qualifying-improvement' } }], mechanisms: [] }) });
   await qualifying.open(); assert.equal(find(qualifying, 'Accept narrower outcome'), undefined);
 });
-test('revision starts from the existing quality bar; refusal preserves typed proposal', async () => {
-  const built = view('proposed', { recordTrial: async () => ({ status: 'refused', diagnostics: [{ message: 'Try again' }] }) }); await built.open(); await find(built, 'Revise').listeners.click();
+test('revision starts from the existing quality bar and bounds; refusal preserves typed proposal', async () => {
+  const bounds = [{ id: 'time', label: 'Time box', unit: 'hours', value: 2, enforcement: { kind: 'advisory' } }];
+  const calls = [], built = view('proposed', { readTrials: async () => ok({ trials: [{ record: { ...record, bounds }, suggestion, evaluation }], mechanisms: [] }), recordTrial: async operation => { calls.push(operation); return { status: 'refused', diagnostics: [{ message: 'Try again' }] }; } });
+  await built.open(); await find(built, 'Revise').listeners.click();
   assert.equal(field(built, 'Acceptable outcome').value, quality.outcome);
   assert.equal(field(built, 'Quality check 1').value, quality.checks[0].text);
+  assert.deepEqual(['Bound 1 label', 'Bound 1 value', 'Bound 1 unit'].map(label => field(built, label).value), ['Time box', '2', 'hours']);
+  assert.equal(find(built, 'Propose revision').disabled, false);
   field(built, 'Acceptable outcome').value = 'Updated quality'; await find(built, 'Propose revision').listeners.click();
+  assert.equal(calls[0].type, 'revise'); assert.deepEqual(calls[0].proposal.bounds, bounds);
   assert.equal(field(built, 'Acceptable outcome').value, 'Updated quality'); assert.equal(built.statuses.at(-1), 'Try again');
 });
 test('narrower acceptance and restoration effects remain separate from outcome and disposition', async () => {
@@ -201,4 +229,18 @@ test('bounds are worded as the module words them, preferring the evaluation text
   const worded = withBounds([{ ...bounds[0], text: 'Time box: 2 hours — advisory (not enforced)' }, { ...bounds[1], text: 'Spending: 5 USD — recorded as enforced by Meter, but that mechanism is not available here, so it is not a cap' }]); await worded.open();
   assert.match(textOf(worded.node), /recorded as enforced by Meter, but that mechanism is not available here, so it is not a cap/);
   assert.doesNotMatch(textOf(worded.node), /Spending: 5 USD — enforced by Meter/);
+});
+test('an overhead row with one recorded side shows that side and says which side is missing', async () => {
+  const unknown = { kind: 'unknown', unknownReason: 'Provider invoice unavailable' }, measured = { kind: 'measured', value: { amount: 100, unit: 'bytes' } };
+  assert.equal(overheadText({ status: 'not-observed', reason: 'trial-not-observed', baseline: unknown }), 'Baseline: unknown (Provider invoice unavailable); trial: not observed — not compared');
+  assert.equal(overheadText({ status: 'not-observed', reason: 'trial-not-observed', baseline: measured }), 'Baseline: 100 bytes; trial: not observed — not compared');
+  assert.equal(overheadText({ status: 'not-observed', reason: 'baseline-not-observed', trial: unknown }), 'Baseline: not observed; trial: unknown (Provider invoice unavailable) — not compared');
+  assert.equal(overheadText({ status: 'not-observed', reason: 'baseline-not-observed', trial: measured }), 'Baseline: not observed; trial: 100 bytes — not compared');
+  assert.equal(overheadText({ status: 'not-observed', reason: 'not-observed' }), 'not observed');
+  const overhead = [{ dimension: 'indexing', label: 'Indexing', status: 'not-observed', reason: 'trial-not-observed', baseline: unknown }, { dimension: 'maintenance', label: 'Maintenance', status: 'not-observed', reason: 'baseline-not-observed', trial: measured }];
+  const built = view('started', { readTrials: async () => ok({ trials: [{ record: { ...record, state: 'started' }, suggestion, evaluation: { ...evaluation, overhead } }], mechanisms: [] }) }); await built.open();
+  const text = textOf(built.node);
+  assert.match(text, /Indexing: Baseline: unknown \(Provider invoice unavailable\); trial: not observed — not compared/);
+  assert.match(text, /Maintenance: Baseline: not observed; trial: 100 bytes — not compared/);
+  assert.match(text, /Setup: not observed/); assert.match(text, /Runtime\/context \(configured material size, not usage\): not observed/);
 });

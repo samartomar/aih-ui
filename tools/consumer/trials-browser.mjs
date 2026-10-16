@@ -13,7 +13,8 @@ import { composeAuthoring, editDraft, freshAuthoring, openDraft } from './headle
 import { installedFamilies } from './installed-families.mjs';
 import { DRAFT_RECORD_SCHEMA } from './journey.mjs';
 import { IMPROVEMENT_SUGGESTION_SCHEMA, IMPROVEMENT_DISMISSAL_SCHEMA } from './improvements.mjs';
-import { TRIAL_SCHEMA } from './trials.mjs';
+import { TRIAL_SCHEMA, DIMENSION_LABELS } from './trials.mjs';
+import { RESTORATION_STATUSES } from './trial-record.mjs';
 
 const decode = bytes => new TextDecoder().decode(bytes);
 const ROOT = 'mattpocock.implement', UNRELATED = 'aihq.project-context', SKIPPED = 'mattpocock.wait-what', SUGGESTED = 'mattpocock.tdd', CLIENTS = ['claude', 'codex'];
@@ -152,7 +153,7 @@ export async function runTrialsBrowser({ origin, output, playwrightModule, setti
     assert.ok(steps.open.includes('trials-read'));
     assert.equal(await cards(first).count(), 0, 'No trial exists yet.');
 
-    // 2. Plan a trial from the leading suggestion: the quality bar first, two bounds, the unknown cost kept.
+    // 2. Plan a trial from the leading suggestion: the quality bar first, a time box that is already there, a second bound, the unknown cost kept.
     const leading = leadingCard(first), suggestionId = await leading.getAttribute('data-suggestion-id');
     assert.match(await textOf(leading), /Scope: project/);
     await leading.getByRole('button', { name: 'Plan a trial', exact: true }).click();
@@ -160,10 +161,14 @@ export async function runTrialsBrowser({ origin, output, playwrightModule, setti
     await planning.getByRole('heading', { name: 'Plan a trial', exact: true }).waitFor();
     await planFields(first, { task: 'Add tests to a small module of the app.', outcome: 'The new tests catch a seeded regression.',
       checks: ['A seeded regression fails a test.', 'The tests pass on the unchanged module.'], conditions: 'Same task, same client, same repository state.' });
-    for (const [index, bound] of [['Time box', 2, 'hours'], ['Spending', 5, 'USD']].entries()) {
-      await planning.getByRole('button', { name: 'Add bound', exact: true }).click();
-      await labelled(planning, `Bound ${index + 1} label`).fill(bound[0]); await labelled(planning, `Bound ${index + 1} value`).fill(String(bound[1])); await labelled(planning, `Bound ${index + 1} unit`).fill(bound[2]);
-    }
+    const propose = planning.getByRole('button', { name: 'Propose trial', exact: true });
+    // The plan opens with one advisory bound (a time box, no value yet), and a trial cannot be proposed without a finished bound.
+    assert.deepEqual([await labelled(planning, 'Bound 1 label').inputValue(), await labelled(planning, 'Bound 1 value').inputValue(), await labelled(planning, 'Bound 1 unit').inputValue()], ['Time box', '', 'hours']);
+    assert.equal(await propose.isDisabled(), true, 'The quality bar alone does not allow proposing: the bound has no value.');
+    await labelled(planning, 'Bound 1 value').fill('2');
+    assert.equal(await propose.isDisabled(), false);
+    await planning.getByRole('button', { name: 'Add bound', exact: true }).click();
+    await labelled(planning, 'Bound 2 label').fill('Spending'); await labelled(planning, 'Bound 2 value').fill('5'); await labelled(planning, 'Bound 2 unit').fill('USD');
     assert.ok((await textOf(planning)).includes(NO_CAP), 'The plan says no bound is a cap.');
     for (const index of [1, 2]) assert.deepEqual(await labelled(planning, `Bound ${index} enforcement`).locator('option').allInnerTexts(), ['Advisory (not enforced)'], 'Only advisory is offered without a mechanism.');
     assert.equal(await labelled(planning, 'Unknown cost 1').inputValue(), COST_UNKNOWN, 'The unknown cost is prefilled.');
@@ -186,7 +191,9 @@ export async function runTrialsBrowser({ origin, output, playwrightModule, setti
     await observe(first, trialA, { option: 'trial', target: 'setup', kind: 'declared', amount: 15, unit: 'minutes' });
     steps.measure = await press(first, trialA, 'Measure configured context');
     assert.deepEqual(steps.measure, ['trials-record', 'trials-read']);
-    const measured = await textOf(card(first, trialA));
+    const measured = await textOf(card(first, trialA)), lines = measured.split('\n');
+    for (const label of Object.values(DIMENSION_LABELS)) assert.ok(lines.some(line => line.startsWith(`${label}: `)), `An overhead row starts with its label: ${label}`);
+    assert.ok(lines.includes('Indexing: not observed') && lines.includes('Maintenance: not observed'), 'A dimension with nothing recorded is not observed.');
     assert.match(measured, /trial: not met \(1 passed, 1 failed, 0 unknown\)/);
     assert.match(measured, /No demonstrated qualifying improvement: the trial did not meet the quality bar\./);
     const evaluated = (await lastTrials()).find(row => row.record.id === trialA).evaluation;
@@ -211,12 +218,14 @@ export async function runTrialsBrowser({ origin, output, playwrightModule, setti
     const narrower = await textOf(card(first, trialA));
     assert.ok(narrower.includes(`Accepted a narrower outcome: ${qualification}`));
     assert.match(narrower, /No demonstrated qualifying improvement/, 'Accepting a narrower outcome does not rewrite the evidence.');
+    assert.deepEqual(await labelled(card(first, trialA), 'Request restoration').locator('option').allInnerTexts(), ['None', ...RESTORATION_STATUSES], 'The restoration request offers exactly the recorded statuses.');
     await act(first, async () => { await labelled(card(first, trialA), 'Decision reason').fill('The second check failed.'); await labelled(card(first, trialA), 'Request restoration').selectOption('partial'); await card(first, trialA).getByRole('button', { name: 'Stop', exact: true }).click(); });
     const stopped = await textOf(card(first, trialA));
     assert.ok(stopped.includes('Stopped. Evaluation ended. This does not mean anything was undone.'));
     assert.ok(stopped.includes('Restoration: partial (recorded by you)'));
     assert.ok(stopped.includes('Decision reason: The second check failed.'));
     assert.doesNotMatch(stopped, /Kept|adopted/);
+    assert.deepEqual(await labelled(card(first, trialA), 'Restoration status').locator('option').allInnerTexts(), RESTORATION_STATUSES, 'The restoration status offers exactly the recorded statuses.');
     const effect = 'The notes file was left in place.';
     await act(first, async () => { await labelled(card(first, trialA), 'Restoration status').selectOption('partial'); await labelled(card(first, trialA), 'Restoration effects').fill(effect); await card(first, trialA).getByRole('button', { name: 'Record restoration', exact: true }).click(); });
     assert.ok((await textOf(card(first, trialA))).includes(effect));
@@ -238,6 +247,7 @@ export async function runTrialsBrowser({ origin, output, playwrightModule, setti
     await again.getByRole('button', { name: 'Plan a trial', exact: true }).click();
     await trialsOf(first).getByRole('heading', { name: 'Plan a trial', exact: true }).waitFor();
     await planFields(first, { task: 'Add tests to a larger module.', outcome: 'The tests catch two seeded regressions.', checks: ['Both seeded regressions fail a test.'], conditions: 'Same client, larger module.' });
+    await labelled(trialsOf(first), 'Bound 1 value').fill('3');
     await act(first, () => trialsOf(first).getByRole('button', { name: 'Propose trial', exact: true }).click());
     assert.equal(await cards(first).count(), 2);
     const trialB = await cards(first).first().getAttribute('data-trial-id');

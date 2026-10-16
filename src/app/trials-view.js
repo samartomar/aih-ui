@@ -16,7 +16,8 @@ export function stateText(record) {
 export const restorationText = record => record.restoration ? `Restoration: ${record.restoration.status} (recorded by you)` : 'No restoration requested.';
 const observedText = observation => observation?.value ? `${observation.value.amount} ${observation.value.unit}` : observation?.unknownReason ? `unknown (${observation.unknownReason})` : 'not observed';
 export function overheadText(row) {
-  if (row.status === 'not-observed') return 'not observed';
+  // Nothing is compared while a side is missing, but the side that was recorded is still shown, and so is which side is missing.
+  if (row.status === 'not-observed') return row.baseline || row.trial ? `Baseline: ${observedText(row.baseline)}; trial: ${observedText(row.trial)} — not compared` : 'not observed';
   if (row.status !== 'available') return `${row.baseline ? observedText(row.baseline) : row.before === undefined ? 'not observed' : `${row.before} ${row.unit ?? ''}`} → ${row.trial ? observedText(row.trial) : row.after === undefined ? 'not observed' : `${row.after} ${row.unit ?? ''}`} — not compared by Core (${row.reason})`;
   // Core owns comparison and percentage semantics, including the zero baseline; its percentage is positive for a reduction,
   // so the sign is put into words here rather than shown as a negative increase.
@@ -28,6 +29,8 @@ const DIMENSIONS = { setup: 'Setup', indexing: 'Indexing', 'runtime-context': 'R
 // Mirrors RESTORATION_STATUSES in tools/consumer/trial-record.mjs; the page cannot import it.
 const RESTORATION = ['proposed', 'pending', 'completed', 'partial', 'unsupported'];
 const COST_UNKNOWN = 'Model or service spending: no cost source is connected, so it is unknown.';
+// A bound the person has finished: a label, a unit and a finite value of zero or more.
+const boundComplete = bound => bound.label !== '' && bound.unit !== '' && Number.isFinite(bound.value) && bound.value >= 0;
 
 export function createTrialsView({ client, el, button, showStatus }) {
   const node = el('section', 'p-3 border border-wb-border rounded bg-surface-container-low space-y-2'); node.id = 'policy-trials';
@@ -43,7 +46,7 @@ export function createTrialsView({ client, el, button, showStatus }) {
     const input = el(options ? 'select' : 'input', 'bg-wb-input border border-wb-border rounded p-1 max-w-full text-[11px]'); input.setAttribute('aria-label', label);
     if (options) for (const [key, text] of options) { const option = el('option', '', text); option.value = key; input.append(option); }
     else input.type = 'text';
-    input.value = value; input.disabled = recording; input.field = wrap; wrap.append(input); parent.append(wrap); return input;
+    input.value = String(value); input.disabled = recording; input.field = wrap; wrap.append(input); parent.append(wrap); return input;
   }
   const lines = input => input.value.split('\n').map(text => text.trim()).filter(Boolean);
   function effectsField(parent, label, values = []) {
@@ -55,7 +58,7 @@ export function createTrialsView({ client, el, button, showStatus }) {
   function plan(suggestion, previous) {
     if (recording || !(client.draft || client.intent)) return;
     checked = client.revision;
-    editor = { suggestion, previous, form: previous ? pick(previous, PLAN_FIELDS) : { scope: suggestion.scope, task: '', quality: { outcome: '', checks: [{ id: 'check-1', text: '' }] }, conditions: '', bounds: [], unknowns: [COST_UNKNOWN] } };
+    editor = { suggestion, previous, form: previous ? pick(previous, PLAN_FIELDS) : { scope: suggestion.scope, task: '', quality: { outcome: '', checks: [{ id: 'check-1', text: '' }] }, conditions: '', bounds: [{ id: 'bound-1', label: 'Time box', unit: 'hours', enforcement: { kind: 'advisory' } }], unknowns: [COST_UNKNOWN] } };
     render();
     planning.scrollIntoView?.({ block: 'nearest' });
   }
@@ -76,14 +79,18 @@ export function createTrialsView({ client, el, button, showStatus }) {
     const unknowns = el('div', 'space-y-1'); planning.append(unknowns);
     let unknownRows = form.unknowns.map(text => ({ text }));
     const reason = previous ? field(planning, 'Revision reason') : undefined;
+    // An empty value stays empty (not zero), so a row the person has not finished is not mistaken for a bound of 0.
+    const boundOf = row => ({ id: row.id, label: row.labelInput.value.trim(), value: row.valueInput.value.trim() === '' ? undefined : Number(row.valueInput.value), unit: row.unitInput.value.trim(), enforcement: row.enforcementInput.value === 'advisory' ? { kind: 'advisory' } : { kind: 'enforced', mechanism: mechanisms.find(mechanism => mechanism.id === row.enforcementInput.value) } });
     function capture() {
-      return { scope: scope.value, task: task.value.trim(), quality: { outcome: outcome.value.trim(), checks: checkRows.filter(row => row.input.value.trim()).map(row => ({ id: row.id, text: row.input.value.trim() })) }, conditions: conditions.value.trim(), bounds: boundRows.map(row => ({ id: row.id, label: row.labelInput.value.trim(), value: Number(row.valueInput.value), unit: row.unitInput.value.trim(), enforcement: row.enforcementInput.value === 'advisory' ? { kind: 'advisory' } : { kind: 'enforced', mechanism: mechanisms.find(mechanism => mechanism.id === row.enforcementInput.value) } })), unknowns: unknownRows.map(row => row.input.value.trim()).filter(Boolean) };
+      return { scope: scope.value, task: task.value.trim(), quality: { outcome: outcome.value.trim(), checks: checkRows.filter(row => row.input.value.trim()).map(row => ({ id: row.id, text: row.input.value.trim() })) }, conditions: conditions.value.trim(), bounds: boundRows.map(boundOf), unknowns: unknownRows.map(row => row.input.value.trim()).filter(Boolean) };
     }
     const submit = choice(previous ? 'Propose revision' : 'Propose trial', () => {
-      const proposal = capture(); if (!proposal.quality.outcome || !proposal.quality.checks.length) return;
+      // Only finished bounds are recorded; a trial needs at least one.
+      const captured = capture(), proposal = { ...captured, bounds: captured.bounds.filter(boundComplete) };
+      if (!proposal.quality.outcome || !proposal.quality.checks.length || !proposal.bounds.length) return;
       return record(previous ? { type: 'revise', id: previous.id, proposal, ...(reason.value.trim() ? { reason: reason.value.trim() } : {}) } : proposeOperation(suggestion, proposal));
     });
-    const validate = () => { submit.disabled = recording || !outcome.value.trim() || !checkRows.some(row => row.input.value.trim()); };
+    const validate = () => { submit.disabled = recording || !outcome.value.trim() || !checkRows.some(row => row.input.value.trim()) || !boundRows.some(row => boundComplete(boundOf(row))); };
     // Preserve typed edits when an in-flight request makes every control inert.
     editor.capture = capture;
     function drawChecks() {
@@ -97,14 +104,15 @@ export function createTrialsView({ client, el, button, showStatus }) {
         row.valueInput = field(bounds, `Bound ${index + 1} value`, row.valueInput?.value ?? row.value ?? ''); row.valueInput.type = 'number'; row.valueInput.min = 0; row.valueInput.step = 'any';
         row.unitInput = field(bounds, `Bound ${index + 1} unit`, row.unitInput?.value ?? row.unit ?? '');
         row.enforcementInput = field(bounds, `Bound ${index + 1} enforcement`, row.enforcementInput?.value ?? row.enforcement?.mechanism?.id ?? 'advisory', [['advisory', 'Advisory (not enforced)'], ...mechanisms.map(m => [m.id, `Enforced by ${m.label}`])]);
-        bounds.append(choice('Remove bound', () => { boundRows = boundRows.filter(item => item !== row); drawBounds(); }));
+        for (const input of [row.labelInput, row.valueInput, row.unitInput]) input.addEventListener('input', validate);
+        bounds.append(choice('Remove bound', () => { boundRows = boundRows.filter(item => item !== row); drawBounds(); validate(); }));
       });
     }
     function drawUnknowns() {
       unknowns.replaceChildren(); unknownRows.forEach((row, index) => { row.input = field(unknowns, `Unknown cost ${index + 1}`, row.input?.value ?? row.text); unknowns.append(choice('Remove unknown cost', () => { unknownRows = unknownRows.filter(item => item !== row); drawUnknowns(); })); });
     }
     drawChecks(); drawBounds(); drawUnknowns(); outcome.addEventListener('input', validate);
-    planning.append(choice('Add quality check', () => { if (checkRows.length < 16) { checkRows.push({ id: `check-${++nextCheck}`, text: '' }); drawChecks(); validate(); } }), choice('Add bound', () => { if (boundRows.length < 16) { boundRows.push({ id: `bound-${++nextBound}` }); drawBounds(); } }), choice('Add unknown cost', () => { if (unknownRows.length < 16) { unknownRows.push({ text: '' }); drawUnknowns(); } }), submit, choice('Cancel plan', () => { editor = undefined; render(); })); validate();
+    planning.append(choice('Add quality check', () => { if (checkRows.length < 16) { checkRows.push({ id: `check-${++nextCheck}`, text: '' }); drawChecks(); validate(); } }), choice('Add bound', () => { if (boundRows.length < 16) { boundRows.push({ id: `bound-${++nextBound}` }); drawBounds(); validate(); } }), choice('Add unknown cost', () => { if (unknownRows.length < 16) { unknownRows.push({ text: '' }); drawUnknowns(); } }), submit, choice('Cancel plan', () => { editor = undefined; render(); })); validate();
   }
   function trialCard({ record: trial, evaluation, suggestion }) {
     const card = el('div', 'p-2 border border-wb-border rounded space-y-1'); card.dataset.trialId = trial.id;

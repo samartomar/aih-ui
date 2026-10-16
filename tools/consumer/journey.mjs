@@ -147,7 +147,7 @@ export async function readJourneyEnvelope(bytes) {
       if (problem !== null) return refuse('INPUT_INVALID', `/records/${index}${problem}`, 'Batch id and checks must derive from its categories, continuation, scopes, inputs and actions.', originalBytes);
     } else if (record.schema === TRIAL_RECORD_SCHEMA) {
       const problem = await trialDerivedProblem(record);
-      if (problem !== null) return refuse('INPUT_INVALID', `/records/${index}${problem}`, 'Trial and observation ids must derive from the suggestion, scope and proposal time, and from the option and target.', originalBytes);
+      if (problem !== null) return refuse('INPUT_INVALID', `/records/${index}${problem}`, 'Trial and observation ids must derive from the suggestion, scope and proposal time, and from the option and target, and the revision from the rest of the record.', originalBytes);
     } else if (record.required) {
       supported = false;
       diagnostics.push({ code: 'JOURNEY_RECORD_UNSUPPORTED', path: `/records/${index}`, message: `Required record ${record.id} has unsupported schema ${record.schema}; it can be read but not changed.` });
@@ -221,7 +221,7 @@ export async function writeJourneyEnvelope({ savedIntentBytes, records, previous
     }
     if (record?.schema === TRIAL_RECORD_SCHEMA) {
       const problem = trialProblem(record) ?? await trialDerivedProblem(record);
-      if (problem !== null) return refuse('INPUT_INVALID', `${path}${problem}`, 'Supply a closed improvement-trial record with derived trial and observation ids.');
+      if (problem !== null) return refuse('INPUT_INVALID', `${path}${problem}`, 'Supply a closed improvement-trial record with derived trial and observation ids and a derived revision.');
       written.push(structuredClone(record));
       continue;
     }

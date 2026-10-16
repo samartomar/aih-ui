@@ -10,7 +10,7 @@ import { refuse, editDraft } from './headless.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { isUtcTimestamp } from './maintenance-record.mjs';
 import { IMPROVEMENT_SUGGESTION_RECORD_SCHEMA, IMPROVEMENT_DISMISSAL_RECORD_SCHEMA, SUGGESTION_FIELDS, suggestionProblem, suggestionDerivedProblem } from './improvement-record.mjs';
-import { TRIAL_RECORD_SCHEMA, TRIAL_DIMENSIONS, MAX_OBSERVATIONS, digest, targetKey, trialId, observationId, observationProblem, proposalProblem, restorationProblem, mechanismValid } from './trial-record.mjs';
+import { TRIAL_RECORD_SCHEMA, TRIAL_DIMENSIONS, MAX_OBSERVATIONS, digest, targetKey, trialId, observationId, observationProblem, proposalProblem, restorationProblem, mechanismValid, sealTrial } from './trial-record.mjs';
 export const TRIAL_SCHEMA = TRIAL_RECORD_SCHEMA;
 // The shipped host can enforce nothing, so every bound it records is advisory and no cap is ever claimed.
 export const TRIAL_MECHANISMS_NONE = Object.freeze([]);
@@ -22,6 +22,7 @@ const isTrial = record => record.schema === TRIAL_RECORD_SCHEMA;
 const byId = (a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 const byProposed = (a, b) => a.proposedAt < b.proposedAt ? -1 : a.proposedAt > b.proposedAt ? 1 : byId(a, b);
 const text = (value, max) => typeof value === 'string' && value.length >= 1 && value.length <= max;
+const DRIFTED = 'The draft changed since this trial was proposed, so the configured size it started from is no longer available; revise the trial to measure again.';
 const ref = claim => ({ id: claim.id, revision: claim.revision });
 // ---- Evaluation ----------------------------------------------------------------------------------------------------------
 const OUTCOMES = { met: 'qualifying-improvement', 'not-met': 'no-qualifying-improvement', unknown: 'inconclusive' };
@@ -104,7 +105,7 @@ export async function readTrials({ envelopeBytes, mechanisms = TRIAL_MECHANISMS_
 }
 // ---- Configured size -----------------------------------------------------------------------------------------------------
 const size = descriptors => descriptors.reduce((total, descriptor) => total + descriptor.byteLength, 0);
-// Configured material size, never observed usage: the recipe and materials of every pinned item, and what the tested item adds
+// Configured material size, never observed usage, of the draft the trial was proposed against: the recipe and materials of every pinned item, and what the tested item adds
 // (itself and what it requires, unless already pinned). A size that cannot be known is unknown with its reason.
 function configuredSize({ draft, change, inventories }) {
   const pins = draft.intent.pins, pinned = new Set(pins.map(pin => `${pin.releaseSha256}/${pin.itemId}`));
@@ -157,7 +158,8 @@ export async function recordTrial({ envelopeBytes, operation, inventories, mecha
   // The proposal fields of a new trial, checked as the record will be, with each bound's enforcement checked against the host's mechanisms.
   const proposed = (fields, path) => {
     if (!only(fields, PROPOSAL_FIELDS, ['bounds', 'unknowns', ...(path === '/operation' ? ['type', 'suggestion'] : [])])) return { refused: fail(path, `Supply only the trial's ${PROPOSAL_FIELDS.join(', ')}, bounds and unknowns.`) };
-    const normal = { scope: fields.scope, task: fields.task, quality: fields.quality, conditions: fields.conditions, bounds: fields.bounds ?? [], unknowns: fields.unknowns ?? [] };
+    if (fields.bounds === undefined || (Array.isArray(fields.bounds) && fields.bounds.length === 0)) return { refused: fail(`${path}/bounds`, 'A trial needs at least one advisory or enforced bound, such as a time box or a spending limit.', 'TRIAL_BOUND_REQUIRED') };
+    const normal = { scope: fields.scope, task: fields.task, quality: fields.quality, conditions: fields.conditions, bounds: fields.bounds, unknowns: fields.unknowns ?? [] };
     const problem = proposalProblem(normal);
     if (problem !== null) return { refused: fail(`${path}${problem}`, 'Supply a valid trial: a scope, a task, the quality it must meet, the comparison conditions, bounds and unknown costs.') };
     const bounds = [];
@@ -177,7 +179,7 @@ export async function recordTrial({ envelopeBytes, operation, inventories, mecha
   const baselineOf = async () => ({ savedIntentSha256: read.envelope.savedIntent.sha256, draftSha256: await digest(draft.intent) });
   // The trial records the suggestion revision it was planned from and carries the change it tests, so it never reads the current suggestion again.
   const newTrial = async (suggestion, change, fields, extra = {}) => {
-    const trial = { id: '', schema: TRIAL_RECORD_SCHEMA, required: false, suggestion: { id: suggestion.id, revision: suggestion.revision }, change: { ...change }, scope: fields.scope, baseline: await baselineOf(),
+    const trial = { id: '', schema: TRIAL_RECORD_SCHEMA, required: false, revision: '', suggestion: { id: suggestion.id, revision: suggestion.revision }, change: { ...change }, scope: fields.scope, baseline: await baselineOf(),
       task: fields.task, quality: fields.quality, conditions: fields.conditions, bounds: fields.bounds, unknowns: fields.unknowns, state: 'proposed', proposedAt: now, observations: [], ...extra };
     trial.id = await trialId(trial);
     return trial;
@@ -185,13 +187,15 @@ export async function recordTrial({ envelopeBytes, operation, inventories, mecha
   // The snapshot a decision keeps: what the evidence said at that moment, whether or not it showed an improvement.
   const decide = async (trial, state, extra = {}) => ({ ...trial, state, decidedAt: now, evidence: { outcome: (await evaluateTrial(trial)).outcome, evaluatedAt: now },
     ...(operation.reason !== undefined ? { reason: operation.reason } : {}), ...extra });
-  const settle = async (next, { base = read, suggestions: nextSuggestions = suggestions, extra = {} } = {}) => {
+  // Every trial written is sealed with the revision of exactly what is written.
+  const settle = async (updated, { base = read, suggestions: nextSuggestions = suggestions } = {}) => {
+    const next = await Promise.all(updated.map(sealTrial));
     const others = base.records.filter(record => Object.hasOwn(JOURNEY_RECORD_KINDS, record.schema) && !isSuggestion(record) && !isTrial(record) && !isDismissal(record));
     const records = [...others, ...[...nextSuggestions].sort(byId), ...base.records.filter(isDismissal), ...[...trials.filter(trial => !next.some(changed => changed.id === trial.id)), ...next].sort(byId)];
     const written = await writeJourneyEnvelope({ savedIntentBytes: base.savedIntentBytes, records, previous: base });
     if (written.status !== 'ok') return { ...written, originalBytes: envelopeBytes.slice() };
     const { envelope, envelopeBytes: bytes } = written.value;
-    return { status: 'ok', diagnostics: [], value: { envelopeBytes: bytes, envelope, projection: projectJourneyEnvelope(envelope), record: structuredClone(next.at(-1)), trials: await present(envelope.records, mechanisms), ...extra } };
+    return { status: 'ok', diagnostics: [], value: { envelopeBytes: bytes, envelope, projection: projectJourneyEnvelope(envelope), record: structuredClone(next.at(-1)), trials: await present(envelope.records, mechanisms) } };
   };
   const withObservations = async (trial, additions) => {
     const kept = trial.observations.filter(o => !additions.some(added => added.option === o.option && targetKey(added.target) === targetKey(o.target)));
@@ -235,9 +239,10 @@ export async function recordTrial({ envelopeBytes, operation, inventories, mecha
       if (problem !== null) return fail(`/operation/observation${problem}`, 'Supply a valid observation for a quality check or an overhead dimension.');
       additions = [{ ...observation, source: 'person' }];
     } else {
-      const measured = configuredSize({ draft, change: trial.change, inventories });
+      // Sizes are the configured size of the draft the trial started from; once the draft is another one, neither side is known.
+      const measured = await digest(draft.intent) === trial.baseline.draftSha256 ? configuredSize({ draft, change: trial.change, inventories }) : { unknown: DRIFTED };
       const side = (option, amount, reason) => ({ option, target: { dimension: 'runtime-context' }, source: 'host', ...(amount !== undefined ? { kind: 'measured', value: { amount, unit: 'bytes' } } : { kind: 'unknown', unknownReason: reason }) });
-      additions = [side('baseline', measured.baseline), side('trial', measured.trial, measured.unknown)];
+      additions = [side('baseline', measured.baseline, measured.unknown), side('trial', measured.trial, measured.unknown)];
     }
     const observed = await withObservations(trial, additions);
     return observed.observations.length > MAX_OBSERVATIONS ? fail('/operation', `A trial keeps at most ${MAX_OBSERVATIONS} observations.`) : settle([observed]);
@@ -262,7 +267,8 @@ export async function recordTrial({ envelopeBytes, operation, inventories, mecha
     const next = await newTrial(trial.suggestion, trial.change, checked.fields, { revises: trial.id });
     if (trials.some(other => other.id === next.id)) return fail('/operation', 'That trial is already planned.');
     const revised = await decide(trial, 'revised', { revisedBy: next.id });
-    return settle([revised, next], { extra: { revised: structuredClone(revised) } });
+    const settled = await settle([revised, next]);
+    return settled.status === 'ok' ? { ...settled, value: { ...settled.value, revised: structuredClone(settled.value.envelope.records.find(record => record.id === revised.id)) } } : settled;
   }
   if (type === 'stop') {
     if (!stateIs(trial, 'proposed', 'started')) return invalid(`Only a proposed or started trial can be stopped; this one is ${trial.state}.`);

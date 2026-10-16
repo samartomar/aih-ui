@@ -13,7 +13,7 @@ import { checkImprovements, recordImprovement, IMPROVEMENT_SUGGESTION_SCHEMA, IM
 import { editWorkspace, exportWorkspace } from './workspace.mjs';
 import { digestBytes } from './intake.mjs';
 import { createMixedService } from './mixed-service.mjs';
-import { TRIAL_RECORD_SCHEMA, trialProblem, trialId } from './trial-record.mjs';
+import { TRIAL_RECORD_SCHEMA, trialProblem, trialId, trialRevision } from './trial-record.mjs';
 import { suggestionRevision } from './improvement-record.mjs';
 const encode = value => new TextEncoder().encode(value), decode = bytes => new TextDecoder().decode(bytes);
 const valueOf = result => { assert.equal(result.status, 'ok', JSON.stringify(result.diagnostics)); return result.value; };
@@ -114,7 +114,7 @@ test('propose, start and keep: the quality is recorded first, the suggestion sit
 test('revise: the old trial is revised and points at the new proposed trial, which points back; a proposed trial can be revised too', async () => {
   const s = await shared();
   const go = await started(s), change = { scope: 'project', task: 'Add tests to a larger module.', quality: { outcome: 'Tests catch two seeded regressions.', checks: [{ id: 'catches-both', text: 'Both seeded regressions fail a test.' }] },
-    conditions: 'Same client, larger module.', bounds: [], unknowns: [] };
+    conditions: 'Same client, larger module.', bounds: [{ id: 'time-box', label: 'Time box', unit: 'hours', value: 2, enforcement: { kind: 'advisory' } }], unknowns: [] };
   const revised = await record(s, go.envelopeBytes, { type: 'revise', id: go.id, reason: 'The module was too small.', proposal: change });
   const old = trialOf(revised.envelope, go.id), next = revised.record;
   assert.equal(old.state, 'revised'); assert.equal(old.revisedBy, next.id); assert.equal(old.reason, 'The module was too small.'); assert.equal(old.evidence.outcome, 'inconclusive');
@@ -458,10 +458,10 @@ test('the trial kind is registered, optional, and round-trips through the journe
   const writtenAlone = await writeJourneyEnvelope({ savedIntentBytes: read.savedIntentBytes, records: read.records.filter(r => r.schema !== IMPROVEMENT_SUGGESTION_SCHEMA) });
   assert.equal(writtenAlone.status, 'refused'); assert.match(writtenAlone.diagnostics[0].path, /^\/records\/\d+\/suggestion$/);
   // A trial that names another revision of the suggestion beside it is still linked (the revision records what was trialled); another suggestion id is not.
-  const older = structuredClone(read.records.find(r => r.id === go.id)); older.suggestion.revision = 'b'.repeat(64); older.id = await trialId(older);
+  const older = structuredClone(read.records.find(r => r.id === go.id)); older.suggestion.revision = 'b'.repeat(64); older.id = await trialId(older); older.revision = await trialRevision(older);
   const oldRevision = await resign(bytes, doc => { doc.records[doc.records.findIndex(r => r.id === go.id)] = older; });
   assert.equal(valueOf(await readJourneyEnvelope(oldRevision)).records.some(r => r.id === older.id), true);
-  const relinked = structuredClone(older); relinked.suggestion.id = `suggestion-${'b'.repeat(32)}`; relinked.id = await trialId(relinked);
+  const relinked = structuredClone(older); relinked.suggestion.id = `suggestion-${'b'.repeat(32)}`; relinked.id = await trialId(relinked); relinked.revision = await trialRevision(relinked);
   const other = await resign(bytes, doc => { doc.records[doc.records.findIndex(r => r.id === go.id)] = relinked; });
   assert.match((await readJourneyEnvelope(other)).diagnostics[0].path, /^\/records\/\d+\/suggestion$/);
   // Ids derive from the record's own fields: a tampered trial or observation id is refused.
@@ -498,6 +498,9 @@ test('the closed trial shape refuses what the lifecycle cannot produce', async (
   assert.equal(problem(t => { t.change.itemSha256 = 'nope'; }), '/change');
   assert.equal(problem(t => { t.bounds = [{ id: 'cap', label: 'Cap', unit: 'usd', value: 1, enforcement: { kind: 'enforced' } }]; }), '/bounds');
   assert.equal(problem(t => { t.proposedAt = '2026-13-01T00:00:00Z'; }), '/proposedAt');
+  assert.equal(problem(t => { t.bounds = []; }), '/bounds', 'a bounded trial has at least one bound');
+  assert.equal(problem(t => { delete t.revision; }), '', 'the revision is part of the closed shape');
+  assert.equal(problem(t => { t.revision = 'nope'; }), '/revision');
   const decided = trialOf(valueOf(await readJourneyEnvelope((await record(s, bytes, { type: 'keep', id: go.id })).envelopeBytes)).envelope, go.id);
   assert.equal(trialProblem(decided), null);
   const kept = mutate => { const copy = structuredClone(decided); mutate(copy); return trialProblem(copy); };
@@ -656,6 +659,8 @@ test('the shipped trial schema agrees structurally with the runtime records', as
   assert.deepEqual([...schema.properties.baseline.required].sort(), Object.keys(kept.record.baseline).sort());
   assert.deepEqual([...schema.properties.quality.required].sort(), Object.keys(kept.record.quality).sort());
   assert.deepEqual([...schema.properties.bounds.items.required].sort(), Object.keys(kept.record.bounds[0]).sort());
+  assert.equal(schema.properties.bounds.minItems, 1); assert.equal(schema.properties.revision.pattern, '^[a-f0-9]{64}$');
+  for (const r of records) assert.match(r.revision, new RegExp(schema.properties.revision.pattern));
   assert.deepEqual([...schema.properties.adopted.required].sort(), Object.keys(kept.record.adopted).sort());
   assert.deepEqual([...schema.properties.evidence.required].sort(), Object.keys(kept.record.evidence).sort());
   assert.deepEqual([...schema.properties.narrower.required].sort(), Object.keys(narrowed.record.narrower).sort());
@@ -695,7 +700,101 @@ test('planning, evaluating and keeping a trial never touch the network or a mode
   try {
     const go = await started(s), bytes = await passAll(s, go.envelopeBytes, go.id);
     await record(s, bytes, { type: 'measure-context', id: go.id }); await record(s, bytes, { type: 'keep', id: go.id }); valueOf(await readTrials({ envelopeBytes: bytes }));
-    valueOf(await proposeTrial({ envelopeBytes: s.envelopeBytes, suggestion: s.tdd, scope: 'project', task: 'x', quality: { outcome: 'y', checks: [{ id: 'z', text: 'w' }] }, conditions: 'c', inventories: s.inventories, now: tick() }));
+    valueOf(await proposeTrial({ envelopeBytes: s.envelopeBytes, suggestion: s.tdd, scope: 'project', task: 'x', quality: { outcome: 'y', checks: [{ id: 'z', text: 'w' }] }, conditions: 'c', bounds: [{ id: 'time-box', label: 'Time box', unit: 'hours', value: 2, enforcement: { kind: 'advisory' } }], inventories: s.inventories, now: tick() }));
   } finally { for (const name of TRAPPED) { if (saved[name] === undefined) delete globalThis[name]; else globalThis[name] = saved[name]; } }
   assert.deepEqual(calls, []);
+});
+
+// ---- 12. Spec review: baseline drift, at least one bound, an explicit revision, one-sided overhead --------------------------------------
+test('measure-context never measures against a draft the trial did not start from: both sides are unknown with the reason, and revising measures again', async () => {
+  const s = await shared(), go = await started(s), digestOf = async intent => digestBytes(encode(stable(intent)));
+  // Another trial of a different item is kept, which edits the draft this trial was proposed against.
+  const other = await record(s, go.envelopeBytes, proposal(s, { suggestion: s.claude, task: 'Set up the client.' })), otherId = other.record.id;
+  const running = await record(s, other.envelopeBytes, { type: 'start', id: otherId }), adopted = await record(s, running.envelopeBytes, { type: 'keep', id: otherId });
+  assert.notEqual(trialOf(adopted.envelope, go.id).baseline.draftSha256, await digestOf(draftIntent(adopted.envelope)), 'the draft moved on after the trial was proposed');
+  const measured = await record(s, adopted.envelopeBytes, { type: 'measure-context', id: go.id });
+  assert.deepEqual(measured.record.observations.map(o => o.option).sort(), ['baseline', 'trial']);
+  for (const observation of measured.record.observations) {
+    assert.deepEqual([observation.source, observation.kind, observation.target, 'value' in observation], ['host', 'unknown', { dimension: 'runtime-context' }, false]);
+    assert.match(observation.unknownReason, /The draft changed since this trial was proposed/); assert.match(observation.unknownReason, /revise the trial to measure again/);
+  }
+  const row = measured.trials.find(t => t.record.id === go.id).evaluation.overhead.find(r => r.dimension === 'runtime-context');
+  assert.deepEqual([row.status, row.reason], ['unavailable', 'unknown-value']);
+  for (const field of ['before', 'after', 'absoluteDifference', 'direction', 'percentage']) assert.equal(field in row, false, `${field} is never claimed for an unknown size`);
+  // A trial proposed against the unchanged draft still measures.
+  const fresh = await started(s), same = await record(s, fresh.envelopeBytes, { type: 'measure-context', id: fresh.id });
+  assert.deepEqual(same.record.observations.map(o => o.kind), ['measured', 'measured']);
+  // Revising proposes against the current draft, so the revised trial can be measured.
+  const revised = await record(s, measured.envelopeBytes, { type: 'revise', id: go.id, proposal: revision(s) });
+  const running2 = await record(s, revised.envelopeBytes, { type: 'start', id: revised.record.id }), again = await record(s, running2.envelopeBytes, { type: 'measure-context', id: revised.record.id });
+  assert.equal(again.record.baseline.draftSha256, await digestOf(draftIntent(again.envelope)));
+  assert.deepEqual(again.record.observations.map(o => o.kind), ['measured', 'measured']);
+});
+
+test('a bounded trial needs at least one bound: proposing and revising without one is refused as TRIAL_BOUND_REQUIRED', async () => {
+  const s = await shared();
+  const { bounds: _omitted, ...withoutBounds } = proposal(s);
+  for (const operation of [withoutBounds, proposal(s, { bounds: [] }), proposal(s, { bounds: undefined })]) {
+    const d = await refused(s, s.envelopeBytes, operation);
+    assert.equal(d.code, 'TRIAL_BOUND_REQUIRED'); assert.equal(d.path, '/operation/bounds'); assert.match(d.message, /at least one advisory or enforced bound/);
+  }
+  const go = await started(s), { bounds: _bounds, ...noBounds } = revision(s);
+  for (const fields of [noBounds, { ...noBounds, bounds: [] }]) {
+    const d = await refused(s, go.envelopeBytes, { type: 'revise', id: go.id, proposal: fields });
+    assert.equal(d.code, 'TRIAL_BOUND_REQUIRED'); assert.equal(d.path, '/operation/proposal/bounds');
+  }
+  const viaHelper = await proposeTrial({ envelopeBytes: s.envelopeBytes, suggestion: s.tdd, scope: 'project', task: 'x', quality: { outcome: 'y', checks: [{ id: 'z', text: 'w' }] }, conditions: 'c', inventories: s.inventories, now: tick() });
+  assert.equal(viaHelper.status, 'refused'); assert.equal(viaHelper.diagnostics[0].code, 'TRIAL_BOUND_REQUIRED');
+  // Quality is still required first, and a malformed bound list is still ordinary invalid input.
+  assert.equal((await refused(s, s.envelopeBytes, proposal(s, { quality: undefined, bounds: [] }))).code, 'TRIAL_QUALITY_REQUIRED');
+  assert.equal((await refused(s, s.envelopeBytes, proposal(s, { bounds: 'none' }))).code, 'INPUT_INVALID');
+  // One advisory bound is enough.
+  assert.equal((await proposed(s)).record.bounds.length, 1);
+});
+
+test('the trial revision is derived from the record, recomputed by every write, and a record whose revision does not derive is refused', async () => {
+  const s = await shared(), p = await proposed(s);
+  const derive = async trial => { const { revision: _omitted, ...rest } = trial; return digestBytes(encode(stable(rest))); };
+  assert.match(p.record.revision, /^[a-f0-9]{64}$/); assert.equal(p.record.revision, await derive(p.record), 'the revision is the digest of the record without it');
+  // Every lifecycle write and every observation gives the trial a new revision, and each one derives.
+  const seen = [p.record.revision];
+  const steps = [{ type: 'start', id: p.id }, outcome(p.id, 'trial', 'catches-regression', 'passed'), outcome(p.id, 'trial', 'catches-regression', 'failed'), overhead(p.id, 'baseline', 'setup', 10, 'minutes', 'declared'),
+    { type: 'measure-context', id: p.id }, { type: 'accept-narrower', id: p.id, qualification: 'Small modules only.' }, { type: 'stop', id: p.id, restoration: { status: 'pending' } }, { type: 'restoration', id: p.id, status: 'completed', effects: [] }];
+  let bytes = p.envelopeBytes, last;
+  for (const operation of steps) {
+    last = await record(s, bytes, operation); bytes = last.envelopeBytes;
+    assert.equal(last.record.revision, await derive(last.record), operation.type);
+    assert.equal(seen.includes(last.record.revision), false, `${operation.type} gives a new revision`); seen.push(last.record.revision);
+  }
+  // A kept trial and a revision (both trials) are sealed as well.
+  const go = await started(s), kept = await record(s, go.envelopeBytes, { type: 'keep', id: go.id });
+  assert.equal(kept.record.revision, await derive(kept.record)); assert.notEqual(kept.record.revision, trialOf(go.envelope, go.id).revision);
+  const second = await started(s), revised = await record(s, second.envelopeBytes, { type: 'revise', id: second.id, proposal: revision(s) });
+  for (const trial of [revised.revised, revised.record]) assert.equal(trial.revision, await derive(trial));
+  assert.notEqual(revised.revised.revision, trialOf(second.envelope, second.id).revision);
+  // It round-trips through read and write unchanged.
+  const read = valueOf(await readJourneyEnvelope(bytes));
+  assert.equal(trialOf(read.envelope, p.id).revision, last.record.revision);
+  const written = valueOf(await writeJourneyEnvelope({ savedIntentBytes: read.savedIntentBytes, records: read.records, previous: read }));
+  assert.equal(trialOf(written.envelope, p.id).revision, last.record.revision);
+  assert.equal(valueOf(await readTrials({ envelopeBytes: written.envelopeBytes })).trials.find(t => t.record.id === p.id).record.revision, last.record.revision);
+  // Edited without recomputing the revision, a trial is refused on read, and on write.
+  const refusedRead = async mutate => { const result = await readJourneyEnvelope(await resign(kept.envelopeBytes, doc => mutate(doc.records.find(r => r.id === go.id)))); assert.equal(result.status, 'refused'); return result.diagnostics[0]; };
+  for (const mutate of [trial => { trial.task = 'A different task.'; }, trial => { trial.evidence.outcome = 'no-qualifying-improvement'; }, trial => { trial.reason = 'Edited later.'; }, trial => { trial.bounds[0].value = 1; }]) {
+    const d = await refusedRead(mutate); assert.equal(d.code, 'INPUT_INVALID'); assert.match(d.path, /^\/records\/\d+\/revision$/);
+  }
+  assert.match((await refusedRead(trial => { delete trial.revision; })).path, /^\/records\/\d+$/, 'a record without a revision is not a closed trial');
+  const readKept = valueOf(await readJourneyEnvelope(kept.envelopeBytes)), stale = structuredClone(readKept.records.find(r => r.id === go.id)); stale.task = 'A different task.';
+  const refusedWrite = await writeJourneyEnvelope({ savedIntentBytes: readKept.savedIntentBytes, records: readKept.records.map(r => r.id === go.id ? stale : r), previous: readKept });
+  assert.equal(refusedWrite.status, 'refused'); assert.match(refusedWrite.diagnostics[0].path, /^\/records\/\d+\/revision$/);
+});
+
+test('an overhead row with one recorded side carries that side, with its unknown reason, and says which side is missing', async () => {
+  const s = await shared(), go = await started(s);
+  const bytes = await observeAll(s, go.envelopeBytes, go.id, [overhead(go.id, 'baseline', 'indexing', 100, 'bytes'),
+    { type: 'observe', observation: { option: 'trial', target: { dimension: 'maintenance' }, kind: 'unknown', unknownReason: 'Provider invoice unavailable' } }]);
+  const rows = valueOf(await readTrials({ envelopeBytes: bytes })).trials[0].evaluation.overhead, row = dimension => rows.find(r => r.dimension === dimension);
+  assert.deepEqual([row('indexing').status, row('indexing').reason, row('indexing').baseline.value.amount, 'trial' in row('indexing')], ['not-observed', 'trial-not-observed', 100, false]);
+  assert.deepEqual([row('maintenance').status, row('maintenance').reason, row('maintenance').trial.unknownReason, 'baseline' in row('maintenance')], ['not-observed', 'baseline-not-observed', 'Provider invoice unavailable', false]);
+  assert.deepEqual([row('setup').status, row('setup').reason, 'baseline' in row('setup'), 'trial' in row('setup')], ['not-observed', 'not-observed', false, false]);
 });

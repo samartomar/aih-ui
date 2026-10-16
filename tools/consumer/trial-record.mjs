@@ -1,7 +1,8 @@
 // Shape of the optional improvement-trial record a journey envelope carries: one bounded trial of a suggested change, from
 // the quality it must meet (defined before anything is compared), through the options' observations, to the person's
 // decision. Internal to the journey reader and the trials module (not a package export): both validate records with exactly
-// these rules. A record never holds a local path, binding or credential; stop and restoration are separate facts.
+// these rules. A record never holds a local path, binding or credential; stop and restoration are separate facts. Its `revision` is
+// the digest of the record without it, so any change to a trial that does not recompute it is refused.
 import { digestBytes, hash, object, only } from './intake.mjs';
 import { isUtcTimestamp } from './maintenance-record.mjs';
 import { isSlug } from './workspace-record.mjs';
@@ -54,7 +55,7 @@ export const proposalProblem = fields => {
   const quality = qualityProblem(fields.quality);
   if (quality !== null) return `/quality${quality}`;
   if (!text(fields.conditions, 1000)) return '/conditions';
-  if (!list(fields.bounds, 16, bound => boundProblem(bound) === null) || !unique(fields.bounds.map(bound => bound.id))) return '/bounds';
+  if (!list(fields.bounds, 16, bound => boundProblem(bound) === null, 1) || !unique(fields.bounds.map(bound => bound.id))) return '/bounds';
   if (!list(fields.unknowns, 16, unknown => text(unknown, 300))) return '/unknowns';
   return null;
 };
@@ -88,11 +89,12 @@ const changeShape = change => only(change, ['kind', 'itemId', 'releaseSha256', '
 const rootRef = root => only(root, ['releaseSha256', 'itemId', 'scope']) && hash(root.releaseSha256) && typeof root.itemId === 'string' && itemIdPattern.test(root.itemId) && scopes.includes(root.scope);
 // JSON pointer (relative to the record) of the first violation of the closed trial shape, else null.
 export function trialProblem(record) {
-  if (!only(record, ['id', 'schema', 'required', 'suggestion', 'change', 'scope', 'baseline', 'task', 'quality', 'conditions', 'bounds', 'unknowns', 'state', 'proposedAt', 'observations'],
+  if (!only(record, ['id', 'schema', 'required', 'revision', 'suggestion', 'change', 'scope', 'baseline', 'task', 'quality', 'conditions', 'bounds', 'unknowns', 'state', 'proposedAt', 'observations'],
     ['startedAt', 'decidedAt', 'evidence', 'narrower', 'reason', 'revises', 'revisedBy', 'adopted', 'restoration'])) return '';
   if (record.schema !== TRIAL_RECORD_SCHEMA) return '/schema';
   if (typeof record.id !== 'string' || !TRIAL_ID_PATTERN.test(record.id)) return '/id';
   if (record.required !== false) return '/required';
+  if (!hash(record.revision)) return '/revision';
   if (!only(record.suggestion, ['id', 'revision']) || typeof record.suggestion.id !== 'string' || !suggestionIdPattern.test(record.suggestion.id) || !hash(record.suggestion.revision)) return '/suggestion';
   if (!changeShape(record.change)) return '/change';
   if (!only(record.baseline, ['savedIntentSha256', 'draftSha256']) || !hash(record.baseline.savedIntentSha256) || !hash(record.baseline.draftSha256)) return '/baseline';
@@ -120,11 +122,15 @@ export function trialProblem(record) {
 export async function trialId({ suggestion, scope, proposedAt }) { return `trial-${(await digest({ suggestion: { id: suggestion.id, revision: suggestion.revision }, scope, proposedAt })).slice(0, 32)}`; }
 // One observation per (option, target); recording it again replaces it, so the id derives from exactly those.
 export async function observationId({ option, target }) { return `obs-${(await digest({ option, target })).slice(0, 24)}`; }
-// Pointer of the first id that does not derive from the record's own fields, else null.
+// The revision names exactly this content: the digest of the stable record without its own `revision`, id included.
+export async function trialRevision(record) { const { revision: _revision, ...content } = record; return digest(content); }
+// The record with its revision recomputed; every write of a trial goes through this.
+export async function sealTrial(record) { return { ...record, revision: await trialRevision(record) }; }
+// Pointer of the first id or revision that does not derive from the record's own fields, else null.
 export async function trialDerivedProblem(record) {
   if (record.id !== await trialId(record)) return '/id';
   for (const [index, observation] of record.observations.entries()) if (observation.id !== await observationId(observation)) return `/observations/${index}/id`;
-  return null;
+  return record.revision === await trialRevision(record) ? null : '/revision';
 }
 // Index of the first trial in `records` with no suggestion record of the same id beside it, else -1. The trial records which revision it
 // was planned from and carries the change it tests, so a later revision of the suggestion does not unlink it.
