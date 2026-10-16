@@ -161,9 +161,11 @@ every command.
   skips that check. Its screenshots of each journey's start page are kept in
   `logs/checks/`. Start without `--manifest` restarts the candidate already
   recorded in the data directory.
-- **stop** ends only the candidate's own process tree, the one start recorded:
-  by a stop request first, also while it is still starting, and by force only
-  when its command line still names this candidate's server.
+- **stop** ends only the candidate's own process tree, the one start recorded.
+  A serving candidate gets a stop request first. One still installing (starting,
+  or reset's seeding run) cannot read a request, so it is ended at once. Either
+  way it is ended by force only when its command line still names this
+  candidate's server.
 - **reset** deletes the data directory, after checking that it carries the
   marker start wrote and that the marker names this same folder. It refuses
   while the candidate is starting or running. It keeps the candidate
