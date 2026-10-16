@@ -1,6 +1,7 @@
 import { intakeDeclaration, digestBytes } from './intake.mjs';
 import { composeAuthoring, readAuthoring, reconcileAuthoring, editAuthoring, freshAuthoring, stable, refuse, inspectReviewEvidence, recordReview, reconsiderReviews, openDraft, editDraft, compileDraft } from './headless.mjs';
 import { checkMaintenance, recordMaintenance } from './maintenance.mjs';
+import { checkImprovements, recordImprovement } from './improvements.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { runOrganizationAuthor } from './organization-author.mjs';
 const encode = value => new TextEncoder().encode(value);
@@ -50,8 +51,9 @@ export async function createMixedService(maintained, { suppliedInventories, fami
       if (operation === 'draft-open') return openDraft({ bytes: bytesOf(body.bytes), inventories: available, ...reviewContext });
       if (operation === 'draft-edit') return editDraft({ envelopeBytes: bytesOf(body.envelopeBytes), inventories: available, operation: body.operation, ...reviewContext });
       if (operation === 'draft-compile') return compileDraft({ envelopeBytes: bytesOf(body.envelopeBytes), inventories: available, ...(Array.isArray(body.roots) ? { roots: body.roots } : {}), ...reviewContext });
-      if (operation === 'maintenance-check' || operation === 'maintenance-record') {
+      if (['maintenance-check', 'maintenance-record', 'improvements-check', 'improvements-record'].includes(operation)) {
         // With no draft open the saved policy is wrapped by the same pure open path (a sequence-1 envelope); a check writes nothing.
+        // Improvements share this branch, so recording on an ordinary saved policy saves it as a draft.
         let envelopeBytes = bytesOf(body.envelopeBytes);
         if (body.envelopeBytes === undefined) {
           if (!Array.isArray(body.bytes)) return refuse('INPUT_INVALID', '/envelopeBytes', 'Supply envelopeBytes, or the saved policy bytes when no draft is open.');
@@ -60,8 +62,9 @@ export async function createMixedService(maintained, { suppliedInventories, fami
           envelopeBytes = wrapped.value.envelopeBytes;
         }
         const now = new Date().toISOString();
-        if (operation === 'maintenance-record') {
-          const recorded = await recordMaintenance({ envelopeBytes, operation: body.operation, now });
+        if (operation === 'improvements-check') return checkImprovements({ envelopeBytes, inventories: all, clients: body.clients ?? [], goal: body.goal, now });
+        if (operation === 'maintenance-record' || operation === 'improvements-record') {
+          const recorded = await (operation === 'maintenance-record' ? recordMaintenance : recordImprovement)({ envelopeBytes, operation: body.operation, now });
           if (recorded.status !== 'ok') return recorded;
           // The client adopts the new envelope exactly as an opened draft, so a recorded policy becomes a saved draft.
           const opened = await openDraft({ bytes: recorded.value.envelopeBytes, inventories: available, ...reviewContext });

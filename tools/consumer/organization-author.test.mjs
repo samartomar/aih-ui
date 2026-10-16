@@ -853,8 +853,8 @@ test('the shipped organization-draft schema agrees with the record the writer pr
   assert.ok(!owner.test('acme;rm') && !name.test('a b') && !path.test('org/$(id).json') && !path.test('org/policy.txt') && !path.test('x/baseline-json'));
   const commit = source.properties.revision.allOf[0];
   assert.equal(commit.if.properties.kind.const, 'commit'); assert.match('a'.repeat(40), new RegExp(commit.then.properties.value.pattern)); assert.doesNotMatch('main', new RegExp(commit.then.properties.value.pattern));
-  // The envelope schema validates the record by reference, after the two maintenance kinds.
+  // The envelope schema validates the record by reference, after the two maintenance kinds and before the two improvement kinds.
   const rules = envelope.properties.records.items.allOf.map(rule => [rule.if.properties.schema.const, rule.then.$ref]);
-  assert.deepEqual(rules.at(-1), [ORGANIZATION_DRAFT_RECORD_SCHEMA, ORGANIZATION_DRAFT_RECORD_SCHEMA]);
-  assert.equal(rules.length, 3);
+  assert.deepEqual(rules[2], [ORGANIZATION_DRAFT_RECORD_SCHEMA, ORGANIZATION_DRAFT_RECORD_SCHEMA]);
+  assert.equal(rules.length, 5);
 });

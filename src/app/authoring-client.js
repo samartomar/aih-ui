@@ -32,7 +32,7 @@ export function createAuthoringClient() {
   // Choices are recorded strictly one after another, each from the envelope the previous one produced.
   // `artifact` changes whenever a different policy or draft is opened, so a queued choice never reaches it.
   let recording, artifact = 0;
-  // What an update check or record reads: the open draft's envelope, else the ordinary policy that is open.
+  // What a maintenance or improvement check or record reads: the open draft's envelope, else the ordinary policy that is open.
   const maintenanceInput = () => draftValue ? { envelopeBytes: [...draftValue.envelopeBytes] } : intent ? { bytes: [...bytes] } : undefined;
   async function request(operation, body = {}) {
     const response = await fetch(`/api/authoring-${operation}`, {
@@ -51,6 +51,30 @@ export function createAuthoringClient() {
     if (attempt !== revision) return { status: 'superseded' };
     if (result.status === 'ok') { draftValue = { ...asDraft(result.value), fromPolicy: !isJourneyEnvelope(input) }; bytes = draftValue.savedIntentBytes.slice(); intent = undefined; compiled = undefined; keepJudgments(result.value); }
     notify(); return result;
+  }
+  function recordChoice(endpoint, operation, message) {
+    const target = artifact;
+    const run = async () => {
+      if (target !== artifact) return { status: 'superseded' };
+      const input = maintenanceInput(), current = draftValue;
+      if (!input) return refusal('INPUT_INVALID', message);
+      const attempt = ++revision; candidate = undefined; notify();
+      let result;
+      try { result = await request(endpoint, { ...input, operation, policyBytes: undefined }); }
+      catch (error) { if (attempt !== revision) return { status: 'superseded' }; throw error; }
+      if (attempt !== revision) return { status: 'superseded' };
+      if (result.status === 'ok') {
+        revision++;
+        draftValue = result.value.draft ? { ...asDraft(result.value.draft), fromPolicy: false }
+          : asDraft({ ...current, ...result.value, savedIntentBytes: current.savedIntentBytes });
+        compiled = undefined; intent = undefined; bytes = draftValue.savedIntentBytes.slice(); keepJudgments(result.value.draft ?? draftValue);
+      }
+      notify(); return result;
+    };
+    const next = recording ? recording.then(run, run) : run();
+    const settled = next.then(() => {}, () => {}).then(() => { if (recording === settled) recording = undefined; });
+    recording = settled;
+    return next;
   }
   return {
     get catalog() { return catalog; }, get intent() { return intent; },
@@ -122,28 +146,19 @@ export function createAuthoringClient() {
     },
     // Also records the note of a successful check. A choice on an ordinary policy turns it into a saved draft.
     recordDisposition(operation) {
-      const target = artifact;
-      const run = async () => {
-        if (target !== artifact) return { status: 'superseded' };
-        const input = maintenanceInput(), current = draftValue;
-        if (!input) return refusal('INPUT_INVALID', 'Open a draft or a saved policy before recording an update choice.');
-        const attempt = ++revision; candidate = undefined; notify();
-        let result;
-        try { result = await request('maintenance-record', { ...input, operation, policyBytes: undefined }); }
-        catch (error) { if (attempt !== revision) return { status: 'superseded' }; throw error; }
-        if (attempt !== revision) return { status: 'superseded' };
-        if (result.status === 'ok') {
-          revision++;
-          draftValue = result.value.draft ? { ...asDraft(result.value.draft), fromPolicy: false }
-            : asDraft({ ...current, ...result.value, savedIntentBytes: current.savedIntentBytes });
-          compiled = undefined; intent = undefined; bytes = draftValue.savedIntentBytes.slice(); keepJudgments(result.value.draft ?? draftValue);
-        }
-        notify(); return result;
-      };
-      const next = recording ? recording.then(run, run) : run();
-      const settled = next.then(() => {}, () => {}).then(() => { if (recording === settled) recording = undefined; });
-      recording = settled;
-      return next;
+      return recordChoice('maintenance-record', operation, 'Open a draft or a saved policy before recording an update choice.');
+    },
+    async checkImprovements({ clients = [], goal } = {}) {
+      const input = maintenanceInput();
+      if (!input) return refusal('INPUT_INVALID', 'Open a draft or a saved policy before checking improvements.');
+      const attempt = revision;
+      try {
+        const result = await request('improvements-check', { ...input, clients, goal, policyBytes: undefined });
+        return attempt === revision ? result : { status: 'superseded' };
+      } catch (error) { if (attempt !== revision) return { status: 'superseded' }; throw error; }
+    },
+    recordImprovement(operation) {
+      return recordChoice('improvements-record', operation, 'Open a draft or a saved policy before recording an improvement choice.');
     },
     async compileDraft(roots) {
       if (!draftValue) return refusal('INPUT_INVALID', 'Open a draft before compiling it.');

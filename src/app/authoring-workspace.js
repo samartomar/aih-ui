@@ -1,5 +1,6 @@
 import { el } from './dom.js';
 import { createUpdatesView } from './updates-view.js';
+import { createImprovementsView } from './improvements-view.js';
 import { createOrganizationAuthorView } from './organization-author.js';
 import { authorityFromResult, changeSummary, compareRevision, reviewFreshness, revisionOf, setupInstructions, sourceRows, staleReviewMessage } from './authority-source.js';
 import { isJourneyEnvelope, importLimitError } from './authoring-client.js';
@@ -59,7 +60,7 @@ export function createAuthoringWorkspace(client) {
   document.getElementById('check-project-policy').addEventListener('click', safe(async () => {
     goToPolicy(); const result = await client.reopen(); diagnostics.textContent = JSON.stringify(result, null, 2);
     if (reopenedDraft(result)) return;
-    if (result.status === 'ok' && result.value.editing === 'available') { showStatus('Policy and exact sources validated. This is not organization approval or execution authorization.'); updates.open(); }
+    if (result.status === 'ok' && result.value.editing === 'available') { showStatus('Policy and exact sources validated. This is not organization approval or execution authorization.'); updates.open(); improvements.open(); }
     else showStatus(failure(result));
   }));
   const copy = document.getElementById('copy-json-btn'), jsonDownload = document.getElementById('download-json-btn');
@@ -82,7 +83,7 @@ export function createAuthoringWorkspace(client) {
   })), file, button('Validate and reopen', safe(async () => {
     const result = await client.reopen();
     if (reopenedDraft(result)) return;
-    if (result.status === 'ok' && result.value.editing === 'available') { optional = result.value.optional ?? []; render(); showStatus('Saved choices recovered from exact source snapshots.'); updates.open(); }
+    if (result.status === 'ok' && result.value.editing === 'available') { optional = result.value.optional ?? []; render(); showStatus('Saved choices recovered from exact source snapshots.'); updates.open(); improvements.open(); }
     else showStatus(`${failure(result)} Reselect the saved personal folder and its binding in Sources & Catalogs, then validate and reopen again. Original bytes retained.`);
   })), save, originalDownload);
   file.addEventListener('change', safe(async () => {
@@ -261,7 +262,8 @@ export function createAuthoringWorkspace(client) {
   draftSection.append(draftTitle, draftNote, draftRoots, draftMissing, draftChanges, draftActions, draftSaveNote, compileNote, draftStatus);
   choices.after(draftSection);
   const updates = createUpdatesView({ client, el, button, showStatus }); draftSection.after(updates.node);
-  const organizationAuthor = createOrganizationAuthorView({ client, el, button, showStatus }); updates.node.after(organizationAuthor.node);
+  const improvements = createImprovementsView({ client, el, button, showStatus }); updates.node.after(improvements.node);
+  const organizationAuthor = createOrganizationAuthorView({ client, el, button, showStatus }); improvements.node.after(organizationAuthor.node);
   const itemLabel = ref => client.catalog?.items.find(item => item.id === ref.itemId && item.root.releaseSha256 === ref.releaseSha256)?.label ?? ref.itemId ?? ref.templateId ?? ref.id;
   const blocker = entry => {
     const what = entry.kind === 'root' ? 'its exact source' : entry.kind === 'dependency' ? `required item ${itemLabel(entry.ref)}`
@@ -334,7 +336,7 @@ export function createAuthoringWorkspace(client) {
     if (result.status !== 'ok' || !client.draft) return false;
     const draft = client.draft, open = draft.roots.filter(root => root.status === 'unresolved').length;
     original = draft.savedIntentBytes.slice(); optional = [];
-    updates.open();
+    updates.open(); improvements.open();
     render();
     showStatus(draft.editing === 'unresolved'
       ? `Unresolved draft opened: ${draft.roots.length} saved ${draft.roots.length === 1 ? 'choice' : 'choices'} kept, ${open} unresolved. Nothing was dropped and no other revision was substituted. Rebind the saved sources in Sources & Catalogs and validate again, or edit the draft and compile its resolved choices. Availability: ${[...new Set(draft.diagnostics.map(diagnostic => diagnostic.code))].join(', ')}.`
@@ -402,7 +404,7 @@ export function createAuthoringWorkspace(client) {
       const exclusion = { originId: intent?.origins.find(origin => origin.kind === 'direct')?.id ?? intent?.origins[0]?.id, ...suggestion.to };
       accepted.append(button(`${suggestion.skipped ? 'Clear skip' : 'Skip optional'} ${suggestion.to.itemId}`, safe(async () => present(await client.propose({ type: suggestion.skipped ? 'unskip' : 'skip', exclusion })))));
     }
-    renderDraft(); updates.render();
+    renderDraft(); updates.render(); improvements.render();
     host.textContent = draft && !intent ? 'Prepare and Apply are unavailable: this draft is not an executable policy. Compile a resolved scope first; the compiled policy is then reviewed with the exact host effects.'
       : client.catalog?.executionAvailable
       ? 'Execution host connected. Prepare and Apply require target review; Enterprise also requires current organization authority.'
