@@ -153,8 +153,11 @@ test("stop ends reset's seeding run at once, naming it", async t => {
   const seeding = runSeedOnly({ layout, env: { ...serverEnvironment(layout), STUB_MODE: 'seed' }, timeoutMs: 30_000, script });
   const record = await until(() => readServerRecord(layout));
   await until(() => isCandidateProcess(layout, record.pid), 30_000);
+  // The seeding run fails as soon as its process is ended, which can be before stop returns (at once on POSIX, where the group
+  // is signalled directly), so the expected failure is awaited from before the stop, never left as an unhandled rejection.
+  const failed = assert.rejects(seeding, refused('CANDIDATE_SEED_FAILED'));
   const stopped = await stopServer(layout, { graceMs: 60_000 });
   assert.match(stopped.message, /still making the sample data\) ended/);
   assert.equal(isAlive(record.pid), false);
-  await assert.rejects(seeding, refused('CANDIDATE_SEED_FAILED'));
+  await failed;
 });
