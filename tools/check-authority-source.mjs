@@ -1,4 +1,4 @@
-// Three local phases against one mutable, in-process GitHub fixture.
+// Four local phases against one mutable, in-process GitHub fixture.
 import assert from 'node:assert/strict';
 import { copyFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
@@ -25,6 +25,7 @@ const summary = { packages: await Promise.all(packages.map(async item => ({ ...i
   coreTargets: targets.ok ? { state: 'published', source: '@aihq/core SUPPORTED_CLIS', targets: targets.targets } : { state: 'unavailable', reason: targets.error } };
 const { createGitHubFixture, enterpriseFixture } = await import(pathToFileURL(join(consumerDir, 'consumer/github-fixture.mjs')));
 const { openAuthorityPage, refreshAuthority, captureAuthority } = await import(pathToFileURL(join(consumerDir, 'consumer/authority-source-browser.mjs')));
+const { runOrganizationAuthorBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/organization-author-browser.mjs')));
 const { chromium } = await import(pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')));
 const fixture = createGitHubFixture(), enterprise = await enterpriseFixture();
 const envKeys = ['AIH_ORGANIZATION_SOURCE', 'AIH_CONSUMER_PROJECT', 'AIH_CONSUMER_CONTROLS', 'AIH_REVIEW_TRUST', 'AIH_CONSUMER_PREVIOUS_CATALOG'];
@@ -83,6 +84,10 @@ try {
   await page.locator('#authority-source-review[data-review="stale"]').waitFor(); assert.equal(await apply.isDisabled(), true);
   states.push('refused', 'stale');
   assert.ok(fixture.requests.every(path => path.startsWith(`/repos/${fixture.source.repository.owner}/${fixture.source.repository.name}/git/`)));
+  // Phase four: an organization author drafts, previews and exports a baseline; publishing it is a separate, manual step.
+  fixture.publish(enterprise.document); await context.close(); await closeServer(); await start('organization-author');
+  const authored = await runOrganizationAuthorBrowser({ page, output, fixture, refreshAuthority, captureAuthority });
+  states.push(...authored.states.map(state => 'organization-author:' + state));
   await writeFile(join(output, 'summary.json'), JSON.stringify({ states, revisions, fixtureRequests: fixture.requests.length, liveNetwork: false }, null, 2));
   console.log(`Authority source demo passed: ${output}`);
 } catch (error) {

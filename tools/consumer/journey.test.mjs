@@ -343,6 +343,10 @@ test('scoped compile never silently drops review decisions and unrelated synthet
   intent.exclusions.push({ originId: 'direct', releaseSha256: shared.release.sha256, itemId: 'shared.optional', scope: 'project' });
   const saved = await composeAuthoring({ intent, inventories: [shared, app] });
   assert.equal(saved.status, 'ok', JSON.stringify(saved.diagnostics));
+  // Each draft choice carries the required dependency set a proposal displays; skipped optionals are not in it.
+  const whole = await opened({ bytes: saved.value.policyBytes, inventories: [shared, app] });
+  assert.deepEqual(whole.roots.find(r => r.itemId === 'app.alpha').dependencies.map(d => d.itemId), ['shared.base']);
+  assert.deepEqual(whole.roots.find(r => r.itemId === 'shared.other').dependencies, []);
   // The app source is unavailable: replace its choice; the skip and the sibling choice survive.
   const open = await opened({ bytes: saved.value.policyBytes, inventories: [shared] });
   assert.equal(open.editing, 'unresolved');

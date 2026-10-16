@@ -40,7 +40,7 @@ async function main() {
     const policyWorkspace = createPolicyWorkspace();
     const authoring = createAuthoringClient();
     const authoringWorkspace = createAuthoringWorkspace(authoring);
-    createEvidenceReview(authoring, result => authoringWorkspace.present(result));
+    const evidenceReview = createEvidenceReview(authoring, result => authoringWorkspace.present(result));
     const policyImport = createPolicyImport({ onReview: (review) => policyWorkspace.setFileReview(review) });
     const decisionImport = createDecisionImport();
 
@@ -63,6 +63,7 @@ async function main() {
         policyImport.setSettings(settings);
         decisionImport.setSettings(settings);
         policyWorkspace.setSettings(settings);
+        void evidenceReview.setDefaultRecipient(settings.reviewer ?? null);
         aiTools.setSelection(settings.clients);
         catalog.setOrganizationName(settings.role === "admin" ? settings.organization?.name ?? null : null);
       },

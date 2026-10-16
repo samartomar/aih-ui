@@ -71,11 +71,12 @@ export async function proveScaleBrowser({ output, policyPath, frameworks, eviden
       await page.locator('#intake-result').filter({ hasText: framework.inventory.release.sha256 }).waitFor();
     }
     await page.locator('#reopen').click();
-    await page.locator('#proposal').filter({ hasText: 'REVIEW_BINDING_UNAVAILABLE' }).waitFor();
+    // #24: missing evidence is reported as unverified applicability and does not block editing.
+    await page.locator('#proposal').filter({ hasText: '"applicability": "unverified"' }).waitFor();
     await page.locator('#review-file').setInputFiles(evidencePath);
     await page.locator('#review-facts').filter({ hasText: 'Original evidence bytes loaded' }).waitFor();
     await page.locator('#reopen').click();
-    await page.locator('#proposal').filter({ hasText: '"editing": "available"' }).waitFor();
+    await page.locator('#proposal').filter({ hasText: '"applicability": "applies"' }).waitFor();
     const reopened = await readAuthoring({ policyBytes: downloadedBytes, inventories, reviewEvidence: [evidenceBytes] });
     assert.equal(reopened.value.editing, 'available'); assert.equal(reopened.value.policy.selections.length, 300);
     assert.deepEqual(JSON.parse(await page.locator('#policy').inputValue()), reopened.value.policy);

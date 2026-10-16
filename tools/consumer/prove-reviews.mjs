@@ -71,10 +71,11 @@ try {
   const fresh = await browser.newPage({ acceptDownloads: true }); fresh.setDefaultTimeout(15_000); fresh.on('pageerror', e => errors.push(e.message));
   await fresh.goto(`${started.origin}/authoring`); await fresh.locator('#summary').filter({ hasText: '"roots"' }).waitFor();
   await fresh.locator('#open').setInputFiles(downloadedPath); await fresh.locator('#proposal').filter({ hasText: 'Original bytes retained' }).waitFor();
-  await fresh.locator('#reopen').click(); await fresh.locator('#proposal').filter({ hasText: 'REVIEW_BINDING_UNAVAILABLE' }).waitFor();
+  // #24: missing evidence leaves the saved policy editable and reports each judgment as unverified.
+  await fresh.locator('#reopen').click(); await fresh.locator('#proposal').filter({ hasText: '"applicability": "unverified"' }).waitFor();
   // Fresh import independently reads the actual original evidence bytes.
   await fresh.locator('#review-file').setInputFiles([artifactPath, catalogArtifactPath]); await fresh.locator('#review-facts').filter({ hasText: 'Original evidence bytes loaded' }).waitFor();
-  await fresh.locator('#reopen').click(); await fresh.locator('#proposal').filter({ hasText: '"editing": "available"' }).waitFor();
+  await fresh.locator('#reopen').click(); await fresh.locator('#proposal').filter({ hasText: '"applicability": "applies"' }).waitFor();
   mixed.inventories[0].materials = [{ ...catalogItem.recipe, bytes: new Uint8Array(await readFile(join(catalogRoot, catalogItem.recipe.path))) }];
   const headless = await readAuthoring({ policyBytes: bytes, inventories: mixed.inventories, reviewEvidence: [artifact.bytes, catalogArtifact.bytes] });
   assert.equal(headless.value.editing, 'available');
@@ -87,11 +88,12 @@ try {
   await fresh.getByRole('button', { name: 'Trim consumer-proof.review-note', exact: true }).click();
   await fresh.locator('#accept:not([disabled])').waitFor(); await fresh.locator('#accept').click();
   const trimmed = JSON.parse(await fresh.locator('#policy').inputValue()).metadata['aih.workbench'].reviews;
-  assert.equal(trimmed.records.find(record => record.supersedes === 'browser-decision').state, 'reconsider');
+  // #24: trimming keeps the judgment current and bound; it is reported as changed, never converted.
+  assert.equal(trimmed.records.find(record => record.id === 'browser-decision').state, 'current');
   assert.equal(trimmed.records.find(record => record.id === 'browser-decision-catalog').state, 'current');
-  assert.equal(trimmed.history[0].id, 'browser-decision');
+  assert.equal(trimmed.history.length, 0);
   assert.deepEqual(errors, []);
   await writeFile(join(output, 'review-browser-headless.json'), JSON.stringify({ status: 'passed', node: process.version, scanId: artifact.scanId, artifactSha256: createHash('sha256').update(artifact.bytes).digest('hex'), downloadSha256: createHash('sha256').update(bytes).digest('hex'), records: headless.value.intent.reviews, trimmed,
-    cases: ['explicit real built-in fixture assessments', 'source/support/authentication/coverage/findings separate', 'accepted-risk organization BYO decision and false-alarm individual Catalog decision', 'two separately scoped original reports retained together', 'actual downloaded file and fresh browser import', 'missing optional evidence preserves policy and refuses reusable decision', 'fresh evidence byte reads restore checked bindings', 'installed public headless record/file agreement', 'authoring trim retains history and requests reconsideration'], errors,
+    cases: ['explicit real built-in fixture assessments', 'source/support/authentication/coverage/findings separate', 'accepted-risk organization BYO decision and false-alarm individual Catalog decision', 'two separately scoped original reports retained together', 'actual downloaded file and fresh browser import', 'missing optional evidence preserves policy and refuses reusable decision', 'fresh evidence byte reads restore checked bindings', 'installed public headless record/file agreement', 'authoring trim keeps the judgment current and reports it as changed'], errors,
     limits: ['Fixture source and local built-in analyzer only; no native/external runtime acceptance.', 'Unsigned artifact is checked, not authenticated; retained and ephemeral signed artifact trust is tested separately.', 'Portable JSON does not authenticate the human or authorize execution.'] }, null, 2) + '\n');
 } finally { await browser?.close(); if (started) await new Promise(resolve => started.server.close(resolve)); await rm(source, { recursive: true, force: true }); await rm(catalogSource, { recursive: true, force: true }); }

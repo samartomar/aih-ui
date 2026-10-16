@@ -17,6 +17,8 @@
     "./maintenance": "./tools/consumer/maintenance.mjs",
     "./schemas/journey-record-maintenance-disposition/1.0.0.json": "./schemas/journey-record-maintenance-disposition-1.0.0.json",
     "./schemas/journey-record-maintenance-check/1.0.0.json": "./schemas/journey-record-maintenance-check-1.0.0.json",
+    "./organization-author": "./tools/consumer/organization-author.mjs",
+    "./schemas/journey-record-organization-draft/1.0.0.json": "./schemas/journey-record-organization-draft-1.0.0.json",
     "./schemas/journey-envelope/1.0.0.json": "./schemas/journey-envelope-1.0.0.json"
   },
   "scripts": {

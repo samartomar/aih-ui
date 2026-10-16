@@ -2,6 +2,7 @@ import { intakeDeclaration, digestBytes } from './intake.mjs';
 import { composeAuthoring, readAuthoring, reconcileAuthoring, editAuthoring, freshAuthoring, stable, refuse, inspectReviewEvidence, recordReview, reconsiderReviews, openDraft, editDraft, compileDraft } from './headless.mjs';
 import { checkMaintenance, recordMaintenance } from './maintenance.mjs';
 import { noteFixture } from './note-fixture.mjs';
+import { runOrganizationAuthor } from './organization-author.mjs';
 const encode = value => new TextEncoder().encode(value);
 const bytesOf = value => Array.isArray(value) ? Uint8Array.from(value) : undefined;
 export async function createMixedService(maintained, { suppliedInventories, familyInventories = [], maintenanceSource } = {}) {
@@ -36,9 +37,10 @@ export async function createMixedService(maintained, { suppliedInventories, fami
         sources: entry.release.sources.filter(source => item.sourceIds.includes(source.id)) }))),
       templates: notes.templates.map(t => ({ ...t, releaseSha256: notes.release.sha256 })) }; },
     async run(operation, body) {
+      if (typeof operation === 'string' && operation.startsWith('organization-')) return runOrganizationAuthor(operation, body, { inventories: all });
       const policyBytes = body.policyBytes ? Uint8Array.from(body.policyBytes) : undefined;
       const reviewEvidence = (body.reviewEvidence ?? []).map(bytes => Uint8Array.from(bytes)), comparisons = body.comparisons ?? [];
-      const reviewContext = { reviewEvidence, comparisons };
+      const reviewContext = { reviewEvidence, comparisons, ...(body.recipient !== undefined ? { recipient: body.recipient } : {}) };
       const evidenceBytes = Number.isSafeInteger(body.evidenceIndex) ? reviewEvidence[body.evidenceIndex] : Uint8Array.from(body.evidenceBytes ?? []);
       if (operation === 'new') return composeAuthoring({ intent: freshAuthoring(), inventories: all,
         ...(body.mode === 'enterprise' ? { basePolicyBytes: encode(JSON.stringify({ schema: 'urn:aihq:core:execution-policy:1.3.0', mode: 'enterprise', selections: [], metadata: { 'aih.workbench': freshAuthoring() } })) } : {}) });
