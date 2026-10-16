@@ -8,6 +8,7 @@ import { buildCss } from './build-css.mjs';
 import { createWorkbench } from './server/workbench.mjs';
 import { listen } from './server/static.mjs';
 import { callService } from './server/service-client.mjs';
+import { coreTargetsSummary } from './server/core-targets-summary.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const consumerDir = resolve(process.argv[2]), runDir = join(consumerDir, 'prototype');
@@ -22,9 +23,8 @@ for (const op of ['parseEvidence', 'prepare', 'consume', 'fixture']) {
   const result = callService(consumerDir, { op });
   assert.doesNotMatch(result.error ?? '', /unknown op:/, `${op} must dispatch to its supported-contract check`);
 }
-const targets = callService(consumerDir, { op: 'coreTargets' });
 const summary = { packages: await Promise.all(packages.map(async item => ({ ...item, packageName: `@aihq/${item.name}`, version: JSON.parse(await readFile(join(consumerDir, `node_modules/@aihq/${item.name}/package.json`), 'utf8')).version }))),
-  coreTargets: targets.ok ? { state: 'published', source: '@aihq/core SUPPORTED_CLIS', targets: targets.targets } : { state: 'unavailable', reason: targets.error } };
+  coreTargets: coreTargetsSummary(callService(consumerDir, { op: 'coreTargets' })) };
 // Host-configured maintenance source for the demonstration journey; it publishes no newer revision until that journey says so.
 const maintenanceSource = join(consumerDir, 'maintenance-source.json');
 await writeFile(maintenanceSource, JSON.stringify({ revisions: ['current'] }));

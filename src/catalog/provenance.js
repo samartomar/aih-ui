@@ -134,7 +134,7 @@ export function createProvenance({ elements }) {
     heading("Core targets");
     const targets = summary.coreTargets ?? {};
     line(
-      "supported AI CLIs",
+      "supported AI clients",
       targets.state === "published"
         ? `${targets.targets.length} from ${targets.source}`
         : `${NOT_PUBLISHED}: ${text(targets.reason) ?? "no target list"}`,

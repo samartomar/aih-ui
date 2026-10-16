@@ -2,6 +2,7 @@
 // explicitly approved repair. The host owns Core; this page only renders the
 // projections it returns and never applies anything without the approval control.
 import { overallLine, rowsFor, summaryCounts } from './app/readiness-view.js';
+import { clientNodes, publishedClients } from './app/core-targets.js';
 
 const $ = id => document.getElementById(id);
 const TONE_CLASS = {
@@ -157,17 +158,19 @@ async function loadRepairs() {
 
 // The summary's coreTargets are the AI clients Core publishes; they are offered as shortcuts, never as the only choice.
 async function loadPublishedTargets() {
-  let published = null, reason = 'The Workbench summary was not reachable.';
+  let published = null, labels = {}, reason = 'The Workbench summary was not reachable.';
   try {
     const summary = await (await fetch('/api/packages')).json();
-    if (summary.coreTargets?.state === 'published' && Array.isArray(summary.coreTargets.targets)) published = summary.coreTargets.targets.filter(target => typeof target === 'string');
+    const offered = publishedClients(summary.coreTargets);
+    if (offered) { published = offered.ids; labels = offered.labels; }
     else reason = 'The installed Core does not publish its supported clients to this Workbench.';
   } catch { /* the free-entry field still works */ }
   $('target-help').textContent = published
     ? 'Core publishes these AI clients; choose any to add them, or type other target ids. Core reports any id it does not recognize.'
     : `${reason} Type target ids; Core reports any id it does not recognize.`;
   for (const target of published ?? []) {
-    const button = el('button', 'px-2 py-0.5 rounded border border-wb-control-border font-mono text-xs hover:bg-surface-container', target);
+    const button = el('button', 'inline-flex items-baseline gap-1.5 px-2 py-0.5 rounded border border-wb-control-border text-xs hover:bg-surface-container');
+    button.append(...clientNodes(labels, target));
     button.type = 'button';
     button.addEventListener('click', () => { $('targets').value = [...new Set([...targetList(), target])].join(', '); });
     $('target-choices').append(button);

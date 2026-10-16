@@ -1,4 +1,5 @@
 import { el, collectIds } from "./dom.js";
+import { clientNodes, publishedClients } from "./core-targets.js";
 import { CAPABILITIES, REVIEWER_KINDS, newSetupSettings, experienceLabel, organizationErrors, settingsErrors } from "./setup-model.js";
 import { reviewerText, setupSummary } from "./setup-summary.js";
 import { loadSetup, saveSetup, updateSetup } from "./settings-client.js";
@@ -13,6 +14,7 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
   let location = null;
   let step = 0;
   let targets = null;
+  let labels = {};
   let targetReason = "The published client list is loading.";
   let savedProblem = null;
   let loading = true;
@@ -110,7 +112,7 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
     elements.setupContent.append(el("p", "setup-notice mb-4", "Selecting a capability only authorizes saving that preference here. No installation, connection, code access or data sharing is performed. Setup of these integrations is not connected in this version."), group);
   }
   function renderClients() {
-    elements.setupDescription.textContent = "Select the AI coding clients you use. The list comes from the installed Core package's public SUPPORTED_CLIS. Selecting one does not install it or verify a connection.";
+    elements.setupDescription.textContent = "Select the AI coding clients you use. The list comes from the installed Core package's public nativeClientIds; its order is not a ranking. Selecting one does not install it or verify a connection.";
     if (targets === null) {
       elements.setupContent.append(el("p", "setup-notice", `${targetReason} Existing selections stay saved; use Skip clients to clear them. You can continue without adding clients.`));
       return;
@@ -123,7 +125,7 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
       box.type = "checkbox";
       box.checked = draft.clients.includes(target);
       box.addEventListener("change", () => { draft.clients = box.checked ? [...draft.clients, target] : draft.clients.filter((item) => item !== target); });
-      label.append(box, el("span", "font-mono text-on-surface", target));
+      label.append(box, ...clientNodes(labels, target));
       group.append(label);
     }
     elements.setupContent.append(group, el("p", "text-outline mt-4 text-[11px]", "Your explicit choices carry into the Workbench's AI tools control. You can change clients there later; your experience stays fixed."));
@@ -327,7 +329,9 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
     start,
     edit: () => start(true),
     setTargets(coreTargets) {
-      targets = coreTargets?.state === "published" && Array.isArray(coreTargets.targets) ? coreTargets.targets.filter((target) => typeof target === "string") : null;
+      const published = publishedClients(coreTargets);
+      targets = published ? published.ids : null;
+      labels = published ? published.labels : {};
       targetReason = coreTargets?.reason ?? "The installed Core does not publish supported AI clients.";
       if (elements.setupDialog.open && !loading && current() === "clients") render();
     },
