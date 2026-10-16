@@ -1,9 +1,10 @@
 // Improvement rules: a fixed, versioned table that explains why one Catalog item might help this policy. Pure and
 // deterministic: it reads the open draft's saved intent, the Catalog items it is handed, the person's declared AI
-// clients and an optional request goal. It calls no model, reads no network or file and keeps no clock; the same
+// clients with their published labels and an optional request goal. It calls no model, reads no network or file and keeps no clock; the same
 // inputs always give the same suggestions. Rule text is not part of a suggestion's identity (see improvement-record.mjs).
 import { suggestionId, suggestionRevision, sameContent } from './improvement-record.mjs';
-export const IMPROVEMENT_RULES_VERSION = '1.0.0';
+// 1.1.0: the client rule names a client by its published label when one is supplied (wording only; identity is unchanged).
+export const IMPROVEMENT_RULES_VERSION = '1.1.0';
 export const MAX_GOAL = 300, MAX_ALTERNATIVES = 3, MAX_TRACKED_NEEDS = 256;
 // Independent of the guided-setup rules on purpose: each rule set is versioned alone, so changing one never changes
 // the saved reasons the other wrote.
@@ -63,7 +64,8 @@ function facts(item, scope, offered, selected) {
 // Suggestions for an open draft, ranked: a request first, then more reasons, then a saved goal before a client-only
 // reason, then item id. `items` are plain Catalog items in the order the inventories were supplied, each with
 // root.releaseSha256; the first offering an id is the one suggested. Nothing absent from them is ever suggested.
-export async function suggestImprovements({ intent, items = [], clients = [], goal } = {}) {
+// `labels` maps a client id to the label Harness publishes for it; a client without one is named by its id.
+export async function suggestImprovements({ intent, items = [], clients = [], labels = {}, goal } = {}) {
   const selected = new Set([...intent.roots, ...intent.pins].map(entry => entry.itemId)), excluded = new Set(intent.exclusions.map(entry => entry.itemId));
   const offered = new Map();
   for (const item of items) if (!offered.has(item.id)) offered.set(item.id, item);
@@ -92,9 +94,11 @@ export async function suggestImprovements({ intent, items = [], clients = [], go
     const phrase = firstPhrase(asked.toLowerCase(), rule.phrases);
     if (phrase !== undefined) add(rule.itemId, `goal:${rule.id}`, rule.id, `You asked about “${asked}”, which mentions “${phrase}”.`, { kind: 'request', ref: 'goal' }, asked);
   }
-  for (const client of [...new Set(clients)].sort(compare))
-    add(`${CLIENT_RULE.itemPrefix}${client}`, `client:${client}`, CLIENT_RULE.id, `You use ${client} (Workbench setup), but this policy does not give it the shared project instructions.`, { kind: 'setting', ref: 'clients' },
-      `Give ${client} the same shared project instructions as your other AI clients.`);
+  for (const client of [...new Set(clients)].sort(compare)) {
+    const name = Object.hasOwn(labels, client) ? labels[client] : client;
+    add(`${CLIENT_RULE.itemPrefix}${client}`, `client:${client}`, CLIENT_RULE.id, `You use ${name} (Workbench setup), but this policy does not give it the shared project instructions.`, { kind: 'setting', ref: 'clients' },
+      `Give ${name} the same shared project instructions as your other AI clients.`);
+  }
   const suggestions = [];
   for (const { item, triggers, references, goal: goalText } of candidates.values()) {
     const scope = item.scopes.includes('project') ? 'project' : item.scopes[0];

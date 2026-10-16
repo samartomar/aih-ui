@@ -62,7 +62,7 @@ export async function createMixedService(maintained, { suppliedInventories, fami
           envelopeBytes = wrapped.value.envelopeBytes;
         }
         const now = new Date().toISOString();
-        if (operation === 'improvements-check') return checkImprovements({ envelopeBytes, inventories: all, clients: body.clients ?? [], goal: body.goal, now });
+        if (operation === 'improvements-check') return checkImprovements({ envelopeBytes, inventories: all, clients: body.clients ?? [], labels: body.labels ?? {}, goal: body.goal, now });
         if (operation === 'maintenance-record' || operation === 'improvements-record') {
           const recorded = await (operation === 'maintenance-record' ? recordMaintenance : recordImprovement)({ envelopeBytes, operation: body.operation, now });
           if (recorded.status !== 'ok') return recorded;

@@ -87,6 +87,8 @@ class Node {
   addEventListener(name, handler) { this.listeners[name] = handler; }
   get options() { return this.children; }
   contains(node) { return elements(this).includes(node); }
+  querySelectorAll() { return elements(this).filter(node => node.id); }
+  focus() { document.activeElement = this; }
 }
 const elements = root => [root, ...root.children.flatMap(elements)];
 const textOf = root => elements(root).map(node => node.textContent).join(' ');
@@ -125,6 +127,111 @@ test('view renders accessible author controls and all six server preview section
   assert.equal(find('org-handoff-git').textContent, handoff.gitSteps);
   assert.equal(find('org-handoff-pr').textContent, handoff.prSteps);
   assert.ok(find('org-handoff-copy-git')); assert.ok(find('org-export-download')); assert.ok(find('org-export-explanation-download'));
+});
+
+// The target client field follows Core's published list; the server's preview stays the authority on an unknown client.
+async function mountTargets(t, targets = []) {
+  const previous = globalThis.document; globalThis.document = { activeElement: null };
+  t.after(() => { globalThis.document = previous; });
+  const calls = [], draft = { entries: [], targets, unresolved: [] }, statuses = [];
+  const client = { request: async (op, body) => { calls.push({ op, body }); return ok([1], draft); } };
+  const el = (tag, cls, text) => new Node(tag, cls, text), button = (label, handler) => { const node = el('button', '', label); node.listeners.click = handler; return node; };
+  const view = createOrganizationAuthorView({ client, el, button, showStatus: message => statuses.push(message) });
+  const find = id => elements(view.node).find(control => control.id === id);
+  await find('org-draft-new').listeners.click(); calls.length = 0;
+  return { view, find, calls, statuses };
+}
+const published = { state: 'published', targets: ['claude', 'codex', 'zed'], labels: { claude: 'Claude Code', codex: 'Codex' } };
+const clientOptions = find => find('org-target-client').options.map(option => [option.value, option.textContent]);
+
+test('target labels render a listed client through its Harness label and keep the old call shape', () => {
+  const target = { scope: 'project', client: 'claude', repository: 'host/team/repo' };
+  assert.equal(targetLabel(target, { claude: 'Claude Code' }), 'project · Claude Code (claude) · host/team/repo');
+  assert.equal(targetLabel(target, {}), 'project · claude · host/team/repo');
+  assert.equal(targetLabel({ scope: 'user', client: 'zed' }, { claude: 'Claude Code' }), 'user · zed');
+  assert.equal(targetLabel({ scope: 'user' }, { claude: 'Claude Code' }), 'user');
+});
+
+test('the target client field offers exactly Core\'s published clients with Harness labels, plus Not declared', async t => {
+  const { view, find } = await mountTargets(t);
+  assert.deepEqual(clientOptions(find), [['', 'Not declared']]);
+  assert.match(find('org-target-client-status').textContent, /not arrived/i);
+  view.setTargets(published);
+  assert.deepEqual(clientOptions(find), [['', 'Not declared'], ['claude', 'Claude Code (claude)'], ['codex', 'Codex (codex)'], ['zed', 'zed']]);
+  assert.equal(find('org-target-client').disabled, false);
+  assert.match(find('org-target-client-status').textContent, /clients the installed Core lists/i);
+  assert.match(find('org-target-client-status').textContent, /not mean it is installed, connected or admitted/i);
+});
+
+test('adding a target sends a listed or undeclared client and refuses one outside the list without a request', async t => {
+  const { view, find, calls, statuses } = await mountTargets(t);
+  view.setTargets(published);
+  find('org-target-scope').value = 'user'; find('org-target-client').value = 'codex';
+  await find('org-target-add').listeners.click();
+  assert.deepEqual(calls.at(-1).body.operation, { kind: 'add-target', scope: 'user', client: 'codex' });
+  find('org-target-client').value = ''; await find('org-target-add').listeners.click();
+  assert.deepEqual(calls.at(-1).body.operation, { kind: 'add-target', scope: 'user' });
+  // A real select cannot hold a value it has no option for; this proves the guard behind it.
+  calls.length = 0; find('org-target-client').value = 'ghost'; await find('org-target-add').listeners.click();
+  assert.equal(calls.length, 0);
+  assert.match(find('org-status').textContent, /"ghost".*not.*Core lists/);
+  assert.equal(statuses.at(-1), find('org-status').textContent);
+});
+
+test('an unavailable or empty Core list leaves the field unavailable with Core\'s reason, never free text', async t => {
+  const { view, find, calls } = await mountTargets(t);
+  for (const unavailable of [{ state: 'unavailable', reason: 'Core is not installed.' }, { state: 'published', targets: [], labels: {} }, { state: 'unavailable' }]) {
+    view.setTargets(unavailable);
+    assert.deepEqual(clientOptions(find), [['', 'Not declared']]);
+    assert.equal(find('org-target-client').disabled, true);
+    assert.match(find('org-target-client-status').textContent, /AI clients are unavailable/);
+    assert.match(find('org-target-client-status').textContent, /still be declared without a client/);
+  }
+  view.setTargets({ state: 'unavailable', reason: 'Core is not installed.' });
+  assert.match(find('org-target-client-status').textContent, /Core is not installed\. A target/);
+  // Core's reason is usually a raw error message without a closing period; it is kept whole.
+  view.setTargets({ state: 'unavailable', reason: 'Core not installed' });
+  assert.match(find('org-target-client-status').textContent, /: Core not installed\. A target/);
+  assert.equal(find('org-target-client')['aria-describedby'], 'org-target-client-status');
+  find('org-target-client').value = 'claude'; await find('org-target-add').listeners.click();
+  assert.equal(calls.length, 0);
+  find('org-target-client').value = ''; await find('org-target-add').listeners.click();
+  assert.deepEqual(calls.at(-1).body.operation, { kind: 'add-target', scope: 'project' });
+  view.setTargets(null);
+  assert.match(find('org-target-client-status').textContent, /not arrived/i);
+});
+
+test('re-sending the list keeps a still-offered selection and drops one Core no longer lists', async t => {
+  const { view, find } = await mountTargets(t);
+  view.setTargets(published); find('org-target-client').value = 'codex';
+  view.setTargets({ ...published, labels: { codex: 'Codex CLI' } });
+  assert.equal(find('org-target-client').value, 'codex');
+  assert.equal(clientOptions(find).find(([value]) => value === 'codex')[1], 'Codex CLI (codex)');
+  view.setTargets({ state: 'published', targets: ['claude'], labels: {} });
+  assert.equal(find('org-target-client').value, '');
+});
+
+test('declared target rows show a listed client\'s label and keep an unlisted one as its id with a note', async t => {
+  const targets = [{ id: 'target-one', scope: 'project', client: 'claude' }, { id: 'target-two', scope: 'user', client: 'legacy' }];
+  const { view, find, calls } = await mountTargets(t, targets);
+  const row = id => elements(view.node).find(control => control.dataset.targetId === id);
+  assert.match(textOf(row('target-one')), /project · claude/); assert.doesNotMatch(textOf(row('target-one')), /Not listed/);
+  assert.doesNotMatch(textOf(row('target-two')), /Not listed/); // no list yet: nothing can be called unlisted
+  view.setTargets(published);
+  assert.match(textOf(row('target-one')), /project · Claude Code \(claude\)/); assert.doesNotMatch(textOf(row('target-one')), /Not listed/);
+  assert.match(textOf(row('target-two')), /user · legacy/);
+  assert.match(textOf(row('target-two')), /Not listed by the installed Core; Core decides at preview\./);
+  assert.equal(elements(row('target-one')).find(control => control.id === 'target-one-remove').textContent, 'Remove target project · Claude Code (claude)');
+  assert.equal(calls.length, 0); // setTargets only re-renders; it requests nothing
+});
+
+test('a list that disables the focused client field moves focus to Add target', async t => {
+  const { view, find } = await mountTargets(t);
+  view.setTargets(published); find('org-target-client').focus();
+  view.setTargets({ ...published, labels: {} });
+  assert.equal(document.activeElement, find('org-target-client'));
+  view.setTargets({ state: 'unavailable', reason: 'Core not installed' });
+  assert.equal(document.activeElement, find('org-target-add'));
 });
 
 test('a slow Open file read cannot replace a later New draft', async () => {

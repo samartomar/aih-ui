@@ -120,6 +120,9 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
     }
     const saved = await first.evaluate(async () => (await fetch('/api/workbench-settings')).json());
     assert.deepEqual(saved.settings.clients, CLIENTS, 'The Workbench reads the saved clients.');
+    // A client Core lists is named by its Harness label; without a published list or label, by its id.
+    const { coreTargets } = await first.evaluate(async () => (await fetch('/api/packages')).json());
+    const named = id => coreTargets?.state === 'published' && typeof coreTargets.labels?.[id] === 'string' ? coreTargets.labels[id] : id;
 
     // 2. Opening shows a leading suggestion and alternatives, explained, and only reads.
     steps.open = await openSaved(first, importPath);
@@ -139,7 +142,7 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
     const alternatives = await groupCards(first, 'Alternatives').allInnerTexts();
     assert.equal(alternatives.length, CLIENTS.length);
     for (const client of CLIENTS) {
-      const card = alternatives.find(text => text.includes(`You use ${client} (Workbench setup), but this policy does not give it the shared project instructions.`));
+      const card = alternatives.find(text => text.includes(`You use ${named(client)} (Workbench setup), but this policy does not give it the shared project instructions.`));
       assert.ok(card, `A client-instructions suggestion for ${client}.`);
       assert.match(card, /Scope: project/); assert.match(card, /Adds \d+ files?/);
       for (const unknown of UNKNOWNS) assert.ok(card.includes(unknown));

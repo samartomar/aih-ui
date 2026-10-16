@@ -60,8 +60,8 @@ test('client checks draft envelopes and ordinary policy bytes with clients and g
   await client.recordImprovement(dismissOperation(suggestion));
   assert.equal(calls[1].url, '/api/authoring-improvements-record'); assert.deepEqual(calls[1].body.operation, dismissOperation(suggestion));
   assert.deepEqual(client.draft.envelopeBytes, Uint8Array.of(2)); assert.deepEqual(client.bytes, Uint8Array.of(9)); assert.equal(client.intent, undefined);
-  await client.checkImprovements({ clients: ['claude'] });
-  assert.deepEqual(calls[2].body, { reviewEvidence: [], envelopeBytes: [2], clients: ['claude'] });
+  await client.checkImprovements({ clients: ['claude'], labels: { claude: 'Claude Code' } });
+  assert.deepEqual(calls[2].body, { reviewEvidence: [], envelopeBytes: [2], clients: ['claude'], labels: { claude: 'Claude Code' } });
   await client.recordImprovement(restoreOperation(record.id));
   assert.deepEqual(client.draft.envelopeBytes, Uint8Array.of(3)); assert.deepEqual(client.draft.savedIntentBytes, Uint8Array.of(9));
   const empty = createAuthoringClient();
@@ -140,6 +140,58 @@ test('the UI pins the shipped suggestion and dismissal record URNs', async () =>
     const schema = JSON.parse(await readFile(new URL(`../../schemas/journey-record-improvement-${name}-1.0.0.json`, import.meta.url), 'utf8'));
     assert.equal(urn, schema.$id);
   }
+});
+
+test('published clients filter saved suggestions and supply labels while naming unlisted settings', async () => {
+  const calls = [], saved = ['claude', 'gone'];
+  const client = { intent: {}, revision: 1, checkImprovements: async input => { calls.push(input); return ok(checked); } };
+  const built = view(client, { loadClients: async () => saved });
+  built.setTargets({ state: 'published', targets: ['claude', 'codex'], labels: { claude: 'Claude Code', codex: 'Codex', gone: 'Gone' } });
+  await built.open();
+  assert.deepEqual(calls, [{ clients: ['claude'], labels: { claude: 'Claude Code' } }]);
+  const note = elements(built.node).find(node => node.id === 'policy-improvements-unlisted');
+  assert.equal(note.hidden, false);
+  assert.equal(note.textContent, 'Saved AI client gone is not listed by the installed Core, so no suggestion is made for it. Your saved setup is unchanged.');
+  assert.deepEqual(saved, ['claude', 'gone']);
+  client.intent = undefined; built.render();
+  assert.equal(note.hidden, true); assert.equal(note.textContent, '');
+});
+
+test('an unavailable client list sends all saved clients without labels or an unlisted note', async () => {
+  const calls = [], client = { intent: {}, revision: 1, checkImprovements: async input => { calls.push(input); return ok(checked); } };
+  const built = view(client, { loadClients: async () => ['claude', 'gone'] });
+  built.setTargets({ state: 'unavailable', reason: 'No list published' });
+  await built.open();
+  assert.deepEqual(calls, [{ clients: ['claude', 'gone'] }]);
+  const note = elements(built.node).find(node => node.id === 'policy-improvements-unlisted');
+  assert.equal(note.hidden, true); assert.equal(note.textContent, '');
+});
+
+test('changing published clients retires shown suggestions until another check', async () => {
+  const client = { intent: {}, revision: 1, checkImprovements: async () => ok(checked) };
+  const built = view(client); await built.open();
+  assert.match(textOf(built.node), /Test helper/);
+  built.setTargets({ state: 'published', targets: ['claude'], labels: {} });
+  assert.equal(find(built, 'Dismiss'), undefined); assert.doesNotMatch(textOf(built.node), /Test helper/);
+  assert.match(textOf(built.node), /open policy or its inputs changed since the last check; Suggest again/);
+  await built.check(); assert.match(textOf(built.node), /Test helper/);
+});
+
+test('a list arriving during a check checks again under that list, and pluralises unlisted clients', async () => {
+  const finishes = [], calls = [];
+  const client = { intent: {}, revision: 1, checkImprovements: input => { calls.push(input); return new Promise(resolve => { finishes.push(resolve); }); } };
+  const built = view(client, { loadClients: async () => ['gone', 'other'] });
+  const running = built.open(); await new Promise(resolve => setTimeout(resolve, 0));
+  built.setTargets({ state: 'published', targets: ['claude'], labels: {} });
+  finishes[0](ok(checked)); await running; await new Promise(resolve => setTimeout(resolve, 0));
+  // The first answer was for the old list; the check made under the new list sends no unlisted client.
+  assert.deepEqual(calls.map(call => call.clients), [['gone', 'other'], []]);
+  assert.equal(find(built, 'Dismiss'), undefined); assert.match(textOf(built.node), /Checking improvements/);
+  finishes[1](ok(checked)); await new Promise(resolve => setTimeout(resolve, 0));
+  assert.notEqual(find(built, 'Dismiss'), undefined); assert.equal(find(built, 'Suggest').disabled, false);
+  const note = elements(built.node).find(node => node.id === 'policy-improvements-unlisted');
+  assert.equal(note.textContent, 'Saved AI clients gone, other are not listed by the installed Core, so no suggestions are made for them. Your saved setup is unchanged.');
+  built.setTargets({ state: 'unavailable' }); assert.equal(note.hidden, true); assert.equal(note.textContent, '');
 });
 
 test('view discards older checks and resets hidden artifact state', async () => {

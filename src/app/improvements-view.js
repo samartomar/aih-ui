@@ -1,4 +1,5 @@
 import { loadSetup } from './settings-client.js';
+import { publishedClients, offersClient, clientLabel } from './core-targets.js';
 
 // Mirrors the record URNs in tools/consumer/improvement-record.mjs, the source of truth; the page cannot import it.
 export const SUGGESTION_RECORD = 'urn:aihq:workbench:journey-record:improvement-suggestion:1.0.0';
@@ -40,15 +41,17 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
   const goal = el('input', 'bg-wb-input border border-wb-border rounded p-1'); goal.id = 'policy-improvements-goal'; goal.type = 'text'; goal.maxLength = 300; goal.value = '';
   const goalLabel = el('label', 'text-on-surface-variant', 'Optional goal'); goalLabel.setAttribute('for', goal.id);
   const status = el('p', 'text-on-surface-variant'); status.setAttribute('role', 'status');
+  const unlisted = el('p', 'text-on-surface-variant'); unlisted.id = 'policy-improvements-unlisted';
   const groups = el('div', 'space-y-2');
   // `checked` is the client revision the shown suggestions answer; any later change to the open artifact retires them.
   // `recording` marks the revision change this view's own record request makes, which never retires its cards.
   let value, checked, pending = false, attempt = 0, failed = false, changed = false, recording = false;
+  let published = null, saved = [];
   const diagnostic = result => result?.diagnostics?.map(row => row.message).join(' ') || result?.error || 'The improvement check could not be completed.';
   const safe = action => async () => { try { await action(); } catch (error) { showStatus(error.message); } };
   const suggest = button('Suggest', safe(() => check())); suggest.id = 'policy-improvements-suggest';
   const controls = el('div', 'flex flex-wrap items-center gap-2'); controls.append(goalLabel, goal, suggest);
-  node.append(el('h3', 'font-medium', 'Improvements'), el('p', 'text-on-surface-variant', IMPROVEMENTS_NOTE), controls, status, groups);
+  node.append(el('h3', 'font-medium', 'Improvements'), el('p', 'text-on-surface-variant', IMPROVEMENTS_NOTE), controls, unlisted, status, groups);
 
   async function record(operation) {
     // While the choice is recorded the cards stay but are inert, so none acts on a policy that changes meanwhile;
@@ -86,7 +89,12 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
   function render() {
     node.hidden = !(client.draft || client.intent);
     if (value && !recording && checked !== client.revision) { value = undefined; changed = true; }
-    if (node.hidden) { attempt++; value = undefined; pending = false; failed = false; changed = false; goal.value = ''; groups.replaceChildren(); return; }
+    if (node.hidden) { attempt++; value = undefined; pending = false; failed = false; changed = false; saved = []; unlisted.hidden = true; unlisted.textContent = ''; goal.value = ''; groups.replaceChildren(); return; }
+    const omitted = saved.filter(id => !offersClient(published?.ids ?? [], id));
+    unlisted.hidden = !omitted.length;
+    unlisted.textContent = !omitted.length ? '' : omitted.length === 1
+      ? `Saved AI client ${omitted[0]} is not listed by the installed Core, so no suggestion is made for it. Your saved setup is unchanged.`
+      : `Saved AI clients ${omitted.join(', ')} are not listed by the installed Core, so no suggestions are made for them. Your saved setup is unchanged.`;
     suggest.disabled = pending || recording;
     status.textContent = pending ? 'Checking improvements…' : failed ? 'The improvement check could not be completed; suggestions are unknown.' : changed ? 'The open policy or its inputs changed since the last check; Suggest again to update the suggestions.' : value ? `Checked ${value.checkedAt}.` : 'Suggest improvements using the fixed rules.';
     groups.replaceChildren();
@@ -127,10 +135,13 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
     const requestedGoal = goal.value.trim(); pending = true; failed = false; render();
     let result;
     try {
-      const clients = await loadClients();
+      const loaded = await loadClients();
       if (current !== attempt) return;
       if (revision !== client.revision) { pending = false; render(); return; }
-      result = await client.checkImprovements({ clients, ...(requestedGoal ? { goal: requestedGoal } : {}) });
+      saved = loaded;
+      const clients = saved.filter(id => offersClient(published?.ids ?? [], id));
+      const labels = Object.fromEntries(clients.flatMap(id => { const label = clientLabel(published?.labels ?? {}, id); return label ? [[id, label]] : []; }));
+      result = await client.checkImprovements({ clients, ...(Object.keys(labels).length ? { labels } : {}), ...(requestedGoal ? { goal: requestedGoal } : {}) });
     } catch (error) { result = { status: 'refused', error: error.message }; }
     if (current !== attempt) return;
     pending = false;
@@ -142,5 +153,12 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
   }
   function open() { attempt++; value = undefined; changed = false; goal.value = ''; return check(); }
   render();
-  return { node, render, check, open };
+  function setTargets(coreTargets) {
+    // A check in flight was made under the old list: it is discarded and made again under this one.
+    const rerun = pending; published = publishedClients(coreTargets); attempt++; pending = false;
+    if (value) { value = undefined; changed = true; }
+    render();
+    if (rerun) return check();
+  }
+  return { node, render, check, open, setTargets };
 }
