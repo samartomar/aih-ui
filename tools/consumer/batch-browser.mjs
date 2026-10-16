@@ -187,6 +187,10 @@ export async function runBatchBrowser({ origin, output, playwrightModule, fixtur
     assert.equal((await act('review', 'batch-review')).review.ready, true);
     await page.locator('#batch-apply:enabled').waitFor();
     await shot('batch-7-reopened.png');
+    // Recover again after the process ran: the earlier Run again is not carried into a new attempt; the process is kept.
+    const again = await act('recover', 'batch-recover');
+    assert.deepEqual(again.projection.actions.filter(action => action.retain).map(action => action.id).sort(), ['a-extra', 'b-core', 'b-dependent', 'b-proc']);
+    assert.equal(await page.locator('#batch-rerun-b-proc').isChecked(), false, 'Run again needs a fresh choice.');
 
     // The browser logs the one deliberately refused run (409) as a console error; nothing else may be logged.
     const refusedLogs = errors.filter(message => /status of 409/.test(message));

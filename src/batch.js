@@ -39,7 +39,7 @@ function renderBatch(projection, batchId) {
     if (action.runAgain) {
       const label = el('label', 'flex items-start gap-2'), box = el('input');
       box.type = 'checkbox'; box.id = `batch-rerun-${action.id}`; box.dataset.action = action.id; box.checked = action.runAgainChecked;
-      box.addEventListener('change', () => perform(async () => { try { await recover(); } catch (error) { box.checked = !box.checked; throw error; } }));
+      box.addEventListener('change', () => perform(async () => { try { await recover({ choices: true }); } catch (error) { box.checked = !box.checked; throw error; } }));
       const words = el('span'); words.append(el('span', 'font-medium', 'Run again'), el('span', 'block text-on-surface-variant', RERUN_NOTE));
       label.append(box, words); row.append(label);
     }
@@ -114,16 +114,17 @@ node('apply').addEventListener('click', () => perform(async () => {
     throw new Error(`Run outcome unavailable: ${error.message} Effects are unknown. Recover to reinspect current state.`);
   }
 }));
-// Recovery reinspects and writes a superseding batch. Work Core cannot confirm is kept unless the person ticks Run again for it.
-async function recover() {
+// Recovery reinspects and writes a superseding batch. Work Core cannot confirm is kept unless the person ticks Run again for it;
+// only ticking re-plans with those choices, so the Recover button never carries an earlier Run again into a new attempt.
+async function recover({ choices = false } = {}) {
   reviewed = null; node('review-section').hidden = true;
-  const old = current.id, rerun = [...node('actions').querySelectorAll('input[data-action]:checked')].map(box => box.dataset.action);
+  const old = current.id, rerun = choices ? [...node('actions').querySelectorAll('input[data-action]:checked')].map(box => box.dataset.action) : [];
   const result = await api('batch-recover', { batchId: old, ...(rerun.length ? { rerun } : {}) });
   renderBatch(result.projection, result.batchId); attempted = false;
   if (result.review) renderReview(result.review, result.batchId);
   node('status').textContent = `Recovered from ${old}. Fresh batch ${result.batchId} supersedes it.`;
 }
-node('recover').addEventListener('click', () => perform(recover));
+node('recover').addEventListener('click', () => perform(() => recover()));
 await perform(async () => {
   const result = await api('batch'); clients = result.clients; supported = result.supported !== false;
   node('notice').textContent = supported ? '' : UNSUPPORTED_NOTE;

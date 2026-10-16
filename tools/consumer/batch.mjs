@@ -13,7 +13,8 @@ const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 const sameBytes = (a, b) => a instanceof Uint8Array && a.length === b.length && a.every((byte, index) => byte === b[index]);
 const unique = value => Array.isArray(value) ? [...new Set(value)].sort(compare) : value;
 // Operations whose result a fresh Prepare can show as already in place. A `process.run` is opaque: Core's published interface cannot
-// establish that an earlier process ran, so an action holding one is never judged by inspection.
+// establish that an earlier process ran, so an action holding one is never judged by inspection. The list mirrors Core's recipe 1.3.0 operation kinds; any kind not
+// listed here is treated as opaque.
 const FILE_LIKE = ['file.write', 'config.entries', 'text.block', 'file.remove', 'hook.group'];
 const inlineRecipe = selection => {
   const recipe = selection?.recipe, inline = recipe?.inline;

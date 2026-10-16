@@ -26,7 +26,7 @@ async function perform(op, { envelope, batchId, approve, rerun, now, clients, ma
 process.on('message', async ({ id, op, body } = {}) => {
   let result;
   try {
-    result = Object.hasOwn(operations, op) ? await perform(op, body) : failure('INVALID_REQUEST', `Unknown batch operation ${String(op)}`);
+    result = Object.hasOwn(operations, op) ? await perform(op, body) : failure('BATCH_HOST_FAILURE', `Unknown batch operation ${String(op)}`);
   } catch (error) {
     result = failure('BATCH_HOST_FAILURE', error.message);
   }
