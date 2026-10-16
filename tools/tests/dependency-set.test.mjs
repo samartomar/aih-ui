@@ -38,7 +38,7 @@ test('proposal renders dependency hooks and one acceptance publishes the whole c
   const nodes = new Map(), created = [];
   const element = tagName => {
     const node = { tagName, children: [], dataset: {}, listeners: {}, value: '', textContent: '', options: [],
-      classList: { remove() {}, toggle() {} }, setAttribute() {}, removeAttribute() {}, after() {},
+      classList: { remove() {}, toggle() {} }, getAttribute() { return null; }, setAttribute() {}, removeAttribute() {}, after() {},
       addEventListener(name, listener) { this.listeners[name] = listener; },
       append(...children) { this.children.push(...children); }, prepend(...children) { this.children.unshift(...children); },
       replaceChildren(...children) { this.children = children; }, get lastChild() { return this.children.at(-1); } };
