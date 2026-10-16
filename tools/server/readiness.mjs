@@ -12,15 +12,6 @@ const ROUTES = { '/api/readiness-report': ['GET', 'report'], '/api/readiness-che
 // lost and rejected are decisions the page renders from the body status, not transport failures.
 const HTTP_STATUS = { ok: 200, lost: 200, rejected: 200 };
 
-// Same layout as tools/consumer/readiness-fixture.mjs, so a demo points Core at one disposable home.
-function homeEnvironment(home) {
-  const layout = { HOME: home, USERPROFILE: home, APPDATA: join(home, 'AppData', 'Roaming'), LOCALAPPDATA: join(home, 'AppData', 'Local'),
-    XDG_CONFIG_HOME: join(home, '.config'), XDG_STATE_HOME: join(home, '.local', 'state'), XDG_DATA_HOME: join(home, '.local', 'share'),
-    XDG_CACHE_HOME: join(home, '.cache') };
-  for (const directory of Object.values(layout)) mkdirSync(directory, { recursive: true });
-  return layout;
-}
-
 export function createReadinessAdapter(consumerDir) {
   let child = null;
   const pending = new Map();

@@ -1,13 +1,16 @@
 // The fixture file is host configuration. HTTP can name only a batch and a choice,
 // never a target, home, material root, fault, policy or prepared handle.
+import { fork } from 'node:child_process';
 import { readFile, writeFile, rename, rm } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { callService } from './service-client.mjs';
+import { homeEnvironment } from '../consumer/home-environment.mjs';
 
 const MAX_BODY = 64 * 1024;
 const ROUTES = { '/api/batch': 'GET', '/api/batch-review': 'POST', '/api/batch-run': 'POST', '/api/batch-recover': 'POST', '/api/batch-continuation': 'POST' };
+const TIMEOUT_MS = { review: 120_000, run: 300_000, recover: 120_000 };
 const CLIENT_NOTE = 'Listed by Core; not checked as installed or connected';
 const reply = (response, code, value) => response.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }).end(JSON.stringify(value));
 const problem = (message, code = 'INVALID_REQUEST') => Object.assign(new Error(message), { code });
@@ -32,13 +35,48 @@ async function replaceEnvelope(path, bytes) {
 
 export function createBatchAdapter(consumerDir) {
   const fixturePath = process.env.AIH_BATCH_FIXTURE;
-  let queue = Promise.resolve(), closed = false, listed;
+  let queue = Promise.resolve(), closed = false, listed, child = null, childHome = null;
+  const pending = new Map();
+  let counter = 0;
+  const settleAll = reason => {
+    for (const [id, entry] of pending) { clearTimeout(entry.timer); entry.reject(problem(reason, 'BATCH_HOST_UNAVAILABLE')); pending.delete(id); }
+  };
+  // Core runs in a forked child whose account home is the fixture's `coreHome`, never the developer's. Killing the child
+  // drops nothing durable: the envelope file is the only state, and every request starts from its bytes.
+  const stop = reason => {
+    const dying = child; child = null; childHome = null;
+    if (dying) { dying.removeAllListeners(); dying.on('error', () => {}); dying.kill(); }
+    settleAll(reason);
+  };
+  function start(coreHome) {
+    const env = { ...process.env, ...homeEnvironment(coreHome), AIH_BATCH_CORE_HOME: coreHome };
+    const next = fork(join(consumerDir, 'consumer/batch-child.mjs'), [], { cwd: consumerDir, env, windowsHide: true,
+      serialization: 'json', stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+    next.stderr.resume();
+    next.on('message', message => {
+      const entry = pending.get(message?.id);
+      if (!entry) return;
+      clearTimeout(entry.timer); pending.delete(message.id);
+      if (message.error) entry.reject(problem(message.error, 'BATCH_HOST_UNAVAILABLE')); else entry.resolve(message.result);
+    });
+    const gone = () => { if (child === next) { child = null; childHome = null; settleAll('The batch host stopped.'); } };
+    next.on('exit', gone); next.on('error', gone);
+    return next;
+  }
+  const call = (coreHome, op, body) => new Promise((resolve, reject) => {
+    if (child && childHome !== coreHome) stop('The batch host was restarted for a different Core home.');
+    if (!child) { child = start(coreHome); childHome = coreHome; }
+    const id = ++counter;
+    const timer = setTimeout(() => stop(`The batch host did not answer ${op} in time.`), TIMEOUT_MS[op]);
+    pending.set(id, { resolve, reject, timer });
+    child.send({ id, op, body }, error => { if (error) stop(error.message); });
+  });
   // Reads, edits and execution share a queue. Durable bytes are read again for
   // every request, and no review session survives a request or a reload.
   const exclusive = operation => {
-    const pending = queue.then(operation);
-    queue = pending.catch(() => {});
-    return pending;
+    const running = queue.then(operation);
+    queue = running.catch(() => {});
+    return running;
   };
   async function operate(pathname, body) {
     if (closed) throw problem('The batch adapter is closed.', 'BATCH_HOST_UNAVAILABLE');
@@ -47,8 +85,10 @@ export function createBatchAdapter(consumerDir) {
     if (![config.envelopePath, config.materialRoot].every(path => typeof path === 'string' && isAbsolute(path))) {
       throw problem('Batch fixture requires absolute envelopePath and materialRoot.', 'BATCH_HOST_UNAVAILABLE');
     }
+    // Core writes protected records into the current account's home; with no disposable home named, nothing starts.
+    if (typeof config.coreHome !== 'string' || !isAbsolute(config.coreHome)) throw problem('No isolated Core home is configured.', 'BATCH_HOST_UNAVAILABLE');
     const load = name => import(pathToFileURL(join(consumerDir, 'consumer', name)).href);
-    const [{ readBatch, projectBatch, setContinuation }, { createBatchHost }] = await Promise.all([load('batch.mjs'), load('batch-host.mjs')]);
+    const { readBatch, projectBatch, setContinuation } = await load('batch.mjs');
     const envelopeBytes = new Uint8Array(await readFile(config.envelopePath));
     const current = valueOf(await readBatch({ envelopeBytes }));
     const record = current.record;
@@ -65,19 +105,18 @@ export function createBatchAdapter(consumerDir) {
       await replaceEnvelope(config.envelopePath, edited.envelopeBytes);
       return { status: 'ok', batchId: edited.record.id, projection: projectBatch(edited.record) };
     }
-    const host = createBatchHost({ clients: clients.targets,
-      materialRoots: Object.fromEntries(record.inputs.map(input => [input.id, config.materialRoot])), controls: { logging: 'off' }, faults: config.faults });
-    try {
-      if (pathname === '/api/batch-review') return { status: 'ok', batchId: record.id, review: valueOf(await host.reviewBatch({ envelopeBytes, batchId: record.id })) };
-      if (pathname === '/api/batch-run') return { status: 'ok', batchId: record.id,
-        report: valueOf(await host.runBatch({ envelopeBytes, batchId: record.id, approve: { batchId: record.id } })) };
-      const recovered = valueOf(await host.recoverBatch({ envelopeBytes, batchId: record.id, now: new Date().toISOString() }));
-      await replaceEnvelope(config.envelopePath, recovered.envelopeBytes);
-      return { status: 'ok', batchId: recovered.record.id, projection: projectBatch(recovered.record), review: recovered.review };
-    } finally { await host.close?.(); }
+    const materialRoots = Object.fromEntries(record.inputs.map(input => [input.id, config.materialRoot]));
+    const ask = (op, extra) => call(config.coreHome, op, { envelope: Buffer.from(envelopeBytes).toString('base64'), batchId: record.id,
+      clients: clients.targets, materialRoots, faults: config.faults, ...extra });
+    if (pathname === '/api/batch-review') return { status: 'ok', batchId: record.id, review: valueOf(await ask('review')) };
+    if (pathname === '/api/batch-run') return { status: 'ok', batchId: record.id, report: valueOf(await ask('run', { approve: { batchId: record.id } })) };
+    const recovered = valueOf(await ask('recover', { now: new Date().toISOString() }));
+    const replacement = new Uint8Array(Buffer.from(recovered.envelope, 'base64'));
+    await replaceEnvelope(config.envelopePath, replacement);
+    return { status: 'ok', batchId: recovered.record.id, projection: projectBatch(recovered.record), review: recovered.review };
   }
   return {
-    close() { closed = true; },
+    close() { closed = true; stop('The batch adapter was closed.'); },
     async handle(request, response, pathname) {
       if (pathname !== '/api/batch' && !pathname.startsWith('/api/batch-')) return false;
       const fail = (status, message, code) => reply(response, status, { status: 'error', diagnostics: [{ code, message }] });

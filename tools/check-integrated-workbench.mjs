@@ -39,7 +39,7 @@ const batch = await batchFixture(join(consumerDir, `batch-fixture-${randomUUID()
 const batchEnvelopePath = join(consumerDir, 'batch-envelope.json');
 await writeFile(batchEnvelopePath, batch.envelopeBytes);
 const batchFixturePath = join(consumerDir, 'batch-host.json');
-await writeFile(batchFixturePath, JSON.stringify({ envelopePath: batchEnvelopePath, homes: batch.homes, materialRoot: batch.materialRoot, faults: { 'b-core': 'stale-target' } }));
+await writeFile(batchFixturePath, JSON.stringify({ envelopePath: batchEnvelopePath, homes: batch.homes, coreHome: batch.coreHome, materialRoot: batch.materialRoot, faults: { 'b-core': 'stale-target' } }));
 process.env.AIH_BATCH_FIXTURE = batchFixturePath;
 const started = await createWorkbench({ consumerDir, runDir, summary, settingsPath: join(consumerDir, 'prototype-settings.json') });
 summary.entryCount = started.catalog.items.length; await writeFile(join(runDir, 'summary.json'), JSON.stringify(summary));

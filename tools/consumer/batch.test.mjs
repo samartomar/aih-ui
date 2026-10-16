@@ -1,7 +1,8 @@
 import test, { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir, mkdir, writeFile, mkdtemp } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdtempSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { planBatch, readBatch, setContinuation, projectBatch } from './batch.mjs';
 import { batchId, batchProblem, batchDerivedProblem, BATCH_RECORD_SCHEMA } from './batch-record.mjs';
@@ -11,6 +12,13 @@ import { stable } from './headless.mjs';
 import { createHost } from './host.mjs';
 import { createBatchHost } from './batch-host.mjs';
 import { batchFixture } from './batch-fixture.mjs';
+import { homeEnvironment } from './home-environment.mjs';
+
+// Core keeps ownership records, recovery manifests, snapshots and run history under the current account's `~/.aih/core`, even
+// with logging off. It resolves the account home with os.homedir() whenever it is used (not at import), so pointing this
+// test process (node --test gives each file its own) at a disposable home before the first Core call keeps every record here.
+const FIXTURE_HOME = mkdtempSync(join(tmpdir(), 'ui35-home-'));
+Object.assign(process.env, homeEnvironment(FIXTURE_HOME));
 
 const encode = value => new TextEncoder().encode(value), decode = bytes => new TextDecoder().decode(bytes);
 const scratch = () => mkdtemp(join(tmpdir(), 'ui35-'));
@@ -142,6 +150,15 @@ async function slim(f) {
 const noHandles = value => assert.doesNotMatch(JSON.stringify(value), /sessionId|reviewDigest|prepared handle/);
 
 describe('reviewed batch against Core', () => {
+  it('keeps every Core record inside the disposable account home', async () => {
+    assert.equal(homedir().toLowerCase(), FIXTURE_HOME.toLowerCase());
+    const f = await batchFixture(await scratch(), { applyEarlier: false }), small = await slim(f);
+    const report = await hostOf(f).runBatch({ ...small, approve: { batchId: small.batchId } });
+    assert.equal(report.status, 'ok', JSON.stringify(report.diagnostics));
+    const core = await readdir(join(FIXTURE_HOME, '.aih', 'core'));
+    assert.ok(core.length > 0, `Core wrote its records under the fixture home: ${core.join(', ')}`);
+  });
+
   it('adds B as one reviewed batch, leaves every unrelated A file byte-identical and completes B', async () => {
     const f = await batchFixture(await scratch()), small = await slim(f);
     const host = hostOf(f), before = await tree(f.homes.a), beforeB = await tree(f.homes.b);
