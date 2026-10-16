@@ -8,7 +8,7 @@ import { existsSync, mkdtempSync, readFileSync, statSync } from 'node:fs';
 import os from 'node:os';
 import { join, relative, isAbsolute } from 'node:path';
 import { createReadinessFixture, FIXTURE_CA } from './readiness-fixture.mjs';
-import { projectInspection, readinessGuidance } from './readiness.mjs';
+import { projectConfigurationComparison, projectInspection, readinessGuidance } from './readiness.mjs';
 
 const realNpmrc = join(os.homedir(), '.npmrc');
 const stamp = path => existsSync(path) ? statSync(path).mtimeMs : null;
@@ -44,6 +44,9 @@ test('a machine check journals its identity and returns isolated copies', async 
   assert.equal(record.core.name, '@aihq/core');
   assert.equal(typeof record.core.version, 'string');
   assert.deepEqual(record.check, projection);
+  assert.deepEqual([projection.options.configuration, projection.persisted], ['process', null], "the machine check is this host's own inspection");
+  assert.deepEqual([record.persistedCheck.options.configuration, record.persistedCheck.persisted, record.persistedCheck.options.targets],
+    ['persisted', [], ['jq']], 'the same targets inspected with the persisted configuration are journaled beside it');
   const original = structuredClone(records);
   record.check.items[0].state = 'verified';
   record.core.version = 'changed';
@@ -166,6 +169,13 @@ test('offline repair needs a live preparation, a matching digest and approval, a
   assert.equal(recheck.ready, false, 'offline recheck cannot be ready');
   assert.match(guidance, /node-npm-ca/);
   assert.equal(existsSync(join(first.home, '.npmrc')), true);
+  // The recheck sees the trust this repair persisted for a new process, and the journal says which value it applied.
+  assert.equal(outcome.condition.options.configuration, 'persisted');
+  const cafile = outcome.condition.persisted.find(entry => entry.id === 'npm-cafile');
+  assert.deepEqual([cafile?.repair, cafile?.state], ['node-npm-ca', 'applied'], JSON.stringify(outcome.condition.persisted));
+  assert.ok(cafile.certificates >= 1 && /^[0-9a-f]{64}$/.test(cafile.materialSha256), JSON.stringify(cafile));
+  assert.ok(!JSON.stringify(record).includes(first.home), 'no fixture path is journaled');
+  assert.match(guidance, /^Checked with the configuration Core's managed repairs persist for a new process: .*npm-cafile applied \(node-npm-ca, \d+ certificates?\)/m);
 
   assert.equal((await host.applyRepair({ sessionId: value.sessionId, reviewDigest: value.reviewDigest, approved: true })).status, 'lost', 'sessions are one-shot');
   const again = ok(await host.prepareRepair({ key: 'npm-ca-offline' }));
@@ -218,11 +228,14 @@ test('online repair is verified and rechecked, or honestly not verified when the
 
 test('the headless projection carries the same meaning as the host API', async () => {
   const request = { targets: ['jq', 'node'], network: 'off' };
-  const { projection, guidance } = ok(await host.check(request));
+  const { projection, persistedCheck, comparison, guidance } = ok(await host.check(request));
   const headless = projectInspection(await inspect(request));
+  const headlessPersisted = projectInspection(await inspect({ ...request, configuration: 'persisted' }));
   assert.deepEqual(projection, headless);
-  assert.equal(guidance, readinessGuidance([headless]));
-  assert.deepEqual(JSON.parse(JSON.stringify(ok(await host.check(request)))), { projection, guidance });
+  assert.deepEqual(persistedCheck, headlessPersisted);
+  assert.deepEqual(comparison, projectConfigurationComparison(headless, headlessPersisted));
+  assert.equal(guidance, readinessGuidance([headless, comparison]));
+  assert.deepEqual(JSON.parse(JSON.stringify(ok(await host.check(request)))), { projection, persistedCheck, comparison, guidance });
 });
 
 test('the host journal reports verified repairs end to end through the adapter and Core', async t => {
@@ -232,13 +245,14 @@ test('the host journal reports verified repairs end to end through the adapter a
   const empty = ok(await reportHost.report());
   assert.equal(empty.records, 0);
   assert.equal(empty.projection.calculations.find(entry => entry.id === 'verified-repairs').count, 0);
-  const { projection: before } = ok(await reportHost.check({ targets: ['jq', 'npm'], network: 'declared' }));
+  const { projection: before, persistedCheck: beforePersisted } = ok(await reportHost.check({ targets: ['jq', 'npm'], network: 'declared' }));
   const value = ok(await reportHost.prepareRepair({ key: 'npm-ca-online' }));
   const { outcome } = ok(await reportHost.applyRepair({ sessionId: value.sessionId, reviewDigest: value.reviewDigest, approved: true }));
   // What Core itself said about each npm condition, before and after the applied repair.
   const stateBefore = new Map(before.items.filter(item => item.target === 'npm').map(item => [item.id, item.state]));
+  const persistedBefore = new Map(beforePersisted.items.filter(item => item.target === 'npm').map(item => [item.id, item.state]));
   const stateAfter = new Map((outcome.condition?.items ?? []).map(item => [item.id, item.state]));
-  const expected = [...stateBefore].filter(([id, state]) => state === 'failed' && stateAfter.get(id) === 'verified').map(([id]) => id);
+  const expected = [...stateBefore].filter(([id, state]) => state === 'failed' && persistedBefore.get(id) === 'failed' && stateAfter.get(id) === 'verified').map(([id]) => id);
 
   const report = ok(await reportHost.report());
   const records = reportHost.records();
@@ -249,13 +263,15 @@ test('the host journal reports verified repairs end to end through the adapter a
   assert.equal(repairs.count, expected.length, JSON.stringify(repairs.attempts));
   assert.ok(outcome.operations.every(item => item.application === 'applied'), 'the repair was applied, so each attempt has an applied repair');
   // The reason Core must give for each before/after pair of that condition, stated independently of the attempt.
-  const expectedReason = (was, now) => was === 'verified' ? 'already-healthy'
-    : was !== 'failed' ? 'unknown-precondition'
-      : now === 'verified' ? 'verified' : now === 'failed' ? 'repair-not-verified' : 'applied-unverified';
+  // Broken only if it failed for this host and with the persisted configuration; a pass in either is already healthy.
+  const expectedReason = (was, wasPersisted, now) => was === 'failed' && wasPersisted === 'failed'
+    ? now === 'verified' ? 'verified' : now === 'failed' ? 'repair-not-verified' : 'applied-unverified'
+    : was === 'verified' || wasPersisted === 'verified' ? 'already-healthy' : 'unknown-precondition';
   assert.ok(repairs.attempts.length > 0, 'the repair of npm has attempts');
   for (const attempt of repairs.attempts) {
     const id = attempt.condition.replace(/^condition:/, '');
-    assert.equal(attempt.reason, expectedReason(stateBefore.get(id), stateAfter.get(id)), `${id}: before ${stateBefore.get(id)}, after ${stateAfter.get(id)}`);
+    assert.equal(attempt.reason, expectedReason(stateBefore.get(id), persistedBefore.get(id), stateAfter.get(id)),
+      `${id}: before ${stateBefore.get(id)} (persisted ${persistedBefore.get(id)}), after ${stateAfter.get(id)}`);
     assert.equal(attempt.counted, attempt.reason === 'verified');
     assert.equal(attempt.operation, 'node-npm-ca');
   }

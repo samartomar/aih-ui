@@ -80,9 +80,13 @@ try {
   };
   const panelText = async name => page.locator(`#report-${name}`).innerText();
   const attemptsShown = async () => (await page.locator('#report-repairs li').allInnerTexts()).map(text => text.split('\n')[0]);
+  // The check response the page received: it also carries the same targets inspected with the persisted configuration.
+  let checkBody = null;
   const check = async () => {
     await page.locator('#check-status').evaluate(node => { node.textContent = ''; });
+    const response = page.waitForResponse(reply => new URL(reply.url()).pathname === '/api/readiness-check');
     await page.click('#check');
+    checkBody = await (await response).json();
     await page.locator('#check-status', { hasText: /Check finished|did not run/ }).waitFor();
     assert.doesNotMatch(await page.textContent('#check-status'), /did not run/, await page.textContent('#check-status'));
   };
@@ -123,7 +127,10 @@ try {
   // What Core itself said about each npm condition before and after the applied repair.
   const stateBefore = new Map(checked.filter(row => row.id.startsWith('npm/')).map(row => [row.id, row.state]));
   const stateAfter = new Map(rechecked.filter(row => row.id.startsWith('npm/')).map(row => [row.id, row.state]));
-  const verifiedIds = [...stateBefore].filter(([id, state]) => /^Failed/.test(state) && /^Verified/.test(stateAfter.get(id) ?? '')).map(([id]) => id);
+  // Broken before only if it failed for this host (the page) and with the persisted configuration.
+  const persistedBefore = new Map((checkBody?.value?.persistedCheck?.items ?? []).map(item => [item.id, item.state]));
+  const verifiedIds = [...stateBefore].filter(([id, state]) => /^Failed/.test(state) && persistedBefore.get(id) === 'failed'
+    && /^Verified/.test(stateAfter.get(id) ?? '')).map(([id]) => id);
 
   // 3. The report counts exactly the conditions Core saw fail, repaired and pass again.
   await openReport();
@@ -148,9 +155,12 @@ try {
     assert.ok(own.some(text => /Value: passed/.test(text)), `${id}: the passing recheck claim is listed`);
   }
   assert.match(claimItems.join('\n'), /Kind: Measured/);
+  // The recheck ran with the configuration the repair persisted; a verified repair shows the values Core applied for it.
+  const persistedApplied = claimItems.filter(text => /^persisted configuration \S+ found by the re-check of npm/.test(text) && /Value: applied/.test(text)).map(text => text.split('\n')[0]);
+  if (verifiedIds.length) assert.ok(persistedApplied.length > 0, `a verified repair shows the persisted values its recheck applied: ${JSON.stringify(claimItems)}`);
   assert.match(await panelText('repairs'), /Operation: node-npm-ca/);
   await shot('02-report-after-repair.png');
-  const afterRepair = { verified: verifiedIds, attempts: shown, score: scoreText.slice(0, 200) };
+  const afterRepair = { verified: verifiedIds, attempts: shown, persistedApplied, score: scoreText.slice(0, 200) };
 
   // 4. A second machine check is a new observation, not another win.
   await page.goto(`${origin}/readiness.html`, { waitUntil: 'domcontentloaded' });
@@ -182,13 +192,13 @@ try {
   assert.equal(await npmrcState(), realNpmrcBefore, "the real home's .npmrc is untouched");
   if (requireVerified) assert.equal(verifiedIds.length, 1, 'AIH_REPORT_REQUIRE_VERIFIED=1 needs exactly one verified repair');
   const summary = { status: 'passed', chromium: browser.version(), port: PORT, verifiedRepairDemonstrated: verifiedIds.length === 1,
-    verifiedRepairs: verifiedIds.length, note: verifiedIds.length ? undefined : 'No npm condition failed before the repair in this environment, so Core reported already-healthy attempts and the report counted none; nothing was invented.',
+    verifiedRepairs: verifiedIds.length, note: verifiedIds.length ? undefined : 'No npm condition failed in both configurations before the repair in this environment, so the report counted none; nothing was invented.',
     beforeAnyCheck: empty, afterRepair, equivalence: { meanings: meanings.length, textEqual: true, missing: missing.length },
     recordsInReport: payload.value.records, screenshots };
   const summaryPath = join(evidence, 'report-evidence.json');
   await writeFile(summaryPath, JSON.stringify(summary, null, 2));
   console.log('Report Chromium demonstration passed.');
-  console.log(`verified repairs: ${verifiedIds.length} (${verifiedIds.join(', ') || 'none: no npm condition failed before the repair'})`);
+  console.log(`verified repairs: ${verifiedIds.length} (${verifiedIds.join(', ') || 'none: no npm condition failed in both configurations before the repair'})`);
   for (const path of screenshots) console.log(`screenshot: ${path}`);
   console.log(`evidence: ${summaryPath}`);
 } finally {
