@@ -176,6 +176,15 @@ test('a record superseded by a real edit retires the cards for the changed polic
   assert.equal(find(built, 'Dismiss'), undefined); assert.match(textOf(built.node), /open policy or its inputs changed/);
 });
 
+test('a record request that fails leaves the cards usable for a retry', async () => {
+  const statuses = [], client = { draft, revision: 1, checkImprovements: async () => ok(checked) };
+  const built = view(client, { showStatus: message => statuses.push(message) }); await built.open();
+  client.recordImprovement = async () => { client.revision++; built.render(); throw new Error('Failed to fetch'); };
+  await find(built, 'Dismiss').listeners.click();
+  assert.equal(find(built, 'Dismiss').disabled, false); assert.equal(find(built, 'Suggest').disabled, false);
+  assert.match(textOf(built.node), /Test helper/); assert.ok(statuses.includes('Failed to fetch'));
+});
+
 test('a pending check does not keep cards for a revision that has changed', async () => {
   let finish;
   const client = { draft, revision: 1, checkImprovements: async () => ok(checked) };

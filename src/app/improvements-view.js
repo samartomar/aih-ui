@@ -55,7 +55,10 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
     // any other change is reconciled when it settles.
     recording = true; render();
     let result;
-    try { result = await client.recordImprovement(operation); } finally { recording = false; }
+    try { result = await client.recordImprovement(operation); }
+    // A failed request changed nothing either: make the controls usable again before reporting it.
+    catch (error) { recording = false; checked = client.revision; render(); throw error; }
+    recording = false;
     // Superseded by another change: render, so cards for the changed policy are retired now.
     if (result.status === 'superseded') return render();
     // A refused choice changed nothing: the shown suggestions still answer the open artifact.
