@@ -1,4 +1,5 @@
 import { el } from './dom.js';
+import { createReviewIdentity } from './review-identity.js';
 
 const reasonText = {
   'subject-not-selected': 'the reviewed item is no longer selected',
@@ -75,8 +76,10 @@ export function createEvidenceReview(client, onProposal) {
   asKind.setAttribute('aria-label', 'Your reviewer kind'); asId.setAttribute('aria-label', 'Your reviewer identity'); asId.placeholder = 'Reviewing as (identity)';
   for (const value of ['individual', 'organization']) asKind.append(new Option(value, value));
   // Only labels saved judgments as yours or imported; it never changes what is recorded.
+  const identity = createReviewIdentity();
   as.append(el('span', 'text-on-surface-variant', 'Reviewing as'), asKind, asId, action('Use identity', async () => {
     const id = asId.value.trim();
+    identity.choose();
     client.setRecipient(id ? { kind: asKind.value, id } : undefined);
     if (!await refresh()) return;
     status.textContent = id ? `Saved judgments are labelled for ${asKind.value} ${id}.` : 'No identity set: every saved judgment is shown as imported.';
@@ -114,4 +117,17 @@ export function createEvidenceReview(client, onProposal) {
     if (!judgments.length) history.append(el('li', '', 'No human review decisions recorded. Supply evidence to review a pinned selection.'));
   });
   document.querySelector('#policy-workspace > .p-4').append(panel);
+  return {
+    // The saved setup identity is only a default: a choice made with "Use identity" this session wins.
+    async setDefaultRecipient(reviewer) {
+      const change = identity.offer(reviewer);
+      if (!change) return;
+      asKind.value = reviewer?.kind ?? asKind.options[0].value; asId.value = reviewer?.id ?? '';
+      client.setRecipient(change.recipient);
+      try {
+        if (!await refresh()) return;
+        status.textContent = change.fromSetup ? `Saved judgments are labelled for ${reviewer.kind} ${reviewer.id} (from your setup preferences).` : 'No identity set: every saved judgment is shown as imported.';
+      } catch (error) { status.textContent = error.message; }
+    },
+  };
 }
