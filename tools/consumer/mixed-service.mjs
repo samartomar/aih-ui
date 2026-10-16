@@ -2,11 +2,14 @@ import { intakeDeclaration, digestBytes } from './intake.mjs';
 import { composeAuthoring, readAuthoring, reconcileAuthoring, editAuthoring, freshAuthoring, stable, refuse, inspectReviewEvidence, recordReview, reconsiderReviews, openDraft, editDraft, compileDraft } from './headless.mjs';
 import { checkMaintenance, recordMaintenance } from './maintenance.mjs';
 import { checkImprovements, recordImprovement } from './improvements.mjs';
+import { readWorkspace, editWorkspace, planBinding, bindCheckout, unbindCheckout, verifyBindings, exportWorkspace } from './workspace.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { runOrganizationAuthor } from './organization-author.mjs';
 const encode = value => new TextEncoder().encode(value);
 const bytesOf = value => Array.isArray(value) ? Uint8Array.from(value) : undefined;
-export async function createMixedService(maintained, { suppliedInventories, familyInventories = [], maintenanceSource } = {}) {
+const WORKSPACE_OPERATIONS = ['workspace-read', 'workspace-edit', 'workspace-plan', 'workspace-bind', 'workspace-unbind', 'workspace-verify', 'workspace-export'];
+// `observeCheckout(root)` is the host's read of one local checkout (see ./workspace-host.mjs); a service made without one cannot inspect folders.
+export async function createMixedService(maintained, { suppliedInventories, familyInventories = [], maintenanceSource, observeCheckout } = {}) {
   async function supplied(snapshot, id = 'notes') {
     const input = { id, kind: 'local', locator: { input: id }, resolvedIdentity: { sha256: await digestBytes(snapshot.declarationBytes) } };
     const result = await intakeDeclaration({ input, ...snapshot, materialSource: { kind: 'local', input: id } });
@@ -26,6 +29,39 @@ export async function createMixedService(maintained, { suppliedInventories, fami
   const maintainedInventories = [maintained, ...familyInventories];
   const current = [...maintainedInventories, notes], all = [...current, changed];
   const candidates = mode => mode === 'missing' ? maintainedInventories : mode === 'updated' ? [...maintainedInventories, changed] : current;
+  // The host observes a folder only when asked, and a bind or verify always observes it again: nothing observed earlier is trusted.
+  const observe = async root => typeof root !== 'string' ? refuse('INPUT_INVALID', '/root', 'Supply the checkout folder.')
+    : observeCheckout ? Promise.resolve().then(() => observeCheckout(root)).catch(() => refuse('CHECKOUT_UNAVAILABLE', '/root', 'The checkout could not be observed.'))
+    : refuse('CHECKOUT_UNAVAILABLE', '/root', 'This host does not inspect local checkouts.');
+  async function runWorkspace(operation, body, { envelopeBytes, now, adopt }) {
+    // A write is reopened as a draft so the client adopts it exactly like an opened draft; a read or export is not adopted.
+    const adopted = async result => {
+      if (result.status !== 'ok') return result;
+      const opened = await adopt(result.value.envelopeBytes);
+      return opened.status === 'ok' ? { status: 'ok', diagnostics: [], value: { draft: opened.value, projection: result.value.workspace, ...(result.value.binding ? { binding: result.value.binding } : {}) } } : { ...opened, originalBytes: envelopeBytes.slice() };
+    };
+    if (operation === 'workspace-read') return readWorkspace({ envelopeBytes });
+    if (operation === 'workspace-edit') return adopted(await editWorkspace({ envelopeBytes, operation: body.operation, now }));
+    if (operation === 'workspace-unbind') return adopted(await unbindCheckout({ envelopeBytes, bindingId: body.bindingId, now }));
+    if (operation === 'workspace-export') {
+      const exported = await exportWorkspace({ envelopeBytes });
+      return exported.status === 'ok' ? { status: 'ok', diagnostics: [], value: { envelopeBytes: exported.value.envelopeBytes, excluded: exported.value.excluded } } : exported;
+    }
+    if (operation === 'workspace-verify') {
+      const read = await readWorkspace({ envelopeBytes });
+      if (read.status !== 'ok') return read;
+      const observations = {};
+      for (const binding of [...read.value.members.flatMap(member => member.bindings), ...read.value.detached]) {
+        const observed = await observe(binding.checkout.root);
+        observations[binding.id] = observed.status === 'ok' ? observed.value : observed;
+      }
+      return verifyBindings({ envelopeBytes, observations });
+    }
+    const observed = await observe(body.root);
+    if (observed.status !== 'ok') return { ...observed, originalBytes: envelopeBytes.slice() };
+    const input = { envelopeBytes, memberId: body.memberId, observation: observed.value, ...(body.replaces !== undefined ? { replaces: body.replaces } : {}) };
+    return operation === 'workspace-plan' ? planBinding(input) : adopted(await bindCheckout({ ...input, ...(body.confirmation !== undefined ? { confirmation: body.confirmation } : {}), now }));
+  }
   return {
     inventories: all,
     addInventory(inventory) {
@@ -51,7 +87,7 @@ export async function createMixedService(maintained, { suppliedInventories, fami
       if (operation === 'draft-open') return openDraft({ bytes: bytesOf(body.bytes), inventories: available, ...reviewContext });
       if (operation === 'draft-edit') return editDraft({ envelopeBytes: bytesOf(body.envelopeBytes), inventories: available, operation: body.operation, ...reviewContext });
       if (operation === 'draft-compile') return compileDraft({ envelopeBytes: bytesOf(body.envelopeBytes), inventories: available, ...(Array.isArray(body.roots) ? { roots: body.roots } : {}), ...reviewContext });
-      if (['maintenance-check', 'maintenance-record', 'improvements-check', 'improvements-record'].includes(operation)) {
+      if (['maintenance-check', 'maintenance-record', 'improvements-check', 'improvements-record', ...WORKSPACE_OPERATIONS].includes(operation)) {
         // With no draft open the saved policy is wrapped by the same pure open path (a sequence-1 envelope); a check writes nothing.
         // Improvements share this branch, so recording on an ordinary saved policy saves it as a draft.
         let envelopeBytes = bytesOf(body.envelopeBytes);
@@ -62,6 +98,7 @@ export async function createMixedService(maintained, { suppliedInventories, fami
           envelopeBytes = wrapped.value.envelopeBytes;
         }
         const now = new Date().toISOString();
+        if (WORKSPACE_OPERATIONS.includes(operation)) return runWorkspace(operation, body, { envelopeBytes, now, adopt: bytes => openDraft({ bytes, inventories: available, ...reviewContext }) });
         if (operation === 'improvements-check') {
           // The same host-configured source as the maintenance check; unreachable (null or a failure) is unknown, never "nothing changed".
           const candidateInventories = maintenanceSource ? await Promise.resolve().then(() => maintenanceSource()).catch(() => null) : null;
