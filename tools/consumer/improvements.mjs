@@ -32,8 +32,9 @@ export function projectDismissals(envelope) {
   return (Array.isArray(envelope?.records) ? envelope.records : []).filter(isDismissal).map(record => structuredClone(record));
 }
 // Bounded read: no scan, native check, model call, host prepare/apply or write. The host supplies `now`, the
-// checked inventories and the AI clients the person declared in Workbench setup; `goal` is an optional request.
-export async function checkImprovements({ envelopeBytes, inventories, clients = [], goal, now } = {}) {
+// checked inventories and the AI clients the person declared in Workbench setup, with the labels Harness publishes for
+// them; `goal` is an optional request.
+export async function checkImprovements({ envelopeBytes, inventories, clients = [], labels = {}, goal, now } = {}) {
   const loaded = await load(envelopeBytes);
   if (loaded.status !== 'ok') return loaded;
   const { read, draft } = loaded.value;
@@ -41,10 +42,12 @@ export async function checkImprovements({ envelopeBytes, inventories, clients = 
   if (!isUtcTimestamp(now)) return fail('/now', 'Supply the check time as an ISO UTC timestamp.');
   if (!checkedEntries(inventories)) return fail('/inventories', 'Supply at most 32 unique checked inventories.');
   if (!Array.isArray(clients) || clients.length > 32 || clients.some(client => typeof client !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(client))) return fail('/clients', 'Supply at most 32 AI client ids.');
+  if (!labels || typeof labels !== 'object' || Array.isArray(labels) || Object.keys(labels).length > 32
+    || Object.entries(labels).some(([id, label]) => !/^[a-z0-9][a-z0-9-]{0,63}$/.test(id) || typeof label !== 'string' || label.length < 1 || label.length > 128 || /[\u0000-\u001f\u007f]/.test(label))) return fail('/labels', 'Supply at most 32 client labels of 1 to 128 characters, without control characters.');
   if (goal !== undefined && (typeof goal !== 'string' || goal.length > MAX_GOAL)) return fail('/goal', `Supply a goal of at most ${MAX_GOAL} characters.`);
   const requested = goal !== undefined && goal.trim() !== '';
   const items = inventories.flatMap(entry => entry.release.items.map(item => ({ ...item, root: { releaseSha256: entry.release.sha256 } })));
-  const current = await suggestImprovements({ intent: draft.intent, items, clients, goal });
+  const current = await suggestImprovements({ intent: draft.intent, items, clients, labels, goal });
   const savedBy = new Map(read.records.filter(isSuggestion).map(record => [record.id, record]));
   const dismissals = new Map(read.records.filter(isDismissal).map(record => [record.suggestion.id, record]));
   const shown = (suggestion, dismissal, reasons = []) => ({ ...suggestion, prompt: improvementPrompt(suggestion), dismissal: dismissal ? structuredClone(dismissal) : null,

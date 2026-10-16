@@ -464,5 +464,7 @@ export function createAuthoringWorkspace(client) {
     finally { snapshot.disabled = false; snapshot.value = ''; }
   });
   intake.append(snapshot, intakeStatus); document.querySelector('#policy-workspace > .p-4').append(intake);
-  return { present, select(entry) { selectedItem = entry?.authoringItem; render(); } };
+  // Core's published AI clients reach the views that offer or name a client.
+  function setTargets(coreTargets) { improvements.setTargets(coreTargets); organizationAuthor.setTargets(coreTargets); }
+  return { present, select(entry) { selectedItem = entry?.authoringItem; render(); }, setTargets };
 }

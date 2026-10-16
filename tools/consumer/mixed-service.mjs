@@ -99,7 +99,7 @@ export async function createMixedService(maintained, { suppliedInventories, fami
         }
         const now = new Date().toISOString();
         if (WORKSPACE_OPERATIONS.includes(operation)) return runWorkspace(operation, body, { envelopeBytes, now, adopt: bytes => openDraft({ bytes, inventories: available, ...reviewContext }) });
-        if (operation === 'improvements-check') return checkImprovements({ envelopeBytes, inventories: all, clients: body.clients ?? [], goal: body.goal, now });
+        if (operation === 'improvements-check') return checkImprovements({ envelopeBytes, inventories: all, clients: body.clients ?? [], labels: body.labels ?? {}, goal: body.goal, now });
         if (operation === 'maintenance-record' || operation === 'improvements-record') {
           const recorded = await (operation === 'maintenance-record' ? recordMaintenance : recordImprovement)({ envelopeBytes, operation: body.operation, now });
           if (recorded.status !== 'ok') return recorded;
