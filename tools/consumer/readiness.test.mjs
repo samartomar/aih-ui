@@ -136,6 +136,28 @@ test('a repair recheck covers only its targets and never states machine readines
   assert.match(readinessGuidance([alone, alone.condition]), /Other targets were not re-checked/);
 });
 
+test('a persisted inspection carries its configuration and what Core reported per persisted value, never a path', () => {
+  const persisted = { values: [
+    { id: 'node-extra-ca-certs', repair: 'node-npm-ca', managementId: 'm-1', member: { path: '/home/dev/.profile', blockId: 'b-1' }, state: 'applied',
+      value: '/home/dev/.aih/ca.pem', certificates: 2, materialSha256: 'b'.repeat(64) },
+    { id: 'npm-cafile', repair: 'node-npm-ca', managementId: 'm-2', member: { path: '/home/dev/.npmrc', blockId: 'b-2' }, state: 'unowned' }] };
+  const projected = projectInspection(inspection([check('npm/tls/node/registry.npmjs.org', 'npm', 'passed', 'connected')],
+    { effectiveOptions: { ...options, configuration: { value: 'persisted', origin: 'explicit' } }, persisted }));
+  assert.equal(projected.options.configuration, 'persisted');
+  assert.deepEqual(projected.persisted, [
+    { id: 'node-extra-ca-certs', repair: 'node-npm-ca', managementId: 'm-1', state: 'applied', certificates: 2, materialSha256: 'b'.repeat(64) },
+    { id: 'npm-cafile', repair: 'node-npm-ca', managementId: 'm-2', state: 'unowned' }]);
+  assert.ok(!JSON.stringify(projected).includes('/home/dev'));
+  const text = readinessGuidance([projected]);
+  assert.match(text, /^Checked with the configuration Core's managed repairs persist for a new process: node-extra-ca-certs applied \(node-npm-ca, 2 certificates\), npm-cafile unowned\.$/m);
+  assert.doesNotMatch(text, /\/home\/dev/);
+  const none = projectInspection(inspection([], { effectiveOptions: { ...options, configuration: { value: 'persisted', origin: 'explicit' } }, persisted: { values: [] } }));
+  assert.match(readinessGuidance([none]), /^Checked with the configuration Core's managed repairs persist for a new process: none found\.$/m);
+  const processDefault = projectInspection(inspection([]));
+  assert.deepEqual([processDefault.options.configuration, processDefault.persisted], [null, null]);
+  assert.doesNotMatch(readinessGuidance([processDefault]), /persist/);
+});
+
 test('guidance text is plain, failure-first and states that nothing was executed', () => {
   const projected = projectInspection(inspection([check('npm/version', 'npm', 'passed', 'version-ok'), check('jq/version', 'jq', 'failed', 'executable-missing')],
     { repairChoices: [{ target: 'jq', kind: 'manual-guidance', reason: 'executable-missing', guidance: 'Install jq yourself.' }] }));

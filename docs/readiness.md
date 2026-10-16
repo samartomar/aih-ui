@@ -76,6 +76,28 @@ Neither a repair outcome nor a recheck is worded as machine readiness. After a r
 the page's Result line and the guidance show the latest machine check, labelled as taken
 before the repair; only a new machine check can state that the machine is ready.
 
+### Persisted configuration
+
+The host passes Core's `configuration: 'persisted'` to every inspection: the machine
+check and the post-repair recheck alike. Node reads `NODE_EXTRA_CA_CERTS` only when a
+process starts, so a long-running host checking with its own start-time trust never
+sees the CA a repair persists, and a real repair could never verify. With the persisted
+configuration Core evaluates Node TLS with the trust its own managed `node-npm-ca`
+configuration gives a new process; `tls/os` checks still use the operating system's
+trust.
+
+The machine check uses it too, so a precheck and its recheck are the same condition,
+and a machine check run again after a repair agrees with that repair's recheck. The
+cost: a CA trusted only through configuration Core does not manage (for example a
+`NODE_EXTRA_CA_CERTS` line the developer wrote) does not make a Node TLS check pass.
+
+Each projection carries `options.configuration` and `persisted`: one entry per value
+Core found (`id`, `repair`, `managementId`, `state`, and when `applied` the
+`certificates` count and `materialSha256`), or `null` for a process-configuration
+inspection. Material and profile paths are dropped. A value that is not `applied` is
+not used, and Core marks the inspection incomplete. The guidance names each value
+and its state.
+
 ## Readiness records
 
 The host keeps the latest 64 checks and repair outcomes in memory, never on disk.

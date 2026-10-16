@@ -34,6 +34,12 @@ function outcomeFields(item) {
   return { kind: 'unknown', unknownReason: item.reason || item.outcome || 'unavailable' };
 }
 
+// A check made with the trust this process started with and one made with the persisted configuration are not
+// the same condition, so they are never paired. A check without a reported configuration (an older Core, or a
+// recheck that failed before Core answered) is not evidence of a different one.
+const configurationOf = check => check?.options?.configuration ?? null;
+const sameConfiguration = (a, b) => configurationOf(a) === null || configurationOf(b) === null || configurationOf(a) === configurationOf(b);
+
 function admit(records) {
   const seen = new Set(), unique = [];
   for (const record of records) {
@@ -140,7 +146,15 @@ function assemble({ records = [], scanReports = [], estimates = [], usage = [], 
       capturedAt: repair.recheckedAt, measure: `condition:${item.id}`, ...outcomeFields(item), coverage: coverageOf(recheck.status),
       authentication: unauthenticated(), applicability: applicability() }));
 
-    const beforeFound = byMachine.get(machineById.get(repair.before)) ?? [];
+    // Core reported each applied, removed, modified or unowned persisted value the recheck found; its state is the value.
+    for (const value of recheck?.persisted ?? []) add({
+      id: `${record.id}/persisted/${value.id}`, revision: record.sha256, producer: producer(), recordSchema: READINESS_RECORD_SCHEMA,
+      subject: { kind: 'persisted-configuration', id: value.id }, scope: { kind: 'machine', targets: [...repair.targets] }, sources: sources.map(source => ({ ...source })),
+      observation: `${record.id}/${value.id}/persisted`, capturedAt: repair.recheckedAt, measure: 'persisted-configuration', kind: 'measured',
+      value: { amount: value.state, unit: 'state' }, coverage: coverageOf(recheck.status), authentication: unauthenticated(), applicability: applicability() });
+
+    const beforeRecord = machineById.get(repair.before);
+    const beforeFound = beforeRecord && sameConfiguration(beforeRecord.check, recheck) ? byMachine.get(beforeRecord) ?? [] : [];
     const before = new Map(beforeFound.filter(entry => entry.condition && repair.targets.includes(entry.item.target)).map(entry => [entry.item.id, entry]));
     const conditions = new Map();
     for (const [id, entry] of before) conditions.set(id, entry.item.target);
@@ -153,6 +167,7 @@ function assemble({ records = [], scanReports = [], estimates = [], usage = [], 
   // Consecutive machine checks with no repair of the target between them: a failure that later passed has an unknown cause.
   for (let index = 1; index < machines.length; index += 1) {
     const [older, newer] = [machines[index - 1], machines[index]];
+    if (!sameConfiguration(older.check, newer.check)) continue;
     const newerById = new Map(byMachine.get(newer).filter(entry => entry.condition).map(entry => [entry.item.id, entry]));
     for (const entry of byMachine.get(older)) {
       if (!entry.condition || entry.item.outcome !== 'failed' || !newerById.has(entry.item.id)) continue;

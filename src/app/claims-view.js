@@ -46,6 +46,7 @@ const checkOf = claim => {
   return ROLES[role] && rest.length ? rest.join('/') : null;
 };
 const CONDITION = /^condition:/;
+const PERSISTED = 'persisted-configuration';
 const conditionKey = measure => String(measure).replace(CONDITION, '');
 
 export function reportPanels(projection) {
@@ -54,11 +55,13 @@ export function reportPanels(projection) {
   const label = ref => {
     const claim = byRef.get(keyOf(ref));
     if (!claim) return String(ref?.id ?? '');
+    // A persisted value the re-check applied names the repaired targets it was checked for.
+    if (claim.measure === PERSISTED) return `persisted configuration ${claim.subject.id} for ${list(claim.scope?.targets).join(', ')}`;
     return `${checkOf(claim) ?? claim.measure} on ${claim.subject.id}`;
   };
   const calculation = method => list(projection?.calculations).find(result => result.method?.id === method);
   const valueText = claim => claim.kind === 'unknown' ? `Unavailable — ${claim.unknownReason}`
-    : claim.value.unit === 'outcome' ? String(claim.value.amount) : `${claim.value.amount} ${claim.value.unit}`;
+    : ['outcome', 'state'].includes(claim.value.unit) ? String(claim.value.amount) : `${claim.value.amount} ${claim.value.unit}`;
   const dedupText = claim => {
     const { status, canonical } = claim.dedup ?? { status: 'unique' };
     if (status === 'canonical') return 'Canonical record of an event imported more than once';
@@ -68,7 +71,8 @@ export function reportPanels(projection) {
     return 'Unique';
   };
   const claimTone = claim => claim.kind === 'unknown' ? 'warning' : claim.value.unit === 'outcome'
-    ? ({ passed: 'success', failed: 'error' })[claim.value.amount] ?? 'neutral' : 'neutral';
+    ? ({ passed: 'success', failed: 'error' })[claim.value.amount] ?? 'neutral'
+    : claim.measure === PERSISTED ? claim.value.amount === 'applied' ? 'neutral' : 'warning' : 'neutral';
   const claimItem = (claim, text) => item(`${claim.id}@${claim.revision}`, claimTone(claim), text, [
     `Kind: ${KIND_LABELS[claim.kind] ?? 'Unknown'}`,
     `Value: ${valueText(claim)}`,
@@ -132,7 +136,7 @@ export function reportPanels(projection) {
         ...list(action.prerequisites).map(text => `Prerequisite: ${text}`)])));
 
   // Claims: the checks, conditions and repairs. Context claims have their own panel.
-  const isContext = claim => !['configuration-check', 'repair', 'external-repair'].includes(claim.measure) && !CONDITION.test(claim.measure);
+  const isContext = claim => !['configuration-check', 'repair', 'external-repair', PERSISTED].includes(claim.measure) && !CONDITION.test(claim.measure);
   const evidence = claims.filter(claim => !isContext(claim));
   const claimsPanel = panel('claims', 'Claims', evidence.length ? `${plural(evidence.length, 'claim')} behind the score and repairs.` : 'No check or repair claim has been recorded.',
     'neutral', evidence.map(claim => claimItem(claim, label(claim))));

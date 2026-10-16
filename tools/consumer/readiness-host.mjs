@@ -15,6 +15,11 @@ const MAX_RECORDS = 64;
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const coreIdentity = inspection => inspection.package ? { name: inspection.package.name, version: inspection.package.version } : null;
 const CONTROLS = Object.freeze({ logging: 'off' });
+// Every inspection, the machine check and the post-repair recheck alike, evaluates Node TLS with the
+// trust Core's managed repairs persist for a new process, not the trust this long-running host
+// started with: otherwise a repair's own persisted CA is invisible to its recheck, and a precheck
+// and recheck of one condition would not be the same condition.
+const CONFIGURATION = 'persisted';
 const failure = (code, message) => ({ status: 'error', diagnostics: [{ code, message }] });
 const invalid = message => failure('INVALID_REQUEST', message);
 const lost = () => ({ status: 'lost', diagnostics: [{ code: 'SESSION_LOST', reason: 'unknown-or-consumed-session',
@@ -83,7 +88,7 @@ export function createReadinessHost({ repairs = [] } = {}) {
       if (targets !== undefined && targetsError(targets)) return invalid(targetsError(targets));
       if (network !== undefined && !NETWORKS.includes(network)) return invalid('network must be declared or off');
       try {
-        const result = await inspect({ ...(targets ? { targets } : {}), ...(network ? { network } : {}) });
+        const result = await inspect({ ...(targets ? { targets } : {}), ...(network ? { network } : {}), configuration: CONFIGURATION });
         const capturedAt = stamp();
         const projection = projectInspection(result);
         const id = randomUUID();
@@ -132,7 +137,7 @@ export function createReadinessHost({ repairs = [] } = {}) {
         // The same condition is checked again by a fresh preparation (its handle is discarded)
         // and by inspecting the repair's targets; either may be unavailable without hiding the run.
         const fresh = await prepare(request(repair), CONTROLS).then(serialize, () => undefined);
-        const inspection = await inspect({ targets: [...repair.targets], network: repair.network }).catch(error => ({ status: 'incomplete',
+        const inspection = await inspect({ targets: [...repair.targets], network: repair.network, configuration: CONFIGURATION }).catch(error => ({ status: 'incomplete',
           diagnostics: [{ code: 'RECHECK_FAILED', message: `Recheck failed: ${error.message}` }] }));
         const recheckedAt = stamp();
         const outcome = projectRepairOutcome({ run, recheck: fresh, inspection, repair, latestCheck: before });

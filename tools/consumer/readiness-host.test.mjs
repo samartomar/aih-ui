@@ -44,6 +44,7 @@ test('a machine check journals its identity and returns isolated copies', async 
   assert.equal(record.core.name, '@aihq/core');
   assert.equal(typeof record.core.version, 'string');
   assert.deepEqual(record.check, projection);
+  assert.deepEqual([projection.options.configuration, projection.persisted], ['persisted', []], 'the machine check uses the persisted configuration');
   const original = structuredClone(records);
   record.check.items[0].state = 'verified';
   record.core.version = 'changed';
@@ -166,6 +167,13 @@ test('offline repair needs a live preparation, a matching digest and approval, a
   assert.equal(recheck.ready, false, 'offline recheck cannot be ready');
   assert.match(guidance, /node-npm-ca/);
   assert.equal(existsSync(join(first.home, '.npmrc')), true);
+  // The recheck sees the trust this repair persisted for a new process, and the journal says which value it applied.
+  assert.equal(outcome.condition.options.configuration, 'persisted');
+  const cafile = outcome.condition.persisted.find(entry => entry.id === 'npm-cafile');
+  assert.deepEqual([cafile?.repair, cafile?.state], ['node-npm-ca', 'applied'], JSON.stringify(outcome.condition.persisted));
+  assert.ok(cafile.certificates >= 1 && /^[0-9a-f]{64}$/.test(cafile.materialSha256), JSON.stringify(cafile));
+  assert.ok(!JSON.stringify(record).includes(first.home), 'no fixture path is journaled');
+  assert.match(guidance, /^Checked with the configuration Core's managed repairs persist for a new process: .*npm-cafile applied \(node-npm-ca, \d+ certificates?\)/m);
 
   assert.equal((await host.applyRepair({ sessionId: value.sessionId, reviewDigest: value.reviewDigest, approved: true })).status, 'lost', 'sessions are one-shot');
   const again = ok(await host.prepareRepair({ key: 'npm-ca-offline' }));
@@ -219,7 +227,7 @@ test('online repair is verified and rechecked, or honestly not verified when the
 test('the headless projection carries the same meaning as the host API', async () => {
   const request = { targets: ['jq', 'node'], network: 'off' };
   const { projection, guidance } = ok(await host.check(request));
-  const headless = projectInspection(await inspect(request));
+  const headless = projectInspection(await inspect({ ...request, configuration: 'persisted' }));
   assert.deepEqual(projection, headless);
   assert.equal(guidance, readinessGuidance([headless]));
   assert.deepEqual(JSON.parse(JSON.stringify(ok(await host.check(request)))), { projection, guidance });

@@ -148,9 +148,12 @@ try {
     assert.ok(own.some(text => /Value: passed/.test(text)), `${id}: the passing recheck claim is listed`);
   }
   assert.match(claimItems.join('\n'), /Kind: Measured/);
+  // The recheck ran with the configuration the repair persisted; a verified repair shows the values Core applied for it.
+  const persistedApplied = claimItems.filter(text => /^persisted configuration \S+ for npm/.test(text) && /Value: applied/.test(text)).map(text => text.split('\n')[0]);
+  if (verifiedIds.length) assert.ok(persistedApplied.length > 0, `a verified repair shows the persisted values its recheck applied: ${JSON.stringify(claimItems)}`);
   assert.match(await panelText('repairs'), /Operation: node-npm-ca/);
   await shot('02-report-after-repair.png');
-  const afterRepair = { verified: verifiedIds, attempts: shown, score: scoreText.slice(0, 200) };
+  const afterRepair = { verified: verifiedIds, attempts: shown, persistedApplied, score: scoreText.slice(0, 200) };
 
   // 4. A second machine check is a new observation, not another win.
   await page.goto(`${origin}/readiness.html`, { waitUntil: 'domcontentloaded' });

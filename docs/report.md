@@ -24,7 +24,7 @@ The read-only text box is the headless rendering of the same records.
 | Readiness record | Claims |
 | --- | --- |
 | Machine check | A `configuration-check` claim and a `condition:<check id>` claim per Core check. Passed or failed is Measured; unavailable, skipped and client `…/loading` observations are Unknown with Core's reason. |
-| Repair | A `repair` claim per target when an operation was applied, and a `condition:<check id>` claim per rechecked condition. The Core run is a source. |
+| Repair | A `repair` claim per target when an operation was applied, a `condition:<check id>` claim per rechecked condition, and a `persisted-configuration` claim per persisted value Core reported for the recheck, Measured with Core's state (`applied`, `removed`, `modified`, `unowned`). The Core run is a source. |
 | Two machine checks with no repair of the target between them | An attempt with no repair, so Core reports an unknown cause or no recovery. |
 | Scan report read | One measured `file-size` claim in bytes. |
 | Estimate | An Estimated `configured-context` claim. |
@@ -45,6 +45,11 @@ and the same check **passed** afterwards. Nothing else counts:
 - applied but not yet passing is `applied-unverified`, still failing is `repair-not-verified`
   (both also rank an urgent review);
 - no earlier machine check is `unknown-precondition`.
+
+A check made with the host's start-time trust and one made with the persisted configuration
+(see [readiness](readiness.md#persisted-configuration)) are different conditions: such a precheck
+is not paired with the recheck, so the attempt is `unknown-precondition`, and two such machine
+checks are not compared.
 
 A later machine check does not add a second win for the same repair.
 
