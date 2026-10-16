@@ -1,11 +1,13 @@
 // Exercise the ordinary server against explicitly reviewed, installed archives.
 import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { installConsumer, resolvePackage } from './packages.mjs';
 import { serviceAssets } from './server/assets.mjs';
+import { homeEnvironment } from './consumer/home-environment.mjs';
+import { snapshotCoreHome, compareCoreHome, describeCoreHomeChange } from './core-home-guard.mjs';
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const output = process.argv[2] ? resolve(process.argv[2]) : mkdtempSync(join(tmpdir(), 'aih-workbench-check-'));
 const packages = ['core', 'catalog', 'scan'].map(name => {
@@ -25,10 +27,23 @@ for (const name of readdirSync(join(repo, 'schemas'))) extraFiles[`schemas/${nam
 for (const key of Object.keys(process.env)) if (key.toLowerCase() === 'npm_config_allow_scripts') delete process.env[key];
 installConsumer({ consumerDir: output, packages, extraFiles, log: console.log });
 writeFileSync(join(output, 'reviewed-packages.json'), JSON.stringify(packages, null, 2) + '\n');
+// Core writes its records under the account home, so every stage gets a disposable one. Playwright finds its browsers
+// under that home too, so the real browser location is passed through before the home moves.
+const realCache = process.platform === 'win32' ? (process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'))
+  : process.platform === 'darwin' ? join(homedir(), 'Library', 'Caches') : (process.env.XDG_CACHE_HOME ?? join(homedir(), '.cache'));
+const isolated = { ...process.env, ...homeEnvironment(join(output, 'account-home')),
+  PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH ?? join(realCache, 'ms-playwright') };
+// Listing metadata only, never contents: the run fails if the real home's Core records change. It runs on exit, so a
+// stage that throws (a timeout, say) is still checked.
+const realCoreBefore = snapshotCoreHome(homedir());
+process.on('exit', () => {
+  const realCoreChange = compareCoreHome(realCoreBefore, snapshotCoreHome(homedir()));
+  if (!realCoreChange.unchanged) { console.error(describeCoreHomeChange(realCoreChange)); process.exitCode = 1; }
+});
 const tests = ['ordinary-families', 'authoring-page', 'authoring-v3', 'reviews', 'personal-folder', 'journey', 'maintenance', 'readiness', 'readiness-host', 'claims', 'authority-source', 'organization-author', 'guided-setup', 'core-targets', 'improvements', 'workspace'];
 const result = spawnSync(process.execPath, ['--test', ...tests.map(name => join(output, `consumer/${name}.test.mjs`))], {
   cwd: output, encoding: 'utf8', windowsHide: true, maxBuffer: 20_000_000, timeout: 120_000,
-  env: { ...process.env, AIH_REPO: repo }
+  env: { ...isolated, AIH_REPO: repo }
 });
 writeFileSync(join(output, 'checks.log'), `${result.stdout ?? ''}${result.stderr ?? ''}`);
 process.stdout.write(result.stdout ?? ''); process.stderr.write(result.stderr ?? '');
@@ -37,7 +52,7 @@ process.exitCode = result.status ?? 1;
 if (process.exitCode === 0) {
   const browser = spawnSync(process.execPath, [join(output, 'consumer/personal-folder-browser.mjs')], {
     cwd: output, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 180_000,
-    env: { ...process.env, PLAYWRIGHT_MODULE: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href,
+    env: { ...isolated, PLAYWRIGHT_MODULE: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href,
       AIH_FOLDER_EVIDENCE: join(output, 'personal-folder-evidence') }
   });
   writeFileSync(join(output, 'browser-check.log'), `${browser.stdout ?? ''}${browser.stderr ?? ''}`);
@@ -47,7 +62,7 @@ if (process.exitCode === 0) {
 }
 if (process.exitCode === 0) {
   const integrated = spawnSync(process.execPath, [join(repo, 'tools/check-integrated-workbench.mjs'), output], {
-    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 180_000,
+    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 180_000, env: isolated,
   });
   writeFileSync(join(output, 'prototype-check.log'), `${integrated.stdout ?? ''}${integrated.stderr ?? ''}`);
   process.stdout.write(integrated.stdout ?? ''); process.stderr.write(integrated.stderr ?? '');
@@ -56,7 +71,7 @@ if (process.exitCode === 0) {
 }
 if (process.exitCode === 0) {
   const authority = spawnSync(process.execPath, [join(repo, 'tools/check-authority-source.mjs'), output, join(output, 'authority-source-evidence')], {
-    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 180_000,
+    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 180_000, env: isolated,
   });
   writeFileSync(join(output, 'authority-source-check.log'), `${authority.stdout ?? ''}${authority.stderr ?? ''}`);
   process.stdout.write(authority.stdout ?? ''); process.stderr.write(authority.stderr ?? '');
@@ -65,7 +80,7 @@ if (process.exitCode === 0) {
 }
 if (process.exitCode === 0) {
   const unit = spawnSync(process.execPath, ['--test', ...readdirSync(join(repo, 'tools/tests')).filter(name => name.endsWith('.test.mjs')).map(name => join(repo, 'tools/tests', name))], {
-    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 120_000,
+    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 120_000, env: isolated,
   });
   writeFileSync(join(output, 'presentation-checks.log'), `${unit.stdout ?? ''}${unit.stderr ?? ''}`);
   process.stdout.write(unit.stdout ?? ''); process.stderr.write(unit.stderr ?? '');
