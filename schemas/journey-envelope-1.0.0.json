@@ -173,6 +173,21 @@
             "then": {
               "$ref": "urn:aihq:workbench:journey-record:maintenance-check:1.0.0"
             }
+          },
+          {
+            "if": {
+              "required": [
+                "schema"
+              ],
+              "properties": {
+                "schema": {
+                  "const": "urn:aihq:workbench:journey-record:organization-draft:1.0.0"
+                }
+              }
+            },
+            "then": {
+              "$ref": "urn:aihq:workbench:journey-record:organization-draft:1.0.0"
+            }
           }
         ]
       }

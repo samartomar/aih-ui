@@ -1,5 +1,6 @@
 import { el } from './dom.js';
 import { createUpdatesView } from './updates-view.js';
+import { createOrganizationAuthorView } from './organization-author.js';
 import { authorityFromResult, changeSummary, compareRevision, reviewFreshness, revisionOf, setupInstructions, sourceRows, staleReviewMessage } from './authority-source.js';
 import { isJourneyEnvelope, importLimitError } from './authoring-client.js';
 
@@ -260,6 +261,7 @@ export function createAuthoringWorkspace(client) {
   draftSection.append(draftTitle, draftNote, draftRoots, draftMissing, draftChanges, draftActions, draftSaveNote, compileNote, draftStatus);
   choices.after(draftSection);
   const updates = createUpdatesView({ client, el, button, showStatus }); draftSection.after(updates.node);
+  const organizationAuthor = createOrganizationAuthorView({ client, el, button, showStatus }); updates.node.after(organizationAuthor.node);
   const itemLabel = ref => client.catalog?.items.find(item => item.id === ref.itemId && item.root.releaseSha256 === ref.releaseSha256)?.label ?? ref.itemId ?? ref.templateId ?? ref.id;
   const blocker = entry => {
     const what = entry.kind === 'root' ? 'its exact source' : entry.kind === 'dependency' ? `required item ${itemLabel(entry.ref)}`

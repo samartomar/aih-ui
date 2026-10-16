@@ -35,6 +35,7 @@ const saved = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: 'u
 // installed @aihq packages, which this repo-root script does not have.
 const journeyRecord = 'urn:aihq:workbench:journey-record:unresolved-draft:1.0.0', journeyEnvelope = 'urn:aihq:workbench:journey-envelope:1.0.0';
 const dispositionRecord = 'urn:aihq:workbench:journey-record:maintenance-disposition:1.0.0', checkRecord = 'urn:aihq:workbench:journey-record:maintenance-check:1.0.0';
+const organizationRecord = 'urn:aihq:workbench:journey-record:organization-draft:1.0.0';
 const utcTimestamp = { type: 'string', pattern: '^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d+)?Z$' };
 const updateCategory = { enum: ['content', 'software', 'client', 'environment'] };
 const recordUrn = { type: 'string', pattern: String.raw`^urn:aihq:workbench:journey-record:[a-z0-9-]+:\d+\.\d+\.\d+$` };
@@ -60,6 +61,29 @@ const check = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: ch
   categories: { type: 'array', minItems: 1, maxItems: 4, items: { ...shape({ category: updateCategory, state: { enum: ['checked', 'unknown', 'not-selected'] },
     reason: { type: 'string', pattern: '^[a-z][a-z0-9-]{0,63}$' } }, ['reason']), allOf: [{ if: { required: ['reason'] }, then: { properties: { state: { const: 'unknown' } } } }] } }
 }) };
+// Organization draft: the baseline an organization author is composing, one fixed-id required record per envelope.
+// Everything not yet decided is simply absent. The reader (tools/consumer/organization-draft-record.mjs) also enforces
+// what a schema cannot express, so a record this schema accepts can still be refused when the Workbench opens it:
+//   - entry and target ids are derived (sha256 of the stable item/scope or scope/client/repository, first 32 hex);
+//   - entry and target ids are unique, and a source path has no empty, "." or ".." segment;
+//   - a branch or tag value has no "..", "//", leading "-" or leading/trailing "/".
+// Selector values, obligations and the exported document are validated by Core when previewed or exported.
+const orgStrings = (maxItems, maxLength) => ({ type: 'array', minItems: 1, maxItems, uniqueItems: true, items: { type: 'string', minLength: 1, maxLength } });
+const orgPermission = { oneOf: [shape({ fixed: {} }), shape({ choices: { type: 'array', minItems: 1, maxItems: 256, uniqueItems: true } }), shape({ allowDeclared: { const: true } })] };
+const orgSource = shape({ provider: { const: 'github' },
+  repository: shape({ owner: { type: 'string', pattern: '^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$' }, name: { type: 'string', pattern: '^[A-Za-z0-9._-]{1,100}$' } }),
+  path: { type: 'string', maxLength: 512, pattern: '^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*\\.json$' },
+  revision: { ...shape({ kind: { enum: ['branch', 'tag', 'commit'] }, value: { type: 'string', minLength: 1, maxLength: 200, pattern: '^[A-Za-z0-9._/-]+$' } }),
+    allOf: [{ if: { required: ['kind'], properties: { kind: { const: 'commit' } } }, then: { properties: { value: { pattern: '^[0-9a-f]{40}$' } } } }] } });
+const organizationEntry = shape({ id: { type: 'string', pattern: '^entry-[a-f0-9]{32}$' }, item: shape({ releaseSha256: hash, itemId: id, itemSha256: hash }), scope,
+  obligation: { enum: ['required', 'recommended', 'permitted', 'prohibited'] }, clients: orgStrings(64, 128), repositories: orgStrings(4096, 512),
+  inputs: { type: 'object', propertyNames: id, additionalProperties: orgPermission } }, ['obligation', 'clients', 'repositories']);
+const organizationTarget = shape({ id: { type: 'string', pattern: '^target-[a-f0-9]{32}$' }, scope, client: { type: 'string', minLength: 1, maxLength: 128 },
+  repository: { type: 'string', minLength: 1, maxLength: 512 } }, ['client', 'repository']);
+const organizationDraft = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: organizationRecord, ...shape({
+  id: { const: 'organization-draft' }, schema: { const: organizationRecord }, required: { const: true }, policyId: id, source: orgSource,
+  entries: array(organizationEntry), targets: { type: 'array', maxItems: 64, items: organizationTarget }
+}, ['policyId', 'source']) };
 const journey = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: journeyEnvelope, ...shape({
   schema: { const: journeyEnvelope },
   id: { type: 'string', pattern: '^journey-[a-f0-9]{32}$' },
@@ -70,10 +94,10 @@ const journey = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: 
   records: array({ if: { required: ['schema'], properties: { schema: { const: journeyRecord } } },
     then: shape({ id, schema: { const: journeyRecord }, required: { const: true }, savedIntentSha256: hash, intent: { $ref: saved.$id } }),
     else: { type: 'object', required: ['id', 'schema', 'required'], additionalProperties: true, properties: { id, schema: recordUrn, required: { type: 'boolean' } } },
-    allOf: [dispositionRecord, checkRecord].map(urn => ({ if: { required: ['schema'], properties: { schema: { const: urn } } }, then: { $ref: urn } })) })
+    allOf: [dispositionRecord, checkRecord, organizationRecord].map(urn => ({ if: { required: ['schema'], properties: { schema: { const: urn } } }, then: { $ref: urn } })) })
 }) };
 mkdirSync(new URL('../schemas/', import.meta.url), { recursive: true });
-for (const [name, schema] of [['saved-intent-3.0.0', saved], ['review-decisions-1.0.0', review], ['journey-envelope-1.0.0', journey], ['journey-record-maintenance-disposition-1.0.0', disposition], ['journey-record-maintenance-check-1.0.0', check]]) {
+for (const [name, schema] of [['saved-intent-3.0.0', saved], ['review-decisions-1.0.0', review], ['journey-envelope-1.0.0', journey], ['journey-record-maintenance-disposition-1.0.0', disposition], ['journey-record-maintenance-check-1.0.0', check], ['journey-record-organization-draft-1.0.0', organizationDraft]]) {
   const path = new URL(`../schemas/${name}.json`, import.meta.url), expected = JSON.stringify(schema, null, 2) + '\n';
   if (process.argv.includes('--check')) {
     if (readFileSync(path, 'utf8').replaceAll('\r\n', '\n') !== expected) throw new Error(`Schema is stale: ${name}`);
