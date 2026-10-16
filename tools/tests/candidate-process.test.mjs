@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { claimDataDir, ensureLayout } from '../candidate/data-dir.mjs';
 import { candidateLayout } from '../candidate/layout.mjs';
-import { isAlive, isCandidateProcess, readServerRecord, serverEnvironment, spawnServer, stopServer, waitForReady } from '../candidate/process.mjs';
+import { isAlive, isCandidateProcess, readServerRecord, runSeedOnly, serverEnvironment, spawnServer, stopServer, waitForReady } from '../candidate/process.mjs';
 
 const STUB = `
 import { createServer } from 'node:http';
@@ -16,6 +16,7 @@ import { join } from 'node:path';
 const data = process.argv[process.argv.indexOf('--data') + 1], mode = process.env.STUB_MODE;
 const state = name => join(data, 'state', name);
 if (mode === 'env') { writeFileSync(join(data, 'child-env.json'), JSON.stringify(process.env)); process.exit(0); }
+if (mode === 'seed') setInterval(() => { if (existsSync(join(data, 'seed-done'))) process.exit(0); }, 50);
 if (mode === 'ready') {
   const server = createServer((request, response) => response.end('{}'));
   server.listen(0, '127.0.0.1', () => writeFileSync(state('server.json'), JSON.stringify({ pid: process.pid, state: 'ready', url: 'http://127.0.0.1:' + server.address().port + '/', dataDir: data })));
@@ -129,4 +130,15 @@ test('a pid that is not this candidate is never ended: stop refuses and leaves i
   await assert.rejects(stopServer(layout, { graceMs: 300 }), refused('CANDIDATE_STOP_REFUSED'));
   assert.equal(isAlive(process.pid), true);
   assert.equal(existsSync(layout.stopRequest), false);
+});
+
+test("reset's seeding run is recorded while it runs, so status, stop, start and reset see it, and its record goes when it exits", async t => {
+  const { layout, script } = area(t);
+  const seeding = runSeedOnly({ layout, env: { ...serverEnvironment(layout), STUB_MODE: 'seed' }, timeoutMs: 15_000, script });
+  const record = await until(() => readServerRecord(layout));
+  assert.equal(record.state, 'seeding');
+  assert.ok(isAlive(record.pid));
+  writeFileSync(join(layout.root, 'seed-done'), '');
+  assert.deepEqual(await seeding, { complete: true });
+  assert.equal(existsSync(layout.server), false);
 });

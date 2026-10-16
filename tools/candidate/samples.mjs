@@ -153,7 +153,8 @@ It selects \`${ROOT_ITEM}\` for the goal "add tests to my app". Reopening checks
 needs a reopened saved draft like this one (the maintenance journey has its own, ${layout.maintenanceDraft}).
 
 ${workspaceText}`));
-    return note ? `not composed: ${note}` : undefined;
+    // Reported and made again on the next start, never recorded as seeded: the diagnostic above stays until then.
+    if (note) throw new Error(`no saved intent was composed: ${note}`);
   });
 
   // Readiness and repair: a disposable home, a PATH with one broken tool, and a test-only CA certificate. Core sees only these.
@@ -278,7 +279,7 @@ the test plan note is suggested and the unrelated style note is not.
 
 **Trials.** Choose AI clients in setup first (a trial needs them), then plan and propose a trial from a suggestion on the reopened draft.
 `));
-    return note ? `not built: ${note}` : undefined;
+    if (note) throw new Error(`no maintenance draft was built: ${note}`);
   })) env.AIH_MAINTENANCE_SOURCE = layout.maintenanceSource;
 
   env.AIH_UI_SETTINGS_PATH = layout.settings;

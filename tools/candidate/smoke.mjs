@@ -1,9 +1,10 @@
 // The owner-testing page check: the served packages match the candidate's manifest, and the Workbench's pages open and show them.
 import { mkdir, writeFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { join, win32 } from 'node:path';
 
 const refusal = (code, message) => Object.assign(new Error(message), { code });
-const nameOf = path => (typeof path === 'string' ? basename(path) : null);
+// The manifest and the server may name a tarball with either separator; win32.basename accepts both on every platform.
+const nameOf = path => (typeof path === 'string' ? win32.basename(path) : null);
 
 export function compareIdentity(identity, packagesSummary) {
   const mismatches = [];

@@ -61,16 +61,17 @@ function describeCandidate(record) {
   out(`data directory: ${record.dataDir}`);
 }
 
-// The recorded server, while its process is alive: starting or ready.
+// The recorded process, while it is alive: a server starting or ready, or reset's seeding run.
 const running = layout => { const record = readServerRecord(layout); return record && isAlive(record.pid) ? record : null; };
-const isStarting = record => record.state === 'starting';
+const isStarting = record => record.state === 'starting' || record.state === 'seeding';
+const phase = record => (record.state === 'seeding' ? 'making the sample data again' : 'starting');
 
 async function start({ manifest, data, port, smoke }) {
   const layout = candidateLayout(data);
   const manifestPath = manifest ? resolve(manifest) : layout.manifest;
   if (!manifest && !existsSync(layout.manifest)) throw refusal('CANDIDATE_USAGE', `start needs --manifest <file> (there is no earlier candidate in ${layout.root}).`);
   const already = running(layout);
-  if (already) throw refusal('CANDIDATE_RUNNING', `The candidate is already ${isStarting(already) ? 'starting' : `running at ${already.url}`} (process ${already.pid}). Stop it first: node tools/candidate.mjs stop`);
+  if (already) throw refusal('CANDIDATE_RUNNING', `The candidate is already ${isStarting(already) ? phase(already) : `running at ${already.url}`} (process ${already.pid}). Stop it first: node tools/candidate.mjs stop`);
   // Nothing is written until the tarballs are exactly the bytes the manifest names and the port is free.
   const read = readManifest(manifestPath);
   await verifyManifest(read);
@@ -145,7 +146,7 @@ async function report({ data }) {
 function status({ data }) {
   const layout = candidateLayout(data), record = running(layout);
   if (record && isStarting(record)) {
-    out(`The candidate is starting (process ${record.pid}); installing the packages can take a few minutes. Stop it with: node tools/candidate.mjs stop`);
+    out(`The candidate is ${phase(record)} (process ${record.pid}); installing the packages can take a few minutes. Stop it with: node tools/candidate.mjs stop`);
     return;
   }
   if (!record) {

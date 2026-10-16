@@ -54,16 +54,20 @@ export function spawnServer({ layout, port, env, script = SERVE, args = [] }) {
 // The server entry in seed-only mode: it installs the consumer, makes the sample data and exits without listening.
 // Resolves { complete }: false when it ran but a sample could not be made (exit 2); the next start retries that sample.
 export function runSeedOnly({ layout, env, timeoutMs, script = SERVE }) {
-  mkdirSync(layout.logs, { recursive: true });
+  for (const directory of [layout.logs, layout.state]) mkdirSync(directory, { recursive: true });
   const log = openSync(layout.serverLog, 'a');
   return new Promise((done, fail) => {
     let settled = false, timer;
     const settle = (problem, complete = true) => {
       if (settled) return;
       settled = true; clearTimeout(timer); closeSync(log);
+      if (readServerRecord(layout)?.pid === child.pid) rmSync(layout.server, { force: true });
       if (problem) fail(refusal('CANDIDATE_SEED_FAILED', `${problem} Last lines of ${layout.serverLog}:\n${logTail(layout)}`)); else done({ complete });
     };
-    const child = spawn(process.execPath, [script, '--data', layout.root, '--seed-only'], { cwd: REPO_ROOT, env, windowsHide: true, stdio: ['ignore', log, log] });
+    // Detached like the server, so a POSIX timeout ends npm's descendants with the group; recorded like it, so status, stop, start and
+    // reset all see the seeding run until it exits.
+    const child = spawn(process.execPath, [script, '--data', layout.root, '--seed-only'], { cwd: REPO_ROOT, env, detached: true, windowsHide: true, stdio: ['ignore', log, log] });
+    if (child.pid) writeFileSync(layout.server, `${JSON.stringify({ pid: child.pid, state: 'seeding', dataDir: layout.root, startedAt: new Date().toISOString() }, null, 2)}\n`);
     timer = setTimeout(() => { killTree(child.pid); settle(`Making the sample data took longer than ${Math.round(timeoutMs / 1000)} s and was ended.`); }, timeoutMs);
     child.on('error', error => settle(`The sample data could not be made: ${error.message}.`));
     child.on('exit', code => (code === 0 || code === 2 ? settle(null, code === 0) : settle(`Making the sample data failed (exit ${code}).`)));
