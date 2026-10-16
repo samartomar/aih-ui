@@ -14,7 +14,7 @@ const packages = ['core', 'catalog', 'scan'].map(name => {
 });
 const extraFiles = Object.fromEntries(readdirSync(join(repo, 'tools/consumer'))
   .map(name => [`consumer/${name}`, join(repo, 'tools/consumer', name)]));
-for (const name of ['consumer.html', 'consumer.js', 'intent.html', 'intent.js', 'authoring.html', 'authoring.js', 'policy-file.js']) extraFiles[`page/${name}`] = join(repo, 'src', name);
+for (const name of ['consumer.html', 'consumer.js', 'intent.html', 'intent.js', 'authoring.html', 'authoring.js', 'policy-file.js', 'app/claims-view.js']) extraFiles[`page/${name}`] = join(repo, 'src', name);
 for (const name of ['consumer.css', 'tokens.css']) extraFiles[`page/${name}`] = join(repo, 'src/styles', name);
 for (const name of readdirSync(join(repo, 'schemas'))) extraFiles[`schemas/${name}`] = join(repo, 'schemas', name);
 // npm run exports user allow-scripts as an environment option. npm rejects that
@@ -22,7 +22,7 @@ for (const name of readdirSync(join(repo, 'schemas'))) extraFiles[`schemas/${nam
 for (const key of Object.keys(process.env)) if (key.toLowerCase() === 'npm_config_allow_scripts') delete process.env[key];
 installConsumer({ consumerDir: output, packages, extraFiles, log: console.log });
 writeFileSync(join(output, 'reviewed-packages.json'), JSON.stringify(packages, null, 2) + '\n');
-const tests = ['ordinary-families', 'authoring-page', 'authoring-v3', 'personal-folder', 'journey', 'readiness', 'readiness-host', 'authority-source'];
+const tests = ['ordinary-families', 'authoring-page', 'authoring-v3', 'personal-folder', 'journey', 'readiness', 'readiness-host', 'claims', 'authority-source'];
 const result = spawnSync(process.execPath, ['--test', ...tests.map(name => join(output, `consumer/${name}.test.mjs`))], {
   cwd: output, encoding: 'utf8', windowsHide: true, maxBuffer: 20_000_000, timeout: 120_000
 });
