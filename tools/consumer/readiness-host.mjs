@@ -71,7 +71,9 @@ export function createReadinessHost({ repairs = [] } = {}) {
       try {
         const { readinessReport } = await import('./claims.mjs');
         const records = structuredClone(journal);
-        const { claimSet, projection } = readinessReport({ records });
+        // The host clock, never earlier than the latest journaled instant.
+        const generatedAt = new Date(Math.max(Date.now(), lastStamp)).toISOString();
+        const { claimSet, projection } = readinessReport({ records, generatedAt });
         return { status: 'ok', value: { records: records.length, claimSet, projection } };
       } catch (error) { return failure('REPORT_FAILED', error.message); }
     },

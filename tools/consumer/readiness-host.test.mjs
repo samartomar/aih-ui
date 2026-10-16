@@ -225,6 +225,44 @@ test('the headless projection carries the same meaning as the host API', async (
   assert.deepEqual(JSON.parse(JSON.stringify(ok(await host.check(request)))), { projection, guidance });
 });
 
+test('the host journal reports verified repairs end to end through the adapter and Core', async t => {
+  const third = makeFixture();
+  enter(third);
+  const reportHost = createReadinessHost({ repairs: [onlineRepair] });
+  const empty = ok(await reportHost.report());
+  assert.equal(empty.records, 0);
+  assert.equal(empty.projection.calculations.find(entry => entry.id === 'verified-repairs').count, 0);
+  const { projection: before } = ok(await reportHost.check({ targets: ['jq', 'npm'], network: 'declared' }));
+  const value = ok(await reportHost.prepareRepair({ key: 'npm-ca-online' }));
+  const { outcome } = ok(await reportHost.applyRepair({ sessionId: value.sessionId, reviewDigest: value.reviewDigest, approved: true }));
+  // What Core itself said about each npm condition, before and after the applied repair.
+  const stateBefore = new Map(before.items.filter(item => item.target === 'npm').map(item => [item.id, item.state]));
+  const stateAfter = new Map((outcome.condition?.items ?? []).map(item => [item.id, item.state]));
+  const expected = [...stateBefore].filter(([id, state]) => state === 'failed' && stateAfter.get(id) === 'verified').map(([id]) => id);
+
+  const report = ok(await reportHost.report());
+  const records = reportHost.records();
+  assert.deepEqual([report.records, records.map(record => record.kind)], [2, ['machine-check', 'repair']]);
+  const repairs = report.projection.calculations.find(entry => entry.id === 'verified-repairs');
+  assert.equal(repairs.status, 'available');
+  assert.deepEqual(repairs.attempts.filter(attempt => attempt.counted).map(attempt => attempt.condition.replace(/^condition:/, '')).sort(), [...expected].sort());
+  assert.equal(repairs.count, expected.length, JSON.stringify(repairs.attempts));
+  for (const attempt of repairs.attempts) {
+    const id = attempt.condition.replace(/^condition:/, '');
+    const reason = stateBefore.get(id) === 'verified' ? 'already-healthy' : attempt.counted ? 'verified' : attempt.reason;
+    assert.equal(attempt.reason, reason, `${id}: before ${stateBefore.get(id)}, after ${stateAfter.get(id)}`);
+    assert.equal(attempt.operation, 'node-npm-ca');
+  }
+  const [machineRecord, repairRecord] = records;
+  const claimsOf = id => report.claimSet.claims.filter(claim => claim.sources.some(source => source.id === id));
+  assert.ok(claimsOf(machineRecord.id).every(claim => claim.sources.some(source => source.sha256 === machineRecord.sha256)), 'exact journal identity');
+  assert.ok(claimsOf(repairRecord.id).length > 0 && claimsOf(repairRecord.repair.run.id).length > 0, 'the repair record and the Core run are sources');
+  const usage = report.claimSet.claims.find(claim => claim.measure === 'observed-usage');
+  assert.equal(usage.kind, 'unknown');
+  assert.ok(usage.capturedAt >= repairRecord.capturedAt, 'stamped by the host clock, not before the journal');
+  if (!expected.length) t.diagnostic(`no npm condition failed before the repair in this environment; the count is ${repairs.count} by Core's own states`);
+});
+
 test('the owner configuration was not touched', () => {
   assert.equal(stamp(realNpmrc), realNpmrcBefore);
 });

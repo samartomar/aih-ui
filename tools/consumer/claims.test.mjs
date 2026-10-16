@@ -161,14 +161,48 @@ test('an already-healthy condition and an unknown-cause recovery are not counted
 
 test('an applied repair with no passing recheck is applied-unverified, ranks an urgent review and is not counted', () => {
   const w = world();
-  const before = w.machine([tls('failed')]);
+  const before = w.machine([tls('failed'), check('jq/version', 'jq', 'failed')]);
   const unchecked = w.repair({ before, after: null });
   const failedAfter = w.repair({ before, after: [tls('failed')], repairId: 'other' });
   const { projection } = readinessReport({ records: [before, unchecked, failedAfter] });
   assert.equal(repairCount(projection).count, 0);
   assert.deepEqual(repairCount(projection).attempts.map(entry => entry.reason).sort(), ['applied-unverified', 'repair-not-verified']);
   assert.equal(projection.actions.filter(action => action.category === 'urgent-review').length, 2);
-  assert.ok(projection.actions.findIndex(action => action.category === 'blocker') < projection.actions.findIndex(action => action.category === 'urgent-review'));
+  const blocker = projection.actions.findIndex(action => action.category === 'blocker');
+  assert.ok(blocker >= 0 && blocker < projection.actions.findIndex(action => action.category === 'urgent-review'));
+});
+
+test('a repair rechecked a target after the latest machine check: its failure is recheck-needed, not a blocker', () => {
+  const w = world();
+  const before = w.machine([tls('failed'), check('jq/version', 'jq', 'failed')]);
+  const repaired = w.repair({ before, after: [tls('passed')] });
+  const { projection } = readinessReport({ records: [before, repaired] });
+  const fromBefore = target => projection.claims.filter(claim => claim.sources.some(source => source.id === before.id) && claim.subject.id === target);
+  assert.ok(fromBefore('npm').length > 0);
+  for (const claim of fromBefore('npm')) {
+    assert.deepEqual([claim.applicability.state, claim.applicability.reason], ['recheck-needed', 'A later repair recheck covered this target; run the machine check again.']);
+  }
+  for (const claim of fromBefore('jq')) assert.deepEqual([claim.applicability.state, claim.applicability.reason], ['current', 'This is the latest machine check.']);
+  const blockers = projection.actions.filter(action => action.category === 'blocker');
+  assert.deepEqual(blockers.map(action => action.subjects[0].id), ['jq'], 'the untouched failed check stays a current blocker');
+  const stale = projection.actions.filter(action => action.subjects.some(subject => subject.id === 'npm') && action.category === 'important-unknown');
+  assert.equal(stale.length, 1, 'one action per rechecked target');
+  assert.match(stale[0].reason, /run the machine check again/);
+  assert.deepEqual(stale[0].route, { kind: 'guidance', id: 'npm/run-the-machine-check-again' });
+  assert.equal(projection.actions.some(action => action.category === 'blocker' && action.subjects.some(subject => subject.id === 'npm')), false);
+  assert.match(reportText(projection), /Freshness: Recheck needed — A later repair recheck covered this target; run the machine check again\./);
+  assert.equal(repairCount(projection).count, 1, 'the repair is still the one verified repair');
+});
+
+test('a machine check taken after the repair makes its failures current blockers again', () => {
+  const w = world();
+  const before = w.machine([tls('failed'), check('jq/version', 'jq', 'failed')]);
+  const repaired = w.repair({ before, after: [tls('failed')] });
+  const later = w.machine([tls('failed'), check('jq/version', 'jq', 'failed')]);
+  const { projection } = readinessReport({ records: [before, repaired, later] });
+  assert.deepEqual(projection.actions.filter(action => action.category === 'blocker').map(action => action.subjects[0].id).sort(), ['jq', 'npm']);
+  assert.ok(projection.claims.filter(claim => claim.sources.some(source => source.id === later.id)).every(claim => claim.applicability.state === 'current'));
+  assert.equal(projection.actions.some(action => /run the machine check again/.test(action.reason)), false);
 });
 
 test('a repair with no earlier machine check has an unknown precondition and an unapplied operation is not a repair claim', () => {

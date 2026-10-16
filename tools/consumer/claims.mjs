@@ -50,6 +50,9 @@ export function readinessClaimSet({ records = [], scanReports = [], estimates = 
   const machines = ordered.filter(record => record.kind === 'machine-check');
   const repairs = ordered.filter(record => record.kind === 'repair');
   const latest = machines.at(-1) ?? null;
+  // A repair taken after the latest machine check rechecked its targets: that check no longer describes them.
+  const rechecked = new Set(latest ? repairs.filter(record => instant(record.capturedAt) > instant(latest.capturedAt))
+    .flatMap(record => record.repair?.targets ?? []) : []);
   const claims = new Map();
   const add = claim => { const key = `${claim.id}\u0000${claim.revision}`; if (!claims.has(key)) claims.set(key, claim); return claim; };
   const recordSource = record => ({ id: record.id, schema: READINESS_RECORD_SCHEMA, sha256: record.sha256 });
@@ -62,9 +65,11 @@ export function readinessClaimSet({ records = [], scanReports = [], estimates = 
   // Machine checks: a configuration-check claim and a separate condition claim per Core check item.
   const byMachine = new Map();
   for (const record of machines) {
-    const applicability = record === latest ? current('This is the latest machine check.') : stale('A later machine check exists.');
+    const base = record === latest ? current('This is the latest machine check.') : stale('A later machine check exists.');
     const found = [];
     for (const item of record.check?.items ?? []) {
+      const applicability = record === latest && rechecked.has(item.target)
+        ? stale('A later repair recheck covered this target; run the machine check again.') : base;
       const loading = item.kind === 'observation';
       const checkClaim = machineClaim(record, { id: `${record.id}/check/${item.id}`, observation: `${record.id}/${item.id}/check`, role: 'check', item,
         measure: 'configuration-check', applicability: applicability() });
@@ -169,12 +174,18 @@ export function readinessClaimSet({ records = [], scanReports = [], estimates = 
   const guidance = (name, reason) => ({ kind: 'guidance', id: `${name}/${reason}` });
   for (const entry of latest ? byMachine.get(latest) : []) {
     const { item } = entry, evidence = [ref(entry.check)];
+    if (rechecked.has(item.target)) continue; // reported once per target below
     if (item.outcome === 'failed') actions.push({ id: `blocker/${latest.id}/${item.id}`, category: 'blocker', subjects: [target(item.target)], evidence,
       reason: `The check ${item.id} failed on ${item.target} (${item.reason}).`, prerequisites: [], route: guidance(item.target, item.reason) });
     else if (item.outcome !== 'passed') actions.push({ id: `important-unknown/${latest.id}/${item.id}`, category: 'important-unknown', subjects: [target(item.target)], evidence,
       reason: item.kind === 'observation' ? `Loading of ${item.target} was observed but not verified.` : `The check ${item.id} on ${item.target} could not be confirmed (${item.reason}).`,
       prerequisites: [], route: guidance(item.target, item.reason) });
   }
+  for (const name of latest ? [...rechecked].filter(id => byMachine.get(latest).some(entry => entry.item.target === id)) : [])
+    actions.push({ id: `important-unknown/${latest.id}/${name}/recheck`, category: 'important-unknown', subjects: [target(name)],
+      evidence: byMachine.get(latest).filter(entry => entry.item.target === name).map(entry => ref(entry.check)),
+      reason: `A repair rechecked ${name} after the latest machine check, so that check no longer describes it; run the machine check again.`,
+      prerequisites: [], route: guidance(name, 'run-the-machine-check-again') });
   if (!usage.length) actions.push({ id: 'important-unknown/observed-usage', category: 'important-unknown', subjects: [{ kind: 'workbench', id: 'client-usage' }],
     evidence: [{ id: 'observed-usage/unavailable', revision: '1' }], reason: 'No client usage was observed, so usage is unknown rather than zero.',
     prerequisites: [], route: guidance('workbench', 'usage-unavailable') });

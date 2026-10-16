@@ -15,6 +15,7 @@ The Policy Workbench user interface for AIH, built as an independent application
 - `prototype/` is retained as a separate design reference. The running page does not import it.
 - Local onboarding preferences (experience, organization context, requested assistance and explicit AI clients). These are UI settings, not policy artifacts or enterprise authorization.
 - The machine-readiness check and host-configured npm repair: Core inspection and repair results projected as failed, unknown, applied, configured or verified, with no project, saved intent or policy. See [machine readiness](docs/readiness.md).
+- The report page: the readiness records as Core-normalized claims, with the configuration-check score, verified repairs, ranked actions and context series. See [report](docs/report.md).
 
 ## What it must never contain
 
