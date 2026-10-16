@@ -25,6 +25,10 @@ for (const op of ['parseEvidence', 'prepare', 'consume', 'fixture']) {
 const targets = callService(consumerDir, { op: 'coreTargets' });
 const summary = { packages: await Promise.all(packages.map(async item => ({ ...item, packageName: `@aihq/${item.name}`, version: JSON.parse(await readFile(join(consumerDir, `node_modules/@aihq/${item.name}/package.json`), 'utf8')).version }))),
   coreTargets: targets.ok ? { state: 'published', source: '@aihq/core SUPPORTED_CLIS', targets: targets.targets } : { state: 'unavailable', reason: targets.error } };
+// Host-configured maintenance source for the demonstration journey; it publishes no newer revision until that journey says so.
+const maintenanceSource = join(consumerDir, 'maintenance-source.json');
+await writeFile(maintenanceSource, JSON.stringify({ revisions: ['current'] }));
+process.env.AIH_MAINTENANCE_SOURCE = maintenanceSource;
 const started = await createWorkbench({ consumerDir, runDir, summary, settingsPath: join(consumerDir, 'prototype-settings.json') });
 summary.entryCount = started.catalog.items.length; await writeFile(join(runDir, 'summary.json'), JSON.stringify(summary));
 const address = await listen(started.server, 0), origin = `http://127.0.0.1:${address.port}`;
@@ -35,7 +39,9 @@ try {
   await runIntegratedBrowser({ origin, output: join(consumerDir, 'prototype-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
   const { runUnresolvedDraftBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/unresolved-draft-browser.mjs')));
   await runUnresolvedDraftBrowser({ origin, output: join(consumerDir, 'unresolved-draft-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
-} finally { await new Promise(resolve => started.server.close(resolve)); }
+  const { runMaintenanceBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/maintenance-browser.mjs')));
+  await runMaintenanceBrowser({ origin, output: join(consumerDir, 'maintenance-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, sourcePath: maintenanceSource });
+} finally { delete process.env.AIH_MAINTENANCE_SOURCE; await new Promise(resolve => started.server.close(resolve)); }
 
 // The normal application's startup must refuse an absent required family,
 // before it can serve a deceptively incomplete inventory. Only this isolated
