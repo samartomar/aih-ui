@@ -7,7 +7,8 @@ import { readFile, stat } from 'node:fs/promises';
 // as newer revisions of the same `notes` input. Read at each check; anything unreadable is offline (null).
 // `newer` is the `updated` content one version later: a second revision of the same package and item. `additional`
 // is a different package and item, so it is offered as its own content, never as a revision of the review note.
-const MAINTENANCE_SOURCE_BYTES = 4096, MAINTENANCE_REVISIONS = ['current', 'updated', 'newer', 'additional'];
+// `expanded` is the same package one minor version later with two new notes, one relevant to a tests goal and one not.
+const MAINTENANCE_SOURCE_BYTES = 4096, MAINTENANCE_REVISIONS = ['current', 'updated', 'newer', 'additional', 'expanded'];
 async function fileMaintenanceSource(consumerDir, path) {
   const load = name => import(pathToFileURL(join(consumerDir, 'consumer', name)).href);
   const [{ noteFixture }, { intakeDeclaration, digestBytes }] = await Promise.all([load('note-fixture.mjs'), load('intake.mjs')]);

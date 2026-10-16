@@ -56,7 +56,7 @@ try {
   const { runReviewIdentityBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/review-identity-browser.mjs')));
   await runReviewIdentityBrowser({ origin, output: join(consumerDir, 'review-identity-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
   const { runImprovementsBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/improvements-browser.mjs')));
-  await runImprovementsBrowser({ origin, output: join(consumerDir, 'improvements-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, settingsPath: join(consumerDir, 'prototype-settings.json') });
+  await runImprovementsBrowser({ origin, output: join(consumerDir, 'improvements-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, settingsPath: join(consumerDir, 'prototype-settings.json'), sourcePath: maintenanceSource });
   const { runWorkspaceBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/workspace-browser.mjs')));
   await runWorkspaceBrowser({ origin, output: join(consumerDir, 'workspace-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
   const { runBatchBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/batch-browser.mjs')));
