@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html class="dark" lang="en" data-mode="dark">
+<head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Report - aih Policy Workbench</title>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&amp;family=Geist+Mono:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles/tailwind.css">
+<link rel="stylesheet" href="/styles/tokens.css">
+<script src="/app/mode.js"></script>
+</head>
+<body class="bg-background font-body text-on-surface text-sm leading-normal antialiased">
+<header class="bg-wb-chrome border-b border-wb-border px-4 py-3 flex items-center justify-between">
+<h1 class="text-base font-semibold">Report</h1>
+<a class="text-primary hover:underline" href="readiness.html" id="back-link">Back to Check this machine</a>
+</header>
+<main class="max-w-4xl mx-auto p-4 space-y-4">
+<p class="text-on-surface-variant">The machine checks and repairs recorded by this Workbench since it started, as normalized claims. A repair counts only when the same check failed before it, the repair was applied, and the same check passed afterwards. Unknown is never shown as zero.</p>
+<div class="flex items-center gap-3">
+<button class="px-3 py-1.5 rounded border border-wb-control-border hover:bg-surface-container disabled:opacity-50" id="report-refresh" type="button">Refresh report</button>
+<span class="text-on-surface-variant" id="report-status" role="status" aria-live="polite">Loading the report.</span>
+</div>
+
+<section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="report-score-heading" id="report-score"></section>
+<section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="report-repairs-heading" id="report-repairs"></section>
+<section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="report-actions-heading" id="report-actions"></section>
+<section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="report-claims-heading" id="report-claims"></section>
+<section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="report-context-heading" id="report-context"></section>
+<section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="report-observations-heading" id="report-observations"></section>
+
+<section class="bg-surface-card border border-wb-border rounded p-4 space-y-2" aria-labelledby="report-text-heading">
+<h2 class="font-semibold" id="report-text-heading">Headless rendering (read-only)</h2>
+<label class="block text-on-surface-variant" for="report-text">The same records and the same words as the panels above, as a headless caller prints them.</label>
+<textarea class="w-full h-64 bg-wb-input border border-wb-control-border rounded px-2 py-1 font-mono text-xs" id="report-text" readonly></textarea>
+</section>
+</main>
+<script type="module" src="/report.js"></script>
+</body>
+</html>

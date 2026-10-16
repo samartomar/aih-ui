@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { READINESS_STATES, projectInspection, projectRepairPreparation, projectRepairOutcome, readinessGuidance } from './readiness.mjs';
+import * as readiness from './readiness.mjs';
 
 // Core-shaped records: InspectResult, PreparationResult (serializable part) and RunResult.
 const options = { targets: { value: ['npm', 'jq'], origin: 'explicit' }, network: { value: 'declared', origin: 'default' },
@@ -146,4 +147,8 @@ test('guidance text is plain, failure-first and states that nothing was executed
   assert.ok(text.indexOf('jq/version') < text.indexOf('npm/version'));
   assert.match(text, /Install jq yourself\./);
   assert.doesNotMatch(text, /fixture-home/);
+});
+
+test('the readiness API exposes repair conditions through outcomes only', () => {
+  assert.equal(Object.hasOwn(readiness, 'projectRecheck'), false);
 });

@@ -47,10 +47,26 @@ const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
 const targetList = targets => (targets ?? []).join(', ') || 'none';
 // Which targets a scoped recheck left out, from the latest machine check.
+// Browser assets cannot import tools/consumer/readiness.mjs; keep target/state wording in sync with notRecheckedText, preserving channel-specific instructions.
 export function notRecheckedLine(projection) {
   if (!Array.isArray(projection?.notRechecked)) return 'Other targets were not re-checked; check this machine again before relying on it.';
   if (!projection.notRechecked.length) return 'Check this machine again to confirm machine readiness.';
   return `Not re-checked: ${projection.notRechecked.map(item => `${item.target} (${stateLabel(item.state).toLowerCase()} in the latest machine check)`).join(', ')}.`;
+}
+
+function countsText(projection) {
+  const counts = Object.fromEntries(summaryCounts(projection).map(item => [item.state, item.count]));
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const parts = [];
+  if (counts.failed) parts.push(`${counts.failed} failed`);
+  if (counts.unknown) parts.push(`${counts.unknown} unknown`);
+  if (counts.applied) parts.push(`${counts.applied} applied but not verified`);
+  if (counts.configured) parts.push(`${counts.configured} configured but not verified`);
+  const detail = parts.length ? `${parts.join(', ')}.` : 'no condition is verified.';
+  const checkDetail = projection.status !== 'complete'
+    ? `the check was ${projection.status ?? 'not finished'}: ${parts.length ? parts.join(', ') : 'not every condition could be confirmed'}.`
+    : total ? detail : 'nothing was checked.';
+  return { counts, total, detail, checkDetail };
 }
 
 // Machine readiness ("Ready") is stated only for a machine check that says ready. A repair or
@@ -61,23 +77,13 @@ export function overallLine(projection) {
   if (projection.kind === 'repair-recheck') {
     const scope = `Recheck of the repair's targets only (${targetList(projection.scope)})`;
     if (projection.scopeVerified === true) return `${scope}: every checked condition verified. This is not machine readiness. ${notRecheckedLine(projection)}`;
-    return `${scope}: not verified — ${overallLine({ ...projection, kind: 'machine-check' }).replace(/^Not ready — /, '')} ${notRecheckedLine(projection)}`;
+    return `${scope}: not verified — ${countsText(projection).checkDetail} ${notRecheckedLine(projection)}`;
   }
   if (projection.ready === true) return projection.kind === 'repair-outcome'
     ? `Repair verified — applied, verified and rechecked for ${targetList(projection.targets)}. This is not machine readiness.` : 'Ready — every condition was checked and verified.';
-  const counts = Object.fromEntries(summaryCounts(projection).map(item => [item.state, item.count]));
-  const total = Object.values(counts).reduce((a, b) => a + b, 0);
-  const parts = [];
-  if (counts.failed) parts.push(`${counts.failed} failed`);
-  if (counts.unknown) parts.push(`${counts.unknown} unknown`);
-  if (counts.applied) parts.push(`${counts.applied} applied but not verified`);
-  if (counts.configured) parts.push(`${counts.configured} configured but not verified`);
-  const listed = parts.length ? `Not ready — ${parts.join(', ')}.` : 'Not ready — no condition is verified.';
-  if (projection.kind === 'machine-check') {
-    // An incomplete check is never ready, but its rows keep their own states.
-    if (projection.status !== 'complete') return `Not ready — the check was ${projection.status ?? 'not finished'}: ${parts.length ? parts.join(', ') : 'not every condition could be confirmed'}.`;
-    return total ? listed : 'Not ready — nothing was checked.';
-  }
+  const { counts, total, detail, checkDetail } = countsText(projection);
+  const listed = `Not ready — ${detail}`;
+  if (projection.kind === 'machine-check') return `Not ready — ${checkDetail}`;
   if (projection.kind === 'repair-condition') {
     if (!total) return `Not ready — the repair could not be prepared (${projection.preparationStatus ?? 'unavailable'}).`;
     return counts.failed ? `Not ready — the repair would make ${plural(counts.failed, 'change')}; nothing changes until you approve.` : listed;

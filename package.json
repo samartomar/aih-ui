@@ -10,6 +10,7 @@
     "./execution-host": "./tools/consumer/host.mjs",
     "./readiness": "./tools/consumer/readiness.mjs",
     "./readiness-host": "./tools/consumer/readiness-host.mjs",
+    "./claims": "./tools/consumer/claims.mjs",
     "./schemas/saved-intent/3.0.0.json": "./schemas/saved-intent-3.0.0.json",
     "./schemas/review-decisions/1.0.0.json": "./schemas/review-decisions-1.0.0.json",
     "./journey": "./tools/consumer/journey.mjs",

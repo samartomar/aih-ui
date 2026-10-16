@@ -30,6 +30,40 @@ const onlineRepair = { key: 'npm-ca-online', id: 'node-npm-ca', targets: ['npm']
 const host = createReadinessHost({ repairs: [offlineRepair, onlineRepair] });
 const ok = result => { assert.equal(result.status, 'ok', JSON.stringify(result)); return result.value; };
 
+test('a machine check journals its identity and returns isolated copies', async () => {
+  const journalHost = createReadinessHost();
+  const { projection } = ok(await journalHost.check({ targets: ['jq'], network: 'off' }));
+  const records = journalHost.records();
+  assert.equal(records.length, 1);
+  const [record] = records;
+  assert.equal(record.schema, 'urn:aih-ui:readiness-record:1.0.0');
+  assert.equal(record.kind, 'machine-check');
+  assert.match(record.id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.match(record.sha256, /^[0-9a-f]{64}$/);
+  assert.equal(new Date(record.capturedAt).toISOString(), record.capturedAt);
+  assert.equal(record.core.name, '@aihq/core');
+  assert.equal(typeof record.core.version, 'string');
+  assert.deepEqual(record.check, projection);
+  const original = structuredClone(records);
+  record.check.items[0].state = 'verified';
+  record.core.version = 'changed';
+  records.pop();
+  projection.items[0].state = 'verified';
+  assert.deepEqual(journalHost.records(), original);
+});
+
+test('the journal retains only the latest 64 records with increasing instants', async () => {
+  const journalHost = createReadinessHost();
+  ok(await journalHost.check({ targets: ['jq'], network: 'off' }));
+  const firstId = journalHost.records()[0].id;
+  for (let index = 0; index < 64; index++) ok(await journalHost.check({ targets: ['jq'], network: 'off' }));
+  const records = journalHost.records();
+  assert.equal(records.length, 64);
+  assert.ok(records.every(record => record.id !== firstId));
+  assert.equal(new Set(records.map(record => record.id)).size, 64);
+  for (let index = 1; index < records.length; index++) assert.ok(records[index - 1].capturedAt < records[index].capturedAt);
+});
+
 test('a failing condition is listed first with guidance and is not ready', async () => {
   const { projection, guidance } = ok(await host.check({ targets: ['jq'], network: 'off' }));
   assert.equal(projection.items[0].id, 'jq/version');
@@ -81,6 +115,7 @@ test('configured repairs are listed without paths or inputs', () => {
 
 test('offline repair needs a live preparation, a matching digest and approval, and is applied, not verified', async () => {
   const before = ok(await host.check({ targets: ['jq', 'npm'], network: 'off' })).projection;
+  const beforeRecord = host.records().at(-1);
   const value = ok(await host.prepareRepair({ key: 'npm-ca-offline' }));
   assert.equal(typeof value.sessionId, 'string');
   assert.equal(typeof value.reviewDigest, 'string');
@@ -109,6 +144,20 @@ test('offline repair needs a live preparation, a matching digest and approval, a
   ok(overlapping);
   assert.deepEqual(settled, ['check', 'apply'], 'the overlapping check must finish while the repair is still running');
   const { outcome, recheck, machine, guidance } = ok(applied);
+  const record = host.records().at(-1);
+  assert.equal(record.schema, 'urn:aih-ui:readiness-record:1.0.0');
+  assert.equal(record.kind, 'repair');
+  assert.match(record.sha256, /^[0-9a-f]{64}$/);
+  assert.equal(record.repair.before, beforeRecord.id, 'the overlapping check must not replace the pre-apply identity');
+  assert.ok(beforeRecord.capturedAt < record.repair.appliedAt);
+  assert.ok(record.repair.appliedAt < record.repair.recheckedAt);
+  assert.equal(record.capturedAt, record.repair.recheckedAt);
+  assert.equal(new Date(record.capturedAt).toISOString(), record.capturedAt);
+  assert.equal(record.repair.repairId, offlineRepair.id);
+  assert.deepEqual(record.repair.targets, offlineRepair.targets);
+  assert.equal(typeof record.repair.run.id, 'string');
+  assert.equal(typeof record.repair.run.schema, 'string');
+  assert.deepEqual(record.repair.outcome, outcome);
   assert.deepEqual(machine, { ...before, beforeRepair: true });
   assert.deepEqual(recheck.notRechecked, [{ target: 'jq', state: 'failed' }]);
   assert.ok(outcome.operations.every(item => item.application === 'applied'), JSON.stringify(outcome.operations));
@@ -174,6 +223,50 @@ test('the headless projection carries the same meaning as the host API', async (
   assert.deepEqual(projection, headless);
   assert.equal(guidance, readinessGuidance([headless]));
   assert.deepEqual(JSON.parse(JSON.stringify(ok(await host.check(request)))), { projection, guidance });
+});
+
+test('the host journal reports verified repairs end to end through the adapter and Core', async t => {
+  const third = makeFixture();
+  enter(third);
+  const reportHost = createReadinessHost({ repairs: [onlineRepair] });
+  const empty = ok(await reportHost.report());
+  assert.equal(empty.records, 0);
+  assert.equal(empty.projection.calculations.find(entry => entry.id === 'verified-repairs').count, 0);
+  const { projection: before } = ok(await reportHost.check({ targets: ['jq', 'npm'], network: 'declared' }));
+  const value = ok(await reportHost.prepareRepair({ key: 'npm-ca-online' }));
+  const { outcome } = ok(await reportHost.applyRepair({ sessionId: value.sessionId, reviewDigest: value.reviewDigest, approved: true }));
+  // What Core itself said about each npm condition, before and after the applied repair.
+  const stateBefore = new Map(before.items.filter(item => item.target === 'npm').map(item => [item.id, item.state]));
+  const stateAfter = new Map((outcome.condition?.items ?? []).map(item => [item.id, item.state]));
+  const expected = [...stateBefore].filter(([id, state]) => state === 'failed' && stateAfter.get(id) === 'verified').map(([id]) => id);
+
+  const report = ok(await reportHost.report());
+  const records = reportHost.records();
+  assert.deepEqual([report.records, records.map(record => record.kind)], [2, ['machine-check', 'repair']]);
+  const repairs = report.projection.calculations.find(entry => entry.id === 'verified-repairs');
+  assert.equal(repairs.status, 'available');
+  assert.deepEqual(repairs.attempts.filter(attempt => attempt.counted).map(attempt => attempt.condition.replace(/^condition:/, '')).sort(), [...expected].sort());
+  assert.equal(repairs.count, expected.length, JSON.stringify(repairs.attempts));
+  assert.ok(outcome.operations.every(item => item.application === 'applied'), 'the repair was applied, so each attempt has an applied repair');
+  // The reason Core must give for each before/after pair of that condition, stated independently of the attempt.
+  const expectedReason = (was, now) => was === 'verified' ? 'already-healthy'
+    : was !== 'failed' ? 'unknown-precondition'
+      : now === 'verified' ? 'verified' : now === 'failed' ? 'repair-not-verified' : 'applied-unverified';
+  assert.ok(repairs.attempts.length > 0, 'the repair of npm has attempts');
+  for (const attempt of repairs.attempts) {
+    const id = attempt.condition.replace(/^condition:/, '');
+    assert.equal(attempt.reason, expectedReason(stateBefore.get(id), stateAfter.get(id)), `${id}: before ${stateBefore.get(id)}, after ${stateAfter.get(id)}`);
+    assert.equal(attempt.counted, attempt.reason === 'verified');
+    assert.equal(attempt.operation, 'node-npm-ca');
+  }
+  const [machineRecord, repairRecord] = records;
+  const claimsOf = id => report.claimSet.claims.filter(claim => claim.sources.some(source => source.id === id));
+  assert.ok(claimsOf(machineRecord.id).every(claim => claim.sources.some(source => source.sha256 === machineRecord.sha256)), 'exact journal identity');
+  assert.ok(claimsOf(repairRecord.id).length > 0 && claimsOf(repairRecord.repair.run.id).length > 0, 'the repair record and the Core run are sources');
+  const usage = report.claimSet.claims.find(claim => claim.measure === 'observed-usage');
+  assert.equal(usage.kind, 'unknown');
+  assert.ok(usage.capturedAt >= repairRecord.capturedAt, 'stamped by the host clock, not before the journal');
+  if (!expected.length) t.diagnostic(`no npm condition failed before the repair in this environment; the count is ${repairs.count} by Core's own states`);
 });
 
 test('the owner configuration was not touched', () => {
