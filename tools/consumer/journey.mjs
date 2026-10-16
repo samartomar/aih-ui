@@ -156,7 +156,7 @@ export async function readJourneyEnvelope(bytes) {
   const unlinked = unlinkedDismissal(envelope.records);
   if (unlinked >= 0) return refuse('INPUT_INVALID', `/records/${unlinked}/suggestion`, 'A dismissal needs the suggestion record, with the same id and revision, in the same envelope.', originalBytes);
   const trialAt = unlinkedTrial(envelope.records);
-  if (trialAt >= 0) return refuse('INPUT_INVALID', `/records/${trialAt}/suggestion`, 'A trial needs the suggestion record, with the same id and revision, in the same envelope.', originalBytes);
+  if (trialAt >= 0) return refuse('INPUT_INVALID', `/records/${trialAt}/suggestion`, 'A trial needs the suggestion record, with the same id, in the same envelope.', originalBytes);
   return ok({ envelope, savedIntentBytes, records: envelope.records, supported, originalBytes }, diagnostics);
 }
 // `records` are the known records to write; unknown optional records from `previous`
@@ -235,7 +235,7 @@ export async function writeJourneyEnvelope({ savedIntentBytes, records, previous
   const unlinked = unlinkedDismissal(written);
   if (unlinked >= 0) return refuse('INPUT_INVALID', `/records/${unlinked}/suggestion`, 'A dismissal needs the suggestion record, with the same id and revision, in the same list.');
   const trialAt = unlinkedTrial(written);
-  if (trialAt >= 0) return refuse('INPUT_INVALID', `/records/${trialAt}/suggestion`, 'A trial needs the suggestion record, with the same id and revision, in the same list.');
+  if (trialAt >= 0) return refuse('INPUT_INVALID', `/records/${trialAt}/suggestion`, 'A trial needs the suggestion record, with the same id, in the same list.');
   const preserved = (previous?.envelope.records ?? []).filter(record => !known(record.schema)).map(record => structuredClone(record));
   const all = [...written, ...preserved];
   if (new Set(all.map(record => record.id)).size !== all.length) return refuse('INPUT_INVALID', '/records', 'Record ids must be unique.');

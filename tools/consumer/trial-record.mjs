@@ -83,15 +83,18 @@ export function observationProblem(observation, checks) {
 const restorationShape = restoration => only(restoration, ['status', 'effects', 'recordedAt'], ['note']) && RESTORATION_STATUSES.includes(restoration.status)
   && list(restoration.effects, 16, effect => text(effect, 300)) && (restoration.note === undefined || text(restoration.note, 1000)) && isUtcTimestamp(restoration.recordedAt);
 export const restorationProblem = restoration => restorationShape(restoration) ? null : '';
+// The change a trial tests, copied from its suggestion at proposal (the suggestion's change without its content digests).
+const changeShape = change => only(change, ['kind', 'itemId', 'releaseSha256', 'itemSha256']) && change.kind === 'add-item' && typeof change.itemId === 'string' && itemIdPattern.test(change.itemId) && hash(change.releaseSha256) && hash(change.itemSha256);
 const rootRef = root => only(root, ['releaseSha256', 'itemId', 'scope']) && hash(root.releaseSha256) && typeof root.itemId === 'string' && itemIdPattern.test(root.itemId) && scopes.includes(root.scope);
 // JSON pointer (relative to the record) of the first violation of the closed trial shape, else null.
 export function trialProblem(record) {
-  if (!only(record, ['id', 'schema', 'required', 'suggestion', 'scope', 'baseline', 'task', 'quality', 'conditions', 'bounds', 'unknowns', 'state', 'proposedAt', 'observations'],
+  if (!only(record, ['id', 'schema', 'required', 'suggestion', 'change', 'scope', 'baseline', 'task', 'quality', 'conditions', 'bounds', 'unknowns', 'state', 'proposedAt', 'observations'],
     ['startedAt', 'decidedAt', 'evidence', 'narrower', 'reason', 'revises', 'revisedBy', 'adopted', 'restoration'])) return '';
   if (record.schema !== TRIAL_RECORD_SCHEMA) return '/schema';
   if (typeof record.id !== 'string' || !TRIAL_ID_PATTERN.test(record.id)) return '/id';
   if (record.required !== false) return '/required';
   if (!only(record.suggestion, ['id', 'revision']) || typeof record.suggestion.id !== 'string' || !suggestionIdPattern.test(record.suggestion.id) || !hash(record.suggestion.revision)) return '/suggestion';
+  if (!changeShape(record.change)) return '/change';
   if (!only(record.baseline, ['savedIntentSha256', 'draftSha256']) || !hash(record.baseline.savedIntentSha256) || !hash(record.baseline.draftSha256)) return '/baseline';
   const proposal = proposalProblem(record);
   if (proposal !== null) return proposal;
@@ -123,8 +126,9 @@ export async function trialDerivedProblem(record) {
   for (const [index, observation] of record.observations.entries()) if (observation.id !== await observationId(observation)) return `/observations/${index}/id`;
   return null;
 }
-// Index of the first trial in `records` with no suggestion record of the same id and revision beside it, else -1.
+// Index of the first trial in `records` with no suggestion record of the same id beside it, else -1. The trial records which revision it
+// was planned from and carries the change it tests, so a later revision of the suggestion does not unlink it.
 export function unlinkedTrial(records) {
-  const suggestions = new Map(records.filter(r => r?.schema === IMPROVEMENT_SUGGESTION_RECORD_SCHEMA).map(r => [r.id, r.revision]));
-  return records.findIndex(r => r?.schema === TRIAL_RECORD_SCHEMA && (!object(r.suggestion) || suggestions.get(r.suggestion.id) !== r.suggestion.revision));
+  const suggestions = new Set(records.filter(r => r?.schema === IMPROVEMENT_SUGGESTION_RECORD_SCHEMA).map(r => r.id));
+  return records.findIndex(r => r?.schema === TRIAL_RECORD_SCHEMA && (!object(r.suggestion) || !suggestions.has(r.suggestion.id)));
 }

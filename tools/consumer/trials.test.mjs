@@ -63,6 +63,13 @@ const outcome = (id, option, checkId, amount) => ({ type: 'observe', id, observa
 const overhead = (id, option, dimension, amount, unit, kind = 'measured', extra = {}) => ({ type: 'observe', id, observation: { option, target: { dimension }, kind, value: { amount, unit }, ...extra } });
 async function observeAll(s, bytes, id, operations) { for (const operation of operations) bytes = (await record(s, bytes, { ...operation, id })).envelopeBytes; return bytes; }
 const passAll = (s, bytes, id, option = 'trial') => observeAll(s, bytes, id, [outcome(id, option, 'catches-regression', 'passed'), outcome(id, option, 'stays-green', 'passed')]);
+// A Catalog change, faked: new content (so a new revision) and an item digest the inventories do not know, so anything that wrongly
+// read the suggestion instead of the trial's own change would select the wrong item.
+async function changedSuggestion(suggestion) {
+  const changed = { ...suggestion, change: { ...suggestion.change, itemSha256: 'c'.repeat(64), content: { ...suggestion.change.content, recipeSha256: 'e'.repeat(64) } } };
+  changed.revision = await suggestionRevision(changed);
+  return changed;
+}
 const trialOf = (envelope, id) => envelope.records.find(r => r.id === id);
 const draftIntent = envelope => envelope.records.find(r => r.schema === DRAFT_RECORD_SCHEMA).intent;
 async function resign(bytes, mutate) {
@@ -80,6 +87,8 @@ test('propose, start and keep: the quality is recorded first, the suggestion sit
   assert.equal(p.record.state, 'proposed'); assert.equal(p.record.schema, TRIAL_SCHEMA); assert.equal(p.record.required, false);
   assert.match(p.id, /^trial-[a-f0-9]{32}$/);
   assert.deepEqual(p.record.suggestion, { id: s.tdd.id, revision: s.tdd.revision });
+  const { content: _content, ...tested } = s.tdd.change;
+  assert.deepEqual(p.record.change, tested, 'the trial carries the change it tests, without the content digests of the suggestion');
   assert.deepEqual(p.record.observations, []); assert.equal('startedAt' in p.record, false);
   assert.equal(p.record.baseline.savedIntentSha256, p.envelope.savedIntent.sha256);
   assert.equal(p.record.baseline.draftSha256, await digestBytes(encode(stable(draftIntent(p.envelope)))));
@@ -442,14 +451,17 @@ test('the trial kind is registered, optional, and round-trips through the journe
   const written = valueOf(await writeJourneyEnvelope({ savedIntentBytes: read.savedIntentBytes, records: read.records, previous: read }));
   assert.deepEqual(written.envelope.records, read.records);
   assert.deepEqual(valueOf(await readJourneyEnvelope(written.envelopeBytes)).records, read.records);
-  // The suggestion record must sit beside the trial, with the same id and revision, on read and on write.
+  // The suggestion record with the same id must sit beside the trial, on read and on write.
   const missing = await resign(bytes, doc => { doc.records = doc.records.filter(r => r.schema !== IMPROVEMENT_SUGGESTION_SCHEMA); });
   const absent = await readJourneyEnvelope(missing);
   assert.equal(absent.status, 'refused'); assert.equal(absent.diagnostics[0].code, 'INPUT_INVALID'); assert.match(absent.diagnostics[0].path, /^\/records\/\d+\/suggestion$/);
   const writtenAlone = await writeJourneyEnvelope({ savedIntentBytes: read.savedIntentBytes, records: read.records.filter(r => r.schema !== IMPROVEMENT_SUGGESTION_SCHEMA) });
   assert.equal(writtenAlone.status, 'refused'); assert.match(writtenAlone.diagnostics[0].path, /^\/records\/\d+\/suggestion$/);
-  // A trial that names another revision of its suggestion (with an id honestly derived from it) is unlinked.
-  const relinked = structuredClone(read.records.find(r => r.id === go.id)); relinked.suggestion.revision = 'b'.repeat(64); relinked.id = await trialId(relinked);
+  // A trial that names another revision of the suggestion beside it is still linked (the revision records what was trialled); another suggestion id is not.
+  const older = structuredClone(read.records.find(r => r.id === go.id)); older.suggestion.revision = 'b'.repeat(64); older.id = await trialId(older);
+  const oldRevision = await resign(bytes, doc => { doc.records[doc.records.findIndex(r => r.id === go.id)] = older; });
+  assert.equal(valueOf(await readJourneyEnvelope(oldRevision)).records.some(r => r.id === older.id), true);
+  const relinked = structuredClone(older); relinked.suggestion.id = `suggestion-${'b'.repeat(32)}`; relinked.id = await trialId(relinked);
   const other = await resign(bytes, doc => { doc.records[doc.records.findIndex(r => r.id === go.id)] = relinked; });
   assert.match((await readJourneyEnvelope(other)).diagnostics[0].path, /^\/records\/\d+\/suggestion$/);
   // Ids derive from the record's own fields: a tampered trial or observation id is refused.
@@ -480,6 +492,10 @@ test('the closed trial shape refuses what the lifecycle cannot produce', async (
   assert.equal(problem(t => { t.observations[0].target = { check: 'not-defined' }; }), '/observations');
   assert.equal(problem(t => { t.observations.push(structuredClone(t.observations[0])); }), '/observations');
   assert.equal(problem(t => { t.quality.checks = []; }), '/quality/checks');
+  assert.equal(problem(t => { delete t.change; }), '', 'the change is part of the closed shape');
+  assert.equal(problem(t => { t.change.content = {}; }), '/change');
+  assert.equal(problem(t => { t.change.kind = 'remove-item'; }), '/change');
+  assert.equal(problem(t => { t.change.itemSha256 = 'nope'; }), '/change');
   assert.equal(problem(t => { t.bounds = [{ id: 'cap', label: 'Cap', unit: 'usd', value: 1, enforcement: { kind: 'enforced' } }]; }), '/bounds');
   assert.equal(problem(t => { t.proposedAt = '2026-13-01T00:00:00Z'; }), '/proposedAt');
   const decided = trialOf(valueOf(await readJourneyEnvelope((await record(s, bytes, { type: 'keep', id: go.id })).envelopeBytes)).envelope, go.id);
@@ -514,11 +530,44 @@ test('restoring a dismissed suggestion that a trial was planned from keeps the s
   // With no trial, restore still removes the suggestion record with the dismissal.
   const plain = valueOf(await recordImprovement({ envelopeBytes: dismissed.envelopeBytes, operation: { type: 'restore', id: s.tdd.id }, now: tick() }));
   assert.equal(plain.envelope.records.some(r => r.schema === IMPROVEMENT_SUGGESTION_SCHEMA), false);
-  // A new revision of the suggestion cannot replace the record while a trial or dismissal still names the old one.
-  const changed = { ...s.tdd, change: { ...s.tdd.change, content: { ...s.tdd.change.content, recipeSha256: 'e'.repeat(64) } } };
-  changed.revision = await suggestionRevision(changed);
+  // A dismissal binds the revision it dismissed, so a changed suggestion has to be shown again before a trial can be planned from it.
+  const changed = await changedSuggestion(s.tdd);
   const d = await refused(s, p.envelopeBytes, proposal(s, { suggestion: changed }));
-  assert.equal(d.code, 'TRIAL_SUGGESTION_CHANGED'); assert.equal(d.path, '/operation/suggestion');
+  assert.equal(d.code, 'TRIAL_SUGGESTION_CHANGED'); assert.equal(d.path, '/operation/suggestion'); assert.match(d.message, /Show the suggestion again first/);
+});
+
+test('a Catalog change that gives the suggestion a new revision locks nothing: a second trial can be planned, the old one keeps the change it tested, and a dismissal can name the new revision', async () => {
+  const s = await shared(), changed = await changedSuggestion(s.tdd);
+  assert.notEqual(changed.revision, s.tdd.revision);
+  const first = await started(s), second = await record(s, first.envelopeBytes, proposal(s, { suggestion: changed, task: 'Add tests after the Catalog changed.' }));
+  assert.equal(second.record.suggestion.revision, changed.revision); assert.equal(second.trials.length, 2);
+  const suggestionRecords = second.envelope.records.filter(r => r.schema === IMPROVEMENT_SUGGESTION_SCHEMA);
+  assert.deepEqual(suggestionRecords.map(r => [r.id, r.revision]), [[s.tdd.id, changed.revision]], 'one suggestion record, now at the new revision');
+  const before = trialOf(second.envelope, first.id);
+  assert.deepEqual(before.suggestion, { id: s.tdd.id, revision: s.tdd.revision }); assert.equal(before.change.itemSha256, s.tdd.change.itemSha256);
+  assert.equal(second.record.change.itemSha256, 'c'.repeat(64), 'the new trial carries the change of the new suggestion');
+  // Evaluation and measuring use the trial's own change, never the current suggestion record.
+  const read = valueOf(await readTrials({ envelopeBytes: second.envelopeBytes }));
+  assert.equal(read.trials.find(t => t.record.id === first.id).suggestion.revision, changed.revision);
+  const measured = await record(s, second.envelopeBytes, { type: 'measure-context', id: first.id });
+  assert.equal(trialOf(measured.envelope, first.id).observations.find(o => o.option === 'trial').kind, 'measured');
+  // Keeping the old trial selects the change it tested, not the changed suggestion's.
+  const kept = await record(s, measured.envelopeBytes, { type: 'keep', id: first.id });
+  assert.deepEqual(kept.record.adopted.root, { releaseSha256: s.tdd.change.releaseSha256, itemId: 'mattpocock.tdd', scope: 'project' });
+  const added = draftIntent(kept.envelope).roots.find(r => r.itemId === 'mattpocock.tdd');
+  assert.equal(added.itemSha256, s.tdd.change.itemSha256);
+  // Dismissing at the new revision while a trial still names the old one works, and the trial stays readable and linked.
+  const open = await proposed(s);
+  const dismissed = valueOf(await recordImprovement({ envelopeBytes: open.envelopeBytes, operation: { type: 'dismiss', suggestion: changed, reason: 'Not now.' }, now: tick() }));
+  assert.deepEqual(dismissed.envelope.records.filter(r => r.schema === IMPROVEMENT_SUGGESTION_SCHEMA).map(r => r.revision), [changed.revision]);
+  assert.equal(trialOf(dismissed.envelope, open.id).suggestion.revision, s.tdd.revision);
+  assert.equal(valueOf(await readTrials({ envelopeBytes: dismissed.envelopeBytes })).trials.length, 1);
+  // A trial of the revision the dismissal names is fine; the older revision is not, until the suggestion is shown again.
+  assert.equal((await record(s, dismissed.envelopeBytes, proposal(s, { suggestion: changed, task: 'Another task.' }))).trials.length, 2);
+  assert.equal((await refused(s, dismissed.envelopeBytes, proposal(s))).code, 'TRIAL_SUGGESTION_CHANGED');
+  // Restoring the dismissal keeps the suggestion record while any trial names its id.
+  const restored = valueOf(await recordImprovement({ envelopeBytes: dismissed.envelopeBytes, operation: { type: 'restore', id: s.tdd.id }, now: tick() }));
+  assert.equal(restored.envelope.records.filter(r => r.schema === IMPROVEMENT_SUGGESTION_SCHEMA).length, 1);
 });
 
 // ---- 10. Portable export -----------------------------------------------------------------------------------------------------------

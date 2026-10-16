@@ -7,7 +7,8 @@ const { proposeOperation, boundText, outcomeText, stateText, restorationText, ov
 const ok = value => ({ status: 'ok', value });
 const suggestion = { id: 'suggestion-one', revision: 'r', rulesVersion: '1', scope: 'project', change: { itemId: 'helper' }, triggers: [], references: [], facts: [], unknowns: [], label: 'Helper', prompt: 'private presentation' };
 const quality = { outcome: 'Correct result', checks: [{ id: 'check-1', text: 'Tests pass' }] };
-const record = { id: 'trial-one', scope: 'project', state: 'proposed', proposedAt: '2026-10-16T12:00:00Z', quality, bounds: [], unknowns: [] };
+const change = { kind: 'add-item', itemId: 'helper', releaseSha256: 'a'.repeat(64), itemSha256: 'b'.repeat(64) };
+const record = { id: 'trial-one', change, scope: 'project', state: 'proposed', proposedAt: '2026-10-16T12:00:00Z', quality, bounds: [], unknowns: [] };
 const evaluation = { outcome: 'inconclusive', quality: { options: { baseline: { state: 'unknown', passed: 0, failed: 0, unknown: 1 }, trial: { state: 'unknown', passed: 0, failed: 0, unknown: 1 } } }, overhead: [] };
 class Node {
   constructor(tag, cls, text = '') { Object.assign(this, { tag, className: cls, textContent: text, children: [], listeners: {}, dataset: {} }); }
@@ -29,7 +30,7 @@ function view(state = 'proposed', options = {}) {
 }
 test('exact bound, outcome, state and restoration wording', () => {
   const bound = { label: 'Time box', value: 2, unit: 'hours', enforcement: { kind: 'advisory' } };
-  assert.equal(boundText(bound), 'Time box: 2 hours — advisory, not enforced');
+  assert.equal(boundText(bound), 'Time box: 2 hours — advisory (not enforced)');
   assert.equal(boundText({ ...bound, enforcement: { kind: 'enforced', mechanism: { label: 'Timer' } } }), 'Time box: 2 hours — enforced by Timer');
   assert.equal(outcomeText(evaluation), "Inconclusive: the trial's quality is not known yet.");
   assert.equal(outcomeText({ outcome: 'no-qualifying-improvement' }), 'No demonstrated qualifying improvement: the trial did not meet the quality bar.');
@@ -43,10 +44,12 @@ test('exact bound, outcome, state and restoration wording', () => {
   for (const status of ['proposed', 'pending', 'completed', 'partial', 'unsupported']) assert.equal(restorationText({ restoration: { status } }), `Restoration: ${status} (recorded by you)`);
 });
 test('overhead uses Core results, including unavailable values and zero baseline', () => {
-  const row = { status: 'available', before: 10, after: 15, unit: 'min', absoluteDifference: 5, direction: 'increase', percentage: 50 };
-  assert.equal(overheadText(row), '10 → 15 min, increase of 5 min (50%)');
-  assert.equal(overheadText({ ...row, direction: 'decrease', percentage: -50 }), '10 → 15 min, decrease of 5 min (-50%)');
-  assert.equal(overheadText({ ...row, before: 0, percentage: null }), '0 → 15 min, increase of 5 min (no percentage: zero baseline)');
+  // Core's percentage is (before − after) / before × 100: negative for an increase.
+  const row = { status: 'available', before: 24009, after: 36362, unit: 'bytes', absoluteDifference: 12353, direction: 'increase', percentage: -51.451539006206005 };
+  assert.equal(overheadText(row), '24009 → 36362 bytes, increase of 12353 bytes (51.5% more than the baseline)');
+  assert.equal(overheadText({ ...row, before: 20, after: 15, absoluteDifference: 5, direction: 'decrease', percentage: 25 }), '20 → 15 bytes, decrease of 5 bytes (25% less than the baseline)');
+  assert.equal(overheadText({ ...row, after: 24009, absoluteDifference: 0, direction: 'unchanged', percentage: 0 }), '24009 → 24009 bytes, unchanged');
+  assert.equal(overheadText({ ...row, before: 0, after: 15, absoluteDifference: 15, percentage: null }), '0 → 15 bytes, increase of 15 bytes (no percentage: zero baseline)');
   assert.equal(overheadText({ status: 'not-observed' }), 'not observed');
   assert.equal(overheadText({ status: 'unavailable', reason: 'unsupported-unit', baseline: { value: { amount: 10, unit: 'min' } }, trial: { value: { amount: 15, unit: 'min' } } }), '10 min → 15 min — not compared by Core (unsupported-unit)');
 });
@@ -71,7 +74,7 @@ test('lifecycle controls follow state; stopped restoration leaves disposition un
   for (const state of ['proposed', 'started', 'kept', 'revised', 'stopped']) {
     const built = view(state); await built.open();
     for (const label of ['Start', 'Revise', 'Stop', 'Keep', 'Record observation', 'Measure configured context', 'Record restoration', 'Accept narrower outcome']) {
-      const expected = state === 'proposed' ? ['Start', 'Revise', 'Stop'] : state === 'started' ? ['Revise', 'Stop', 'Keep', 'Record observation', 'Measure configured context', 'Accept narrower outcome'] : state === 'stopped' ? ['Record restoration', 'Accept narrower outcome'] : [];
+      const expected = state === 'proposed' ? ['Start', 'Revise', 'Stop'] : state === 'started' ? ['Revise', 'Stop', 'Keep', 'Record observation', 'Measure configured context', 'Accept narrower outcome'] : state === 'stopped' ? ['Record restoration', 'Accept narrower outcome'] : state === 'kept' ? ['Accept narrower outcome'] : [];
       assert.equal(!!find(built, label), expected.includes(label), `${state}: ${label}`);
     }
     if (state === 'stopped') {
@@ -174,4 +177,28 @@ test('narrower acceptance and restoration effects remain separate from outcome a
   const built = view('stopped', { readTrials: async () => ok({ trials: [{ record: stopped, suggestion, evaluation }], mechanisms: [] }) }); await built.open();
   const text = textOf(built.node);
   for (const line of ['Accepted a narrower outcome: For examples only', 'Decision reason: Quality failed', 'One file remains', stateText(stopped), restorationText(stopped), outcomeText(evaluation, stopped)]) assert.ok(text.includes(line), line);
+});
+test('a kept trial without a qualifying outcome can still accept a narrower outcome; a qualifying one cannot', async () => {
+  const kept = (outcome, extra = {}) => view('kept', { readTrials: async () => ok({ trials: [{ record: { ...record, state: 'kept', evidence: { outcome }, ...extra }, suggestion, evaluation: { ...evaluation, outcome } }], mechanisms: [] }) });
+  const inconclusive = kept('inconclusive'); await inconclusive.open();
+  field(inconclusive, 'Narrower outcome qualification').value = 'Small modules only'; await find(inconclusive, 'Accept narrower outcome').listeners.click();
+  assert.deepEqual(inconclusive.calls[0], { type: 'accept-narrower', id: record.id, qualification: 'Small modules only' });
+  assert.ok(find(inconclusive, 'Accept narrower outcome'));
+  const failed = kept('no-qualifying-improvement'); await failed.open(); assert.ok(find(failed, 'Accept narrower outcome'));
+  const qualifying = kept('qualifying-improvement'); await qualifying.open(); assert.equal(find(qualifying, 'Accept narrower outcome'), undefined);
+});
+test('the card heading falls back to the trial change when the suggestion has no label', async () => {
+  const heading = async (shown, extra = {}) => { const built = view('proposed', { readTrials: async () => ok({ trials: [{ record: { ...record, ...extra }, suggestion: shown, evaluation }], mechanisms: [] }) }); await built.open(); return elements(built.node).find(n => n.tag === 'h4' && n.textContent !== 'Plan a trial').textContent; };
+  assert.equal(await heading({ ...suggestion, label: 'Helper skill' }), 'Helper skill');
+  assert.equal(await heading({ change: { itemId: 'other-current-item' } }), 'helper');
+  assert.equal(await heading(undefined), 'helper');
+});
+test('bounds are worded as the module words them, preferring the evaluation text', async () => {
+  const bounds = [{ id: 'time', label: 'Time box', unit: 'hours', value: 2, enforcement: { kind: 'advisory' } }, { id: 'spend', label: 'Spending', unit: 'USD', value: 5, enforcement: { kind: 'enforced', mechanism: { id: 'meter', label: 'Meter' } } }];
+  const withBounds = texts => view('proposed', { readTrials: async () => ok({ trials: [{ record: { ...record, bounds }, suggestion, evaluation: { ...evaluation, bounds: texts } }], mechanisms: [] }) });
+  const plain = withBounds(undefined); await plain.open();
+  assert.match(textOf(plain.node), /Time box: 2 hours — advisory \(not enforced\)/); assert.match(textOf(plain.node), /Spending: 5 USD — enforced by Meter/);
+  const worded = withBounds([{ ...bounds[0], text: 'Time box: 2 hours — advisory (not enforced)' }, { ...bounds[1], text: 'Spending: 5 USD — recorded as enforced by Meter, but that mechanism is not available here, so it is not a cap' }]); await worded.open();
+  assert.match(textOf(worded.node), /recorded as enforced by Meter, but that mechanism is not available here, so it is not a cap/);
+  assert.doesNotMatch(textOf(worded.node), /Spending: 5 USD — enforced by Meter/);
 });

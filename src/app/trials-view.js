@@ -3,7 +3,7 @@ const SUGGESTION_FIELDS = ['id', 'revision', 'rulesVersion', 'scope', 'change', 
 const PLAN_FIELDS = ['scope', 'task', 'quality', 'conditions', 'bounds', 'unknowns'];
 const pick = (value, fields) => Object.fromEntries(fields.filter(key => value[key] !== undefined).map(key => [key, value[key]]));
 export const proposeOperation = (suggestion, form) => ({ type: 'propose', suggestion: pick(suggestion, SUGGESTION_FIELDS), ...pick(form, PLAN_FIELDS) });
-export const boundText = bound => `${bound.label}: ${bound.value} ${bound.unit} — ${bound.enforcement?.kind === 'enforced' ? `enforced by ${bound.enforcement.mechanism.label}` : 'advisory, not enforced'}`;
+export const boundText = bound => `${bound.label}: ${bound.value} ${bound.unit} — ${bound.enforcement?.kind === 'enforced' ? `enforced by ${bound.enforcement.mechanism.label}` : 'advisory (not enforced)'}`;
 export function outcomeText(evaluation, record) {
   const outcome = record?.evidence?.outcome ?? evaluation?.outcome;
   return outcome === 'qualifying-improvement' ? 'The trial met the quality bar.' : outcome === 'no-qualifying-improvement' ? 'No demonstrated qualifying improvement: the trial did not meet the quality bar.' : "Inconclusive: the trial's quality is not known yet.";
@@ -18,10 +18,12 @@ const observedText = observation => observation?.value ? `${observation.value.am
 export function overheadText(row) {
   if (row.status === 'not-observed') return 'not observed';
   if (row.status !== 'available') return `${row.baseline ? observedText(row.baseline) : row.before === undefined ? 'not observed' : `${row.before} ${row.unit ?? ''}`} → ${row.trial ? observedText(row.trial) : row.after === undefined ? 'not observed' : `${row.after} ${row.unit ?? ''}`} — not compared by Core (${row.reason})`;
-  // Core owns comparison and percentage semantics, including the zero baseline.
-  return `${row.before} → ${row.after} ${row.unit}, ${row.direction} of ${row.absoluteDifference} ${row.unit} (${row.percentage === null ? 'no percentage: zero baseline' : `${row.percentage}%`})`;
+  // Core owns comparison and percentage semantics, including the zero baseline; its percentage is positive for a reduction,
+  // so the sign is put into words here rather than shown as a negative increase.
+  const share = row.percentage === null ? 'no percentage: zero baseline' : `${Math.round(Math.abs(row.percentage) * 10) / 10}% ${row.percentage < 0 ? 'more' : 'less'} than the baseline`;
+  return row.direction === 'unchanged' ? `${row.before} → ${row.after} ${row.unit}, unchanged` : `${row.before} → ${row.after} ${row.unit}, ${row.direction} of ${row.absoluteDifference} ${row.unit} (${share})`;
 }
-const DIMENSIONS = { setup: 'Setup', indexing: 'Indexing', 'runtime-context': 'Runtime/context (configured material size, not observed usage)', maintenance: 'Maintenance' };
+const DIMENSIONS = { setup: 'Setup', indexing: 'Indexing', 'runtime-context': 'Runtime/context (configured material size, not usage)', maintenance: 'Maintenance' };
 const RESTORATION = ['proposed', 'pending', 'completed', 'partial', 'unsupported'];
 const COST_UNKNOWN = 'Model or service spending: no cost source is connected, so it is unknown.';
 
@@ -36,10 +38,10 @@ export function createTrialsView({ client, el, button, showStatus }) {
   const choice = (label, action) => { const control = button(label, safe(action)); control.disabled = recording; return control; };
   function field(parent, label, value = '', options) {
     const wrap = el('label', 'block text-on-surface-variant', label);
-    const input = el(options ? 'select' : 'input', 'bg-wb-input border border-wb-border rounded p-1'); input.setAttribute('aria-label', label);
+    const input = el(options ? 'select' : 'input', 'bg-wb-input border border-wb-border rounded p-1 max-w-full text-[11px]'); input.setAttribute('aria-label', label);
     if (options) for (const [key, text] of options) { const option = el('option', '', text); option.value = key; input.append(option); }
     else input.type = 'text';
-    input.value = value; input.disabled = recording; wrap.append(input); parent.append(wrap); return input;
+    input.value = value; input.disabled = recording; input.field = wrap; wrap.append(input); parent.append(wrap); return input;
   }
   const lines = input => input.value.split('\n').map(text => text.trim()).filter(Boolean);
   function effectsField(parent, label, values = []) {
@@ -104,10 +106,11 @@ export function createTrialsView({ client, el, button, showStatus }) {
   }
   function trialCard({ record: trial, evaluation, suggestion }) {
     const card = el('div', 'p-2 border border-wb-border rounded space-y-1'); card.dataset.trialId = trial.id;
-    card.append(el('h4', 'font-medium', suggestion?.label ?? suggestion?.change?.itemId ?? trial.suggestion?.id), el('p', 'text-outline text-[11px]', `Scope: ${trial.scope}`), el('p', '', stateText(trial)), el('p', 'text-on-surface-variant', `Representative task: ${trial.task ?? ''}`), el('p', '', `Quality bar: ${trial.quality.outcome}`));
+    card.append(el('h4', 'font-medium', suggestion?.label ?? trial.change?.itemId ?? trial.suggestion?.id), el('p', 'text-outline text-[11px]', `Scope: ${trial.scope}`), el('p', '', stateText(trial)), el('p', 'text-on-surface-variant', `Representative task: ${trial.task ?? ''}`), el('p', '', `Quality bar: ${trial.quality.outcome}`));
     for (const check of trial.quality.checks) card.append(el('p', 'text-on-surface-variant', check.text));
     card.append(el('p', 'text-on-surface-variant', `Comparison conditions: ${trial.conditions ?? ''}`));
-    for (const bound of trial.bounds) card.append(el('p', 'text-on-surface-variant', boundText(bound)));
+    // The module words each bound (including a mechanism recorded as enforced but not available here), so its text is preferred.
+    for (const bound of trial.bounds) card.append(el('p', 'text-on-surface-variant', evaluation?.bounds?.find(row => row.id === bound.id)?.text ?? boundText(bound)));
     card.append(el('h5', 'font-medium', 'Unknown costs'));
     for (const unknown of trial.unknowns) card.append(el('p', 'text-outline text-[11px]', unknown));
     card.append(el('h5', 'font-medium', 'Quality'));
@@ -134,7 +137,11 @@ export function createTrialsView({ client, el, button, showStatus }) {
       const result = field(observation, 'Quality result', 'passed', [['passed', 'Passed'], ['failed', 'Failed']]);
       const unit = field(observation, 'Observation unit');
       const methodId = field(observation, 'Method id'), methodVersion = field(observation, 'Method version'), unknownReason = field(observation, 'Unknown reason');
-      const update = () => { const check = target.value.startsWith('check:'); numeric.hidden = unit.hidden = check || kind.value === 'unknown'; result.hidden = !check || kind.value === 'unknown'; methodId.hidden = methodVersion.hidden = kind.value !== 'estimated'; unknownReason.hidden = kind.value !== 'unknown'; };
+      // A field that does not apply is hidden with its label.
+      const show = (input, shown) => { input.hidden = !shown; if (input.field) input.field.hidden = !shown; };
+      const update = () => { const check = target.value.startsWith('check:'), unknown = kind.value === 'unknown';
+        for (const input of [numeric, unit]) show(input, !check && !unknown); show(result, check && !unknown);
+        for (const input of [methodId, methodVersion]) show(input, kind.value === 'estimated'); show(unknownReason, unknown); };
       target.addEventListener('change', update); kind.addEventListener('change', update); update();
       action('Record observation', 'observe', () => ({ observation: { option: option.value, target: target.value.startsWith('check:') ? { check: target.value.slice(6) } : { dimension: target.value }, kind: kind.value, ...(kind.value === 'unknown' ? { unknownReason: unknownReason.value.trim() } : { value: target.value.startsWith('check:') ? { amount: result.value, unit: 'outcome' } : { amount: Number(numeric.value), unit: unit.value.trim() }, ...(kind.value === 'estimated' ? { method: { id: methodId.value.trim(), version: methodVersion.value.trim() } } : {}) }) } }));
       action('Measure configured context', 'measure-context');
@@ -152,7 +159,7 @@ export function createTrialsView({ client, el, button, showStatus }) {
       const effects = effectsField(card, 'Restoration effects', trial.restoration?.effects);
       action('Record restoration', 'restoration', () => ({ status: restoration.value, effects: lines(effects) }));
     }
-    if (['started', 'stopped'].includes(trial.state) && (trial.evidence?.outcome ?? evaluation?.outcome) !== 'qualifying-improvement') {
+    if (['started', 'kept', 'stopped'].includes(trial.state) && (trial.evidence?.outcome ?? evaluation?.outcome) !== 'qualifying-improvement') {
       const qualification = field(card, 'Narrower outcome qualification');
       action('Accept narrower outcome', 'accept-narrower', () => ({ qualification: qualification.value.trim() }));
     }

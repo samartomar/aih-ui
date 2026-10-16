@@ -54,11 +54,11 @@ async function claimOf(record, observation, target) {
 }
 // Quality first: the outcome rests on the trial's own quality checks alone. Only then are the overhead observations put through Core's
 // context-change calculation, and each row copies Core's result; nothing here recomputes a difference or a percentage.
-export async function evaluateTrial(record, { suggestion, mechanisms } = {}) {
+export async function evaluateTrial(record, { mechanisms } = {}) {
   const options = { baseline: qualityOf(record, 'baseline'), trial: qualityOf(record, 'trial') };
   const quality = { defined: { outcome: record.quality.outcome, checks: record.quality.checks.map(check => ({ ...check })) }, options };
   const outcome = OUTCOMES[options.trial.state];
-  const target = suggestion?.change?.itemId ?? record.suggestion.id, claims = new Map();
+  const target = record.change.itemId, claims = new Map();
   for (const observation of record.observations) claims.set(`${observation.option}/${targetKey(observation.target)}`, await claimOf(record, observation, target));
   const calculations = TRIAL_DIMENSIONS.filter(dimension => claims.has(`baseline/${dimension}`) && claims.has(`trial/${dimension}`))
     .map(dimension => ({ id: `${record.id}/${dimension}`, method: 'context-change', version: '1.0.0', before: ref(claims.get(`baseline/${dimension}`)), after: ref(claims.get(`trial/${dimension}`)) }));
@@ -87,12 +87,12 @@ async function load(envelopeBytes) {
   if (!draft) return refuse('INPUT_INVALID', '/records', 'Envelope has no unresolved-draft record.', envelopeBytes);
   return { status: 'ok', value: { read: read.value, draft }, diagnostics: read.diagnostics };
 }
-// Each trial with the suggestion it was planned from and its evaluation, oldest proposal first.
+// Each trial with the suggestion record beside it (any revision; undefined only if the envelope was edited by hand) and its evaluation, oldest proposal first.
 async function present(records, mechanisms) {
   const suggestions = new Map(records.filter(isSuggestion).map(record => [record.id, record]));
   return Promise.all(records.filter(isTrial).sort(byProposed).map(async record => {
     const suggestion = suggestions.get(record.suggestion.id);
-    return { record: structuredClone(record), suggestion: structuredClone(suggestion), evaluation: await evaluateTrial(record, { suggestion, mechanisms }) };
+    return { record: structuredClone(record), suggestion: structuredClone(suggestion), evaluation: await evaluateTrial(record, { mechanisms }) };
   }));
 }
 // Read-only: nothing is written and nothing is changed. `mechanisms` are the enforcement mechanisms the host can apply.
@@ -104,14 +104,14 @@ export async function readTrials({ envelopeBytes, mechanisms = TRIAL_MECHANISMS_
 }
 // ---- Configured size -----------------------------------------------------------------------------------------------------
 const size = descriptors => descriptors.reduce((total, descriptor) => total + descriptor.byteLength, 0);
-// Configured material size, never observed usage: the recipe and materials of every pinned item, and what the suggested item adds
+// Configured material size, never observed usage: the recipe and materials of every pinned item, and what the tested item adds
 // (itself and what it requires, unless already pinned). A size that cannot be known is unknown with its reason.
-function configuredSize({ draft, suggestion, inventories }) {
+function configuredSize({ draft, change, inventories }) {
   const pins = draft.intent.pins, pinned = new Set(pins.map(pin => `${pin.releaseSha256}/${pin.itemId}`));
   const baseline = pins.reduce((total, pin) => total + pin.recipe.byteLength + size(pin.materials), 0);
-  const entry = Array.isArray(inventories) ? inventories.find(candidate => candidate.release?.sha256 === suggestion.change.releaseSha256) : undefined;
+  const entry = Array.isArray(inventories) ? inventories.find(candidate => candidate.release?.sha256 === change.releaseSha256) : undefined;
   if (!entry) return { baseline, unknown: 'The suggested item is not in the supplied inventories, so its configured size is unknown.' };
-  const items = new Map(entry.release.items.map(item => [item.id, item])), added = [], seen = new Set(), queue = [suggestion.change.itemId];
+  const items = new Map(entry.release.items.map(item => [item.id, item])), added = [], seen = new Set(), queue = [change.itemId];
   while (queue.length) {
     const id = queue.shift();
     if (seen.has(id)) continue;
@@ -169,14 +169,15 @@ export async function recordTrial({ envelopeBytes, operation, inventories, mecha
     }
     return { fields: { ...normal, bounds } };
   };
-  const scopeOffered = (suggestion, scope, path) => {
-    const entry = Array.isArray(inventories) ? inventories.find(candidate => candidate.release?.sha256 === suggestion.change.releaseSha256) : undefined;
-    const item = entry?.release?.items?.find(candidate => candidate.id === suggestion.change.itemId);
-    return item && !item.scopes.includes(scope) ? fail(path, `${suggestion.change.itemId} is not offered at the ${scope} scope.`) : null;
+  const scopeOffered = (change, scope, path) => {
+    const entry = Array.isArray(inventories) ? inventories.find(candidate => candidate.release?.sha256 === change.releaseSha256) : undefined;
+    const item = entry?.release?.items?.find(candidate => candidate.id === change.itemId);
+    return item && !item.scopes.includes(scope) ? fail(path, `${change.itemId} is not offered at the ${scope} scope.`) : null;
   };
   const baselineOf = async () => ({ savedIntentSha256: read.envelope.savedIntent.sha256, draftSha256: await digest(draft.intent) });
-  const newTrial = async (suggestion, fields, extra = {}) => {
-    const trial = { id: '', schema: TRIAL_RECORD_SCHEMA, required: false, suggestion: { id: suggestion.id, revision: suggestion.revision }, scope: fields.scope, baseline: await baselineOf(),
+  // The trial records the suggestion revision it was planned from and carries the change it tests, so it never reads the current suggestion again.
+  const newTrial = async (suggestion, change, fields, extra = {}) => {
+    const trial = { id: '', schema: TRIAL_RECORD_SCHEMA, required: false, suggestion: { id: suggestion.id, revision: suggestion.revision }, change: { ...change }, scope: fields.scope, baseline: await baselineOf(),
       task: fields.task, quality: fields.quality, conditions: fields.conditions, bounds: fields.bounds, unknowns: fields.unknowns, state: 'proposed', proposedAt: now, observations: [], ...extra };
     trial.id = await trialId(trial);
     return trial;
@@ -192,7 +193,6 @@ export async function recordTrial({ envelopeBytes, operation, inventories, mecha
     const { envelope, envelopeBytes: bytes } = written.value;
     return { status: 'ok', diagnostics: [], value: { envelopeBytes: bytes, envelope, projection: projectJourneyEnvelope(envelope), record: structuredClone(next.at(-1)), trials: await present(envelope.records, mechanisms), ...extra } };
   };
-  const suggestionOf = trial => suggestions.find(record => record.id === trial.suggestion.id);
   const withObservations = async (trial, additions) => {
     const kept = trial.observations.filter(o => !additions.some(added => added.option === o.option && targetKey(added.target) === targetKey(o.target)));
     return { ...trial, observations: [...kept, ...await Promise.all(additions.map(async added => ({ ...added, id: await observationId(added), source: added.source ?? 'person', recordedAt: now })))] };
@@ -207,12 +207,14 @@ export async function recordTrial({ envelopeBytes, operation, inventories, mecha
     if (problem !== null) return fail(`/operation/suggestion${problem}`, 'Supply a valid improvement suggestion.');
     const checked = proposed(operation, '/operation');
     if (checked.refused) return checked.refused;
-    const outside = scopeOffered(saved, checked.fields.scope, '/operation/scope');
+    const { content: _content, ...change } = saved.change;
+    const outside = scopeOffered(change, checked.fields.scope, '/operation/scope');
     if (outside) return outside;
-    // One suggestion record per suggestion id, and everything that refers to it names its revision.
-    if ([...trials, ...dismissals].some(other => other.suggestion.id === saved.id && other.suggestion.revision !== saved.revision))
-      return fail('/operation/suggestion', 'An earlier trial or dismissal still refers to a different revision of this suggestion. Finish that first.', 'TRIAL_SUGGESTION_CHANGED');
-    const trial = await newTrial(saved, checked.fields);
+    // One suggestion record per suggestion id. Trials keep their own change, so they may name an older revision; a dismissal binds the
+    // revision it dismissed, so a changed suggestion has to be shown again first.
+    if (dismissals.some(other => other.suggestion.id === saved.id && other.suggestion.revision !== saved.revision))
+      return fail('/operation/suggestion', 'A dismissal still refers to a different revision of this suggestion. Show the suggestion again first, then plan the trial.', 'TRIAL_SUGGESTION_CHANGED');
+    const trial = await newTrial(saved, change, checked.fields);
     if (trials.some(other => other.id === trial.id)) return fail('/operation', 'That trial is already planned.');
     return settle([trial], { suggestions: [...suggestions.filter(record => record.id !== saved.id), saved] });
   }
@@ -233,7 +235,7 @@ export async function recordTrial({ envelopeBytes, operation, inventories, mecha
       if (problem !== null) return fail(`/operation/observation${problem}`, 'Supply a valid observation for a quality check or an overhead dimension.');
       additions = [{ ...observation, source: 'person' }];
     } else {
-      const measured = configuredSize({ draft, suggestion: suggestionOf(trial), inventories });
+      const measured = configuredSize({ draft, change: trial.change, inventories });
       const side = (option, amount, reason) => ({ option, target: { dimension: 'runtime-context' }, source: 'host', ...(amount !== undefined ? { kind: 'measured', value: { amount, unit: 'bytes' } } : { kind: 'unknown', unknownReason: reason }) });
       additions = [side('baseline', measured.baseline), side('trial', measured.trial, measured.unknown)];
     }
@@ -242,9 +244,9 @@ export async function recordTrial({ envelopeBytes, operation, inventories, mecha
   }
   if (type === 'keep') {
     if (!stateIs(trial, 'started')) return invalid(`Only a started trial can be kept; this one is ${trial.state}.`);
-    const suggestion = suggestionOf(trial), root = { releaseSha256: suggestion.change.releaseSha256, itemId: suggestion.change.itemId, scope: trial.scope };
+    const { change } = trial, root = { releaseSha256: change.releaseSha256, itemId: change.itemId, scope: trial.scope };
     // The ordinary draft edit adds the one suggested item at the chosen scope first; if it refuses, nothing changes.
-    const edited = await editDraft({ envelopeBytes, inventories, operation: { type: 'select', root: { ...root, itemSha256: suggestion.change.itemSha256 } } });
+    const edited = await editDraft({ envelopeBytes, inventories, operation: { type: 'select', root: { ...root, itemSha256: change.itemSha256 } } });
     if (edited.status !== 'ok') return { ...edited, originalBytes: envelopeBytes.slice() };
     const reread = await load(edited.value.envelopeBytes);
     if (reread.status !== 'ok') return { ...reread, originalBytes: envelopeBytes.slice() };
@@ -255,9 +257,9 @@ export async function recordTrial({ envelopeBytes, operation, inventories, mecha
     if (!stateIs(trial, 'proposed', 'started')) return invalid(`Only a proposed or started trial can be revised; this one is ${trial.state}.`);
     const checked = proposed(operation.proposal, '/operation/proposal');
     if (checked.refused) return checked.refused;
-    const suggestion = suggestionOf(trial), outside = scopeOffered(suggestion, checked.fields.scope, '/operation/proposal/scope');
+    const outside = scopeOffered(trial.change, checked.fields.scope, '/operation/proposal/scope');
     if (outside) return outside;
-    const next = await newTrial(suggestion, checked.fields, { revises: trial.id });
+    const next = await newTrial(trial.suggestion, trial.change, checked.fields, { revises: trial.id });
     if (trials.some(other => other.id === next.id)) return fail('/operation', 'That trial is already planned.');
     const revised = await decide(trial, 'revised', { revisedBy: next.id });
     return settle([revised, next], { extra: { revised: structuredClone(revised) } });

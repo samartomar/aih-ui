@@ -8,6 +8,7 @@
     "schema",
     "required",
     "suggestion",
+    "change",
     "scope",
     "baseline",
     "task",
@@ -43,6 +44,33 @@
           "pattern": "^suggestion-[a-f0-9]{32}$"
         },
         "revision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "itemId",
+        "releaseSha256",
+        "itemSha256"
+      ],
+      "properties": {
+        "kind": {
+          "const": "add-item"
+        },
+        "itemId": {
+          "type": "string",
+          "pattern": "^[\\w.-]{1,180}$"
+        },
+        "releaseSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "itemSha256": {
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
         }
