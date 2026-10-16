@@ -5,7 +5,7 @@ import { checkIntentShape, rootKey, pinKey } from './intent-shape.mjs';
 import { migrateIntent } from './migrate-intent.mjs';
 import { inspectReviewEvidence, compareReviewBindings, describeReviewJudgments, summarizeReviewJudgments } from './review-bindings.mjs';
 import { checkReview } from './intent-shape.mjs';
-import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_SCHEMAS } from './journey.mjs';
+import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_KINDS } from './journey.mjs';
 export { inspectReviewEvidence, compareReviewBindings, describeReviewJudgments, summarizeReviewJudgments } from './review-bindings.mjs';
 export const AUTHORING_SCHEMA = 'urn:aihq:workbench:saved-intent:3.0.0';
 export const REVIEW_SCHEMA = 'urn:aihq:workbench:review-decisions:1.0.0';
@@ -686,7 +686,7 @@ export async function editDraft({ envelopeBytes, inventories, operation, reviewE
   }));
   changes.removedPins = record.intent.pins.filter(p => !reached.has(pinKey(p))).map(p => ({ releaseSha256: p.releaseSha256, itemId: p.itemId }));
   if (!checkIntentShape(intent)) return fail('FIELD_SEMANTICS_UNSUPPORTED', '/records/0/intent', 'Edited draft violates the supported saved-intent shape.');
-  const known = read.records.filter(r => r.schema in JOURNEY_RECORD_SCHEMAS).map(r => r === record ? { id: r.id, schema: r.schema, required: true, intent } : r);
+  const known = read.records.filter(r => Object.hasOwn(JOURNEY_RECORD_KINDS, r.schema)).map(r => r === record ? { id: r.id, schema: r.schema, required: true, intent } : r);
   const written = await writeJourneyEnvelope({ savedIntentBytes: read.savedIntentBytes, records: known, previous: read });
   if (written.status !== 'ok') return unchanged(written);
   const presented = await presentDraft({ inventories, reviewEvidence, comparisons, recipient, envelopeBytes: written.value.envelopeBytes, envelope: written.value.envelope,

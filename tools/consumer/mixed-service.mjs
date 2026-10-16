@@ -1,9 +1,10 @@
 import { intakeDeclaration, digestBytes } from './intake.mjs';
 import { composeAuthoring, readAuthoring, reconcileAuthoring, editAuthoring, freshAuthoring, stable, refuse, inspectReviewEvidence, recordReview, reconsiderReviews, openDraft, editDraft, compileDraft } from './headless.mjs';
+import { checkMaintenance, recordMaintenance } from './maintenance.mjs';
 import { noteFixture } from './note-fixture.mjs';
 const encode = value => new TextEncoder().encode(value);
 const bytesOf = value => Array.isArray(value) ? Uint8Array.from(value) : undefined;
-export async function createMixedService(maintained, { suppliedInventories, familyInventories = [] } = {}) {
+export async function createMixedService(maintained, { suppliedInventories, familyInventories = [], maintenanceSource } = {}) {
   async function supplied(snapshot, id = 'notes') {
     const input = { id, kind: 'local', locator: { input: id }, resolvedIdentity: { sha256: await digestBytes(snapshot.declarationBytes) } };
     const result = await intakeDeclaration({ input, ...snapshot, materialSource: { kind: 'local', input: id } });
@@ -47,6 +48,31 @@ export async function createMixedService(maintained, { suppliedInventories, fami
       if (operation === 'draft-open') return openDraft({ bytes: bytesOf(body.bytes), inventories: available, ...reviewContext });
       if (operation === 'draft-edit') return editDraft({ envelopeBytes: bytesOf(body.envelopeBytes), inventories: available, operation: body.operation, ...reviewContext });
       if (operation === 'draft-compile') return compileDraft({ envelopeBytes: bytesOf(body.envelopeBytes), inventories: available, ...(Array.isArray(body.roots) ? { roots: body.roots } : {}), ...reviewContext });
+      if (operation === 'maintenance-check' || operation === 'maintenance-record') {
+        // With no draft open the saved policy is wrapped by the same pure open path (a sequence-1 envelope); a check writes nothing.
+        let envelopeBytes = bytesOf(body.envelopeBytes);
+        if (body.envelopeBytes === undefined) {
+          if (!Array.isArray(body.bytes)) return refuse('INPUT_INVALID', '/envelopeBytes', 'Supply envelopeBytes, or the saved policy bytes when no draft is open.');
+          const wrapped = await openDraft({ bytes: bytesOf(body.bytes), inventories: available, ...reviewContext });
+          if (wrapped.status !== 'ok') return wrapped;
+          envelopeBytes = wrapped.value.envelopeBytes;
+        }
+        const now = new Date().toISOString();
+        if (operation === 'maintenance-record') {
+          const recorded = await recordMaintenance({ envelopeBytes, operation: body.operation, now });
+          if (recorded.status !== 'ok') return recorded;
+          // The client adopts the new envelope exactly as an opened draft, so a recorded policy becomes a saved draft.
+          const opened = await openDraft({ bytes: recorded.value.envelopeBytes, inventories: available, ...reviewContext });
+          return opened.status === 'ok' ? { ...recorded, value: { ...recorded.value, draft: opened.value } } : { ...opened, originalBytes: (bytesOf(body.bytes) ?? envelopeBytes)?.slice() };
+        }
+        // Host-configured source only, and only when content is selected. Unreachable (null or a failure) is offline and
+        // an unconfigured source is its own unknown: neither is an empty update list.
+        const categories = body.categories ?? ['content'];
+        const read = Array.isArray(categories) && categories.includes('content') && maintenanceSource;
+        const candidateInventories = read ? await Promise.resolve().then(() => maintenanceSource()).catch(() => null) : null;
+        return checkMaintenance({ envelopeBytes, inventories: all, candidateInventories: candidateInventories ?? null,
+          candidateSource: maintenanceSource ? 'configured' : 'unconfigured', ...(body.categories !== undefined ? { categories: body.categories } : {}), now });
+      }
       if (operation === 'compose') return composeAuthoring({ basePolicyBytes: policyBytes, intent: body.intent, inventories: all, ...reviewContext });
       if (operation === 'edit') return editAuthoring({ policyBytes, inventories: all, operation: body.operation, ...reviewContext });
       if (operation === 'reconcile') return reconcileAuthoring({ savedPolicyBytes: policyBytes, inventories: all, candidateInventories: candidates(body.candidateMode), ...reviewContext });

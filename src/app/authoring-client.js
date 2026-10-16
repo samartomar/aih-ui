@@ -29,6 +29,11 @@ export function createAuthoringClient() {
   const notify = () => { for (const listener of listeners) listener(); };
   // Saved judgments are a derived display of the latest read, publish or accept; they never gate editing.
   const keepJudgments = value => { judgments = value?.reviewJudgments ?? []; judgmentSummary = value?.reviewSummary; };
+  // Choices are recorded strictly one after another, each from the envelope the previous one produced.
+  // `artifact` changes whenever a different policy or draft is opened, so a queued choice never reaches it.
+  let recording, artifact = 0;
+  // What an update check or record reads: the open draft's envelope, else the ordinary policy that is open.
+  const maintenanceInput = () => draftValue ? { envelopeBytes: [...draftValue.envelopeBytes] } : intent ? { bytes: [...bytes] } : undefined;
   async function request(operation, body = {}) {
     const response = await fetch(`/api/authoring-${operation}`, {
       method: 'POST', headers: { ...headers, 'content-type': 'application/json' },
@@ -78,16 +83,18 @@ export function createAuthoringClient() {
       if (result.status !== 'ok') throw new Error(JSON.stringify(result));
     },
     async newDraft(mode) {
+      // A new policy is a different artifact from the moment it is requested, so queued choices stop here.
+      artifact++;
       const attempt = this.invalidate(), result = await request('new', { mode });
       if (attempt !== revision) return { status: 'superseded' };
       if (result.status === 'ok') this.publish(result.value);
       return result;
     },
     publish(value) {
-      revision++; candidate = undefined; draftValue = undefined; compiled = undefined;
+      artifact++; revision++; candidate = undefined; draftValue = undefined; compiled = undefined;
       bytes = Uint8Array.from(value.policyBytes); intent = value.intent; keepJudgments(value); notify();
     },
-    importBytes(value) { revision++; bytes = value.slice(); intent = undefined; keepJudgments(); candidate = undefined; draftValue = undefined; compiled = undefined; notify(); },
+    importBytes(value) { artifact++; revision++; bytes = value.slice(); intent = undefined; keepJudgments(); candidate = undefined; draftValue = undefined; compiled = undefined; notify(); },
     // While a draft is open every edit goes through the draft operations: the recorded
     // choices are never composed as an executable policy until an explicit compile.
     async propose(operation) { return draftValue ? this.proposeDraft(operation) : this.proposeRequest('edit', { operation }); },
@@ -100,8 +107,43 @@ export function createAuthoringClient() {
       notify(); return result;
     },
     async openDraft(input = bytes) {
+      artifact++;
       const attempt = ++revision; candidate = undefined; notify();
       return openAttempt(attempt, input);
+    },
+    async checkMaintenance(categories) {
+      const input = maintenanceInput();
+      if (!input) return refusal('INPUT_INVALID', 'Open a draft or a saved policy before checking available updates.');
+      const attempt = revision;
+      try {
+        const result = await request('maintenance-check', { ...input, categories, policyBytes: undefined });
+        return attempt === revision ? result : { status: 'superseded' };
+      } catch (error) { if (attempt !== revision) return { status: 'superseded' }; throw error; }
+    },
+    // Also records the note of a successful check. A choice on an ordinary policy turns it into a saved draft.
+    recordDisposition(operation) {
+      const target = artifact;
+      const run = async () => {
+        if (target !== artifact) return { status: 'superseded' };
+        const input = maintenanceInput(), current = draftValue;
+        if (!input) return refusal('INPUT_INVALID', 'Open a draft or a saved policy before recording an update choice.');
+        const attempt = ++revision; candidate = undefined; notify();
+        let result;
+        try { result = await request('maintenance-record', { ...input, operation, policyBytes: undefined }); }
+        catch (error) { if (attempt !== revision) return { status: 'superseded' }; throw error; }
+        if (attempt !== revision) return { status: 'superseded' };
+        if (result.status === 'ok') {
+          revision++;
+          draftValue = result.value.draft ? { ...asDraft(result.value.draft), fromPolicy: false }
+            : asDraft({ ...current, ...result.value, savedIntentBytes: current.savedIntentBytes });
+          compiled = undefined; intent = undefined; bytes = draftValue.savedIntentBytes.slice();
+        }
+        notify(); return result;
+      };
+      const next = recording ? recording.then(run, run) : run();
+      const settled = next.then(() => {}, () => {}).then(() => { if (recording === settled) recording = undefined; });
+      recording = settled;
+      return next;
     },
     async compileDraft(roots) {
       if (!draftValue) return refusal('INPUT_INVALID', 'Open a draft before compiling it.');
