@@ -23,7 +23,9 @@ export function overheadText(row) {
   const share = row.percentage === null ? 'no percentage: zero baseline' : `${Math.round(Math.abs(row.percentage) * 10) / 10}% ${row.percentage < 0 ? 'more' : 'less'} than the baseline`;
   return row.direction === 'unchanged' ? `${row.before} → ${row.after} ${row.unit}, unchanged` : `${row.before} → ${row.after} ${row.unit}, ${row.direction} of ${row.absoluteDifference} ${row.unit} (${share})`;
 }
+// Mirrors DIMENSION_LABELS in tools/consumer/trials.mjs, the source of truth; a row's own `label` is shown when present.
 const DIMENSIONS = { setup: 'Setup', indexing: 'Indexing', 'runtime-context': 'Runtime/context (configured material size, not usage)', maintenance: 'Maintenance' };
+// Mirrors RESTORATION_STATUSES in tools/consumer/trial-record.mjs; the page cannot import it.
 const RESTORATION = ['proposed', 'pending', 'completed', 'partial', 'unsupported'];
 const COST_UNKNOWN = 'Model or service spending: no cost source is connected, so it is unknown.';
 
@@ -119,7 +121,10 @@ export function createTrialsView({ client, el, button, showStatus }) {
       card.append(el('p', 'text-on-surface-variant', `${option}: ${q?.state === 'not-met' ? 'not met' : q?.state ?? 'unknown'} (${q?.passed ?? 0} passed, ${q?.failed ?? 0} failed, ${q?.unknown ?? trial.quality.checks.length} unknown)`));
     }
     card.append(el('h5', 'font-medium', 'Overhead'));
-    for (const [dimension, label] of Object.entries(DIMENSIONS)) card.append(el('p', 'text-on-surface-variant', `${label}: ${overheadText(evaluation?.overhead?.find(row => row.dimension === dimension) ?? { status: 'not-observed' })}`));
+    for (const [dimension, label] of Object.entries(DIMENSIONS)) {
+      const row = evaluation?.overhead?.find(entry => entry.dimension === dimension) ?? { status: 'not-observed' };
+      card.append(el('p', 'text-on-surface-variant', `${row.label ?? label}: ${overheadText(row)}`));
+    }
     card.append(el('p', '', outcomeText(evaluation, trial)));
     const narrower = trial.narrower ?? evaluation?.narrower;
     if (narrower) card.append(el('p', 'text-on-surface-variant', `Accepted a narrower outcome: ${narrower.qualification}`));

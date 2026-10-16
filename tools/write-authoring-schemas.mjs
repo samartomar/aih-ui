@@ -119,15 +119,16 @@ const improvementDismissal = { $schema: 'https://json-schema.org/draft/2020-12/s
 // evidence snapshot are separate facts. The reader (tools/consumer/trial-record.mjs) also enforces what a schema cannot express,
 // so a record this schema accepts can still be refused when the Workbench opens it:
 //   - id derives from the suggestion (id and revision), scope and proposedAt; each observation id derives from its option and target;
-//   - the suggestion record with the same id (any revision; the trial names the one it was planned from) must sit in the same envelope,
-//     and the trial's change is the suggestion's change at proposal without its content digests;
+//   - the suggestion record with the same id (any revision; the trial names the one it was planned from) must sit in the same envelope;
+//   - revises and revisedBy name another trial, never the record itself;
 //   - check ids and bound ids are unique, and there is at most one observation per (option, target);
 //   - a check observation names a quality check of this trial, with unit "outcome" and amount "passed" or "failed"; a dimension
 //     observation has a numeric amount;
 //   - startedAt is required when started or kept and absent when proposed (a trial stopped or revised while still proposed never
 //     started); observations exist only once it started;
-//   - an enforced bound names its mechanism, and the host refuses it when it has no such mechanism;
 //   - every timestamp must be a real calendar timestamp.
+// When recording (not when reading), the change is copied from the suggestion at proposal and an enforced bound is refused unless
+// the host names that mechanism; a stored enforced bound whose mechanism the host lacks is shown as not a cap.
 const trialId = { type: 'string', pattern: '^trial-[a-f0-9]{32}$' }, trialSlug = { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,63}$' };
 const trialDecided = { enum: ['kept', 'revised', 'stopped'] };
 const trialObservation = { ...shape({ id: trialSlug, option: { enum: ['baseline', 'trial'] }, target: { oneOf: [shape({ dimension: { enum: ['setup', 'indexing', 'runtime-context', 'maintenance'] } }), shape({ check: trialSlug })] },

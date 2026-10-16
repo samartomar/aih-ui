@@ -106,7 +106,7 @@ export async function createMixedService(maintained, { suppliedInventories, fami
           return checkImprovements({ envelopeBytes, inventories: all, candidateInventories: candidateInventories ?? null, candidateSource: maintenanceSource ? 'configured' : 'unconfigured',
             clients: body.clients ?? [], labels: body.labels ?? {}, goal: body.goal, now });
         }
-        // A trial is a read here, not a write. This host can enforce no bound, so it has no mechanisms and every bound is advisory.
+        // Reading trials writes nothing. This host can enforce no bound, so it has no mechanisms and every bound is advisory.
         if (operation === 'trials-read') return readTrials({ envelopeBytes, mechanisms: TRIAL_MECHANISMS_NONE });
         if (operation === 'maintenance-record' || operation === 'improvements-record' || operation === 'trials-record') {
           const recorded = await (operation === 'trials-record' ? recordTrial({ envelopeBytes, operation: body.operation, inventories: all, mechanisms: TRIAL_MECHANISMS_NONE, now })
