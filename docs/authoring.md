@@ -383,6 +383,10 @@ Refusals keep the original bytes and no refused read or write rewrites them.
 Bounds: 1,000,000 saved-intent bytes and 2,000,000 envelope bytes. The page accepts
 an imported envelope up to the envelope bound and a policy up to 1,000,000 bytes.
 
+Improvement suggestions check goal-relevant content changes against the configured
+update source using the order declared by this host's update source when known,
+falling back to strictly later semantic versions when that order is unknown.
+
 ## Evidence and review lifecycle
 
 Review-v1 records contain id, owner `{kind:"individual"|"organization",id}`,
@@ -485,6 +489,16 @@ during ordinary composition are refused. `recordReview` creates exact current
 decisions only after the new decision's own checked binding, and is not blocked by
 other records; its optional `decision.supersedes` moves an active prior record
 into history or references retained history.
+
+### Changes for headless callers
+
+`REVIEW_RECONSIDER_REQUIRED` is no longer returned. A missing or changed review
+binding is reported as `applicability` instead of making reads or edits
+unavailable. Nothing automatically converts a record to `reconsider`, and
+`reviewsReconsidered` is removed from draft results. `reviewJudgments`,
+`reviewSummary` and the optional `recipient` input are new.
+`REVIEW_BINDING_UNAVAILABLE` remains for new decisions whose binding cannot be
+minted and for changes to decisions made outside the review workflow.
 
 `reconsiderReviews({policyBytes,inventories,reviewEvidence?,comparisons?})` is an
 explicit, optional operation for an organization that requires review during its
