@@ -142,5 +142,6 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
   }
   function open() { attempt++; value = undefined; changed = false; goal.value = ''; return check(); }
   render();
-  return { node, render, check, open };
+  function setTargets() {}
+  return { node, render, check, open, setTargets };
 }

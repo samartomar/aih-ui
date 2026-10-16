@@ -88,6 +88,7 @@ async function main() {
         aiTools.setTargets(coreTargets);
         onboarding.setTargets(coreTargets);
         governance.setTargets(coreTargets);
+        authoringWorkspace.setTargets(coreTargets);
       },
     });
 

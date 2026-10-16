@@ -217,5 +217,6 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
   }
   const resultActions = line(); resultActions.append(action('Preview', 'org-preview', showPreview), action('Export candidate', 'org-export', exportCandidate));
   node.append(el('summary', 'font-medium cursor-pointer', 'Organization baseline (organization author)'), el('p', 'text-on-surface-variant', 'An organization author sets obligations, targets and inputs; preview is computed by Core; exporting writes a candidate file and never publishes or activates authority.'), draftActions, policyRow, sourceRow, addRow, entries, el('h3', 'font-medium', 'Declared targets'), targets, targetRow, el('h3', 'font-medium', 'Unresolved choices'), unresolved, resultActions, preview, handoff, status);
-  return { node };
+  function setTargets() {}
+  return { node, setTargets };
 }
