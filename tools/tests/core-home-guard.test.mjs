@@ -128,6 +128,12 @@ test('a re-pointed or unresolvable linked root is never unchanged', { skip: proc
   } finally { chmodSync(locked, 0o700); }
 });
 
+test('a root that is both unresolved and unreadable is one unreadable path', () => {
+  const unresolved = { root: '/home/a/.aih/core', exists: true, target: null, entries: new Map([['', 'unreadable']]) };
+  assert.deepEqual(compareCoreHome(unresolved, unresolved), counts(0, 0, 0, 1));
+  assert.deepEqual(compareCoreHome(unresolved, { ...unresolved, entries: new Map() }), counts(0, 1, 0, 1));
+});
+
 test('an unreadable file needs no content read', { skip: process.platform === 'win32' }, t => {
   const { home, root } = fixture(t);
   const file = join(root, 'private.json');
