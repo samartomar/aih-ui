@@ -287,3 +287,10 @@ test('describePolicy: an included dependency pinned to another release falls bac
   assert.equal(included.length, 1);
   assert.equal(included[0].text, 'mattpocock.code-review is included as something your choices need.');
 });
+
+// tools/consumer/guided-setup.test.mjs saves this exact string through Core; it cannot import this module.
+test('choiceReason gives exactly the reason the consumer test round-trips', () => {
+  const detections = detectStack(JS).detections;
+  assert.equal(choiceReason({ goal: 'add tests to my react app', detections, choice: { ruleId: 'goal.test' }, rulesVersion: GUIDED_RULES_VERSION }),
+    'guided-setup rules 1.0.0: goal.test. Goal: add tests to my react app. Project: JavaScript, TypeScript, React, Vitest.');
+});

@@ -53,12 +53,17 @@ function invalidate() {
   $('suggest-status').textContent = STALE_MESSAGE;
   syncButtons();
 }
+// While a save runs its inputs stay fixed; anything that arrives meanwhile is compared once it ends.
 function checkStale() {
-  if (suggestion && !sameInputs(inputsNow(), snapshot)) invalidate();
+  if (!busy && suggestion && !sameInputs(inputsNow(), snapshot)) invalidate();
+  syncButtons();
 }
 function syncButtons() {
   $('suggest').disabled = busy || suggesting;
   $('save').disabled = busy || !suggestion || !suggestion.choices.some(choice => picked.get(choice.itemId));
+  for (const id of ['goal', 'folder', 'add-stack', 'add-stack-button', 'reopen-file']) $(id).disabled = busy;
+  $('detect-clients').disabled = busy || published.length === 0;
+  for (const control of [...$('detections').querySelectorAll('button'), ...$('clients').querySelectorAll('input')]) control.disabled = busy;
 }
 
 function showLines(list, lines) {
@@ -291,7 +296,7 @@ async function save() {
     $('save-status').textContent = 'Saved to a draft. Download the setup file to keep it; nothing was installed.';
   } catch (error) {
     if (!outdated()) $('save-status').textContent = `Nothing was saved: ${error.message}`;
-  } finally { busy = false; refreshPrompt(); syncButtons(); }
+  } finally { busy = false; refreshPrompt(); syncButtons(); checkStale(); }
 }
 
 async function reopen(file) {

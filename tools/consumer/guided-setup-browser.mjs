@@ -24,9 +24,9 @@ export async function runGuidedSetupBrowser({ origin, output, playwrightModule }
     await page.goto(origin + '/guided.html');
     return page;
   };
-  // The prompt lists exactly the ticked clients, even when they load after suggestions.
-  // A client that arrives after suggestions invalidates them on purpose, so suggest again before comparing.
-  const promptFollowsClients = async page => {
+  // The current suggestion's prompt lists exactly the ticked clients. A client that arrives after
+  // suggesting invalidates them on purpose, so this suggests again first when the page asks for it.
+  const currentPromptListsTickedClients = async page => {
     await page.waitForLoadState('networkidle');
     if (/inputs changed/.test(await page.locator('#suggest-status').innerText())) {
       await page.locator('#suggest').click();
@@ -90,7 +90,7 @@ export async function runGuidedSetupBrowser({ origin, output, playwrightModule }
     for (const heading of ['What it helps with', 'What it needs', 'What it will change', 'Why suggested']) assert.equal(await cards.filter({ hasText: heading }).count(), count, heading);
     const prompt = await page.locator('#prompt').inputValue();
     assert.ok(prompt.includes(GOAL) && !prompt.includes(fixtureText.trim()), 'The prompt carries the goal and no file content.');
-    await promptFollowsClients(page);
+    await currentPromptListsTickedClients(page);
     await shot(page, '05-suggestions');
 
     // Changing an input after suggestions hides the choices and save, and asks for a new suggestion before saving.
@@ -136,14 +136,15 @@ export async function runGuidedSetupBrowser({ origin, output, playwrightModule }
     await unknown.locator('#goal').fill('hmm, something nice');
     await unknown.locator('#folder').setInputFiles(join(FIXTURES, 'guided-unknown'));
     await unknown.locator('#folder-status').filter({ hasText: 'Nothing was uploaded' }).waitFor();
-    // Saved setup clients load in the background; suggest once they are in, as a person would after reading the page.
+    // Saved setup clients load in the background; the list renders once they are in.
+    await unknown.locator('#clients li').first().waitFor();
     await unknown.waitForLoadState('networkidle');
     await unknown.locator('#suggest').click();
-    await unknown.locator('#suggest-status').filter({ hasText: /No confident suggestion|inputs changed|could not/ }).waitFor();
+    await unknown.locator('#suggest-status').filter({ hasText: /No confident suggestion|could not/ }).waitFor();
     assert.match(await unknown.locator('#suggest-status').innerText(), /No confident suggestion/);
     assert.equal(await unknown.locator('#choices > li').count(), 0);
     assert.equal(await unknown.locator('#browse-link').isVisible(), true);
-    await promptFollowsClients(unknown);
+    await currentPromptListsTickedClients(unknown);
     await shot(unknown, '08-no-confident-suggestion');
 
     // No request left the Workbench origin and none carried fixture file content.
