@@ -35,28 +35,31 @@ export function snapshotCoreHome(home) {
     for (const name of names) walk(join(path, name), relative ? `${relative}/${name}` : name);
   }
 
-  // A linked `.aih/core` is still the home Core writes to, so the walk starts at its target. Links inside are not followed.
-  let start = root;
-  try { start = realpathSync(root); } catch {}
-  walk(start, '');
-  return { root, exists, entries };
+  // A linked `.aih/core` is still the home Core writes to, so the walk starts at its target, which is recorded too.
+  // Links inside are not followed. A target that cannot be resolved leaves `target` null: the listing is incomplete.
+  let target = root;
+  try { target = realpathSync(root); } catch (error) { if (!['ENOENT', 'ENOTDIR'].includes(error.code)) target = null; }
+  walk(target ?? root, '');
+  return { root, exists, target, entries };
 }
 
 export function compareCoreHome(before, after) {
   let added = 0;
   let removed = 0;
-  let changed = before.exists === after.exists ? 0 : 1;
+  let changed = before.exists === after.exists && before.target === after.target ? 0 : 1;
   for (const [path, signature] of before.entries) {
-    // An unreadable entry cannot prove itself unchanged, so it always counts as changed.
     if (!after.entries.has(path)) removed++;
-    else if (after.entries.get(path) !== signature || signature === 'unreadable') changed++;
+    else if (after.entries.get(path) !== signature) changed++;
   }
+  // Anything that could not be read cannot prove itself unchanged, so it is counted on its own and fails the comparison.
+  const unreadable = [before, after].reduce((sum, { exists, target, entries }) =>
+    sum + (exists && target === null ? 1 : 0) + [...entries.values()].filter(signature => signature === 'unreadable').length, 0);
   for (const path of after.entries.keys()) {
     if (!before.entries.has(path)) added++;
   }
-  return { unchanged: added + removed + changed === 0, added, removed, changed };
+  return { unchanged: added + removed + changed + unreadable === 0, added, removed, changed, unreadable };
 }
 
-export function describeCoreHomeChange({ added, removed, changed }) {
-  return `The real account home's .aih/core changed: ${added} added, ${removed} removed, ${changed} changed.`;
+export function describeCoreHomeChange({ added, removed, changed, unreadable }) {
+  return `The real account home's .aih/core changed or could not be read: ${added} added, ${removed} removed, ${changed} changed, ${unreadable} unreadable.`;
 }

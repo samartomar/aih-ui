@@ -17,8 +17,8 @@ function fixture(t, create = true) {
   return { home, root };
 }
 
-const counts = (added = 0, removed = 0, changed = 0) => ({
-  unchanged: added + removed + changed === 0, added, removed, changed,
+const counts = (added = 0, removed = 0, changed = 0, unreadable = 0) => ({
+  unchanged: added + removed + changed + unreadable === 0, added, removed, changed, unreadable,
 });
 
 test('missing root equals missing root', t => {
@@ -82,9 +82,9 @@ test('description discloses counts only', t => {
   const result = compareCoreHome(before, snapshotCoreHome(home));
   assert.deepEqual(result, counts(1));
   assert.equal(describeCoreHomeChange(result),
-    "The real account home's .aih/core changed: 1 added, 0 removed, 0 changed.");
-  assert.equal(describeCoreHomeChange(counts(3, 2, 1)),
-    "The real account home's .aih/core changed: 3 added, 2 removed, 1 changed.");
+    "The real account home's .aih/core changed or could not be read: 1 added, 0 removed, 0 changed, 0 unreadable.");
+  assert.equal(describeCoreHomeChange(counts(3, 2, 1, 4)),
+    "The real account home's .aih/core changed or could not be read: 3 added, 2 removed, 1 changed, 4 unreadable.");
 });
 
 test('links inside are not traversed, but a linked root is walked', { skip: process.platform === 'win32' }, t => {
@@ -105,6 +105,27 @@ test('links inside are not traversed, but a linked root is walked', { skip: proc
   assert.deepEqual([...linked.entries.keys()], ['not-inspected']);
   writeFileSync(join(outside, 'added-through-link'), 'x');
   assert.deepEqual(compareCoreHome(linked, snapshotCoreHome(home)), counts(1));
+});
+
+test('a re-pointed or unresolvable linked root is never unchanged', { skip: process.platform === 'win32' }, t => {
+  const { home, root } = fixture(t, false);
+  const first = join(home, 'first'), second = join(home, 'second'), locked = join(home, 'locked');
+  for (const dir of [first, second, join(locked, 'core')]) mkdirSync(dir, { recursive: true });
+  mkdirSync(join(home, '.aih'));
+  symlinkSync(first, root);
+  const before = snapshotCoreHome(home);
+  rmSync(root);
+  symlinkSync(second, root);
+  assert.deepEqual(compareCoreHome(before, snapshotCoreHome(home)), counts(0, 0, 1));
+  rmSync(root);
+  symlinkSync(join(locked, 'core'), root);
+  chmodSync(locked, 0);
+  try {
+    try { readdirSync(locked); t.skip('account can read directories despite mode 000'); return; } catch {}
+    const hidden = snapshotCoreHome(home);
+    assert.equal(hidden.target, null);
+    assert.equal(compareCoreHome(hidden, snapshotCoreHome(home)).unchanged, false);
+  } finally { chmodSync(locked, 0o700); }
 });
 
 test('an unreadable file needs no content read', { skip: process.platform === 'win32' }, t => {
@@ -131,7 +152,7 @@ test('unreadable directories are recorded rather than silently omitted', { skip:
     }
     const partial = snapshotCoreHome(home);
     assert.equal(partial.entries.get('private-dir'), 'unreadable');
-    assert.deepEqual(compareCoreHome(partial, snapshotCoreHome(home)), counts(0, 0, 1));
+    assert.deepEqual(compareCoreHome(partial, snapshotCoreHome(home)), counts(0, 0, 0, 2));
     chmodSync(root, 0);
     const snapshot = snapshotCoreHome(home);
     assert.equal(snapshot.exists, true);
