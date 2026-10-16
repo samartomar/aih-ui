@@ -56,7 +56,9 @@ export function createAuthoringWorkspace(client) {
   document.getElementById('review-project-changes').addEventListener('click', goToPolicy);
   document.getElementById('check-project-policy').addEventListener('click', safe(async () => {
     goToPolicy(); const result = await client.reopen(); diagnostics.textContent = JSON.stringify(result, null, 2);
-    if (!reopenedDraft(result)) showStatus(result.status === 'ok' && result.value.editing === 'available' ? 'Policy and exact sources validated. This is not organization approval or execution authorization.' : failure(result));
+    if (reopenedDraft(result)) return;
+    if (result.status === 'ok' && result.value.editing === 'available') { showStatus('Policy and exact sources validated. This is not organization approval or execution authorization.'); updates.open(); }
+    else showStatus(failure(result));
   }));
   const copy = document.getElementById('copy-json-btn'), jsonDownload = document.getElementById('download-json-btn');
   for (const action of [copy, jsonDownload]) { action.disabled = false; action.removeAttribute('aria-disabled'); action.classList.remove('cursor-not-allowed'); }
@@ -78,7 +80,7 @@ export function createAuthoringWorkspace(client) {
   })), file, button('Validate and reopen', safe(async () => {
     const result = await client.reopen();
     if (reopenedDraft(result)) return;
-    if (result.status === 'ok' && result.value.editing === 'available') { optional = result.value.optional ?? []; render(); showStatus('Saved choices recovered from exact source snapshots.'); }
+    if (result.status === 'ok' && result.value.editing === 'available') { optional = result.value.optional ?? []; render(); showStatus('Saved choices recovered from exact source snapshots.'); updates.open(); }
     else showStatus(`${failure(result)} Reselect the saved personal folder and its binding in Sources & Catalogs, then validate and reopen again. Original bytes retained.`);
   })), save, originalDownload);
   file.addEventListener('change', safe(async () => {
@@ -237,7 +239,11 @@ export function createAuthoringWorkspace(client) {
   const draftRoots = el('div', 'space-y-2'); draftRoots.id = 'policy-draft-roots';
   const draftMissing = el('div', 'space-y-1'); draftMissing.id = 'policy-draft-unresolved';
   const draftChanges = el('p', 'text-outline'); draftChanges.id = 'policy-draft-changes';
-  const draftSave = button('Save unresolved draft', () => client.draft && download(client.draft.envelopeBytes, 'policy.draft.journey.json')); draftSave.id = 'policy-draft-save';
+  // Saving the envelope first records the last successful check, so a later offline reopen can still show it.
+  const draftSave = button('Save unresolved draft', async () => {
+    await updates.noteCheck();
+    if (client.draft) download(client.draft.envelopeBytes, 'policy.draft.journey.json');
+  }); draftSave.id = 'policy-draft-save';
   const draftSaveNote = el('p', 'text-outline', 'Saves a journey envelope that is not executable. It keeps your original policy bytes exactly and every recorded choice, so you can reopen it later.'); draftSaveNote.id = 'policy-draft-save-note';
   const compileNote = el('p', 'text-on-surface-variant break-words'); compileNote.id = 'policy-draft-compile-note';
   const compileScope = async roots => {

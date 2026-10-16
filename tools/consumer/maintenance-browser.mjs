@@ -1,16 +1,18 @@
 // Ordinary Workbench journey: available updates for a saved choice are checked on open and on Check now,
-// each exact revision keeps its own skip/defer choice inside the saved envelope, and the check only reads.
+// each exact revision keeps its own keep/skip/defer choice inside the saved envelope, and the check only reads.
 import assert from 'node:assert/strict';
 import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { readInstalledRelease } from '@aihq/catalog/node';
+import { runScan, prepareArtifact } from '@aihq/scan/host';
 import { fileURLToPath } from 'node:url';
-import { checkMaintenance, MAINTENANCE_DISPOSITION_SCHEMA, UPDATE_CATEGORIES } from './maintenance.mjs';
+import { checkMaintenance, MAINTENANCE_DISPOSITION_SCHEMA, MAINTENANCE_CHECK_SCHEMA, UPDATE_CATEGORIES } from './maintenance.mjs';
+import { openDraft } from './headless.mjs';
 import { intakeDeclaration, digestBytes } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { installedFamilies } from './installed-families.mjs';
 
-const NOTE = 'consumer-proof.review-note', PERSONAL = 'personal.skill.example', OPENED = 'Unresolved draft opened';
+const NOTE = 'consumer-proof.review-note', PERSONAL = 'personal.skill.example', OPENED = 'Unresolved draft opened', REVIEW = 'maintenance-review';
 const encode = value => new TextEncoder().encode(value), decode = bytes => new TextDecoder().decode(bytes);
 
 // The same revisions the host source publishes: one input `notes`, so each matches the saved release as a newer revision.
@@ -26,6 +28,8 @@ async function notesInventory(variant) {
   assert.equal(result.status, 'ok', JSON.stringify(result.diagnostics));
   return result.value;
 }
+const FACT_LABEL = { authority: 'Authority', evidence: 'Evidence', availability: 'Availability' };
+const factLines = facts => facts.map(fact => `${FACT_LABEL[fact.kind]}: ${fact.message}`).sort();
 
 export async function runMaintenanceBrowser({ origin, output, playwrightModule, sourcePath }) {
   const { chromium } = await import(playwrightModule);
@@ -43,9 +47,18 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     await notesInventory('current')];
   const updated = await notesInventory('updated'), newer = await notesInventory('newer');
   const now = () => new Date().toISOString();
-  const futureDate = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+  const day = offset => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+  const futureDate = day(30), pastDate = day(-1);
+  // Explicit setup step, never a Workbench action: checked scan evidence for the review note, supplied to the page like any evidence file.
+  const sourceRoot = join(output, 'review-source');
+  for (const material of inventories.at(-1).materials) { const path = join(sourceRoot, material.path); await mkdir(dirname(path), { recursive: true }); await writeFile(path, material.bytes); }
+  const scan = await runScan({ schema: 'urn:aihq:scan:request:1.0.0', source: { kind: 'local', path: sourceRoot },
+    selection: { paths: inventories.at(-1).materials.map(material => material.path).sort(), excludedPaths: [] }, detectors: [{ detectorId: 'detector.aih-binding-gate', configuration: {} }] });
+  assert.equal(scan.status, 'assessment', JSON.stringify(scan));
+  const evidence = await prepareArtifact({ report: scan.report, annexes: scan.annexes.map(annex => ({ id: annex.id, bytes: Buffer.from(annex.bytesBase64, 'base64') })) });
+  const evidencePath = join(output, 'review-evidence.unsigned.json'); await writeFile(evidencePath, evidence.bytes);
   const browser = await chromium.launch({ headless: true });
-  const errors = [], failedResponses = []; let observed; let operations = [], categoriesSent = [];
+  const errors = [], failedResponses = []; let observed; let operations = [], categoriesSent = [], checkInputs = [];
   const openPage = async () => {
     const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 1100 } });
     const page = await context.newPage(); observed = page; page.setDefaultTimeout(30_000);
@@ -55,7 +68,10 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
       const operation = /\/api\/authoring-([\w-]+)$/.exec(new URL(request.url()).pathname)?.[1];
       if (!operation || request.method() !== 'POST') return;
       operations.push(operation);
-      if (operation === 'maintenance-check') categoriesSent.push(JSON.parse(request.postData() ?? '{}').categories);
+      if (operation === 'maintenance-check') {
+        const body = JSON.parse(request.postData() ?? '{}');
+        categoriesSent.push(body.categories); checkInputs.push(body.envelopeBytes ? 'envelope' : body.bytes ? 'policy' : 'none');
+      }
     });
     await page.goto(origin + '/');
     await page.locator('#browse-family option[value="Catalog"]').waitFor({ state: 'attached' });
@@ -67,6 +83,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     return page;
   };
   const download = async (page, trigger, path) => { const event = page.waitForEvent('download'); await trigger(); await (await event).saveAs(path); return new Uint8Array(await readFile(path)); };
+  const saveDraft = (page, path) => download(page, () => page.locator('#policy-draft-save').click(), path);
   const sameBytes = (a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)) === 0;
   const checkedText = page => page.locator('#policy-updates-checked').textContent();
   const checkedAt = text => /(\d{4}-\d\d-\d\dT[\d:.]+Z)/.exec(text)?.[1];
@@ -91,6 +108,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     await page.locator('#policy-draft-status').filter({ hasText: heading }).waitFor();
     await waitSettled(page, null);
   };
+  const recordedNote = envelope => envelope.records.find(record => record.schema === MAINTENANCE_CHECK_SCHEMA);
   const dispositions = envelope => envelope.records.filter(record => record.schema === MAINTENANCE_DISPOSITION_SCHEMA);
   const headlessCheck = async (envelopeBytes, candidateInventories) => {
     const result = await checkMaintenance({ envelopeBytes, inventories, candidateInventories, now: now() });
@@ -99,22 +117,34 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
   };
   const shownChoices = async page => (await page.locator('#policy-draft-roots > div').evaluateAll(rows => rows.map(row => [row.dataset.itemId, row.dataset.status]))).sort();
   const draftRevision = async page => Number(/Draft revision (\d+)/.exec(await page.locator('#policy-draft-note').textContent())?.[1]);
+  const choose = async (page, family, id) => {
+    await page.locator('#nav-sources').click(); await page.locator('#browse-support').selectOption('all'); await page.locator('#browse-family').selectOption(family);
+    await page.getByRole('button', { name: `Choose ${id}`, exact: true }).click();
+    await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click();
+  };
+  // The evidence panel is the existing review flow's own: open it, then supply the original evidence bytes.
+  const supplyEvidence = async page => {
+    await page.locator('#nav-policy').click();
+    await page.locator('summary').filter({ hasText: 'Evidence review and reconsideration' }).click();
+    await page.getByLabel('Review evidence files', { exact: true }).setInputFiles(evidencePath);
+    await page.getByText('Original evidence bytes loaded').waitFor();
+  };
+  // The updates section sits below the policy steps; bring it to the top of the scrolled view before capturing.
+  const shot = async (page, name) => {
+    await page.locator('#policy-updates').evaluate(node => node.scrollIntoView({ block: 'start' }));
+    await page.screenshot({ path: join(output, name), fullPage: true });
+  };
   const scenarios = [], revisions = {}, observedFacts = {};
   try {
     // 1. The source publishes nothing newer. Choose the independent review note and save the policy.
     await publish(['current']);
     const authoring = await openPage();
-    // A saved policy whose every choice resolves reopens as an ordinary policy, which holds no envelope. The envelope route is an
-    // unresolved draft, so a personal skill (not rebound in the fresh pages) is chosen as well; the review note stays resolved.
-    const choose = async (family, id) => {
-      await authoring.locator('#nav-sources').click(); await authoring.locator('#browse-support').selectOption('all'); await authoring.locator('#browse-family').selectOption(family);
-      await authoring.getByRole('button', { name: `Choose ${id}`, exact: true }).click();
-      await authoring.locator('#policy-accept:not([disabled])').waitFor(); await authoring.locator('#policy-accept').click();
-    };
+    // A personal skill (not rebound in the fresh pages) is chosen as well, so this saved policy reopens as an unresolved draft;
+    // the review note stays resolved. The fully resolved route is journeyed separately below.
     await authoring.locator('#personal-folder').setInputFiles(folder);
     await authoring.locator('#personal-result').filter({ hasText: 'Folder validated' }).waitFor();
-    await choose('Personal', PERSONAL);
-    await choose('Independent', NOTE);
+    await choose(authoring, 'Personal', PERSONAL);
+    await choose(authoring, 'Independent', NOTE);
     const policyPath = join(output, 'policy.downloaded.json');
     const policyBytes = await download(authoring, () => authoring.locator('#policy-save').click(), policyPath);
     assert.deepEqual(JSON.parse(decode(policyBytes)).metadata['aih.workbench'].roots.map(root => root.itemId).sort(), [NOTE, PERSONAL].sort());
@@ -139,24 +169,36 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     for (const [name, box] of [['content', true], ['software', false], ['client', false], ['environment', false]])
       assert.equal(await reopened.getByLabel(`Check ${name} updates`, { exact: true }).isChecked(), box);
     assert.match(await reopened.locator('#policy-updates').textContent(), /only read the supplied sources; nothing is applied or scheduled/);
-    const draftBefore = await draftRevision(reopened);
-    const bytesBefore = await download(reopened, () => reopened.locator('#policy-draft-save').click(), join(output, 'policy.draft.before-check.json'));
+    const draftBefore = await draftRevision(reopened), firstCheck = checkedAt(await checkedText(reopened));
+    // Saving the envelope records the last successful check first; the check itself wrote nothing.
+    const bytesBefore = await saveDraft(reopened, join(output, 'policy.draft.before-check.json'));
     const envelopeBefore = JSON.parse(decode(bytesBefore));
-    assert.equal(envelopeBefore.revision.sequence, draftBefore);
+    assert.equal(envelopeBefore.revision.sequence, draftBefore + 1);
     assert.deepEqual(dispositions(envelopeBefore), [], 'Checking records no choice.');
+    const noteBefore = recordedNote(envelopeBefore);
+    assert.equal(noteBefore.required, false); assert.equal(noteBefore.checkedAt, firstCheck);
+    assert.deepEqual(noteBefore.categories, [{ category: 'content', state: 'checked' }, { category: 'software', state: 'not-selected' },
+      { category: 'client', state: 'not-selected' }, { category: 'environment', state: 'not-selected' }]);
     const headlessFirst = await headlessCheck(bytesBefore, [...inventories, updated]);
     assert.deepEqual(headlessFirst.updates.map(update => [update.promoted, update.attention]), [[true, 'new']]);
+    assert.deepEqual(headlessFirst.lastCheck, { checkedAt: noteBefore.checkedAt, categories: noteBefore.categories });
+    const savedRevision = await draftRevision(reopened);
+    assert.equal(savedRevision, envelopeBefore.revision.sequence);
     const ranCheck = await checkNow(reopened);
     assert.deepEqual(ranCheck, ['maintenance-check'], 'Check now performs one bounded read and nothing else.');
-    assert.equal(await draftRevision(reopened), draftBefore);
-    const bytesAfter = await download(reopened, () => reopened.locator('#policy-draft-save').click(), join(output, 'policy.draft.after-check.json'));
-    assert.ok(sameBytes(bytesBefore, bytesAfter), 'A check leaves the draft envelope bytes unchanged.');
+    assert.equal(await draftRevision(reopened), savedRevision, 'A check alone leaves the envelope revision unchanged.');
+    const bytesAfter = await saveDraft(reopened, join(output, 'policy.draft.after-check.json'));
+    const envelopeAfter = JSON.parse(decode(bytesAfter)), noteAfter = recordedNote(envelopeAfter);
+    assert.equal(envelopeAfter.revision.sequence, savedRevision + 1);
+    assert.ok(noteAfter.checkedAt > noteBefore.checkedAt, 'Saving after a newer check records that check.');
+    const unrelated = envelope => envelope.records.filter(record => record.schema !== MAINTENANCE_CHECK_SCHEMA);
+    assert.deepEqual(unrelated(envelopeAfter), unrelated(envelopeBefore)); assert.deepEqual(envelopeAfter.savedIntent, envelopeBefore.savedIntent);
     const pageFacts = (await groupRows(reopened, 'Needs attention'))[0].split('\n').filter(line => /^(Authority|Evidence|Availability):/.test(line));
     assert.equal(pageFacts.length, headlessFirst.updates[0].facts.length, 'The page shows exactly the facts the headless check reports.');
     observedFacts.first = headlessFirst.updates[0].facts;
-    await reopened.screenshot({ path: join(output, '01-update-available.png'), fullPage: true });
-    scenarios.push('automatic-check-on-open', 'category-line-content-only', 'check-is-read-only', 'envelope-bytes-unchanged-by-check');
-    revisions.beforeDisposition = envelopeBefore.revision.sequence;
+    await shot(reopened, '01-update-available.png');
+    scenarios.push('automatic-check-on-open', 'category-line-content-only', 'check-is-read-only', 'check-alone-leaves-envelope-unchanged', 'save-records-last-successful-check');
+    revisions.beforeDisposition = envelopeAfter.revision.sequence;
 
     // 3. Skip that exact revision and save the envelope.
     await section(reopened, 'Needs attention').getByRole('button', { name: 'Skip this revision', exact: true }).click();
@@ -166,9 +208,9 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     assert.equal(groups['Needs attention'], undefined);
     assert.match(groups['Skipped revisions'][0], /Skipped this exact revision\./);
     const envelopePath = join(output, 'policy.draft.skipped.journey.json');
-    const skippedBytes = await download(reopened, () => reopened.locator('#policy-draft-save').click(), envelopePath);
+    const skippedBytes = await saveDraft(reopened, envelopePath);
     const skipped = JSON.parse(decode(skippedBytes));
-    assert.equal(skipped.revision.sequence, envelopeBefore.revision.sequence + 1);
+    assert.equal(skipped.revision.sequence, envelopeAfter.revision.sequence + 2, 'One revision for the choice and one for the recorded check.');
     assert.equal(skipped.executable, false);
     const [skipRecord, ...others] = dispositions(skipped);
     assert.deepEqual(others, []);
@@ -190,7 +232,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     assert.match(await checkedText(skippedPage), /^Last checked/);
     const headlessSkipped = await headlessCheck(skippedBytes, [...inventories, updated]);
     assert.deepEqual(headlessSkipped.updates.map(update => [update.disposition?.disposition, update.promoted, update.attention]), [['skip', false, null]]);
-    await skippedPage.screenshot({ path: join(output, '02-skip-preserved-after-reopen.png'), fullPage: true });
+    await shot(skippedPage, '02-skip-preserved-after-reopen.png');
     scenarios.push('reopen-preserves-exact-skip', 'headless-agreement-skip');
 
     // 5. A newer revision is published: it appears separately as needing attention while the skip stays. Defer it.
@@ -200,7 +242,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     assert.equal(groups['Needs attention'].length, 1); assert.match(groups['Needs attention'][0], /review-notes-catalog 1\.0\.2/);
     assert.match(groups['Needs attention'][0], /New revision available\./);
     assert.equal(groups['Skipped revisions'].length, 1); assert.match(groups['Skipped revisions'][0], /review-notes-catalog 1\.0\.1/);
-    await skippedPage.screenshot({ path: join(output, '03-newer-revision-needs-attention.png'), fullPage: true });
+    await shot(skippedPage, '03-newer-revision-needs-attention.png');
     const needs = section(skippedPage, 'Needs attention');
     await needs.locator('input[type="date"]').fill(futureDate);
     await needs.getByRole('button', { name: 'Defer', exact: true }).click();
@@ -209,12 +251,14 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     assert.equal(groups['Needs attention'], undefined);
     assert.match(groups.Deferred[0], /review-notes-catalog 1\.0\.2/); assert.match(groups.Deferred[0], new RegExp(`Deferred until ${futureDate}\\.`));
     assert.match(groups['Skipped revisions'][0], /review-notes-catalog 1\.0\.1/);
-    await skippedPage.screenshot({ path: join(output, '04-newer-deferred.png'), fullPage: true });
+    await shot(skippedPage, '04-newer-deferred.png');
     const deferredPath = join(output, 'policy.draft.deferred.journey.json');
-    const deferredBytes = await download(skippedPage, () => skippedPage.locator('#policy-draft-save').click(), deferredPath);
+    const deferredBytes = await saveDraft(skippedPage, deferredPath);
     const deferred = JSON.parse(decode(deferredBytes));
     assert.deepEqual(dispositions(deferred).map(record => [record.disposition, record.candidate.releaseSha256, record.deferUntil, record.required]).sort(),
       [['defer', newer.release.sha256, futureDate, false], ['skip', updated.release.sha256, undefined, false]].sort());
+    const savedCheck = recordedNote(deferred);
+    assert.ok(savedCheck, 'The saved envelope records its last successful check.');
     const headlessDeferred = await headlessCheck(deferredBytes, [...inventories, updated, newer]);
     assert.deepEqual(headlessDeferred.updates.map(update => [update.candidate.releaseSha256, update.disposition.disposition, update.promoted]).sort(),
       [[updated.release.sha256, 'skip', false], [newer.release.sha256, 'defer', false]].sort());
@@ -236,11 +280,60 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     const offlineHeadless = await headlessCheck(deferredBytes, null);
     assert.deepEqual(offlineHeadless.categories[0], { category: 'content', selected: true, state: 'unknown', reason: 'sources-unavailable' });
     assert.deepEqual(offlineHeadless.updates, []); assert.deepEqual(offlineHeadless.preserved.map(entry => entry.state), ['unknown', 'unknown']);
-    await skippedPage.screenshot({ path: join(output, '05-offline-last-check-kept.png'), fullPage: true });
+    await shot(skippedPage, '05-offline-last-check-kept.png');
     scenarios.push('offline-keeps-last-check-time', 'offline-shows-unknown-not-no-updates', 'headless-agreement-offline');
 
-    // 7. A category the Workbench cannot read is unknown; selecting it selects nothing else.
+    // 6b. A fresh page reopens the saved envelope while the source is still unreachable: the check time recorded in
+    // the envelope is shown, content is unknown now, and the saved choices are preserved, not dropped.
+    const offlineReopen = await openPage();
+    await openSaved(offlineReopen, deferredPath, OPENED);
+    const reopenedOffline = await checkedText(offlineReopen);
+    assert.match(reopenedOffline, /^Updates as of /); assert.equal(checkedAt(reopenedOffline), savedCheck.checkedAt); assert.match(reopenedOffline, /Some updates are unknown\./);
+    assert.deepEqual(await categoryLines(offlineReopen), ['Content: unknown — sources are unavailable', 'Software: not selected', 'Client: not selected', 'Environment: not selected']);
+    const recordedText = await offlineReopen.locator('#policy-updates-recorded').textContent();
+    assert.ok(recordedText.includes(savedCheck.checkedAt)); assert.match(recordedText, /Content: checked/);
+    groups = await groupsOf(offlineReopen);
+    assert.deepEqual(Object.keys(groups), ['Preserved choices']); assert.equal(groups['Preserved choices'].length, 2);
+    assert.doesNotMatch(await offlineReopen.locator('#policy-updates').textContent(), /No updates were offered/);
+    const reopenedHeadless = await headlessCheck(deferredBytes, null);
+    assert.deepEqual(reopenedHeadless.lastCheck, { checkedAt: savedCheck.checkedAt, categories: savedCheck.categories });
+    await shot(offlineReopen, '06-offline-reopen-recorded-check.png');
+    scenarios.push('offline-reopen-shows-recorded-check', 'headless-agreement-recorded-check');
+
+    // 6c. The source returns. A defer date that has been reached needs attention again when the envelope is
+    // reopened or checked; nothing is scheduled or applied.
     await publish(['current', 'updated', 'newer']);
+    assert.deepEqual(await checkNow(skippedPage), ['maintenance-check']);
+    assert.match(await checkedText(skippedPage), /^Last checked/);
+    const deferredNow = section(skippedPage, 'Deferred');
+    await deferredNow.locator('input[type="date"]').fill(pastDate);
+    await deferredNow.getByRole('button', { name: 'Defer', exact: true }).click();
+    await skippedPage.locator('#policy-draft-status').filter({ hasText: 'Update choice recorded' }).waitFor();
+    await section(skippedPage, 'Needs attention').waitFor();
+    groups = await groupsOf(skippedPage);
+    assert.equal(groups.Deferred, undefined);
+    assert.match(groups['Needs attention'][0], /review-notes-catalog 1\.0\.2/);
+    assert.match(groups['Needs attention'][0], new RegExp(`Defer date reached \\(${pastDate}\\); needs attention\\.`));
+    const reachedPath = join(output, 'policy.draft.defer-reached.journey.json');
+    const reachedBytes = await saveDraft(skippedPage, reachedPath);
+    const reached = JSON.parse(decode(reachedBytes));
+    assert.deepEqual(dispositions(reached).map(record => [record.disposition, record.deferUntil]).sort(), [['defer', pastDate], ['skip', undefined]].sort());
+    const headlessReached = await headlessCheck(reachedBytes, [...inventories, updated, newer]);
+    assert.deepEqual(headlessReached.updates.map(update => [update.package.version, update.attention, update.promoted]).sort(), [['1.0.1', null, false], ['1.0.2', 'defer-date-reached', true]]);
+    const reachedPage = await openPage();
+    operations = [];
+    await openSaved(reachedPage, reachedPath, OPENED);
+    assert.deepEqual(operations.filter(operation => !['read', 'draft-open', 'maintenance-check'].includes(operation)), [], 'Reopening only reads; nothing is scheduled or applied.');
+    groups = await groupsOf(reachedPage);
+    assert.equal(groups['Needs attention'].length, 1);
+    assert.match(groups['Needs attention'][0], new RegExp(`Defer date reached \\(${pastDate}\\); needs attention\\.`));
+    assert.equal(groups['Skipped revisions'].length, 1);
+    assert.equal(await draftRevision(reachedPage), reached.revision.sequence, 'Reopening leaves the envelope revision unchanged.');
+    await shot(reachedPage, '07-defer-date-reached-after-reopen.png');
+    revisions.afterDeferReached = reached.revision.sequence;
+    scenarios.push('defer-past-date-saved', 'reopen-defer-date-reached-needs-attention', 'no-scheduler-reads-only', 'headless-agreement-defer-date-reached');
+
+    // 7. A category the Workbench cannot read is unknown; selecting it selects nothing else.
     categoriesSent = [];
     await skippedPage.getByLabel('Check software updates', { exact: true }).check();
     assert.deepEqual(await checkNow(skippedPage), ['maintenance-check']);
@@ -249,13 +342,103 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     for (const [name, box] of [['content', true], ['software', true], ['client', false], ['environment', false]])
       assert.equal(await skippedPage.getByLabel(`Check ${name} updates`, { exact: true }).isChecked(), box);
     assert.match(await checkedText(skippedPage), /Some updates are unknown\./);
-    await skippedPage.screenshot({ path: join(output, '06-extra-category-unknown.png'), fullPage: true });
+    await shot(skippedPage, '08-extra-category-unknown.png');
     scenarios.push('extra-category-unknown-no-reader', 'categories-never-expand');
+
+    // 8. A fully resolved saved policy, with a recorded review decision, gets the same check. The review decision comes
+    // from the existing evidence-review flow on the review note; its facts are then shown on the row, whatever the choice.
+    await publish(['current', 'updated']);
+    const resolvedAuthoring = await openPage();
+    await choose(resolvedAuthoring, 'Independent', NOTE);
+    await supplyEvidence(resolvedAuthoring);
+    await resolvedAuthoring.getByLabel('Evidence review subject', { exact: true }).selectOption({ label: NOTE });
+    await resolvedAuthoring.getByRole('button', { name: 'Inspect evidence', exact: true }).click();
+    await resolvedAuthoring.getByText(/findings bound to the checked subject/).waitFor();
+    await resolvedAuthoring.getByLabel('Review decision ID', { exact: true }).fill(REVIEW);
+    await resolvedAuthoring.getByLabel('Review owner', { exact: true }).fill('fixture-owner');
+    await resolvedAuthoring.getByLabel('Reviewer', { exact: true }).fill('fixture-reviewer');
+    await resolvedAuthoring.getByLabel('Review disposition', { exact: true }).selectOption('false-alarm');
+    await resolvedAuthoring.getByLabel('Review reason', { exact: true }).fill('Fixture note intentionally has no license declaration.');
+    await resolvedAuthoring.getByRole('button', { name: 'Propose human review', exact: true }).click();
+    await resolvedAuthoring.locator('#policy-accept:not([disabled])').waitFor(); await resolvedAuthoring.locator('#policy-accept').click();
+    const resolvedPath = join(output, 'policy.resolved.downloaded.json');
+    const resolvedBytes = await download(resolvedAuthoring, () => resolvedAuthoring.locator('#policy-save').click(), resolvedPath);
+    const resolvedIntent = JSON.parse(decode(resolvedBytes)).metadata['aih.workbench'];
+    assert.deepEqual(resolvedIntent.roots.map(root => root.itemId), [NOTE]);
+    assert.deepEqual(resolvedIntent.reviews.records.map(record => [record.id, record.state]), [[REVIEW, 'current']]);
+    const reviewed = await openDraft({ bytes: resolvedBytes, inventories, reviewEvidence: [evidence.bytes] });
+    assert.equal(reviewed.status, 'ok', JSON.stringify(reviewed.diagnostics));
+    assert.equal(reviewed.value.editing, 'available', 'Every recorded choice resolves.');
+    const resolvedHeadless = await headlessCheck(reviewed.value.envelopeBytes, [...inventories, updated]);
+    assert.equal(resolvedHeadless.updates.length, 1);
+    const expectedFacts = factLines(resolvedHeadless.updates[0].facts);
+    assert.ok(expectedFacts.length > 0, 'The recorded review decision is a real evidence fact.');
+    assert.ok(expectedFacts.some(line => line.startsWith(`Evidence: Review decision ${REVIEW} `)), expectedFacts.join('\n'));
+    observedFacts.resolved = resolvedHeadless.updates[0].facts;
+
+    const resolvedPage = await openPage();
+    operations = []; categoriesSent = []; checkInputs = [];
+    await supplyEvidence(resolvedPage);
+    await resolvedPage.locator('#policy-open').setInputFiles(resolvedPath);
+    await resolvedPage.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+    await resolvedPage.locator('#policy-status').filter({ hasText: 'Saved choices recovered' }).waitFor();
+    await waitSettled(resolvedPage, null);
+    assert.equal(await resolvedPage.locator('#policy-draft').isHidden(), true, 'A resolved policy reopens as an ordinary policy, not a draft.');
+    assert.equal(await resolvedPage.locator('#policy-updates').isVisible(), true);
+    assert.deepEqual(operations.filter(operation => !['read', 'maintenance-check'].includes(operation)), [], 'Opening may only read.');
+    assert.deepEqual(checkInputs, ['policy']); assert.deepEqual(categoriesSent, [['content']]);
+    groups = await groupsOf(resolvedPage);
+    assert.deepEqual(Object.keys(groups), ['Needs attention']);
+    assert.match(groups['Needs attention'][0], /New revision available\./);
+    const shownFacts = async (page, label) => factLines((await groupRows(page, label))[0].split('\n').filter(line => /^(Authority|Evidence|Availability):/.test(line)).map(line => {
+      const [kind, ...message] = line.split(': '); return { kind: Object.entries(FACT_LABEL).find(([, text]) => text === kind)[0], message: message.join(': ') };
+    }));
+    assert.deepEqual(await shownFacts(resolvedPage, 'Needs attention'), expectedFacts);
+    // Keep current: the update stays available and is listed, but is not promoted as needing attention.
+    await section(resolvedPage, 'Needs attention').getByRole('button', { name: 'Keep current', exact: true }).click();
+    await section(resolvedPage, 'Kept current').waitFor();
+    await resolvedPage.locator('#policy-draft-status').filter({ hasText: 'Update choice recorded' }).waitFor();
+    assert.equal(await resolvedPage.locator('#policy-draft').isVisible(), true, 'Recording a choice on a policy saves it as a draft.');
+    groups = await groupsOf(resolvedPage);
+    assert.equal(groups['Needs attention'], undefined);
+    assert.equal(groups['Kept current'].length, 1);
+    assert.match(groups['Kept current'][0], /Keep current — this update remains available\./); assert.match(groups['Kept current'][0], /review-notes-catalog 1\.0\.1/);
+    assert.deepEqual(await shownFacts(resolvedPage, 'Kept current'), expectedFacts, 'Facts stay visible whatever the choice.');
+    assert.equal(await draftRevision(resolvedPage), 2);
+    await shot(resolvedPage, '09-resolved-policy-keep-current.png');
+    // Then skip that exact revision, save the draft and reopen it.
+    await section(resolvedPage, 'Kept current').getByRole('button', { name: 'Skip this revision', exact: true }).click();
+    await section(resolvedPage, 'Skipped revisions').waitFor();
+    assert.equal((await groupsOf(resolvedPage))['Kept current'], undefined);
+    const resolvedDraftPath = join(output, 'policy.resolved.skipped.journey.json');
+    const resolvedDraftBytes = await saveDraft(resolvedPage, resolvedDraftPath);
+    const resolvedDraft = JSON.parse(decode(resolvedDraftBytes));
+    assert.deepEqual(dispositions(resolvedDraft).map(record => [record.disposition, record.required, record.candidate.releaseSha256]), [['skip', false, updated.release.sha256]]);
+    assert.ok(recordedNote(resolvedDraft)); assert.equal(resolvedDraft.revision.sequence, 4, 'Keep current, skip, then the recorded check.');
+    assert.ok(sameBytes(Buffer.from(resolvedDraft.savedIntent.base64, 'base64'), resolvedBytes), 'The saved policy bytes inside the envelope are untouched.');
+    const afterSkip = await shownFacts(resolvedPage, 'Skipped revisions');
+    assert.deepEqual(afterSkip, expectedFacts);
+    const resolvedReopened = await openPage();
+    operations = [];
+    await supplyEvidence(resolvedReopened);
+    await openSaved(resolvedReopened, resolvedDraftPath, 'Saved draft reopened');
+    assert.deepEqual(operations.filter(operation => !['read', 'draft-open', 'maintenance-check'].includes(operation)), [], 'Reopening only reads.');
+    groups = await groupsOf(resolvedReopened);
+    assert.deepEqual(Object.keys(groups), ['Skipped revisions']);
+    assert.match(groups['Skipped revisions'][0], /Skipped this exact revision\./);
+    assert.deepEqual(await shownFacts(resolvedReopened, 'Skipped revisions'), expectedFacts);
+    const resolvedAgain = await headlessCheck(resolvedDraftBytes, [...inventories, updated]);
+    assert.deepEqual(resolvedAgain.updates.map(update => [update.disposition?.disposition, update.promoted, update.attention]), [['skip', false, null]]);
+    assert.deepEqual(factLines(resolvedAgain.updates[0].facts), expectedFacts);
+    await shot(resolvedReopened, '10-resolved-policy-skip-reopened.png');
+    revisions.resolvedDraft = resolvedDraft.revision.sequence;
+    scenarios.push('resolved-policy-update-shown', 'resolved-policy-check-reads-saved-bytes', 'keep-current-stays-available', 'review-fact-on-row-with-disposition',
+      'resolved-policy-skip-becomes-saved-draft', 'resolved-policy-skip-survives-reopen', 'headless-agreement-resolved-policy');
 
     assert.deepEqual(errors, []); assert.deepEqual(failedResponses, []);
     await writeFile(join(output, 'maintenance-evidence.json'), JSON.stringify({ status: 'passed', entry: '/', chromium: browser.version(), scenarios, categories: UPDATE_CATEGORIES,
-      candidates: { updated: updated.release.sha256, newer: newer.release.sha256 }, envelopeRevisions: revisions, defer: { until: futureDate },
-      factsObserved: observedFacts, errors, failedResponses }, null, 2));
+      candidates: { updated: updated.release.sha256, newer: newer.release.sha256 }, envelopeRevisions: revisions, defer: { future: futureDate, past: pastDate },
+      recordedCheck: { checkedAt: savedCheck.checkedAt, categories: savedCheck.categories }, factsObserved: observedFacts, errors, failedResponses }, null, 2));
     console.log(`Maintenance journey passed: ${output}`);
   } catch (error) {
     await observed?.screenshot({ path: join(output, 'maintenance-failure.png'), fullPage: true }).catch(() => {});

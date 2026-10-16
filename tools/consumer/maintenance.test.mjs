@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { composeAuthoring, freshAuthoring, stable, openDraft, editDraft } from './headless.mjs';
+import * as journey from './journey.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
-import { checkMaintenance, recordMaintenance, projectDispositions, MAINTENANCE_DISPOSITION_SCHEMA, UPDATE_CATEGORIES } from './maintenance.mjs';
+import { checkMaintenance, recordMaintenance, projectDispositions, MAINTENANCE_DISPOSITION_SCHEMA, MAINTENANCE_CHECK_SCHEMA, UPDATE_CATEGORIES } from './maintenance.mjs';
 import { createMixedService } from './mixed-service.mjs';
 import { mixedInventories } from './authoring-v3.test.mjs';
 import { intakeDeclaration, digestBytes } from './intake.mjs';
@@ -371,7 +372,8 @@ test('writeJourneyEnvelope validates disposition records and the registry names 
   const s = await scenario();
   const good = await record(s.envelopeBytes, setOp(s, s.updated, 'skip'));
   const read = (await readJourneyEnvelope(s.envelopeBytes)).value, draft = read.records[0];
-  assert.deepEqual(Object.keys(JOURNEY_RECORD_KINDS).sort(), ['urn:aihq:workbench:journey-record:maintenance-disposition:1.0.0', 'urn:aihq:workbench:journey-record:unresolved-draft:1.0.0']);
+  assert.deepEqual(Object.keys(JOURNEY_RECORD_KINDS).sort(), ['urn:aihq:workbench:journey-record:maintenance-check:1.0.0',
+    'urn:aihq:workbench:journey-record:maintenance-disposition:1.0.0', 'urn:aihq:workbench:journey-record:unresolved-draft:1.0.0']);
   assert.equal(MAINTENANCE_DISPOSITION_SCHEMA, 'urn:aihq:workbench:journey-record:maintenance-disposition:1.0.0');
   assert.equal(JOURNEY_RECORD_KINDS[MAINTENANCE_DISPOSITION_SCHEMA].required, false);
   const accepted = await writeJourneyEnvelope({ savedIntentBytes: read.savedIntentBytes, records: [draft, good.record] });
@@ -438,23 +440,26 @@ test('host route: maintenance-check and maintenance-record through the mixed ser
   assert.equal(refused.status, 'refused');
   const badCategory = await service.run('maintenance-check', { envelopeBytes: bytes, categories: ['hardware'] });
   assert.equal(badCategory.status, 'refused'); assert.equal(badCategory.diagnostics[0].path, '/categories');
-  // Without a configured source the current inventories are the candidates; a throwing source is offline.
+  // Without a configured source nothing is checked: content is unknown for its own reason, never an all-clear.
   const plain = await createMixedService({ release: maintained.release, materials: maintained.materials, materialSource: maintained.materialSource });
   const unconfigured = await plain.run('maintenance-check', { envelopeBytes: bytes });
   assert.equal(unconfigured.status, 'ok'); assert.deepEqual(unconfigured.value.updates, []);
-  assert.equal(unconfigured.value.categories[0].state, 'checked');
+  assert.deepEqual(unconfigured.value.categories[0], { category: 'content', selected: true, state: 'unknown', reason: 'no-configured-source' });
+  assert.deepEqual(unconfigured.value.reads, ['envelope', 'supplied-inventories']);
+  // A source that throws is configured but unreachable.
   const throwing = await createMixedService({ release: maintained.release, materials: maintained.materials, materialSource: maintained.materialSource },
     { maintenanceSource: async () => { throw new Error('unreachable'); } });
   const failed = await throwing.run('maintenance-check', { envelopeBytes: bytes });
   assert.equal(failed.value.categories[0].reason, 'sources-unavailable');
 });
 
-test('shipped disposition schema agrees with the runtime record', async t => {
-  let schema, journey;
+test('shipped disposition schema agrees structurally with the runtime record', async t => {
+  let schema, journey, checkSchema;
   for (const base of ['../../schemas/', '../schemas/']) {
     try {
       schema = JSON.parse(await readFile(new URL(`${base}journey-record-maintenance-disposition-1.0.0.json`, import.meta.url), 'utf8'));
       journey = JSON.parse(await readFile(new URL(`${base}journey-envelope-1.0.0.json`, import.meta.url), 'utf8'));
+      checkSchema = JSON.parse(await readFile(new URL(`${base}journey-record-maintenance-check-1.0.0.json`, import.meta.url), 'utf8'));
       break;
     } catch { /* try next layout */ }
   }
@@ -475,6 +480,150 @@ test('shipped disposition schema agrees with the runtime record', async t => {
   assert.match(written.deferUntil, new RegExp(schema.properties.deferUntil.pattern));
   // The envelope schema validates the record by reference and leaves the draft and open rules unchanged.
   const items = journey.properties.records.items;
-  assert.deepEqual(items.allOf.map(rule => [rule.if.properties.schema.const, rule.then.$ref]), [[MAINTENANCE_DISPOSITION_SCHEMA, MAINTENANCE_DISPOSITION_SCHEMA]]);
+  assert.deepEqual(items.allOf.map(rule => [rule.if.properties.schema.const, rule.then.$ref]),
+    [[MAINTENANCE_DISPOSITION_SCHEMA, MAINTENANCE_DISPOSITION_SCHEMA], [MAINTENANCE_CHECK_SCHEMA, MAINTENANCE_CHECK_SCHEMA]]);
+  // The check note: closed, fixed id, optional, categories drawn from the same registry.
+  const note = (await record(s.envelopeBytes, { type: 'note-check', checkedAt: '2026-10-14T09:30:00Z',
+    categories: [{ category: 'content', state: 'checked' }, { category: 'software', state: 'unknown', reason: 'no-supported-reader' }] })).envelope.records.find(r => r.id === 'maintenance-check');
+  assert.equal(checkSchema.$id, MAINTENANCE_CHECK_SCHEMA); assert.equal(checkSchema.properties.schema.const, MAINTENANCE_CHECK_SCHEMA);
+  assert.equal(checkSchema.properties.id.const, 'maintenance-check'); assert.equal(checkSchema.properties.required.const, false);
+  assert.equal(checkSchema.additionalProperties, false);
+  assert.deepEqual([...checkSchema.required].sort(), Object.keys(note).sort()); assert.deepEqual(Object.keys(checkSchema.properties).sort(), Object.keys(note).sort());
+  assert.match(note.checkedAt, new RegExp(checkSchema.properties.checkedAt.pattern));
+  assert.deepEqual(checkSchema.properties.categories.items.properties.category.enum, UPDATE_CATEGORIES);
+  assert.deepEqual(checkSchema.properties.categories.items.properties.state.enum, ['checked', 'unknown', 'not-selected']);
+  assert.match(note.categories[1].reason, new RegExp(checkSchema.properties.categories.items.properties.reason.pattern));
   assert.equal(items.else.additionalProperties, true);
+});
+
+test('the source is read only when content is selected, and no configured source is unknown, not checked', async () => {
+  const s = await scenario(), [maintained] = s.inventories;
+  let reads = 0;
+  const base = { release: maintained.release, materials: maintained.materials, materialSource: maintained.materialSource };
+  const service = await createMixedService(base, { maintenanceSource: async () => { reads++; return [s.updated]; } });
+  for (const categories of [['software'], ['client', 'environment']]) {
+    const value = (await service.run('maintenance-check', { envelopeBytes: [...s.envelopeBytes], categories })).value;
+    assert.deepEqual(value.categories.find(c => c.category === 'content'), { category: 'content', selected: false, state: 'not-selected' });
+    assert.equal(value.reads.includes('candidate-inventories'), false);
+  }
+  assert.equal(reads, 0, 'the content source is not read when Content is not selected');
+  const withContent = await service.run('maintenance-check', { envelopeBytes: [...s.envelopeBytes], categories: ['content', 'software'] });
+  assert.equal(reads, 1); assert.equal(withContent.value.reads.includes('candidate-inventories'), true);
+  assert.equal((await service.run('maintenance-check', { envelopeBytes: [...s.envelopeBytes] })).status, 'ok'); assert.equal(reads, 2);
+  // Headless: the unconfigured and unreachable cases are told apart, and neither lists candidate inventories as read.
+  const unconfigured = await check({ envelopeBytes: s.envelopeBytes, inventories: s.inventories, candidateInventories: null, candidateSource: 'unconfigured' });
+  assert.deepEqual(unconfigured.categories[0], { category: 'content', selected: true, state: 'unknown', reason: 'no-configured-source' });
+  assert.deepEqual(unconfigured.reads, ['envelope', 'supplied-inventories']);
+  const unreachable = await check({ envelopeBytes: s.envelopeBytes, inventories: s.inventories, candidateInventories: null, candidateSource: 'configured' });
+  assert.equal(unreachable.categories[0].reason, 'sources-unavailable');
+  const refused = await checkMaintenance({ envelopeBytes: s.envelopeBytes, inventories: s.inventories, candidateInventories: null, candidateSource: 'elsewhere', now: NOW });
+  assert.equal(refused.status, 'refused'); assert.equal(refused.diagnostics[0].path, '/candidateSource');
+});
+
+test('host route: a saved policy gets the update check and recording becomes a saved draft', async () => {
+  const s = await scenario(), [maintained] = s.inventories;
+  const service = await createMixedService({ release: maintained.release, materials: maintained.materials, materialSource: maintained.materialSource },
+    { maintenanceSource: async () => [s.updated] });
+  const policy = [...s.policyBytes], before = policy.slice();
+  const checked = await service.run('maintenance-check', { bytes: policy, categories: ['content'] });
+  assert.equal(checked.status, 'ok', JSON.stringify(checked.diagnostics));
+  assert.deepEqual(checked.value.updates.map(u => [u.subject.itemId, u.attention, u.promoted]), [[s.noteId, 'new', true]]);
+  assert.deepEqual(checked.value.mutations, []); assert.deepEqual(policy, before);
+  assert.equal('lastCheck' in checked.value, false);
+  const refused = await service.run('maintenance-check', { categories: ['content'] });
+  assert.equal(refused.status, 'refused');
+  const recorded = await service.run('maintenance-record', { bytes: policy, operation: setOp(s, s.updated, 'skip') });
+  assert.equal(recorded.status, 'ok', JSON.stringify(recorded.diagnostics));
+  assert.equal(recorded.value.envelope.revision.sequence, 2); assert.equal(recorded.value.record.disposition, 'skip');
+  // The returned draft is exactly what opening the new envelope presents, so the client adopts it as an opened draft.
+  const opened = await openDraft({ bytes: recorded.value.envelopeBytes, inventories: service.inventories });
+  assert.equal(opened.status, 'ok', JSON.stringify(opened.diagnostics));
+  assert.deepEqual(recorded.value.draft, opened.value);
+  assert.deepEqual(recorded.value.draft.savedIntentBytes, s.policyBytes);
+  assert.equal(recorded.value.draft.projection.records.filter(r => r.schema === MAINTENANCE_DISPOSITION_SCHEMA).length, 1);
+  // Envelope input keeps its own path and also returns the draft.
+  const again = await service.run('maintenance-record', { envelopeBytes: [...recorded.value.envelopeBytes], operation: { type: 'clear', id: recorded.value.record.id } });
+  assert.equal(again.status, 'ok'); assert.equal(again.value.draft.projection.revision.sequence, 3);
+});
+
+test('a note-check record keeps the last successful check inside the envelope and only recordMaintenance writes it', async () => {
+  noNetwork();
+  const s = await scenario(), candidates = [...s.inventories, s.updated];
+  const categories = [{ category: 'content', state: 'checked' }, { category: 'software', state: 'unknown', reason: 'no-supported-reader' },
+    { category: 'client', state: 'not-selected' }, { category: 'environment', state: 'not-selected' }];
+  const checkedAt = '2026-10-14T09:30:00Z';
+  // A check alone never writes a note; with none recorded there is no lastCheck.
+  const none = await check({ envelopeBytes: s.envelopeBytes, inventories: s.inventories, candidateInventories: candidates });
+  assert.equal('lastCheck' in none, false);
+  const noted = await record(s.envelopeBytes, { type: 'note-check', checkedAt, categories });
+  assert.equal(noted.envelope.revision.sequence, 2);
+  const note = noted.envelope.records.find(r => r.schema === MAINTENANCE_CHECK_SCHEMA);
+  assert.deepEqual(note, { id: 'maintenance-check', schema: MAINTENANCE_CHECK_SCHEMA, required: false, checkedAt, categories });
+  assert.equal(noted.envelope.records.find(r => r.id === 'draft').required, true);
+  assert.deepEqual(noted.envelope.savedIntent, s.open.envelope.savedIntent);
+  assert.deepEqual(noted.dispositions, []);
+  assert.deepEqual(noted.projection.records.map(r => [r.id, r.required, r.supported]), [['draft', true, true], ['maintenance-check', false, true]]);
+  // Reopening and an offline check both report the recorded time and per-category states.
+  const reopened = await openDraft({ bytes: noted.envelopeBytes, inventories: s.inventories });
+  assert.equal(reopened.status, 'ok', JSON.stringify(reopened.diagnostics)); assert.deepEqual(reopened.value.envelopeBytes, noted.envelopeBytes);
+  const offline = await check({ envelopeBytes: noted.envelopeBytes, inventories: s.inventories, candidateInventories: null });
+  assert.deepEqual(offline.lastCheck, { checkedAt, categories });
+  assert.equal(offline.checkedAt, NOW); assert.deepEqual(offline.categories[0], { category: 'content', selected: true, state: 'unknown', reason: 'sources-unavailable' });
+  assert.deepEqual(noted.envelopeBytes, (await record(s.envelopeBytes, { type: 'note-check', checkedAt, categories })).envelopeBytes);
+  // A later note replaces it (one record, fixed id); dispositions and the draft survive both ways.
+  const skipped = await record(noted.envelopeBytes, setOp(s, s.updated, 'skip'));
+  assert.deepEqual(skipped.envelope.records.find(r => r.id === 'maintenance-check'), note);
+  const later = await record(skipped.envelopeBytes, { type: 'note-check', checkedAt: '2026-10-15T08:00:00Z', categories: categories.slice(0, 1) });
+  assert.equal(later.envelope.records.filter(r => r.schema === MAINTENANCE_CHECK_SCHEMA).length, 1);
+  assert.equal(later.envelope.records.find(r => r.id === 'maintenance-check').checkedAt, '2026-10-15T08:00:00Z');
+  assert.deepEqual(later.dispositions.map(d => d.id), [skipped.record.id]);
+  const cleared = await record(later.envelopeBytes, { type: 'clear', id: skipped.record.id });
+  assert.equal(cleared.envelope.records.some(r => r.schema === MAINTENANCE_CHECK_SCHEMA), true);
+  // A draft edit passes the note through.
+  const edited = await editDraft({ envelopeBytes: later.envelopeBytes, inventories: s.inventories,
+    operation: { type: 'remove-root', root: { releaseSha256: s.maintained.release.sha256, itemId: 'mattpocock.code-review', scope: 'project' } } });
+  assert.equal(edited.status, 'ok', JSON.stringify(edited.diagnostics));
+  assert.deepEqual(edited.value.envelope.records.find(r => r.id === 'maintenance-check'), later.envelope.records.find(r => r.id === 'maintenance-check'));
+  // The mixed service reports it too.
+  const [maintained] = s.inventories;
+  const service = await createMixedService({ release: maintained.release, materials: maintained.materials, materialSource: maintained.materialSource });
+  const viaHost = await service.run('maintenance-check', { envelopeBytes: [...noted.envelopeBytes] });
+  assert.deepEqual(viaHost.value.lastCheck, { checkedAt, categories });
+});
+
+test('malformed note-check records and operations are refused with the path', async () => {
+  const s = await scenario();
+  const categories = [{ category: 'content', state: 'checked' }];
+  const good = await record(s.envelopeBytes, { type: 'note-check', checkedAt: '2026-10-14T09:30:00Z', categories });
+  const resign = async mutate => {
+    const doc = JSON.parse(decode(good.envelopeBytes));
+    mutate(doc.records.find(r => r.id === 'maintenance-check'));
+    const { sha256: _omitted, ...revision } = doc.revision;
+    doc.revision.sha256 = await digestBytes(encode(stable({ ...doc, revision })));
+    return encode(JSON.stringify(doc, null, 2) + '\n');
+  };
+  const index = (await readJourneyEnvelope(good.envelopeBytes)).value.records.findIndex(r => r.id === 'maintenance-check');
+  const malformed = [r => { r.required = true; }, r => { r.extra = 1; }, r => { r.checkedAt = '2026-10-14'; }, r => { r.checkedAt = '2026-02-30T00:00:00Z'; },
+    r => { r.categories = []; }, r => { r.categories = [{ category: 'hardware', state: 'checked' }]; }, r => { r.categories = [{ category: 'content', state: 'fine' }]; },
+    r => { r.categories = [{ category: 'content', state: 'checked' }, { category: 'content', state: 'unknown' }]; },
+    r => { r.categories = [{ category: 'content', state: 'checked', extra: 1 }]; }, r => { delete r.checkedAt; }];
+  for (const [n, mutate] of malformed.entries()) {
+    const bytes = await resign(mutate);
+    const result = await readJourneyEnvelope(bytes);
+    assert.equal(result.status, 'refused', `mutation ${n}`); assert.equal(result.diagnostics[0].code, 'INPUT_INVALID', `mutation ${n}`);
+    assert.equal(result.diagnostics[0].path, `/records/${index}`, `mutation ${n}`); assert.deepEqual(result.originalBytes, bytes);
+  }
+  const at = '2026-10-14T09:30:00Z';
+  const bad = [{ type: 'note-check', checkedAt: 'now', categories }, { type: 'note-check', checkedAt: at }, { type: 'note-check', checkedAt: at, categories: [] },
+    { type: 'note-check', checkedAt: at, categories: [{ category: 'x', state: 'checked' }] }, { type: 'note-check', checkedAt: at, categories, extra: 1 }];
+  for (const operation of bad) {
+    const refused = await recordMaintenance({ envelopeBytes: s.envelopeBytes, operation, now: NOW });
+    assert.equal(refused.status, 'refused', JSON.stringify(operation)); assert.equal(refused.diagnostics[0].code, 'INPUT_INVALID');
+    assert.match(refused.diagnostics[0].path, /^\/operation/); assert.deepEqual(refused.originalBytes, s.envelopeBytes);
+  }
+});
+
+test('validator internals are not part of the public journey entry', () => {
+  for (const name of ['isUtcTimestamp', 'dispositionProblem', 'dispositionId', 'DISPOSITION_CATEGORIES', 'DISPOSITION_SUBJECT_KINDS', 'DISPOSITION_CANDIDATE_KINDS', 'DISPOSITIONS'])
+    assert.equal(name in journey, false, name);
 });

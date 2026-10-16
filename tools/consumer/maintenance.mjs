@@ -1,15 +1,20 @@
 // Maintenance dispositions: what a person chose to do about an available update, kept in the journey
-// envelope. Pure and bounded: it reads the saved envelope and the inventories it is handed, and
-// writes only a new envelope revision through recordMaintenance. A date never schedules anything.
+// envelope with the time and states of the last successful check. Pure and bounded: it reads the saved
+// envelope and the inventories it is handed, and writes only a new envelope revision through
+// recordMaintenance. A date never schedules anything.
 import { isCheckedRelease } from '@aihq/catalog/reader';
 import { rootKey, pinKey } from './intent-shape.mjs';
 import { only } from './intake.mjs';
 import { refuse, stable } from './headless.mjs';
-import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isUtcTimestamp, dispositionProblem, dispositionId,
-  DRAFT_RECORD_SCHEMA, MAINTENANCE_DISPOSITION_RECORD_SCHEMA, DISPOSITION_CATEGORIES, JOURNEY_RECORD_KINDS } from './journey.mjs';
+import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_KINDS } from './journey.mjs';
+import { isUtcTimestamp, dispositionProblem, dispositionId, checkProblem, MAINTENANCE_DISPOSITION_RECORD_SCHEMA, MAINTENANCE_CHECK_RECORD_SCHEMA,
+  MAINTENANCE_CHECK_RECORD_ID, UPDATE_CATEGORIES } from './maintenance-record.mjs';
 export const MAINTENANCE_DISPOSITION_SCHEMA = MAINTENANCE_DISPOSITION_RECORD_SCHEMA;
-export const UPDATE_CATEGORIES = [...DISPOSITION_CATEGORIES];
+export const MAINTENANCE_CHECK_SCHEMA = MAINTENANCE_CHECK_RECORD_SCHEMA;
+export { UPDATE_CATEGORIES };
 const isDisposition = record => record.schema === MAINTENANCE_DISPOSITION_RECORD_SCHEMA;
+const isCheck = record => record.schema === MAINTENANCE_CHECK_RECORD_SCHEMA;
+const CANDIDATE_SOURCES = ['configured', 'unconfigured'];
 const byId = (a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 const checkedEntries = value => {
@@ -29,18 +34,21 @@ export function projectDispositions(envelope) {
   return (Array.isArray(envelope?.records) ? envelope.records : []).filter(isDisposition).map(record => structuredClone(record));
 }
 // Bounded read: no scan, native check, model call, host prepare/apply or write. The host supplies
-// `now`; `candidateInventories` is null/undefined when the maintenance source could not be read.
-export async function checkMaintenance({ envelopeBytes, inventories, candidateInventories, categories = ['content'], now } = {}) {
+// `now`; `candidateInventories` is null/undefined when the maintenance source could not be read, and
+// `candidateSource` says whether the host has one at all ('unconfigured' is unknown, never checked).
+export async function checkMaintenance({ envelopeBytes, inventories, candidateInventories, candidateSource = 'configured', categories = ['content'], now } = {}) {
   const loaded = await load(envelopeBytes);
   if (loaded.status !== 'ok') return loaded;
   const { read, draft } = loaded.value, { intent } = draft;
   const fail = (path, message) => refuse('INPUT_INVALID', path, message, envelopeBytes);
   if (!isUtcTimestamp(now)) return fail('/now', 'Supply the check time as an ISO UTC timestamp.');
   if (!Array.isArray(categories) || !categories.length || categories.some(category => !UPDATE_CATEGORIES.includes(category))) return fail('/categories', `Supply one or more of: ${UPDATE_CATEGORIES.join(', ')}.`);
+  if (!CANDIDATE_SOURCES.includes(candidateSource)) return fail('/candidateSource', `Supply one of: ${CANDIDATE_SOURCES.join(', ')}.`);
   if (!checkedEntries(inventories)) return fail('/inventories', 'Supply at most 32 unique checked inventories.');
-  const selected = new Set(categories), offline = candidateInventories === null || candidateInventories === undefined;
+  const selected = new Set(categories), unconfigured = candidateSource === 'unconfigured', offline = candidateInventories === null || candidateInventories === undefined;
   const states = UPDATE_CATEGORIES.map(category => !selected.has(category) ? { category, selected: false, state: 'not-selected' }
     : category !== 'content' ? { category, selected: true, state: 'unknown', reason: 'no-supported-reader' }
+    : unconfigured ? { category, selected: true, state: 'unknown', reason: 'no-configured-source' }
     : offline ? { category, selected: true, state: 'unknown', reason: 'sources-unavailable' } : { category, selected: true, state: 'checked' });
   const contentChecked = states.find(state => state.category === 'content').state === 'checked';
   if (contentChecked && !checkedEntries(candidateInventories)) return fail('/candidateInventories', 'Supply at most 32 unique checked candidate inventories.');
@@ -77,10 +85,14 @@ export async function checkMaintenance({ envelopeBytes, inventories, candidateIn
   const roots = new Set(intent.roots.map(rootKey));
   const preserved = recorded.filter(record => !matched.has(record.id)).sort(byId).map(record => ({ record: structuredClone(record),
     state: !roots.has(rootKey({ ...record.subject, scope: record.scope })) ? 'orphaned' : record.category !== 'content' || !contentChecked ? 'unknown' : 'not-offered' }));
+  // The last successful check the envelope recorded, if any; this check itself writes nothing.
+  const note = read.records.find(isCheck);
   return { status: 'ok', diagnostics: loaded.diagnostics, value: { checkedAt: now,
-    reads: ['envelope', 'supplied-inventories', ...(contentChecked ? ['candidate-inventories'] : [])], mutations: [], categories: states, updates, preserved } };
+    reads: ['envelope', 'supplied-inventories', ...(contentChecked ? ['candidate-inventories'] : [])], mutations: [], categories: states, updates, preserved,
+    ...(note ? { lastCheck: { checkedAt: note.checkedAt, categories: structuredClone(note.categories) } } : {}) } };
 }
-// A deliberate choice becomes a new envelope revision; the saved intent and the draft are untouched.
+// A deliberate choice, or the note of a successful check, becomes a new envelope revision; the saved intent
+// and the draft are untouched.
 export async function recordMaintenance({ envelopeBytes, operation, now } = {}) {
   const loaded = await load(envelopeBytes);
   if (loaded.status !== 'ok') return loaded;
@@ -88,10 +100,16 @@ export async function recordMaintenance({ envelopeBytes, operation, now } = {}) 
   const fail = (path, message) => refuse('INPUT_INVALID', path, message, envelopeBytes);
   if (!read.supported) return refuse('JOURNEY_RECORD_UNSUPPORTED', '/records', 'The envelope has required records this version cannot change; it is read-only.', envelopeBytes);
   if (!isUtcTimestamp(now)) return fail('/now', 'Supply the record time as an ISO UTC timestamp.');
-  if (!operation || typeof operation !== 'object' || !['set', 'clear'].includes(operation.type)) return fail('/operation/type', 'Supply a set or clear operation.');
+  if (!operation || typeof operation !== 'object' || !['set', 'clear', 'note-check'].includes(operation.type)) return fail('/operation/type', 'Supply a set, clear or note-check operation.');
   const dispositions = read.records.filter(isDisposition);
-  let next, record;
-  if (operation.type === 'clear') {
+  let next = dispositions, note = read.records.find(isCheck), record;
+  if (operation.type === 'note-check') {
+    if (!only(operation, ['type', 'checkedAt', 'categories'])) return fail('/operation', 'Supply {type,checkedAt,categories}.');
+    record = { id: MAINTENANCE_CHECK_RECORD_ID, schema: MAINTENANCE_CHECK_RECORD_SCHEMA, required: false, checkedAt: operation.checkedAt, categories: operation.categories };
+    const problem = checkProblem(record);
+    if (problem !== null) return fail(`/operation${problem}`, 'Supply a valid maintenance check.');
+    note = structuredClone(record);
+  } else if (operation.type === 'clear') {
     if (!only(operation, ['type', 'id'])) return fail('/operation', 'Supply {type,id}.');
     record = dispositions.find(r => r.id === operation.id);
     if (!record) return fail('/operation/id', 'No recorded disposition has that id.');
@@ -108,7 +126,7 @@ export async function recordMaintenance({ envelopeBytes, operation, now } = {}) 
       return fail('/operation/subject', 'The subject must be a choice in this draft.');
     next = [...dispositions.filter(r => r.id !== record.id), record];
   }
-  const records = [...read.records.filter(r => Object.hasOwn(JOURNEY_RECORD_KINDS, r.schema) && !isDisposition(r)), ...next.sort(byId)];
+  const records = [...read.records.filter(r => Object.hasOwn(JOURNEY_RECORD_KINDS, r.schema) && !isDisposition(r) && !isCheck(r)), ...[...next].sort(byId), ...(note ? [note] : [])];
   const written = await writeJourneyEnvelope({ savedIntentBytes: read.savedIntentBytes, records, previous: read });
   if (written.status !== 'ok') return { ...written, originalBytes: envelopeBytes.slice() };
   const { envelope, envelopeBytes: bytes } = written.value;

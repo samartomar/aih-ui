@@ -3,22 +3,19 @@
 // Digests use the shared Web Crypto; no host, filesystem or network is touched.
 import { checkIntentShape } from './intent-shape.mjs';
 import { digestBytes, hash, object, only } from './intake.mjs';
+import { MAINTENANCE_DISPOSITION_RECORD_SCHEMA, MAINTENANCE_CHECK_RECORD_SCHEMA, dispositionProblem, dispositionId, checkProblem } from './maintenance-record.mjs';
 export const JOURNEY_SCHEMA_PREFIX = 'urn:aihq:workbench:journey-envelope:';
 export const JOURNEY_SCHEMA = `${JOURNEY_SCHEMA_PREFIX}1.0.0`;
 export const JOURNEY_ACCEPTED_SCHEMAS = [JOURNEY_SCHEMA];
 export const SAVED_INTENT_TYPE = 'urn:aihq:core:execution-policy-bytes';
 export const DRAFT_RECORD_SCHEMA = 'urn:aihq:workbench:journey-record:unresolved-draft:1.0.0';
-export const MAINTENANCE_DISPOSITION_RECORD_SCHEMA = 'urn:aihq:workbench:journey-record:maintenance-disposition:1.0.0';
 // Records that bind the saved intent they sit beside.
 export const JOURNEY_RECORD_SCHEMAS = { [DRAFT_RECORD_SCHEMA]: { kind: 'unresolved-draft', version: '1.0.0' } };
 // Every kind this version interprets, with the `required` value its writer must use.
 export const JOURNEY_RECORD_KINDS = { [DRAFT_RECORD_SCHEMA]: { kind: 'unresolved-draft', version: '1.0.0', required: true },
-  [MAINTENANCE_DISPOSITION_RECORD_SCHEMA]: { kind: 'maintenance-disposition', version: '1.0.0', required: false } };
+  [MAINTENANCE_DISPOSITION_RECORD_SCHEMA]: { kind: 'maintenance-disposition', version: '1.0.0', required: false },
+  [MAINTENANCE_CHECK_RECORD_SCHEMA]: { kind: 'maintenance-check', version: '1.0.0', required: false } };
 const known = schema => Object.hasOwn(JOURNEY_RECORD_KINDS, schema);
-export const DISPOSITION_CATEGORIES = ['content', 'software', 'client', 'environment'];
-export const DISPOSITION_SUBJECT_KINDS = ['selection'];
-export const DISPOSITION_CANDIDATE_KINDS = ['content-revision'];
-export const DISPOSITIONS = ['keep-current', 'skip', 'defer'];
 export const MAX_SAVED_INTENT_BYTES = 1_000_000;
 export const MAX_ENVELOPE_BYTES = 2_000_000;
 // True for an envelope of any version, so an unsupported one is refused as such rather than read as a policy.
@@ -36,34 +33,6 @@ const stable = value => JSON.stringify(value, (_key, member) => member && typeof
 const ok = (value, diagnostics = []) => ({ status: 'ok', value, diagnostics });
 const refuse = (code, path, message, originalBytes) => ({ status: 'refused', diagnostics: [{ code, path, message }], ...(originalBytes ? { originalBytes: originalBytes.slice() } : {}) });
 const encode = value => new TextEncoder().encode(value);
-const utc = value => typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(value)
-  && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 19) === value.slice(0, 19);
-export const isUtcTimestamp = utc;
-const calendarDate = value => typeof value === 'string' && /^\d{4}-\d\d-\d\d$/.test(value)
-  && !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
-const dispositionRef = (value, kinds) => only(value, ['kind', 'releaseSha256', 'itemId', 'itemSha256']) && kinds.includes(value.kind)
-  && hash(value.releaseSha256) && typeof value.itemId === 'string' && idPattern.test(value.itemId) && hash(value.itemSha256);
-// JSON pointer (relative to the record) of the first violation of the closed disposition shape, else null.
-export function dispositionProblem(record) {
-  if (!only(record, ['id', 'schema', 'required', 'category', 'subject', 'scope', 'candidate', 'disposition', 'recordedAt'], ['reason', 'deferUntil'])) return '';
-  if (record.schema !== MAINTENANCE_DISPOSITION_RECORD_SCHEMA) return '/schema';
-  if (typeof record.id !== 'string' || !/^disposition-[a-f0-9]{32}$/.test(record.id)) return '/id';
-  if (record.required !== false) return '/required';
-  if (!DISPOSITION_CATEGORIES.includes(record.category)) return '/category';
-  if (!dispositionRef(record.subject, DISPOSITION_SUBJECT_KINDS)) return '/subject';
-  if (!['project', 'user'].includes(record.scope)) return '/scope';
-  if (!dispositionRef(record.candidate, DISPOSITION_CANDIDATE_KINDS)
-    || (record.candidate.releaseSha256 === record.subject.releaseSha256 && record.candidate.itemSha256 === record.subject.itemSha256)) return '/candidate';
-  if (!DISPOSITIONS.includes(record.disposition)) return '/disposition';
-  if (!utc(record.recordedAt)) return '/recordedAt';
-  if (record.reason !== undefined && (typeof record.reason !== 'string' || record.reason.length < 1 || record.reason.length > 1000)) return '/reason';
-  if (record.deferUntil !== undefined && (record.disposition !== 'defer' || !calendarDate(record.deferUntil))) return '/deferUntil';
-  return null;
-}
-// One record per exact (category, subject, scope, candidate); setting it again replaces it.
-export async function dispositionId({ category, subject, scope, candidate }) {
-  return `disposition-${(await digestBytes(encode(stable({ category, subject, scope, candidate })))).slice(0, 32)}`;
-}
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 export function encodeBase64(bytes) {
   let text = '';
@@ -104,6 +73,7 @@ function shapeProblem(envelope) {
     if (!object(record) || typeof record.id !== 'string' || !idPattern.test(record.id) || typeof record.schema !== 'string' || !recordSchemaUrn.test(record.schema) || typeof record.required !== 'boolean') return path;
     if (record.schema === DRAFT_RECORD_SCHEMA && (!only(record, ['id', 'schema', 'required', 'savedIntentSha256', 'intent']) || record.required !== true || !hash(record.savedIntentSha256) || !object(record.intent))) return path;
     if (record.schema === MAINTENANCE_DISPOSITION_RECORD_SCHEMA && dispositionProblem(record) !== null) return path;
+    if (record.schema === MAINTENANCE_CHECK_RECORD_SCHEMA && checkProblem(record) !== null) return path;
   }
   return null;
 }
@@ -160,6 +130,12 @@ export async function writeJourneyEnvelope({ savedIntentBytes, records, previous
       const problem = dispositionProblem(record);
       if (problem !== null) return refuse('INPUT_INVALID', `${path}${problem}`, 'Supply a closed maintenance-disposition record.');
       if (record.id !== await dispositionId(record)) return refuse('INPUT_INVALID', `${path}/id`, 'Disposition id must derive from its category, subject, scope and candidate.');
+      written.push(structuredClone(record));
+      continue;
+    }
+    if (record?.schema === MAINTENANCE_CHECK_RECORD_SCHEMA) {
+      const problem = checkProblem(record);
+      if (problem !== null) return refuse('INPUT_INVALID', `${path}${problem}`, 'Supply a closed maintenance-check record.');
       written.push(structuredClone(record));
       continue;
     }

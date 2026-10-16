@@ -1,6 +1,8 @@
+// Mirrors MAINTENANCE_DISPOSITION_RECORD_SCHEMA in tools/consumer/maintenance-record.mjs, the source of truth; the page cannot import it.
+const DISPOSITION_RECORD = 'urn:aihq:workbench:journey-record:maintenance-disposition:1.0.0';
 const CATEGORIES = ['content', 'software', 'client', 'environment'];
 const LABELS = { content: 'Content', software: 'Software', client: 'Client', environment: 'Environment' };
-const REASONS = { 'sources-unavailable': 'sources are unavailable', 'no-supported-reader': 'no supported reader in this Workbench', 'check-failed': 'the check could not be completed', 'not-checked': 'not checked yet' };
+const REASONS = { 'sources-unavailable': 'sources are unavailable', 'no-configured-source': 'no update source is configured on this host', 'no-supported-reader': 'no supported reader in this Workbench', 'check-failed': 'the check could not be completed', 'not-checked': 'not checked yet' };
 export const UPDATES_NOTE = 'Opening and Check now only read the supplied sources; nothing is applied or scheduled. A defer date is only considered when the Workbench is opened or checked. Save the draft to keep your choices.';
 
 export function groupUpdates(value) {
@@ -31,18 +33,30 @@ export function categoryLine(row) {
   return `${LABELS[row.category] ?? row.category}: ${row.state === 'not-selected' ? 'not selected' : row.state === 'checked' ? 'checked' : `unknown — ${REASONS[row.reason] ?? row.reason ?? 'not checked yet'}`}`;
 }
 
-export function updatesState(previous, result, selected) {
+// The shown row follows the choice currently recorded: none means a new revision, a reached defer date needs attention again.
+function withChoice(row, record, today) {
+  const attention = !record ? 'new' : record.disposition === 'defer' && record.deferUntil !== undefined && record.deferUntil <= today ? 'defer-date-reached' : null;
+  return { ...row, disposition: record ?? null, attention, promoted: attention !== null };
+}
+// `dispositions` are the envelope's recorded choices; they stand in for the response when the check produced none.
+export function updatesState(previous, result, selected, dispositions) {
   const value = result?.status === 'ok' ? result.value : null;
   const categories = CATEGORIES.map(category => !selected.includes(category) ? { category, state: 'not-selected', selected: false }
     : { category, state: 'unknown', reason: 'check-failed', ...value?.categories?.find(row => row.category === category), selected: true });
   const unknownCategories = categories.filter(row => row.state === 'unknown').map(row => row.category);
   const retained = (previous?.value?.updates ?? []).filter(row => unknownCategories.includes(row.category));
-  const stale = !value || retained.length > 0 || !!(previous?.value?.checkedAt && categories.some(row => row.category === 'content' && row.state === 'unknown'));
-  const updates = value ? [...(value.updates ?? []), ...retained.filter(old => !value.updates?.some(row => row.id === old.id))] : previous?.value?.updates ?? [];
+  // A check recorded in the saved envelope stands in for the last seen one after a reopen.
+  const lastCheck = value?.lastCheck ?? previous?.value?.lastCheck, seen = previous?.value?.checkedAt ?? lastCheck?.checkedAt;
+  const stale = !value || retained.length > 0 || !!(seen && categories.some(row => row.category === 'content' && row.state === 'unknown'));
+  const current = value ? [...(value.updates ?? []).map(row => row.disposition), ...(value.preserved ?? []).map(entry => entry.record)].filter(Boolean) : dispositions;
+  const today = (value?.checkedAt ?? previous?.value?.checkedAt ?? '').slice(0, 10);
+  const kept = value ? retained.filter(old => !value.updates?.some(row => row.id === old.id)) : previous?.value?.updates ?? [];
+  const rederived = current ? kept.map(row => withChoice(row, current.find(record => record.id === row.id), today)) : kept;
+  const updates = value ? [...(value.updates ?? []), ...rederived] : rederived;
   // A choice already shown as a retained row is not listed a second time as an unknown preserved one.
   const shown = new Set(updates.map(row => row.disposition?.id).filter(Boolean));
   const preserved = (value?.preserved ?? previous?.value?.preserved ?? []).filter(entry => !shown.has(entry.record?.id));
-  return { value: { ...value, updates, preserved, categories, checkedAt: stale ? previous?.value?.checkedAt : categories.some(row => row.state === 'checked') ? value?.checkedAt : undefined },
+  return { value: { ...value, updates, preserved, categories, lastCheck, checkedAt: stale ? seen : categories.some(row => row.state === 'checked') ? value?.checkedAt : undefined },
     unknown: unknownCategories.length > 0, stale, failed: !value || !categories.some(row => row.state === 'checked') };
 }
 export function checkedLine(state) {
@@ -51,12 +65,20 @@ export function checkedLine(state) {
   return `${state.stale ? 'Updates as of' : 'Last checked'} ${time}.${state.unknown ? ' Some updates are unknown.' : ''}`;
 }
 
+// The check recorded in the draft, shown while this page has no newer check of its own.
+export function recordedLine(state) {
+  const note = state?.value?.lastCheck;
+  return note && state.stale ? `Recorded in this draft: ${note.checkedAt} — ${note.categories.map(categoryLine).join('; ')}.` : '';
+}
+
 export function createUpdatesView({ client, el, button, showStatus }) {
   const node = el('section', 'p-3 border border-wb-border rounded bg-surface-container-low space-y-2'); node.id = 'policy-updates';
   const checked = el('p', 'text-on-surface-variant'); checked.id = 'policy-updates-checked'; checked.setAttribute('role', 'status');
+  const recordedNote = el('p', 'text-outline text-[11px]'); recordedNote.id = 'policy-updates-recorded';
   const categoryRows = el('div', 'space-y-1'), groups = el('div', 'space-y-2');
   const controls = el('div', 'flex flex-wrap items-center gap-2');
-  let state, pending = false, attempt = 0;
+  // The last successful check seen by this page, and the newest check time the envelope is known to record.
+  let state, pending = false, attempt = 0, lastSuccess, recorded;
   const selected = new Set(['content']);
   const selection = () => CATEGORIES.filter(category => selected.has(category));
   const safe = action => async () => { try { await action(); } catch (error) { showStatus(error.message); } };
@@ -73,7 +95,7 @@ export function createUpdatesView({ client, el, button, showStatus }) {
     label.append(input, el('span', '', LABELS[category])); controls.append(label);
   }
   controls.append(checkNow);
-  node.append(el('h3', 'font-medium', 'Available updates'), el('p', 'text-on-surface-variant', UPDATES_NOTE), controls, checked, categoryRows, groups);
+  node.append(el('h3', 'font-medium', 'Available updates'), el('p', 'text-on-surface-variant', UPDATES_NOTE), controls, checked, recordedNote, categoryRows, groups);
   const diagnostic = result => result?.diagnostics?.map(row => row.message).join(' ') || result?.error || 'The update choice could not be saved.';
   async function record(operation) {
     const result = await client.recordDisposition(operation);
@@ -95,10 +117,13 @@ export function createUpdatesView({ client, el, button, showStatus }) {
     return controls;
   }
   function render() {
-    node.hidden = !client.draft;
-    if (!client.draft) { attempt++; state = undefined; pending = false; return; }
+    // A draft, or an ordinary policy that is open: both are checked, and a choice on a policy saves it as a draft.
+    const available = client.draft || client.intent;
+    node.hidden = !available;
+    if (!available) { attempt++; state = undefined; pending = false; lastSuccess = undefined; recorded = undefined; return; }
     checkNow.disabled = pending || selected.size === 0;
     checked.textContent = pending ? `Checking… ${checkedLine(state)}` : checkedLine(state);
+    recordedNote.textContent = recordedLine(state); recordedNote.hidden = !recordedNote.textContent;
     const currentCategories = state?.value.categories ?? CATEGORIES.map(category => ({ category, state: selected.has(category) ? 'unknown' : 'not-selected', reason: 'not-checked' }));
     categoryRows.replaceChildren(...currentCategories.map(row => el('p', 'text-outline text-[11px]', categoryLine(row))));
     if (!selected.size) categoryRows.append(el('p', 'text-outline', 'Select at least one update category to check.'));
@@ -120,8 +145,10 @@ export function createUpdatesView({ client, el, button, showStatus }) {
     }
     if (state && !pending && !state.unknown && !state.value.updates.length && !state.value.preserved.length) groups.append(el('p', 'text-on-surface-variant', 'No updates were offered in the checked categories.'));
   }
+  // The choices the draft envelope itself records, or undefined when this page holds no envelope.
+  const recordedChoices = () => client.draft?.envelope?.records?.filter(record => record.schema === DISPOSITION_RECORD);
   async function check() {
-    if (!client.draft || !selected.size) return;
+    if (!(client.draft || client.intent) || !selected.size) return;
     const current = ++attempt, revision = client.revision; pending = true; render();
     let result;
     try { result = await client.checkMaintenance(selection()); }
@@ -129,8 +156,25 @@ export function createUpdatesView({ client, el, button, showStatus }) {
     if (current !== attempt) return;
     pending = false;
     if (client.revision !== revision || result?.status === 'superseded') { render(); return; }
-    state = updatesState(state, result, selection()); render();
+    state = updatesState(state, result, selection(), recordedChoices());
+    const value = result?.status === 'ok' ? result.value : null, note = value?.lastCheck?.checkedAt;
+    if (note && (!recorded || note > recorded)) recorded = note;
+    if (value && value.categories.some(row => row.state === 'checked'))
+      lastSuccess = { checkedAt: value.checkedAt, categories: value.categories.map(({ category, state: outcome, reason }) => ({ category, state: outcome, ...(reason ? { reason } : {}) })) };
+    render();
   }
+  // Saving an envelope records the last successful check first, when it is newer than the one the envelope holds.
+  // A refused or failed note never stops the save.
+  async function noteCheck() {
+    if (!client.draft || !lastSuccess || (recorded && recorded >= lastSuccess.checkedAt)) return;
+    const sent = lastSuccess;
+    try {
+      const result = await client.recordDisposition({ type: 'note-check', ...sent });
+      if (result?.status === 'ok') recorded = sent.checkedAt;
+    } catch { /* The draft is saved as it is. */ }
+  }
+  // Opening starts from nothing known about this artifact, then reads once.
+  function open() { attempt++; state = undefined; lastSuccess = undefined; recorded = undefined; return check(); }
   render();
-  return { node, render, check, open: check };
+  return { node, render, check, open, noteCheck };
 }

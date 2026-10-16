@@ -44,7 +44,10 @@ test('category lines explain checked, unavailable readers, offline sources and n
 
 test('failed and offline checks retain rows and their actual check time, never claim no updates', () => {
   const success = updatesState(null, ok(checked), ['content']);
-  for (const failure of [{ status: 'refused' }, null, ok({ ...checked, checkedAt: '2026-10-16T12:00:00Z', updates: [], categories: [{ category: 'content', selected: true, state: 'unknown', reason: 'sources-unavailable' }] })]) {
+  // An offline response lists the envelope's recorded choices as preserved, so the retained rows keep their current choice.
+  const offline = ok({ ...checked, checkedAt: '2026-10-16T12:00:00Z', updates: [], preserved: [{ record: checked.updates[0].disposition, state: 'unknown' }],
+    categories: [{ category: 'content', selected: true, state: 'unknown', reason: 'sources-unavailable' }] });
+  for (const failure of [{ status: 'refused' }, null, offline]) {
     const state = updatesState(success, failure, ['content']);
     assert.deepEqual(state.value.updates, checked.updates);
     assert.equal(state.value.checkedAt, checked.checkedAt);
@@ -182,4 +185,153 @@ test('adopting a recorded choice invalidates checks begun during its request', a
   const record = client.recordDisposition({ type: 'clear', id: 'old' }), check = client.checkMaintenance(['content']);
   finishRecord(ok({ envelopeBytes: [2], projection: { revision: { sequence: 2 } }, dispositions: [] })); await record;
   finishCheck(ok(checked)); assert.deepEqual(await check, { status: 'superseded' });
+});
+
+const policy = { roots: [subject] };
+const offlineValue = (extra = {}) => ({ checkedAt: '2026-10-16T12:00:00Z', categories: [{ category: 'content', selected: true, state: 'unknown', reason: 'sources-unavailable' }],
+  updates: [], preserved: [], ...extra });
+
+test('choices recorded one after another never overwrite each other', async t => {
+  let first, second;
+  const done = { envelopeBytes: [2], projection: { revision: { sequence: 2 } }, dispositions: [] };
+  const calls = service(t, ok(draft), new Promise(resolve => { first = resolve; }), new Promise(resolve => { second = resolve; }));
+  const client = createAuthoringClient(); await client.openDraft(Uint8Array.of(1));
+  const one = client.recordDisposition({ type: 'clear', id: 'one' }), two = client.recordDisposition({ type: 'clear', id: 'two' });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(calls.length, 2, 'the second choice waits for the first');
+  first(ok(done)); await one;
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(calls[2].body.envelopeBytes, [2], 'the second choice starts from the envelope the first produced');
+  assert.deepEqual(calls[2].body.operation, { type: 'clear', id: 'two' });
+  second(ok({ ...done, envelopeBytes: [3], projection: { revision: { sequence: 3 } } }));
+  assert.equal((await two).status, 'ok'); assert.deepEqual(client.draft.envelopeBytes, Uint8Array.of(3));
+});
+
+test('a failed choice does not block the next one', async t => {
+  const calls = service(t, ok(draft), new Error('network'), ok({ envelopeBytes: [2], projection: { revision: { sequence: 2 } }, dispositions: [] }));
+  const client = createAuthoringClient(); await client.openDraft(Uint8Array.of(1));
+  await assert.rejects(client.recordDisposition({ type: 'clear', id: 'one' }), /network/);
+  assert.equal((await client.recordDisposition({ type: 'clear', id: 'two' })).status, 'ok');
+  assert.deepEqual(calls[2].body.envelopeBytes, [1]);
+});
+
+test('a failure of a superseded choice is superseded, like a check', async t => {
+  let fail;
+  service(t, ok(draft), new Promise((_resolve, reject) => { fail = reject; }));
+  const other = createAuthoringClient(); await other.openDraft(Uint8Array.of(1));
+  const recording = other.recordDisposition({ type: 'clear', id: 'one' }); await new Promise(resolve => setTimeout(resolve, 0));
+  other.importBytes(Uint8Array.of(8)); fail(new Error('late failure'));
+  assert.deepEqual(await recording, { status: 'superseded' });
+});
+
+test('an ordinary policy is checked and recorded as its own bytes, and recording makes it a saved draft', async t => {
+  const adopted = { ...draft, envelopeBytes: [2], projection: { revision: { sequence: 2 } } };
+  const calls = service(t, ok(checked), ok({ envelopeBytes: [2], envelope: {}, projection: { revision: { sequence: 2 } }, record: null, dispositions: [], draft: adopted }), ok(adopted));
+  const client = createAuthoringClient(); client.publish({ policyBytes: [7, 7], intent: policy });
+  assert.equal(client.draft, undefined);
+  await client.checkMaintenance(['content']);
+  assert.equal(calls[0].url, '/api/authoring-maintenance-check');
+  assert.deepEqual(calls[0].body.bytes, [7, 7]); assert.equal('envelopeBytes' in calls[0].body, false); assert.equal('policyBytes' in calls[0].body, false);
+  const revision = client.revision;
+  assert.equal((await client.recordDisposition({ type: 'clear', id: 'old' })).status, 'ok');
+  assert.deepEqual(calls[1].body.bytes, [7, 7]); assert.equal('envelopeBytes' in calls[1].body, false);
+  assert.ok(client.revision > revision);
+  assert.deepEqual(client.draft.envelopeBytes, Uint8Array.of(2)); assert.equal(client.draft.fromPolicy, false);
+  assert.equal(client.intent, undefined); assert.deepEqual(client.bytes, Uint8Array.of(9));
+  // The saved draft reopens by revalidating its envelope, never by re-reading the plain policy.
+  await client.reopen();
+  assert.equal(calls[2].url, '/api/authoring-draft-open'); assert.deepEqual(calls[2].body.bytes, [2]);
+  // Neither route works with nothing open.
+  const empty = createAuthoringClient();
+  assert.equal((await empty.checkMaintenance(['content'])).status, 'refused');
+  assert.equal((await empty.recordDisposition({ type: 'clear', id: 'x' })).status, 'refused');
+});
+
+test('the update view is shown for an ordinary policy, and checks it on open', async () => {
+  const calls = [];
+  const client = { intent: policy, revision: 1, checkMaintenance: async selected => { calls.push(selected); return ok(checked); } };
+  const built = view(client);
+  assert.equal(built.node.hidden, false);
+  await built.open();
+  assert.deepEqual(calls, [['content']]); assert.match(textOf(built.node), /Skipped revisions/);
+  client.intent = undefined; built.render();
+  assert.equal(built.node.hidden, true);
+});
+
+test('with no configured source the category line says so and no update claim is made', async () => {
+  const unconfigured = { ...checked, updates: [], categories: [{ category: 'content', selected: true, state: 'unknown', reason: 'no-configured-source' }] };
+  assert.match(categoryLine(unconfigured.categories[0]), /unknown.*no update source is configured on this host/i);
+  const built = view({ draft, revision: 1, checkMaintenance: async () => ok(unconfigured) }); await built.open();
+  const text = textOf(built.node);
+  assert.match(text, /no update source is configured on this host/); assert.match(text, /could not be completed.*updates are unknown/i);
+  assert.doesNotMatch(text, /no updates were offered/i);
+});
+
+test('an offline first check after a reopen shows the recorded check time and states, with content unknown now', async () => {
+  const lastCheck = { checkedAt: '2026-10-14T09:30:00Z', categories: [{ category: 'content', state: 'checked' }, { category: 'software', state: 'not-selected' }] };
+  const state = updatesState(null, ok(offlineValue({ lastCheck })), ['content']);
+  assert.equal(state.value.checkedAt, lastCheck.checkedAt);
+  assert.match(checkedLine(state), /^Updates as of 2026-10-14T09:30:00Z\./); assert.match(checkedLine(state), /Some updates are unknown/);
+  assert.equal(state.value.categories.find(row => row.category === 'content').state, 'unknown');
+  const built = view({ draft, revision: 1, checkMaintenance: async () => ok(offlineValue({ lastCheck })) }); await built.open();
+  const text = textOf(built.node);
+  assert.match(text, /Updates as of 2026-10-14T09:30:00Z/); assert.match(text, /Content: unknown — sources are unavailable/);
+  assert.match(text, /Recorded in this draft.*2026-10-14T09:30:00Z.*Content: checked/);
+  // Nothing recorded and nothing seen: still unknown, with no time claimed.
+  assert.equal(updatesState(null, ok(offlineValue()), ['content']).value.checkedAt, undefined);
+});
+
+test('saving notes the last successful check once, only when it is newer than the recorded one', async () => {
+  const notes = [];
+  const client = { draft, revision: 1, checkMaintenance: async () => ok({ ...checked, lastCheck: { checkedAt: '2026-10-14T00:00:00Z', categories: [{ category: 'content', state: 'checked' }] } }),
+    recordDisposition: async operation => { notes.push(operation); return ok({}); } };
+  const built = view(client);
+  await built.noteCheck(); assert.deepEqual(notes, [], 'nothing was checked yet');
+  await built.open();
+  assert.deepEqual(notes, [], 'a check alone never records');
+  await built.noteCheck();
+  assert.equal(notes.length, 1);
+  assert.deepEqual(notes[0], { type: 'note-check', checkedAt: '2026-10-15T12:00:00Z', categories: [
+    { category: 'content', state: 'checked' }, { category: 'software', state: 'not-selected' }, { category: 'client', state: 'not-selected' }, { category: 'environment', state: 'not-selected' }] });
+  await built.noteCheck(); assert.equal(notes.length, 1, 'the same check is not recorded twice');
+  // An offline or failed check is not a successful one: it never replaces the recorded time.
+  client.checkMaintenance = async () => ok(offlineValue());
+  await built.check(); await built.noteCheck(); assert.equal(notes.length, 1);
+});
+
+test('a check already recorded in the envelope is not recorded again, and a refused note does not block saving', async () => {
+  const notes = [];
+  const client = { draft, revision: 1, checkMaintenance: async () => ok({ ...checked, lastCheck: { checkedAt: checked.checkedAt, categories: [{ category: 'content', state: 'checked' }] } }),
+    recordDisposition: async operation => { notes.push(operation); return { status: 'refused', diagnostics: [{ message: 'read only' }] }; } };
+  const built = view(client); await built.open(); await built.noteCheck();
+  assert.deepEqual(notes, []);
+  client.checkMaintenance = async () => ok({ ...checked, checkedAt: '2026-10-17T00:00:00Z' });
+  await built.check(); await built.noteCheck();
+  assert.equal(notes.length, 1);
+  await assert.doesNotReject(built.noteCheck());
+});
+
+test('offline rows follow the current envelope: a cleared choice shows no choice, a newly recorded skip shows skipped', () => {
+  const success = updatesState(null, ok({ ...checked, updates: [update('old', 'skip'), update('fresh', null, 'new')] }), ['content']);
+  // The skip on `old` was revisited (cleared) and `fresh` was skipped while the source was unreachable.
+  const skippedRecord = { id: 'fresh', category: 'content', subject, scope: 'project', candidate: { ...subject, kind: 'content-revision', releaseSha256: 'fresh' }, disposition: 'skip' };
+  const offline = ok(offlineValue({ preserved: [{ record: skippedRecord, state: 'unknown' }] }));
+  const state = updatesState(success, offline, ['content']);
+  const old = state.value.updates.find(row => row.id === 'old'), fresh = state.value.updates.find(row => row.id === 'fresh');
+  assert.equal(old.disposition, null); assert.equal(old.promoted, true); assert.equal(old.attention, 'new');
+  assert.equal(fresh.disposition.disposition, 'skip'); assert.equal(fresh.promoted, false); assert.equal(fresh.attention, null);
+  const groups = groupUpdates(state.value);
+  assert.deepEqual(groups.map(group => [group.label, group.rows.map(row => row.id ?? row.record?.id)]),
+    [['Needs attention', ['old']], ['Kept current', []], ['Skipped revisions', ['fresh']], ['Deferred', []], ['Preserved choices', []]]);
+  assert.match(dispositionText(old), /New revision available/);
+  // A defer whose date has been reached by the offline check's own time needs attention again.
+  const deferred = { ...skippedRecord, id: 'old', disposition: 'defer', deferUntil: '2026-10-16' };
+  const later = updatesState(success, ok(offlineValue({ preserved: [{ record: deferred, state: 'unknown' }] })), ['content']);
+  const reached = later.value.updates.find(row => row.id === 'old');
+  assert.equal(reached.attention, 'defer-date-reached'); assert.equal(reached.promoted, true);
+  const future = updatesState(success, ok(offlineValue({ preserved: [{ record: { ...deferred, deferUntil: '2026-11-01' }, state: 'unknown' }] })), ['content']);
+  assert.equal(future.value.updates.find(row => row.id === 'old').promoted, false);
+  // With no response at all the current envelope's own dispositions are authoritative.
+  const failed = updatesState(success, null, ['content'], []);
+  assert.equal(failed.value.updates.find(row => row.id === 'old').disposition, null);
 });
