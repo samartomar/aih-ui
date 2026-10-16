@@ -40,11 +40,12 @@ process.on('exit', () => {
   const realCoreChange = compareCoreHome(realCoreBefore, snapshotCoreHome(homedir()));
   if (!realCoreChange.unchanged) { console.error(describeCoreHomeChange(realCoreChange)); process.exitCode = 1; }
 });
-// The reviewed-batch suite alone takes about as long as all the others together, so it runs as its own group;
-// each group keeps the same limit.
+// The reviewed-batch suite alone takes about as long as all the others together, so it runs as its own group.
+// Each group keeps the same limit: suites that would bring a group near it go in a new group instead.
 const testGroups = [
   ['ordinary-families', 'authoring-page', 'authoring-v3', 'reviews', 'personal-folder', 'journey', 'maintenance', 'readiness', 'readiness-host', 'claims', 'authority-source', 'organization-author', 'guided-setup', 'core-targets', 'improvements', 'trials', 'workspace'],
-  ['batch']
+  ['batch'],
+  ['intent-http', 'intent-page', 'organization', 'saved-intent', 'setup']
 ];
 let checksLog = '';
 for (const tests of testGroups) {
