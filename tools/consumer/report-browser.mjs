@@ -149,7 +149,7 @@ try {
   }
   assert.match(claimItems.join('\n'), /Kind: Measured/);
   // The recheck ran with the configuration the repair persisted; a verified repair shows the values Core applied for it.
-  const persistedApplied = claimItems.filter(text => /^persisted configuration \S+ for npm/.test(text) && /Value: applied/.test(text)).map(text => text.split('\n')[0]);
+  const persistedApplied = claimItems.filter(text => /^persisted configuration \S+ found by the re-check of npm/.test(text) && /Value: applied/.test(text)).map(text => text.split('\n')[0]);
   if (verifiedIds.length) assert.ok(persistedApplied.length > 0, `a verified repair shows the persisted values its recheck applied: ${JSON.stringify(claimItems)}`);
   assert.match(await panelText('repairs'), /Operation: node-npm-ca/);
   await shot('02-report-after-repair.png');

@@ -94,9 +94,10 @@ cost: a CA trusted only through configuration Core does not manage (for example 
 Each projection carries `options.configuration` and `persisted`: one entry per value
 Core found (`id`, `repair`, `managementId`, `state`, and when `applied` the
 `certificates` count and `materialSha256`), or `null` for a process-configuration
-inspection. Material and profile paths are dropped. A value that is not `applied` is
-not used, and Core marks the inspection incomplete. The guidance names each value
-and its state.
+inspection. Material and member (profile or `.npmrc`) paths are dropped. A value that
+is not `applied` is not used, and Core marks the inspection incomplete. The guidance
+names each value and its state, or says Core could not read that configuration
+(`persisted-configuration-unavailable`) rather than that none was found.
 
 ## Readiness records
 

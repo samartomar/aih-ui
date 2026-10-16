@@ -153,9 +153,17 @@ test('a persisted inspection carries its configuration and what Core reported pe
   assert.doesNotMatch(text, /\/home\/dev/);
   const none = projectInspection(inspection([], { effectiveOptions: { ...options, configuration: { value: 'persisted', origin: 'explicit' } }, persisted: { values: [] } }));
   assert.match(readinessGuidance([none]), /^Checked with the configuration Core's managed repairs persist for a new process: none found\.$/m);
-  const processDefault = projectInspection(inspection([]));
-  assert.deepEqual([processDefault.options.configuration, processDefault.persisted], [null, null]);
+  // Core could not read its custody: that is not "none found".
+  const unreadable = projectInspection(inspection([check('npm/tls/node/registry.npmjs.org', 'npm', 'unavailable', 'persisted-configuration-unavailable')], {
+    status: 'incomplete', effectiveOptions: { ...options, configuration: { value: 'persisted', origin: 'explicit' } }, persisted: { values: [] },
+    diagnostics: [{ code: 'PREREQUISITE_UNAVAILABLE', reason: 'persisted-configuration-unavailable', message: 'Custody could not be read.' }] }));
+  const unreadableText = readinessGuidance([unreadable]);
+  assert.match(unreadableText, /^Checked with the configuration Core's managed repairs persist for a new process, but Core could not read that configuration\.$/m);
+  assert.doesNotMatch(unreadableText, /none found/);
+  const processDefault = projectInspection(inspection([], { effectiveOptions: { ...options, configuration: { value: 'process', origin: 'default' } } }));
+  assert.deepEqual([processDefault.options.configuration, processDefault.persisted], ['process', null]);
   assert.doesNotMatch(readinessGuidance([processDefault]), /persist/);
+  assert.equal(projectInspection(inspection([])).options.configuration, null, 'a Core without the option reports none');
 });
 
 test('guidance text is plain, failure-first and states that nothing was executed', () => {

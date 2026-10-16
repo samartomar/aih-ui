@@ -163,9 +163,9 @@ test('a persisted re-check is one verified repair against a persisted precheck, 
   assert.deepEqual(persisted[0].sources, [{ id: repaired.id, schema: READINESS_RECORD_SCHEMA, sha256: repaired.sha256 }, { id: 'run-1', schema: 'urn:aihq:core:run-result:1.3.0' }]);
   assert.ok(!JSON.stringify(claimSet).includes('/home/dev'), 'no machine-local path reaches a claim');
   const shown = reportPanels(projection).claims.items.find(entry => entry.id.startsWith(`${repaired.id}/persisted/`));
-  assert.equal(shown.text, 'persisted configuration npm-cafile for npm');
+  assert.equal(shown.text, 'persisted configuration npm-cafile found by the re-check of npm');
   assert.ok(shown.details.includes('Value: applied'), JSON.stringify(shown.details));
-  assert.ok(reportText(projection).includes('persisted configuration npm-cafile for npm'));
+  assert.ok(reportText(projection).includes('persisted configuration npm-cafile found by the re-check of npm'));
   // The journal keeps what Core reported about the value, without its paths.
   assert.deepEqual(repaired.repair.outcome.condition.persisted, [{ id: 'npm-cafile', repair: 'node-npm-ca', managementId: 'm-1', state: 'applied', certificates: 1, materialSha256: 'a'.repeat(64) }]);
 });
@@ -191,6 +191,28 @@ test('a precheck taken with another configuration is not the same condition, so 
   assert.equal(attemptFor(projection, 'npm', 'npm/tls/node').reason, 'unknown-precondition');
   // Two machine checks with different configurations are not compared either.
   assert.ok(!repairCount(projection).attempts.some(attempt => attempt.operation === 'none'), JSON.stringify(repairCount(projection).attempts));
+});
+
+test('a precheck from a Core that reported no configuration is the process configuration, not a persisted one', () => {
+  const w = world();
+  const legacy = w.machine([tls('failed')]);
+  const repaired = w.repair({ before: legacy, after: [tls('passed')], afterOptions: { targets: ['npm'], configuration: 'persisted', persisted: [persistedCafile()] } });
+  const { projection } = readinessReport({ records: [legacy, repaired] });
+  assert.equal(repairCount(projection).count, 0);
+  assert.equal(attemptFor(projection, 'npm', 'npm/tls/node').reason, 'unknown-precondition');
+  // Legacy records on both sides are still the same condition.
+  const old = w.machine([tls('failed')]);
+  const { projection: legacyPair } = readinessReport({ records: [old, w.repair({ before: old, after: [tls('passed')] })] });
+  assert.equal(repairCount(legacyPair).count, 1);
+});
+
+test('a recheck that failed before Core answered keeps the persisted precheck, so the repair asks for review', () => {
+  const w = world();
+  const before = w.machine([tls('failed')], { configuration: 'persisted', persisted: [] });
+  const failed = w.repair({ before });
+  const { projection } = readinessReport({ records: [before, failed] });
+  assert.equal(attemptFor(projection, 'npm', 'npm/tls/node').reason, 'applied-unverified');
+  assert.ok(projection.actions.some(action => action.category === 'urgent-review'), JSON.stringify(projection.actions));
 });
 
 test('an already-healthy condition and an unknown-cause recovery are not counted, each with its Core reason', () => {

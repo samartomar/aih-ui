@@ -111,7 +111,10 @@ const notRecheckedText = projection => projection.notRechecked === null
   : projection.notRechecked.length ? `Not re-checked: ${projection.notRechecked.map(item => `${item.target} (${item.state} in the latest machine check)`).join(', ')}.`
     : 'Run the machine check again before claiming machine readiness.';
 
-const persistedText = values => `Checked with the configuration Core's managed repairs persist for a new process: ${values.length
+// Core could not read its custody at all: no value was found or applied, and that is not "none found".
+const persistedText = ({ persisted: values, diagnostics }) => diagnostics.some(diagnostic => diagnostic.reason === 'persisted-configuration-unavailable')
+  ? "Checked with the configuration Core's managed repairs persist for a new process, but Core could not read that configuration."
+  : `Checked with the configuration Core's managed repairs persist for a new process: ${values.length
   ? values.map(value => `${value.id} ${value.state}${value.state === 'applied' ? ` (${value.repair}, ${value.certificates} certificate${value.certificates === 1 ? '' : 's'})` : ''}`).join(', ')
   : 'none found'}.`;
 
@@ -126,7 +129,7 @@ export function readinessGuidance(projections) {
         lines.push(`Recheck of the repair's targets only: ${projection.scope.join(', ')} (${network}): ${projection.scopeVerified ? 'every checked condition verified for these targets' : 'not verified'}. This is not a machine readiness result.`);
         lines.push(notRecheckedText(projection));
       } else lines.push(`${projection.beforeRepair ? 'Latest machine check, taken before this repair' : 'Machine check'} (${network}): ${projection.ready ? 'ready' : 'not ready'}.`);
-      if (projection.persisted) lines.push(persistedText(projection.persisted));
+      if (projection.persisted) lines.push(persistedText(projection));
       for (const item of projection.items) {
         lines.push(`- [${item.state}] ${item.id}: ${item.reason}${item.detail ? ` (${item.detail})` : ''}`);
         if (item.guidance) lines.push(`  Guidance: ${item.guidance}`);

@@ -49,7 +49,8 @@ and the same check **passed** afterwards. Nothing else counts:
 A check made with the host's start-time trust and one made with the persisted configuration
 (see [readiness](readiness.md#persisted-configuration)) are different conditions: such a precheck
 is not paired with the recheck, so the attempt is `unknown-precondition`, and two such machine
-checks are not compared.
+checks are not compared. A record from a Core that reported no configuration counts as the
+process configuration.
 
 A later machine check does not add a second win for the same repair.
 

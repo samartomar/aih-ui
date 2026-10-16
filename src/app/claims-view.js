@@ -55,8 +55,8 @@ export function reportPanels(projection) {
   const label = ref => {
     const claim = byRef.get(keyOf(ref));
     if (!claim) return String(ref?.id ?? '');
-    // A persisted value the re-check applied names the repaired targets it was checked for.
-    if (claim.measure === PERSISTED) return `persisted configuration ${claim.subject.id} for ${list(claim.scope?.targets).join(', ')}`;
+    // A persisted value Core reported for a repair's re-check names the targets that re-check covered, not a target of the value.
+    if (claim.measure === PERSISTED) return `persisted configuration ${claim.subject.id} found by the re-check of ${list(claim.scope?.targets).join(', ')}`;
     return `${checkOf(claim) ?? claim.measure} on ${claim.subject.id}`;
   };
   const calculation = method => list(projection?.calculations).find(result => result.method?.id === method);
@@ -72,7 +72,7 @@ export function reportPanels(projection) {
   };
   const claimTone = claim => claim.kind === 'unknown' ? 'warning' : claim.value.unit === 'outcome'
     ? ({ passed: 'success', failed: 'error' })[claim.value.amount] ?? 'neutral'
-    : claim.measure === PERSISTED ? claim.value.amount === 'applied' ? 'neutral' : 'warning' : 'neutral';
+    : claim.measure === PERSISTED ? ({ applied: 'neutral' })[claim.value.amount] ?? 'warning' : 'neutral';
   const claimItem = (claim, text) => item(`${claim.id}@${claim.revision}`, claimTone(claim), text, [
     `Kind: ${KIND_LABELS[claim.kind] ?? 'Unknown'}`,
     `Value: ${valueText(claim)}`,
