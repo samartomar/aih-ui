@@ -103,12 +103,16 @@ test('stop ends a ready server through its stop request and removes the record',
   assert.equal((await stopServer(layout)).running, false);
 });
 
-test('stop also ends a server that is still starting', async t => {
+test('a server that is still starting (installing, so it cannot read a request) is ended at once after its command line is checked', async t => {
   const { layout, launch } = area(t);
   const pid = launch('starting');
   assert.equal(readServerRecord(layout).state, 'starting');
-  const stopped = await stopServer(layout, { graceMs: 15_000 });
-  assert.match(stopped.message, /still starting/);
+  await until(() => isCandidateProcess(layout, pid), 30_000);
+  const begun = Date.now();
+  const stopped = await stopServer(layout, { graceMs: 60_000 });
+  assert.ok(Date.now() - begun < 30_000, 'no request grace while starting');
+  assert.match(stopped.message, /still starting\) ended/);
+  assert.equal(existsSync(layout.stopRequest), false);
   assert.equal(isAlive(pid), false);
   assert.equal(existsSync(layout.server), false);
 });
@@ -117,6 +121,7 @@ test('a server that ignores the stop request is ended by force, but only after i
   const { layout, script, launch } = area(t);
   const pid = launch('hung');
   assert.equal(await until(() => isCandidateProcess(layout, pid), 30_000), true);
+  writeFileSync(layout.server, JSON.stringify({ ...readServerRecord(layout), state: 'ready' }));
   const stopped = await stopServer(layout, { graceMs: 500 });
   assert.match(stopped.message, /ended after it did not stop on request/);
   assert.equal(isAlive(pid), false);
@@ -141,4 +146,15 @@ test("reset's seeding run is recorded while it runs, so status, stop, start and 
   writeFileSync(join(layout.root, 'seed-done'), '');
   assert.deepEqual(await seeding, { complete: true });
   assert.equal(existsSync(layout.server), false);
+});
+
+test("stop ends reset's seeding run at once, naming it", async t => {
+  const { layout, script } = area(t);
+  const seeding = runSeedOnly({ layout, env: { ...serverEnvironment(layout), STUB_MODE: 'seed' }, timeoutMs: 30_000, script });
+  const record = await until(() => readServerRecord(layout));
+  await until(() => isCandidateProcess(layout, record.pid), 30_000);
+  const stopped = await stopServer(layout, { graceMs: 60_000 });
+  assert.match(stopped.message, /still making the sample data\) ended/);
+  assert.equal(isAlive(record.pid), false);
+  await assert.rejects(seeding, refused('CANDIDATE_SEED_FAILED'));
 });

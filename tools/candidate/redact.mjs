@@ -18,7 +18,7 @@ export function redact(text, { realHome } = {}) {
     .replace(/\bsk-(?:ant-)?[A-Za-z0-9_-]+/g, '[redacted]')
     .replace(/\bnpm_[A-Za-z0-9]{20,}/g, '[redacted]')
     .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/g, '[redacted]')
-    .replace(/\bAKIA[0-9A-Z]{16}\b/g, '[redacted]')
+    .replace(/\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, '[redacted]')
     .replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/<>"@]+@/gi, '$1[redacted]@')
     .replace(/(\bAuthorization\s*:\s*)[^\r\n]+/gi, '$1[redacted]')
     .replace(/(\bBearer\s+)[^\s,"';]+/gi, '$1[redacted]')

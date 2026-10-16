@@ -241,25 +241,10 @@ Partial failure is provoked by the switches the batch host already has; nothing 
   })) env.AIH_BATCH_FIXTURE = layout.batchHost;
 
   // Maintenance and improvement: the host's update source, published by editing a small file, and the saved draft that selects its review note.
-  if (await sample('maintenance', [layout.maintenanceSource, join(layout.samples, 'maintenance'), layout.maintenanceDraft], async () => {
+  if (await sample('maintenance', [layout.maintenanceSource, join(layout.samples, 'maintenance')], async () => {
     write(layout.maintenanceSource, `${JSON.stringify({ revisions: ['current'] }, null, 2)}\n`);
-    // The same input the update source publishes revisions of (id `notes`), taken at its `current` revision as the page's service holds it.
-    let note = '';
-    try {
-      const [{ maintained, rootOf, draft }, { noteFixture }, { intakeDeclaration, digestBytes }] = await Promise.all([base(), load('note-fixture.mjs'), load('intake.mjs')]);
-      const snapshot = await noteFixture();
-      const input = { id: 'notes', kind: 'local', locator: { input: 'notes' }, resolvedIdentity: { sha256: await digestBytes(snapshot.declarationBytes) } };
-      const notes = await intakeDeclaration({ input, ...snapshot, materialSource: { kind: 'local', input: 'notes' } });
-      if (notes.status !== 'ok') throw new Error(JSON.stringify(notes.diagnostics));
-      const bytes = await draft([rootOf(maintained.release, ROOT_ITEM, SAVED_REASON), rootOf(notes.value.release, NOTE_ITEM)], [notes.value]);
-      mkdirSync(layout.savedIntents, { recursive: true });
-      writeFileSync(layout.maintenanceDraft, bytes);
-    } catch (error) { note = error.message; }
-    const draftText = note
-      ? `No maintenance draft could be built from the installed packages, so none was written (no bytes were faked). Diagnostic:\n\n\`\`\`\n${note}\n\`\`\`\n`
-      : `**The draft.** ${layout.maintenanceDraft} is a saved draft that selects the review note (\`${NOTE_ITEM}\`) the update source publishes revisions of, beside \`${ROOT_ITEM}\` for the goal "add tests to my app".`;
     write(join(layout.samples, 'maintenance', 'SAMPLE.md'), notice('Maintenance and improvement', 'A review note that can be updated, so the Workbench can show a newer revision and what improving a setup looks like.', `
-${draftText}
+**The draft.** ${layout.maintenanceDraft} is a saved draft that selects the review note (\`${NOTE_ITEM}\`) the update source publishes revisions of, beside \`${ROOT_ITEM}\` for the goal "add tests to my app". If it is missing, the server log says why it could not be built from the installed packages (no bytes are faked), and the next start tries again.
 
 **The update source** is ${layout.maintenanceSource}, a file naming the revisions of the review note to publish; it is read at each check:
 
@@ -279,8 +264,19 @@ the test plan note is suggested and the unrelated style note is not.
 
 **Trials.** Choose AI clients in setup first (a trial needs them), then plan and propose a trial from a suggestion on the reopened draft.
 `));
-    if (note) throw new Error(`no maintenance draft was built: ${note}`);
   })) env.AIH_MAINTENANCE_SOURCE = layout.maintenanceSource;
+  // The saved draft that selects that review note is its own sample, so the update source stays configured if the draft cannot be built.
+  await sample('maintenance-draft', [layout.maintenanceDraft], async () => {
+    // The same input the update source publishes revisions of (id `notes`), taken at its `current` revision as the page's service holds it.
+    const [{ maintained, rootOf, draft }, { noteFixture }, { intakeDeclaration, digestBytes }] = await Promise.all([base(), load('note-fixture.mjs'), load('intake.mjs')]);
+    const snapshot = await noteFixture();
+    const input = { id: 'notes', kind: 'local', locator: { input: 'notes' }, resolvedIdentity: { sha256: await digestBytes(snapshot.declarationBytes) } };
+    const notes = await intakeDeclaration({ input, ...snapshot, materialSource: { kind: 'local', input: 'notes' } });
+    if (notes.status !== 'ok') throw new Error(JSON.stringify(notes.diagnostics));
+    const bytes = await draft([rootOf(maintained.release, ROOT_ITEM, SAVED_REASON), rootOf(notes.value.release, NOTE_ITEM)], [notes.value]);
+    mkdirSync(layout.savedIntents, { recursive: true });
+    writeFileSync(layout.maintenanceDraft, bytes);
+  });
 
   env.AIH_UI_SETTINGS_PATH = layout.settings;
   return { env, seeded, problems };

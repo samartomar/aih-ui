@@ -8,7 +8,7 @@
  * It installs the manifest's three tarballs (and the optional previous Catalog) into a fresh run directory, seeds the sample
  * data, points the Workbench's existing host configuration at it, serves the Workbench, and records itself in state/server.json
  * (the launcher wrote the record as "starting"; this rewrites it as "ready"). It ends when state/stop-request appears or on
- * SIGINT/SIGTERM, also while it is still installing. The launcher gave it exactly the environment it runs with: the candidate's
+ * SIGINT/SIGTERM once it is serving; while it is still installing, stop ends its process tree after checking its command line. The launcher gave it exactly the environment it runs with: the candidate's
  * disposable account home (HOME, USERPROFILE, APPDATA, XDG_*) so Core's records land there and never in the real account's, its
  * own temporary directory, and no AIH_* host setting but the ones this process sets from the samples it made. A sample that
  * could not be made leaves its host input unset, so the product shows its own "not configured" state.
@@ -23,6 +23,7 @@ import { homeEnvironment } from '../consumer/home-environment.mjs';
 import { startPreview } from '../preview.mjs';
 import { candidateLayout } from './layout.mjs';
 import { candidateIdentity, readManifest, verifyManifest } from './manifest.mjs';
+import { readServerRecord } from './process.mjs';
 import { installLocalAuthority } from './local-authority.mjs';
 import { seedSamples } from './samples.mjs';
 
@@ -37,10 +38,6 @@ function extractPackage(tarball, destination) {
   const result = spawnSync('tar', ['-xz'], { cwd: destination, input: readFileSync(tarball), encoding: 'utf8', windowsHide: true, maxBuffer: 256 * 1024 * 1024 });
   if (result.error || result.status !== 0) throw new Error(`could not extract ${tarball}: ${result.error?.message ?? result.stderr}`);
   return join(destination, 'package');
-}
-
-function readRecord(layout) {
-  try { return JSON.parse(readFileSync(layout.server, 'utf8')); } catch { return null; }
 }
 
 async function main() {
@@ -107,7 +104,7 @@ async function main() {
   }
   if (closing) return;
 
-  const starting = readRecord(layout);
+  const starting = readServerRecord(layout);
   writeFileSync(layout.server, `${JSON.stringify({ pid: process.pid, state: 'ready', port, url: preview.url,
     startedAt: starting?.pid === process.pid ? starting.startedAt : new Date().toISOString(), instance: randomUUID(),
     identity, packages: preview.summary.packages, dataDir: layout.root }, null, 2)}\n`);

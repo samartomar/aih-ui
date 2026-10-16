@@ -120,19 +120,21 @@ export async function stopServer(layout, { graceMs = 30_000 } = {}) {
   if (!record) return { running: false, message: 'The candidate is not running.' };
   const cleanup = () => { rmSync(layout.stopRequest, { force: true }); rmSync(layout.server, { force: true }); };
   if (!isAlive(record.pid)) { cleanup(); return { running: false, message: `The candidate is not running (process ${record.pid} had already ended; its leftover record was removed).` }; }
-  writeFileSync(layout.stopRequest, `${new Date().toISOString()}\n`);
+  // A candidate still installing cannot read the request (npm runs synchronously), so it is ended at once after the identity check.
+  const installing = record.state === 'starting' || record.state === 'seeding';
+  if (!installing) writeFileSync(layout.stopRequest, `${new Date().toISOString()}\n`);
   let how = 'stopped';
-  if (!await waitForExit(record.pid, graceMs)) {
+  if (installing || !await waitForExit(record.pid, graceMs)) {
     if (!isCandidateProcess(layout, record.pid)) {
       rmSync(layout.stopRequest, { force: true });
-      throw refusal('CANDIDATE_STOP_REFUSED', `Process ${record.pid} did not stop, and it no longer looks like this candidate's server, so it was left alone.`);
+      throw refusal('CANDIDATE_STOP_REFUSED', `Process ${record.pid} is still running, and it no longer looks like this candidate's server, so it was left alone.`);
     }
     killTree(record.pid);
     if (!await waitForExit(record.pid, 10_000)) throw refusal('CANDIDATE_STOP_FAILED', `Process ${record.pid} could not be ended.`);
-    how = 'ended after it did not stop on request';
+    how = installing ? 'ended' : 'ended after it did not stop on request';
   }
   cleanup();
-  return { running: true, pid: record.pid, message: `The candidate${record.state === 'starting' ? ' (it was still starting)' : ''} ${how} (process ${record.pid}).` };
+  return { running: true, pid: record.pid, message: `The candidate${{ starting: ' (it was still starting)', seeding: ' (it was still making the sample data)' }[record.state] ?? ''} ${how} (process ${record.pid}).` };
 }
 
 export const stopRequested = layout => existsSync(layout.stopRequest);
