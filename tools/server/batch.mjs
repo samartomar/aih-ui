@@ -68,7 +68,7 @@ export function createBatchAdapter(consumerDir) {
     const env = { ...process.env, ...homeEnvironment(coreHome), AIH_BATCH_CORE_HOME: coreHome };
     const next = fork(join(consumerDir, 'consumer/batch-child.mjs'), [], { cwd: consumerDir, env, windowsHide: true,
       serialization: 'json', stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
-    next.stderr.resume();
+    next.stderr.pipe(process.stderr, { end: false });
     next.on('message', message => {
       if (message?.persist !== undefined) { save(next, envelopePath, message); return; }
       const entry = pending.get(message?.id);
