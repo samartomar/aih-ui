@@ -97,7 +97,9 @@ export async function recordImprovement({ envelopeBytes, operation, now } = {}) 
     record = dismissals.find(r => r.suggestion.id === operation.id);
     if (!record) return fail('/operation/id', 'No recorded dismissal is for that suggestion.');
     nextDismissals = dismissals.filter(r => r !== record);
-    nextSuggestions = suggestions.filter(r => r.id !== operation.id);
+    // A trial still needs the suggestion it was planned from, so only the dismissal goes then.
+    const planned = read.records.some(r => JOURNEY_RECORD_KINDS[r.schema]?.kind === 'improvement-trial' && r.suggestion?.id === operation.id);
+    nextSuggestions = suggestions.filter(r => r.id !== operation.id || planned);
   } else {
     if (!only(operation, ['type', 'suggestion'], ['reason'])) return fail('/operation', 'Supply {type,suggestion,reason?}.');
     const { suggestion } = operation;

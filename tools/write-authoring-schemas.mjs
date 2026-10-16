@@ -38,7 +38,7 @@ const dispositionRecord = 'urn:aihq:workbench:journey-record:maintenance-disposi
 const organizationRecord = 'urn:aihq:workbench:journey-record:organization-draft:1.0.0';
 const suggestionRecord = 'urn:aihq:workbench:journey-record:improvement-suggestion:1.0.0', dismissalRecord = 'urn:aihq:workbench:journey-record:improvement-dismissal:1.0.0';
 const workspaceRecord = 'urn:aihq:workbench:journey-record:workspace-declaration:1.0.0', bindingRecord = 'urn:aihq:workbench:journey-record:local-binding:1.0.0';
-const batchRecord = 'urn:aihq:workbench:journey-record:reviewed-batch:1.0.0';
+const batchRecord = 'urn:aihq:workbench:journey-record:reviewed-batch:1.0.0', trialRecord = 'urn:aihq:workbench:journey-record:improvement-trial:1.0.0';
 const utcTimestamp = { type: 'string', pattern: '^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d+)?Z$' };
 const updateCategory = { enum: ['content', 'software', 'client', 'environment'] };
 const recordUrn = { type: 'string', pattern: String.raw`^urn:aihq:workbench:journey-record:[a-z0-9-]+:\d+\.\d+\.\d+$` };
@@ -114,6 +114,45 @@ const improvementDismissal = { $schema: 'https://json-schema.org/draft/2020-12/s
   id: { type: 'string', pattern: '^dismissal-[a-f0-9]{32}$' }, schema: { const: dismissalRecord }, required: { const: false },
   suggestion: shape({ id: { type: 'string', pattern: '^suggestion-[a-f0-9]{32}$' }, revision: hash }), recordedAt: utcTimestamp, reason: suggestionText()
 }, ['reason']) };
+// Improvement trial: one bounded trial of a suggested item. The quality it must meet is defined at proposal and never changes
+// afterwards (a revision is a new trial); observations are for the baseline and the trial option; stop, restoration and the
+// evidence snapshot are separate facts. The reader (tools/consumer/trial-record.mjs) also enforces what a schema cannot express,
+// so a record this schema accepts can still be refused when the Workbench opens it:
+//   - id derives from the suggestion (id and revision), scope and proposedAt; each observation id derives from its option and target;
+//   - the suggestion record with the same id and revision must sit in the same envelope;
+//   - check ids and bound ids are unique, and there is at most one observation per (option, target);
+//   - a check observation names a quality check of this trial, with unit "outcome" and amount "passed" or "failed"; a dimension
+//     observation has a numeric amount;
+//   - startedAt is required when started or kept and absent when proposed (a trial stopped or revised while still proposed never
+//     started); observations exist only once it started;
+//   - an enforced bound names its mechanism, and the host refuses it when it has no such mechanism;
+//   - every timestamp must be a real calendar timestamp.
+const trialId = { type: 'string', pattern: '^trial-[a-f0-9]{32}$' }, trialSlug = { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,63}$' };
+const trialDecided = { enum: ['kept', 'revised', 'stopped'] };
+const trialObservation = { ...shape({ id: trialSlug, option: { enum: ['baseline', 'trial'] }, target: { oneOf: [shape({ dimension: { enum: ['setup', 'indexing', 'runtime-context', 'maintenance'] } }), shape({ check: trialSlug })] },
+  kind: { enum: ['measured', 'estimated', 'declared', 'unknown'] }, value: shape({ amount: { anyOf: [{ type: 'number', minimum: 0 }, { enum: ['passed', 'failed'] }] }, unit: suggestionText(32) }),
+  method: shape({ id: trialSlug, version: { type: 'string', pattern: String.raw`^\d+\.\d+\.\d+$` } }), unknownReason: suggestionText(300), source: { enum: ['person', 'host'] }, recordedAt: utcTimestamp }, ['value', 'method', 'unknownReason']),
+  allOf: [{ if: { properties: { kind: { const: 'unknown' } }, required: ['kind'] }, then: { required: ['unknownReason'], properties: { value: false, method: false } }, else: { required: ['value'], properties: { unknownReason: false } } },
+    { if: { properties: { kind: { const: 'estimated' } }, required: ['kind'] }, then: { required: ['method'] }, else: { properties: { method: false } } }] };
+const improvementTrial = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: trialRecord, ...shape({
+  id: trialId, schema: { const: trialRecord }, required: { const: false }, suggestion: shape({ id: { type: 'string', pattern: '^suggestion-[a-f0-9]{32}$' }, revision: hash }), scope,
+  baseline: shape({ savedIntentSha256: hash, draftSha256: hash }), task: suggestionText(),
+  quality: shape({ outcome: suggestionText(), checks: { type: 'array', minItems: 1, maxItems: 16, items: shape({ id: trialSlug, text: suggestionText(300) }) } }), conditions: suggestionText(),
+  bounds: { type: 'array', maxItems: 16, items: shape({ id: trialSlug, label: suggestionText(120), unit: suggestionText(32), value: { type: 'number', minimum: 0 },
+    enforcement: { oneOf: [shape({ kind: { const: 'advisory' } }), shape({ kind: { const: 'enforced' }, mechanism: shape({ id: trialSlug, label: suggestionText(120) }) })] } }) },
+  unknowns: { type: 'array', maxItems: 16, items: suggestionText(300) }, state: { enum: ['proposed', 'started', 'kept', 'revised', 'stopped'] },
+  proposedAt: utcTimestamp, startedAt: utcTimestamp, decidedAt: utcTimestamp, observations: { type: 'array', maxItems: 256, items: trialObservation },
+  evidence: shape({ outcome: { enum: ['qualifying-improvement', 'no-qualifying-improvement', 'inconclusive'] }, evaluatedAt: utcTimestamp }),
+  narrower: shape({ qualification: suggestionText(), acceptedAt: utcTimestamp }), reason: suggestionText(), revises: trialId, revisedBy: trialId,
+  adopted: shape({ root: shape({ ...ref, scope }), draftSha256: hash }),
+  restoration: shape({ status: { enum: ['proposed', 'pending', 'completed', 'partial', 'unsupported'] }, effects: { type: 'array', maxItems: 16, items: suggestionText(300) }, note: suggestionText(), recordedAt: utcTimestamp }, ['note'])
+}, ['startedAt', 'decidedAt', 'evidence', 'narrower', 'reason', 'revises', 'revisedBy', 'adopted', 'restoration']), allOf: [
+  { if: { required: ['state'], properties: { state: trialDecided } }, then: { required: ['decidedAt', 'evidence'] }, else: { properties: { decidedAt: false, evidence: false, reason: false } } },
+  { if: { required: ['state'], properties: { state: { enum: ['started', 'kept'] } } }, then: { required: ['startedAt'] } },
+  { if: { required: ['state'], properties: { state: { const: 'proposed' } } }, then: { properties: { startedAt: false, observations: { maxItems: 0 } } } },
+  { if: { required: ['state'], properties: { state: { const: 'kept' } } }, then: { required: ['adopted'] }, else: { properties: { adopted: false } } },
+  { if: { required: ['state'], properties: { state: { const: 'revised' } } }, then: { required: ['revisedBy'] }, else: { properties: { revisedBy: false } } },
+  { if: { required: ['state'], properties: { state: { const: 'stopped' } } }, then: {}, else: { properties: { restoration: false } } }] };
 // Workspace declaration: the portable record of which repositories make up one workspace and how they relate, one
 // fixed-id optional record per envelope. It never holds a local path or a credential; the reader
 // (tools/consumer/workspace-record.mjs) enforces what a schema cannot express, so a record this schema accepts can still be
@@ -200,10 +239,10 @@ const journey = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: 
   records: array({ if: { required: ['schema'], properties: { schema: { const: journeyRecord } } },
     then: shape({ id, schema: { const: journeyRecord }, required: { const: true }, savedIntentSha256: hash, intent: { $ref: saved.$id } }),
     else: { type: 'object', required: ['id', 'schema', 'required'], additionalProperties: true, properties: { id, schema: recordUrn, required: { type: 'boolean' } } },
-    allOf: [dispositionRecord, checkRecord, organizationRecord, suggestionRecord, dismissalRecord, workspaceRecord, bindingRecord, batchRecord].map(urn => ({ if: { required: ['schema'], properties: { schema: { const: urn } } }, then: { $ref: urn } })) })
+    allOf: [dispositionRecord, checkRecord, organizationRecord, suggestionRecord, dismissalRecord, workspaceRecord, bindingRecord, batchRecord, trialRecord].map(urn => ({ if: { required: ['schema'], properties: { schema: { const: urn } } }, then: { $ref: urn } })) })
 }) };
 mkdirSync(new URL('../schemas/', import.meta.url), { recursive: true });
-for (const [name, schema] of [['saved-intent-3.0.0', saved], ['review-decisions-1.0.0', review], ['journey-envelope-1.0.0', journey], ['journey-record-maintenance-disposition-1.0.0', disposition], ['journey-record-maintenance-check-1.0.0', check], ['journey-record-organization-draft-1.0.0', organizationDraft], ['journey-record-improvement-suggestion-1.0.0', improvementSuggestion], ['journey-record-improvement-dismissal-1.0.0', improvementDismissal], ['journey-record-workspace-declaration-1.0.0', workspaceDeclaration], ['journey-record-local-binding-1.0.0', localBinding], ['journey-record-reviewed-batch-1.0.0', reviewedBatch]]) {
+for (const [name, schema] of [['saved-intent-3.0.0', saved], ['review-decisions-1.0.0', review], ['journey-envelope-1.0.0', journey], ['journey-record-maintenance-disposition-1.0.0', disposition], ['journey-record-maintenance-check-1.0.0', check], ['journey-record-organization-draft-1.0.0', organizationDraft], ['journey-record-improvement-suggestion-1.0.0', improvementSuggestion], ['journey-record-improvement-dismissal-1.0.0', improvementDismissal], ['journey-record-workspace-declaration-1.0.0', workspaceDeclaration], ['journey-record-local-binding-1.0.0', localBinding], ['journey-record-reviewed-batch-1.0.0', reviewedBatch], ['journey-record-improvement-trial-1.0.0', improvementTrial]]) {
   const path = new URL(`../schemas/${name}.json`, import.meta.url), expected = JSON.stringify(schema, null, 2) + '\n';
   if (process.argv.includes('--check')) {
     if (readFileSync(path, 'utf8').replaceAll('\r\n', '\n') !== expected) throw new Error(`Schema is stale: ${name}`);

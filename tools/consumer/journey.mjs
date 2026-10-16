@@ -8,6 +8,7 @@ import { IMPROVEMENT_SUGGESTION_RECORD_SCHEMA, IMPROVEMENT_DISMISSAL_RECORD_SCHE
 import { WORKSPACE_DECLARATION_RECORD_SCHEMA, LOCAL_BINDING_RECORD_SCHEMA, declarationProblem, declarationDerivedProblem, bindingProblem, bindingDerivedProblem } from './workspace-record.mjs';
 import { ORGANIZATION_DRAFT_RECORD_SCHEMA, organizationDraftProblem, organizationDraftDerivedProblem } from './organization-draft-record.mjs';
 import { BATCH_RECORD_SCHEMA, batchProblem, batchDerivedProblem } from './batch-record.mjs';
+import { TRIAL_RECORD_SCHEMA, trialProblem, trialDerivedProblem, unlinkedTrial } from './trial-record.mjs';
 export const JOURNEY_SCHEMA_PREFIX = 'urn:aihq:workbench:journey-envelope:';
 export const JOURNEY_SCHEMA = `${JOURNEY_SCHEMA_PREFIX}1.0.0`;
 export const JOURNEY_ACCEPTED_SCHEMAS = [JOURNEY_SCHEMA];
@@ -24,7 +25,8 @@ export const JOURNEY_RECORD_KINDS = { [DRAFT_RECORD_SCHEMA]: { kind: 'unresolved
   [ORGANIZATION_DRAFT_RECORD_SCHEMA]: { kind: 'organization-draft', version: '1.0.0', required: true },
   [WORKSPACE_DECLARATION_RECORD_SCHEMA]: { kind: 'workspace-declaration', version: '1.0.0', required: false },
   [LOCAL_BINDING_RECORD_SCHEMA]: { kind: 'local-binding', version: '1.0.0', required: false },
-  [BATCH_RECORD_SCHEMA]: { kind: 'reviewed-batch', version: '1.0.0', required: false } };
+  [BATCH_RECORD_SCHEMA]: { kind: 'reviewed-batch', version: '1.0.0', required: false },
+  [TRIAL_RECORD_SCHEMA]: { kind: 'improvement-trial', version: '1.0.0', required: false } };
 const known = schema => Object.hasOwn(JOURNEY_RECORD_KINDS, schema);
 export const MAX_SAVED_INTENT_BYTES = 1_000_000;
 export const MAX_ENVELOPE_BYTES = 2_000_000;
@@ -90,6 +92,7 @@ function shapeProblem(envelope) {
     if (record.schema === WORKSPACE_DECLARATION_RECORD_SCHEMA && declarationProblem(record) !== null) return path;
     if (record.schema === LOCAL_BINDING_RECORD_SCHEMA && bindingProblem(record) !== null) return path;
     if (record.schema === BATCH_RECORD_SCHEMA && batchProblem(record) !== null) return path;
+    if (record.schema === TRIAL_RECORD_SCHEMA && trialProblem(record) !== null) return path;
   }
   return null;
 }
@@ -142,6 +145,9 @@ export async function readJourneyEnvelope(bytes) {
     } else if (record.schema === BATCH_RECORD_SCHEMA) {
       const problem = await batchDerivedProblem(record);
       if (problem !== null) return refuse('INPUT_INVALID', `/records/${index}${problem}`, 'Batch id and checks must derive from its categories, continuation, scopes, inputs and actions.', originalBytes);
+    } else if (record.schema === TRIAL_RECORD_SCHEMA) {
+      const problem = await trialDerivedProblem(record);
+      if (problem !== null) return refuse('INPUT_INVALID', `/records/${index}${problem}`, 'Trial and observation ids must derive from the suggestion, scope and proposal time, and from the option and target.', originalBytes);
     } else if (record.required) {
       supported = false;
       diagnostics.push({ code: 'JOURNEY_RECORD_UNSUPPORTED', path: `/records/${index}`, message: `Required record ${record.id} has unsupported schema ${record.schema}; it can be read but not changed.` });
@@ -149,6 +155,8 @@ export async function readJourneyEnvelope(bytes) {
   }
   const unlinked = unlinkedDismissal(envelope.records);
   if (unlinked >= 0) return refuse('INPUT_INVALID', `/records/${unlinked}/suggestion`, 'A dismissal needs the suggestion record, with the same id and revision, in the same envelope.', originalBytes);
+  const trialAt = unlinkedTrial(envelope.records);
+  if (trialAt >= 0) return refuse('INPUT_INVALID', `/records/${trialAt}/suggestion`, 'A trial needs the suggestion record, with the same id and revision, in the same envelope.', originalBytes);
   return ok({ envelope, savedIntentBytes, records: envelope.records, supported, originalBytes }, diagnostics);
 }
 // `records` are the known records to write; unknown optional records from `previous`
@@ -211,6 +219,12 @@ export async function writeJourneyEnvelope({ savedIntentBytes, records, previous
       written.push(structuredClone(record));
       continue;
     }
+    if (record?.schema === TRIAL_RECORD_SCHEMA) {
+      const problem = trialProblem(record) ?? await trialDerivedProblem(record);
+      if (problem !== null) return refuse('INPUT_INVALID', `${path}${problem}`, 'Supply a closed improvement-trial record with derived trial and observation ids.');
+      written.push(structuredClone(record));
+      continue;
+    }
     if (!only(record, ['id', 'schema', 'required', 'intent'], ['savedIntentSha256']) || typeof record.id !== 'string' || !idPattern.test(record.id)) return refuse('INPUT_INVALID', path, 'Supply {id,schema,required,intent} records.');
     if (!Object.hasOwn(JOURNEY_RECORD_SCHEMAS, record.schema)) return refuse('JOURNEY_RECORD_UNSUPPORTED', `${path}/schema`, 'Only supported record schemas can be written.');
     if (record.required !== true) return refuse('INPUT_INVALID', `${path}/required`, 'The unresolved-draft record is required.');
@@ -220,6 +234,8 @@ export async function writeJourneyEnvelope({ savedIntentBytes, records, previous
   }
   const unlinked = unlinkedDismissal(written);
   if (unlinked >= 0) return refuse('INPUT_INVALID', `/records/${unlinked}/suggestion`, 'A dismissal needs the suggestion record, with the same id and revision, in the same list.');
+  const trialAt = unlinkedTrial(written);
+  if (trialAt >= 0) return refuse('INPUT_INVALID', `/records/${trialAt}/suggestion`, 'A trial needs the suggestion record, with the same id and revision, in the same list.');
   const preserved = (previous?.envelope.records ?? []).filter(record => !known(record.schema)).map(record => structuredClone(record));
   const all = [...written, ...preserved];
   if (new Set(all.map(record => record.id)).size !== all.length) return refuse('INPUT_INVALID', '/records', 'Record ids must be unique.');

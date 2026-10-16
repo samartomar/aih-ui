@@ -167,6 +167,18 @@ export function createAuthoringClient() {
         return attempt === revision ? result : { status: 'superseded' };
       } catch (error) { if (attempt !== revision) return { status: 'superseded' }; throw error; }
     },
+    async readTrials() {
+      const input = maintenanceInput();
+      if (!input) return refusal('INPUT_INVALID', 'Open a draft or a saved policy before reading trials.');
+      const attempt = revision;
+      try {
+        const result = await request('trials-read', { ...input, policyBytes: undefined });
+        return attempt === revision ? result : { status: 'superseded' };
+      } catch (error) { if (attempt !== revision) return { status: 'superseded' }; throw error; }
+    },
+    recordTrial(operation) {
+      return recordChoice('trials-record', operation, 'Open a draft or a saved policy before recording a trial.');
+    },
     recordImprovement(operation) {
       return recordChoice('improvements-record', operation, 'Open a draft or a saved policy before recording an improvement choice.');
     },

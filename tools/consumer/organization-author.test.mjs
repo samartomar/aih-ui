@@ -856,5 +856,5 @@ test('the shipped organization-draft schema agrees with the record the writer pr
   // The envelope schema validates the record by reference, after the two maintenance kinds and before the two improvement kinds (the two workspace kinds follow).
   const rules = envelope.properties.records.items.allOf.map(rule => [rule.if.properties.schema.const, rule.then.$ref]);
   assert.deepEqual(rules[2], [ORGANIZATION_DRAFT_RECORD_SCHEMA, ORGANIZATION_DRAFT_RECORD_SCHEMA]);
-  assert.equal(rules.length, 8);
+  assert.equal(rules.length, 9);
 });

@@ -36,7 +36,7 @@ async function savedClients() {
   } catch { return []; }
 }
 
-export function createImprovementsView({ client, el, button, showStatus, loadClients = savedClients }) {
+export function createImprovementsView({ client, el, button, showStatus, loadClients = savedClients, onPlanTrial }) {
   const node = el('section', 'p-3 border border-wb-border rounded bg-surface-container-low space-y-2'); node.id = 'policy-improvements';
   const goal = el('input', 'bg-wb-input border border-wb-border rounded p-1'); goal.id = 'policy-improvements-goal'; goal.type = 'text'; goal.maxLength = 300; goal.value = '';
   const goalLabel = el('label', 'text-on-surface-variant', 'Optional goal'); goalLabel.setAttribute('for', goal.id);
@@ -124,7 +124,10 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
         if (preserved) card.append(choice('Forget dismissal', safe(() => record(restoreOperation(suggestion.id)))));
         // A suggestion that arose from a typed goal is shown again for that goal, so restoring it never makes it vanish.
         else if (dismissed) card.append(choice('Show again', safe(() => { if (suggestion.references?.some(r => r.kind === 'request')) goal.value = suggestion.goal; return record(restoreOperation(suggestion.id)); })));
-        else card.append(choice('Dismiss', safe(() => record(dismissOperation(suggestion)))), promptControls(suggestion));
+        else {
+          card.append(choice('Dismiss', safe(() => record(dismissOperation(suggestion)))), promptControls(suggestion));
+          if (onPlanTrial) card.append(choice('Plan a trial', safe(() => onPlanTrial(suggestion))));
+        }
         section.append(card);
       }
       groups.append(section);

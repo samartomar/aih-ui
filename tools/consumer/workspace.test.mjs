@@ -634,7 +634,7 @@ test('the default export is a portable artifact: it keeps only kinds known to be
   for (const leaked of [payload, '/srv/checkouts/api', 'secret123', 'future-note', 'local-binding']) assert.equal(text.includes(leaked), false, leaked);
   assert.deepEqual(exported.envelope.records.map(r => r.schema).sort(), ['urn:aihq:workbench:journey-record:unresolved-draft:1.0.0', WORKSPACE_DECLARATION_SCHEMA]);
   // Every kind this build knows to be portable survives (a binding and a batch are local); the local envelope is untouched.
-  assert.ok(Object.values(JOURNEY_RECORD_KINDS).filter(entry => !['local-binding', 'reviewed-batch'].includes(entry.kind)).length === 7);
+  assert.ok(Object.values(JOURNEY_RECORD_KINDS).filter(entry => !['local-binding', 'reviewed-batch'].includes(entry.kind)).length === 8);
   assert.deepEqual(valueOf(await exportWorkspace({ envelopeBytes: exported.envelopeBytes })).excluded, { bindings: 0, batches: 0, unknownRecords: 0 });
   // An unknown required record cannot be left out, so nothing is exported and the original bytes stay.
   const required = await resign(base, doc => { doc.records.push({ id: 'future-required', schema: 'urn:aihq:workbench:journey-record:future-required:1.0.0', required: true, payload }); });
