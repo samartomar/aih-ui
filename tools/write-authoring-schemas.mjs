@@ -38,6 +38,7 @@ const dispositionRecord = 'urn:aihq:workbench:journey-record:maintenance-disposi
 const organizationRecord = 'urn:aihq:workbench:journey-record:organization-draft:1.0.0';
 const suggestionRecord = 'urn:aihq:workbench:journey-record:improvement-suggestion:1.0.0', dismissalRecord = 'urn:aihq:workbench:journey-record:improvement-dismissal:1.0.0';
 const workspaceRecord = 'urn:aihq:workbench:journey-record:workspace-declaration:1.0.0', bindingRecord = 'urn:aihq:workbench:journey-record:local-binding:1.0.0';
+const batchRecord = 'urn:aihq:workbench:journey-record:reviewed-batch:1.0.0';
 const utcTimestamp = { type: 'string', pattern: '^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d+)?Z$' };
 const updateCategory = { enum: ['content', 'software', 'client', 'environment'] };
 const recordUrn = { type: 'string', pattern: String.raw`^urn:aihq:workbench:journey-record:[a-z0-9-]+:\d+\.\d+\.\d+$` };
@@ -162,6 +163,30 @@ const localBinding = { $schema: 'https://json-schema.org/draft/2020-12/schema', 
   verification: shape({ result: { enum: ['matched', 'confirmed'] }, reasons: { type: 'array', maxItems: 6, uniqueItems: true, items: { enum: ['additional-checkout', 'ambiguous-remote', 'fork', 'moved', 'no-remote', 'similar-name'] } }, verifiedAt: utcTimestamp }),
   replaces: { type: 'string', pattern: '^binding-[a-f0-9]{32}$' }
 }, ['replaces']) };
+// Reviewed batch: the durable description of one multi-scope change, one optional record per distinct plan. It is never a prepared
+// handle: no session id, review digest, run id or outcome can appear (the shape is closed). It holds absolute target roots, so
+// it is local state and the default sharing export leaves it out. The reader (tools/consumer/batch-record.mjs) also enforces what
+// a schema cannot express, so a record this schema accepts can still be refused when the Workbench opens it:
+//   - id derives from (categories, continuation, scopes, inputs, actions, supersedes); each check id derives from (kind, subject), and
+//     the checks are exactly the set the batch discloses (one per input, two per scope, one per action);
+//   - categories, scopes, inputs, action inputs, action requires and checks are sorted by id and unique, and no two scopes share a root;
+//   - action order is the reviewed execution order: every required action appears earlier (so there is no cycle);
+//   - every action scope, category and input is declared, and every declared scope, category and input is used;
+//   - recordedAt must be a real calendar timestamp.
+// Selection digests and Core `requires` mirroring are checked against the envelope's saved policy when the batch is read.
+const batchSlug = { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,63}$' }, batchIdPattern = { type: 'string', pattern: '^batch-[a-f0-9]{32}$' };
+const batchAction = shape({ id: batchSlug, scope: batchSlug, category: updateCategory, selection: shape({ id, sha256: hash }),
+  inputs: { type: 'array', maxItems: 64, uniqueItems: true, items: batchSlug }, requires: { type: 'array', maxItems: 256, uniqueItems: true, items: batchSlug }, retain: { const: true } }, ['retain']);
+const reviewedBatch = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: batchRecord, ...shape({
+  id: batchIdPattern, schema: { const: batchRecord }, required: { const: false }, recordedAt: utcTimestamp,
+  categories: { type: 'array', minItems: 1, maxItems: 4, uniqueItems: true, items: updateCategory }, continuation: { enum: ['stop', 'continue-independent'] },
+  scopes: { type: 'array', minItems: 1, maxItems: 16, items: shape({ id: batchSlug, role: { enum: ['existing', 'added'] }, client: { type: 'string', minLength: 1, maxLength: 128 },
+    target: shape({ kind: { const: 'project' }, root: { type: 'string', minLength: 1, maxLength: 1024, pattern: String.raw`^(?:[A-Za-z]:[\\/]|\\\\|/)` } }) }) },
+  inputs: { type: 'array', maxItems: 64, items: shape({ id: batchSlug, kind: { const: 'material' }, sha256: hash, byteLength: { type: 'integer', minimum: 0 } }) },
+  actions: { type: 'array', minItems: 1, maxItems: 256, items: batchAction },
+  checks: { type: 'array', maxItems: 512, items: shape({ id: { type: 'string', pattern: '^check-[a-f0-9]{32}$' }, kind: { enum: ['shared-input', 'unrelated-state', 'conflict', 'core-review'] }, subject: batchSlug }) },
+  supersedes: batchIdPattern
+}, ['supersedes']) };
 const journey = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: journeyEnvelope, ...shape({
   schema: { const: journeyEnvelope },
   id: { type: 'string', pattern: '^journey-[a-f0-9]{32}$' },
@@ -172,10 +197,10 @@ const journey = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: 
   records: array({ if: { required: ['schema'], properties: { schema: { const: journeyRecord } } },
     then: shape({ id, schema: { const: journeyRecord }, required: { const: true }, savedIntentSha256: hash, intent: { $ref: saved.$id } }),
     else: { type: 'object', required: ['id', 'schema', 'required'], additionalProperties: true, properties: { id, schema: recordUrn, required: { type: 'boolean' } } },
-    allOf: [dispositionRecord, checkRecord, organizationRecord, suggestionRecord, dismissalRecord, workspaceRecord, bindingRecord].map(urn => ({ if: { required: ['schema'], properties: { schema: { const: urn } } }, then: { $ref: urn } })) })
+    allOf: [dispositionRecord, checkRecord, organizationRecord, suggestionRecord, dismissalRecord, workspaceRecord, bindingRecord, batchRecord].map(urn => ({ if: { required: ['schema'], properties: { schema: { const: urn } } }, then: { $ref: urn } })) })
 }) };
 mkdirSync(new URL('../schemas/', import.meta.url), { recursive: true });
-for (const [name, schema] of [['saved-intent-3.0.0', saved], ['review-decisions-1.0.0', review], ['journey-envelope-1.0.0', journey], ['journey-record-maintenance-disposition-1.0.0', disposition], ['journey-record-maintenance-check-1.0.0', check], ['journey-record-organization-draft-1.0.0', organizationDraft], ['journey-record-improvement-suggestion-1.0.0', improvementSuggestion], ['journey-record-improvement-dismissal-1.0.0', improvementDismissal], ['journey-record-workspace-declaration-1.0.0', workspaceDeclaration], ['journey-record-local-binding-1.0.0', localBinding]]) {
+for (const [name, schema] of [['saved-intent-3.0.0', saved], ['review-decisions-1.0.0', review], ['journey-envelope-1.0.0', journey], ['journey-record-maintenance-disposition-1.0.0', disposition], ['journey-record-maintenance-check-1.0.0', check], ['journey-record-organization-draft-1.0.0', organizationDraft], ['journey-record-improvement-suggestion-1.0.0', improvementSuggestion], ['journey-record-improvement-dismissal-1.0.0', improvementDismissal], ['journey-record-workspace-declaration-1.0.0', workspaceDeclaration], ['journey-record-local-binding-1.0.0', localBinding], ['journey-record-reviewed-batch-1.0.0', reviewedBatch]]) {
   const path = new URL(`../schemas/${name}.json`, import.meta.url), expected = JSON.stringify(schema, null, 2) + '\n';
   if (process.argv.includes('--check')) {
     if (readFileSync(path, 'utf8').replaceAll('\r\n', '\n') !== expected) throw new Error(`Schema is stale: ${name}`);

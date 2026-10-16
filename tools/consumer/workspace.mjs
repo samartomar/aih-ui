@@ -344,6 +344,8 @@ export async function verifyBindings({ envelopeBytes, observations = {} } = {}) 
 const PORTABLE_KINDS = ['unresolved-draft', 'maintenance-disposition', 'maintenance-check', 'improvement-suggestion', 'improvement-dismissal', 'organization-draft', 'workspace-declaration'];
 const isPortable = record => Object.hasOwn(JOURNEY_RECORD_KINDS, record.schema) && PORTABLE_KINDS.includes(JOURNEY_RECORD_KINDS[record.schema].kind);
 const isLocal = record => record.schema.startsWith('urn:aihq:workbench:journey-record:local-binding:');
+// A reviewed batch (of any version) holds absolute target roots, so it is local state like a binding and never part of the default export.
+const isBatch = record => record.schema.startsWith('urn:aihq:workbench:journey-record:reviewed-batch:');
 const note = (found, pointer) => { if (found.length < 20 && !found.includes(pointer)) found.push(pointer); };
 // JSON pointers (at most 20) of the strings and keys in `value` that hold a local path or a credential; the values are never reported, and an
 // unsafe key is reported as `~unsafe-key` instead of itself.
@@ -371,8 +373,8 @@ export async function exportWorkspace({ envelopeBytes } = {}) {
   const { read, declaration } = loaded.value, records = read.envelope.records;
   const required = records.findIndex(record => record.required && !isPortable(record) && !isLocal(record));
   if (required >= 0) return refuse('WORKSPACE_EXPORT_UNSAFE', `/records/${required}`, `Sharing is refused: the required record at /records/${required} has a schema (${records[required].schema}) that this version cannot establish as portable, and it cannot be left out. This file is unchanged.`, envelopeBytes);
-  const excluded = { bindings: records.filter(isLocal).length, unknownRecords: records.filter(record => !isLocal(record) && !Object.hasOwn(JOURNEY_RECORD_KINDS, record.schema)).length };
-  const previous = { ...read, supported: true, envelope: { ...read.envelope, records: records.filter(isPortable) } };
+  const excluded = { bindings: records.filter(isLocal).length, batches: records.filter(isBatch).length, unknownRecords: records.filter(record => !isLocal(record) && !isBatch(record) && !Object.hasOwn(JOURNEY_RECORD_KINDS, record.schema)).length };
+  const portable = records.filter(isPortable), previous = { ...read, supported: true, records: portable, envelope: { ...read.envelope, records: portable } };
   const written = await write({ ...loaded.value, read: previous }, envelopeBytes, declaration, [], previous);
   if (written.status !== 'ok') return written;
   const found = [];

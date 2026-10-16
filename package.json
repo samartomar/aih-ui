@@ -24,6 +24,9 @@
     "./workspace-host": "./tools/consumer/workspace-host.mjs",
     "./schemas/journey-record-workspace-declaration/1.0.0.json": "./schemas/journey-record-workspace-declaration-1.0.0.json",
     "./schemas/journey-record-local-binding/1.0.0.json": "./schemas/journey-record-local-binding-1.0.0.json",
+    "./batch": "./tools/consumer/batch.mjs",
+    "./batch-host": "./tools/consumer/batch-host.mjs",
+    "./schemas/journey-record-reviewed-batch/1.0.0.json": "./schemas/journey-record-reviewed-batch-1.0.0.json",
     "./organization-author": "./tools/consumer/organization-author.mjs",
     "./schemas/journey-record-organization-draft/1.0.0.json": "./schemas/journey-record-organization-draft-1.0.0.json",
     "./schemas/journey-envelope/1.0.0.json": "./schemas/journey-envelope-1.0.0.json"

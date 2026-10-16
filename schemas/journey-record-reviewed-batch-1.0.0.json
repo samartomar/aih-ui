@@ -1,0 +1,245 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:aihq:workbench:journey-record:reviewed-batch:1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "schema",
+    "required",
+    "recordedAt",
+    "categories",
+    "continuation",
+    "scopes",
+    "inputs",
+    "actions",
+    "checks"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^batch-[a-f0-9]{32}$"
+    },
+    "schema": {
+      "const": "urn:aihq:workbench:journey-record:reviewed-batch:1.0.0"
+    },
+    "required": {
+      "const": false
+    },
+    "recordedAt": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d+)?Z$"
+    },
+    "categories": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "content",
+          "software",
+          "client",
+          "environment"
+        ]
+      }
+    },
+    "continuation": {
+      "enum": [
+        "stop",
+        "continue-independent"
+      ]
+    },
+    "scopes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "role",
+          "client",
+          "target"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+          },
+          "role": {
+            "enum": [
+              "existing",
+              "added"
+            ]
+          },
+          "client": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "target": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "root"
+            ],
+            "properties": {
+              "kind": {
+                "const": "project"
+              },
+              "root": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024,
+                "pattern": "^(?:[A-Za-z]:[\\\\/]|\\\\\\\\|/)"
+              }
+            }
+          }
+        }
+      }
+    },
+    "inputs": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "sha256",
+          "byteLength"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+          },
+          "kind": {
+            "const": "material"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "byteLength": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "scope",
+          "category",
+          "selection",
+          "inputs",
+          "requires"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+          },
+          "scope": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+          },
+          "category": {
+            "enum": [
+              "content",
+              "software",
+              "client",
+              "environment"
+            ]
+          },
+          "selection": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "sha256"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[\\w.-]{1,180}$"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            }
+          },
+          "inputs": {
+            "type": "array",
+            "maxItems": 64,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+            }
+          },
+          "requires": {
+            "type": "array",
+            "maxItems": 256,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+            }
+          },
+          "retain": {
+            "const": true
+          }
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "maxItems": 512,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "subject"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^check-[a-f0-9]{32}$"
+          },
+          "kind": {
+            "enum": [
+              "shared-input",
+              "unrelated-state",
+              "conflict",
+              "core-review"
+            ]
+          },
+          "subject": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+          }
+        }
+      }
+    },
+    "supersedes": {
+      "type": "string",
+      "pattern": "^batch-[a-f0-9]{32}$"
+    }
+  }
+}
