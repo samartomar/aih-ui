@@ -100,18 +100,24 @@ function packedFilename(dir, name) {
  * @param name      "core" | "scan" | "catalog"
  * @param repo      the checkout to read a checkpoint from
  * @param supplied  a tarball path that bypasses the checkout entirely
+ * @param expected  { sha256, commit } a candidate manifest pins for the supplied tarball: a digest
+ *                  mismatch is refused, and the manifest's commit is recorded for it
  * @param workspace a directory outside every repository for snapshots
  */
-export function resolvePackage({ name, repo, supplied, workspace, log }) {
+export function resolvePackage({ name, repo, supplied, expected, workspace, log }) {
   if (supplied) {
     if (!exists(supplied)) throw new Error(`supplied ${name} tarball not found at ${supplied}`);
     log(`${name}: using the supplied tarball; no checkout is read or built`);
+    const sha256 = sha256File(supplied);
+    if (expected && sha256 !== expected.sha256) {
+      throw new Error(`supplied ${name} tarball has sha256 ${sha256}, not the ${expected.sha256} the candidate manifest names`);
+    }
     return {
       name,
       tarball: resolve(supplied),
-      sha256: sha256File(supplied),
-      commit: "supplied-tarball",
-      source: "supplied tarball",
+      sha256,
+      commit: expected ? expected.commit : "supplied-tarball",
+      source: expected ? "candidate manifest" : "supplied tarball",
       midChange: false,
     };
   }

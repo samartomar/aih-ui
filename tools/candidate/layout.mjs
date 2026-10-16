@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 export const DATA_MARKER_SCHEMA = 'urn:aih-ui:candidate-data:1.0.0';
 export const MANIFEST_SCHEMA = 'urn:aih-ui:candidate-manifest:1.0.0';
 export const DEFAULT_PORT = 4300;
-// The owner's running preview.
+// The ordinary preview's default port (tools/preview.mjs).
 export const RESERVED_PORTS = Object.freeze([4173]);
 
 export function candidateLayout(dataDir) {
