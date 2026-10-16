@@ -11,7 +11,7 @@ import * as publicApi from './workspace.mjs';
 import { readWorkspace, editWorkspace, planBinding, bindCheckout, unbindCheckout, verifyBindings, exportWorkspace, remoteIdentity, sameIdentity,
   validateDeclaration, validateBinding, WORKSPACE_DECLARATION_SCHEMA, LOCAL_BINDING_SCHEMA } from './workspace.mjs';
 import { observeCheckout } from './workspace-host.mjs';
-import { readJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
+import { readJourneyEnvelope, JOURNEY_RECORD_KINDS, encodeBase64 } from './journey.mjs';
 import { unsafeText, identityOf } from './workspace-record.mjs';
 import { recordMaintenance } from './maintenance.mjs';
 import { checkImprovements, recordImprovement } from './improvements.mjs';
@@ -180,8 +180,8 @@ test('members: known/unresolved fields are explicit, pasted remote URLs lose the
 test('absolute local paths, URL userinfo and malformed fields are refused in every free-text and location field', async () => {
   const bytes = (await edit((await shared()).envelopeBytes, { type: 'declare' })).envelopeBytes;
   const unsafe = ['C:\\Users\\me\\repo', 'c:/work/repo', '\\\\server\\share\\repo', '/home/me/repo', '/Users/me/repo', '/root/repo', '~/repo', 'cloned at /home/me/repo', 'see (~/repo)', 'see file:///etc/passwd', 'https://user:ghp_secret@github.com/acme/api', 'clone from https://ghp_secret@host/x',
-    '/srv/checkouts/api', 'checkout lives at /srv/repos/api', '/opt/a/b', 'see "/mnt/c/work"', '/Volumes/x/y', 'path=/var/lib/x', 'ssh://host/access?token=secret123', 'curl -H api_key=abc', 'password: hunter2', 'secret : s3',
-    'ghp_' + 'a'.repeat(36), 'github_pat_11AAAAAAA', 'glpat-abcdefghij', 'xoxb-123-456', 'sk-' + 'a1'.repeat(12), 'AKIAIOSFODNN7EXAMPLE', 'Token=abc', 'x?access_token=1', 'passwd=1', 'pwd=1', 'apikey=1'];
+    '/srv/checkouts/api', 'checkout lives at /srv/repos/api', '/opt/a/b', 'see "/mnt/c/work"', '/Volumes/x/y', 'path=/var/lib/x', 'ssh://host/access?token=secret123', 'curl -H api_key=abcdefgh', 'password: hunter2', 'secret : s3cr3t99', '/private.pem', 'checkout:/srv/checkouts/api', 'token=secret123abc',
+    'ghp_' + 'a'.repeat(36), 'github_pat_11AAAAAAA', 'glpat-abcdefghij', 'xoxb-123-456', 'sk-' + 'a1'.repeat(12), 'AKIAIOSFODNN7EXAMPLE', 'Token=abcdefgh', 'x?access_token=12345678', 'passwd=12345678', 'pwd=12345678', 'apikey=12345678'];
   const attempt = async (patch, operation = { type: 'set-member', member: { ...UI, ...patch } }) => editWorkspace({ envelopeBytes: bytes, operation, now: NOW });
   for (const text of unsafe) {
     for (const [name, patch] of [['label', { label: text }], ['responsibilities', { responsibilities: { status: 'known', values: [text] } }]]) {
@@ -200,7 +200,7 @@ test('absolute local paths, URL userinfo and malformed fields are refused in eve
     assert.equal(code(await editWorkspace({ envelopeBytes: two, operation: { type: 'set-relationship', relationship: { from: 'api', to: 'ui', kind: 'depends-on', provenance: { kind: 'owner', ref: text } } }, now: NOW })), 'INPUT_INVALID', text);
     assert.equal(code(await editWorkspace({ envelopeBytes: two, operation: { type: 'suggest-relationship', relationship: { from: 'api', to: 'ui', kind: 'depends-on', reason: text } }, now: NOW })), 'INPUT_INVALID', text);
   }
-  for (const safe of ['Owns src/home/index.ts', 'Edits the profile: page', 'Serves api/root/health', 'See docs/api/v1/orders and AGENTS.md', 'Owns /health only', 'https://example.com/a/b is documented', 'Rotates secrets quarterly', 'sk-short'])
+  for (const safe of ['Owns src/home/index.ts', 'Edits the profile: page', 'Serves api/root/health', 'See docs/api/v1/orders and AGENTS.md', 'Owns /health only', 'https://example.com/a/b is documented', 'Rotates secrets quarterly', 'sk-short', 'owns the /v1/orders/ endpoint', 'serves /api/health/live', 'Handles password: reset emails', 'limits max_token=4096', 'See https://example.com'])
     assert.equal((await attempt({ label: safe, responsibilities: { status: 'known', values: [safe] } })).status, 'ok', safe);
   for (const text of unsafe) assert.equal(unsafeText(text), true, text);
   for (const text of ['src/home/index.ts', 'profile: page', 'serves api/root/health', 'AGENTS.md', 5, null]) assert.equal(unsafeText(text), false, String(text));
@@ -212,6 +212,15 @@ test('absolute local paths, URL userinfo and malformed fields are refused in eve
   for (const patch of [{ extra: 1 }, { identity: 'C:\\repo' }, { identity: 'github.com/acme' }, { id: 'Bad Id' }, { id: '' }, { aliases: 'x' }, { aliases: ['/srv/repo.git'] }, { aliases: ['github.com/acme/ui'] },
     { responsibilities: { status: 'known', values: [] } }, { responsibilities: { status: 'known' } }, { responsibilities: { status: 'unresolved', values: ['x'] } }, { responsibilities: { status: 'maybe' } }, { label: 'x'.repeat(121) }])
     assert.equal(code(await attempt(patch)), 'INPUT_INVALID', JSON.stringify(patch));
+});
+
+test('the text guard refuses local roots at any depth, top-level files and credential values, and allows ordinary routes and prose', () => {
+  const refused = ['/private.pem', 'see /private.pem.', '(/id_rsa.key)', 'checkout:/srv/checkouts/api', '/srv/checkouts/api', '/srv/x', 'at "/workspace/api"', 'x=/data/export', '/Library/Keychains/a', 'ssh://host/access?token=secret123', 'token=secret123abc',
+    'api_key=abcdefgh12', 'x&password=hunter2hunter2', 'password: hunter2', 'secret : s3cr3t99', 'api-key: abc-1234', 'passwd: Hunter22.'];
+  const allowed = ['owns the /v1/orders/ endpoint', 'serves /api/health/live', 'Handles password: reset emails', 'limits max_token=4096', 'src/home/index.ts', 'profile: page', 'serves api/root/health', 'Owns /health only', 'calls /v1.2/orders',
+    'See https://example.com', 'https://example.com/home/x', 'token=short', 'The secret: rotated', 'src/srv/x.ts', 'a/private.pem'];
+  for (const text of refused) assert.equal(unsafeText(text), true, text);
+  for (const text of allowed) assert.equal(unsafeText(text), false, text);
 });
 
 test('a mismatched revision, relationship or binding id and unknown members are refused on read and on write', async () => {
@@ -496,7 +505,9 @@ test('relationships return to unresolved when a member is added or removed or it
   assert.equal(await shown(base), 'complete');
   // Label, field and relationship edits do not reopen the judgement.
   for (const operation of [{ type: 'set-member', member: { ...UI, label: 'UI app' } }, { type: 'set-member', member: { ...UI, responsibilities: { status: 'known', values: ['Renders'] } } }, { type: 'set-label', label: 'Renamed' },
-    { type: 'set-relationship', relationship: { from: 'ui', to: 'api', kind: 'consumes-api', provenance: { kind: 'owner' } } }, { type: 'set-member', member: API }])
+    { type: 'set-relationship', relationship: { from: 'ui', to: 'api', kind: 'consumes-api', provenance: { kind: 'owner' } } }, { type: 'set-member', member: API },
+    // A case-only edit of a repository that the host folds is the same repository.
+    { type: 'set-member', member: { ...UI, identity: 'github.com/Acme/UI' } }, { type: 'set-member', member: { ...API, aliases: ['gitlab.com/ACME/api-mirror'] } }])
     assert.equal(await shown((await edit(base, operation)).envelopeBytes), 'complete', operation.type);
   // A new member, another identity, other aliases and a removed member each leave the relationships unjudged.
   for (const [name, operation] of Object.entries({ 'new member': { type: 'set-member', member: { id: 'docs', identity: 'github.com/acme/docs' } },
@@ -526,7 +537,7 @@ test('the default export excludes bindings, absolute local paths and credentials
   assert.equal(valueOf(await readWorkspace({ envelopeBytes: bytes })).bindings, 2);
   const exported = valueOf(await exportWorkspace({ envelopeBytes: bytes }));
   const text = decode(exported.envelopeBytes);
-  assert.deepEqual(exported.excluded, { bindings: 3 });
+  assert.deepEqual(exported.excluded, { bindings: 3, unknownRecords: 0 });
   for (const forbidden of [LOCAL_BINDING_SCHEMA, ':local-binding:', 'binding-', 'C:\\\\Users', 'someone', 'secret', 'ghp_secret', 'user:', 'gitDirSha256', 'workingState', '/home/', /(?<![A-Za-z0-9])[A-Za-z]:[\\/]/, /\\\\\\\\/, /\/(?:home|Users|root)\//, /:\/\/[^\s"]*@/])
     typeof forbidden === 'string' ? assert.equal(text.includes(forbidden), false, forbidden) : assert.doesNotMatch(text, forbidden, String(forbidden));
   // It is a valid envelope: it re-reads, keeps the declaration and its relationship, and carries no binding.
@@ -540,9 +551,9 @@ test('the default export excludes bindings, absolute local paths and credentials
   assert.deepEqual(exported.envelope.savedIntent, valueOf(await readJourneyEnvelope(bytes)).envelope.savedIntent);
   // The local envelope is untouched, and exporting an envelope with no workspace or bindings still works.
   assert.equal(decode(bytes), own);
-  assert.deepEqual(valueOf(await exportWorkspace({ envelopeBytes: (await shared()).envelopeBytes })).excluded, { bindings: 0 });
+  assert.deepEqual(valueOf(await exportWorkspace({ envelopeBytes: (await shared()).envelopeBytes })).excluded, { bindings: 0, unknownRecords: 0 });
   // Exporting twice excludes nothing more.
-  assert.deepEqual(valueOf(await exportWorkspace({ envelopeBytes: exported.envelopeBytes })).excluded, { bindings: 0 });
+  assert.deepEqual(valueOf(await exportWorkspace({ envelopeBytes: exported.envelopeBytes })).excluded, { bindings: 0, unknownRecords: 0 });
 });
 
 test('the default export refuses unsafe text anywhere in the outgoing envelope or the saved intent, reports only pointers, and still exports a normal composed envelope', async () => {
@@ -569,9 +580,46 @@ test('the default export refuses unsafe text anywhere in the outgoing envelope o
   assert.equal(code(refusedIntent), 'WORKSPACE_EXPORT_UNSAFE'); assert.equal(refusedIntent.diagnostics[0].path, '/savedIntent/note'); assert.deepEqual(refusedIntent.originalBytes, unsafeIntent);
   assert.equal(JSON.stringify(refusedIntent.diagnostics).includes('srv'), false);
   // Many offenders: at most 20 pointers.
-  const many = await resign(normal, doc => { for (const root of doc.records.find(r => r.id === 'draft').intent.roots) root.reason = 'x'; doc.records.push(...Array.from({ length: 30 }, (_, n) => ({ id: `note-${n}`, schema: 'urn:aihq:workbench:journey-record:future-note:1.0.0', required: false, text: 'see /srv/a/b' }))); });
+  const many = await resign(normal, doc => { for (const root of doc.records.find(r => r.id === 'draft').intent.roots) { root.reason = 'x'; for (let n = 0; n < 30; n++) root.configuration[`note${n}`] = 'see /srv/a/b'; } });
   const crowded = await exportWorkspace({ envelopeBytes: many });
   assert.equal(code(crowded), 'WORKSPACE_EXPORT_UNSAFE'); assert.equal(crowded.diagnostics[0].message.split('/records/').length - 1, 20);
+});
+
+test('the default export refuses an unsafe JSON key itself, with the key redacted from the pointer', async () => {
+  const normal = await declared(), { writeJourneyEnvelope } = await import('./journey.mjs');
+  for (const key of ['/srv/checkouts/api', 'token=secret123abc']) {
+    const dirty = await resign(normal, doc => { doc.records.find(r => r.id === 'draft').intent.roots[0].configuration[key] = 'ok'; });
+    assert.equal(valueOf(await readWorkspace({ envelopeBytes: dirty })).members.length, 2, 'the envelope itself is valid and readable');
+    const refused = await exportWorkspace({ envelopeBytes: dirty });
+    assert.equal(code(refused), 'WORKSPACE_EXPORT_UNSAFE'); assert.deepEqual(refused.originalBytes, dirty);
+    assert.match(refused.diagnostics[0].path, /^\/records\/\d+\/intent\/roots\/0\/configuration\/~unsafe-key$/);
+    assert.equal(JSON.stringify(refused.diagnostics).includes('srv'), false); assert.equal(JSON.stringify(refused.diagnostics).includes('secret123'), false);
+  }
+  // The same in the decoded saved intent, with a safe value.
+  const read = valueOf(await readJourneyEnvelope(normal)), policy = JSON.parse(decode(read.savedIntentBytes));
+  const written = await writeJourneyEnvelope({ savedIntentBytes: encode(JSON.stringify({ ...policy, '/srv/checkouts/api': 'ok' })), records: read.records.filter(r => r.id === 'draft').map(({ savedIntentSha256: _bound, ...rest }) => rest) });
+  const refusedIntent = await exportWorkspace({ envelopeBytes: (await edit(valueOf(written).envelopeBytes, { type: 'declare' })).envelopeBytes });
+  assert.equal(code(refusedIntent), 'WORKSPACE_EXPORT_UNSAFE'); assert.equal(refusedIntent.diagnostics[0].path, '/savedIntent/~unsafe-key');
+});
+
+test('the default export is a portable artifact: it keeps only kinds known to be portable, drops unknown optional records and refuses an unknown required one', async () => {
+  const base = await declared(), payload = encodeBase64(encode('/srv/checkouts/api; token=secret123'));
+  assert.equal(payload.includes('srv'), false);
+  const unknown = await resign(base, doc => { doc.records.push({ id: 'future-note', schema: 'urn:aihq:workbench:journey-record:future-note:1.0.0', required: false, payload }); });
+  assert.ok(decode(unknown).includes(payload), 'the local envelope carries the unknown optional record');
+  assert.equal(valueOf(await readWorkspace({ envelopeBytes: unknown })).members.length, 2);
+  const bound = (await bind(unknown, 'api', observation())).envelopeBytes, exported = valueOf(await exportWorkspace({ envelopeBytes: bound })), text = decode(exported.envelopeBytes);
+  assert.deepEqual(exported.excluded, { bindings: 1, unknownRecords: 1 });
+  for (const leaked of [payload, '/srv/checkouts/api', 'secret123', 'future-note', 'local-binding']) assert.equal(text.includes(leaked), false, leaked);
+  assert.deepEqual(exported.envelope.records.map(r => r.schema).sort(), ['urn:aihq:workbench:journey-record:unresolved-draft:1.0.0', WORKSPACE_DECLARATION_SCHEMA]);
+  // Every kind this build knows to be portable survives; the local envelope is untouched.
+  assert.ok(Object.values(JOURNEY_RECORD_KINDS).filter(entry => entry.kind !== 'local-binding').length === 7);
+  assert.deepEqual(valueOf(await exportWorkspace({ envelopeBytes: exported.envelopeBytes })).excluded, { bindings: 0, unknownRecords: 0 });
+  // An unknown required record cannot be left out, so nothing is exported and the original bytes stay.
+  const required = await resign(base, doc => { doc.records.push({ id: 'future-required', schema: 'urn:aihq:workbench:journey-record:future-required:1.0.0', required: true, payload }); });
+  const refused = await exportWorkspace({ envelopeBytes: required });
+  assert.equal(code(refused), 'WORKSPACE_EXPORT_UNSAFE'); assert.deepEqual(refused.originalBytes, required); assert.match(refused.diagnostics[0].path, /^\/records\/\d+$/);
+  for (const leaked of [payload, 'secret123']) assert.equal(JSON.stringify(refused.diagnostics).includes(leaked), false, leaked);
 });
 
 // ---- 6. Unsupported versions -----------------------------------------------------------------------------------------
@@ -613,7 +661,7 @@ test('an unsupported workspace record version fails explicitly, keeps its bytes,
   }
   // The binding future version alone still allows a default export that drops it.
   const bindingOnly = future['binding 9.0.0'][0], exported = valueOf(await exportWorkspace({ envelopeBytes: bindingOnly }));
-  assert.deepEqual(exported.excluded, { bindings: 1 }); assert.equal(decode(exported.envelopeBytes).includes('/home/me/x'), false);
+  assert.deepEqual(exported.excluded, { bindings: 1, unknownRecords: 0 }); assert.equal(decode(exported.envelopeBytes).includes('/home/me/x'), false);
   // Garbage is the journey reader's refusal, untouched.
   const garbage = encode('not json');
   assert.equal(code(await readWorkspace({ envelopeBytes: garbage })), 'INPUT_INVALID');
@@ -655,7 +703,7 @@ test('workspace records survive draft edits, maintenance and improvement records
   assert.equal(reopened.editing, 'available');
 });
 
-// ---- 8. Host adapter (real Git, one test) ---------------------------------------------------------------------------
+// ---- 8. Host adapter (real Git in two tests, canned Git output everywhere else) ------------------------------------------
 test('observeCheckout reads Git metadata only: same identity across worktrees, distinct worktree hashes, no credentials', async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'aih-workspace-')));
   try {
@@ -668,7 +716,7 @@ test('observeCheckout reads Git metadata only: same identity across worktrees, d
     run(main, 'worktree', 'add', '-q', '-b', 'feature', linked);
     await mkdir(join(main, 'sub'));
     const head = run(main, 'rev-parse', 'HEAD');
-    const a = valueOf(observeCheckout(main)), b = valueOf(observeCheckout(linked)), sub = valueOf(observeCheckout(join(main, 'sub')));
+    const [a, b, sub] = [valueOf(await observeCheckout(main)), valueOf(await observeCheckout(linked)), valueOf(await observeCheckout(join(main, 'sub')))];
     for (const observed of [a, b]) {
       assert.deepEqual(observed.remotes, [{ name: 'origin', identity: 'github.com/acme/api' }]);
       assert.equal(observed.revision, head); assert.deepEqual(observed.workingState.clean, true);
@@ -679,28 +727,27 @@ test('observeCheckout reads Git metadata only: same identity across worktrees, d
     assert.match(a.worktree.gitDirSha256, /^[a-f0-9]{64}$/);
     assert.equal(a.root.toLowerCase(), main.toLowerCase()); assert.equal(b.root.toLowerCase(), linked.toLowerCase());
     assert.equal(b.branch, 'feature'); assert.equal(typeof a.branch, 'string');
-    assert.deepEqual(sub, { ...a, observedAt: sub.observedAt }); // a subfolder selects its checkout
+    assert.deepEqual(sub, { ...a, observedAt: sub.observedAt }); // a subfolder selects its checkout, and the same state is the same digest
     assert.equal(JSON.stringify([a, b, sub]).includes('tok'), false);
-    assert.equal(observeCheckout(main).value.workingState.sha256, a.workingState.sha256);
     // The observation is a valid input to planning; two worktrees of one repository bind separately.
     let bytes = await declared();
     bytes = valueOf(await bindCheckout({ envelopeBytes: bytes, memberId: 'api', observation: a, now: NOW })).envelopeBytes;
     assert.equal((await confirmed(bytes, 'api', b)).workspace.members[0].bindings.length, 2);
     // A non-repository folder, a missing folder and bad input are refusals that echo nothing.
-    const none = observeCheckout(plain);
+    const noneCall = observeCheckout(plain); assert.ok(noneCall instanceof Promise, 'observing does not block: the call returns a promise');
+    const none = await noneCall;
     assert.equal(code(none), 'CHECKOUT_NOT_REPOSITORY');
     for (const bad of [join(root, 'missing'), 'relative', '', null, 7, 'x'.repeat(2000), join(root, 'api', '.git', 'HEAD')]) {
-      const refused = observeCheckout(bad);
+      const refused = await observeCheckout(bad);
       assert.ok(['CHECKOUT_UNAVAILABLE', 'CHECKOUT_NOT_REPOSITORY'].includes(code(refused)), String(bad).slice(0, 40));
       assert.equal(JSON.stringify(refused).includes('tok'), false);
     }
     // A dirty folder changes the working-state digest; a bare repository cannot be bound.
-    await mkdir(join(main, 'new-folder')); run(main, '-c', 'user.name=t', 'config', '--local', 'user.name', 't');
     const bare = join(root, 'bare.git'); run(root, 'init', '-q', '--bare', bare);
-    assert.equal(code(observeCheckout(bare)), 'CHECKOUT_NOT_REPOSITORY');
+    assert.equal(code(await observeCheckout(bare)), 'CHECKOUT_NOT_REPOSITORY');
     const { writeFile } = await import('node:fs/promises');
-    await writeFile(join(main, 'untracked.txt'), 'x');
-    const dirty = valueOf(observeCheckout(main));
+    await mkdir(join(main, 'new-folder')); await writeFile(join(main, 'untracked.txt'), 'x');
+    const dirty = valueOf(await observeCheckout(main));
     assert.equal(dirty.workingState.clean, false); assert.notEqual(dirty.workingState.sha256, a.workingState.sha256);
     assert.equal(dirty.revision, a.revision);
   } finally { await rm(root, { recursive: true, force: true }); }
@@ -708,20 +755,27 @@ test('observeCheckout reads Git metadata only: same identity across worktrees, d
 
 const gitIn = (cwd, ...args) => { const result = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8', windowsHide: true }); assert.equal(result.status, 0, result.stderr); return result.stdout.trim(); };
 const posix = path => path.replaceAll('\\', '/');
-// A process runner that answers every Git call the host makes from canned output, so folder-reading rules are tested without Git.
-const fakeGit = ({ top, config = '', status = Buffer.alloc(0) }) => (_command, args) => {
+// A process runner that answers every Git call the host makes from canned output, so folder-reading rules are tested without Git. `config` and
+// `filters` are the records of `git config --includes --show-scope -z --get-regexp`; `calls` collects the Git arguments after `-C <folder>`.
+const configRecord = (scope, key, value) => `${scope}\0${key}\n${value}\0`;
+const fakeGit = ({ top, config = '', filters = '', status = Buffer.alloc(0), staged = Buffer.alloc(0), unborn = false, calls = [] }) => (_command, args) => {
   const sub = args.slice(args.indexOf('-C') + 2), ok = stdout => ({ status: 0, stdout, stderr: '' });
+  calls.push({ sub, args });
   if (sub[0] === 'rev-parse' && sub.includes('--show-toplevel')) return ok(`${posix(top)}\n${posix(join(top, '.git'))}\n${posix(join(top, '.git'))}\n`);
-  if (sub[0] === 'rev-parse') return ok(`${'a'.repeat(40)}\n`);
+  if (sub[0] === 'rev-parse') return unborn ? { status: 1, stdout: '', stderr: '' } : ok(`${'a'.repeat(40)}\n`);
   if (sub[0] === 'symbolic-ref') return ok('main\n');
-  return sub[0] === 'config' ? ok(config) : ok(status);
+  if (sub[0] === 'config') return ok(sub.includes('^filter\\.') ? filters : config);
+  return sub[0] === 'diff' || sub[0] === 'ls-files' ? ok(staged) : ok(status);
 };
 const porcelain = (...entries) => Buffer.from(entries.map(entry => `${entry}\0`).join(''));
-test('observeCheckout never runs a command the repository configures, drops inherited Git variables and keeps every remote', async () => {
-  const { writeFile, appendFile, access } = await import('node:fs/promises'), root = await realpath(await mkdtemp(join(tmpdir(), 'aih-workspace-'))), calls = [], saved = { ...process.env };
+const temporary = () => mkdtemp(join(tmpdir(), 'aih-workspace-')).then(realpath);
+test('observeCheckout never runs a command the repository configures (fsmonitor, clean and process filters), reads included configuration, drops inherited Git variables and keeps every remote', async () => {
+  const { writeFile, appendFile, access, utimes } = await import('node:fs/promises'), root = await temporary(), calls = [], saved = { ...process.env };
   const exists = path => access(path).then(() => true, () => false);
   try {
-    const repo = join(root, 'repo'); await mkdir(repo); gitIn(repo, 'init', '-q'); gitIn(repo, 'commit', '-q', '--allow-empty', '-m', 'init');
+    const repo = join(root, 'repo'); await mkdir(repo); gitIn(repo, 'init', '-q');
+    await writeFile(join(repo, 'tracked.txt'), 'one\n'); await writeFile(join(repo, 'zz.dat'), 'one\n');
+    gitIn(repo, 'add', '.'); gitIn(repo, 'commit', '-q', '-m', 'init');
     // A configured fsmonitor command runs on `git status`; observing must not run it. The fixture first proves plain Git does run it.
     const marker = join(root, 'fsmonitor-ran'), script = join(root, 'fsmonitor.sh');
     await writeFile(script, `#!/bin/sh\n: > '${posix(marker)}'\nprintf '\\0'\n`);
@@ -729,85 +783,178 @@ test('observeCheckout never runs a command the repository configures, drops inhe
     gitIn(repo, 'status', '--porcelain');
     assert.equal(await exists(marker), true, 'the fixture hook runs under plain git status');
     await rm(marker);
-    valueOf(observeCheckout(repo));
+    valueOf(await observeCheckout(repo));
     assert.equal(await exists(marker), false, 'observeCheckout did not run the configured fsmonitor command');
-    // A remote whose name cannot be carried is still a remote: it is recorded once as (unrecognized), so a plan sees the ambiguity.
-    await appendFile(join(repo, '.git', 'config'), '[remote "origin"]\n\turl = https://user:tok@github.com/acme/api.git\n[remote "up@x"]\n\turl = https://github.com/evil/other\n[remote "up y"]\n\turl = https://github.com/evil/other2\n[remote "multi"]\n\turl = https://github.com/a/b\n\turl = https://github.com/c/d\n');
+    // A clean filter and a long-running process filter that the repository defines run when Git compares a stat-dirty file with the index.
+    // The fixture proves plain Git runs both; an empty clean, smudge and process command (and required=false) is what keeps them from running.
+    const cleanMarker = join(root, 'clean-ran'), processMarker = join(root, 'process-ran'), cleanScript = join(root, 'clean.sh'), processScript = join(root, 'process.sh');
+    await writeFile(cleanScript, `#!/bin/sh\n: > '${posix(cleanMarker)}'\ncat\n`); await writeFile(processScript, `#!/bin/sh\n: > '${posix(processMarker)}'\nexit 1\n`);
+    gitIn(repo, 'config', '--unset', 'core.fsmonitor');   // a fsmonitor that reports no change would keep Git from looking at the files at all
+    gitIn(repo, 'config', 'filter.x.clean', `sh '${posix(cleanScript)}'`); gitIn(repo, 'config', 'filter.p.process', `sh '${posix(processScript)}'`); gitIn(repo, 'config', 'filter.p.required', 'true');
+    await writeFile(join(repo, '.git', 'info', 'attributes'), '*.txt filter=x\n*.dat filter=p\n');
+    const stale = async year => { for (const name of ['tracked.txt', 'zz.dat']) { await writeFile(join(repo, name), 'one\n'); await utimes(join(repo, name), new Date(`${year}-01-01`), new Date(`${year}-01-01`)); } };
+    await stale(2020);
+    spawnSync('git', ['status', '--porcelain'], { cwd: repo, windowsHide: true });
+    assert.deepEqual([await exists(cleanMarker), await exists(processMarker)], [true, true], 'the fixture filters run under plain git status');
+    await rm(cleanMarker); await rm(processMarker); await stale(2021);
+    valueOf(await observeCheckout(repo));
+    assert.deepEqual([await exists(cleanMarker), await exists(processMarker)], [false, false], 'observeCheckout did not run the configured filters');
+    // A remote whose name cannot be carried is still a remote: it is recorded once as (unrecognized), so a plan sees the ambiguity. A remote
+    // that sits in a file the repository configuration includes is read too.
+    const extra = join(root, 'extra.cfg'); await writeFile(extra, '[remote "inc"]\n\turl = https://github.com/inc/one\n');
+    await appendFile(join(repo, '.git', 'config'), `[include]\n\tpath = ${posix(extra)}\n[remote "origin"]\n\turl = https://user:tok@github.com/acme/api.git\n[remote "up@x"]\n\turl = https://github.com/evil/other\n[remote "up y"]\n\turl = https://github.com/evil/other2\n[remote "multi"]\n\turl = https://github.com/a/b\n\turl = https://github.com/c/d\n`);
     // Inherited variables that would point Git at another repository or add configuration are not passed on (they would break this call).
     Object.assign(process.env, { GIT_DIR: join(root, 'elsewhere'), GIT_WORK_TREE: root, GIT_INDEX_FILE: join(root, 'index'), GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.fsmonitor', GIT_CONFIG_VALUE_0: 'true', GIT_CONFIG_PARAMETERS: "'core.fsmonitor=true'" });
     let odd;
-    try { odd = valueOf(observeCheckout(repo, (command, args, options) => { calls.push({ command, args, options }); return spawnSync(command, args, options); })); } finally { for (const key of Object.keys(process.env)) if (!(key in saved)) delete process.env[key]; }
-    assert.deepEqual(odd.remotes, [{ name: '(unrecognized)', identity: null }, { name: 'multi', identity: null }, { name: 'origin', identity: 'github.com/acme/api' }]);
+    try { odd = valueOf(await observeCheckout(repo, (command, args, options) => { calls.push({ command, args, options }); return spawnSync(command, args, options); })); } finally { for (const key of Object.keys(process.env)) if (!(key in saved)) delete process.env[key]; }
+    assert.deepEqual(odd.remotes, [{ name: '(unrecognized)', identity: null }, { name: 'inc', identity: 'github.com/inc/one' }, { name: 'multi', identity: null }, { name: 'origin', identity: 'github.com/acme/api' }]);
     assert.equal(JSON.stringify(odd).includes('tok'), false);
     const planned = await plan(await declared(), 'api', odd);
     assert.deepEqual([planned.outcome, planned.reasons], ['confirm', ['ambiguous-remote']]);
-    assert.ok(calls.length >= 5);
+    assert.ok(calls.length >= 7);
     for (const { command, args, options } of calls) {
       assert.equal(command, 'git');
       assert.deepEqual(args.slice(0, 5), ['--no-optional-locks', '-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false']);
       assert.equal(options.windowsHide, true); assert.equal(options.env.GIT_TERMINAL_PROMPT, '0'); assert.equal(options.env.GIT_OPTIONAL_LOCKS, '0');
       assert.deepEqual(Object.keys(options.env).filter(key => /^GIT_(?:DIR|WORK_TREE|INDEX_FILE|CONFIG.*)$/i.test(key)), []);
     }
-    assert.ok(calls.find(call => call.args.includes('--get-regexp')).args.includes('--local'));
-    assert.ok(calls.find(call => call.args.includes('status')).args.includes('--untracked-files=all'));
+    for (const call of calls.filter(call => call.args.includes('--get-regexp'))) { assert.ok(call.args.includes('--includes') && call.args.includes('--show-scope')); assert.equal(call.args.includes('--local'), false); }
+    const status = calls.find(call => call.args.includes('status')).args;
+    for (const setting of ['filter.x.clean=', 'filter.x.smudge=', 'filter.x.process=', 'filter.x.required=false', 'filter.p.clean=', 'filter.p.process=', 'filter.p.required=false']) assert.ok(status.includes(setting), setting);
+    assert.ok(status.includes('--untracked-files=normal') && status.includes('--ignore-submodules=all'));
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-test('observeCheckout refuses in words a person can act on: ownership, too many remotes, too many changes', async () => {
-  const { writeFile, truncate } = await import('node:fs/promises'), root = await realpath(await mkdtemp(join(tmpdir(), 'aih-workspace-')));
+test('observeCheckout reads only the repository\'s own configuration, switches off every filter it defines, and refuses ones it cannot switch off', async () => {
+  const root = await temporary();
   try {
-    const remotes = count => Array.from({ length: count }, (_, n) => `remote.r${n}.url\nhttps://github.com/a/r${n}\0`).join('');
-    assert.equal(valueOf(observeCheckout(root, fakeGit({ top: root, config: remotes(32) }))).remotes.length, 32);
-    const tooMany = observeCheckout(root, fakeGit({ top: root, config: remotes(33) }));
+    const calls = [], config = configRecord('local', 'remote.origin.url', 'https://github.com/acme/api') + configRecord('worktree', 'remote.wt.url', 'https://github.com/acme/wt') + configRecord('global', 'remote.g.url', 'https://github.com/g/g')
+      + configRecord('system', 'remote.s.url', 'https://github.com/s/s') + configRecord('command', 'remote.c.url', 'https://github.com/c/c');
+    const filters = configRecord('local', 'filter.x.clean', 'cmd') + configRecord('worktree', 'filter.my.drv.process', 'cmd') + configRecord('local', 'filter.x.required', 'true') + configRecord('global', 'filter.g.clean', 'cmd') + configRecord('command', 'filter.c.clean', 'cmd');
+    const seen = valueOf(await observeCheckout(root, fakeGit({ top: root, config, filters, calls })));
+    assert.deepEqual(seen.remotes, [{ name: 'origin', identity: 'github.com/acme/api' }, { name: 'wt', identity: 'github.com/acme/wt' }]);
+    const status = calls.find(call => call.sub[0] === 'status').args, settings = status.filter((arg, at) => status[at - 1] === '-c' && arg.startsWith('filter.'));
+    assert.deepEqual(settings.sort(), ['x', 'my.drv'].flatMap(name => [`filter.${name}.clean=`, `filter.${name}.smudge=`, `filter.${name}.process=`, `filter.${name}.required=false`]).sort());
+    assert.ok(status.lastIndexOf('-c') < status.indexOf('-C'), 'overrides are given before the command');
+    assert.deepEqual(calls.find(call => call.sub[0] === 'diff').args.filter(arg => arg.startsWith('filter.x.clean')), ['filter.x.clean=']);
+    // Only the person's own configuration defines these, so nothing is switched off for them.
+    const none = [];
+    valueOf(await observeCheckout(root, fakeGit({ top: root, filters: configRecord('global', 'filter.g.clean', 'cmd'), calls: none })));
+    assert.equal(none.find(call => call.sub[0] === 'status').args.some(arg => arg.startsWith('filter.')), false);
+    // A name that cannot be given on a command line, or too many names, is refused in words and echoes nothing.
+    for (const filtersOut of [configRecord('local', 'filter.a=b.clean', 'cmd'), Array.from({ length: 33 }, (_, n) => configRecord('local', `filter.f${n}.clean`, 'cmd')).join('')]) {
+      const refused = await observeCheckout(root, fakeGit({ top: root, filters: filtersOut }));
+      assert.equal(code(refused), 'CHECKOUT_UNAVAILABLE'); assert.match(refused.diagnostics[0].message, /content filters/); assert.equal(JSON.stringify(refused).includes('a=b'), false);
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('observeCheckout refuses in words a person can act on: ownership, too many remotes, too many changes, a failed Git call', async () => {
+  const { writeFile, truncate } = await import('node:fs/promises'), root = await temporary();
+  try {
+    const remotes = count => Array.from({ length: count }, (_, n) => configRecord('local', `remote.r${n}.url`, `https://github.com/a/r${n}`)).join('');
+    assert.equal(valueOf(await observeCheckout(root, fakeGit({ top: root, config: remotes(32) }))).remotes.length, 32);
+    const tooMany = await observeCheckout(root, fakeGit({ top: root, config: remotes(33) }));
     assert.equal(code(tooMany), 'CHECKOUT_UNAVAILABLE'); assert.equal(tooMany.diagnostics[0].message, 'The checkout has more than 32 remotes.');
     const dubious = () => ({ status: 128, stdout: '', stderr: "fatal: detected dubious ownership in repository at 'C:/secret/place'\nTo add an exception for this directory, call:\n\tgit config --global --add safe.directory C:/secret/place\n" });
-    const owned = observeCheckout(root, dubious);
+    const owned = await observeCheckout(root, dubious);
     assert.equal(code(owned), 'CHECKOUT_UNAVAILABLE'); assert.equal(owned.diagnostics[0].message, 'Git refuses this folder because it is owned by another user (safe.directory).');
     assert.equal(JSON.stringify(owned).includes('secret'), false);
-    assert.equal(code(observeCheckout(root, () => ({ status: 128, stdout: '', stderr: 'fatal: not a git repository' }))), 'CHECKOUT_NOT_REPOSITORY');
+    assert.equal(code(await observeCheckout(root, () => ({ status: 128, stdout: '', stderr: 'fatal: not a git repository' }))), 'CHECKOUT_NOT_REPOSITORY');
+    // A runner that answers with a promise is awaited like a synchronous one; a call that fails or throws is a refusal, never a crash.
+    const asynchronous = fakeGit({ top: root });
+    assert.equal(valueOf(await observeCheckout(root, async (...args) => asynchronous(...args))).revision, 'a'.repeat(40));
+    const failing = after => (command, args, options) => args.includes(after) ? { status: 2, stdout: '', stderr: 'fatal: boom' } : fakeGit({ top: root })(command, args, options);
+    for (const word of ['status', 'diff', 'config']) assert.equal((await observeCheckout(root, failing(word))).diagnostics[0].message, 'Git metadata could not be read for this folder.', word);
+    assert.equal((await observeCheckout(root, () => { throw new Error('spawn exploded'); })).diagnostics[0].message, 'Git could not be run for this folder.');
     // Up to 2000 changed paths are identified; one more is refused (before any file is read), and so are more than 256 MiB of changed bytes.
     const paths = count => porcelain(...Array.from({ length: count }, (_, n) => `?? many/f${n}`));
-    assert.equal(valueOf(observeCheckout(root, fakeGit({ top: root, status: paths(2000) }))).workingState.clean, false);
-    const crowded = observeCheckout(root, fakeGit({ top: root, status: paths(2001) }));
+    assert.equal(valueOf(await observeCheckout(root, fakeGit({ top: root, status: paths(2000) }))).workingState.clean, false);
+    const crowded = await observeCheckout(root, fakeGit({ top: root, status: paths(2001) }));
     assert.equal(code(crowded), 'CHECKOUT_UNAVAILABLE'); assert.equal(crowded.diagnostics[0].message, 'Too many changed files to identify the working state; commit or stash, then inspect again.');
+    // Output that overruns the buffer is the same refusal.
+    for (const error of [{ code: 'ENOBUFS' }, { code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' }]) {
+      const overrun = (command, args, options) => args.includes('status') ? { status: null, stdout: '', stderr: '', error } : fakeGit({ top: root })(command, args, options);
+      assert.equal((await observeCheckout(root, overrun)).diagnostics[0].message, crowded.diagnostics[0].message);
+    }
     await writeFile(join(root, 'big.bin'), ''); await truncate(join(root, 'big.bin'), 257 * 1024 * 1024);
-    assert.equal(observeCheckout(root, fakeGit({ top: root, status: porcelain('?? big.bin') })).diagnostics[0].message, crowded.diagnostics[0].message);
+    assert.equal((await observeCheckout(root, fakeGit({ top: root, status: porcelain('?? big.bin') }))).diagnostics[0].message, crowded.diagnostics[0].message);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-test('the working state covers the content of changed files, so editing an already changed file changes it', async () => {
-  const { writeFile, symlink, mkdir: makeDir } = await import('node:fs/promises'), root = await realpath(await mkdtemp(join(tmpdir(), 'aih-workspace-')));
+test('the working state covers the content of changed files and what is staged, so editing a changed file or staging another version changes it', async () => {
+  const { writeFile, symlink, mkdir: makeDir } = await import('node:fs/promises'), root = await temporary();
   try {
-    const state = (...entries) => valueOf(observeCheckout(root, fakeGit({ top: root, status: porcelain(...entries) }))).workingState;
+    const state = async (...entries) => valueOf(await observeCheckout(root, fakeGit({ top: root, status: porcelain(...entries) }))).workingState;
     await writeFile(join(root, 'a.txt'), 'one');
-    const first = state(' M a.txt');
+    const first = await state(' M a.txt');
     await writeFile(join(root, 'a.txt'), 'two');                           // the same status line, other bytes
-    const second = state(' M a.txt');
+    const second = await state(' M a.txt');
     assert.deepEqual([first.clean, second.clean], [false, false]); assert.notEqual(first.sha256, second.sha256);
-    await writeFile(join(root, 'a.txt'), 'one'); assert.equal(state(' M a.txt').sha256, first.sha256, 'the same content is the same state');
-    assert.equal(state().clean, true);
+    await writeFile(join(root, 'a.txt'), 'one'); assert.equal((await state(' M a.txt')).sha256, first.sha256, 'the same content is the same state');
+    assert.equal((await state()).clean, true);
     // An untracked file, and a deleted one (listed, but nothing to read).
-    await writeFile(join(root, 'u.txt'), 'aaa'); const u1 = state('?? u.txt'); await writeFile(join(root, 'u.txt'), 'bbb'); assert.notEqual(state('?? u.txt').sha256, u1.sha256);
-    assert.equal(state(' D gone.txt').clean, false); assert.notEqual(state(' D gone.txt').sha256, state(' D other.txt').sha256);
+    await writeFile(join(root, 'u.txt'), 'aaa'); const u1 = await state('?? u.txt'); await writeFile(join(root, 'u.txt'), 'bbb'); assert.notEqual((await state('?? u.txt')).sha256, u1.sha256);
+    assert.equal((await state(' D gone.txt')).clean, false); assert.notEqual((await state(' D gone.txt')).sha256, (await state(' D other.txt')).sha256);
     // A rename or copy entry is followed by its original path; that path is not a change of its own (`zzzc.txt` would otherwise read as `c.txt`).
     await writeFile(join(root, 'b.txt'), 'b1'); await writeFile(join(root, 'c.txt'), 'c1');
     for (const kind of ['R ', ' R', 'C ']) {
-      const entry = `${kind} b.txt`, renamed = state(entry, 'zzzc.txt'), before = renamed.sha256;
-      await writeFile(join(root, 'c.txt'), 'c2'); assert.equal(state(entry, 'zzzc.txt').sha256, before, kind); await writeFile(join(root, 'c.txt'), 'c1');
-      await writeFile(join(root, 'b.txt'), 'b2'); assert.notEqual(state(entry, 'zzzc.txt').sha256, before, kind); await writeFile(join(root, 'b.txt'), 'b1');
+      const entry = `${kind} b.txt`, renamed = await state(entry, 'zzzc.txt'), before = renamed.sha256;
+      await writeFile(join(root, 'c.txt'), 'c2'); assert.equal((await state(entry, 'zzzc.txt')).sha256, before, kind); await writeFile(join(root, 'c.txt'), 'c1');
+      await writeFile(join(root, 'b.txt'), 'b2'); assert.notEqual((await state(entry, 'zzzc.txt')).sha256, before, kind); await writeFile(join(root, 'b.txt'), 'b1');
     }
+    // Staged changes: the same worktree bytes and the same status line, but another staged blob, is another state. Before the first commit the index itself is read.
+    const staged = async (output, options = {}) => { const calls = []; const seen = valueOf(await observeCheckout(root, fakeGit({ top: root, status: porcelain('MM a.txt'), staged: Buffer.from(output), calls, ...options }))).workingState; return { seen, calls }; };
+    const raw = blob => `:100644 100644 ${'1'.repeat(40)} ${blob.repeat(40)} M\0a.txt\0`;
+    const one = await staged(raw('2')), again = await staged(raw('2')), other = await staged(raw('3')), mode = await staged(raw('2').replace('100644 100644', '100644 100755'));
+    assert.equal(one.seen.sha256, again.seen.sha256); assert.notEqual(one.seen.sha256, other.seen.sha256); assert.notEqual(one.seen.sha256, mode.seen.sha256);
+    const diff = one.calls.find(call => call.sub[0] === 'diff').sub;
+    assert.deepEqual(diff.slice(0, 5), ['diff', '--cached', '--raw', '-z', '--no-renames']); assert.ok(diff.includes('--abbrev=40') && diff.includes('HEAD'));
+    const unborn = await staged(`100644 ${'2'.repeat(40)} 0\ta.txt\0`, { unborn: true }), unbornOther = await staged(`100644 ${'3'.repeat(40)} 0\ta.txt\0`, { unborn: true });
+    assert.deepEqual(unborn.calls.find(call => call.sub[0] === 'ls-files').sub, ['ls-files', '-s', '-z']); assert.equal(unborn.calls.some(call => call.sub[0] === 'diff'), false);
+    assert.notEqual(unborn.seen.sha256, unbornOther.seen.sha256);
     // A symlink digests its target string and is never followed; so is a path below a link that leaves the checkout. Without the privilege to make
     // links the symlink assertions are skipped, never weakened.
     const outside = join(root, 'outside'); await makeDir(outside); await writeFile(join(outside, 'file.txt'), 'secret'); await makeDir(join(root, 'work'));
     const checkout = join(root, 'work');
-    const inside = (...entries) => valueOf(observeCheckout(checkout, fakeGit({ top: checkout, status: porcelain(...entries) }))).workingState;
+    const inside = async (...entries) => valueOf(await observeCheckout(checkout, fakeGit({ top: checkout, status: porcelain(...entries) }))).workingState;
     try {
-      await symlink(join(outside, 'file.txt'), join(checkout, 'link'), 'file'); const l1 = inside('?? link');
-      await writeFile(join(outside, 'file.txt'), 'changed elsewhere'); assert.equal(inside('?? link').sha256, l1.sha256, 'the target of a link is not read');
-      await rm(join(checkout, 'link')); await symlink(join(outside, 'other.txt'), join(checkout, 'link'), 'file'); assert.notEqual(inside('?? link').sha256, l1.sha256, 'another target is a change');
-      await symlink(outside, join(checkout, 'door'), process.platform === 'win32' ? 'junction' : 'dir'); const d1 = inside('?? door/file.txt');
-      await writeFile(join(outside, 'file.txt'), 'changed again'); assert.equal(inside('?? door/file.txt').sha256, d1.sha256, 'a path that leaves the checkout is not read');
+      await symlink(join(outside, 'file.txt'), join(checkout, 'link'), 'file'); const l1 = await inside('?? link');
+      await writeFile(join(outside, 'file.txt'), 'changed elsewhere'); assert.equal((await inside('?? link')).sha256, l1.sha256, 'the target of a link is not read');
+      await rm(join(checkout, 'link')); await symlink(join(outside, 'other.txt'), join(checkout, 'link'), 'file'); assert.notEqual((await inside('?? link')).sha256, l1.sha256, 'another target is a change');
+      await symlink(outside, join(checkout, 'door'), process.platform === 'win32' ? 'junction' : 'dir'); const d1 = await inside('?? door/file.txt');
+      await writeFile(join(outside, 'file.txt'), 'changed again'); assert.equal((await inside('?? door/file.txt')).sha256, d1.sha256, 'a path that leaves the checkout is not read');
     } catch (error) { if (!['EPERM', 'EACCES', 'ENOSYS'].includes(error.code)) throw error; }
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('an untracked folder is one entry that digests a listing of its files (path, size, time; no content), and a big folder can still be bound', async () => {
+  const { writeFile, utimes, mkdir: makeDir } = await import('node:fs/promises'), root = await temporary();
+  try {
+    const state = async (options, ...entries) => valueOf(await observeCheckout(root, fakeGit({ top: root, status: porcelain(...entries) }), options)).workingState;
+    // Two thousand and a hundred files below one untracked folder (more than the changed-path limit) are one entry: observing works.
+    const build = join(root, 'build'); await makeDir(join(build, 'deep'), { recursive: true });
+    await Promise.all(Array.from({ length: 2100 }, (_, n) => writeFile(join(n % 2 === 0 ? build : join(build, 'deep'), `f${n}.o`), 'x')));
+    const big = await state({}, '?? build/');
+    assert.equal(big.clean, false);
+    assert.equal((await state({}, '?? build/')).sha256, big.sha256, 'the same listing is the same state');
+    // Same size and time but other bytes: the listing does not read content. A new file, a different size and a different time are each a change.
+    const old = new Date('2020-01-01T00:00:00Z'), small = join(root, 'small'); await makeDir(join(small, 'deep'), { recursive: true });
+    const stamp = async (name, text, date = old) => { await writeFile(join(small, name), text); await utimes(join(small, name), date, date); };
+    await stamp('f0.o', 'x'); await stamp('deep/f1.o', 'x');
+    const first = await state({}, '?? small/');
+    await stamp('f0.o', 'y'); assert.equal((await state({}, '?? small/')).sha256, first.sha256, 'content is not read');
+    await stamp('f0.o', 'yy'); const longer = await state({}, '?? small/'); assert.notEqual(longer.sha256, first.sha256);
+    await stamp('f0.o', 'yy', new Date('2021-01-01T00:00:00Z')); const later = await state({}, '?? small/'); assert.notEqual(later.sha256, longer.sha256);
+    await stamp('deep/new.o', 'x'); assert.notEqual((await state({}, '?? small/')).sha256, later.sha256);
+    // A file at the top of the checkout keeps its content digest, and a nested `.git` is not listed.
+    await writeFile(join(root, 'top.txt'), 'one'); const t1 = await state({}, '?? top.txt'); await writeFile(join(root, 'top.txt'), 'two'); assert.notEqual((await state({}, '?? top.txt')).sha256, t1.sha256);
+    await makeDir(join(root, 'nested', '.git'), { recursive: true }); await writeFile(join(root, 'nested', 'a.txt'), 'a'); const n1 = await state({}, '?? nested/');
+    await writeFile(join(root, 'nested', '.git', 'HEAD'), 'ref'); assert.equal((await state({}, '?? nested/')).sha256, n1.sha256);
+    // More than the limit of listed files is the usual refusal; the limit (20000) is lowered here so the folder stays small.
+    const limited = await observeCheckout(root, fakeGit({ top: root, status: porcelain('?? build/') }), { listedEntries: 2100 });
+    assert.equal(code(limited), 'CHECKOUT_UNAVAILABLE'); assert.equal(limited.diagnostics[0].message, 'Too many changed files to identify the working state; commit or stash, then inspect again.');
+    assert.equal((await observeCheckout(root, fakeGit({ top: root, status: porcelain('?? build/') }), { listedEntries: 2101 })).status, 'ok');
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
@@ -834,7 +981,7 @@ test('mixed service: an ordinary saved policy becomes a draft on workspace-edit;
   const [bindingId] = Object.keys(verified.statuses);
   assert.equal(verified.statuses[bindingId].status, 'current'); assert.equal(inspected.at(-1), '/work/api'); assert.equal(verified.projection.members[0].bindings[0].status, 'current');
   const exported = valueOf(await service.run('workspace-export', { envelopeBytes: bytes }));
-  assert.deepEqual(exported.excluded, { bindings: 1 });
+  assert.deepEqual(exported.excluded, { bindings: 1, unknownRecords: 0 });
   assert.equal(decode(Uint8Array.from(exported.envelopeBytes)).includes('/work/api'), false); assert.equal(decode(Uint8Array.from(exported.envelopeBytes)).includes(LOCAL_BINDING_SCHEMA), false);
   assert.equal('draft' in exported, false);
   const unbound = valueOf(await service.run('workspace-unbind', { envelopeBytes: bytes, bindingId }));
@@ -923,7 +1070,7 @@ test('the pure modules import only the allowed seams and contain no network, pro
       assert.doesNotMatch(source, forbidden, `${name} ${forbidden}`);
   }
   const host = await readFile(new URL('./workspace-host.mjs', import.meta.url), 'utf8');
-  assert.match(host, /windowsHide: true/); assert.doesNotMatch(host, /fetch\(|shell: true|(?<![.\w])exec\(|execSync|execFile|GIT_ASKPASS|['"]push['"]|['"]fetch['"]|['"]pull['"]|['"]clone['"]/);
+  assert.match(host, /windowsHide: true/); assert.doesNotMatch(host, /fetch\(|shell: true|(?<![.\w])exec\(|execSync|spawnSync|GIT_ASKPASS|['"]push['"]|['"]fetch['"]|['"]pull['"]|['"]clone['"]/);
   assert.deepEqual(Object.keys(publicApi).sort(), ['BINDING_REASONS', 'LOCAL_BINDING_SCHEMA', 'RELATIONSHIP_KINDS', 'WORKSPACE_DECLARATION_SCHEMA', 'bindCheckout', 'editWorkspace', 'exportWorkspace', 'planBinding',
     'projectWorkspace', 'readWorkspace', 'remoteIdentity', 'sameIdentity', 'unbindCheckout', 'validateBinding', 'validateDeclaration', 'verifyBindings']);
 });

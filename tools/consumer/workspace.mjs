@@ -97,7 +97,8 @@ const memberOf = async (body, operation) => {
   if (problem !== null) return problemOf(`/operation/member${problem}`, 'Supply a valid workspace member: slug id, repository identity, and no local paths or credentials.');
   if (!body.members.some(existing => existing.id === member.id) && body.members.length >= MAX_MEMBERS) return problemOf('/operation/member', `A workspace has at most ${MAX_MEMBERS} members.`);
   // Adding a member, or changing which repository one is, leaves its relationships unjudged: "complete" no longer holds.
-  const previous = body.members.find(existing => existing.id === member.id), moved = !previous || previous.identity !== member.identity || stable(previous.aliases) !== stable(member.aliases);
+  const previous = body.members.find(existing => existing.id === member.id);
+  const moved = !previous || !sameIdentity(previous.identity, member.identity) || previous.aliases.length !== member.aliases.length || previous.aliases.some(alias => !member.aliases.some(other => sameIdentity(alias, other)));
   return { members: [...body.members.filter(existing => existing.id !== member.id), member].sort(byId), ...(moved ? { relationships: unjudged(body.relationships) } : {}) };
 };
 const edgeOf = async (operation, fields, now, ids) => {
@@ -339,34 +340,46 @@ export async function verifyBindings({ envelopeBytes, observations = {} } = {}) 
   return { status: 'ok', diagnostics: [], value: { statuses, projection: projection({ ...loaded.value }, statuses) } };
 }
 // ---- Default sharing export ----------------------------------------------------------------------------------------
-// JSON pointers (at most 20) of the strings in `value` that hold a local path or a credential; the values are never reported.
+// The kinds of record this build knows to be portable: everything the sharing export may carry. Any other kind of record, known or not, stays local.
+const PORTABLE_KINDS = ['unresolved-draft', 'maintenance-disposition', 'maintenance-check', 'improvement-suggestion', 'improvement-dismissal', 'organization-draft', 'workspace-declaration'];
+const isPortable = record => Object.hasOwn(JOURNEY_RECORD_KINDS, record.schema) && PORTABLE_KINDS.includes(JOURNEY_RECORD_KINDS[record.schema].kind);
+const isLocal = record => record.schema.startsWith('urn:aihq:workbench:journey-record:local-binding:');
+const note = (found, pointer) => { if (found.length < 20 && !found.includes(pointer)) found.push(pointer); };
+// JSON pointers (at most 20) of the strings and keys in `value` that hold a local path or a credential; the values are never reported, and an
+// unsafe key is reported as `~unsafe-key` instead of itself.
 function unsafePointers(value, pointer, found, depth = 0) {
   if (found.length >= 20) return;
-  if (depth > 64) found.push(pointer);
-  else if (typeof value === 'string') { if (unsafeText(value)) found.push(pointer); }
+  if (depth > 64) note(found, pointer);
+  else if (typeof value === 'string') { if (unsafeText(value)) note(found, pointer); }
   else if (Array.isArray(value)) value.forEach((item, index) => unsafePointers(item, `${pointer}/${index}`, found, depth + 1));
-  else if (value && typeof value === 'object') for (const [key, item] of Object.entries(value)) unsafePointers(item, unsafeText(key) ? `${pointer}/(key)` : `${pointer}/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`, found, depth + 1);
+  else if (value && typeof value === 'object') for (const [key, item] of Object.entries(value)) {
+    const hidden = unsafeText(key);
+    if (hidden) note(found, `${pointer}/~unsafe-key`);
+    unsafePointers(item, hidden ? `${pointer}/~unsafe-key` : `${pointer}/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`, found, depth + 1);
+  }
 }
-// A new revision without any local binding record (of any version): bindings hold absolute local paths and are never
-// shared. A declaration's validator refuses local paths and credentials, but sharing also carries the other records and the saved
-// intent, so every string in the outgoing records and in the decoded saved intent must pass the same guard or nothing is
-// exported; the original bytes stay and only JSON pointers are reported. A declaration of a version this module cannot read
-// refuses, since it might hold either.
+// The default sharing export is a defined portable artifact: a new revision with only the records of kinds this build knows to be
+// portable. Every local binding (of any version) is left out, since bindings hold absolute local paths, and so is every optional record
+// of an unknown kind, since nothing says what it carries. An unknown required record cannot be left out, so it refuses the export. A
+// declaration of a version this module cannot read refuses too. Everything that remains, with the decoded saved intent, must pass the
+// same text guard (values and keys) as the declaration or nothing is exported; the original bytes stay and only JSON pointers are reported.
 export async function exportWorkspace({ envelopeBytes } = {}) {
   const loaded = await load(envelopeBytes);
   if (loaded.status !== 'ok') return loaded;
   const refused = blocked(loaded.value, envelopeBytes, { binding: false });
   if (refused) return refused;
-  const { read, declaration } = loaded.value, isLocal = record => record.schema.startsWith('urn:aihq:workbench:journey-record:local-binding:');
-  const excluded = read.records.filter(isLocal).length;
-  const previous = { ...read, envelope: { ...read.envelope, records: read.envelope.records.filter(record => !isLocal(record)) } };
+  const { read, declaration } = loaded.value, records = read.envelope.records;
+  const required = records.findIndex(record => record.required && !isPortable(record) && !isLocal(record));
+  if (required >= 0) return refuse('WORKSPACE_EXPORT_UNSAFE', `/records/${required}`, `Sharing is refused: the required record at /records/${required} has a schema (${records[required].schema}) that this version cannot establish as portable, and it cannot be left out. This file is unchanged.`, envelopeBytes);
+  const excluded = { bindings: records.filter(isLocal).length, unknownRecords: records.filter(record => !isLocal(record) && !Object.hasOwn(JOURNEY_RECORD_KINDS, record.schema)).length };
+  const previous = { ...read, supported: true, envelope: { ...read.envelope, records: records.filter(isPortable) } };
   const written = await write({ ...loaded.value, read: previous }, envelopeBytes, declaration, [], previous);
   if (written.status !== 'ok') return written;
   const found = [];
   unsafePointers(written.value.envelope.records, '/records', found);
   let intent;
-  try { intent = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(read.savedIntentBytes)); } catch { found.push('/savedIntent'); }
+  try { intent = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(read.savedIntentBytes)); } catch { note(found, '/savedIntent'); }
   if (intent !== undefined) unsafePointers(intent, '/savedIntent', found);
   if (found.length > 0) return refuse('WORKSPACE_EXPORT_UNSAFE', found[0], `Sharing is refused: ${found.length >= 20 ? 'at least 20' : found.length} values look like local paths or credentials (at ${found.join(', ')}). Remove them and export again; this file is unchanged.`, envelopeBytes);
-  return { ...written, value: { ...written.value, excluded: { bindings: excluded } } };
+  return { ...written, value: { ...written.value, excluded } };
 }

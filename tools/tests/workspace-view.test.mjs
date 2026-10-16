@@ -259,15 +259,19 @@ test('removed member bindings show facts and statuses and can only be removed', 
   assert.equal(find(built, 'Remove binding'), undefined);
 });
 
-test('unsupported local bindings keep sharing enabled and disclose preservation', async () => {
+test('unsupported local bindings make the workspace read-only but keep sharing enabled', async () => {
   const downloads = [], { client } = clientFor();
   client.readWorkspace = async () => ok({ ...projection, unsupported: [{ id: 'future-binding', schema: 'urn:aihq:workbench:journey-record:local-binding:2.0.0' }] });
   const built = view(client, { download: (...args) => downloads.push(args) }); await built.open();
-  assert.ok(textOf(built.node).includes('Some local bindings use a version this Workbench does not support; they are kept unchanged and are never exported.'));
+  assert.ok(textOf(built.node).includes('Some local bindings use a version this Workbench does not support; they are kept unchanged and are never exported. The workspace is read-only here; Export for sharing still works.'));
   assert.equal(find(built, 'Export for sharing').disabled, false);
-  assert.equal(find(built, 'Save member').disabled, false);
+  // The service refuses workspace writes while a binding version is unsupported, so edits are not offered.
+  assert.equal(find(built, 'Save member').disabled, true);
+  assert.equal(find(built, 'Verify checkouts').disabled, true);
   await find(built, 'Export for sharing').listeners.click();
-  assert.deepEqual(downloads, [[[4, 5], 'workspace.share.json']]);
+  await find(built, 'Export for sharing').listeners.click();
+  assert.deepEqual(downloads, [[[4, 5], 'workspace.share.json'], [[4, 5], 'workspace.share.json']], 'exporting stays available after use');
+  assert.doesNotMatch(textOf(built.node), /does not support. It is shown read-only/);
 });
 
 test('Verify discloses every bound root including removed members before its button', async () => {
@@ -291,4 +295,9 @@ test('unsafe export displays its diagnostic in the status line without downloadi
   await find(built, 'Export for sharing').listeners.click();
   assert.equal(elements(built.node).find(n => n.role === 'status').textContent, message);
   assert.deepEqual(downloads, []);
+});
+
+test('the export reports what it left out', () => {
+  assert.equal(workspace.exportedText({ bindings: 1, unknownRecords: 0 }), 'Exported for sharing without 1 local binding and 0 records of a kind this Workbench cannot check.');
+  assert.equal(workspace.exportedText({ bindings: 3, unknownRecords: 1 }), 'Exported for sharing without 3 local bindings and 1 record of a kind this Workbench cannot check.');
 });

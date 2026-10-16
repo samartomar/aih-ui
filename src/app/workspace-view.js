@@ -2,7 +2,7 @@
 export const WORKSPACE_DECLARATION_RECORD_SCHEMA = 'urn:aihq:workbench:journey-record:workspace-declaration:1.0.0';
 export const LOCAL_BINDING_RECORD_SCHEMA = 'urn:aihq:workbench:journey-record:local-binding:1.0.0';
 const READ_ONLY = 'This workspace uses a record version this Workbench does not support. It is shown read-only; the original bytes are kept unchanged.';
-const LOCAL_BINDINGS_UNSUPPORTED = 'Some local bindings use a version this Workbench does not support; they are kept unchanged and are never exported.';
+const LOCAL_BINDINGS_UNSUPPORTED = 'Some local bindings use a version this Workbench does not support; they are kept unchanged and are never exported. The workspace is read-only here; Export for sharing still works.';
 const SHARE_NOTE = 'Local checkout bindings, absolute paths and credentials are not included.';
 const trim = value => String(value ?? '').trim();
 const list = value => trim(value).split(',').map(trim).filter(Boolean);
@@ -30,6 +30,8 @@ const STATUSES = {
   'declaration-changed': 'Declaration changed since binding — inspect and rebind',
   unverified: 'Not verified since opening — select Verify checkouts',
 };
+// What the sharing export left out, in words.
+export const exportedText = (excluded = {}) => `Exported for sharing without ${excluded.bindings ?? 0} local ${excluded.bindings === 1 ? 'binding' : 'bindings'} and ${excluded.unknownRecords ?? 0} ${excluded.unknownRecords === 1 ? 'record' : 'records'} of a kind this Workbench cannot check.`;
 export const bindingStatusText = status => STATUSES[status] ?? STATUSES.unverified;
 export function memberOperation(form) {
   const member = { id: trim(form.id), identity: trim(form.identity), aliases: [...new Set(list(form.aliases))], ...(trim(form.label) ? { label: trim(form.label) } : {}) };
@@ -61,11 +63,14 @@ export function createWorkspaceView({ client, el, button, showStatus, download =
   const diagnostic = result => result?.diagnostics?.map(row => row.message).join(' ') || result?.error || 'The workspace request could not be completed.';
   const isUnsupported = result => result?.diagnostics?.some(row => row.code === 'WORKSPACE_VERSION_UNSUPPORTED');
   const available = () => Boolean(client.draft || client.intent);
-  const locked = () => pending || unsupported;
+  // Unsupported binding records keep the workspace read-only (the service refuses its writes) but never block sharing:
+  // the export leaves every binding out.
+  const bindingsOnly = () => !unsupported && Boolean(projection?.unsupported?.some(record => record.schema?.includes(':local-binding:')));
+  const locked = () => pending || unsupported || bindingsOnly();
   const text = (parent, value) => parent.append(el('p', 'text-on-surface-variant break-words', value));
-  const action = (label, handler) => {
-    const control = button(label, safe(async () => { if (!locked()) await handler(); }));
-    control.disabled = locked(); return control;
+  const action = (label, handler, blocked = locked) => {
+    const control = button(label, safe(async () => { if (!blocked()) await handler(); }));
+    control.disabled = blocked(); return control;
   };
   function field(parent, label, options, initial = '') {
     const wrapper = el('label', 'block text-on-surface-variant space-y-1', label);
@@ -100,7 +105,7 @@ export function createWorkspaceView({ client, el, button, showStatus, download =
     pending = false; recording = false;
     if (!available() || result?.status === 'superseded' || (!write && revision !== client.revision)) { render(); return; }
     checked = client.revision;
-    if (isUnsupported(result)) unsupported = true;
+    if (isUnsupported(result) && !bindingsOnly()) unsupported = true;
     if (result?.status === 'ok') {
       receive?.(result.value);
       unsupported = unsupported || Boolean(projection?.unsupported?.some(record => record.schema?.includes(':workspace-declaration:')));
@@ -218,7 +223,7 @@ export function createWorkspaceView({ client, el, button, showStatus, download =
         const status = value.statuses?.[binding.id];
         if (status) statuses.set(binding.id, typeof status === 'string' ? status : status.status);
       }
-    } })), action('Export for sharing', () => request(() => client.exportWorkspace(), { receive: value => download(value.envelopeBytes, 'workspace.share.json') })));
+    } })), action('Export for sharing', () => request(() => client.exportWorkspace(), { receive: value => { download(value.envelopeBytes, 'workspace.share.json'); message = exportedText(value.excluded); showStatus(message); } }), () => pending || unsupported));
     text(body, SHARE_NOTE);
   }
   async function open() {

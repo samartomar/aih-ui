@@ -20,14 +20,20 @@ const stable = value => JSON.stringify(value, (_key, member) => member && typeof
 export const digest = async value => digestBytes(new TextEncoder().encode(stable(value)));
 const list = (value, max, each, min = 0) => Array.isArray(value) && value.length >= min && value.length <= max && value.every(each);
 const sortedUnique = values => values.every((value, index) => index === 0 || values[index - 1] < value);
-// A drive path, a UNC path, a file URL, a home path, any absolute POSIX path of two or more segments, a URL with userinfo or a
-// recognizable credential: refused wherever free text or a location is accepted. Paths count only where a path starts, so a
-// repository path such as `src/home/index.ts` or text such as `serves api/root/health` stays valid.
+// A drive path, a UNC path, a file URL, a home path, an absolute POSIX path under a root a local machine uses (at any depth), a
+// top-level file-like absolute path such as /private.pem, a URL with userinfo or a recognizable credential: refused wherever free
+// text or a location is accepted. A path counts only where it starts (not inside a longer word, file name or scheme authority), so
+// a repository path such as `src/home/index.ts`, a route such as `/v1/orders/` and text such as `serves api/root/health` stay valid.
 const start = String.raw`(?:^|[\s"'(=,;])`;
-const LOCAL_OR_SECRET = [/(?<![A-Za-z0-9])[A-Za-z]:[\\/]/, /\\\\/, /\bfile:/i, new RegExp(`${start}~[\\\\/]`), new RegExp(`${start}/(?:home|Users|root)/`, 'i'), new RegExp(`${start}/[^\\s/]+/`), /:\/\/[^\s/?#]*@/,
+const alone = String.raw`(?<![A-Za-z0-9._-])(?<!:/)`;
+const LOCAL_ROOTS = 'home|Users|root|srv|opt|mnt|Volumes|var|tmp|etc|private|media|usr|run|data|proc|dev|sys|Library|Applications|System|workspace|workspaces';
+const LOCAL_OR_SECRET = [/(?<![A-Za-z0-9])[A-Za-z]:[\\/]/, /\\\\/, /\bfile:/i, new RegExp(String.raw`${start}~[\\/]`), new RegExp(String.raw`${alone}/(?:${LOCAL_ROOTS})/[^\s/]`, 'i'),
+  new RegExp(String.raw`${alone}/[\w-][\w.-]*\.(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{1,8}(?![\w/-])`), /:\/\/[^\s/?#]*@/,
   /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}/, /\bgithub_pat_/, /\bglpat-/, /\bxox[abprs]-/, /\bsk-[A-Za-z0-9]{20,}/, /\bAKIA[0-9A-Z]{16}\b/,
-  /(?:access_token|token|api[_-]?key|apikey|secret|password|passwd|pwd)=/i, /(?:password|passwd|secret|api[_-]?key)\s*:\s*\S/i];
-export const unsafeText = value => typeof value === 'string' && LOCAL_OR_SECRET.some(pattern => pattern.test(value));
+  /\b(?:access_token|token|api[_-]?key|apikey|secret|password|passwd|pwd)=[A-Za-z0-9_\-.~+/]{8,}/i];
+// `password: value`: a value of six or more characters that holds a digit or a symbol (not a plain word such as "reset").
+const labelledSecret = value => [...value.matchAll(/\b(?:password|passwd|secret|api[_-]?key)\s*:\s*(\S+)/gi)].some(([, found]) => { const token = found.replace(/[.,;)\]"']+$/, ''); return token.length >= 6 && /[^A-Za-z]/.test(token); });
+export const unsafeText = value => typeof value === 'string' && (LOCAL_OR_SECRET.some(pattern => pattern.test(value)) || labelledSecret(value));
 const plain = (value, max) => typeof value === 'string' && value.length >= 1 && value.length <= max && !/[\x00-\x1f\x7f]/.test(value);
 const text = (value, max) => plain(value, max) && !unsafeText(value);
 export const isSlug = value => typeof value === 'string' && slugPattern.test(value);
