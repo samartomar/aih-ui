@@ -44,10 +44,24 @@ export function organizationErrors(organization, role) {
   return errors;
 }
 
+export const REVIEWER_KINDS = ["individual", "organization"];
+const REVIEWER_MESSAGE = "Choose individual or organization and enter an identity (up to 254 characters, no leading or trailing spaces), or leave it empty.";
+
+/** Optional reviewing identity: absent means not set. A present value must be exact. */
+export function reviewerErrors(reviewer) {
+  if (reviewer === undefined) return {};
+  const valid = exactKeys(reviewer, ["kind", "id"]) && REVIEWER_KINDS.includes(reviewer.kind)
+    && boundedText(reviewer.id, 254) && reviewer.id.length > 0 && reviewer.id === reviewer.id.trim();
+  return valid ? {} : { reviewer: REVIEWER_MESSAGE };
+}
+
 /** Validate the settings envelope, never a policy or an upstream package record. */
 export function settingsErrors(value) {
-  if (!exactKeys(value, ["format", "version", "experience", "role", "organization", "capabilities", "clients"])) return { settings: "The setup file has an unexpected structure." };
-  const errors = {};
+  // Older files have no reviewer key; "not set" is that key's absence.
+  const base = ["format", "version", "experience", "role", "organization", "capabilities", "clients"];
+  const reviewed = plain(value) && Object.hasOwn(value, "reviewer");
+  if (!exactKeys(value, reviewed ? [...base, "reviewer"] : base)) return { settings: "The setup file has an unexpected structure." };
+  const errors = reviewed && value.reviewer === undefined ? { reviewer: REVIEWER_MESSAGE } : reviewerErrors(value.reviewer);
   if (value.format !== SETTINGS_FORMAT || value.version !== SETTINGS_VERSION) errors.version = "This setup version is not supported.";
   if (!["vibe", "enterprise"].includes(value.experience)) errors.experience = "Choose Vibe coder or Enterprise.";
   if (value.experience === "enterprise") {
