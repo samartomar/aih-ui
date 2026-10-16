@@ -1,4 +1,5 @@
 import { el } from './dom.js';
+import { authorityFromResult, changeSummary, compareRevision, reviewFreshness, revisionOf, setupInstructions, sourceRows, staleReviewMessage } from './authority-source.js';
 import { isJourneyEnvelope, importLimitError } from './authoring-client.js';
 
 const buttonClass = 'px-3 py-1.5 rounded bg-surface-container text-on-surface border border-wb-border hover:bg-surface-container-high';
@@ -123,7 +124,72 @@ export function createAuthoringWorkspace(client) {
   }))); proposal.after(reconcile);
   const reconciliation = el('div', 'space-y-2'); reconcile.append(reconciliation);
   const host = el('p', 'mt-3 text-outline'); host.id = 'policy-host-status'; reconcile.after(host);
-  const execution = el('div', 'space-y-2'); host.after(execution);
+  // Organization authority source: read-only. The source is host configuration, never browser input.
+  const source = el('section', 'mt-3 p-3 border border-wb-border rounded space-y-2'); source.id = 'authority-source';
+  source.append(el('h3', 'font-medium', 'Organization authority source'));
+  const sourceNote = el('p', 'text-on-surface-variant'); source.append(sourceNote);
+  const sourceFacts = el('div', 'space-y-1'), factValues = {};
+  for (const [id, label] of [['provider', 'Provider'], ['repository', 'Repository'], ['path', 'Path'], ['ref', 'Revision requested'],
+    ['commit', 'Resolved commit'], ['blob', 'Blob'], ['digest', 'Content digest'], ['retrieved', 'Retrieved'], ['policy', 'Policy ID']]) {
+    const value = el('span', 'font-mono text-[10px] break-all'); value.id = `authority-source-${id}`; factValues[id] = value;
+    sourceFacts.append(el('p', 'flex flex-wrap gap-2', ''));
+    sourceFacts.lastChild.append(el('span', 'text-outline', `${label}:`), value);
+  }
+  const sourceChange = el('p', 'text-on-surface-variant break-all'); sourceChange.id = 'authority-source-change'; sourceChange.setAttribute('role', 'status');
+  const sourceReview = el('p', 'text-on-surface-variant'); sourceReview.id = 'authority-source-review';
+  const sourceDiagnostics = el('p', 'text-on-surface-variant'); sourceDiagnostics.id = 'authority-source-diagnostics';
+  const sourceSetup = el('pre', 'whitespace-pre-wrap break-words text-[10px]'); sourceSetup.id = 'authority-source-setup'; sourceSetup.textContent = setupInstructions();
+  const sourceCopy = button('Copy setup instructions', safe(async () => { await navigator.clipboard.writeText(setupInstructions()); sourceCopy.textContent = 'Copied'; }));
+  sourceCopy.id = 'authority-source-copy';
+  const sourceRefresh = button('Refresh', safe(async () => readSource())); sourceRefresh.id = 'authority-source-refresh';
+  source.append(sourceFacts, sourceChange, sourceReview, sourceDiagnostics, sourceSetup, sourceCopy, sourceRefresh);
+  host.after(source);
+  let known, latest, latestAuthority, sourceRead = false, sourceAttempt = 0, sourceState;
+  const configuredSource = () => client.catalog?.organizationSource ?? null;
+  const dash = '—';
+  function renderSource() {
+    const configured = client.catalog ? configuredSource() : undefined;
+    sourceState = configured === undefined ? undefined : !configured ? 'not-configured' : sourceState === 'refused' ? 'refused' : latest ? 'configured' : 'unread';
+    if (sourceState) source.dataset.state = sourceState; else delete source.dataset.state;
+    const rows = sourceRows(configured);
+    for (const id of ['provider', 'repository', 'path', 'ref']) factValues[id].textContent = rows[id] ?? dash;
+    factValues.commit.textContent = latest?.resolvedCommit ?? dash; factValues.blob.textContent = latest?.blobId ?? dash;
+    factValues.digest.textContent = latest?.contentDigest ?? dash;
+    factValues.retrieved.textContent = latestAuthority?.retrievedAt ?? dash; factValues.policy.textContent = latestAuthority?.policyId ?? dash;
+    const none = sourceState === 'not-configured';
+    sourceFacts.hidden = sourceChange.hidden = sourceReview.hidden = sourceRefresh.hidden = none || sourceState === undefined;
+    sourceSetup.hidden = sourceCopy.hidden = !none;
+    sourceNote.textContent = sourceState === undefined ? 'Reading host configuration…'
+      : none ? 'No organization authority source is configured by the host. Enterprise policies cannot be admitted until one is.'
+      : 'Read-only. The host configures this source; this page can only read it again.';
+    // A failed read keeps the last known revision: an established stale review stays stale.
+    const freshness = reviewFreshness(prepared?.review, known);
+    sourceReview.dataset.review = freshness;
+    sourceReview.textContent = freshness === 'stale' ? staleReviewMessage
+      : freshness === 'current' ? 'The prepared review matches the current organization policy revision.' : 'No prepared review is bound to an organization policy revision.';
+    apply.disabled = !prepared || freshness === 'stale';
+  }
+  // A successful read (Refresh, Refresh current authority or Prepare) updates the latest known revision.
+  function noteAuthority(authority) {
+    if (latestAuthority?.retrievedAt > authority.retrievedAt) return;
+    const next = revisionOf(authority), change = compareRevision(known, next);
+    sourceChange.dataset.change = change; sourceChange.textContent = changeSummary(change, known, next);
+    known = next; latest = next; latestAuthority = authority; sourceState = 'configured'; sourceDiagnostics.textContent = '';
+  }
+  const syncSource = () => { renderSource(); if (client.catalog && configuredSource() && !sourceRead) safe(readSource)(); };
+  async function readSource() {
+    if (!configuredSource()) return;
+    const attempt = ++sourceAttempt; sourceRead = true;
+    const result = await client.request('authority-source');
+    if (attempt !== sourceAttempt) return;
+    if (result.status === 'ok' && revisionOf(result.authority)) noteAuthority(result.authority);
+    else {
+      latest = undefined; latestAuthority = undefined; sourceState = 'refused'; delete sourceChange.dataset.change; sourceChange.textContent = '';
+      sourceDiagnostics.textContent = failure(result);
+    }
+    renderSource();
+  }
+  const execution = el('div', 'space-y-2'); source.after(execution);
   const executionStatus = el('p', 'text-on-surface-variant'); executionStatus.setAttribute('role', 'status');
   const executionDiagnostic = el('details'); executionDiagnostic.append(el('summary', 'cursor-pointer text-outline', 'Exact host review and effects'));
   const hostFacts = el('pre', 'whitespace-pre-wrap break-all text-[10px]'); executionDiagnostic.append(hostFacts);
@@ -135,8 +201,10 @@ export function createAuthoringWorkspace(client) {
     hostFacts.textContent = JSON.stringify(result, null, 2);
     const preparation = result.preparation ?? result;
     prepared = preparation.status === 'ready' && preparation.sessionId ? preparation : undefined;
-    apply.disabled = !prepared;
-    executionStatus.textContent = prepared ? 'Prepared effects are ready for review. Inspect the exact host review before explicitly approving Apply.'
+    const read = authorityFromResult(result); if (read) noteAuthority(read);
+    renderSource();
+    executionStatus.textContent = prepared && !apply.disabled ? 'Prepared effects are ready for review. Inspect the exact host review before explicitly approving Apply.'
+      : prepared ? staleReviewMessage
       : result.status === 'ok' ? 'Host responded. Inspect authority and effect details; no organization approval is inferred.' : failure(result);
   };
   const authority = button('Refresh current authority', safe(async () => { prepared = undefined; apply.disabled = true; presentHost(await client.requestHost('authority')); }));
@@ -317,6 +385,7 @@ export function createAuthoringWorkspace(client) {
       : 'Execution is not connected: this preview has no operator-selected project, material roots or controls. Save the policy for a configured CLI host; supported material facts do not establish native execution or automatic guardrails.';
   }
   const binding = document.getElementById('personal-binding');
+  syncSource();
   client.subscribe(() => {
     prepared = undefined; apply.disabled = true;
     managedRows.replaceChildren();
@@ -327,7 +396,7 @@ export function createAuthoringWorkspace(client) {
       for (const input of inputs.filter(input => input.kind === 'local' && input.id?.startsWith('personal-'))) binding.append(new Option(`Rebind saved ${input.id}`, JSON.stringify(input)));
       binding.value = selected && [...binding.options].some(option => option.value === selected) ? selected : binding.options.length === 2 ? binding.options[1].value : '';
     } catch { /* Original malformed bytes stay available for diagnostics. */ }
-    render();
+    render(); syncSource();
   });
   const folder = document.getElementById('personal-folder'), folderResult = document.getElementById('personal-result');
   folder.addEventListener('change', async () => {

@@ -4,8 +4,8 @@
 // never deserialized back into executable work.
 import { randomUUID } from 'node:crypto';
 import { apply, prepare, prepareManagedRemoval, listManagedSelections } from '@aihq/core';
-import { parsePolicy, parseOrganizationPolicy } from '@aihq/core/contracts';
-import { readGitHubPolicy } from '@aihq/core/harness/runtime';
+import { parsePolicy } from '@aihq/core/contracts';
+import { readOrganization } from './authority-source.mjs';
 import { previewPolicyAuthority } from './organization.mjs';
 
 const lostResult = () => ({
@@ -43,14 +43,11 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
     const parsed = parsePolicy(policyText);
     if (!parsed.valid) return { status: 'refused', diagnostics: parsed.diagnostics };
     if (parsed.document.mode === 'vibe') return { status: 'ok', value: { mode: 'vibe', advisory: true, authority: null, affectedChoices: [], stillValidChoices: [] }, diagnostics: [] };
-    const { authentication, signal } = controlsFor(controls);
-    const read = await readGitHubPolicy(organizationSource, { ...(authentication ? { authentication } : {}), ...(signal ? { signal } : {}) });
-    if (read.status !== 'read') return { status: 'refused', diagnostics: [{ code: read.code, reason: read.reason, message: read.message }], authority: { source: read.source, helper: read.helper, accounting: read.accounting } };
-    const organization = parseOrganizationPolicy(new TextDecoder().decode(read.bytes));
-    if (!organization.valid) return { status: 'refused', diagnostics: organization.diagnostics };
-    const result = await previewPolicyAuthority({ policy: parsed.document, organization: organization.document, recipeMaterials, privateInputs: controlsFor(controls).privateInputs });
-    const authority = { source: read.source, resolvedCommit: read.resolvedCommit, blobId: read.blobId, contentDigest: read.contentDigest, policyId: organization.document.id, retrievedAt: read.retrievedAt, helper: read.helper, accounting: read.accounting };
-    return result.status === 'ok' ? { ...result, value: { ...result.value, authority } } : { ...result, authority };
+    const read = await readOrganization({ organizationSource, controls: controlsFor(controls) });
+    if (read.status === 'unreadable') return { status: 'refused', diagnostics: read.diagnostics, authority: { source: read.read.source, helper: read.read.helper, accounting: read.read.accounting } };
+    if (read.status === 'invalid') return { status: 'refused', diagnostics: read.diagnostics };
+    const result = await previewPolicyAuthority({ policy: parsed.document, organization: read.organization, recipeMaterials, privateInputs: controlsFor(controls).privateInputs });
+    return result.status === 'ok' ? { ...result, value: { ...result.value, authority: read.authority } } : { ...result, authority: read.authority };
   }
   return {
     inspectAuthority,

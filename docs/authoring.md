@@ -498,6 +498,14 @@ of imported policy/source/review JSON. The local preview also accepts a host-own
 `AIH_ORGANIZATION_SOURCE` JSON file and `AIH_CONSUMER_CONTROLS`; credentials never
 enter the browser or exported policy. Supply authentication to both Prepare and
 Apply through host controls. Portable organization origins remain provenance only.
+The Policy workspace shows the configured source read-only (repository, path, requested
+revision, resolved commit, blob and digest) or, when none is configured, the setup
+instructions. Refresh reads it again and reports the revision as unchanged or changed; a
+changed revision marks an already prepared review stale and disables Apply until the
+effects are prepared again. No browser control sets or overrides the source.
+`check:workbench` demonstrates the not-configured, configured and changed-revision states
+against a controlled in-process GitHub fixture through `tools/check-authority-source.mjs
+<consumerDir> <evidenceDir> [--port N]`, using a consumer it installed.
 
 ```js
 import { createHost } from 'aih-ui/execution-host';
