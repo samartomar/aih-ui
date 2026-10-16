@@ -23,7 +23,7 @@ const at = n => new Date(Date.UTC(2026, 9, 16, 9, 0, n)).toISOString().replace('
 // ---- Fixture: a draft with two unrelated choices and two suggestions from the installed maintained Catalog ---------------
 let installedPromise;
 const installed = () => installedPromise ??= readInstalledRelease({ root: dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'))), sourceInput: 'maintained' });
-const withoutDisplay = ({ label: _label, description: _description, prompt: _prompt, dismissal: _dismissal, promotion: _promotion, ...fields }) => fields;
+const withoutDisplay = ({ label: _label, description: _description, prompt: _prompt, dismissal: _dismissal, promotion: _promotion, client: _client, ...fields }) => fields;
 async function scenario() {
   const found = await installed();
   assert.equal(found.valid, true, JSON.stringify(found.diagnostics));

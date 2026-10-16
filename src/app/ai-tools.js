@@ -9,8 +9,9 @@
  *     own, so a reinstalled Core changes this with no UI edit. The list's order
  *     is Core's, not a ranking.
  *   - SELECTED: the user's explicit choice in the workspace's local setup file.
- *   - CONNECTED: whether a tool is installed or connected. Nothing supplies
- *     that yet, so it is never implied - not by the dot, not by the count.
+ *   - CONNECTED: whether a tool is installed or connected. Nothing here checks
+ *     a tool, so it reads "not checked" and is never implied - not by the dot,
+ *     not by the count.
  *
  * The count reads "<selected> of <supported>", as the design source lays it
  * out, and its tooltip says what each number is. The design source's "3 of 11"
@@ -18,7 +19,7 @@
  */
 
 import { el, text } from "./dom.js";
-import { NOT_CONNECTED, NOT_PUBLISHED } from "./absence.js";
+import { NOT_PUBLISHED } from "./absence.js";
 import { clientNodes, publishedClients } from "./core-targets.js";
 
 /** @param elements { aiToolsTrigger, aiToolsCount, aiToolsPop, aiToolsList, aiToolsNote } */
@@ -57,7 +58,7 @@ export function createAiTools({ elements, onSelectionChange }) {
     elements.aiToolsCount.textContent = `${chosen.length} of ${supported.length}`;
     elements.aiToolsTrigger.title =
       `${supported.length} AI clients @aihq/core supports as targets; ${chosen.length} selected in this workspace's local setup. ` +
-      `Installed or connected: ${NOT_CONNECTED}.`;
+      "Installed or connected: not checked.";
 
     for (const target of supported) {
       const row = el("label", "flex items-center gap-2 px-1.5 py-1 rounded hover:bg-surface-container cursor-pointer text-on-surface");
@@ -90,7 +91,7 @@ export function createAiTools({ elements, onSelectionChange }) {
       failure.setAttribute("role", "alert");
       elements.aiToolsNote.appendChild(failure);
     }
-    note(`Installed or connected: ${NOT_CONNECTED}. Nothing here checks a tool.`);
+    note("Installed or connected: not checked. Nothing here checks a tool.");
     // A saved choice this Core no longer lists stays saved, but is not counted.
     const unknown = selected.filter((item) => !supported.includes(item));
     if (unknown.length > 0) {

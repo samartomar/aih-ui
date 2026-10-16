@@ -11,6 +11,7 @@ import { recordMaintenance } from './maintenance.mjs';
 import { digestBytes, intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { createMixedService } from './mixed-service.mjs';
+import { nativeClientIds } from '@aihq/core/harness';
 import { suggestionRevision, suggestionProblem } from './improvement-record.mjs';
 import { suggestImprovements, lead, classifyImprovement, improvementPrompt, GOAL_RULES, UNKNOWNS, IMPROVEMENT_RULES_VERSION, MAX_ALTERNATIVES } from './improvement-rules.mjs';
 import { checkImprovements, recordImprovement, projectDismissals, IMPROVEMENT_SUGGESTION_SCHEMA, IMPROVEMENT_DISMISSAL_SCHEMA } from './improvements.mjs';
@@ -23,7 +24,9 @@ const hex = n => n.toString(16).padStart(64, '0');
 const item = (id, extra = {}) => ({ id, label: `Label ${id}`, description: `About ${id}.`, scopes: ['project'], recipe: { sha256: hex(1), byteLength: 100 },
   materials: [{ sha256: hex(2), byteLength: 10 }, { sha256: hex(3), byteLength: 20 }], dependencies: { requires: [], optional: [], conflicts: [] }, itemSha256: hex(4), root: { releaseSha256: hex(9) }, ...extra });
 const GOAL_ITEMS = [...new Set(GOAL_RULES.map(rule => rule.itemId))];
-const catalog = () => [...GOAL_ITEMS, 'aihq.client.claude', 'aihq.client.codex'].map(id => item(id));
+// A client adapter names its target in clientId (Catalog release format 1.4); its id is only a name.
+const adapter = (id, clientId, extra = {}) => item(id, { kind: 'client-adapter', clientId, ...extra });
+const catalog = () => [...GOAL_ITEMS.map(id => item(id)), adapter('aihq.client.claude', 'claude'), adapter('aihq.client.codex', 'codex')];
 const intentOf = ({ roots = [], pins = [], exclusions = [] } = {}) => ({ ...freshAuthoring(), roots, pins, exclusions });
 const rootOf = (itemId, reason) => ({ releaseSha256: hex(9), itemId, itemSha256: hex(4), scope: 'project', configuration: {}, originIds: ['direct'], ...(reason ? { reason } : {}) });
 const savedReason = (rule, goal) => `guided-setup rules 1.0.0: ${rule}. Goal: ${goal}. Project: JavaScript.`;
@@ -32,7 +35,7 @@ const byItem = (suggestions, itemId) => suggestions.find(s => s.change.itemId ==
 const shownItem = (checked, itemId) => byItem([checked.leading, ...checked.alternatives, ...checked.dismissed].filter(Boolean), itemId);
 
 test('the rules version and goal table are fixed and every rule names a distinct, well-formed reason', () => {
-  assert.equal(IMPROVEMENT_RULES_VERSION, '1.2.0');
+  assert.equal(IMPROVEMENT_RULES_VERSION, '1.3.0');
   assert.deepEqual(GOAL_RULES.map(rule => [rule.id, rule.itemId]), [['goal.fix', 'mattpocock.diagnosing-bugs'], ['goal.test', 'mattpocock.tdd'], ['goal.regressions', 'mattpocock.tdd'],
     ['goal.review', 'mattpocock.code-review'], ['goal.refactor', 'mattpocock.improve-codebase-architecture'], ['goal.plan', 'mattpocock.grill-me'], ['goal.context', 'aihq.project-context']]);
   for (const rule of GOAL_RULES) assert.match(rule.id, /^[a-z][a-z0-9.-]{0,63}$/);
@@ -80,6 +83,39 @@ test('reasons for one item merge into one suggestion; the same reason from a sav
   assert.equal(both[0].goal, 'tests');
 });
 
+// ---- The client rule finds an adapter by Catalog's clientId -----------------------------------------------------------
+test('the client rule finds the adapter whose clientId names the client, whatever its item id', async () => {
+  const items = [adapter('vendor.wire-claude', 'claude'), adapter('aihq.client.y', 'z')];
+  assert.deepEqual((await suggest({ items, clients: ['claude'] })).map(s => s.change.itemId), ['vendor.wire-claude']);
+  assert.deepEqual((await suggest({ items, clients: ['z'] })).map(s => s.change.itemId), ['aihq.client.y']);
+  assert.deepEqual(await suggest({ items, clients: ['y'] }), [], 'an item named aihq.client.y does not make y a target');
+});
+
+test('an adapter without clientId (an earlier release format) and a non-adapter named like one are never matched to a client', async () => {
+  const items = [item('aihq.client.claude', { kind: 'client-adapter' }), item('aihq.client.codex', { kind: 'skill', clientId: 'codex' })];
+  assert.deepEqual(await suggest({ items, clients: ['claude', 'codex'] }), []);
+});
+
+test('a client suggestion states the adapter target, Core support and installed state as three separate facts', async () => {
+  const items = [adapter('aihq.client.claude', 'claude'), adapter('vendor.other', 'other')];
+  const [supported, outside] = await suggest({ items, clients: ['claude', 'other'], coreClients: ['claude'] });
+  assert.equal(supported.change.itemId, 'aihq.client.claude');
+  assert.deepEqual([supported.client.target.clientId, supported.client.core.state, supported.client.installed.state], ['claude', 'supported', 'not-checked']);
+  assert.equal(outside.change.itemId, 'vendor.other');
+  assert.deepEqual([outside.client.core.state, outside.client.installed.state], ['not-supported', 'not-checked']);
+  assert.match(improvementPrompt(outside), /Not Core-supported: Core does not list other./);
+  assert.match(improvementPrompt(outside), /Installed or connected: not checked./);
+  assert.equal((await suggest({ items, clients: ['claude'] }))[0].client.core.state, 'unknown', 'no Core list supplied');
+  assert.equal(Object.hasOwn((await suggest({ goal: 'fewer regressions' }))[0], 'client'), false, 'only adapters carry client facts');
+});
+
+test('client facts are not part of a suggestion record or its identity', async () => {
+  const items = [adapter('aihq.client.claude', 'claude')];
+  const [plain] = await suggest({ items, clients: ['claude'] }), [withCore] = await suggest({ items, clients: ['claude'], coreClients: ['claude'] });
+  assert.equal(withCore.id, plain.id);
+  assert.equal(withCore.revision, plain.revision);
+});
+
 test('the client rule fires for each declared client whose item is offered, once', async () => {
   const suggestions = await suggest({ clients: ['codex', 'zed', 'claude', 'claude'] });
   assert.deepEqual(suggestions.map(s => s.change.itemId), ['aihq.client.claude', 'aihq.client.codex']);
@@ -95,7 +131,7 @@ test('the client rule names a client by its published label, and the label never
   const [plain] = await suggest({ clients: ['claude'] }), [named] = await suggest({ clients: ['claude'], labels: { claude: 'Claude Code', codex: 'Codex' } });
   assert.deepEqual(named.triggers, [{ ruleId: 'client.instructions', key: 'client:claude', text: 'You use Claude Code (Workbench setup), but this policy does not give it the shared project instructions.' }]);
   assert.equal(named.goal, 'Give Claude Code the same shared project instructions as your other AI clients.');
-  assert.equal(named.rulesVersion, '1.2.0');
+  assert.equal(named.rulesVersion, '1.3.0');
   // A label is wording: the same id and revision, so a dismissal made before a rename still applies.
   assert.deepEqual([named.id, named.revision], [plain.id, plain.revision]);
   assert.deepEqual(classifyImprovement(named, plain), { dismissed: true, reasons: [] });
@@ -274,7 +310,7 @@ test('a goal-relevant item that is new or revised in a newer revision of a saved
   assert.equal(changeTrigger(tdd).text, '“Label mattpocock.tdd” changed in review-notes-catalog 1.1.0 (its recipe or files differ from the revision this policy was saved from); your saved goal “add tests to my app” mentions “tests”.');
   assert.deepEqual(tdd.triggers.map(t => t.key), ['change:revised@1.1.0', 'goal:goal.test']);
   assert.deepEqual(tdd.references, [{ kind: 'saved-reason', ref: 'x.root' }, { kind: 'catalog-item', ref: 'mattpocock.tdd' }]);
-  assert.equal(tdd.goal, GOAL); assert.equal(tdd.rulesVersion, '1.2.0');
+  assert.equal(tdd.goal, GOAL); assert.equal(tdd.rulesVersion, '1.3.0');
   // The change describes the candidate item, the content the reason talks about.
   assert.deepEqual([tdd.change.releaseSha256, tdd.change.itemSha256, tdd.change.content.recipeSha256], [hex(10), hex(121), hex(21)]);
   const plan = byItem(got, 'notes.plan');
@@ -367,7 +403,7 @@ test('selected, excluded and scope-less items are never suggested for a change, 
 });
 
 test('a change reason is shown once: dismissed with it, a goal suggestion stays dismissed; novelty alone never re-promotes', async () => {
-  const before = [item('x.root'), item('mattpocock.tdd'), item('aihq.client.claude')], after = [item('x.root'), revised(item('mattpocock.tdd'), 21), item('aihq.client.claude')];
+  const before = [item('x.root'), item('mattpocock.tdd'), adapter('aihq.client.claude', 'claude')], after = [item('x.root'), revised(item('mattpocock.tdd'), 21), adapter('aihq.client.claude', 'claude')];
   const dismissedGoal = byItem(await withChanges({ before, candidates: [] }), 'mattpocock.tdd');
   const shown = byItem(await withChanges({ before, after }), 'mattpocock.tdd');
   const again = classifyImprovement(shown, dismissedGoal);
@@ -386,11 +422,11 @@ test('a change reason is shown once: dismissed with it, a goal suggestion stays 
   assert.notEqual(later.revision, shown.revision); assert.deepEqual(classifyImprovement(later, shown, versionOf), { dismissed: true, reasons: [] });
   // A revised client-rule item that is not relevant to a saved goal is neither a new reason nor changed content.
   const clientBefore = byItem(await withChanges({ before, clients: ['claude'] }), 'aihq.client.claude');
-  const clientAfter = byItem(await withChanges({ before, after: [...after.slice(0, 2), revised(item('aihq.client.claude', { label: 'Claude wiring' }), 41)], clients: ['claude'] }), 'aihq.client.claude');
+  const clientAfter = byItem(await withChanges({ before, after: [...after.slice(0, 2), revised(adapter('aihq.client.claude', 'claude', { label: 'Claude wiring' }), 41)], clients: ['claude'] }), 'aihq.client.claude');
   assert.equal(changeTrigger(clientAfter), undefined); assert.equal(clientAfter.revision, clientBefore.revision);
   assert.deepEqual(classifyImprovement(clientAfter, clientBefore), { dismissed: true, reasons: [] });
   // Relevant by its label to the saved goal, the same revision is a reason and changed content.
-  const relevant = byItem(await withChanges({ before, after: [...after.slice(0, 2), revised(item('aihq.client.claude', { label: 'Test the Claude wiring' }), 41)], clients: ['claude'] }), 'aihq.client.claude');
+  const relevant = byItem(await withChanges({ before, after: [...after.slice(0, 2), revised(adapter('aihq.client.claude', 'claude', { label: 'Test the Claude wiring' }), 41)], clients: ['claude'] }), 'aihq.client.claude');
   assert.equal(changeTrigger(relevant).key, 'change:revised@1.1.0');
   assert.equal(classifyImprovement(relevant, clientBefore).dismissed, false);
 });
@@ -422,7 +458,7 @@ async function scenario({ rootIds = ['mattpocock.implement'], goal = 'add tests 
 }
 const check = async (s, bytes, options = {}) => valueOf(await checkImprovements({ envelopeBytes: bytes, inventories: s.inventories, now: NOW, ...options }));
 const dismissOperation = (suggestion, reason) => {
-  const { label: _label, description: _description, prompt: _prompt, dismissal: _dismissal, promotion: _promotion, ...fields } = suggestion;
+  const { label: _label, description: _description, prompt: _prompt, dismissal: _dismissal, promotion: _promotion, client: _client, ...fields } = suggestion;
   return { type: 'dismiss', suggestion: fields, ...(reason !== undefined ? { reason } : {}) };
 };
 const record = async (bytes, operation, now = NOW) => valueOf(await recordImprovement({ envelopeBytes: bytes, operation, now }));
@@ -444,14 +480,14 @@ test('the rule table points at items the installed maintained Catalog really off
   const before = s.envelopeBytes.slice();
   const value = await check(s, s.envelopeBytes, { clients: ['claude', 'not-a-client'], goal: 'fewer regressions' });
   assert.deepEqual(s.envelopeBytes, before);
-  assert.equal(value.rulesVersion, '1.2.0'); assert.equal(value.checkedAt, NOW); assert.deepEqual(value.mutations, []);
+  assert.equal(value.rulesVersion, '1.3.0'); assert.equal(value.checkedAt, NOW); assert.deepEqual(value.mutations, []);
   assert.deepEqual(value.reads, ['envelope', 'supplied-inventories', 'declared-clients', 'request-goal']);
   // implement is the root; tdd arises from the saved goal and the request (two reasons), the client wiring from setup.
   assert.equal(value.leading.change.itemId, 'mattpocock.tdd');
   assert.deepEqual(value.leading.triggers.map(t => t.key), ['goal:goal.regressions', 'goal:goal.test']);
   assert.equal(value.leading.label, s.maintained.release.items.find(i => i.id === 'mattpocock.tdd').label);
   assert.equal(value.leading.scope, 'project'); assert.equal(value.leading.dismissal, null); assert.equal(value.leading.promotion, undefined);
-  assert.equal(value.leading.rulesVersion, '1.2.0'); assert.equal(value.leading.change.releaseSha256, s.maintained.release.sha256);
+  assert.equal(value.leading.rulesVersion, '1.3.0'); assert.equal(value.leading.change.releaseSha256, s.maintained.release.sha256);
   assert.match(value.leading.facts[0].text, /^Adds \d+ files, \d+ bytes in total, and needs 0 other items\.$/);
   assert.deepEqual(value.alternatives.map(a => a.change.itemId), ['aihq.client.claude']);
   assert.match(value.alternatives[0].facts[0].text, /^Adds \d+ files, \d+ bytes in total, and needs [1-9]\d* other items?: /);
@@ -839,7 +875,7 @@ test('checking, dismissing and building the prompt never touch the network or a 
 });
 
 test('the improvement modules import only the allowed seams and contain no network, process or random calls', async () => {
-  const allowed = [/^\.\/intake\.mjs$/, /^\.\/journey\.mjs$/, /^\.\/headless\.mjs$/, /^\.\/intent-shape\.mjs$/, /^\.\/maintenance-record\.mjs$/, /^\.\/improvement-[a-z]+\.mjs$/, /^\.\/trial-record\.mjs$/, /^@aihq\/catalog\/reader$/];
+  const allowed = [/^\.\/intake\.mjs$/, /^\.\/journey\.mjs$/, /^\.\/headless\.mjs$/, /^\.\/intent-shape\.mjs$/, /^\.\/maintenance-record\.mjs$/, /^\.\/improvement-[a-z]+\.mjs$/, /^\.\/client-identity\.mjs$/, /^\.\/trial-record\.mjs$/, /^@aihq\/catalog\/reader$/];
   for (const name of ['improvement-record.mjs', 'improvement-rules.mjs', 'improvements.mjs']) {
     const source = await readFile(new URL(`./${name}`, import.meta.url), 'utf8');
     const specifiers = [...source.matchAll(/^(?:import|export)\b[^;]*?\bfrom\s+'([^']+)'/gm)].map(match => match[1]);
@@ -850,7 +886,7 @@ test('the improvement modules import only the allowed seams and contain no netwo
       assert.doesNotMatch(source, forbidden, `${name} ${forbidden}`);
   }
   const rules = await readFile(new URL('./improvement-rules.mjs', import.meta.url), 'utf8');
-  assert.deepEqual([...rules.matchAll(/^import\b[^;]*?\bfrom\s+'([^']+)'/gm)].map(m => m[1]), ['./improvement-record.mjs']);
+  assert.deepEqual([...rules.matchAll(/^import\b[^;]*?\bfrom\s+'([^']+)'/gm)].map(m => m[1]), ['./improvement-record.mjs', './client-identity.mjs']);
 });
 
 // ---- The copy-only prompt ------------------------------------------------------------------------------------------
@@ -861,7 +897,7 @@ test('the prompt is attributed, tells the AI to change nothing, and carries no p
   for (const suggestion of [checked.leading, ...checked.alternatives]) {
     const prompt = suggestion.prompt;
     assert.equal(prompt, improvementPrompt(suggestion));
-    assert.ok(prompt.includes('Suggested by the AIH Workbench improvement rules 1.2.0 (fixed rules; no AI model was used).'));
+    assert.ok(prompt.includes('Suggested by the AIH Workbench improvement rules 1.3.0 (fixed rules; no AI model was used).'));
     assert.match(prompt, /Do not install, change or run anything/); assert.match(prompt, /do not ask me to upload/);
     assert.ok(prompt.includes('Start your reply with “AI advice:”.'));
     assert.ok(prompt.includes(suggestion.label)); assert.ok(prompt.includes(suggestion.change.itemId));
@@ -951,4 +987,40 @@ test('shipped suggestion and dismissal schemas agree structurally with the runti
   assert.deepEqual([...dismissalSchema.properties.suggestion.required].sort(), Object.keys(dismissal.suggestion).sort());
   const rules = journey.properties.records.items.allOf.map(rule => [rule.if.properties.schema.const, rule.then.$ref]);
   for (const urn of [IMPROVEMENT_SUGGESTION_SCHEMA, IMPROVEMENT_DISMISSAL_SCHEMA]) assert.ok(rules.some(([a, b]) => a === urn && b === urn), urn);
+});
+
+test('checkImprovements fills the client facts from the Core clients the host gives it and keeps them out of records', async () => {
+  const s = await scenario(), declared = { clients: ['claude', 'codex'], coreClients: ['claude'] };
+  const checked = await check(s, s.envelopeBytes, declared);
+  const shown = [checked.leading, ...checked.alternatives].filter(Boolean).filter(x => x.client);
+  assert.ok(shown.length > 0, 'at least one client adapter suggestion');
+  const byClient = Object.fromEntries(shown.map(x => [x.client.target.clientId, x.client]));
+  assert.deepEqual([byClient.claude.core.state, byClient.claude.installed.state], ['supported', 'not-checked']);
+  if (byClient.codex) assert.deepEqual([byClient.codex.core.state, byClient.codex.installed.state], ['not-supported', 'not-checked']);
+  const dismissed = await record(s.envelopeBytes, dismissOperation(shown[0]));
+  assert.equal(JSON.stringify(dismissed.record).includes('Core-supported'), false);
+});
+
+test('host route: Core support comes from the installed Core, and a list in the request has no effect', async () => {
+  const s = await scenario(), service = await createMixedService(s.maintained);
+  const stateOf = async extra => {
+    const value = valueOf(await service.run('improvements-check', { envelopeBytes: [...s.envelopeBytes], clients: ['claude'], ...extra }));
+    return [value.leading, ...value.alternatives].filter(Boolean).find(x => x.client?.target.clientId === 'claude').client.core.state;
+  };
+  assert.ok(nativeClientIds.includes('claude'), 'the installed Core lists claude');
+  assert.equal(await stateOf({}), 'supported', 'with no list in the request, support is still the installed Core list');
+  for (const coreClients of [[], ['codex'], 'claude', null, ['claude', 7]])
+    assert.equal(await stateOf({ coreClients }), 'supported', `a request list ${JSON.stringify(coreClients)} is ignored`);
+});
+
+test('the authoring catalog the browser is served carries every installed adapter\'s clientId, and only adapters have one', async () => {
+  const s = await scenario(), served = (await createMixedService(s.maintained)).catalog().items;
+  const adapters = served.filter(item => item.kind === 'client-adapter');
+  assert.ok(adapters.length > 0);
+  for (const item of adapters) {
+    const published = s.maintained.release.items.find(other => other.id === item.id);
+    assert.match(item.clientId, /^[a-z][a-z0-9-]{0,63}$/);
+    assert.equal(item.clientId, published.clientId, item.id);
+  }
+  assert.deepEqual(served.filter(item => item.kind !== 'client-adapter' && 'clientId' in item), []);
 });

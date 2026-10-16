@@ -41,7 +41,8 @@ export function projectDismissals(envelope) {
 // them; `goal` is an optional request. `candidateInventories` is null/undefined when the host's update source could not be
 // read, and `candidateSource` says whether the host has one at all ('unconfigured' is unknown, never checked). A caller that
 // supplies neither has no update source, so earlier callers keep their meaning.
-export async function checkImprovements({ envelopeBytes, inventories, candidateInventories, candidateSource = candidateInventories === undefined ? 'unconfigured' : 'configured', clients = [], labels = {}, goal, now } = {}) {
+// `coreClients` (optional) is the host's own reading of Core's nativeClientIds, never a request field; it only fills the `client` facts of an adapter suggestion, a display field a recorded suggestion never carries.
+export async function checkImprovements({ envelopeBytes, inventories, candidateInventories, candidateSource = candidateInventories === undefined ? 'unconfigured' : 'configured', clients = [], labels = {}, coreClients, goal, now } = {}) {
   const loaded = await load(envelopeBytes);
   if (loaded.status !== 'ok') return loaded;
   const { read, draft } = loaded.value;
@@ -60,7 +61,7 @@ export async function checkImprovements({ envelopeBytes, inventories, candidateI
   const text = CONTENT_COVERAGE[reason ?? 'checked'], coverage = [{ trigger: 'content-change', state: reason === undefined ? 'checked' : 'unknown', ...(reason !== undefined ? { reason } : {}), text },
     { trigger: 'recurring-friction', state: 'unknown', reason: 'no-published-interface', text: FRICTION_UNKNOWN }];
   // Unchecked content changes are said on each suggestion too; unknowns are not part of its identity.
-  const suggested = await suggestImprovements({ intent: draft.intent, items, inventories, candidates: reason === undefined ? candidateInventories : [], clients, labels, goal });
+  const suggested = await suggestImprovements({ intent: draft.intent, items, inventories, candidates: reason === undefined ? candidateInventories : [], clients, labels, goal, coreClients });
   const current = reason === undefined ? suggested : suggested.map(suggestion => ({ ...suggestion, unknowns: [...suggestion.unknowns, text] }));
   const savedBy = new Map(read.records.filter(isSuggestion).map(record => [record.id, record]));
   const dismissals = new Map(read.records.filter(isDismissal).map(record => [record.suggestion.id, record]));

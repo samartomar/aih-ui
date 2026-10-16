@@ -17,6 +17,7 @@ import { createToolbar } from "./toolbar.js";
 import { categoryCoverage } from "./publisher.js";
 import { categoryRows } from "./categories.js";
 import { projectItems, capabilityFacts, declaredTargets, supportedEntries } from "./authoring-model.js";
+import { publishedClients } from "../app/core-targets.js";
 import { inventoryCounts, scopeEntries, scopeTotal, selectedScope, visibleEntries } from "./selectors.js";
 import { emptyView, restoreView, saveView } from "./view-state.js";
 import { text } from "../app/dom.js";
@@ -140,7 +141,9 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   }
 
   function detailsModel(entry) {
-    return { entry, counts: state.counts, publisher: state.publisher, qualification: state.qualification, target: target.value };
+    return { entry, counts: state.counts, publisher: state.publisher, qualification: state.qualification, target: target.value,
+      // Core's nativeClientIds when it published them, otherwise null (support unknown).
+      coreClients: publishedClients(state.summary?.coreTargets)?.ids ?? null };
   }
 
   function render() {

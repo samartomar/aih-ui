@@ -696,7 +696,7 @@ async function draftOverMaintained() {
 let maintainedDraftPromise;
 const maintainedDraft = () => maintainedDraftPromise ??= draftOverMaintained();
 const NOW = '2026-10-16T09:00:00Z';
-const withoutDisplay = ({ label: _label, description: _description, prompt: _prompt, dismissal: _dismissal, promotion: _promotion, ...fields }) => fields;
+const withoutDisplay = ({ label: _label, description: _description, prompt: _prompt, dismissal: _dismissal, promotion: _promotion, client: _client, ...fields }) => fields;
 const suggestionOf = async draft => {
   const checked = valueOf(await checkImprovements({ envelopeBytes: draft.envelopeBytes, inventories: draft.inventories, goal: 'add tests to my app', clients: ['claude'], now: NOW }));
   return withoutDisplay([checked.leading, ...checked.alternatives].find(x => x.change.itemId === 'mattpocock.tdd'));
