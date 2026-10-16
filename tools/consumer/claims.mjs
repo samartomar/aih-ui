@@ -34,6 +34,26 @@ function outcomeFields(item) {
   return { kind: 'unknown', unknownReason: item.reason || item.outcome || 'unavailable' };
 }
 
+// A Core that reported its options but no configuration predates the option and checked with the process's
+// trust; only an inspection that failed before Core answered (no effective option reported) is unknown.
+const configurationOf = check => check?.options?.configuration
+  ?? (Object.values(check?.options ?? {}).some(value => value !== null) ? 'process' : null);
+const sameConfiguration = (a, b) => configurationOf(a) === null || configurationOf(b) === null || configurationOf(a) === configurationOf(b);
+
+// The condition was broken before a repair only if it failed both for this host and with the persisted
+// configuration; the persisted failure is then the precheck, the same configuration as the recheck. A pass in
+// either is the precheck (already healthy); otherwise an unknown one is (unknown precondition). A record without
+// the persisted inspection, from an older Workbench or Core, never pairs.
+function precheckOf({ item, twin, condition, persisted }) {
+  if (!persisted) return null;
+  if (item.outcome === 'failed' && twin.outcome === 'failed') return persisted;
+  if (item.outcome === 'passed') return condition;
+  if (twin.outcome === 'passed') return persisted;
+  return item.outcome === 'failed' ? persisted : condition;
+}
+
+const said = item => item.outcome === 'passed' || item.outcome === 'failed' ? item.outcome : `could not be confirmed (${item.reason || item.outcome})`;
+
 function admit(records) {
   const seen = new Set(), unique = [];
   for (const record of records) {
@@ -88,17 +108,20 @@ function assemble({ records = [], scanReports = [], estimates = [], usage = [], 
   const claims = new Map();
   const add = claim => { const key = `${claim.id}\u0000${claim.revision}`; if (!claims.has(key)) claims.set(key, claim); return claim; };
   const recordSource = record => ({ id: record.id, schema: READINESS_RECORD_SCHEMA, sha256: record.sha256 });
-  const machineClaim = (record, { id, observation, role, item, measure, applicability }) => add({
+  const machineClaim = (record, { id, observation, role, item, measure, applicability, status = record.check?.status }) => add({
     id, revision: record.sha256, producer: producer(), recordSchema: READINESS_RECORD_SCHEMA, subject: target(item.target),
     scope: { kind: 'machine', targets: [item.target] }, sources: [recordSource(record)], observation, capturedAt: record.capturedAt, measure,
-    ...(role === 'check' ? { method: { ...CHECK_SET } } : {}), ...outcomeFields(item), coverage: coverageOf(record.check?.status),
+    ...(role === 'check' ? { method: { ...CHECK_SET } } : {}), ...outcomeFields(item), coverage: coverageOf(status),
     authentication: unauthenticated(), applicability });
 
-  // Machine checks: a configuration-check claim and a separate condition claim per Core check item.
+  // Machine checks: a configuration-check claim and a separate condition claim per Core check item, plus a condition
+  // claim for the same check made with the persisted configuration when the record carries that inspection.
   const byMachine = new Map();
   for (const record of machines) {
     const base = record === latest ? current('This is the latest machine check.') : stale('A later machine check exists.');
     const found = [];
+    const persisted = configurationOf(record.persistedCheck) === 'persisted' ? record.persistedCheck : null;
+    const twins = new Map((persisted?.items ?? []).filter(item => item.kind === 'check').map(item => [item.id, item]));
     for (const item of record.check?.items ?? []) {
       const applicability = record === latest && rechecked.has(item.target)
         ? stale('A later repair recheck covered this target; run the machine check again.') : base;
@@ -107,7 +130,10 @@ function assemble({ records = [], scanReports = [], estimates = [], usage = [], 
         measure: 'configuration-check', applicability: applicability() });
       const conditionClaim = loading ? null : machineClaim(record, { id: `${record.id}/condition/${item.id}`, observation: `${record.id}/${item.id}/condition`,
         role: 'condition', item, measure: `condition:${item.id}`, applicability: applicability() });
-      found.push({ item, check: checkClaim, condition: conditionClaim });
+      const twin = conditionClaim && configurationOf(record.check) === 'process' ? twins.get(item.id) ?? null : null;
+      const persistedClaim = twin ? machineClaim(record, { id: `${record.id}/persisted-condition/${item.id}`, observation: `${record.id}/${item.id}/persisted-condition`,
+        role: 'condition', item: twin, measure: `condition:${item.id}`, applicability: applicability(), status: persisted.status }) : null;
+      found.push({ item, check: checkClaim, condition: conditionClaim, twin, persisted: persistedClaim });
     }
     byMachine.set(record, found);
   }
@@ -140,19 +166,30 @@ function assemble({ records = [], scanReports = [], estimates = [], usage = [], 
       capturedAt: repair.recheckedAt, measure: `condition:${item.id}`, ...outcomeFields(item), coverage: coverageOf(recheck.status),
       authentication: unauthenticated(), applicability: applicability() }));
 
-    const beforeFound = byMachine.get(machineById.get(repair.before)) ?? [];
+    // Core reported each applied, removed, modified or unowned persisted value the recheck found; its state is the value.
+    for (const value of recheck?.persisted ?? []) add({
+      id: `${record.id}/persisted/${value.id}`, revision: record.sha256, producer: producer(), recordSchema: READINESS_RECORD_SCHEMA,
+      subject: { kind: 'persisted-configuration', id: value.id }, scope: { kind: 'machine', targets: [...repair.targets] }, sources: sources.map(source => ({ ...source })),
+      observation: `${record.id}/${value.id}/persisted`, capturedAt: repair.recheckedAt, measure: 'persisted-configuration', kind: 'measured',
+      value: { amount: value.state, unit: 'state' }, coverage: coverageOf(recheck.status), authentication: unauthenticated(), applicability: applicability() });
+
+    // Only a persisted recheck can show the trust a repair persisted; a recheck that failed before Core answered has
+    // no postcheck, so its precheck stays and the repair is reviewed.
+    const beforeRecord = machineById.get(repair.before);
+    const beforeFound = beforeRecord && configurationOf(recheck) !== 'process' ? byMachine.get(beforeRecord) ?? [] : [];
     const before = new Map(beforeFound.filter(entry => entry.condition && repair.targets.includes(entry.item.target)).map(entry => [entry.item.id, entry]));
     const conditions = new Map();
     for (const [id, entry] of before) conditions.set(id, entry.item.target);
     for (const [id, claim] of post) if (!conditions.has(id)) conditions.set(id, claim.subject.id);
     for (const [id, name] of conditions) attempts.push({ operation: repair.repairId, subject: target(name), condition: `condition:${id}`,
-      precheck: before.has(id) ? ref(before.get(id).condition) : null, repair: ofTarget.has(name) ? ref(ofTarget.get(name)) : null,
+      precheck: before.has(id) && precheckOf(before.get(id)) ? ref(precheckOf(before.get(id))) : null, repair: ofTarget.has(name) ? ref(ofTarget.get(name)) : null,
       postcheck: post.has(id) ? ref(post.get(id)) : null });
   }
 
   // Consecutive machine checks with no repair of the target between them: a failure that later passed has an unknown cause.
   for (let index = 1; index < machines.length; index += 1) {
     const [older, newer] = [machines[index - 1], machines[index]];
+    if (!sameConfiguration(older.check, newer.check)) continue;
     const newerById = new Map(byMachine.get(newer).filter(entry => entry.condition).map(entry => [entry.item.id, entry]));
     for (const entry of byMachine.get(older)) {
       if (!entry.condition || entry.item.outcome !== 'failed' || !newerById.has(entry.item.id)) continue;
@@ -218,6 +255,12 @@ function assemble({ records = [], scanReports = [], estimates = [], usage = [], 
     else if (item.outcome !== 'passed') actions.push({ id: `important-unknown/${latest.id}/${item.id}`, category: 'important-unknown', subjects: [target(item.target)], evidence,
       reason: item.kind === 'observation' ? `Loading of ${item.target} was observed but not verified.` : `The check ${item.id} on ${item.target} could not be confirmed (${item.reason}).`,
       prerequisites: [], route: guidance(item.target, item.reason) });
+    // The two configurations disagree: say so, and keep this host's result as the machine's readiness. Unreadable
+    // persisted configuration is already said once by the comparison, so it adds no action per check.
+    if (entry.persisted && entry.twin.outcome !== item.outcome && entry.twin.reason !== 'persisted-configuration-unavailable') actions.push({ id: `important-unknown/${latest.id}/${item.id}/configuration`,
+      category: 'important-unknown', subjects: [target(item.target)], evidence: [ref(entry.condition), ref(entry.persisted)],
+      reason: `The check ${item.id} on ${item.target} ${said(item)} for this host but ${said(entry.twin)} with the configuration Core's managed repairs persist for a new process; the score uses this host's result.`,
+      prerequisites: [], route: guidance(item.target, 'configuration-disagreement') });
   }
   for (const name of latest ? [...rechecked].filter(id => byMachine.get(latest).some(entry => entry.item.target === id)) : [])
     actions.push({ id: `important-unknown/${latest.id}/${name}/recheck`, category: 'important-unknown', subjects: [target(name)],

@@ -37,8 +37,30 @@ export function projectInspection(result) {
   return { kind: 'machine-check', status: result.status, state, ready: complete && sorted.length > 0 && state === 'verified',
     summary: summarize(sorted), items: sorted,
     tools: (result.tools ?? []).filter(tool => tool.selection !== 'unselected').map(({ id, label, state: presence, selection }) => ({ id, label, presence, selection })),
-    options: { targets: result.effectiveOptions?.targets?.value ?? null, network: result.effectiveOptions?.network?.value ?? null },
-    diagnostics: diagnosticsOf(result), followUp: [...(result.followUp ?? [])] };
+    options: { targets: result.effectiveOptions?.targets?.value ?? null, network: result.effectiveOptions?.network?.value ?? null,
+      configuration: result.effectiveOptions?.configuration?.value ?? null },
+    persisted: persistedOf(result), diagnostics: diagnosticsOf(result), followUp: [...(result.followUp ?? [])] };
+}
+
+// What Core reported for each persisted value a `configuration: 'persisted'` inspection found
+// (null for a process-configuration inspection). Its material and member paths are machine-local, so they are dropped.
+function persistedOf(result) {
+  if (!Array.isArray(result.persisted?.values)) return null;
+  return result.persisted.values.map(({ id, repair, managementId, state, certificates, materialSha256 }) =>
+    ({ id, repair, managementId, state, ...(state === 'applied' ? { certificates, materialSha256 } : {}) }));
+}
+const UNREADABLE = 'persisted-configuration-unavailable';
+const unreadableOf = diagnostics => diagnostics.some(diagnostic => diagnostic.reason === UNREADABLE);
+
+// The machine check is this host's own (process-configuration) inspection; the same targets inspected with the
+// persisted configuration are evidence beside it. This names every check whose state differs, never picking one.
+export function projectConfigurationComparison(processCheck, persistedCheck) {
+  const available = persistedCheck?.options?.configuration === 'persisted';
+  const twins = new Map((available ? persistedCheck.items : []).filter(item => item.kind === 'check').map(item => [item.id, item]));
+  const differences = available ? processCheck.items.filter(item => item.kind === 'check' && (twins.get(item.id)?.state ?? 'unknown') !== item.state)
+    .map(item => ({ id: item.id, target: item.target, process: item.state, persisted: twins.get(item.id)?.state ?? 'unknown' })) : [];
+  return { kind: 'configuration-comparison', available, persisted: available ? persistedCheck.persisted : null,
+    unreadable: available && unreadableOf(persistedCheck.diagnostics), differences };
 }
 
 export function projectRepairPreparation(preparation, repair) {
@@ -102,6 +124,13 @@ const notRecheckedText = projection => projection.notRechecked === null
   : projection.notRechecked.length ? `Not re-checked: ${projection.notRechecked.map(item => `${item.target} (${item.state} in the latest machine check)`).join(', ')}.`
     : 'Run the machine check again before claiming machine readiness.';
 
+// Core could not read its custody at all: no value was found or applied, and that is not "none found".
+const persistedText = (values, unreadable) => unreadable
+  ? "Checked with the configuration Core's managed repairs persist for a new process, but Core could not read that configuration."
+  : `Checked with the configuration Core's managed repairs persist for a new process: ${values.length
+  ? values.map(value => `${value.id} ${value.state}${value.state === 'applied' ? ` (${value.repair}, ${value.certificates} certificate${value.certificates === 1 ? '' : 's'})` : ''}`).join(', ')
+  : 'none found'}.`;
+
 // Plain text for the developer's existing AI client. Producing or copying it executes nothing.
 // A machine check marked `beforeRepair` is the latest full check, taken before the repair ran.
 export function readinessGuidance(projections) {
@@ -113,9 +142,19 @@ export function readinessGuidance(projections) {
         lines.push(`Recheck of the repair's targets only: ${projection.scope.join(', ')} (${network}): ${projection.scopeVerified ? 'every checked condition verified for these targets' : 'not verified'}. This is not a machine readiness result.`);
         lines.push(notRecheckedText(projection));
       } else lines.push(`${projection.beforeRepair ? 'Latest machine check, taken before this repair' : 'Machine check'} (${network}): ${projection.ready ? 'ready' : 'not ready'}.`);
+      if (projection.persisted) lines.push(persistedText(projection.persisted, unreadableOf(projection.diagnostics)));
       for (const item of projection.items) {
         lines.push(`- [${item.state}] ${item.id}: ${item.reason}${item.detail ? ` (${item.detail})` : ''}`);
         if (item.guidance) lines.push(`  Guidance: ${item.guidance}`);
+      }
+    } else if (projection.kind === 'configuration-comparison') {
+      if (!projection.available) lines.push("The same checks with the configuration Core's managed repairs persist for a new process did not run, so the two cannot be compared.");
+      else {
+        lines.push(projection.differences.length
+          ? `With the configuration Core's managed repairs persist for a new process, these checks differ from this host's result above, which is the machine's readiness: ${projection.differences
+            .map(item => `${item.id} (this host ${item.process}, persisted ${item.persisted})`).join(', ')}.`
+          : "With the configuration Core's managed repairs persist for a new process, every check gives the same result as this host.");
+        lines.push(persistedText(projection.persisted ?? [], projection.unreadable));
       }
     } else {
       lines.push(`Repair ${projection.repairId} for ${projection.targets.join(', ')}: ${projection.state}.`);

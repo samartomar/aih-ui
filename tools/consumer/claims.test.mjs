@@ -13,10 +13,11 @@ import { reportPanels, reportText } from '../page/app/claims-view.js';
 
 // The records the readiness host produces (contract: urn:aih-ui:readiness-record:1.0.0), built from
 // Core-shaped results through the same projections the host uses.
-const options = targets => ({ targets: { value: targets, origin: 'explicit' }, network: { value: 'declared', origin: 'default' } });
-const inspection = (checks, { targets = ['npm', 'jq'], status = 'complete', observations = [] } = {}) => ({ status, package: { name: '@aihq/core', version: 'x' },
+const options = (targets, configuration) => ({ targets: { value: targets, origin: 'explicit' }, network: { value: 'declared', origin: 'default' },
+  ...(configuration ? { configuration: { value: configuration, origin: 'explicit' } } : {}) });
+const inspection = (checks, { targets = ['npm', 'jq'], status = 'complete', observations = [], configuration, persisted } = {}) => ({ status, package: { name: '@aihq/core', version: 'x' },
   tools: targets.map(id => ({ id, label: id, state: 'runnable', selection: 'requested' })), observations, checks, repairChoices: [], diagnostics: [],
-  effectiveOptions: options(targets), limits: {}, followUp: [] });
+  effectiveOptions: options(targets, configuration), ...(persisted ? { persisted: { values: persisted } } : {}), limits: {}, followUp: [] });
 const check = (id, target, outcome, reason = outcome === 'passed' ? 'version-ok' : 'executable-missing') => ({ id, target, outcome, reason, detail: '' });
 const operation = (id, effects) => ({ id, purpose: id, kind: 'file.write', scope: 'user', effects, ownership: 'managed', requires: [], checks: [], details: {} });
 const preparation = effects => ({ status: 'ready', diagnostics: [], review: { operations: effects.map((value, index) => operation(`trust/op${index}`, value)), reviewDigest: 'd' } });
@@ -28,12 +29,15 @@ const sha = value => createHash('sha256').update(JSON.stringify(value)).digest('
 function world() {
   let tick = Date.parse('2026-10-15T10:00:00.000Z'), serial = 0;
   const stamp = () => new Date(tick += 1000).toISOString();
-  const machine = (checks, extra = {}) => {
-    const result = inspection(checks, extra);
-    return { schema: READINESS_RECORD_SCHEMA, id: `machine-${++serial}`, kind: 'machine-check', capturedAt: stamp(), sha256: sha(result),
-      core: { ...result.package }, check: projectInspection(result) };
+  // This host's (process) inspection and the persisted inspection of the same targets, which mirrors it unless a
+  // test says otherwise. A legacy record, from before the option, has neither a configuration nor the persisted one.
+  const machine = (checks, { persistedChecks = checks, persistedValues = [], legacy = false, ...extra } = {}) => {
+    const result = inspection(checks, { ...extra, ...(legacy ? {} : { configuration: 'process' }) });
+    const persistedResult = legacy ? null : inspection(persistedChecks, { ...extra, configuration: 'persisted', persisted: persistedValues });
+    return { schema: READINESS_RECORD_SCHEMA, id: `machine-${++serial}`, kind: 'machine-check', capturedAt: stamp(), sha256: sha({ result, persistedResult }),
+      core: { ...result.package }, check: projectInspection(result), ...(persistedResult ? { persistedCheck: projectInspection(persistedResult) } : {}) };
   };
-  const repair = ({ before = null, targets = ['npm'], applied = [['applied', 'passed']], after, afterOptions = { targets }, repairId = 'node-npm-ca', recheck = ['already-satisfied'] }) => {
+  const repair = ({ before = null, targets = ['npm'], applied = [['applied', 'passed']], after, afterOptions = { targets, configuration: 'persisted', persisted: [] }, repairId = 'node-npm-ca', recheck = ['already-satisfied'] }) => {
     const result = run('complete', applied), fresh = preparation(recheck), post = after ? inspection(after, afterOptions) : null;
     const appliedAt = stamp(), recheckedAt = stamp();
     const outcome = projectRepairOutcome({ run: result, recheck: fresh, inspection: post, repair: { id: repairId, targets }, latestCheck: before?.check ?? null });
@@ -105,7 +109,8 @@ test('the same record passed twice counts once; a re-imported event under anothe
 
   // A re-import carries the adapter's claim under a new claim id but the same event identity.
   const claimSet = JSON.parse(JSON.stringify(once.claimSet));
-  const precheck = claimSet.claims.find(claim => claim.measure === 'condition:npm/tls/node' && claim.id.startsWith(before.id));
+  const cited = claimSet.calculations.find(entry => entry.id === 'verified-repairs').attempts.find(entry => entry.condition === 'condition:npm/tls/node').precheck;
+  const precheck = claimSet.claims.find(claim => claim.id === cited.id && claim.revision === cited.revision);
   claimSet.claims.push({ ...JSON.parse(JSON.stringify(precheck)), id: `${precheck.id}-reimport` });
   const request = claimSet.calculations.find(entry => entry.id === 'verified-repairs');
   request.attempts.push({ ...JSON.parse(JSON.stringify(request.attempts.find(entry => entry.condition === 'condition:npm/tls/node'))),
@@ -142,6 +147,101 @@ test('failed precheck, applied repair, passing recheck of the same condition is 
   assert.equal(panels.repairs.value, '1');
   assert.match(panels.repairs.summary, /^1 verified repair\b/);
   assert.match(panels.repairs.items.find(entry => entry.details.includes('Core reason: verified')).text, /^Counted — npm npm\/tls\/node/);
+});
+
+// What Core reports for the managed npm cafile a persisted re-check applied (its paths are machine-local values).
+const persistedCafile = (state = 'applied') => ({ id: 'npm-cafile', repair: 'node-npm-ca', managementId: 'm-1', member: { path: '/home/dev/.npmrc', blockId: 'b-1' }, state,
+  ...(state === 'applied' ? { value: '/home/dev/.aih/npm-ca.pem', certificates: 1, materialSha256: 'a'.repeat(64) } : {}) });
+
+test('a repair is verified against a precheck failed in both configurations, and its applied persisted values are measured claims', () => {
+  const w = world();
+  const before = w.machine([tls('failed'), check('jq/version', 'jq', 'passed')]);
+  const repaired = w.repair({ before, after: [tls('passed')], afterOptions: { targets: ['npm'], configuration: 'persisted', persisted: [persistedCafile()] } });
+  const { claimSet, projection } = readinessReport({ records: [before, repaired] });
+  assert.equal(repairCount(projection).count, 1);
+  assert.equal(attemptFor(projection, 'npm', 'npm/tls/node').reason, 'verified');
+  const persisted = claimSet.claims.filter(claim => claim.measure === 'persisted-configuration');
+  assert.deepEqual(persisted.map(claim => [claim.id, claim.kind, claim.value, claim.subject, claim.scope, claim.capturedAt, claim.revision]),
+    [[`${repaired.id}/persisted/npm-cafile`, 'measured', { amount: 'applied', unit: 'state' }, { kind: 'persisted-configuration', id: 'npm-cafile' },
+      { kind: 'machine', targets: ['npm'] }, repaired.repair.recheckedAt, repaired.sha256]]);
+  assert.deepEqual(persisted[0].sources, [{ id: repaired.id, schema: READINESS_RECORD_SCHEMA, sha256: repaired.sha256 }, { id: 'run-1', schema: 'urn:aihq:core:run-result:1.3.0' }]);
+  assert.ok(!JSON.stringify(claimSet).includes('/home/dev'), 'no machine-local path reaches a claim');
+  const items = reportPanels(projection).claims.items;
+  const shown = items.find(entry => entry.id.startsWith(`${repaired.id}/persisted/`));
+  assert.equal(shown.text, 'persisted configuration npm-cafile found by the re-check of npm');
+  assert.ok(shown.details.includes('Value: applied'), JSON.stringify(shown.details));
+  assert.ok(reportText(projection).includes('persisted configuration npm-cafile found by the re-check of npm'));
+  assert.ok(items.some(entry => entry.text === 'npm/tls/node on npm with the persisted configuration' && entry.details.includes('Value: failed')), 'the persisted precheck is listed');
+  // The journal keeps what Core reported about the value, without its paths.
+  assert.deepEqual(repaired.repair.outcome.condition.persisted, [{ id: 'npm-cafile', repair: 'node-npm-ca', managementId: 'm-1', state: 'applied', certificates: 1, materialSha256: 'a'.repeat(64) }]);
+});
+
+test('a value Core did not apply is claimed with its own state, and a re-check with none applied claims nothing', () => {
+  const w = world();
+  const before = w.machine([tls('failed')]);
+  const modified = w.repair({ before, after: [tls('failed')], afterOptions: { targets: ['npm'], status: 'incomplete', configuration: 'persisted', persisted: [persistedCafile('modified')] } });
+  const none = w.repair({ before, after: [tls('failed')], afterOptions: { targets: ['npm'], configuration: 'persisted', persisted: [] } });
+  const { claimSet } = readinessReport({ records: [before, modified, none] });
+  const persisted = claimSet.claims.filter(claim => claim.measure === 'persisted-configuration');
+  assert.deepEqual(persisted.map(claim => [claim.id, claim.value.amount, claim.coverage.state]), [[`${modified.id}/persisted/npm-cafile`, 'modified', 'partial']]);
+  assert.deepEqual(modified.repair.outcome.condition.persisted, [{ id: 'npm-cafile', repair: 'node-npm-ca', managementId: 'm-1', state: 'modified' }]);
+});
+
+// Precheck for this host (process) and with the persisted configuration, then the persisted recheck after an applied repair.
+for (const [name, processBefore, persistedBefore, after, reason, counted] of [
+  ['a developer-trusted CA: passes for this host, fails persisted', 'passed', 'failed', 'passed', 'already-healthy', false],
+  ['broken in both configurations, then the persisted recheck passes', 'failed', 'failed', 'passed', 'verified', true],
+  ['broken in both configurations, and the persisted recheck still fails', 'failed', 'failed', 'failed', 'repair-not-verified', false],
+  ["a Core block already present but this host started earlier: fails for this host, passes persisted", 'failed', 'passed', 'passed', 'already-healthy', false],
+  ['fails for this host, unknown persisted', 'failed', 'unavailable', 'passed', 'unknown-precondition', false],
+  ['unknown for this host, fails persisted', 'unavailable', 'failed', 'passed', 'unknown-precondition', false],
+  ['broken in both configurations, and the recheck failed before Core answered', 'failed', 'failed', null, 'applied-unverified', false],
+]) test(`${name}: ${counted ? 'one verified repair' : `not counted (${reason})`}`, () => {
+  const w = world();
+  const before = w.machine([tls(processBefore)], { persistedChecks: [tls(persistedBefore)] });
+  const repaired = w.repair({ before, ...(after ? { after: [tls(after)] } : {}) });
+  const { projection } = readinessReport({ records: [before, repaired] });
+  const attempt = attemptFor(projection, 'npm', 'npm/tls/node');
+  assert.deepEqual([attempt.reason, attempt.counted, repairCount(projection).count], [reason, counted, counted ? 1 : 0]);
+  // A precheck failed in both configurations is the persisted one, the same configuration as the recheck.
+  if (processBefore === 'failed' && persistedBefore === 'failed') assert.equal(attempt.precheck.id, `${before.id}/persisted-condition/npm/tls/node`);
+});
+
+test('when the two configurations disagree the report says so, and the score and blockers follow this host', () => {
+  const w = world();
+  const before = w.machine([tls('passed'), check('jq/version', 'jq', 'failed')], { persistedChecks: [tls('failed'), check('jq/version', 'jq', 'failed')] });
+  const { projection } = readinessReport({ records: [before] });
+  const disagreement = projection.actions.filter(action => action.id.endsWith('/configuration'));
+  assert.deepEqual(disagreement.map(action => [action.category, action.reason]), [['important-unknown',
+    "The check npm/tls/node on npm passed for this host but failed with the configuration Core's managed repairs persist for a new process; the score uses this host's result."]]);
+  assert.ok(!projection.actions.some(action => action.category === 'blocker' && action.subjects[0].id === 'npm'), 'a persisted failure alone is not a blocker');
+  assert.deepEqual([scoreOf(projection).numerator, scoreOf(projection).denominator], [1, 2]);
+  assert.match(reportText(projection), /passed for this host but failed with the configuration Core's managed repairs persist/);
+});
+
+test('a precheck from a record without the persisted inspection never pairs', () => {
+  const w = world();
+  const legacy = w.machine([tls('failed')], { legacy: true });
+  const repaired = w.repair({ before: legacy, after: [tls('passed')], afterOptions: { targets: ['npm'], configuration: 'persisted', persisted: [persistedCafile()] } });
+  const { projection } = readinessReport({ records: [legacy, repaired] });
+  assert.equal(repairCount(projection).count, 0);
+  assert.equal(attemptFor(projection, 'npm', 'npm/tls/node').reason, 'unknown-precondition');
+  // A legacy recheck, made with this host's own trust, cannot show what a repair persisted either.
+  const old = w.machine([tls('failed')], { legacy: true });
+  const { projection: legacyPair } = readinessReport({ records: [old, w.repair({ before: old, after: [tls('passed')], afterOptions: { targets: ['npm'] } })] });
+  assert.equal(repairCount(legacyPair).count, 0);
+  const current = w.machine([tls('failed')]);
+  const { projection: processRecheck } = readinessReport({ records: [current, w.repair({ before: current, after: [tls('passed')], afterOptions: { targets: ['npm'], configuration: 'process' } })] });
+  assert.equal(attemptFor(processRecheck, 'npm', 'npm/tls/node').reason, 'unknown-precondition');
+});
+
+test('a recheck that failed before Core answered keeps the precheck, so the repair asks for review', () => {
+  const w = world();
+  const before = w.machine([tls('failed')]);
+  const failed = w.repair({ before });
+  const { projection } = readinessReport({ records: [before, failed] });
+  assert.equal(attemptFor(projection, 'npm', 'npm/tls/node').reason, 'applied-unverified');
+  assert.ok(projection.actions.some(action => action.category === 'urgent-review'), JSON.stringify(projection.actions));
 });
 
 test('an already-healthy condition and an unknown-cause recovery are not counted, each with its Core reason', () => {

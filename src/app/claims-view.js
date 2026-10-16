@@ -29,7 +29,7 @@ const COMPARE_REASONS = {
 const SERIES = [['file-size', 'Measured file size'], ['configured-context', 'Estimated configured context'], ['observed-usage', 'Observed usage']];
 const SERIES_EMPTY = { 'file-size': 'No Scan report has been read.', 'configured-context': 'No estimate was supplied.',
   'observed-usage': 'Unavailable — no usage observation was supplied.' };
-const ROLES = { check: 'check', condition: 'condition', postcheck: 'condition after repair', repair: 'repair' };
+const ROLES = new Set(['check', 'condition', 'persisted-condition', 'postcheck', 'repair']);
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 const sentence = text => /[.!?]$/.test(text) ? text : `${text}.`;
@@ -40,12 +40,13 @@ const panel = (id, title, summary, tone, items = [], extra = {}) => ({ id, title
 
 // Claim ids from the Workbench adapter read "<record>/<role>/<check id>"; any other claim is shown by its measure and subject.
 const READINESS_PRODUCER = 'aih-ui/readiness';
-const checkOf = claim => {
+const parsed = claim => {
   if (claim?.producer?.id !== READINESS_PRODUCER) return null;
   const [, role, ...rest] = String(claim.id).split('/');
-  return ROLES[role] && rest.length ? rest.join('/') : null;
+  return ROLES.has(role) && rest.length ? { role, check: rest.join('/') } : null;
 };
 const CONDITION = /^condition:/;
+const PERSISTED = 'persisted-configuration';
 const conditionKey = measure => String(measure).replace(CONDITION, '');
 
 export function reportPanels(projection) {
@@ -54,11 +55,15 @@ export function reportPanels(projection) {
   const label = ref => {
     const claim = byRef.get(keyOf(ref));
     if (!claim) return String(ref?.id ?? '');
-    return `${checkOf(claim) ?? claim.measure} on ${claim.subject.id}`;
+    // A persisted value Core reported for a repair's re-check names the targets that re-check covered, not a target of the value.
+    if (claim.measure === PERSISTED) return `persisted configuration ${claim.subject.id} found by the re-check of ${list(claim.scope?.targets).join(', ')}`;
+    // The same machine check made with the configuration Core's managed repairs persist for a new process says so.
+    const known = parsed(claim);
+    return `${known?.check ?? claim.measure} on ${claim.subject.id}${known?.role === 'persisted-condition' ? ' with the persisted configuration' : ''}`;
   };
   const calculation = method => list(projection?.calculations).find(result => result.method?.id === method);
   const valueText = claim => claim.kind === 'unknown' ? `Unavailable — ${claim.unknownReason}`
-    : claim.value.unit === 'outcome' ? String(claim.value.amount) : `${claim.value.amount} ${claim.value.unit}`;
+    : ['outcome', 'state'].includes(claim.value.unit) ? String(claim.value.amount) : `${claim.value.amount} ${claim.value.unit}`;
   const dedupText = claim => {
     const { status, canonical } = claim.dedup ?? { status: 'unique' };
     if (status === 'canonical') return 'Canonical record of an event imported more than once';
@@ -68,7 +73,8 @@ export function reportPanels(projection) {
     return 'Unique';
   };
   const claimTone = claim => claim.kind === 'unknown' ? 'warning' : claim.value.unit === 'outcome'
-    ? ({ passed: 'success', failed: 'error' })[claim.value.amount] ?? 'neutral' : 'neutral';
+    ? ({ passed: 'success', failed: 'error' })[claim.value.amount] ?? 'neutral'
+    : claim.measure === PERSISTED ? ({ applied: 'neutral' })[claim.value.amount] ?? 'warning' : 'neutral';
   const claimItem = (claim, text) => item(`${claim.id}@${claim.revision}`, claimTone(claim), text, [
     `Kind: ${KIND_LABELS[claim.kind] ?? 'Unknown'}`,
     `Value: ${valueText(claim)}`,
@@ -132,7 +138,7 @@ export function reportPanels(projection) {
         ...list(action.prerequisites).map(text => `Prerequisite: ${text}`)])));
 
   // Claims: the checks, conditions and repairs. Context claims have their own panel.
-  const isContext = claim => !['configuration-check', 'repair', 'external-repair'].includes(claim.measure) && !CONDITION.test(claim.measure);
+  const isContext = claim => !['configuration-check', 'repair', 'external-repair', PERSISTED].includes(claim.measure) && !CONDITION.test(claim.measure);
   const evidence = claims.filter(claim => !isContext(claim));
   const claimsPanel = panel('claims', 'Claims', evidence.length ? `${plural(evidence.length, 'claim')} behind the score and repairs.` : 'No check or repair claim has been recorded.',
     'neutral', evidence.map(claim => claimItem(claim, label(claim))));

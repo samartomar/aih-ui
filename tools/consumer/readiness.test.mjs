@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { READINESS_STATES, projectInspection, projectRepairPreparation, projectRepairOutcome, readinessGuidance } from './readiness.mjs';
+import { READINESS_STATES, projectConfigurationComparison, projectInspection, projectRepairPreparation, projectRepairOutcome, readinessGuidance } from './readiness.mjs';
 import * as readiness from './readiness.mjs';
 
 // Core-shaped records: InspectResult, PreparationResult (serializable part) and RunResult.
@@ -134,6 +134,58 @@ test('a repair recheck covers only its targets and never states machine readines
     inspection: inspection([check('npm/tls/node', 'npm', 'passed', 'connected')], targets(['npm'])), repair });
   assert.equal(alone.condition.notRechecked, null);
   assert.match(readinessGuidance([alone, alone.condition]), /Other targets were not re-checked/);
+});
+
+test('a persisted inspection carries its configuration and what Core reported per persisted value, never a path', () => {
+  const persisted = { values: [
+    { id: 'node-extra-ca-certs', repair: 'node-npm-ca', managementId: 'm-1', member: { path: '/home/dev/.profile', blockId: 'b-1' }, state: 'applied',
+      value: '/home/dev/.aih/ca.pem', certificates: 2, materialSha256: 'b'.repeat(64) },
+    { id: 'npm-cafile', repair: 'node-npm-ca', managementId: 'm-2', member: { path: '/home/dev/.npmrc', blockId: 'b-2' }, state: 'unowned' }] };
+  const projected = projectInspection(inspection([check('npm/tls/node/registry.npmjs.org', 'npm', 'passed', 'connected')],
+    { effectiveOptions: { ...options, configuration: { value: 'persisted', origin: 'explicit' } }, persisted }));
+  assert.equal(projected.options.configuration, 'persisted');
+  assert.deepEqual(projected.persisted, [
+    { id: 'node-extra-ca-certs', repair: 'node-npm-ca', managementId: 'm-1', state: 'applied', certificates: 2, materialSha256: 'b'.repeat(64) },
+    { id: 'npm-cafile', repair: 'node-npm-ca', managementId: 'm-2', state: 'unowned' }]);
+  assert.ok(!JSON.stringify(projected).includes('/home/dev'));
+  const text = readinessGuidance([projected]);
+  assert.match(text, /^Checked with the configuration Core's managed repairs persist for a new process: node-extra-ca-certs applied \(node-npm-ca, 2 certificates\), npm-cafile unowned\.$/m);
+  assert.doesNotMatch(text, /\/home\/dev/);
+  const none = projectInspection(inspection([], { effectiveOptions: { ...options, configuration: { value: 'persisted', origin: 'explicit' } }, persisted: { values: [] } }));
+  assert.match(readinessGuidance([none]), /^Checked with the configuration Core's managed repairs persist for a new process: none found\.$/m);
+  // Core could not read its custody: that is not "none found".
+  const unreadable = projectInspection(inspection([check('npm/tls/node/registry.npmjs.org', 'npm', 'unavailable', 'persisted-configuration-unavailable')], {
+    status: 'incomplete', effectiveOptions: { ...options, configuration: { value: 'persisted', origin: 'explicit' } }, persisted: { values: [] },
+    diagnostics: [{ code: 'PREREQUISITE_UNAVAILABLE', reason: 'persisted-configuration-unavailable', message: 'Custody could not be read.' }] }));
+  const unreadableText = readinessGuidance([unreadable]);
+  assert.match(unreadableText, /^Checked with the configuration Core's managed repairs persist for a new process, but Core could not read that configuration\.$/m);
+  assert.doesNotMatch(unreadableText, /none found/);
+  const processDefault = projectInspection(inspection([], { effectiveOptions: { ...options, configuration: { value: 'process', origin: 'default' } } }));
+  assert.deepEqual([processDefault.options.configuration, processDefault.persisted], ['process', null]);
+  assert.doesNotMatch(readinessGuidance([processDefault]), /persist/);
+  assert.equal(projectInspection(inspection([])).options.configuration, null, 'a Core without the option reports none');
+});
+
+test("the machine check is this host's result; the persisted inspection beside it is compared, and a disagreement is said plainly", () => {
+  const persistedOptions = { effectiveOptions: { ...options, configuration: { value: 'persisted', origin: 'explicit' } } };
+  const host = projectInspection(inspection([check('npm/tls/node/registry.npmjs.org', 'npm', 'passed', 'connected'), check('jq/version', 'jq', 'failed', 'version-exit')],
+    { effectiveOptions: { ...options, configuration: { value: 'process', origin: 'default' } } }));
+  const persisted = projectInspection(inspection([check('npm/tls/node/registry.npmjs.org', 'npm', 'failed', 'certificate-chain'), check('jq/version', 'jq', 'failed', 'version-exit')],
+    { ...persistedOptions, persisted: { values: [] } }));
+  const comparison = projectConfigurationComparison(host, persisted);
+  assert.deepEqual(comparison, { kind: 'configuration-comparison', available: true, persisted: [], unreadable: false,
+    differences: [{ id: 'npm/tls/node/registry.npmjs.org', target: 'npm', process: 'verified', persisted: 'failed' }] });
+  const text = readinessGuidance([host, comparison]);
+  assert.match(text, /^Machine check \(complete, network declared\): not ready\.$/m);
+  assert.match(text, /^With the configuration Core's managed repairs persist for a new process, these checks differ from this host's result above, which is the machine's readiness: npm\/tls\/node\/registry\.npmjs\.org \(this host verified, persisted failed\)\.$/m);
+  assert.match(text, /^Checked with the configuration Core's managed repairs persist for a new process: none found\.$/m);
+  const same = projectConfigurationComparison(host, projectInspection(inspection(host.items.map(item => check(item.id, item.target, item.outcome, item.reason)), { ...persistedOptions, persisted: { values: [] } })));
+  assert.deepEqual(same.differences, []);
+  assert.match(readinessGuidance([host, same]), /every check gives the same result as this host\./);
+  // The persisted inspection failed before Core answered: nothing is compared or claimed.
+  const missing = projectConfigurationComparison(host, projectInspection({ status: 'incomplete', diagnostics: [{ code: 'PERSISTED_CHECK_FAILED', message: 'x' }] }));
+  assert.deepEqual([missing.available, missing.differences, missing.persisted], [false, [], null]);
+  assert.match(readinessGuidance([host, missing]), /did not run, so the two cannot be compared\./);
 });
 
 test('guidance text is plain, failure-first and states that nothing was executed', () => {

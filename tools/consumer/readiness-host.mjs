@@ -6,7 +6,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { apply, inspect, prepare } from '@aihq/core';
 import { targets as coreTargets } from '@aihq/core/harness';
 import { READINESS_RECORD_SCHEMA, readinessReport } from './claims.mjs';
-import { projectInspection, projectRepairOutcome, projectRepairPreparation, readinessGuidance } from './readiness.mjs';
+import { projectConfigurationComparison, projectInspection, projectRepairOutcome, projectRepairPreparation, readinessGuidance } from './readiness.mjs';
 
 const KNOWN_TARGETS = new Set(coreTargets.map(target => target.id));
 const NETWORKS = ['declared', 'off'];
@@ -15,6 +15,12 @@ const MAX_RECORDS = 64;
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const coreIdentity = inspection => inspection.package ? { name: inspection.package.name, version: inspection.package.version } : null;
 const CONTROLS = Object.freeze({ logging: 'off' });
+// Node reads NODE_EXTRA_CA_CERTS only when a process starts, so this long-running host cannot see the CA a
+// repair persists. The machine check stays Core's default (this host's own trust) and is the machine's
+// readiness; the same targets are also inspected with the trust Core's managed repairs persist for a new
+// process, as evidence beside it. The post-repair recheck uses that persisted configuration.
+const CONFIGURATION = 'persisted';
+const persistedFailure = error => ({ status: 'incomplete', diagnostics: [{ code: 'PERSISTED_CHECK_FAILED', message: `Persisted-configuration check failed: ${error.message}` }] });
 const failure = (code, message) => ({ status: 'error', diagnostics: [{ code, message }] });
 const invalid = message => failure('INVALID_REQUEST', message);
 const lost = () => ({ status: 'lost', diagnostics: [{ code: 'SESSION_LOST', reason: 'unknown-or-consumed-session',
@@ -50,6 +56,7 @@ export function createReadinessHost({ repairs = [] } = {}) {
   // The latest machine check lets a repair outcome say which targets its recheck did not cover.
   let latestCheck = null;
   let latestCheckId = null;
+  let latestComparison = null;
   const journal = [];
   let lastStamp = 0;
   const stamp = () => {
@@ -83,14 +90,21 @@ export function createReadinessHost({ repairs = [] } = {}) {
       if (targets !== undefined && targetsError(targets)) return invalid(targetsError(targets));
       if (network !== undefined && !NETWORKS.includes(network)) return invalid('network must be declared or off');
       try {
-        const result = await inspect({ ...(targets ? { targets } : {}), ...(network ? { network } : {}) });
+        const scope = { ...(targets ? { targets } : {}), ...(network ? { network } : {}) };
+        const result = await inspect(scope);
+        // Same targets and network authority, one after the other; a failure here leaves the comparison unavailable.
+        const persistedResult = await inspect({ ...scope, configuration: CONFIGURATION }).catch(persistedFailure);
         const capturedAt = stamp();
         const projection = projectInspection(result);
+        const persistedCheck = projectInspection(persistedResult);
+        const comparison = projectConfigurationComparison(projection, persistedCheck);
         const id = randomUUID();
-        append({ schema: READINESS_RECORD_SCHEMA, id, kind: 'machine-check', capturedAt, sha256: digest(result), core: coreIdentity(result), check: projection });
+        append({ schema: READINESS_RECORD_SCHEMA, id, kind: 'machine-check', capturedAt, sha256: digest({ result, persistedResult }), core: coreIdentity(result),
+          check: projection, persistedCheck });
         latestCheck = projection;
         latestCheckId = id;
-        return { status: 'ok', value: { projection, guidance: readinessGuidance([projection]) } };
+        latestComparison = comparison;
+        return { status: 'ok', value: { projection, persistedCheck, comparison, guidance: readinessGuidance([projection, comparison]) } };
       } catch (error) { return failure('CHECK_FAILED', `Machine check failed: ${error.message}`); }
     },
 
@@ -126,13 +140,14 @@ export function createReadinessHost({ repairs = [] } = {}) {
       // Taken now, so a check that finishes while the repair runs is never labelled as before it.
       const before = latestCheck;
       const beforeId = latestCheckId;
+      const beforeComparison = latestComparison;
       try {
         const run = await apply(handle, { approved: true, origin: 'interactive', reviewDigest: session.reviewDigest }, CONTROLS);
         const appliedAt = stamp();
         // The same condition is checked again by a fresh preparation (its handle is discarded)
         // and by inspecting the repair's targets; either may be unavailable without hiding the run.
         const fresh = await prepare(request(repair), CONTROLS).then(serialize, () => undefined);
-        const inspection = await inspect({ targets: [...repair.targets], network: repair.network }).catch(error => ({ status: 'incomplete',
+        const inspection = await inspect({ targets: [...repair.targets], network: repair.network, configuration: CONFIGURATION }).catch(error => ({ status: 'incomplete',
           diagnostics: [{ code: 'RECHECK_FAILED', message: `Recheck failed: ${error.message}` }] }));
         const recheckedAt = stamp();
         const outcome = projectRepairOutcome({ run, recheck: fresh, inspection, repair, latestCheck: before });
@@ -145,7 +160,8 @@ export function createReadinessHost({ repairs = [] } = {}) {
             appliedAt, recheckedAt, outcome } });
         const recheck = outcome.condition;
         const machine = before ? { ...before, beforeRepair: true } : null;
-        return { status: 'ok', value: { outcome, recheck, machine, guidance: readinessGuidance([...(machine ? [machine] : []), outcome, recheck]) } };
+        return { status: 'ok', value: { outcome, recheck, machine,
+          guidance: readinessGuidance([...(machine ? [machine, beforeComparison] : []), outcome, recheck]) } };
       } catch (error) { return failure('APPLY_FAILED', `Repair apply failed: ${error.message}`); }
     },
   };
