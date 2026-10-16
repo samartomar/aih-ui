@@ -23,6 +23,14 @@ test('a changed setup identity replaces the setup default; clearing it removes o
   assert.equal(identity.offer(null), undefined);
 });
 
+test('saving setup again with the same identity changes nothing', () => {
+  const identity = createReviewIdentity();
+  identity.offer(alice);
+  assert.equal(identity.offer({ ...alice }), undefined);
+  identity.offer(null);
+  assert.deepEqual(identity.offer(alice), { recipient: alice, fromSetup: true });
+});
+
 test('a session choice wins over later setup changes, including clearing', () => {
   const identity = createReviewIdentity();
   identity.offer(alice);

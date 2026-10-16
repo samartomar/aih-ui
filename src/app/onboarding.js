@@ -1,5 +1,5 @@
 import { el, collectIds } from "./dom.js";
-import { CAPABILITIES, newSetupSettings, experienceLabel, organizationErrors, settingsErrors } from "./setup-model.js";
+import { CAPABILITIES, REVIEWER_KINDS, newSetupSettings, experienceLabel, organizationErrors, settingsErrors } from "./setup-model.js";
 import { reviewerText, setupSummary } from "./setup-summary.js";
 import { loadSetup, saveSetup, updateSetup } from "./settings-client.js";
 
@@ -135,7 +135,7 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
     const kind = el("select", "setup-input");
     kind.id = "setup-field-reviewer-kind";
     kind.name = "reviewerKind";
-    for (const value of ["individual", "organization"]) kind.append(new Option(value, value));
+    for (const value of REVIEWER_KINDS) kind.append(new Option(value, value));
     reviewerKind = draft.reviewer?.kind ?? reviewerKind;
     kind.value = reviewerKind;
     const caption = el("label", "block text-on-surface font-medium", "Reviewing as (optional)");
@@ -164,9 +164,12 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
     kind.addEventListener("change", sync);
     input.addEventListener("input", sync);
     fields.set("reviewer", input);
-    const help = el("p", "text-outline text-[11px] leading-relaxed", "Only labels saved review judgments as yours. It is kept in the local setup file and is never written into a policy or draft you export. Leave empty to show every saved judgment as imported.");
+    const help = el("p", "text-outline text-[11px] leading-relaxed", "Only labels saved review judgments as yours. It is kept in the local setup file, used only by this Workbench's local service on this computer, and is never written into a policy or draft you export or sent to another service. Leave empty to show every saved judgment as imported.");
     help.id = "setup-field-reviewer-hint";
     const row = el("div", "setup-reviewer");
+    row.setAttribute("role", "group");
+    caption.id = "setup-field-reviewer-caption";
+    row.setAttribute("aria-labelledby", caption.id);
     row.append(kindLabel, kind, input);
     wrapper.append(caption, row, help);
     return wrapper;

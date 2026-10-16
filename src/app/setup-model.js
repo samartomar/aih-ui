@@ -44,7 +44,7 @@ export function organizationErrors(organization, role) {
   return errors;
 }
 
-const REVIEWER_KINDS = ["individual", "organization"];
+export const REVIEWER_KINDS = ["individual", "organization"];
 const REVIEWER_MESSAGE = "Choose individual or organization and enter an identity (up to 254 characters, no leading or trailing spaces), or leave it empty.";
 
 /** Optional reviewing identity: absent means not set. A present value must be exact. */

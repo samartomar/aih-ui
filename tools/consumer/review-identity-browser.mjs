@@ -102,7 +102,8 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
     await page.locator('#setup-dialog').waitFor({ state: 'visible' });
     const id = page.locator('#setup-field-reviewer-id');
     await page.locator('#setup-next:not([disabled])').waitFor();
-    while (!await id.isVisible()) await page.locator('#setup-next').click();
+    for (let step = 0; step < 6 && !await id.isVisible(); step++) await page.locator('#setup-next').click();
+    await id.waitFor();
     if (shot) await page.screenshot({ path: join(output, shot.before), fullPage: true });
     if (reviewer) await page.getByLabel('Reviewer kind', { exact: true }).selectOption(reviewer.kind);
     await id.fill(reviewer?.id ?? '');
@@ -180,7 +181,7 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
     assert.deepEqual(await origins(defaulted), { 'review-me': 'imported', 'review-team': 'recipient' });
     scenarios.push('session-choice-wins', 'session-choice-survives-setup-edit');
 
-    // e. Never exported: a fresh page defaults to the sentinel; ordinary edits and saves must not carry it anywhere.
+    // f. Never exported: a fresh page defaults to the sentinel; ordinary edits and saves must not carry it anywhere.
     const settingsPosts = sent.filter(post => post.path.startsWith('/api/workbench-settings'));
     assert.ok(settingsPosts.some(post => post.body.includes(SENTINEL)), 'The setup save is the one place the identity is sent.');
     const exporting = await openPage();
@@ -204,7 +205,7 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
     await shot(exporting, '06-never-exported.png');
     scenarios.push('identity-not-in-downloaded-policy', 'identity-only-as-recipient-label');
 
-    // f. Clearing returns every judgment to imported, and the setup is left as found.
+    // g. Clearing returns every judgment to imported, and the setup is left as found.
     await editSetup(exporting, undefined);
     assert.equal(await setupReviewer(exporting), undefined);
     const cleared = await openPage();
