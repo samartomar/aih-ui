@@ -16,6 +16,7 @@ import { createMixedService } from './mixed-service.mjs';
 import { installedFamilies } from './installed-families.mjs';
 import { inspectAuthenticatedReviewEvidence } from './review-host.mjs';
 import { intakePersonalFolder } from './personal-folder.mjs';
+import { observeCheckout } from './workspace-host.mjs';
 
 export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, port = 0 } = {}) {
   const installed = await readInstalledRelease({
@@ -36,7 +37,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
     return { ...descriptor, bytes: new Uint8Array(await readFile(path)) };
   }));
   const familyInventories = await installedFamilies();
-  const mixedService = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, maintenanceSource });
+  const mixedService = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, maintenanceSource, observeCheckout });
   const authoringRoots = { maintained: catalogRoot };
   if (projectRoot) {
     const staging = await mkdtemp(join(tmpdir(), 'aih-authoring-materials-'));
@@ -71,7 +72,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
       const client = { usedAt: now, stages: [], grants: new Map(), roots: { ...authoringRoots } };
       clients.set(id, client);
       client.ready = (async () => {
-        client.mixed = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, maintenanceSource });
+        client.mixed = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, maintenanceSource, observeCheckout });
         client.recipeMaterials = client.mixed.inventories.flatMap(i => i.materials ?? []);
         client.host = projectRoot ? createHost({ projectRoot, materialRoots: client.roots, organizationSource, recipeMaterials: client.recipeMaterials, controls }) : null;
       })();

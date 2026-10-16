@@ -5,6 +5,7 @@ import { checkIntentShape } from './intent-shape.mjs';
 import { digestBytes, hash, object, only } from './intake.mjs';
 import { MAINTENANCE_DISPOSITION_RECORD_SCHEMA, MAINTENANCE_CHECK_RECORD_SCHEMA, dispositionProblem, dispositionId, checkProblem } from './maintenance-record.mjs';
 import { IMPROVEMENT_SUGGESTION_RECORD_SCHEMA, IMPROVEMENT_DISMISSAL_RECORD_SCHEMA, suggestionProblem, suggestionDerivedProblem, dismissalProblem, dismissalId as improvementDismissalId, unlinkedDismissal } from './improvement-record.mjs';
+import { WORKSPACE_DECLARATION_RECORD_SCHEMA, LOCAL_BINDING_RECORD_SCHEMA, declarationProblem, declarationDerivedProblem, bindingProblem, bindingDerivedProblem } from './workspace-record.mjs';
 import { ORGANIZATION_DRAFT_RECORD_SCHEMA, organizationDraftProblem, organizationDraftDerivedProblem } from './organization-draft-record.mjs';
 export const JOURNEY_SCHEMA_PREFIX = 'urn:aihq:workbench:journey-envelope:';
 export const JOURNEY_SCHEMA = `${JOURNEY_SCHEMA_PREFIX}1.0.0`;
@@ -19,7 +20,9 @@ export const JOURNEY_RECORD_KINDS = { [DRAFT_RECORD_SCHEMA]: { kind: 'unresolved
   [MAINTENANCE_CHECK_RECORD_SCHEMA]: { kind: 'maintenance-check', version: '1.0.0', required: false },
   [IMPROVEMENT_SUGGESTION_RECORD_SCHEMA]: { kind: 'improvement-suggestion', version: '1.0.0', required: false },
   [IMPROVEMENT_DISMISSAL_RECORD_SCHEMA]: { kind: 'improvement-dismissal', version: '1.0.0', required: false },
-  [ORGANIZATION_DRAFT_RECORD_SCHEMA]: { kind: 'organization-draft', version: '1.0.0', required: true } };
+  [ORGANIZATION_DRAFT_RECORD_SCHEMA]: { kind: 'organization-draft', version: '1.0.0', required: true },
+  [WORKSPACE_DECLARATION_RECORD_SCHEMA]: { kind: 'workspace-declaration', version: '1.0.0', required: false },
+  [LOCAL_BINDING_RECORD_SCHEMA]: { kind: 'local-binding', version: '1.0.0', required: false } };
 const known = schema => Object.hasOwn(JOURNEY_RECORD_KINDS, schema);
 export const MAX_SAVED_INTENT_BYTES = 1_000_000;
 export const MAX_ENVELOPE_BYTES = 2_000_000;
@@ -82,6 +85,8 @@ function shapeProblem(envelope) {
     if (record.schema === IMPROVEMENT_SUGGESTION_RECORD_SCHEMA && suggestionProblem(record) !== null) return path;
     if (record.schema === IMPROVEMENT_DISMISSAL_RECORD_SCHEMA && dismissalProblem(record) !== null) return path;
     if (record.schema === ORGANIZATION_DRAFT_RECORD_SCHEMA && organizationDraftProblem(record) !== null) return path;
+    if (record.schema === WORKSPACE_DECLARATION_RECORD_SCHEMA && declarationProblem(record) !== null) return path;
+    if (record.schema === LOCAL_BINDING_RECORD_SCHEMA && bindingProblem(record) !== null) return path;
   }
   return null;
 }
@@ -125,6 +130,12 @@ export async function readJourneyEnvelope(bytes) {
     } else if (record.schema === ORGANIZATION_DRAFT_RECORD_SCHEMA) {
       const problem = await organizationDraftDerivedProblem(record);
       if (problem !== null) return refuse('INPUT_INVALID', `/records/${index}${problem}`, 'Entry and target ids must derive from their item, scope and target.', originalBytes);
+    } else if (record.schema === WORKSPACE_DECLARATION_RECORD_SCHEMA) {
+      const problem = await declarationDerivedProblem(record);
+      if (problem !== null) return refuse('INPUT_INVALID', `/records/${index}${problem}`, 'Declaration relationship ids and revision must derive from its workspace, members and relationships.', originalBytes);
+    } else if (record.schema === LOCAL_BINDING_RECORD_SCHEMA) {
+      const problem = await bindingDerivedProblem(record);
+      if (problem !== null) return refuse('INPUT_INVALID', `/records/${index}${problem}`, 'Binding id must derive from its workspace, member and checkout root.', originalBytes);
     } else if (record.required) {
       supported = false;
       diagnostics.push({ code: 'JOURNEY_RECORD_UNSUPPORTED', path: `/records/${index}`, message: `Required record ${record.id} has unsupported schema ${record.schema}; it can be read but not changed.` });
@@ -173,6 +184,18 @@ export async function writeJourneyEnvelope({ savedIntentBytes, records, previous
     if (record?.schema === ORGANIZATION_DRAFT_RECORD_SCHEMA) {
       const problem = organizationDraftProblem(record) ?? await organizationDraftDerivedProblem(record);
       if (problem !== null) return refuse('INPUT_INVALID', `${path}${problem}`, 'Supply a closed organization-draft record with derived entry and target ids.');
+      written.push(structuredClone(record));
+      continue;
+    }
+    if (record?.schema === WORKSPACE_DECLARATION_RECORD_SCHEMA) {
+      const problem = declarationProblem(record) ?? await declarationDerivedProblem(record);
+      if (problem !== null) return refuse('INPUT_INVALID', `${path}${problem}`, 'Supply a closed workspace-declaration record with a derived revision.');
+      written.push(structuredClone(record));
+      continue;
+    }
+    if (record?.schema === LOCAL_BINDING_RECORD_SCHEMA) {
+      const problem = bindingProblem(record) ?? await bindingDerivedProblem(record);
+      if (problem !== null) return refuse('INPUT_INVALID', `${path}${problem}`, 'Supply a closed local-binding record with a derived id.');
       written.push(structuredClone(record));
       continue;
     }
