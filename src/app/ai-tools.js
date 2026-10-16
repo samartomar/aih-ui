@@ -1,5 +1,5 @@
 /*
- * The header's AI tools control: which AI CLIs to set up for.
+ * The header's AI tools control: which AI clients to set up for.
  *
  * Three different facts, kept apart:
  *
@@ -56,7 +56,7 @@ export function createAiTools({ elements, onSelectionChange }) {
     const chosen = supported.filter((target) => selected.includes(target));
     elements.aiToolsCount.textContent = `${chosen.length} of ${supported.length}`;
     elements.aiToolsTrigger.title =
-      `${supported.length} AI CLIs @aihq/core supports as targets; ${chosen.length} selected in this workspace's local setup. ` +
+      `${supported.length} AI clients @aihq/core supports as targets; ${chosen.length} selected in this workspace's local setup. ` +
       `Installed or connected: ${NOT_CONNECTED}.`;
 
     for (const target of supported) {
@@ -83,7 +83,7 @@ export function createAiTools({ elements, onSelectionChange }) {
       elements.aiToolsList.appendChild(row);
     }
 
-    note(`Supported: the ${supported.length} targets @aihq/core lists (nativeClientIds).`);
+    note(`Supported: the ${supported.length} AI clients @aihq/core lists (nativeClientIds).`);
     note(saving ? "Saving client selection…" : "Selected: saved in this workspace's local setup file. It is not a policy.");
     if (saveError) {
       const failure = el("p", "text-error", `Selection was not saved: ${saveError}`);

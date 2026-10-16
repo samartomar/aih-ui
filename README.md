@@ -99,6 +99,7 @@ src/
     mode.js             theme preference and toggle
     onboarding.js       first-run wizard and saved-setup loading
     setup-model.js      versioned UI settings shape and input validation
+    core-targets.js     Core's published AI clients and their Harness labels, for display
     settings-client.js  local setup API transport
     setup-summary.js    read-only review of saved preferences
     policy-import.js    read-only local PolicyBundle structure review
@@ -860,6 +861,7 @@ tools/
     service-client.mjs  one request, one child process, in the consumer
     static.mjs          the static half of the server
     assets.mjs          what is copied where, discovered rather than listed
+    core-targets-summary.mjs  the package summary's coreTargets, from the service answer
   service/              COPIED INTO THE CONSUMER, run from there
     core-service.mjs    the operation dispatcher (stdin -> stdout)
     catalog-access.mjs  the installed @aihq/catalog, through its export map

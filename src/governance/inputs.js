@@ -71,7 +71,7 @@ function renderCatalog(box, catalog) {
 /**
  * The Target field's options, built from @aihq/core's own nativeClientIds.
  *
- * The page keeps no list of AI CLIs: a Core that lists different targets
+ * The page keeps no list of AI clients: a Core that lists different targets
  * changes this field with no UI edit, and a Core that publishes no list leaves
  * it disabled, reading "Not connected", supplying no target at all. Nothing
  * here checks whether a tool is installed or connected - that is a separate

@@ -162,7 +162,7 @@ async function loadPublishedTargets() {
   try {
     const summary = await (await fetch('/api/packages')).json();
     const offered = publishedClients(summary.coreTargets);
-    if (offered) ({ ids: published, labels } = offered);
+    if (offered) { published = offered.ids; labels = offered.labels; }
     else reason = 'The installed Core does not publish its supported clients to this Workbench.';
   } catch { /* the free-entry field still works */ }
   $('target-help').textContent = published

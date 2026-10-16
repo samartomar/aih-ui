@@ -3,7 +3,7 @@
 // page only and nothing from it is sent anywhere. Rules live in app/guided-rules.js; Core
 // validates and composes through the same authoring operations as the policy workspace.
 import { el } from './app/dom.js';
-import { clientNodes, publishedClients } from './app/core-targets.js';
+import { clientNodes, offersClient, publishedClients } from './app/core-targets.js';
 import { createAuthoringClient, importLimitError } from './app/authoring-client.js';
 import { loadSetup } from './app/settings-client.js';
 import { ADDED_BY_YOU, KNOWN_STACK, MANIFEST_BYTE_LIMIT, addDetection, choiceReason, clientPrompt, describePolicy, detectStack, provenanceText, suggestStarters, wantsContent }
@@ -25,7 +25,7 @@ let listSource = 'supported by Core';
 let detections = [], folderChosen = false, published = [], publishedLabels = {}, suggestion = null, busy = false, suggesting = false, started = false;
 // The inputs the current suggestion was made from, and a counter that changes whenever that suggestion stops applying.
 let snapshot = null, generation = 0, savedShown = false;
-const clients = new Map(); // id -> { setup, detected, added, checked }
+const clients = new Map(); // id -> { setup, detected, added, checked, unlisted }
 const picked = new Map();  // itemId -> checked
 
 let clientPromise;
@@ -132,8 +132,9 @@ function renderClients() {
       state.added = box.checked && !state.setup && !state.detected;
       renderClients();
     });
-    label.append(box, ...clientNodes(publishedLabels, id));
-    const tags = [state.setup && 'chosen in your Workbench setup', state.detected && (state.broken ? 'found on this machine, but its check failed' : 'detected on this machine'), state.added && 'added by you'].filter(Boolean);
+    // A saved client outside the offered list is shown, not offered as a choice.
+    label.append(...(state.unlisted ? [] : [box]), ...clientNodes(publishedLabels, id));
+    const tags = [state.unlisted ? 'saved in your Workbench setup, but not in the list this Workbench offers' : state.setup && 'chosen in your Workbench setup', state.detected && (state.broken ? 'found on this machine, but its check failed' : 'detected on this machine'), state.added && 'added by you'].filter(Boolean);
     item.append(label, el('span', 'text-xs text-on-surface-variant', tags.length ? tags.join(' · ') : listSource));
     return item;
   });
@@ -142,13 +143,13 @@ function renderClients() {
   checkStale();
   if (!rows.length) $('clients').append(el('li', 'text-on-surface-variant', 'No AI clients are known yet. Neither Core nor the installed Catalog lists them for this Workbench.'));
 }
-const clientState = id => { if (!clients.has(id)) clients.set(id, { setup: false, detected: false, broken: false, added: false, checked: false }); return clients.get(id); };
+const clientState = id => { if (!clients.has(id)) clients.set(id, { setup: false, detected: false, broken: false, added: false, checked: false, unlisted: false }); return clients.get(id); };
 
 async function loadClients() {
   try {
     const summary = await (await fetch('/api/packages')).json();
     const offered = publishedClients(summary.coreTargets);
-    if (offered) ({ ids: published, labels: publishedLabels } = offered);
+    if (offered) { published = offered.ids; publishedLabels = offered.labels; }
   } catch { /* the setup choices below still work */ }
   // Without Core's published list, offer the clients the installed Catalog has an adapter for.
   if (!published.length) {
@@ -163,7 +164,8 @@ async function loadClients() {
   try {
     const result = await loadSetup();
     if (result.state === 'saved' && Array.isArray(result.settings?.clients))
-      for (const id of result.settings.clients.filter(value => typeof value === 'string')) { const state = clientState(id); state.setup = true; state.checked = true; }
+      // A saved client outside the offered list keeps its saved preference but is not an active choice.
+      for (const id of result.settings.clients.filter(value => typeof value === 'string')) { const state = clientState(id); state.setup = true; state.unlisted = !offersClient(published, id); state.checked = !state.unlisted; }
   } catch { /* no saved Workbench setup */ }
   renderClients();
   syncButtons();

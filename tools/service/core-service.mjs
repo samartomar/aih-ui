@@ -25,7 +25,7 @@
  *                          public reader's result, member by member
  *   catalog-qualification.mjs  Catalog's publisher qualification, via its reader
  *   catalog-categories.mjs  Catalog's curated categories, via its reader
- *   core-targets.mjs       Core's supported AI CLI targets
+ *   core-targets.mjs       Core's supported AI client ids and labels
  *   validation-fixture.mjs VALIDATION ONLY: the one module that manufactures
  *                          anything, and it labels everything it makes
  */

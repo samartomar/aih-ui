@@ -1,18 +1,17 @@
 // The AI clients the Workbench offers are exactly the ids the packed Core publishes as
 // `nativeClientIds` from @aihq/core/harness. This runs against the installed archives: the
 // service worker, the package summary the preview serves, and the settings routes that
-// validate a chosen client against that summary. AIH_UI_REPO names the repository checkout
-// whose server modules are under test.
+// validate a chosen client against that summary. The server and page modules under test come
+// from the checkout AIH_REPO names (check-workbench sets it), as in readiness-browser.mjs.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { nativeClientIds, targets as harnessTargets } from '@aihq/core/harness';
 
-const repo = process.env.AIH_UI_REPO;
-assert.ok(repo, 'AIH_UI_REPO must name the aih-ui checkout');
+const repo = resolve(process.env.AIH_REPO ?? join(dirname(fileURLToPath(import.meta.url)), '..', '..'));
 const load = path => import(pathToFileURL(join(repo, path)).href);
 const { callService } = await load('tools/server/service-client.mjs');
 const { coreTargetsSummary } = await load('tools/server/core-targets-summary.mjs');

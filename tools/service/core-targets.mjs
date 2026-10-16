@@ -30,10 +30,9 @@ export function coreTargets() {
     throw new Error("@aihq/core/harness nativeClientIds lists a client twice");
   }
   const labels = {};
-  for (const target of Array.isArray(harnessTargets) ? harnessTargets : []) {
-    if (nativeClientIds.includes(target?.id) && typeof target.label === "string" && target.label !== "") {
-      labels[target.id] = target.label;
-    }
+  for (const id of nativeClientIds) {
+    const label = Array.isArray(harnessTargets) ? harnessTargets.find((target) => target?.id === id)?.label : undefined;
+    if (typeof label === "string" && label !== "") labels[id] = label;
   }
   return { targets: [...nativeClientIds], labels };
 }

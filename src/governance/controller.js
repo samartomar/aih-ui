@@ -453,7 +453,7 @@ export function createGovernance() {
     // value the page is entitled to invent.
     if (values.target === "") {
       detector.renderError(
-        "No target is selected. The Target field offers the AI CLIs @aihq/core lists as supported; " +
+        "No target is selected. The Target field offers the AI clients @aihq/core lists as supported; " +
           "until that list is available there is nothing to build a validation fixture for.",
       );
       return;
@@ -520,7 +520,7 @@ export function createGovernance() {
 
   return {
     /**
-     * The AI CLI targets @aihq/core supports, as the preview summary reports
+     * The AI client targets @aihq/core supports, as the preview summary reports
      * them. The pane holds no list of its own: until this arrives the Target
      * field offers nothing and nothing can be prepared.
      */

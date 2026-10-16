@@ -24,6 +24,14 @@ export function publishedClients(coreTargets) {
   return { ids, labels };
 }
 
+/**
+ * Whether a client can be offered as a choice: only a listed one once a list is
+ * offered. A saved preference outside it stays saved, but is not offered.
+ */
+export function offersClient(ids, id) {
+  return ids.length === 0 || ids.includes(id);
+}
+
 /** The published label for an id, or null. */
 export function clientLabel(labels, id) {
   return Object.hasOwn(labels, id) ? labels[id] : null;
