@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html class="dark" lang="en" data-mode="dark">
+<head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Check this machine - aih Policy Workbench</title>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&amp;family=Geist+Mono:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles/tailwind.css">
+<link rel="stylesheet" href="/styles/tokens.css">
+<script src="/app/mode.js"></script>
+</head>
+<body class="bg-background font-body text-on-surface text-sm leading-normal antialiased">
+<header class="bg-wb-chrome border-b border-wb-border px-4 py-3 flex items-center justify-between">
+<h1 class="text-base font-semibold">Check this machine</h1>
+<a class="text-primary hover:underline" href="/" id="back-link">Back to the Workbench</a>
+</header>
+<main class="max-w-4xl mx-auto p-4 space-y-4">
+<p class="text-on-surface-variant">Checks the tools on this machine without a project, saved intent or policy. A check only reads; nothing is changed until you review and approve a repair below.</p>
+
+<section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="check-heading">
+<h2 class="font-semibold" id="check-heading">Check</h2>
+<div class="space-y-1">
+<label class="block text-on-surface-variant" for="targets">Targets (optional; leave empty for Core's default selection)</label>
+<input class="w-full max-w-md bg-wb-input border border-wb-control-border rounded px-2 py-1 font-mono" id="targets" type="text" autocomplete="off" spellcheck="false" placeholder="for example: node, npm">
+<div class="flex flex-wrap items-center gap-1" id="target-choices"></div>
+<p class="text-xs text-outline" id="target-help"></p>
+</div>
+<label class="flex items-center gap-2"><input id="offline" type="checkbox"><span>Offline (do not use the network; network-dependent conditions stay unknown)</span></label>
+<div class="flex items-center gap-3">
+<button class="px-3 py-1.5 rounded bg-primary-container text-on-primary font-medium disabled:opacity-50" id="check" type="button">Check this machine</button>
+<span class="text-on-surface-variant" id="check-status" role="status" aria-live="polite"></span>
+</div>
+</section>
+
+<section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="result-heading" id="result-section" hidden>
+<h2 class="font-semibold" id="result-heading">Result</h2>
+<p class="font-medium" id="overall" aria-live="polite"></p>
+<div class="flex flex-wrap gap-1" id="summary"></div>
+<ul class="space-y-2" id="rows"></ul>
+<div class="space-y-1">
+<label class="block text-on-surface-variant" for="guidance" id="guidance-label">Guidance for your AI client (read-only)</label>
+<textarea class="w-full h-40 bg-wb-input border border-wb-control-border rounded px-2 py-1 font-mono text-xs" id="guidance" readonly></textarea>
+<div class="flex flex-wrap items-center gap-3">
+<button class="px-3 py-1.5 rounded border border-wb-control-border hover:bg-surface-container" id="copy-guidance" type="button">Copy guidance for your AI client</button>
+<span class="text-xs text-on-surface-variant" id="copy-status" role="status" aria-live="polite">Copying only puts this text on your clipboard. It executes nothing and changes nothing.</span>
+</div>
+</div>
+</section>
+
+<section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="repair-heading">
+<h2 class="font-semibold" id="repair-heading">Repair</h2>
+<p class="text-on-surface-variant" id="repairs-note">Loading supported repairs.</p>
+<ul class="space-y-2" id="repairs"></ul>
+<div class="space-y-3" id="review" hidden>
+<h3 class="font-medium" id="review-heading">Review</h3>
+<p class="font-medium" id="review-overall"></p>
+<ul class="space-y-2" id="review-rows"></ul>
+<label class="flex items-center gap-2"><input id="approve" type="checkbox"><span>I reviewed these changes</span></label>
+<button class="px-3 py-1.5 rounded bg-primary-container text-on-primary font-medium disabled:opacity-50" id="apply" type="button" disabled>Apply approved repair</button>
+</div>
+<p class="text-on-surface-variant" id="repair-status" role="status" aria-live="polite"></p>
+<div class="space-y-3" id="outcome" hidden>
+<h3 class="font-medium" id="outcome-heading">Repair outcome</h3>
+<p class="font-medium" id="outcome-overall" aria-live="polite"></p>
+<ul class="space-y-2" id="outcome-rows"></ul>
+<h3 class="font-medium" id="recheck-heading">Recheck of the repair's targets</h3>
+<p class="font-medium" id="recheck-overall"></p>
+<ul class="space-y-2" id="recheck-rows"></ul>
+</div>
+</section>
+</main>
+<script type="module" src="/readiness.js"></script>
+</body>
+</html>
