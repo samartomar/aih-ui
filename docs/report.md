@@ -46,8 +46,8 @@ and the same check **passed** afterwards. Nothing else counts:
   (both also rank an urgent review);
 - no earlier machine check is `unknown-precondition`.
 
-The machine check records each condition twice: for this host (`process`) and with the
-persisted configuration (see [readiness](readiness.md#persisted-configuration)). The post-repair
+The machine check records each condition for this host (`process`) and, when that inspection
+ran, with the persisted configuration (see [readiness](readiness.md#persisted-configuration)). The post-repair
 recheck uses the persisted configuration. The precheck Core sees is chosen so that a repair
 counts only when:
 
@@ -61,6 +61,11 @@ counts only when:
 | failed | passed (a Core-managed block from before this host started) | any | `already-healthy`, not counted |
 | failed | failed | passed | `verified`, counted once |
 | failed | failed | failed | `repair-not-verified` |
+| failed | failed | did not answer | `applied-unverified` |
+| failed | unknown | any | `unknown-precondition` |
+| unknown | failed or unknown | any | `unknown-precondition` |
+
+When it failed in both, the persisted failure is the precheck, the same configuration as the recheck.
 
 A record without the persisted inspection (from an older Workbench or Core) never pairs, and
 neither does a recheck made with this host's own trust: the attempt is `unknown-precondition`. A

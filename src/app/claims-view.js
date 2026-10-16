@@ -40,10 +40,10 @@ const panel = (id, title, summary, tone, items = [], extra = {}) => ({ id, title
 
 // Claim ids from the Workbench adapter read "<record>/<role>/<check id>"; any other claim is shown by its measure and subject.
 const READINESS_PRODUCER = 'aih-ui/readiness';
+const roleOf = claim => claim?.producer?.id === READINESS_PRODUCER ? String(claim.id).split('/')[1] : null;
 const checkOf = claim => {
-  if (claim?.producer?.id !== READINESS_PRODUCER) return null;
-  const [, role, ...rest] = String(claim.id).split('/');
-  return ROLES[role] && rest.length ? rest.join('/') : null;
+  const [, , ...rest] = String(claim?.id).split('/');
+  return ROLES[roleOf(claim)] && rest.length ? rest.join('/') : null;
 };
 const CONDITION = /^condition:/;
 const PERSISTED = 'persisted-configuration';
@@ -57,9 +57,8 @@ export function reportPanels(projection) {
     if (!claim) return String(ref?.id ?? '');
     // A persisted value Core reported for a repair's re-check names the targets that re-check covered, not a target of the value.
     if (claim.measure === PERSISTED) return `persisted configuration ${claim.subject.id} found by the re-check of ${list(claim.scope?.targets).join(', ')}`;
-    const shown = `${checkOf(claim) ?? claim.measure} on ${claim.subject.id}`;
-    // The same machine check made with the configuration Core's managed repairs persist for a new process.
-    return checkOf(claim) && String(claim.id).split('/')[1] === 'persisted-condition' ? `${shown} with the persisted configuration` : shown;
+    // The same machine check made with the configuration Core's managed repairs persist for a new process says so.
+    return `${checkOf(claim) ?? claim.measure} on ${claim.subject.id}${checkOf(claim) && roleOf(claim) === 'persisted-condition' ? ' with the persisted configuration' : ''}`;
   };
   const calculation = method => list(projection?.calculations).find(result => result.method?.id === method);
   const valueText = claim => claim.kind === 'unknown' ? `Unavailable — ${claim.unknownReason}`

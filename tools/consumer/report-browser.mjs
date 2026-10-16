@@ -192,13 +192,13 @@ try {
   assert.equal(await npmrcState(), realNpmrcBefore, "the real home's .npmrc is untouched");
   if (requireVerified) assert.equal(verifiedIds.length, 1, 'AIH_REPORT_REQUIRE_VERIFIED=1 needs exactly one verified repair');
   const summary = { status: 'passed', chromium: browser.version(), port: PORT, verifiedRepairDemonstrated: verifiedIds.length === 1,
-    verifiedRepairs: verifiedIds.length, note: verifiedIds.length ? undefined : 'No npm condition failed before the repair in this environment, so Core reported already-healthy attempts and the report counted none; nothing was invented.',
+    verifiedRepairs: verifiedIds.length, note: verifiedIds.length ? undefined : 'No npm condition failed in both configurations before the repair in this environment, so the report counted none; nothing was invented.',
     beforeAnyCheck: empty, afterRepair, equivalence: { meanings: meanings.length, textEqual: true, missing: missing.length },
     recordsInReport: payload.value.records, screenshots };
   const summaryPath = join(evidence, 'report-evidence.json');
   await writeFile(summaryPath, JSON.stringify(summary, null, 2));
   console.log('Report Chromium demonstration passed.');
-  console.log(`verified repairs: ${verifiedIds.length} (${verifiedIds.join(', ') || 'none: no npm condition failed before the repair'})`);
+  console.log(`verified repairs: ${verifiedIds.length} (${verifiedIds.join(', ') || 'none: no npm condition failed in both configurations before the repair'})`);
   for (const path of screenshots) console.log(`screenshot: ${path}`);
   console.log(`evidence: ${summaryPath}`);
 } finally {

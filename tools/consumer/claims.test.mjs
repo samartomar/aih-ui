@@ -109,7 +109,8 @@ test('the same record passed twice counts once; a re-imported event under anothe
 
   // A re-import carries the adapter's claim under a new claim id but the same event identity.
   const claimSet = JSON.parse(JSON.stringify(once.claimSet));
-  const precheck = claimSet.claims.find(claim => claim.measure === 'condition:npm/tls/node' && claim.id.startsWith(before.id));
+  const cited = claimSet.calculations.find(entry => entry.id === 'verified-repairs').attempts.find(entry => entry.condition === 'condition:npm/tls/node').precheck;
+  const precheck = claimSet.claims.find(claim => claim.id === cited.id && claim.revision === cited.revision);
   claimSet.claims.push({ ...JSON.parse(JSON.stringify(precheck)), id: `${precheck.id}-reimport` });
   const request = claimSet.calculations.find(entry => entry.id === 'verified-repairs');
   request.attempts.push({ ...JSON.parse(JSON.stringify(request.attempts.find(entry => entry.condition === 'condition:npm/tls/node'))),
@@ -192,13 +193,18 @@ for (const [name, processBefore, persistedBefore, after, reason, counted] of [
   ['broken in both configurations, then the persisted recheck passes', 'failed', 'failed', 'passed', 'verified', true],
   ['broken in both configurations, and the persisted recheck still fails', 'failed', 'failed', 'failed', 'repair-not-verified', false],
   ["a Core block already present but this host started earlier: fails for this host, passes persisted", 'failed', 'passed', 'passed', 'already-healthy', false],
+  ['fails for this host, unknown persisted', 'failed', 'unavailable', 'passed', 'unknown-precondition', false],
+  ['unknown for this host, fails persisted', 'unavailable', 'failed', 'passed', 'unknown-precondition', false],
+  ['broken in both configurations, and the recheck failed before Core answered', 'failed', 'failed', null, 'applied-unverified', false],
 ]) test(`${name}: ${counted ? 'one verified repair' : `not counted (${reason})`}`, () => {
   const w = world();
   const before = w.machine([tls(processBefore)], { persistedChecks: [tls(persistedBefore)] });
-  const repaired = w.repair({ before, after: [tls(after)] });
+  const repaired = w.repair({ before, ...(after ? { after: [tls(after)] } : {}) });
   const { projection } = readinessReport({ records: [before, repaired] });
   const attempt = attemptFor(projection, 'npm', 'npm/tls/node');
   assert.deepEqual([attempt.reason, attempt.counted, repairCount(projection).count], [reason, counted, counted ? 1 : 0]);
+  // A precheck failed in both configurations is the persisted one, the same configuration as the recheck.
+  if (processBefore === 'failed' && persistedBefore === 'failed') assert.equal(attempt.precheck.id, `${before.id}/persisted-condition/npm/tls/node`);
 });
 
 test('when the two configurations disagree the report says so, and the score and blockers follow this host', () => {

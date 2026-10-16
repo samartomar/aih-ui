@@ -41,11 +41,12 @@ const configurationOf = check => check?.options?.configuration
 const sameConfiguration = (a, b) => configurationOf(a) === null || configurationOf(b) === null || configurationOf(a) === configurationOf(b);
 
 // The condition was broken before a repair only if it failed both for this host and with the persisted
-// configuration. A pass in either is the precheck (already healthy); otherwise an unknown one is (unknown
-// precondition). A record without the persisted inspection, from an older Workbench or Core, never pairs.
+// configuration; the persisted failure is then the precheck, the same configuration as the recheck. A pass in
+// either is the precheck (already healthy); otherwise an unknown one is (unknown precondition). A record without
+// the persisted inspection, from an older Workbench or Core, never pairs.
 function precheckOf({ item, twin, condition, persisted }) {
   if (!persisted) return null;
-  if (item.outcome === 'failed' && twin.outcome === 'failed') return condition;
+  if (item.outcome === 'failed' && twin.outcome === 'failed') return persisted;
   if (item.outcome === 'passed') return condition;
   if (twin.outcome === 'passed') return persisted;
   return item.outcome === 'failed' ? persisted : condition;
@@ -254,8 +255,9 @@ function assemble({ records = [], scanReports = [], estimates = [], usage = [], 
     else if (item.outcome !== 'passed') actions.push({ id: `important-unknown/${latest.id}/${item.id}`, category: 'important-unknown', subjects: [target(item.target)], evidence,
       reason: item.kind === 'observation' ? `Loading of ${item.target} was observed but not verified.` : `The check ${item.id} on ${item.target} could not be confirmed (${item.reason}).`,
       prerequisites: [], route: guidance(item.target, item.reason) });
-    // The two configurations disagree: say so, and keep this host's result as the machine's readiness.
-    if (entry.persisted && entry.twin.outcome !== item.outcome) actions.push({ id: `important-unknown/${latest.id}/${item.id}/configuration`,
+    // The two configurations disagree: say so, and keep this host's result as the machine's readiness. Unreadable
+    // persisted configuration is already said once by the comparison, so it adds no action per check.
+    if (entry.persisted && entry.twin.outcome !== item.outcome && entry.twin.reason !== 'persisted-configuration-unavailable') actions.push({ id: `important-unknown/${latest.id}/${item.id}/configuration`,
       category: 'important-unknown', subjects: [target(item.target)], evidence: [ref(entry.condition), ref(entry.persisted)],
       reason: `The check ${item.id} on ${item.target} ${said(item)} for this host but ${said(entry.twin)} with the configuration Core's managed repairs persist for a new process; the score uses this host's result.`,
       prerequisites: [], route: guidance(item.target, 'configuration-disagreement') });
