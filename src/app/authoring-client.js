@@ -158,12 +158,12 @@ export function createAuthoringClient() {
     recordDisposition(operation) {
       return recordChoice('maintenance-record', operation, 'Open a draft or a saved policy before recording an update choice.');
     },
-    async checkImprovements({ clients = [], labels, goal } = {}) {
+    async checkImprovements({ clients = [], labels, coreClients, goal } = {}) {
       const input = maintenanceInput();
       if (!input) return refusal('INPUT_INVALID', 'Open a draft or a saved policy before checking improvements.');
       const attempt = revision;
       try {
-        const result = await request('improvements-check', { ...input, clients, labels, goal, policyBytes: undefined });
+        const result = await request('improvements-check', { ...input, clients, labels, coreClients, goal, policyBytes: undefined });
         return attempt === revision ? result : { status: 'superseded' };
       } catch (error) { if (attempt !== revision) return { status: 'superseded' }; throw error; }
     },

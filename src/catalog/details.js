@@ -30,6 +30,7 @@
 
 import { el, text } from "../app/dom.js";
 import { capabilityFacts } from './authoring-model.js';
+import { describeClientIdentity } from '../app/client-identity.js';
 import {
   EVIDENCE_SUMMARY_ABSENT,
   FINDING_DETAIL_ABSENT,
@@ -223,7 +224,7 @@ export function createDetails({ elements }) {
 
   return {
     /** @param model { entry, counts, publisher, qualification } */
-    render({ entry, counts, publisher, qualification, target }) {
+    render({ entry, counts, publisher, qualification, target, coreClients }) {
       reset();
       renderQualification(elements, qualification, entry ?? null);
       if (!entry) {
@@ -243,6 +244,9 @@ export function createDetails({ elements }) {
           const node = el('p', 'p-2 rounded border border-wb-border text-[11px]', `${fact.support} · ${fact.capability} · ${fact.surface} — ${fact.reason ?? 'No producer reason supplied.'}`);
           elements.detailsCapabilities.append(node);
         }
+        // A client adapter's target, whether Core supports it and whether the client is installed are three separate facts.
+        const clientFacts = describeClientIdentity({ item, coreClients });
+        if (clientFacts) for (const fact of [clientFacts.target, clientFacts.core, clientFacts.installed]) elements.detailsCapabilities.append(el('p', 'p-2 rounded border border-wb-border text-[11px]', fact.text));
         row(elements.detailsIdentity, 'Item id', item.id);
         codeRow(elements.detailsIdentity, 'Release sha256', item.root.releaseSha256);
         codeRow(elements.detailsIdentity, 'Item sha256', item.root.itemSha256);

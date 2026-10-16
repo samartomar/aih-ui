@@ -8,7 +8,12 @@
  * facts (labels, descriptions, dependencies, inputs) come from the catalog items
  * passed in; this module holds no Catalog content and no policy logic. A rule
  * whose item is absent from the served catalog is skipped, never substituted.
+ *
+ * A client is served by the adapter whose Catalog `clientId` names it (see client-identity.js);
+ * an item id is never read as a client.
  */
+
+import { adapterFor, describeClientIdentity } from './client-identity.js';
 
 export const GUIDED_RULES_VERSION = '1.0.0';
 export const ADDED_BY_YOU = 'added by you';
@@ -206,15 +211,19 @@ function changesFor(item, scope, byId) {
 /**
  * goal: free text. detections: from detectStack, possibly edited. clients: ids (or { id }). catalogItems: the served items.
  * projectInspected (optional): true when a project folder was inspected; defaults to "some detection came from a file".
+ * coreClients (optional): Core's nativeClientIds; observations (optional): client id -> readiness presence. They only fill the facts a client choice
+ * carries (`choice.client`: target, Core support, installed) and never decide which choices are made.
  * An inspected project whose language was not recognised (and not added by hand) is never confident, even when the goal matched.
  */
-export function suggestStarters({ goal, detections = [], clients = [], catalogItems = [], projectInspected } = {}) {
+export function suggestStarters({ goal, detections = [], clients = [], catalogItems = [], projectInspected, coreClients, observations } = {}) {
   const byId = new Map((catalogItems ?? []).filter(item => item && typeof item.id === 'string').map(item => [item.id, item]));
   const text = goalWords(goal);
   const inspected = projectInspected ?? detections.some(detection => detection.provenance.some(path => path !== ADDED_BY_YOU));
   const candidates = [];
-  for (const id of clientIds(clients))
-    candidates.push({ ruleId: `client.${id}`, itemId: `aihq.client.${id}`, helpsWith: `Lets ${id} read the same shared project instructions as your other AI clients, so it starts every task with the same context.`, why: `You use ${id} as an AI client.` });
+  for (const id of clientIds(clients)) {
+    const adapter = adapterFor(catalogItems, id);
+    if (adapter) candidates.push({ ruleId: `client.${id}`, itemId: adapter.id, adapter, helpsWith: `Lets ${id} read the same shared project instructions as your other AI clients, so it starts every task with the same context.`, why: `You use ${id} as an AI client.` });
+  }
   let goalMatched = false;
   for (const rule of GOAL_RULES) {
     const phrase = firstPhrase(text, rule.phrases);
@@ -246,7 +255,8 @@ export function suggestStarters({ goal, detections = [], clients = [], catalogIt
     taken.add(item.id); for (const id of closure) covered.add(id);
     choices.push({ itemId: item.id, label: item.label || item.id, scope, ruleId: candidate.ruleId, why: candidate.why,
       helpsWith: inline(candidate.helpsWith) || `Adds ${item.label || item.id}.`, catalogDescription: inline(item.description), needs: needsFor(item, byId), changes: changesFor(item, scope, byId),
-      dependencies: closure.map(id => ({ itemId: id, label: labelOf(id, byId) })) });
+      dependencies: closure.map(id => ({ itemId: id, label: labelOf(id, byId) })),
+      ...(candidate.adapter ? { client: describeClientIdentity({ item: candidate.adapter, coreClients, observation: observations?.[candidate.ruleId.slice('client.'.length)] }) } : {}) });
   }
   // A choice added earlier may turn out to be required by a later one; that is fine, both are kept as roots.
   if (unrecognised) return { rulesVersion: GUIDED_RULES_VERSION, status: 'no-confident-suggestion', choices: [],

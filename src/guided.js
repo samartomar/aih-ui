@@ -4,6 +4,7 @@
 // validates and composes through the same authoring operations as the policy workspace.
 import { el } from './app/dom.js';
 import { clientNodes, offersClient, publishedClients } from './app/core-targets.js';
+import { adapterClientIds } from './app/client-identity.js';
 import { createAuthoringClient, importLimitError } from './app/authoring-client.js';
 import { loadSetup } from './app/settings-client.js';
 import { ADDED_BY_YOU, KNOWN_STACK, MANIFEST_BYTE_LIMIT, addDetection, choiceReason, clientPrompt, describePolicy, detectStack, provenanceText, suggestStarters, wantsContent }
@@ -20,8 +21,10 @@ const INTENT_SCHEMA = 'urn:aihq:workbench:saved-intent:3.0.0';
 const REVIEW_SCHEMA = 'urn:aihq:workbench:review-decisions:1.0.0';
 const DOWNLOAD_NAME = 'guided-setup.journey.json';
 
-const ADAPTER_PREFIX = 'aihq.client.';
 let listSource = 'supported by Core';
+// Core's nativeClientIds when it published them, readiness presence by client id once a check has run.
+let coreList = null;
+const presence = new Map();
 let detections = [], folderChosen = false, published = [], publishedLabels = {}, suggestion = null, busy = false, suggesting = false, started = false;
 // The inputs the current suggestion was made from, and a counter that changes whenever that suggestion stops applying.
 let snapshot = null, generation = 0, savedShown = false;
@@ -149,15 +152,14 @@ async function loadClients() {
   try {
     const summary = await (await fetch('/api/packages')).json();
     const offered = publishedClients(summary.coreTargets);
-    if (offered) { published = offered.ids; publishedLabels = offered.labels; }
+    if (offered) { published = offered.ids; publishedLabels = offered.labels; coreList = offered.ids; }
   } catch { /* the setup choices below still work */ }
   // Without Core's published list, offer the clients the installed Catalog has an adapter for.
   if (!published.length) {
     try {
       const client = await ensureClient();
-      published = [...new Set(client.catalog.items.filter(item => item.kind === 'client-adapter' && item.id.startsWith(ADAPTER_PREFIX))
-        .map(item => item.id.slice(ADAPTER_PREFIX.length)))].sort();
-      if (published.length) listSource = 'has a Catalog adapter';
+      published = adapterClientIds(client.catalog.items);
+      if (published.length) listSource = 'has a Catalog adapter · Core support unknown';
     } catch { /* reported when suggestions are requested */ }
   }
   for (const id of published) clientState(id);
@@ -180,6 +182,7 @@ async function detectClients() {
     const payload = await response.json();
     if (!response.ok || payload.status !== 'ok') throw new Error(messagesOf(payload).join(' ') || payload.message || `The host answered ${response.status}.`);
     // Core reports a found client as present, or broken when it is installed but its check failed.
+    for (const tool of payload.value?.projection?.tools ?? []) if (typeof tool?.id === 'string' && typeof tool.presence === 'string') presence.set(tool.id, tool.presence);
     const found = (payload.value?.projection?.tools ?? []).filter(tool => ['present', 'broken'].includes(tool.presence) && typeof tool.id === 'string');
     for (const tool of found) { const state = clientState(tool.id); state.detected = true; state.broken = tool.presence === 'broken'; state.checked = true; state.added = false; }
     renderClients();
@@ -218,6 +221,8 @@ function choiceCard(choice) {
   section('What the catalog says', [choice.catalogDescription || 'The catalog gives no description for this item.']);
   section('What it needs', choice.needs);
   section('What it will change', choice.changes);
+  // Three separate facts; none of them implies another.
+  if (choice.client) section('About this client', [choice.client.target.text, choice.client.core.text, choice.client.installed.text]);
   section('Why suggested', [choice.why]);
   return item;
 }
@@ -232,7 +237,7 @@ async function suggest() {
     if (!sameInputs(inputsNow(), inputs)) { $('suggest-status').textContent = STALE_MESSAGE; return; }
     generation += 1;
     snapshot = inputs;
-    suggestion = suggestStarters({ ...inputs, catalogItems: client.catalog.items });
+    suggestion = suggestStarters({ ...inputs, catalogItems: client.catalog.items, coreClients: coreList, observations: Object.fromEntries(presence) });
     picked.clear();
     for (const choice of suggestion.choices) picked.set(choice.itemId, true);
     $('suggestion').hidden = false;

@@ -704,7 +704,7 @@ test('workspace records survive draft edits, maintenance and improvement records
   assert.ok(noted.envelope.records.some(r => r.id === 'maintenance-check'));
   // An improvement dismissal keeps both workspace records; a workspace edit and the default export keep it and the maintenance note.
   const checked = valueOf(await checkImprovements({ envelopeBytes: noted.envelopeBytes, inventories: s.inventories, goal: 'add tests', now: NOW }));
-  const { label: _label, description: _description, prompt: _prompt, dismissal: _dismissal, promotion: _promotion, ...fields } = checked.leading;
+  const { label: _label, description: _description, prompt: _prompt, dismissal: _dismissal, promotion: _promotion, client: _client, ...fields } = checked.leading;
   const dismissed = valueOf(await recordImprovement({ envelopeBytes: noted.envelopeBytes, operation: { type: 'dismiss', suggestion: fields }, now: NOW }));
   assert.deepEqual(workspaceRecords(dismissed.envelope), original);
   const kept = doc => doc.records.filter(r => /:(?:improvement-suggestion|improvement-dismissal|maintenance-check):/.test(r.schema)).map(r => r.id).sort();

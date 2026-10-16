@@ -169,7 +169,8 @@ test('published clients filter saved suggestions and supply labels while naming 
   const built = view(client, { loadClients: async () => saved });
   built.setTargets({ state: 'published', targets: ['claude', 'codex'], labels: { claude: 'Claude Code', codex: 'Codex', gone: 'Gone' } });
   await built.open();
-  assert.deepEqual(calls, [{ clients: ['claude'], labels: { claude: 'Claude Code' } }]);
+  // Core's own list travels with the check, so an adapter's target can be stated against it; saved clients are filtered by it.
+  assert.deepEqual(calls, [{ clients: ['claude'], labels: { claude: 'Claude Code' }, coreClients: ['claude', 'codex'] }]);
   const note = elements(built.node).find(node => node.id === 'policy-improvements-unlisted');
   assert.equal(note.hidden, false);
   assert.equal(note.textContent, 'Saved AI client gone is not listed by the installed Core, so no suggestion is made for it. Your saved setup is unchanged.');
@@ -310,4 +311,15 @@ test('reasons name their source in words and keep the exact reference', () => {
   assert.equal(referenceText({ kind: 'setting', ref: 'clients' }), 'From your Workbench setup');
   assert.equal(referenceText({ kind: 'request', ref: 'goal' }), 'From the goal you asked about');
   assert.equal(referenceText({ kind: 'catalog-item', ref: 'mattpocock.tdd' }), 'Catalog item mattpocock.tdd');
+});
+
+test('an adapter suggestion shows its target, Core support and installed state as three lines, and a dismissal never records them', async () => {
+  const client = { target: { state: 'declared', clientId: 'other', text: 'Target: other.' }, core: { state: 'not-supported', text: 'Not Core-supported: Core does not list other.' },
+    installed: { state: 'not-checked', text: 'Installed or connected: not checked.' } };
+  const withClient = { ...suggestion, client };
+  const built = view({ intent: {}, revision: 1, checkImprovements: async () => ok({ ...checked, leading: withClient }) }, { loadClients: async () => ['codex'] });
+  await built.open();
+  const shown = textOf(built.node);
+  for (const line of [client.target.text, client.core.text, client.installed.text]) assert.ok(shown.includes(line), line);
+  assert.deepEqual(dismissOperation(withClient), { type: 'dismiss', suggestion: record });
 });

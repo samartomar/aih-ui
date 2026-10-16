@@ -22,7 +22,7 @@ The Policy Workbench user interface for AIH, built as an independent application
 - Local onboarding preferences (experience, organization context, requested assistance, explicit AI clients and an optional reviewing identity that defaults "Reviewing as" and is never exported). These are UI settings, not policy artifacts or enterprise authorization.
 - The machine-readiness check and host-configured npm repair: Core inspection and repair results projected as failed, unknown, applied, configured or verified, with no project, saved intent or policy. See [machine readiness](docs/readiness.md).
 - The report page: the readiness records as Core-normalized claims, with the configuration-check score, verified repairs, ranked actions and context series. See [report](docs/report.md).
-- Guided personal setup (`src/guided.html`): a goal sentence, an optional project folder inspected only in the browser and the chosen AI clients become explained starter choices from the served Catalog, a copyable prompt and a saved unresolved-draft envelope. The rules are fixed and local (`src/app/guided-rules.js`); no folder content, model call or upload is involved.
+- Guided personal setup (`src/guided.html`): a goal sentence, an optional project folder inspected only in the browser and the chosen AI clients become explained starter choices from the served Catalog, a copyable prompt and a saved unresolved-draft envelope. The rules are fixed and local (`src/app/guided-rules.js`); no folder content, model call or upload is involved. A chosen client is served by the adapter whose Catalog `clientId` names it, and the choice states that adapter's target, Core support and installed state separately.
 
 ## What it must never contain
 
@@ -106,6 +106,7 @@ src/
     onboarding.js       first-run wizard and saved-setup loading
     setup-model.js      versioned UI settings shape and input validation
     core-targets.js     Core's published AI clients and their Harness labels, for display
+    client-identity.js  a client adapter's Catalog clientId, Core support and observed presence, as three separate facts (pure)
     settings-client.js  local setup API transport
     setup-summary.js    read-only review of saved preferences
     policy-import.js    read-only local PolicyBundle structure review
@@ -357,6 +358,16 @@ reads `<selected> of <supported>`. Supported, selected and connected are kept ap
 - installed or connected is **Not connected**: nothing here checks a tool.
 
 The Workbench design's `3 of 11` was sample data and is not restored as state.
+
+A client adapter is tied to its client by the `clientId` Catalog release format 1.4 puts on
+the item, never by its item id. Three facts stay apart wherever an adapter is shown
+(`src/app/client-identity.js`, mirrored byte for byte for the headless readers in
+`tools/consumer/client-identity.mjs`): the adapter's **target** (`clientId`, or *not declared
+by this release format* for an adapter from an earlier format, which is never guessed from
+its id); whether Core **supports** that client (membership in `nativeClientIds`; an adapter
+for a client Core does not list is shown as not Core-supported, and support is unknown when
+Core publishes no list); and whether the client is **installed or connected**, which only an
+observed check supplies and is otherwise *not checked*.
 
 The Governance pane's **Target** field reads that same list and keeps no copy
 either: its options are Core's clients in Core's own order (not a ranking), shown

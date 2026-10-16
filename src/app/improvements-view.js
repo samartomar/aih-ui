@@ -115,6 +115,8 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
         if (suggestion.goal) card.append(el('p', 'text-on-surface-variant', `Goal: ${suggestion.goal}`));
         for (const trigger of suggestion.triggers ?? []) card.append(el('p', 'text-on-surface-variant', trigger.text));
         for (const fact of suggestion.facts ?? []) card.append(el('p', 'text-on-surface-variant text-[11px]', fact.text));
+        // Adapter target, Core support and installed state: three separate facts, shown for a current suggestion only.
+        if (suggestion.client) for (const fact of [suggestion.client.target, suggestion.client.core, suggestion.client.installed]) card.append(el('p', 'text-on-surface-variant text-[11px]', fact.text));
         for (const unknown of suggestion.unknowns ?? []) card.append(el('p', 'text-outline text-[11px]', unknown));
         for (const reference of suggestion.references ?? []) card.append(el('p', 'text-outline text-[11px]', referenceText(reference)));
         const dismissal = preserved ? row.dismissal : suggestion.dismissal;
@@ -147,7 +149,7 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
       saved = loaded;
       const clients = saved.filter(id => offersClient(published?.ids ?? [], id));
       const labels = Object.fromEntries(clients.flatMap(id => { const label = clientLabel(published?.labels ?? {}, id); return label ? [[id, label]] : []; }));
-      result = await client.checkImprovements({ clients, ...(Object.keys(labels).length ? { labels } : {}), ...(requestedGoal ? { goal: requestedGoal } : {}) });
+      result = await client.checkImprovements({ clients, ...(Object.keys(labels).length ? { labels } : {}), ...(published ? { coreClients: published.ids } : {}), ...(requestedGoal ? { goal: requestedGoal } : {}) });
     } catch (error) { result = { status: 'refused', error: error.message }; }
     if (current !== attempt) return;
     pending = false;

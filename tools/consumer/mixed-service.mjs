@@ -104,7 +104,7 @@ export async function createMixedService(maintained, { suppliedInventories, fami
           // The same host-configured source as the maintenance check; unreachable (null or a failure) is unknown, never "nothing changed".
           const candidateInventories = maintenanceSource ? await Promise.resolve().then(() => maintenanceSource()).catch(() => null) : null;
           return checkImprovements({ envelopeBytes, inventories: all, candidateInventories: candidateInventories ?? null, candidateSource: maintenanceSource ? 'configured' : 'unconfigured',
-            clients: body.clients ?? [], labels: body.labels ?? {}, goal: body.goal, now });
+            clients: body.clients ?? [], labels: body.labels ?? {}, coreClients: body.coreClients, goal: body.goal, now });
         }
         // Reading trials writes nothing. This host can enforce no bound, so it has no mechanisms and every bound is advisory.
         if (operation === 'trials-read') return readTrials({ envelopeBytes, mechanisms: TRIAL_MECHANISMS_NONE });

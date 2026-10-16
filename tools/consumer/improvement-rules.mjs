@@ -3,6 +3,7 @@
 // from and newer candidate revisions of them, the person's declared AI clients with their published labels and an optional request goal. It calls no model, reads no network or file and keeps no clock; the same
 // inputs always give the same suggestions. Rule text is not part of a suggestion's identity (see improvement-record.mjs).
 import { suggestionId, suggestionRevision, sameContent } from './improvement-record.mjs';
+import { adapterFor, describeClientIdentity } from './client-identity.mjs';
 // 1.1.0: the client rule names a client by its published label when one is supplied (wording only; identity is unchanged).
 // 1.2.0: a goal-relevant item new or revised in a newer revision of a saved source is suggested from that revision; recurring friction is named as unchecked.
 export const IMPROVEMENT_RULES_VERSION = '1.2.0';
@@ -18,7 +19,8 @@ export const GOAL_RULES = [
   { id: 'goal.plan', itemId: 'mattpocock.grill-me', phrases: ['plan', 'planning', 'design', 'spec'] },
   { id: 'goal.context', itemId: 'aihq.project-context', phrases: ['context', 'instructions', 'consistent', 'onboarding'] }
 ];
-export const CLIENT_RULE = { id: 'client.instructions', itemPrefix: 'aihq.client.' };
+// The adapter for a client is the Catalog item whose clientId names it (see client-identity.mjs), never one matched by its id.
+export const CLIENT_RULE = { id: 'client.instructions' };
 // Readiness checks describe machine setup and name Readiness and Core repair as the remedy; nothing published ties recurring work friction to a Catalog item.
 export const FRICTION_UNKNOWN = 'Recurring friction is not checked: no published evidence interface reports recurring friction in your work (readiness checks cover machine setup only).';
 export const UNKNOWNS = ['Whether it improves your results is unknown until you try it.', 'Actual usage and cost are unknown; no usage data is read.', FRICTION_UNKNOWN];
@@ -68,6 +70,8 @@ function needs(item, offered, selected) {
   }
   return { found: [...found.values()].sort((a, b) => compare(a.id, b.id)), missing: [...missing].sort(compare) };
 }
+// Observed presence is not an input here: nothing this check reads observes a client, so installed is always "not checked".
+const clientFacts = (item, coreClients) => { const client = describeClientIdentity({ item, coreClients }); return client ? { client } : {}; };
 function facts(item, scope, offered, selected) {
   const { found, missing } = needs(item, offered, selected), all = [item, ...found];
   const labels = found.map(i => i.label ?? i.id), shown = labels.slice(0, 8).join(', ') + (labels.length > 8 ? ` and ${labels.length - 8} more` : '');
@@ -125,8 +129,9 @@ function changedItems(intent, inventories, candidates, offered) {
 // root.releaseSha256; the first offering an id is the one suggested, unless a newer revision of a saved source (`candidates`,
 // compared with the `inventories` the policy was saved from) adds or changes it in a way a saved goal makes relevant. Nothing absent
 // from them is ever suggested except such an item. `labels` maps a client id to the label Harness publishes for it; a client
-// without one is named by its id.
-export async function suggestImprovements({ intent, items = [], inventories = [], candidates: revisions = [], clients = [], labels = {}, goal } = {}) {
+// without one is named by its id. `coreClients` (optional) is Core's nativeClientIds; it only fills the `client` facts of an adapter
+// suggestion (target, Core support, installed) and never decides whether one is made.
+export async function suggestImprovements({ intent, items = [], inventories = [], candidates: revisions = [], clients = [], labels = {}, goal, coreClients } = {}) {
   const selected = new Set([...intent.roots, ...intent.pins].map(entry => entry.itemId)), excluded = new Set(intent.exclusions.map(entry => entry.itemId));
   const offered = new Map();
   for (const item of items) if (!offered.has(item.id)) offered.set(item.id, item);
@@ -173,7 +178,8 @@ export async function suggestImprovements({ intent, items = [], inventories = []
   }
   for (const client of [...new Set(clients)].sort(compare)) {
     const name = Object.hasOwn(labels, client) ? labels[client] : client;
-    add(`${CLIENT_RULE.itemPrefix}${client}`, `client:${client}`, CLIENT_RULE.id, `You use ${name} (Workbench setup), but this policy does not give it the shared project instructions.`, { kind: 'setting', ref: 'clients' },
+    const adapter = adapterFor([...offered.values()], client);
+    if (adapter) add(adapter.id, `client:${client}`, CLIENT_RULE.id, `You use ${name} (Workbench setup), but this policy does not give it the shared project instructions.`, { kind: 'setting', ref: 'clients' },
       `Give ${name} the same shared project instructions as your other AI clients.`);
   }
   const suggestions = [];
@@ -188,7 +194,7 @@ export async function suggestImprovements({ intent, items = [], inventories = []
     const sorted = [...triggers.values()].sort((a, b) => compare(a.key, b.key)), id = await suggestionId({ change, scope });
     suggestions.push({ id, rulesVersion: IMPROVEMENT_RULES_VERSION, revision: await suggestionRevision({ id, change, triggers: sorted }), scope, change, triggers: sorted,
       ...(goalText !== undefined ? { goal: goalText } : {}), references: [...references.slice(0, 31), { kind: 'catalog-item', ref: item.id }],
-      facts: facts(item, scope, known, selected), unknowns: [...UNKNOWNS, ...untracked], label: item.label ?? item.id, description: item.description ?? '' });
+      facts: facts(item, scope, known, selected), ...clientFacts(item, coreClients), unknowns: [...UNKNOWNS, ...untracked], label: item.label ?? item.id, description: item.description ?? '' });
   }
   const rank = s => [s.references.some(r => r.kind === 'request') ? 0 : 1, -s.triggers.length, s.references.some(r => r.kind === 'saved-reason') ? 0 : 1];
   return suggestions.sort((a, b) => {
@@ -221,7 +227,7 @@ export function improvementPrompt(suggestion) {
     'You are giving advice only. Do not install, change or run anything, and do not ask me to upload any files, policies or other data.', '',
     `Suggestion: add “${suggestion.label ?? suggestion.change.itemId}” (${suggestion.change.itemId}) to my AI-assistant policy at ${suggestion.scope} scope.`,
     '', 'Why the rules suggested it:', ...suggestion.triggers.map(t => `- ${t.text}`),
-    '', 'What is known:', ...suggestion.facts.map(f => `- ${f.text}`), '', 'What is unknown:', ...suggestion.unknowns.map(u => `- ${u}`), '',
+    '', 'What is known:', ...suggestion.facts.map(f => `- ${f.text}`), ...(suggestion.client ? [suggestion.client.target, suggestion.client.core, suggestion.client.installed].map(f => `- ${f.text}`) : []), '', 'What is unknown:', ...suggestion.unknowns.map(u => `- ${u}`), '',
     'Tell me in plain language whether this looks worthwhile for what I am trying to do, what to check first, and what could go wrong. Start your reply with “AI advice:”.'];
   return lines.join('\n');
 }
