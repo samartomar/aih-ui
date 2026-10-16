@@ -48,8 +48,15 @@ export function createEvidenceReview(client, onProposal) {
     status.textContent = `${inspected.bindings.length} findings bound to the checked subject. Producer authentication is separate; inspect diagnostics for authentication and report support.`;
     for (const [index, binding] of inspected.bindings.entries()) finding.append(new Option(`${binding.finding.detectorId} · ${binding.finding.ruleId} · ${binding.finding.findingId}`, index));
     record.disabled = !inspected.bindings.length;
-  }), action('Forget supplied evidence', () => { invalidate(); file.value = ''; evidence.replaceChildren(); client.setReviewEvidence([]); status.textContent = 'Supplied evidence forgotten. Saved review history remains in the original artifact.'; }),
+  }), action('Forget supplied evidence', async () => { invalidate(); file.value = ''; evidence.replaceChildren(); client.setReviewEvidence([]); if (await refresh()) status.textContent = 'Supplied evidence forgotten. Saved review history remains in the original artifact.'; }),
   action('Reconsider saved reviews (optional)', async () => onProposal(await client.proposeRequest('reconsider-reviews'))));
+  // Applicability is derived from the supplied evidence and identity, so either change re-reads the saved judgments.
+  const refresh = async () => {
+    if (!client.bytes.length) return true;
+    const result = await client.reopen();
+    if (result.status === 'refused') { status.textContent = result.diagnostics?.map(value => value.message).join(' ') ?? result.status; return false; }
+    return true;
+  };
   const inputs = {};
   for (const [key, label, value] of [['id', 'Review decision ID', ''], ['owner', 'Review owner', ''], ['actor', 'Reviewer', ''], ['reason', 'Review reason', '']]) {
     const field = el('input', 'bg-wb-input border border-wb-border rounded p-1'); field.setAttribute('aria-label', label); field.placeholder = label; field.value = value; inputs[key] = field; form.append(field);
@@ -71,7 +78,7 @@ export function createEvidenceReview(client, onProposal) {
   as.append(el('span', 'text-on-surface-variant', 'Reviewing as'), asKind, asId, action('Use identity', async () => {
     const id = asId.value.trim();
     client.setRecipient(id ? { kind: asKind.value, id } : undefined);
-    if (client.bytes.length) { const result = await client.reopen(); if (result.status === 'refused') { status.textContent = result.diagnostics?.map(value => value.message).join(' ') ?? result.status; return; } }
+    if (!await refresh()) return;
     status.textContent = id ? `Saved judgments are labelled for ${asKind.value} ${id}.` : 'No identity set: every saved judgment is shown as imported.';
   }));
   panel.append(as);
@@ -85,7 +92,7 @@ export function createEvidenceReview(client, onProposal) {
       const loaded = await Promise.all(files.map(async file => new Uint8Array(await file.arrayBuffer())));
       if (attempt !== revision) return;
       client.setReviewEvidence(loaded); evidence.replaceChildren(...files.map((file, index) => new Option(file.name, index)));
-      status.textContent = 'Original evidence bytes loaded. Inspect for the selected policy subject.';
+      if (await refresh()) status.textContent = 'Original evidence bytes loaded. Saved judgments show their applicability to it; inspect for the selected policy subject to record a new one.';
     } catch (error) { status.textContent = error.message; }
   });
   for (const node of [evidence, target]) node.addEventListener('change', invalidate);
