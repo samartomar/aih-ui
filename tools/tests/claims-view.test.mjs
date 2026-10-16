@@ -40,6 +40,11 @@ test('a score keeps unknown checks in the denominator and lists failed checks ev
   assert.match(mixed.score.summary, /Unknown checks stay in the total/);
 });
 
+test('a score over checks without an event identity says re-imports cannot be recognized', () => {
+  const panels = reportPanels(projection({ calculations: [score({ deduplication: { status: 'not-established', unidentified: [ref('a'), ref('b')] } })] }));
+  assert.ok(panels.score.items.some(item => item.text === 'Duplicate imports cannot be recognized for 2 checks without an event identity.'));
+});
+
 test('with no machine check or no applicable check the score is Unavailable, never 0', () => {
   const none = reportPanels(projection());
   assert.equal(none.score.value, 'Unavailable');

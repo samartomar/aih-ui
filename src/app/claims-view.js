@@ -101,7 +101,7 @@ export function reportPanels(projection) {
     for (const ref of list(scoreResult.conflicts)) score.items.push(item(`conflict:${keyOf(ref)}`, 'warning', `Conflicting record counted as unknown: ${label(ref)}`));
     for (const { claim, reason } of list(scoreResult.excluded)) score.items.push(item(`excluded:${keyOf(claim)}`, 'neutral', `Excluded: ${label(claim)}`, [`Reason: ${sentence(reason)}`]));
     if (scoreResult.deduplication?.status === 'not-established') score.items.push(item('dedup', 'warning',
-      `Duplicate imports cannot be recognized for${plural(list(scoreResult.deduplication.unidentified).length, 'check')} without an event identity.`));
+      `Duplicate imports cannot be recognized for ${plural(list(scoreResult.deduplication.unidentified).length, 'check')} without an event identity.`));
   }
 
   // Repairs: Core's count; every attempt shows its own Core reason.

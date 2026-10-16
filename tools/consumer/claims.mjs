@@ -52,19 +52,13 @@ const LOCAL_PATH = /^(?:file:|~(?:[\\/]|$)|[\\/][^\\/]|[\\/]{2})|(?:^|[^A-Za-z0-
 function assertNoLocalPath(value, what) {
   if (typeof value === 'string' && LOCAL_PATH.test(value)) throw new TypeError(`${what} looks like a machine-local path; supply a stable identifier instead.`);
 }
+// Every supplied string a claim keeps (ids, unit, amount, method, coverage) is checked, not a chosen few.
 function assertSupplied(list, name) {
-  list.forEach((entry, index) => {
-    const at = field => `${name}[${index}] ${field}`;
-    assertNoLocalPath(entry?.subject?.id, at('subject id'));
-    assertNoLocalPath(entry?.subject?.kind, at('subject kind'));
-    assertNoLocalPath(entry?.scope?.kind, at('scope kind'));
-    for (const target of Array.isArray(entry?.scope?.targets) ? entry.scope.targets : []) assertNoLocalPath(target, at('scope target'));
-    assertNoLocalPath(entry?.source?.id, at('source id'));
-    assertNoLocalPath(entry?.source?.schema, at('source schema'));
-    assertNoLocalPath(entry?.observation, at('observation'));
-    assertNoLocalPath(entry?.method?.id, at('method id'));
-    assertNoLocalPath(entry?.coverage?.reason, at('coverage reason'));
-  });
+  const walk = (value, at) => {
+    if (typeof value === 'string') assertNoLocalPath(value, at);
+    else if (value && typeof value === 'object') for (const [key, inner] of Object.entries(value)) walk(inner, `${at} ${key}`);
+  };
+  list.forEach((entry, index) => walk(entry, `${name}[${index}]`));
 }
 
 // A supplied claim's revision names its content, so an entry that repeats collapses and one that

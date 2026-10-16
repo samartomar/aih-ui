@@ -335,6 +335,10 @@ test('supplied ids that carry a machine-local path are refused before any claim 
     { ...supplied, source: { ...supplied.source, id: path } },
     { ...supplied, source: { ...supplied.source, schema: path } },
     { ...supplied, observation: path },
+    { ...supplied, unit: path },
+    { ...supplied, amount: path },
+    { ...supplied, method: { id: 'aih-ui/estimate', version: path } },
+    { ...supplied, method: { id: path, version: '1.0.0' } },
   ];
   for (const path of paths) for (const key of ['estimates', 'usage']) for (const entry of variants(path)) {
     assert.throws(() => readinessClaimSet({ [key]: [entry] }), error => error instanceof TypeError && !/alice|Users|server|\.md/.test(error.message), `${key}: ${path}`);
