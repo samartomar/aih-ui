@@ -2,8 +2,8 @@
 // the page only ever sees the serializable projections the child returns. AIH_READINESS_HOME,
 // AIH_READINESS_PATH and AIH_READINESS_REPAIRS are host/test inputs, never HTTP inputs.
 import { fork } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { homeEnvironment } from '../consumer/home-environment.mjs';
 
 const MAX_BODY = 64 * 1024;
 const TIMEOUT_MS = { check: 200_000, 'repair-prepare': 120_000, 'repair-apply': 120_000, repairs: 10_000, report: 30_000 };
