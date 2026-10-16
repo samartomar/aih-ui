@@ -57,8 +57,8 @@ counts only when:
 
 | Before: this host | Before: persisted | Persisted recheck | Result |
 | --- | --- | --- | --- |
-| passed (for example a CA the developer trusts) | failed | any | `already-healthy`, not counted |
-| failed | passed (a Core-managed block from before this host started) | any | `already-healthy`, not counted |
+| passed (for example a CA the developer trusts) | any | any | `already-healthy`, not counted |
+| failed or unknown | passed (for example a Core-managed block from before this host started) | any | `already-healthy`, not counted |
 | failed | failed | passed | `verified`, counted once |
 | failed | failed | failed | `repair-not-verified` |
 | failed | failed | did not answer | `applied-unverified` |
