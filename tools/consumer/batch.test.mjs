@@ -13,7 +13,7 @@ import { createHost } from './host.mjs';
 import { createBatchHost } from './batch-host.mjs';
 import { batchFixture } from './batch-fixture.mjs';
 import { homeEnvironment } from './home-environment.mjs';
-import { replaceEnvelope } from './envelope-file.mjs';
+import { replaceEnvelope, revisionOf } from './envelope-file.mjs';
 
 // Core keeps ownership records, recovery manifests, snapshots and run history under the current account's `~/.aih/core`, even
 // with logging off. It resolves the account home with os.homedir() whenever it is used (not at import), so pointing this
@@ -379,13 +379,13 @@ describe('reviewed batch against Core', () => {
   const processOnly = async f => valueOf(await planBatch({ ...f.plan, scopes: [f.plan.scopes[1]], inputs: [], actions: [f.action('b-proc', 'scope-b', 'b-proc')] }));
   const run = (host, envelopeBytes, record, extra = {}) => host.runBatch({ envelopeBytes, batchId: record.id, approve: { batchId: record.id }, now: NOW, ...extra });
   const recordIn = async bytes => valueOf(await readBatch({ envelopeBytes: bytes })).record;
-  const revisionOf = bytes => JSON.parse(decode(bytes)).revision.sha256;
   // A tiny store holding the one envelope, with the contract `persist` documents: refuse unless the stored revision is the expected one.
   const storeOf = held => {
     const calls = [];
     return { calls, bytes: () => held, persist: async (next, { expectedRevisionSha256 } = {}) => {
       calls.push(expectedRevisionSha256);
-      if (expectedRevisionSha256 !== undefined && revisionOf(held) !== expectedRevisionSha256) throw Object.assign(new Error('The stored batch changed.'), { code: 'BATCH_ENVELOPE_CHANGED' });
+      if (typeof expectedRevisionSha256 !== 'string') throw new TypeError('Name the revision digest the stored envelope must have.');
+      if (revisionOf(held) !== expectedRevisionSha256) throw Object.assign(new Error('The stored batch changed.'), { code: 'BATCH_ENVELOPE_CHANGED' });
       held = next;
     } };
   };

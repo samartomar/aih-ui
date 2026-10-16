@@ -1,8 +1,8 @@
 // Reviewed-batch demonstration in installed Chromium against the real Workbench. Two disposable client homes: A (existing, with the
 // person's own files) and B (added). Everything the person does goes through the page. Filesystem and host-configuration changes
 // below are test setup (removing the unowned file, creating the process marker, clearing the stale-target fault), never page
-// capabilities: the page and its HTTP routes can name only the current batch and the continuation choice. The process counts its own
-// executions, counted by the fixture's `procCount`, so the journey can show that a reload never runs it again and that a Run
+// capabilities: the page and its HTTP routes can name only the current batch and the continuation choice. The fixture's `procCount`
+// counts the process's executions, so the journey can show that a reload never runs it again and that a Run
 // again choice made for one run is gone afterwards.
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile, lstat, rm } from 'node:fs/promises';

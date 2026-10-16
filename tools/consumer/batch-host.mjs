@@ -12,6 +12,7 @@ import { nativeClientIds } from '@aihq/core/harness';
 import { createHost } from './host.mjs';
 import { refuse, stable } from './headless.mjs';
 import { readBatch, planBatch, isVerifiable } from './batch.mjs';
+import { revisionOf } from './envelope-file.mjs';
 const MAX_MATERIAL_FILES = 2000, MAX_SNAPSHOT_ENTRIES = 2000, MAX_SNAPSHOT_BYTES = 256 * 1024 * 1024;
 const FAULTS = ['stale-target'];
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -103,7 +104,7 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
     const read = await readBatch({ envelopeBytes, batchId });
     if (read.status !== 'ok') return read;
     return { status: 'ok', value: { record: read.value.record, current: read.value.current, supported: read.value.supported, diagnostics: read.diagnostics, policy: JSON.parse(new TextDecoder().decode(read.value.savedPolicyBytes)),
-      revision: JSON.parse(new TextDecoder().decode(envelopeBytes)).revision.sha256 } };
+      revision: revisionOf(envelopeBytes) } };
   }
   // An envelope with a required record this Workbench does not know is read-only: it may be reviewed, never run, recovered or changed.
   function unsupported({ diagnostics }, envelopeBytes) {
