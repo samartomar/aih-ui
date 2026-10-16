@@ -128,6 +128,8 @@ export async function readJourneyEnvelope(bytes) {
       if (!checkIntentShape(record.intent)) return refuse('FIELD_SEMANTICS_UNSUPPORTED', `/records/${index}/intent`, 'Draft intent violates the supported saved-intent shape.', originalBytes);
     } else if (record.schema === MAINTENANCE_DISPOSITION_RECORD_SCHEMA) {
       if (record.id !== await dispositionId(record)) return refuse('INPUT_INVALID', `/records/${index}/id`, 'Disposition id must derive from its category, subject, scope and candidate.', originalBytes);
+    } else if (record.schema === MAINTENANCE_CHECK_RECORD_SCHEMA) {
+      // Known and nothing to derive: its id is fixed, and checkProblem in the shape pass already refused any other.
     } else if (record.schema === IMPROVEMENT_SUGGESTION_RECORD_SCHEMA) {
       const problem = await suggestionDerivedProblem(record);
       if (problem !== null) return refuse('INPUT_INVALID', `/records/${index}${problem}`, 'Suggestion id and revision must derive from its item, scope, content and trigger keys.', originalBytes);
