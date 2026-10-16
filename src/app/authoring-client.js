@@ -52,7 +52,7 @@ export function createAuthoringClient() {
     if (result.status === 'ok') { draftValue = { ...asDraft(result.value), fromPolicy: !isJourneyEnvelope(input) }; bytes = draftValue.savedIntentBytes.slice(); intent = undefined; compiled = undefined; keepJudgments(result.value); }
     notify(); return result;
   }
-  function recordChoice(endpoint, operation, message) {
+  function recordChoice(endpoint, operation, message, extraBody = {}) {
     const target = artifact;
     const run = async () => {
       if (target !== artifact) return { status: 'superseded' };
@@ -60,7 +60,7 @@ export function createAuthoringClient() {
       if (!input) return refusal('INPUT_INVALID', message);
       const attempt = ++revision; candidate = undefined; notify();
       let result;
-      try { result = await request(endpoint, { ...input, operation, policyBytes: undefined }); }
+      try { result = await request(endpoint, { ...input, operation, ...extraBody, policyBytes: undefined }); }
       catch (error) { if (attempt !== revision) return { status: 'superseded' }; throw error; }
       if (attempt !== revision) return { status: 'superseded' };
       if (result.status === 'ok') {
@@ -75,6 +75,16 @@ export function createAuthoringClient() {
     const settled = next.then(() => {}, () => {}).then(() => { if (recording === settled) recording = undefined; });
     recording = settled;
     return next;
+  }
+  // Workspace inspection and export read the same artifact as improvement checks, without adopting it.
+  async function workspaceRequest(endpoint, body = {}) {
+    const input = maintenanceInput();
+    if (!input) return refusal('INPUT_INVALID', 'Open a draft or a saved policy before working with a workspace.');
+    const attempt = revision;
+    try {
+      const result = await request(endpoint, { ...input, ...body, policyBytes: undefined });
+      return attempt === revision ? result : { status: 'superseded' };
+    } catch (error) { if (attempt !== revision) return { status: 'superseded' }; throw error; }
   }
   return {
     get catalog() { return catalog; }, get intent() { return intent; },
@@ -159,6 +169,19 @@ export function createAuthoringClient() {
     },
     recordImprovement(operation) {
       return recordChoice('improvements-record', operation, 'Open a draft or a saved policy before recording an improvement choice.');
+    },
+    readWorkspace() { return workspaceRequest('workspace-read'); },
+    planBinding({ memberId, root, replaces } = {}) { return workspaceRequest('workspace-plan', { memberId, root, replaces }); },
+    verifyWorkspace() { return workspaceRequest('workspace-verify'); },
+    exportWorkspace() { return workspaceRequest('workspace-export'); },
+    editWorkspace(operation) {
+      return recordChoice('workspace-edit', operation, 'Open a draft or a saved policy before declaring a workspace.');
+    },
+    bindCheckout({ memberId, root, replaces, confirmation } = {}) {
+      return recordChoice('workspace-bind', undefined, 'Open a draft or a saved policy before binding a checkout.', { memberId, root, replaces, confirmation });
+    },
+    unbindCheckout(bindingId) {
+      return recordChoice('workspace-unbind', undefined, 'Open a draft or a saved policy before removing a binding.', { bindingId });
     },
     async compileDraft(roots) {
       if (!draftValue) return refusal('INPUT_INVALID', 'Open a draft before compiling it.');

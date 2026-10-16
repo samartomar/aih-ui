@@ -37,6 +37,7 @@ const journeyRecord = 'urn:aihq:workbench:journey-record:unresolved-draft:1.0.0'
 const dispositionRecord = 'urn:aihq:workbench:journey-record:maintenance-disposition:1.0.0', checkRecord = 'urn:aihq:workbench:journey-record:maintenance-check:1.0.0';
 const organizationRecord = 'urn:aihq:workbench:journey-record:organization-draft:1.0.0';
 const suggestionRecord = 'urn:aihq:workbench:journey-record:improvement-suggestion:1.0.0', dismissalRecord = 'urn:aihq:workbench:journey-record:improvement-dismissal:1.0.0';
+const workspaceRecord = 'urn:aihq:workbench:journey-record:workspace-declaration:1.0.0', bindingRecord = 'urn:aihq:workbench:journey-record:local-binding:1.0.0';
 const utcTimestamp = { type: 'string', pattern: '^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(?:\\.\\d+)?Z$' };
 const updateCategory = { enum: ['content', 'software', 'client', 'environment'] };
 const recordUrn = { type: 'string', pattern: String.raw`^urn:aihq:workbench:journey-record:[a-z0-9-]+:\d+\.\d+\.\d+$` };
@@ -112,6 +113,53 @@ const improvementDismissal = { $schema: 'https://json-schema.org/draft/2020-12/s
   id: { type: 'string', pattern: '^dismissal-[a-f0-9]{32}$' }, schema: { const: dismissalRecord }, required: { const: false },
   suggestion: shape({ id: { type: 'string', pattern: '^suggestion-[a-f0-9]{32}$' }, revision: hash }), recordedAt: utcTimestamp, reason: suggestionText()
 }, ['reason']) };
+// Workspace declaration: the portable record of which repositories make up one workspace and how they relate, one
+// fixed-id optional record per envelope. It never holds a local path or a credential; the reader
+// (tools/consumer/workspace-record.mjs) enforces what a schema cannot express, so a record this schema accepts can still be
+// refused when the Workbench opens it:
+//   - revision is the sha256 of the stable workspace, members and relationships; each relationship id is derived from (from, to, kind);
+//   - members and relationships are sorted by id, aliases are sorted and differ from the identity (also ignoring case);
+//   - relationship endpoints are declared members and differ from each other;
+//   - every free-text field, instruction location and contract reference is refused when it holds a drive or UNC path, a
+//     file: URL, a ~/ path, a /home/, /Users/ or /root/ path, or a URL with userinfo; locations and contract paths are
+//     repository-relative (no leading slash, no .. or . segment);
+//   - recordedAt must be a real calendar timestamp.
+// An empty members or confirmed list is valid, and relationships.status stays "unresolved" until the owner says otherwise.
+const memberSlug = { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{0,63}$' };
+const repoIdentity = { type: 'string', maxLength: 512, pattern: String.raw`^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?:/[\w.+~-]+){2,}$` };
+const repoPath = { type: 'string', minLength: 1, maxLength: 512, pattern: String.raw`^(?![/\\~])(?![A-Za-z]:)(?!.*\\)(?!.*(?:^|/)\.{0,2}(?:/|$))[^\x00-\x1f]+$` };
+const contractRef = { anyOf: [repoPath, { type: 'string', maxLength: 300, pattern: String.raw`^urn:[A-Za-z0-9][A-Za-z0-9-]{0,31}:[\w.:@%/+-]+$` }] };
+const knownField = (key, items, maxItems) => ({ oneOf: [shape({ status: { const: 'unresolved' } }),
+  shape({ status: { const: 'known' }, [key]: { type: 'array', minItems: 1, maxItems, items } })] });
+const workspaceMember = shape({ id: memberSlug, identity: repoIdentity, aliases: { type: 'array', maxItems: 16, uniqueItems: true, items: repoIdentity }, label: suggestionText(120),
+  responsibilities: knownField('values', suggestionText(300), 32), instructions: knownField('locations', repoPath, 32), contracts: knownField('references', contractRef, 64) }, ['label']);
+const relationshipEdge = extra => shape({ id: { type: 'string', pattern: '^relationship-[a-f0-9]{32}$' }, from: memberSlug, to: memberSlug,
+  kind: { enum: ['depends-on', 'consumes-api', 'deploys', 'shares-contract'] }, ...extra });
+const workspaceDeclaration = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: workspaceRecord, ...shape({
+  id: { const: 'workspace-declaration' }, schema: { const: workspaceRecord }, required: { const: false },
+  workspace: shape({ id: { type: 'string', pattern: '^workspace-[a-f0-9]{32}$' }, label: suggestionText(120) }, ['label']), revision: hash,
+  members: { type: 'array', maxItems: 64, items: workspaceMember },
+  relationships: shape({ status: { enum: ['unresolved', 'complete'] },
+    confirmed: { type: 'array', maxItems: 256, items: relationshipEdge({ provenance: shape({ kind: { enum: ['owner', 'contract', 'instruction'] }, ref: suggestionText(300), recordedAt: utcTimestamp }, ['ref']) }) },
+    suggested: { type: 'array', maxItems: 256, items: relationshipEdge({ reason: suggestionText(300) }) } })
+}) };
+// Local binding: local state that ties one declared member to one checkout folder; never part of a default sharing export
+// and never portable execution permission. The reader also requires its id to derive from (workspace id, member id,
+// checkout root), reasons to be sorted and empty exactly when the result is "matched", remotes to be sorted by unique name,
+// and verifiedAt to be a real calendar timestamp. A different worktree has a different root, so its own binding.
+const bindingCommit = { type: 'string', pattern: '^(?:[a-f0-9]{40}|[a-f0-9]{64})$' }, nullable = schema => ({ oneOf: [schema, { type: 'null' }] });
+const localBinding = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: bindingRecord, ...shape({
+  id: { type: 'string', pattern: '^binding-[a-f0-9]{32}$' }, schema: { const: bindingRecord }, required: { const: false },
+  workspace: shape({ id: { type: 'string', pattern: '^workspace-[a-f0-9]{32}$' }, revision: hash }),
+  member: shape({ id: memberSlug, identity: repoIdentity }),
+  checkout: shape({ root: { type: 'string', minLength: 1, maxLength: 1024, pattern: String.raw`^(?:[A-Za-z]:[\\/]|\\\\|/)` } }),
+  observed: shape({ repository: nullable(repoIdentity),
+    remotes: { type: 'array', maxItems: 32, items: shape({ name: { type: 'string', pattern: String.raw`^[\w./-]{1,200}$` }, identity: nullable(repoIdentity) }) },
+    revision: nullable(bindingCommit), branch: suggestionText(255),
+    worktree: shape({ kind: { enum: ['main', 'linked'] }, gitDirSha256: hash }), workingState: shape({ clean: { type: 'boolean' }, sha256: hash }) }, ['branch']),
+  verification: shape({ result: { enum: ['matched', 'confirmed'] }, reasons: { type: 'array', maxItems: 5, uniqueItems: true, items: { enum: ['ambiguous-remote', 'fork', 'moved', 'no-remote', 'similar-name'] } }, verifiedAt: utcTimestamp }),
+  replaces: { type: 'string', pattern: '^binding-[a-f0-9]{32}$' }
+}, ['replaces']) };
 const journey = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: journeyEnvelope, ...shape({
   schema: { const: journeyEnvelope },
   id: { type: 'string', pattern: '^journey-[a-f0-9]{32}$' },
@@ -122,10 +170,10 @@ const journey = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: 
   records: array({ if: { required: ['schema'], properties: { schema: { const: journeyRecord } } },
     then: shape({ id, schema: { const: journeyRecord }, required: { const: true }, savedIntentSha256: hash, intent: { $ref: saved.$id } }),
     else: { type: 'object', required: ['id', 'schema', 'required'], additionalProperties: true, properties: { id, schema: recordUrn, required: { type: 'boolean' } } },
-    allOf: [dispositionRecord, checkRecord, organizationRecord, suggestionRecord, dismissalRecord].map(urn => ({ if: { required: ['schema'], properties: { schema: { const: urn } } }, then: { $ref: urn } })) })
+    allOf: [dispositionRecord, checkRecord, organizationRecord, suggestionRecord, dismissalRecord, workspaceRecord, bindingRecord].map(urn => ({ if: { required: ['schema'], properties: { schema: { const: urn } } }, then: { $ref: urn } })) })
 }) };
 mkdirSync(new URL('../schemas/', import.meta.url), { recursive: true });
-for (const [name, schema] of [['saved-intent-3.0.0', saved], ['review-decisions-1.0.0', review], ['journey-envelope-1.0.0', journey], ['journey-record-maintenance-disposition-1.0.0', disposition], ['journey-record-maintenance-check-1.0.0', check], ['journey-record-organization-draft-1.0.0', organizationDraft], ['journey-record-improvement-suggestion-1.0.0', improvementSuggestion], ['journey-record-improvement-dismissal-1.0.0', improvementDismissal]]) {
+for (const [name, schema] of [['saved-intent-3.0.0', saved], ['review-decisions-1.0.0', review], ['journey-envelope-1.0.0', journey], ['journey-record-maintenance-disposition-1.0.0', disposition], ['journey-record-maintenance-check-1.0.0', check], ['journey-record-organization-draft-1.0.0', organizationDraft], ['journey-record-improvement-suggestion-1.0.0', improvementSuggestion], ['journey-record-improvement-dismissal-1.0.0', improvementDismissal], ['journey-record-workspace-declaration-1.0.0', workspaceDeclaration], ['journey-record-local-binding-1.0.0', localBinding]]) {
   const path = new URL(`../schemas/${name}.json`, import.meta.url), expected = JSON.stringify(schema, null, 2) + '\n';
   if (process.argv.includes('--check')) {
     if (readFileSync(path, 'utf8').replaceAll('\r\n', '\n') !== expected) throw new Error(`Schema is stale: ${name}`);

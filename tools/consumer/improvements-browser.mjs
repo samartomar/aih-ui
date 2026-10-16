@@ -18,7 +18,7 @@ import { UNKNOWNS, IMPROVEMENT_RULES_VERSION } from './improvement-rules.mjs';
 const decode = bytes => new TextDecoder().decode(bytes);
 const ROOT = 'mattpocock.implement', CLIENTS = ['claude', 'codex'];
 const SAVED_REASON = 'guided-setup rules 1.0.0: goal.build. Goal: add tests to my app. Project: JavaScript.';
-const READS = ['read', 'draft-open', 'maintenance-check', 'improvements-check'];
+const READS = ['read', 'draft-open', 'maintenance-check', 'improvements-check', 'workspace-read'];
 const OPENED = /Saved draft reopened|Unresolved draft opened/;
 
 export async function runImprovementsBrowser({ origin, output, playwrightModule, settingsPath }) {
