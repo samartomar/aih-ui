@@ -51,10 +51,13 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
   node.append(el('h3', 'font-medium', 'Improvements'), el('p', 'text-on-surface-variant', IMPROVEMENTS_NOTE), controls, status, groups);
 
   async function record(operation) {
-    recording = true;
+    // While the choice is recorded the cards stay but are inert, so none acts on a policy that changes meanwhile;
+    // any other change is reconciled when it settles.
+    recording = true; render();
     let result;
     try { result = await client.recordImprovement(operation); } finally { recording = false; }
-    if (result.status === 'superseded') return;
+    // Superseded by another change: render, so cards for the changed policy are retired now.
+    if (result.status === 'superseded') return render();
     // A refused choice changed nothing: the shown suggestions still answer the open artifact.
     if (result.status !== 'ok') { checked = client.revision; render(); return showStatus(diagnostic(result)); }
     // Old cards describe the previous envelope; a failed recheck must not show stale actions.
@@ -62,6 +65,8 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
     showStatus('Improvement choice recorded. Save the draft to keep it.');
     await check();
   }
+  // A record action; inert while another choice is being recorded.
+  const choice = (label, handler) => { const control = button(label, handler); control.disabled = recording; return control; };
   function promptControls(suggestion) {
     const controls = el('div', 'space-y-1');
     const prompt = el('div', 'space-y-1'); prompt.hidden = true;
@@ -78,7 +83,7 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
     node.hidden = !(client.draft || client.intent);
     if (value && !recording && checked !== client.revision) { value = undefined; changed = true; }
     if (node.hidden) { attempt++; value = undefined; pending = false; failed = false; changed = false; goal.value = ''; groups.replaceChildren(); return; }
-    suggest.disabled = pending;
+    suggest.disabled = pending || recording;
     status.textContent = pending ? 'Checking improvements…' : failed ? 'The improvement check could not be completed; suggestions are unknown.' : changed ? 'The open policy or its inputs changed since the last check; Suggest again to update the suggestions.' : value ? `Checked ${value.checkedAt}.` : 'Suggest improvements using the fixed rules.';
     groups.replaceChildren();
     for (const group of groupImprovements(value)) {
@@ -101,10 +106,10 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
         if (dismissal?.reason) card.append(el('p', 'text-outline text-[11px]', dismissal.reason));
         if (preserved) card.append(el('p', 'text-on-surface-variant', 'This suggestion is not current: none of its reasons applies now. Its dismissal is preserved; forgetting it shows nothing until a reason applies again.'));
         // A preserved dismissal's suggestion no longer arises, so clearing it forgets the choice rather than showing a card.
-        if (preserved) card.append(button('Forget dismissal', safe(() => record(restoreOperation(suggestion.id)))));
+        if (preserved) card.append(choice('Forget dismissal', safe(() => record(restoreOperation(suggestion.id)))));
         // A suggestion that arose from a typed goal is shown again for that goal, so restoring it never makes it vanish.
-        else if (dismissed) card.append(button('Show again', safe(() => { if (suggestion.references?.some(r => r.kind === 'request')) goal.value = suggestion.goal; return record(restoreOperation(suggestion.id)); })));
-        else card.append(button('Dismiss', safe(() => record(dismissOperation(suggestion)))), promptControls(suggestion));
+        else if (dismissed) card.append(choice('Show again', safe(() => { if (suggestion.references?.some(r => r.kind === 'request')) goal.value = suggestion.goal; return record(restoreOperation(suggestion.id)); })));
+        else card.append(choice('Dismiss', safe(() => record(dismissOperation(suggestion)))), promptControls(suggestion));
         section.append(card);
       }
       groups.append(section);

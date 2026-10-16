@@ -168,6 +168,14 @@ test('suggestions checked for one revision are retired when the open policy chan
   assert.match(textOf(built.node), /Test helper/); assert.doesNotMatch(textOf(built.node), /policy or its inputs changed/); built.render(); assert.ok(find(built, 'Dismiss'));
 });
 
+test('a record superseded by a real edit retires the cards for the changed policy', async () => {
+  const client = { draft, revision: 1, checkImprovements: async () => ok(checked) };
+  const built = view(client); await built.open();
+  client.recordImprovement = async () => { client.revision++; built.render(); assert.equal(find(built, 'Dismiss').disabled, true, 'inert while recording'); client.revision++; return { status: 'superseded' }; };
+  await find(built, 'Dismiss').listeners.click();
+  assert.equal(find(built, 'Dismiss'), undefined); assert.match(textOf(built.node), /open policy or its inputs changed/);
+});
+
 test('a pending check does not keep cards for a revision that has changed', async () => {
   let finish;
   const client = { draft, revision: 1, checkImprovements: async () => ok(checked) };
