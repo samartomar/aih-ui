@@ -19,6 +19,12 @@ const SERVED = new Set([".html", ".js", ".css", ".json", ".svg"]);
 /** The backend worker is ESM modules only. */
 const SERVICE = new Set([".mjs"]);
 
+/**
+ * Authored sources under src/ that are inputs to generated modules, not pages. The V9 report shell
+ * is embedded in src/report/template.js; served on its own it would show the design sample unlabelled.
+ */
+const NOT_SERVED = ["report/templates/"];
+
 /** Entry points the page cannot start without. */
 const REQUIRED_PAGE_ASSETS = ["index.html", "main.js"];
 
@@ -41,7 +47,7 @@ function walk(root, extensions, prefix = "", found = []) {
  * the module tree the page imports is the module tree that is served.
  */
 export function pageAssets(repoRoot) {
-  const served = walk(join(repoRoot, "src"), SERVED);
+  const served = walk(join(repoRoot, "src"), SERVED).filter((relative) => !NOT_SERVED.some((prefix) => relative.startsWith(prefix)));
   for (const required of REQUIRED_PAGE_ASSETS) {
     if (!served.includes(required)) throw new Error(`src/${required} is missing from ${repoRoot}`);
   }

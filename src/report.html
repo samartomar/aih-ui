@@ -29,6 +29,25 @@
 <section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="report-context-heading" id="report-context"></section>
 <section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="report-observations-heading" id="report-observations"></section>
 
+<section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="snapshot-heading" id="snapshot-report">
+<h2 class="font-semibold" id="snapshot-heading">Saved snapshot report (V9)</h2>
+<p class="text-on-surface-variant">Open a report snapshot saved by <code>@aihq/core/report</code>. Core validates it, then the Workbench draws it as the offline V9 page. The page shows only what the snapshot supplies and collects nothing.</p>
+<div class="flex flex-wrap items-center gap-3">
+<label class="text-on-surface-variant" for="snapshot-file">Snapshot file</label>
+<input class="text-xs" id="snapshot-file" type="file" accept=".json,application/json">
+<label class="text-on-surface-variant" for="snapshot-mode">Show</label>
+<select class="bg-wb-input border border-wb-control-border rounded px-2 py-1 text-xs" id="snapshot-mode">
+<option value="report">The snapshot</option>
+<option value="demo">Design sample (invented values, not the snapshot)</option>
+</select>
+<button class="px-3 py-1.5 rounded border border-wb-control-border hover:bg-surface-container disabled:opacity-50" id="snapshot-render" type="button" disabled>Render</button>
+<a class="text-primary hover:underline" id="snapshot-save" download="report.html" hidden>Save HTML</a>
+</div>
+<p class="text-on-surface-variant" id="snapshot-status" role="status" aria-live="polite">No snapshot opened.</p>
+<p class="border border-tertiary rounded p-2 text-tertiary" id="snapshot-demo-note" role="note" hidden>Design sample: every number, name and command shown is invented for illustration. None of it comes from the snapshot you opened.</p>
+<iframe class="w-full h-[80vh] border border-wb-border rounded" id="snapshot-frame" title="Rendered V9 report" sandbox="allow-scripts" hidden></iframe>
+</section>
+
 <section class="bg-surface-card border border-wb-border rounded p-4 space-y-2" aria-labelledby="report-text-heading">
 <h2 class="font-semibold" id="report-text-heading">Headless rendering (read-only)</h2>
 <label class="block text-on-surface-variant" for="report-text">The same records and the same words as the panels above, as a headless caller prints them.</label>
@@ -36,5 +55,6 @@
 </section>
 </main>
 <script type="module" src="/report.js"></script>
+<script type="module" src="/report/snapshot-view.js"></script>
 </body>
 </html>
