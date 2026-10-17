@@ -6,6 +6,7 @@ import { assertCandidateDir } from './data-dir.mjs';
 import { candidateIdentity, readManifest } from './manifest.mjs';
 import { isAlive } from './process.mjs';
 import { redact, redactJson } from './redact.mjs';
+import { STAGED_LABEL, stagedTlsCondition } from './tls-interception.mjs';
 
 const LIMIT = 1024 * 1024, LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]']);
 const refusal = (code, message) => Object.assign(new Error(message), { code });
@@ -83,9 +84,14 @@ export async function writeReport({ dataDir, now = new Date(), realHome = homedi
   if (await safe(layout.manifest)) {
     try { identity = candidateIdentity(readManifest(layout.manifest)); } catch (error) { identity = `unreadable: ${error.message}`; }
   } else missing.push(`${shown(layout.manifest)}: not present`);
+  // A staged condition is part of the candidate's identity: a failure seen under it is not the same failure without it.
+  const conditionFile = join(layout.stagedTls, 'condition.json'), recorded = await safe(conditionFile);
+  const staged = recorded ? stagedTlsCondition(layout) : null;
+  if (recorded && !staged) missing.push(`${shown(conditionFile)}: present but incomplete or for a different CA, so the condition is not active`);
   const server = await json(layout.server), running = isAlive(server?.pid), ready = running && server.state === 'ready';
   await save('identity.json', {
     manifest: identity,
+    ...(staged ? { stagedCondition: STAGED_LABEL } : {}),
     server: server ? { state: server.state ?? 'unknown', url: server.url, port: server.port, startedAt: server.startedAt, packages: server.packages } : 'not present', running,
   }, true);
   await save('environment.json', { node: process.version, platform: process.platform, arch: arch(), release: release(), type: type(),
@@ -94,6 +100,12 @@ export async function writeReport({ dataDir, now = new Date(), realHome = homedi
   await mkdir(join(bundleDir, 'records'));
   await copy(layout.serverLog, 'logs/server.log');
   await copy(layout.authorityLog, 'logs/authority-transport.log');
+  // Its record and notice only; the interceptor's key and certificates stay in the data directory.
+  if (staged) {
+    await copy(join(layout.stagedTls, 'condition.json'), 'staged/condition.json', true);
+    await copy(join(layout.stagedTls, 'STAGED.md'), 'staged/STAGED.md');
+    await copy(layout.tlsLog, 'logs/tls-interception.log');
+  }
   const runs = [];
   for (const entry of await listing(layout.checks)) {
     const path = join(layout.checks, entry.name);
@@ -138,7 +150,7 @@ export async function writeReport({ dataDir, now = new Date(), realHome = homedi
   const summary = packages.map(pkg => `- ${pkg.name}: sha256 ${String(pkg.sha256).slice(0, 12)}, commit ${pkg.commit}, tarball ${pkg.tarball}`).join('\n') || `Manifest: ${typeof identity === 'string' ? identity : 'no packages'}`;
   await save('ISSUE.md', [
     '# Title: [describe the problem]', '',
-    `Candidate: ${typeof identity === 'object' ? identity.candidate ?? '(unnamed)' : identity}`, summary, '',
+    `Candidate: ${typeof identity === 'object' ? identity.candidate ?? '(unnamed)' : identity}`, summary, ...(staged ? [STAGED_LABEL] : []), '',
     `OS: ${type()} ${release()} (${process.platform}/${arch()})`, `Node: ${process.version}`, '',
     '## Steps to reproduce', '1. [First step]', '2. [Next step]', '',
     '## Expected result', '[Describe]', '',
@@ -152,6 +164,7 @@ export async function writeReport({ dataDir, now = new Date(), realHome = homedi
     'logs/: server and authority logs plus the three newest check directories; files over 1 MiB keep their tail with a truncation line.',
     'records/: journey records the page saved or the samples created (batch envelope and saved intents), plus host configuration in config/. These records are not proof of execution. Sample data is sample data, not observed evidence.',
     'records/live/: the readiness report and the reviewed batch as the running candidate itself reports them.',
+    ...(staged ? ['staged/: the staged TLS-interception condition active in this candidate (its record and notice; never its key). logs/tls-interception.log is the interceptor\'s own log.'] : []),
     'ISSUE.md: issue template to fill in.', '',
     'Tokens, keys, authorization headers, URL credentials, private keys, sensitive named values and the real home path were redacted automatically. Review every file before sharing. Linked paths outside the candidate are excluded.', '',
     '## Missing inputs', missing.length ? missing.map(item => `- ${item}`).join('\n') : 'None.', ''].join('\n'));

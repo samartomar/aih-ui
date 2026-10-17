@@ -303,3 +303,33 @@ test('the export reports what it left out', () => {
   assert.equal(workspace.exportedText({ bindings: 0, batches: 1, unknownRecords: 0 }), 'Exported for sharing without 0 local bindings and 0 records of a kind this Workbench cannot check. 1 reviewed batch stayed local because they hold local folder paths.');
   assert.equal(workspace.exportedText({ bindings: 1, batches: 2, unknownRecords: 0 }).endsWith(' 2 reviewed batches stayed local because they hold local folder paths.'), true);
 });
+
+test('reviewed batch navigation needs a declared workspace with at least two members', async () => {
+  const members = [projection.members[0], { ...projection.members[0], id: 'ui' }];
+  for (const [declared, count] of [[true, 0], [true, 1], [true, 2], [false, 2]]) {
+    const { client } = clientFor();
+    client.readWorkspace = async () => ok({ ...projection, workspace: declared ? projection.workspace : null, members: members.slice(0, count) });
+    const built = view(client); await built.open();
+    const link = elements(built.node).find(node => node.id === 'workspace-batch-link');
+    assert.equal(Boolean(link), declared && count >= 2);
+    if (link) {
+      assert.equal(link.tag, 'a'); assert.equal(link.href, '/batch.html');
+      assert.equal(link.textContent, 'Review cross-repository work as one batch');
+      assert.match(textOf(built.node), /reviewed-batch page, where the batch's scopes are reviewed and applied together/);
+    }
+  }
+});
+
+test('reviewed batch navigation stays available while workspace controls are read-only or pending', async () => {
+  const { client } = clientFor();
+  client.readWorkspace = async () => ok({ ...projection, members: [projection.members[0], { ...projection.members[0], id: 'ui' }],
+    unsupported: [{ schema: 'urn:aihq:workbench:journey-record:local-binding:2.0.0' }] });
+  const built = view(client); await built.open();
+  assert.ok(elements(built.node).find(node => node.id === 'workspace-batch-link'));
+  const editable = { ...projection, members: [projection.members[0], { ...projection.members[0], id: 'ui' }] };
+  client.readWorkspace = async () => ok(editable); await built.open();
+  let finish; client.editWorkspace = () => new Promise(resolve => { finish = resolve; });
+  const pending = find(built, 'Save member').listeners.click();
+  assert.ok(elements(built.node).find(node => node.id === 'workspace-batch-link'));
+  finish(ok({ projection: editable })); await pending;
+});

@@ -8,7 +8,8 @@ import { createReadinessHost } from './readiness-host.mjs';
 let host, startupError;
 try {
   const file = process.env.AIH_READINESS_REPAIRS;
-  host = createReadinessHost({ repairs: file ? JSON.parse(readFileSync(file, 'utf8')).repairs : [] });
+  const config = file ? JSON.parse(readFileSync(file, 'utf8')) : {};
+  host = createReadinessHost({ repairs: config.repairs, staged: config.staged });
 } catch (error) {
   // Answer every request with the configuration error instead of crashing into a restart loop.
   startupError = { status: 'error', diagnostics: [{ code: 'READINESS_CONFIG_INVALID', message: `Readiness host configuration is invalid: ${error.message}` }] };

@@ -14,6 +14,8 @@
  * disposable account home (HOME, USERPROFILE, APPDATA, XDG_*) so Core's records land there and never in the real account's, its
  * own temporary directory, and no AIH_* host setting but the ones this process sets from the samples it made. A sample that
  * could not be made leaves its host input unset, so the product shows its own "not configured" state.
+ * While the TLS-interception condition is staged (tls-interception.mjs) and the readiness sample exists, it also starts the interceptor
+ * after the installation and gives only the processes it starts afterwards the environment that reaches it.
  * With --seed-only it installs the consumer and makes the samples, then exits without listening (exit 2 if one could not be made).
  */
 import { spawnSync } from 'node:child_process';
@@ -28,6 +30,7 @@ import { candidateIdentity, readManifest, verifyManifest } from './manifest.mjs'
 import { readServerRecord } from './process.mjs';
 import { installLocalAuthority } from './local-authority.mjs';
 import { seedSamples } from './samples.mjs';
+import { activateStagedCondition } from './tls-interception.mjs';
 
 const say = message => process.stdout.write(`${new Date().toISOString()} ${message}\n`);
 const option = name => { const at = process.argv.indexOf(name); return at >= 0 ? process.argv[at + 1] : undefined; };
@@ -58,7 +61,7 @@ async function main() {
   rmSync(layout.run, { recursive: true, force: true });
   mkdirSync(layout.run, { recursive: true });
 
-  let authority, preview, closing = false, problems = [];
+  let authority, interceptor, preview, closing = false, problems = [];
   const shutdown = async reason => {
     if (closing) return;
     closing = true;
@@ -68,6 +71,7 @@ async function main() {
     preview?.server.closeAllConnections?.();
     await preview?.close().catch(() => {});
     authority?.restore();
+    await interceptor?.close().catch(() => {});
     rmSync(layout.server, { force: true });
     say('stopped');
     process.exit(0);
@@ -105,6 +109,9 @@ async function main() {
         authority = installLocalAuthority({ repository: layout.authority, log: layout.authorityLog });
         Object.assign(process.env, seeded.env);
         if (updateSourceRoots.length) delete process.env.AIH_MAINTENANCE_SOURCE;
+        // A staged condition (tls-interception.mjs) starts only now, after every install: npm's own installs and this process never see it,
+        // and only the processes started from here on (the readiness check and what Core runs from it) inherit its environment.
+        interceptor = await activateStagedCondition({ layout, seededEnv: seeded.env, say });
       },
     });
   } catch (error) {

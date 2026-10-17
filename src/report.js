@@ -2,6 +2,7 @@
 // claim set from its readiness journal and Core projects it; this page prints the strings the
 // view module produced and computes no meaning of its own. Text goes in with textContent only.
 import { reportPanels, reportText } from './app/claims-view.js';
+import { stagedNotice } from './app/readiness-view.js';
 
 const $ = id => document.getElementById(id);
 const TEXT_TONE = { error: 'text-error', warning: 'text-tertiary', success: 'text-secondary', neutral: 'text-on-surface' };
@@ -25,6 +26,20 @@ async function load() {
   } catch (error) {
     return { status: 'error', message: `The host could not be reached: ${error.message}` };
   }
+}
+
+// Staging context must never delay or invalidate the evidence report.
+async function loadStaged() {
+  const node = $('report-staged');
+  let notice = null;
+  try {
+    const response = await fetch('/api/readiness-repairs', { cache: 'no-store' });
+    const payload = await response.json();
+    notice = response.ok && payload.status === 'ok' ? stagedNotice(payload.value?.staged) : null;
+  } catch { /* The report remains available without staging context. */ }
+  // Replaced in one step, so two quick refreshes cannot both add the notice.
+  node.replaceChildren(...(notice ? [el('p', 'font-semibold', notice.label), ...(notice.detail ? [el('p', '', notice.detail)] : [])] : []));
+  node.hidden = !notice;
 }
 
 function renderPanel(panel, { heading = 'h2', headingId, depth = 0 } = {}) {
@@ -65,6 +80,7 @@ function clear(message) {
 }
 
 async function refresh() {
+  void loadStaged();
   $('report-refresh').disabled = true;
   $('report-status').textContent = 'Loading the report.';
   const result = await load();

@@ -98,3 +98,12 @@ export function overallLine(projection) {
   }
   return listed;
 }
+
+// Host staging is context for the demonstration, separate from readiness evidence.
+export function stagedNotice(staged) {
+  if (!staged || typeof staged !== 'object' || Array.isArray(staged)
+    || Object.keys(staged).some(key => !['label', 'detail'].includes(key))
+    || typeof staged.label !== 'string' || !staged.label.trim() || staged.label.length > 200
+    || (Object.hasOwn(staged, 'detail') && (typeof staged.detail !== 'string' || staged.detail.length > 1000))) return null;
+  return { label: staged.label, detail: staged.detail ?? '' };
+}

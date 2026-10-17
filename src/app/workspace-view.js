@@ -189,6 +189,12 @@ export function createWorkspaceView({ client, el, button, showStatus, download =
       body.append(declareForm); return;
     }
     text(body, `${projection.workspace.label ?? projection.workspace.id} — revision ${projection.revision ?? 'Unknown'}`);
+    if ((projection.members ?? []).length >= 2) {
+      const link = el('a', 'text-primary hover:underline', 'Review cross-repository work as one batch');
+      link.id = 'workspace-batch-link'; link.href = '/batch.html';
+      body.append(link);
+      text(body, "Opens the reviewed-batch page, where the batch's scopes are reviewed and applied together.");
+    }
     const saveMember = action('Save member', () => edit(memberOperation(values(memberFields))));
     body.append(memberForm, saveMember);
     for (const member of projection.members ?? []) body.append(memberCard(member));
