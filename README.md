@@ -305,6 +305,7 @@ PowerShell, from the repository root:
 ```powershell
 node tools/candidate.mjs tls-interception on
 node tools/candidate.mjs tls-interception status
+node tools/candidate.mjs tls-interception rotate
 node tools/candidate.mjs tls-interception off
 ```
 
@@ -313,6 +314,7 @@ POSIX shells:
 ```sh
 node tools/candidate.mjs tls-interception on
 node tools/candidate.mjs tls-interception status
+node tools/candidate.mjs tls-interception rotate
 node tools/candidate.mjs tls-interception off
 ```
 
@@ -333,6 +335,24 @@ The journey, after `tls-interception on` and a start:
    own ping goes through the interceptor and is relayed to the real registry.
 3. The re-check now passes, and the readiness report counts **1 verified
    repair**.
+
+To see the same condition come back, as when an inspection proxy rotates its
+CA, run `node tools/candidate.mjs tls-interception rotate` (with the same
+`--data <dir>`) while the candidate is still running. It is the one mode that
+works while the candidate runs, and only while the condition is staged. It makes
+a fresh sample CA in its own folder under `staged/tls-interception/`, leaves
+every earlier CA file as it was (so the trust the earlier repair persisted goes
+stale rather than following the new CA), rewrites the repair offer, and does
+not reset the readiness sample. The running interceptor switches to the new
+certificate at its next connection and logs the rotation; material that does
+not verify is refused and the previous certificate kept. Check again with the
+target **npm**: the persisted-configuration check fails again. An improvements
+check on a draft that selects an item running `npx` (an ECC MCP server such as
+`ecc.claude.mcp.context7`) then suggests the diagnosis practice from these
+records (see "Recurring friction from stored Core results"). Before the
+rotation, the same check reads `checked` with no suggestion. The readiness page
+reads its repair offer when it starts, so it offers the new sample CA only after
+the next start, and a restart begins a new readiness journal.
 
 Confinement:
 
