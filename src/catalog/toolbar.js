@@ -32,7 +32,7 @@ const KIND_ORDER = Object.keys(KIND_LABELS);
 /** Why each unavailable review state has nothing to filter on. */
 const UNAVAILABLE = {
   "Needs Review":
-    `${NOT_PUBLISHED}: no scan result or Core disposition is published per item, so no review state can be derived.`,
+    `${NOT_PUBLISHED}: supplied Scan evidence gives an evidence state, not a review state, and no Core disposition is published per item, so no review state can be derived.`,
   "Egress Out":
     `${NOT_PUBLISHED}: no item declares egress, and an empty declaration is not a measurement of none.`,
 };

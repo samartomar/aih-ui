@@ -5,19 +5,35 @@
  *
  *   header   kind icon, the item's name, its content-family badge
  *   body     the item's description from the installed Catalog release
- *   footer   the SCAN STATUS pill, the TOKEN ESTIMATE chip, local preference
+ *   footer   the EVIDENCE pill, the TOKEN chip, local preference
  *
- * Scan status and token estimate are published by nothing, so each slot keeps
- * its place and its look and says "Not published"; it is not borrowed for
- * something else. When every visible entry shares a family, its label is shown
- * once above the grid.
+ * The evidence pill is the item's state against the Scan evidence the person
+ * supplied, read by Scan's public read and coverage operations on the host:
+ * not supplied, invalid, unsupported, mismatched or matched. Missing evidence
+ * is never a publication claim, and matched is unchecked coverage of exact
+ * bytes, not producer authentication, approval or execution authority.
+ * No defined producer supplies token values, so the token chip says Unknown.
+ * When every visible entry shares a family, its label is shown once above the
+ * grid.
  * Local preferences stay unavailable until Catalog publishes an exact mapping
  * from every displayed entry to its authoring asset identity.
  */
 
 import { el } from "../app/dom.js";
-import { NOT_PUBLISHED } from "../app/absence.js";
+import { NOT_PUBLISHED, NOT_SUPPLIED } from "../app/absence.js";
 import { KIND_ICON, KIND_TONE, identity } from "./entry.js";
+
+const AUTHORITY = "Producer authenticity is unchecked; this is not an approval or execution authority.";
+// One entry per evidence state the host reports; the dot keeps the status colour meanings.
+export const EVIDENCE_STATE = {
+  "not-supplied": { text: NOT_SUPPLIED, dot: "bg-outline", title: () => "Scan evidence: not supplied. Supply a Scan report in Scan Review to see this item's state." },
+  invalid: { text: "Invalid evidence", dot: "bg-error", title: () => "Scan evidence: the supplied documents are not valid Scan reports or artifacts." },
+  unsupported: { text: "Unsupported report", dot: "bg-tertiary", title: () => "Scan evidence: the supplied report uses a version this Scan reader does not support." },
+  unavailable: { text: "Not assessable", dot: "bg-tertiary", title: () => "Scan evidence: Scan could not assess this item against the supplied reports." },
+  mismatched: { text: "Mismatched", dot: "bg-error", title: value => `Scan evidence: report ${value.scanId ?? ""} did not capture this item's exact files. ${AUTHORITY}` },
+  matched: { text: "Matched", dot: "bg-primary", title: value => `Scan evidence: report ${value.scanId ?? ""} captured this item's exact files; Scan Review shows which observations cover them. ${AUTHORITY}` },
+};
+const NOT_SUPPLIED_EVIDENCE = { state: "not-supplied" };
 
 const NO_FAMILY = { text: NOT_PUBLISHED, value: false, title: "Content family: not published for this entry.", source: "Content family" };
 
@@ -74,16 +90,19 @@ function card(entry, selectedId, onSelect, model) {
   const foot = el("div", "pt-2.5 mt-2.5 border-t border-wb-border flex items-center justify-between text-[10px]");
   const left = el("div", "flex items-center gap-2 min-w-0");
 
+  const evidence = model.evidence?.get(id.entryId) ?? NOT_SUPPLIED_EVIDENCE;
+  const shown = EVIDENCE_STATE[evidence.state] ?? EVIDENCE_STATE.unavailable;
   const status = el("span", "px-1.5 py-0.5 rounded bg-wb-meta-bg border border-wb-border text-wb-meta font-mono font-medium flex items-center gap-1 shrink-0");
-  status.appendChild(el("span", "w-1 h-1 rounded-full bg-outline"));
-  status.appendChild(el("span", "", NOT_PUBLISHED));
-  status.title = "Scan status: not published. The index carries no scan result for this item.";
+  status.dataset.evidenceState = evidence.state;
+  status.appendChild(el("span", `w-1 h-1 rounded-full ${shown.dot}`));
+  status.appendChild(el("span", "", shown.text));
+  status.title = shown.title(evidence);
   left.appendChild(status);
 
   const tokens = el("span", "px-1.5 py-0.5 rounded bg-wb-meta-bg border border-wb-border text-wb-meta font-mono hidden sm:inline-flex items-center gap-1 shrink-0");
   tokens.appendChild(el("span", "material-symbols-outlined text-[13px] text-kind-token", "toll"));
-  tokens.appendChild(el("span", "", NOT_PUBLISHED));
-  tokens.title = "Token estimate: not published.";
+  tokens.appendChild(el("span", "", "Unknown"));
+  tokens.title = "Tokens: unknown. No defined producer supplies token values for this item.";
   left.appendChild(tokens);
   foot.appendChild(left);
 
@@ -128,7 +147,7 @@ function card(entry, selectedId, onSelect, model) {
  */
 export function createCards({ elements, onSelect }) {
   return {
-    /** @param model { entries, total, noun, selectedId, intent, onChoose } */
+    /** @param model { entries, total, noun, selectedId, intent, onChoose, evidence } -- evidence: Map entryId -> { state, scanId } */
     render(model) {
       elements.cardsGrid.replaceChildren();
       elements.categoryContext.textContent = "";
