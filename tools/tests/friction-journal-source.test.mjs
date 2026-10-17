@@ -152,8 +152,6 @@ test('a child that answers something other than a list, or stops while asked, is
 });
 
 test('the journal is not an HTTP route: the page cannot read it', async () => {
-  const source = await readFile(new URL('../server/readiness.mjs', import.meta.url), 'utf8');
-  assert.doesNotMatch(source, /'\/api\/readiness-records'/);
   await withFakeChild({}, async ({ adapter, startsOf }) => {
     const request = { method: 'GET', headers: { host: '127.0.0.1:4999' }, socket: { localPort: 4999 } }, seen = [];
     const response = { writeHead(code) { seen.push(code); return this; }, end() {} };

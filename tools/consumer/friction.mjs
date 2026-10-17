@@ -127,7 +127,7 @@ export function frictionRecurrence({ evidence, subjects }) {
     if (readings === undefined) { unread += 1; continue; }
     for (const reading of readings) {
       const body = { producer: { ...FRICTION_PRODUCER }, recordSchema: entry.result.schema, subject: { ...reading.subject }, scope: { kind: reading.scopeKind, targets: [reading.subject.id] },
-        sources: [{ id: entry.id, schema: entry.result.schema, ...(entry.sha256 ? { sha256: entry.sha256 } : {}) }], observation: fit(`${entry.id}/${reading.subject.id}/${reading.condition}${reading.method ? '/persisted-configuration' : ''}`),
+        sources: [{ id: entry.id, schema: entry.result.schema, ...(entry.sha256 ? { sha256: entry.sha256 } : {}) }], observation: fit(`${entry.id}/${reading.subject.id}/${reading.condition}${reading.method ? `/${reading.method.id}` : ''}`),
         capturedAt: entry.capturedAt, measure: reading.condition, ...(reading.method ? { method: { ...reading.method } } : {}),
         ...(reading.outcome === 'unknown' ? { kind: 'unknown', unknownReason: reading.reason } : { kind: 'measured', value: { amount: reading.outcome, unit: 'outcome' } }),
         coverage: reading.complete ? { state: 'complete', reason: 'The stored Core result covers every selected check.' } : { state: 'partial', reason: 'The stored Core result was not complete.' },
@@ -140,7 +140,7 @@ export function frictionRecurrence({ evidence, subjects }) {
       const stored = claims.get(`${claim.id}\u0000${claim.revision}`);
       if (!stored) claims.set(`${claim.id}\u0000${claim.revision}`, { claim, print });
       // One request per subject, condition and check method: Core's recurrence method walks claims of one method only.
-      const groupKey = `${reading.subject.kind}\u0000${reading.subject.id}\u0000${reading.condition}\u0000${reading.method?.id}\u0000${reading.method?.version}`;
+      const groupKey = `${reading.subject.kind}\u0000${reading.subject.id}\u0000${reading.condition}\u0000${reading.method?.id ?? ''}\u0000${reading.method?.version ?? ''}`;
       const group = groups.get(groupKey) ?? { tie: reading.tie, subject: reading.subject, condition: reading.condition, method: reading.method, refs: new Map(), entries: new Set(), fixture: false };
       group.refs.set(`${claim.id}\u0000${claim.revision}`, { id: claim.id, revision: claim.revision });
       group.entries.add(entry.id);
