@@ -169,7 +169,8 @@ test('the staged repair file offers the one CA repair, and carries exactly the t
   const written = JSON.parse(readFileSync(layout.stagedRepairs, 'utf8'));
   assert.deepEqual(Object.keys(written).sort(), ['repairs', 'staged']);
   assert.deepEqual(Object.keys(written.staged).sort(), ['detail', 'label']);
-  assert.equal(written.staged.label, 'Staged condition: TLS interception (sample)');
+  assert.equal(written.staged.label, STAGED_LABEL);
+  assert.equal(STAGED_LABEL, 'Staged condition: TLS interception (sample)');
   assert.match(written.staged.detail, /tls-interception off/);
   assert.deepEqual(written.repairs, [{ key: 'npm-ca', id: 'node-npm-ca', targets: ['npm'], inputs: { caFile: join(layout.stagedTls, 'sample-ca.pem') }, network: 'declared' }]);
 });
@@ -379,7 +380,8 @@ test('start boundary: activation changes only the environment it is given, and o
   stageTlsInterception(layout);
   const outside = () => listing(root).filter(path => !path.startsWith(relative(root, data)));
   const outsideBefore = outside(), processEnvBefore = { ...process.env };
-  const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !['NODE_EXTRA_CA_CERTS', 'NODE_USE_SYSTEM_CA', 'NODE_OPTIONS'].includes(name.toUpperCase())));
+  // A controlled input: an inherited proxy or trust setting in this shell is not what the test is about.
+  const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^(NODE_EXTRA_CA_CERTS|NODE_USE_SYSTEM_CA|NODE_OPTIONS|HTTPS?_PROXY|NO_PROXY|NPM_CONFIG_(HTTPS_)?PROXY|NPM_CONFIG_NOPROXY)$/i.test(name)));
   const atInstall = { ...env }, said = [];
   const running = await activateStagedCondition({ layout, seededEnv: { AIH_READINESS_HOME: join(layout.readiness, 'home') }, env, say: line => said.push(line),
     start: options => startInterceptor({ ...options, upstream: { host: '127.0.0.1', port: registry.port }, upstreamCa: registry.caPem }) });

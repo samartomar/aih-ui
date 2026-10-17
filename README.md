@@ -209,7 +209,7 @@ Data persists across stop and start until reset.
 | `config/` | Host configuration: settings, organization source, maintenance source, readiness repairs, batch host. |
 | `samples/` | Sample projects, repositories and fixtures, each with a `SAMPLE.md`. |
 | `samples/repositories/sample-web/.claude`, `sample-api/.codex` | The two controlled client configuration folders, inside the two sample checkouts. |
-| `staged/` | Present only while a staged condition is on: the sample CA and notice for [TLS interception](#staged-tls-interception). |
+| `staged/` | Present only while a staged condition is on: the sample CA, the interceptor's certificate and key, and the notice for [TLS interception](#staged-tls-interception). |
 | `tmp/` | Temporary files of the server process and everything it starts. |
 | `state/`, `logs/`, `reports/` | The running server's record (starting or ready), logs, and failure reports. |
 | `run/` | The installed consumer and served page, rebuilt by every start. |
@@ -312,8 +312,8 @@ Confinement:
 - The sample CA, interceptor certificate and key, and a notice (`STAGED.md`) are
   written to `staged/tls-interception/` in the data directory, the repair offer
   to `config/readiness-repairs-staged.json`, and the interceptor's events to
-  `logs/tls-interception.log`. The CA's private key is used once to sign the
-  interceptor's certificate and is never kept.
+  `logs/tls-interception.log`. The CA's private key signs the CA and the
+  interceptor's certificate in memory, then is dropped; it is never kept.
 - Only the processes the candidate's server starts after it has installed its
   packages (the readiness check and what Core runs from it) see the condition:
   a preload that reroutes their TLS connection for `registry.npmjs.org:443` to

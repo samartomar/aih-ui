@@ -1,6 +1,6 @@
 // A throwaway certificate authority and one server certificate, made with Node's crypto and a small DER writer: no openssl and
 // no dependency. It exists so the staged TLS-interception condition has something real to be trusted or distrusted. The CA's
-// private key signs the leaf once, in memory, and is dropped: nothing can issue another certificate from this CA afterwards.
+// private key signs the CA's own certificate and the leaf, in memory, and is dropped: nothing can issue another certificate from this CA afterwards.
 import { createHash, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
 
 const length = size => {

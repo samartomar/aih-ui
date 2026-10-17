@@ -6,7 +6,8 @@
 import tls from 'node:tls';
 import { syncBuiltinESMExports } from 'node:module';
 
-const LOOPBACK = new Set(['127.0.0.1', 'localhost', '::1']);
+// Literal loopback addresses only: a name such as localhost goes through the hosts file.
+const LOOPBACK = new Set(['127.0.0.1', '::1']);
 
 export function parseRoutes(text) {
   const routes = new Map();

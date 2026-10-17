@@ -2,7 +2,7 @@
 // and wired to the Workbench only through the host configuration it already reads (the AIH_* inputs). Nothing here is
 // observed evidence, and nothing real is inspected or fetched. Runs inside the server process, after the consumer is installed.
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -83,6 +83,18 @@ async function declareWorkspace({ editWorkspace }, envelopeBytes) {
     bytes = result.value.envelopeBytes;
   }
   return bytes;
+}
+
+// Makes a sample unmade: its own paths go, and so does its entry in the record, so the next start makes it again. A record in
+// another format is left alone (seedSamples then starts a new one anyway).
+export function forgetSample(layout, key, owned) {
+  for (const path of owned) rmSync(path, { recursive: true, force: true, maxRetries: 3 });
+  const recordPath = join(layout.samples, '.seeded.json');
+  let record;
+  try { record = JSON.parse(readFileSync(recordPath, 'utf8')); } catch { return; }
+  if (record?.schema !== SEEDED_SCHEMA || !record.samples || !(key in record.samples)) return;
+  delete record.samples[key];
+  writeFileSync(recordPath, `${JSON.stringify(record, null, 2)}\n`);
 }
 
 export async function seedSamples({ layout, consumerDir }) {

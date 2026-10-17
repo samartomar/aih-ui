@@ -10,7 +10,7 @@ const routes = parseRoutes('registry.npmjs.org=127.0.0.1:5555');
 const probe = () => { const calls = []; const target = { connect: (...args) => { calls.push(args); return 'socket'; } }; installRoute(routes, target); return { target, calls }; };
 
 test('parses host=address:port lists and keeps only loopback targets with valid ports', () => {
-  assert.deepEqual([...parseRoutes('A.example=127.0.0.1:1234, b.example=localhost:2').entries()], [['a.example', { host: '127.0.0.1', port: 1234 }], ['b.example', { host: 'localhost', port: 2 }]]);
+  assert.deepEqual([...parseRoutes('A.example=127.0.0.1:1234, b.example=::1:2, c.example=localhost:3').entries()], [['a.example', { host: '127.0.0.1', port: 1234 }], ['b.example', { host: '::1', port: 2 }]]);
   assert.equal(parseRoutes('x=10.0.0.1:443').size, 0);
   assert.equal(parseRoutes('x=127.0.0.1:0,y=127.0.0.1:70000,=127.0.0.1:1,z').size, 0);
   assert.equal(parseRoutes(undefined).size, 0);

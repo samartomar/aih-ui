@@ -31,16 +31,15 @@ async function load() {
 // Staging context must never delay or invalidate the evidence report.
 async function loadStaged() {
   const node = $('report-staged');
-  node.hidden = true; node.replaceChildren();
+  let notice = null;
   try {
     const response = await fetch('/api/readiness-repairs', { cache: 'no-store' });
     const payload = await response.json();
-    const notice = response.ok && payload.status === 'ok' ? stagedNotice(payload.value?.staged) : null;
-    if (!notice) return;
-    node.append(el('p', 'font-semibold', notice.label));
-    if (notice.detail) node.append(el('p', '', notice.detail));
-    node.hidden = false;
+    notice = response.ok && payload.status === 'ok' ? stagedNotice(payload.value?.staged) : null;
   } catch { /* The report remains available without staging context. */ }
+  // Replaced in one step, so two quick refreshes cannot both add the notice.
+  node.replaceChildren(...(notice ? [el('p', 'font-semibold', notice.label), ...(notice.detail ? [el('p', '', notice.detail)] : [])] : []));
+  node.hidden = !notice;
 }
 
 function renderPanel(panel, { heading = 'h2', headingId, depth = 0 } = {}) {

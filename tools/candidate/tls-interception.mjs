@@ -10,29 +10,22 @@ import { dirname, join } from 'node:path';
 import tls from 'node:tls';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createSampleCa } from './sample-ca.mjs';
+import { forgetSample } from './samples.mjs';
 
 export const STAGED_CONDITION_SCHEMA = 'urn:aih-ui:candidate-staged-condition:1.0.0';
-export const STAGED_LABEL = 'Staged condition active: TLS interception (sample)';
+// One name for the condition everywhere: the page banners, the report bundle and the server log.
+export const STAGED_LABEL = 'Staged condition: TLS interception (sample)';
 export const TLS_ROUTE_MODULE = fileURLToPath(new URL('./tls-route.mjs', import.meta.url));
 const HOSTS = Object.freeze(['registry.npmjs.org']);
 const OFF_COMMAND = 'node tools/candidate.mjs tls-interception off';
+const refusal = (code, message) => Object.assign(new Error(message), { code });
 const fold = name => (process.platform === 'win32' ? name.toUpperCase() : name);
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const files = layout => ({ condition: join(layout.stagedTls, 'condition.json'), ca: join(layout.stagedTls, 'sample-ca.pem'), cert: join(layout.stagedTls, 'interceptor.pem'),
   key: join(layout.stagedTls, 'interceptor-key.pem'), notice: join(layout.stagedTls, 'STAGED.md') });
 
-// A repair applied earlier must not hide the staged failure, so the readiness sample is made again by the next start: its folder
-// goes, and so does its entry in the record of samples already made (samples.mjs makes any sample with no entry).
-function resetReadinessSample(layout) {
-  rmSync(layout.readiness, { recursive: true, force: true, maxRetries: 3 });
-  const recordPath = join(layout.samples, '.seeded.json');
-  let record;
-  try { record = JSON.parse(readFileSync(recordPath, 'utf8')); } catch { return; }
-  if (record?.samples && 'readiness' in record.samples) {
-    delete record.samples.readiness;
-    writeFileSync(recordPath, `${JSON.stringify(record, null, 2)}\n`);
-  }
-}
+// A repair applied earlier must not hide the staged failure, so the readiness sample is made again by the next start.
+const resetReadinessSample = layout => forgetSample(layout, 'readiness', [layout.readiness]);
 
 const noticeText = hosts => `# Staged sample condition: TLS interception
 
@@ -92,7 +85,7 @@ export function stagedTlsCondition(layout) {
 // reroutes the Node probe). The terminator answers with the sample leaf, then relays to the real host as a client would, so the
 // upstream is verified with default trust (plus `upstreamCa`, which only tests supply).
 export async function startInterceptor({ layout, condition = stagedTlsCondition(layout), log = layout.tlsLog, upstream = { host: 'registry.npmjs.org', port: 443 }, upstreamCa } = {}) {
-  if (!condition) throw Object.assign(new Error('The TLS-interception condition is not staged.'), { code: 'CANDIDATE_NOT_STAGED' });
+  if (!condition) throw refusal('CANDIDATE_NOT_STAGED', 'The TLS-interception condition is not staged.');
   const at = files(layout), hosts = condition.hosts.map(host => host.toLowerCase());
   mkdirSync(dirname(log), { recursive: true });
   const record = line => { try { appendFileSync(log, `${new Date().toISOString()} ${line}\n`); } catch { /* logging is never a reason to fail a connection */ } };
@@ -181,7 +174,8 @@ export async function activateStagedCondition({ layout, seededEnv, env = process
   if (!condition) return null;
   if (!seededEnv.AIH_READINESS_HOME) { say('staged condition: TLS interception is staged but the readiness sample is missing, so it stays inactive'); return null; }
   const interceptor = await start({ layout, condition });
-  writeStagedRepairs(layout, condition);
+  // A failure after the interceptor started must not leave it listening behind a server that is about to exit.
+  try { writeStagedRepairs(layout, condition); } catch (error) { await interceptor.close().catch(() => {}); throw error; }
   Object.assign(env, stagedEnvironment({ base: env, routeModule: TLS_ROUTE_MODULE, tlsPort: interceptor.tlsPort, proxyPort: interceptor.proxyPort, repairsFile: layout.stagedRepairs }));
   say(`staged condition: TLS interception (proxy 127.0.0.1:${interceptor.proxyPort}, tls 127.0.0.1:${interceptor.tlsPort})`);
   return interceptor;
@@ -190,7 +184,7 @@ export async function activateStagedCondition({ layout, seededEnv, env = process
 // The repair offer that goes with the condition. `staged` is read by the readiness child and shown as a banner on the readiness
 // and report pages: exactly these two strings.
 export function writeStagedRepairs(layout, condition) {
-  const staged = { label: 'Staged condition: TLS interception (sample)',
+  const staged = { label: STAGED_LABEL,
     detail: `An intercepting proxy with a generated sample CA stands between this candidate's services and ${condition.hosts.join(', ')}; nothing on this machine outside the candidate is changed. Turn it off with: ${OFF_COMMAND}` };
   const repairs = [{ key: 'npm-ca', id: 'node-npm-ca', targets: ['npm'], inputs: { caFile: files(layout).ca }, network: 'declared' }];
   mkdirSync(dirname(layout.stagedRepairs), { recursive: true });
