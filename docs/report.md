@@ -94,3 +94,88 @@ the machine check to be run again. Failed checks of targets no repair touched st
   inputs (`readinessReport({ scanReports, estimates, usage })`); the page does not collect them.
 - `generatedAt`, the instant the caller passes to `readinessReport`, is the capture time of the Unknown usage claim; the host passes its own clock.
 - The report is a projection for the developer; it does not change anything and grants no approval.
+
+## Saved snapshot report (V9)
+
+The page also draws a saved `@aihq/core/report` snapshot as one self-contained, offline HTML page in
+the V9 developer-console design. Core owns the snapshot: its shape, `createReport`, `importSnapshot`,
+`exportSnapshot`, `validateSnapshot`, the bounds and the privacy projection. The Workbench owns how it
+looks, and reads the snapshot only through those public functions.
+
+| Piece | Where |
+| --- | --- |
+| Renderer (no package, file, network or clock access) | `src/report/render.js`, `createReportRenderer(reportData)` |
+| Authored V9 shell | `src/report/templates/report.html` (not served on its own) |
+| Generated template module | `src/report/template.js`, from `node tools/report-template.mjs`; `--check` verifies it |
+| Binding to the installed Core | `tools/report/core-report.mjs` |
+| Offline tool | `tools/render-report.mjs` |
+| Page section and host route | `src/report.html`, `src/report/snapshot-view.js`, `POST /api/report-render` (`tools/server/report.mjs`) |
+| Checks | `tools/tests/report-render.test.mjs`, `tools/check-report.mjs`, `tools/report/visual.mjs`, `tools/report/page-browser.mjs` |
+| Attribution | `src/report/NOTICE`, `src/report/LICENSE` (Apache-2.0) |
+
+`renderReport(snapshot, { title?, mode? })` takes a title of 1–200 characters (default `AIH report`)
+and a mode of `report` (default) or `demo`; any other option value throws `TypeError`. The snapshot is
+re-projected through `exportSnapshot` and `importSnapshot` before it is drawn, so invalid input throws
+Core's `ReportInputError` (`INPUT_INVALID` or `SCHEMA_UNSUPPORTED`), in demo mode too.
+
+Offline, without a server:
+
+```
+node tools/render-report.mjs <snapshot.json> <out.html> [--demo] [--title <text>] [--consumer <dir>]
+```
+
+`@aihq/core` is found in `node_modules` from `--consumer`, else from the current folder, else from
+this repository. Core validates the file before anything is written; an invalid snapshot prints
+Core's code and reason and writes nothing. An existing output file is never replaced.
+
+On the page, the person opens a snapshot file and chooses the snapshot or the design sample. The host
+validates it with the installed `@aihq/core/report` and renders it with the same renderer; the page
+shows the document in a frame sandboxed to an opaque origin (scripts only) and offers the same bytes
+to save. The route takes a same-origin `application/json` post of the snapshot document, at most
+2 MiB, with `?mode=report` or `?mode=demo`; an invalid snapshot answers 422 with Core's code.
+
+### What the page shows
+
+- **Offline and deterministic.** Inline CSS and script, system fonts, no external request. Identical
+  snapshot and options give identical bytes; the only clock is the topbar time, filled in at view time.
+- **Escaped.** Every supplied string is HTML-escaped. The embedded `window.AIH_DATA` literal escapes
+  `<`, `>`, `&`, U+2028 and U+2029, so supplied text cannot end the script or add markup.
+- **No score.** Counts are the snapshot's own `metrics.counts`. Readiness wording is factual
+  (`FAILED CHECKS`, `UNVERIFIED GAPS`, `NO FAILED CHECKS`, `NO CHECKS REPORTED`, or `NOT EVALUATED`
+  when `status` is not `completed`) and never says "ready".
+- **Report mode.** Every document says **Saved snapshot display**. Five of the 14 sections are LIVE
+  ("LIVE · supplied snapshot" or "LIVE · caller-labelled newly acquired"; live means supplied, never
+  fresh): `sec-hero` (status, counts, totals), `sec-ready` (failed and not-evaluated checks, and the
+  evidence and provenance card), `sec-actions` (items ranked mechanically from failed checks, broken
+  tools, diagnostics, unavailable and skipped checks, absent and config-only tools, each with "no
+  command supplied"), `sec-adoption` (check chips, tools by state, observations) and `sec-support`
+  (a copy-ready draft of the findings). The other nine are EMPTY with a reason and no number; a
+  missing measurement is never drawn as zero.
+- **Evidence limits.** `binary` is "found — not run", `config-only` is "not verified", observations
+  are "observed, not verified". Structural validation, the original-evidence SHA-256 (not recomputed)
+  and authentication (`not authenticated`) are three separate rows.
+- **Design sample.** Demo mode is the authored V9 sample with its DEMO banner, DEMO chips and PREVIEW
+  ribbons: every number, name and command is invented, and none of the snapshot's values is drawn
+  (the snapshot is still validated). The page adds its own design-sample note beside the frame.
+- **Static and hydrated.** The document is complete with scripts off. The same section HTML is
+  embedded in `window.AIH_DATA` and re-applied on load, so static and hydrated sections are
+  identical. The Ctrl+K palette jumps between the 14 sections; without scripts each is reachable by
+  its `#sec-…` anchor.
+
+### Checks
+
+`npm run check:workbench` runs `tools/check-report.mjs` against the installed Core. It verifies that
+the template reproduces from the shell; that, while the installed Core still exports
+`./report/render`, the Workbench renderer draws Core's bytes for every fixture snapshot
+(`tools/report/fixtures.mjs`), both modes and an escaped title, and refuses invalid input and options
+with the same error (once Core no longer exports it, the comparison is recorded as skipped); and that
+the offline tool writes the renderer's bytes, refuses an unsupported snapshot without writing and
+never replaces a file. Its visual check renders the workflow snapshot in both modes with scripts off
+and on in Chromium (`REPORT_BROWSER_CHANNEL`, for example `msedge`, selects an installed browser) and
+saves `report-static`, `report-hydrated`, `demo-static` and `demo-hydrated` full-page and `-hero`
+screenshots with `visual-check.json` under `report-evidence/visual/` in the check output. It fails on
+a page or console error, any network request, a missing section, an invisible or mis-sized outcome
+bar, report-mode states other than 5 LIVE and 9 EMPTY, hydrated sections that differ from static
+ones, or a broken palette. The integrated Workbench check drives the page section in Chromium
+(`tools/report/page-browser.mjs`). Only Core's single supported diagnostic contract is bound, and
+only Chromium is checked.

@@ -92,6 +92,17 @@ if (process.exitCode === 0) {
   process.exitCode = authority.status ?? 1;
 }
 if (process.exitCode === 0) {
+  // The V9 report presentation: Core equivalence, the offline tool and the visual check with screenshots.
+  const report = spawnSync(process.execPath, [join(repo, 'tools/check-report.mjs'), output, join(output, 'report-evidence')], {
+    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 180_000,
+    env: { ...isolated, PLAYWRIGHT_MODULE: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href },
+  });
+  writeFileSync(join(output, 'report-check.log'), `${report.stdout ?? ''}${report.stderr ?? ''}`);
+  process.stdout.write(report.stdout ?? ''); process.stderr.write(report.stderr ?? '');
+  if (report.error) throw report.error;
+  process.exitCode = report.status ?? 1;
+}
+if (process.exitCode === 0) {
   const unit = spawnSync(process.execPath, ['--test', ...readdirSync(join(repo, 'tools/tests')).filter(name => name.endsWith('.test.mjs')).map(name => join(repo, 'tools/tests', name))], {
     cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 120_000, env: isolated,
   });
