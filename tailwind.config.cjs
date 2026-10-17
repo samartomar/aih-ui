@@ -21,7 +21,8 @@ const roles = [
 ];
 
 module.exports = {
-  content: { relative: true, files: ["./src/**/*.{html,js}"] },
+  // The V9 report shell carries its own inline styles and is never styled by these utilities.
+  content: { relative: true, files: ["./src/**/*.{html,js}", "!./src/report/template.js", "!./src/report/templates/**"] },
   plugins: [require("@tailwindcss/forms"), require("@tailwindcss/container-queries")],
   darkMode: "class",
   theme: {
