@@ -6,7 +6,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { readInstalledRelease } from '@aihq/catalog/node';
-import { freshAuthoring, composeAuthoring, openDraft, editDraft, stable } from './headless.mjs';
+import { freshAuthoring, composeAuthoring, openDraft, editDraft } from './headless.mjs';
 import * as publicApi from './workspace.mjs';
 import { readWorkspace, editWorkspace, planBinding, bindCheckout, unbindCheckout, verifyBindings, exportWorkspace, remoteIdentity, sameIdentity,
   validateDeclaration, validateBinding, WORKSPACE_DECLARATION_SCHEMA, LOCAL_BINDING_SCHEMA } from './workspace.mjs';
@@ -15,7 +15,7 @@ import { readJourneyEnvelope, JOURNEY_RECORD_KINDS, encodeBase64 } from './journ
 import { unsafeText, identityOf } from './workspace-record.mjs';
 import { recordMaintenance } from './maintenance.mjs';
 import { checkImprovements, recordImprovement } from './improvements.mjs';
-import { digestBytes } from './intake.mjs';
+import { stable, digestBytes } from './primitives.mjs';
 import { BATCH_RECORD_SCHEMA } from './batch-record.mjs';
 import { batchFixture } from './batch-fixture.mjs';
 import { createMixedService } from './mixed-service.mjs';
@@ -1083,7 +1083,7 @@ test('shipped workspace schemas agree structurally with the runtime records and 
 
 // ---- 10. Boundaries --------------------------------------------------------------------------------------------------
 test('the pure modules import only the allowed seams and contain no network, process, timer or random calls; the public entry is small', async () => {
-  const allowed = [/^\.\/intake\.mjs$/, /^\.\/journey\.mjs$/, /^\.\/headless\.mjs$/, /^\.\/maintenance-record\.mjs$/, /^\.\/workspace-record\.mjs$/];
+  const allowed = [/^\.\/primitives\.mjs$/, /^\.\/journey\.mjs$/, /^\.\/maintenance-record\.mjs$/, /^\.\/workspace-record\.mjs$/];
   for (const name of ['workspace-record.mjs', 'workspace.mjs']) {
     const source = await readFile(new URL(`./${name}`, import.meta.url), 'utf8');
     const specifiers = [...source.matchAll(/^(?:import|export)\b[^;]*?\bfrom\s+'([^']+)'/gm)].map(match => match[1]);

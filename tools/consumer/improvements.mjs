@@ -4,8 +4,8 @@
 // recordImprovement. Nothing is applied and nothing is sent anywhere.
 import { isCheckedRelease } from '@aihq/catalog/reader';
 import { releaseOrderProblem } from './release-order.mjs';
-import { only } from './intake.mjs';
-import { refuse, managementIdOf } from './headless.mjs';
+import { only, refuse } from './primitives.mjs';
+import { managementIdOf } from './headless.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { isUtcTimestamp, MAINTENANCE_CHECK_RECORD_SCHEMA } from './maintenance-record.mjs';
 import { IMPROVEMENT_SUGGESTION_RECORD_SCHEMA, IMPROVEMENT_DISMISSAL_RECORD_SCHEMA, SUGGESTION_FIELDS, suggestionProblem, suggestionDerivedProblem, dismissalProblem, dismissalId } from './improvement-record.mjs';

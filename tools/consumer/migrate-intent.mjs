@@ -1,5 +1,5 @@
-import { freshAuthoring, ok, refuse } from './headless.mjs';
-import { only, hash } from './intake.mjs';
+import { freshAuthoring } from './intent-shape.mjs';
+import { ok, refuse, only, hash } from './primitives.mjs';
 export function migrateIntent(old, inventories) {
   const next = freshAuthoring();
   const find = ref => inventories.find(e => e.release.sha256 === ref.releaseSha256)?.release.items.find(i => i.id === ref.itemId);

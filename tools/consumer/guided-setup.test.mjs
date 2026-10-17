@@ -4,8 +4,9 @@ import { readFile } from 'node:fs/promises';
 import { dirname, isAbsolute, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readInstalledRelease } from '@aihq/catalog/node';
+import { digestBytes } from './primitives.mjs';
 import { freshAuthoring, composeAuthoring, openDraft, compileDraft } from './headless.mjs';
-import { intakeDeclaration, digestBytes } from './intake.mjs';
+import { intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
 
 const rootIds = ['mattpocock.tdd', 'mattpocock.implement', 'aihq.client.claude'];

@@ -10,7 +10,7 @@ import { mkdir, readdir, readFile, rename, rm } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { nativeClientIds } from '@aihq/core/harness';
 import { createHost } from './host.mjs';
-import { refuse, stable } from './headless.mjs';
+import { refuse, stable } from './primitives.mjs';
 import { readBatch, planBatch, isVerifiable } from './batch.mjs';
 import { revisionOf } from './envelope-file.mjs';
 const MAX_MATERIAL_FILES = 2000, MAX_SNAPSHOT_ENTRIES = 2000, MAX_SNAPSHOT_BYTES = 256 * 1024 * 1024;

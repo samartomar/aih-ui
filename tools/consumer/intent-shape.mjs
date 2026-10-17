@@ -1,4 +1,23 @@
-import { hash, object, only, checkInput } from './intake.mjs';
+import { hash, object, only } from './primitives.mjs';
+export const AUTHORING_SCHEMA = 'urn:aihq:workbench:saved-intent:3.0.0';
+export const REVIEW_SCHEMA = 'urn:aihq:workbench:review-decisions:1.0.0';
+export function freshAuthoring() {
+  return { schema: AUTHORING_SCHEMA, origins: [{ id: 'direct', kind: 'direct' }], roots: [], exclusions: [], pins: [], provenance: [], inputs: [], reviews: { schema: REVIEW_SCHEMA, records: [], history: [] } };
+}
+const text = value => typeof value === 'string' && value.length > 0 && value.length <= 1000 && !/[\x00-\x1f]/.test(value);
+const name = value => text(value) && /^[\w.-]{1,180}$/.test(value);
+export function checkInput(input, resolved = true) {
+  if (!only(input, ['id', 'kind', 'locator', 'resolvedIdentity'], ['releaseSha256']) || !name(input.id) || (resolved && !hash(input.releaseSha256))) return false;
+  const { kind, locator: l, resolvedIdentity: r } = input;
+  if (!object(r) || !hash(r.sha256)) return false;
+  if (kind === 'local') return only(l, ['input']) && name(l.input) && only(r, ['sha256']);
+  if (kind === 'git') return only(l, ['repository'], ['ref']) && text(l.repository) && !/[@?#\\]|:\/\/[^/]*:/.test(l.repository)
+    && (l.ref === undefined || text(l.ref)) && only(r, ['revision', 'sha256']) && /^[a-f0-9]{40,64}$/.test(r.revision);
+  if (kind === 'npm') return only(l, ['name'], ['range']) && /^(@[\w.-]+\/)?[\w.-]+$/.test(l.name) && (l.range === undefined || text(l.range))
+    && only(r, ['version', 'integrity', 'sha256']) && /^\d+\.\d+\.\d+[-+\w.]*$/.test(r.version) && /^sha(256|384|512)-[A-Za-z0-9+/]+={0,2}$/.test(r.integrity);
+  return kind === 'organization' && only(l, ['authorityId', 'sourceId']) && name(l.authorityId) && name(l.sourceId)
+    && only(r, ['revision', 'sha256']) && text(r.revision);
+}
 const id = value => typeof value === 'string' && /^[\w.-]{1,180}$/.test(value);
 const scope = value => ['project', 'user'].includes(value);
 const descriptor = value => only(value, ['path', 'sha256', 'byteLength'], ['id', 'schema']) && typeof value.path === 'string' && hash(value.sha256) && Number.isSafeInteger(value.byteLength) && value.byteLength >= 0;
@@ -10,7 +29,7 @@ const unique = (values, key) => new Set(values.map(key)).size === values.length;
 export const rootKey = value => `${value.releaseSha256}/${value.itemId}/${value.scope}`;
 export const pinKey = value => `${value.releaseSha256}/${value.itemId}`;
 export function checkReview(review) {
-  if (!only(review, ['schema', 'records', 'history']) || review.schema !== 'urn:aihq:workbench:review-decisions:1.0.0' || !Array.isArray(review.records) || !Array.isArray(review.history)) return false;
+  if (!only(review, ['schema', 'records', 'history']) || review.schema !== REVIEW_SCHEMA || !Array.isArray(review.records) || !Array.isArray(review.history)) return false;
   const all = [...review.records, ...review.history];
   return all.length <= 4096 && unique(all, r => r?.id) && all.every(r => only(r, ['id', 'owner', 'actor', 'recordedAt', 'disposition', 'reason', 'subject', 'finding', 'evidence', 'state'], ['supersedes'])
     && id(r.id) && only(r.owner, ['kind', 'id']) && ['individual', 'organization'].includes(r.owner.kind) && identity(r.owner.id)
@@ -24,7 +43,7 @@ export function checkReview(review) {
     && (r.supersedes === undefined || (r.supersedes !== r.id && review.history.some(prior => prior.id === r.supersedes))));
 }
 export function checkIntentShape(intent) {
-  if (!only(intent, ['schema', 'origins', 'roots', 'exclusions', 'pins', 'provenance', 'inputs', 'reviews']) || intent.schema !== 'urn:aihq:workbench:saved-intent:3.0.0') return false;
+  if (!only(intent, ['schema', 'origins', 'roots', 'exclusions', 'pins', 'provenance', 'inputs', 'reviews']) || intent.schema !== AUTHORING_SCHEMA) return false;
   if (['origins', 'roots', 'exclusions', 'pins', 'provenance', 'inputs'].some(field => !Array.isArray(intent[field]) || intent[field].length > 4096)) return false;
   if (['origins', 'roots', 'exclusions', 'pins', 'provenance', 'inputs'].some(field => intent[field].some(value => !object(value)))) return false;
   if (new TextEncoder().encode(JSON.stringify(intent)).length > 850_000 || !checkReview(intent.reviews)) return false;

@@ -1,23 +1,17 @@
 // Supported consumer boundary. No host acquisition or execution authority.
-import { parsePolicy, deriveRecipeIdentity } from '@aihq/core/contracts';
+import { parsePolicy } from '@aihq/core/contracts';
 import { isCheckedRelease, listItems, configureItem, resolveSelections, validateSelectionSet } from '@aihq/catalog/reader';
-import { checkIntentShape, rootKey, pinKey } from './intent-shape.mjs';
+import { checkIntentShape, checkReview, rootKey, pinKey, AUTHORING_SCHEMA, REVIEW_SCHEMA } from './intent-shape.mjs';
 import { migrateIntent } from './migrate-intent.mjs';
 import { inspectReviewEvidence, compareReviewBindings, describeReviewJudgments, summarizeReviewJudgments } from './review-bindings.mjs';
-import { checkReview } from './intent-shape.mjs';
+import { stable, ok, refuse } from './primitives.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_KINDS } from './journey.mjs';
-export { inspectReviewEvidence, compareReviewBindings, describeReviewJudgments, summarizeReviewJudgments } from './review-bindings.mjs';
-export const AUTHORING_SCHEMA = 'urn:aihq:workbench:saved-intent:3.0.0';
-export const REVIEW_SCHEMA = 'urn:aihq:workbench:review-decisions:1.0.0';
-export const stable = value => JSON.stringify(value, (_key, member) => member && typeof member === 'object' && !Array.isArray(member)
-  ? Object.fromEntries(Object.entries(member).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : member);
-export const ok = value => ({ status: 'ok', value, diagnostics: [] });
-export const refuse = (code, path, message, originalBytes, details) => ({ status: 'refused', diagnostics: [{ code, path, message, ...(details ? { details } : {}) }], ...(originalBytes ? { originalBytes: originalBytes.slice() } : {}) });
+export { inspectReviewEvidence, compareReviewBindings, describeReviewJudgments, summarizeReviewJudgments, describeAuthoringSubject } from './review-bindings.mjs';
+export { AUTHORING_SCHEMA, REVIEW_SCHEMA, freshAuthoring } from './intent-shape.mjs';
+// The ./authoring entry has always exported these names; they come from the shared primitives.
+export { stable, ok, refuse } from './primitives.mjs';
 // The id ordinary Enterprise composition gives an item at a scope; also names an organization entry that is never composed.
 export const managementIdOf = ({ scope, packageName, itemId }) => `${scope}--${packageName.replace(/^@/, '').replaceAll('/', '.')}--${itemId}`;
-export function freshAuthoring() {
-  return { schema: AUTHORING_SCHEMA, origins: [{ id: 'direct', kind: 'direct' }], roots: [], exclusions: [], pins: [], provenance: [], inputs: [], reviews: { schema: REVIEW_SCHEMA, records: [], history: [] } };
-}
 const sorted = values => [...values].sort((a, b) => stable(a) < stable(b) ? -1 : stable(a) > stable(b) ? 1 : 0);
 function inventoryIndex(inventories) {
   if (!Array.isArray(inventories) || inventories.length > 32) throw new Error('Supply at most 32 exact checked inventories.');
@@ -195,22 +189,6 @@ async function buildReviewed({ intent, inventories, base, originalBytes, reviewE
   const result = await build({ intent, inventories, base, capture: true });
   if (result.status === 'ok') return ok({ ...result.value, ...await reviewView({ intent: result.value.intent, inventories, reviewEvidence, comparisons, recipient }) });
   return originalBytes ? { ...result, originalBytes: originalBytes.slice() } : result;
-}
-// Use Core's public identity semantics for exact supplied recipe snapshots.
-// This describes content, not human approval or observation custody.
-export async function describeAuthoringSubject({ inventory, itemId }) {
-  if (!inventory || !isCheckedRelease(inventory.release)) return refuse('SOURCE_IDENTITY_MISMATCH', '/inventory', 'Supply an actual checked Catalog reader value.');
-  const item = listItems(inventory.release).find(item => item.id === itemId);
-  if (!item) return refuse('SOURCE_REVISION_UNAVAILABLE', '/itemId', 'Exact item unavailable.');
-  const recipeBytes = inventory.materials?.find(material => material.path === item.recipe.path)?.bytes;
-  if (!recipeBytes) return refuse('SOURCE_REVISION_UNAVAILABLE', '/recipeBytes', 'Exact recipe bytes are required for identity derivation.');
-  // Identity describes the checked recipe declaration, independent of the
-  // authored values for its required inputs. Core validates this public shape.
-  const reference = { source: inventory.materialSource, path: item.recipe.path, sha256: item.recipe.sha256, byteLength: item.recipe.byteLength,
-    materials: item.materials.map(({ id, path, sha256, byteLength }) => ({ id, path, sha256, byteLength })) };
-  const identity = await deriveRecipeIdentity({ recipeBytes, reference });
-  if (identity.status !== 'ok') return identity;
-  return ok({ releaseSha256: inventory.release.sha256, itemId, itemSha256: item.itemSha256, recipeIdentity: identity.value.recipeIdentity, materials: identity.value.materials });
 }
 export async function editAuthoring({ policyBytes, inventories, operation, reviewEvidence = [], comparisons = [], recipient }) {
   const original = await readAuthoring({ policyBytes, inventories });

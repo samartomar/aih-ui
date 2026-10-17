@@ -7,7 +7,7 @@
 // requested; a result of any other schema is counted as unread, never an error; unknown is never a value, and missing history is never zero.
 import { CLAIMS_SCHEMA_1_1_0, projectClaims, validateClaimSet } from '@aihq/core/report';
 import { READINESS_RECORD_SCHEMA, fingerprint, isLocalPath } from './claims.mjs';
-import { only, object, hash } from './intake.mjs';
+import { only, object, hash } from './primitives.mjs';
 import { isUtcTimestamp, MAINTENANCE_CHECK_RECORD_SCHEMA } from './maintenance-record.mjs';
 
 export const FILE_STATE_SCHEMA = 'urn:aihq:core:file-state-result:1.0.0';

@@ -1,8 +1,7 @@
 // Reviewed batch: one multi-scope change described as a durable record in the journey envelope. Pure and bounded: it reads the saved
 // envelope and writes only a new envelope revision. It holds no prepared handle, session or outcome; the Node host (batch-host)
 // prepares fresh work every time. There is no atomic multi-scope promise.
-import { digestBytes } from './intake.mjs';
-import { refuse, stable } from './headless.mjs';
+import { digestBytes, refuse, stable } from './primitives.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { isUtcTimestamp, UPDATE_CATEGORIES } from './maintenance-record.mjs';
 import { batchProblem, batchDerivedProblem, batchId, deriveChecks, BATCH_RECORD_SCHEMA, BATCH_ID_PATTERN, CONTINUATIONS, MAX_ACTIONS } from './batch-record.mjs';

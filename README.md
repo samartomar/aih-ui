@@ -67,6 +67,8 @@ The machine-readiness host tests run Core only against a disposable fixture home
 
 Pack each local package with `npm pack`, install the tarballs into a throwaway consumer project, and run the scenario there. Do not use `npm link`: it hides packaging errors such as a wrong `exports` map or a missing file.
 
+The application declares `@aihq/core` 1.0.0-dev.37, `@aihq/catalog` 0.1.0 and `@aihq/scan` 0.5.0 as optional peer dependencies. They are peers because the consumer installs the reviewed archives beside the application, and optional because those versions exist only as local archives, so npm must not fetch them for this repository's own install. An installation that supplies another version of any of them is reported by npm as an unmet peer. The portable entries (`aih-ui/journey`, `aih-ui/workspace`, `aih-ui/readiness`) import none of the three; `tools/tests/pure-imports.test.mjs` keeps their whole import graph free of packages, Node built-ins, host modules and browser globals.
+
 For the saved-intent local proof, set `CORE_TGZ`, `CATALOG_TGZ` and `SCAN_TGZ`
 to reviewed archives, then run `node tools/saved-intent-proof.mjs <output-directory> --serve`
 with Node 24.15–24.x. It installs into an isolated consumer, runs the focused tests,
@@ -1261,12 +1263,7 @@ tools/
     core-adapter.mjs    calls to @aihq/core's public API; never a reimplementation
     scan-verifier.mjs   the Scan verifier wiring and its trust boundary
     artifacts.mjs       exact-byte artifact I/O
-    catalog-collections.mjs  Catalog's current collection view, via its reader
     core-targets.mjs    Core's supported AI client ids and labels, via its public export
-    catalog-publisher.mjs  Catalog's publisher titles and descriptions, via its reader
-    catalog-served.mjs  the catalog document the page is served, from the reader's result
-    catalog-qualification.mjs  Catalog's publisher qualification, via its reader
-    catalog-categories.mjs  Catalog's curated categories, via its reader
     validation-fixture.mjs  VALIDATION ONLY: the one module that manufactures
                             anything, and it labels everything it makes
 ```
@@ -1285,9 +1282,8 @@ maps — no `npm link`, no `dist/` deep import, no sibling source, no fallback.
 does not provide these APIs.** The published versions predate them; only the local
 tarballs carry the governance-input contract.
 
-The page also needs Catalog's collection view (`readCatalogCollectionsV1`) and
-Core's public `nativeClientIds`. Until those reach the checkouts the preview reads
-by default, point it at checkouts that have them:
+The page also needs Core's public `nativeClientIds`. Until it reaches the checkout
+the preview reads by default, point it at a checkout that has it:
 
 ```
 CORE_REPO=<core checkout> CATALOG_REPO=<catalog checkout> node tools/preview.mjs
@@ -1295,7 +1291,7 @@ CORE_REPO=<core checkout> CATALOG_REPO=<catalog checkout> node tools/preview.mjs
 
 A Core without `nativeClientIds` leaves the AI tools control reading **Not
 published** and the Governance pane's Target field disabled reading **Not
-connected**; a Catalog without the collection view stops the preview.
+connected**.
 
 A checkout another worker is mid-change is never built and never packed. Its
 committed checkpoint is extracted with `git archive` into a workspace outside
@@ -1314,24 +1310,12 @@ joins every descriptor path and refuses one that escapes the package root. The
 relationship between the subpath export and the root-relative location is
 checked, not assumed; a failure is reported and no internal directory is guessed.
 
-**The page is served the reader's output, never the raw index.** The raw
-`defaults/catalog-index-v1.json` bytes do not reach the page. At start the
-backend reads the index with `readCatalogContentV1` and serves, at the same
-`catalog-index.json` URL, `{ format, version, digest, package,
-organizationAdmission, entries }` built member by member from the reader's
-result type (`tools/service/catalog-served.mjs`). A field the installed reader
-does not return cannot be rendered, whatever the index file holds: against a
-Catalog whose reader returns the evidence `summary` the statements show it
-verbatim, and against an older one the slot reads "Not published: Catalog's
-public reader does not surface the evidence summary." The provenance
-disclosure's index sha256 is the reader's digest over the exact published bytes,
-not a hash of the served projection. The regression
-`tools/tests/catalog-served.test.mjs` feeds the builder a reader result carrying
-extra members at every level and asserts none of them is served.
-
-The same rule holds for every other Catalog view: collections, presentation,
-qualification and curated categories each come from their own reader, as plain
-data, and nothing on the page is read around a reader.
+The page's catalog comes from the authoring host (`/api/authoring-catalog`), which
+reads the installed releases through `@aihq/catalog/node` and `@aihq/catalog/reader`.
+The backend no longer serves a projection of the content index or the collection,
+presentation, qualification and category sidecars: no route asked for them, and
+the supported Catalog does not publish the package root or the JSON subpaths they
+were read from.
 
 **Remaining gap for @aihq/catalog, backend only:** it publishes artifact paths
 but not the directory that contains them, so Core's subject derivation still
@@ -1339,6 +1323,20 @@ takes that directory from a path, in `entryContentDir`
 (`tools/service/catalog-access.mjs`). It works from a path
 `resolveCatalogContentPathV1` has already validated, never reaches the page, and
 is the single place to change when Catalog publishes an accessor for it.
+
+**Unpublished interfaces the Governance pane and policy-file review still name.**
+The supported packages (Core 1.0.0-dev.37, Catalog 0.1.0) do not publish the
+Catalog package root (`readCatalogContentV1` and the index constants) or Core's
+governance-input, evidence-envelope and decision names (`prepareGovernanceInputV1`,
+`consumeGovernanceInputV1`, `parseGovernanceInputV1Bytes`,
+`parseOrganizationEvidenceEnvelopeV1Bytes`, `organizationEvidenceEnvelopeDigestV1`,
+`governanceDecisionSourceDigestV2`, `governanceDecisionSubjectDigestV2`,
+`governanceDecisionDigestV2`, `parseGovernanceDecisionV2`, `parsePolicyBundle`).
+The operations behind `/api/subject`, `/api/catalog-integrity`, `/api/evidence`,
+`/api/validation-fixture`, `/api/prepare`, `/api/consume`,
+`/api/policy-bundle-structure` and `/api/decision-structure` therefore refuse with
+the missing export when called. Nothing substitutes for them until the owning
+package publishes a replacement.
 
 ### Publisher qualification
 

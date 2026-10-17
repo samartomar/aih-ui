@@ -2,7 +2,7 @@
 // dismissal itself. Internal to the journey reader and the improvements module (not a package export): both validate
 // records with exactly these rules. Identity deliberately excludes labels, descriptions, release digests, rule texts and
 // the rules version, so none of those changing (or a reopen) resets a dismissal.
-import { digestBytes, hash, object, only } from './intake.mjs';
+import { digestJson as digest, hash, object, only, stable } from './primitives.mjs';
 import { isUtcTimestamp } from './maintenance-record.mjs';
 export const IMPROVEMENT_SUGGESTION_RECORD_SCHEMA = 'urn:aihq:workbench:journey-record:improvement-suggestion:1.0.0';
 export const IMPROVEMENT_DISMISSAL_RECORD_SCHEMA = 'urn:aihq:workbench:journey-record:improvement-dismissal:1.0.0';
@@ -11,10 +11,6 @@ export const MAX_TRIGGERS = 16;
 export const SUGGESTION_FIELDS = ['id', 'revision', 'rulesVersion', 'scope', 'change', 'triggers', 'goal', 'references', 'facts', 'unknowns'];
 const REFERENCE_KINDS = ['setting', 'saved-reason', 'request', 'catalog-item'], FACT_KINDS = ['overhead', 'scope', 'dependency'];
 const idPattern = /^[\w.-]{1,180}$/, ruleIdPattern = /^[a-z][a-z0-9.-]{0,63}$/, keyPattern = /^[a-z][a-z0-9-]{0,31}:[\w.@-]{1,180}$/, versionPattern = /^\d+\.\d+\.\d+$/;
-// Same canonical JSON as headless `stable`; kept local so this module has no host dependency.
-const stable = value => JSON.stringify(value, (_key, member) => member && typeof member === 'object' && !Array.isArray(member)
-  ? Object.fromEntries(Object.entries(member).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : member);
-const digest = async value => digestBytes(new TextEncoder().encode(stable(value)));
 const text = (value, max) => typeof value === 'string' && value.length >= 1 && value.length <= max;
 const list = (value, max, each, min = 0) => Array.isArray(value) && value.length >= min && value.length <= max && value.every(each);
 const sortedUnique = values => values.every((value, index) => index === 0 || values[index - 1] < value);

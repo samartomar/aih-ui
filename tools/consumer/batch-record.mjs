@@ -2,7 +2,7 @@
 // (scopes, shared inputs, ordered actions, dependency edges, disclosed checks and the continuation choice). It never holds a
 // session id, review digest, prepared handle, run id or outcome. Internal to the journey reader and the batch module (not a
 // package export): both validate records with exactly these rules.
-import { digestBytes, hash, only } from './intake.mjs';
+import { digestJson, hash, only, stable } from './primitives.mjs';
 import { isUtcTimestamp, UPDATE_CATEGORIES } from './maintenance-record.mjs';
 import { absoluteRoot, isSlug, plain, sameRoot } from './workspace-record.mjs';
 export const BATCH_RECORD_SCHEMA = 'urn:aihq:workbench:journey-record:reviewed-batch:1.0.0';
@@ -12,12 +12,9 @@ export const CHECK_KINDS = ['shared-input', 'unrelated-state', 'conflict', 'core
 export const BATCH_ID_PATTERN = /^batch-[a-f0-9]{32}$/;
 export const MAX_SCOPES = 16, MAX_INPUTS = 64, MAX_ACTIONS = 256;
 const idPattern = /^[\w.-]{1,180}$/;
-// Same canonical JSON as headless `stable`; kept local so this module has no host dependency.
-const stable = value => JSON.stringify(value, (_key, member) => member && typeof member === 'object' && !Array.isArray(member)
-  ? Object.fromEntries(Object.entries(member).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : member);
 const list = (value, min, max, each) => Array.isArray(value) && value.length >= min && value.length <= max && value.every(each);
 const ascending = (items, key = item => item) => items.every((item, index) => index === 0 || key(items[index - 1]) < key(item));
-const digest = async value => (await digestBytes(new TextEncoder().encode(stable(value)))).slice(0, 32);
+const digest = async value => (await digestJson(value)).slice(0, 32);
 // JSON pointer (relative to the record) of the first violation of the closed batch shape, else null.
 export function batchProblem(record) {
   if (!only(record, ['id', 'schema', 'required', 'recordedAt', 'categories', 'continuation', 'scopes', 'inputs', 'actions', 'checks'], ['supersedes'])) return '';

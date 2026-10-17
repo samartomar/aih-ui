@@ -5,12 +5,12 @@
 // the chosen scope through the ordinary draft edit and nothing else; stopping ends the evaluation and says nothing about
 // anything being undone, which is tracked separately as a restoration. Core's claim and calculation format carries the evidence.
 import { CLAIMS_SCHEMA, projectClaims, validateClaimSet } from '@aihq/core/report';
-import { object, only } from './intake.mjs';
-import { refuse, editDraft } from './headless.mjs';
+import { object, only, refuse, digestJson as digest } from './primitives.mjs';
+import { editDraft } from './headless.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { isUtcTimestamp } from './maintenance-record.mjs';
 import { IMPROVEMENT_SUGGESTION_RECORD_SCHEMA, IMPROVEMENT_DISMISSAL_RECORD_SCHEMA, SUGGESTION_FIELDS, suggestionProblem, suggestionDerivedProblem } from './improvement-record.mjs';
-import { TRIAL_RECORD_SCHEMA, TRIAL_DIMENSIONS, MAX_OBSERVATIONS, digest, targetKey, trialId, observationId, observationProblem, proposalProblem, restorationProblem, mechanismValid, sealTrial } from './trial-record.mjs';
+import { TRIAL_RECORD_SCHEMA, TRIAL_DIMENSIONS, MAX_OBSERVATIONS, targetKey, trialId, observationId, observationProblem, proposalProblem, restorationProblem, mechanismValid, sealTrial } from './trial-record.mjs';
 export const TRIAL_SCHEMA = TRIAL_RECORD_SCHEMA;
 // The shipped host can enforce nothing, so every bound it records is advisory and no cap is ever claimed.
 export const TRIAL_MECHANISMS_NONE = Object.freeze([]);

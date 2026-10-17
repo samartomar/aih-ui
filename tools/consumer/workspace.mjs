@@ -2,13 +2,12 @@
 // (portable, in the journey envelope), and which local folder a person deliberately bound to each repository (local
 // state, never shared and never execution permission). Pure and bounded: it reads the saved envelope and the
 // observations it is handed, never touches a folder, Git or the network, and writes only a new envelope revision.
-import { only } from './intake.mjs';
-import { refuse, stable } from './headless.mjs';
+import { only, refuse, stable, digestJson as digest } from './primitives.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { isUtcTimestamp } from './maintenance-record.mjs';
 import { unsafeText, parseIdentity, WORKSPACE_DECLARATION_RECORD_SCHEMA, LOCAL_BINDING_RECORD_SCHEMA, WORKSPACE_DECLARATION_RECORD_ID, RELATIONSHIP_KINDS, BINDING_REASONS, MAX_MEMBERS, MAX_RELATIONSHIPS, MAX_BINDINGS,
   declarationProblem, declarationDerivedProblem, bindingProblem, bindingDerivedProblem, memberProblem, edgeProblem, observationProblem, relationshipId, workspaceId, workspaceRevision,
-  bindingId, remoteIdentity, sameIdentity, identityOf, sameRoot, digest } from './workspace-record.mjs';
+  bindingId, remoteIdentity, sameIdentity, identityOf, sameRoot } from './workspace-record.mjs';
 export const WORKSPACE_DECLARATION_SCHEMA = WORKSPACE_DECLARATION_RECORD_SCHEMA;
 export const LOCAL_BINDING_SCHEMA = LOCAL_BINDING_RECORD_SCHEMA;
 export { RELATIONSHIP_KINDS, BINDING_REASONS, remoteIdentity, sameIdentity };

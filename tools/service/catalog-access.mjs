@@ -37,7 +37,7 @@ const INDEX_SPECIFIER = `@aihq/catalog${CATALOG_CONTENT_INDEX_SUBPATH_V1.slice(1
  * published by Catalog, so this is a CHECK, not a guess: if the two stop
  * agreeing, that is reported rather than worked around.
  */
-export function catalogRoot() {
+function catalogRoot() {
   const indexPath = fileURLToPath(import.meta.resolve(INDEX_SPECIFIER));
   const posix = indexPath.replaceAll("\\", "/");
   if (!posix.endsWith(`/${CATALOG_CONTENT_INDEX_ROOT_URL}`)) {

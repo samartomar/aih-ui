@@ -2,7 +2,7 @@
 // beside the empty Enterprise starting policy it travels with. Internal to the journey reader and the
 // organization author (not a package export): both validate the record with exactly these rules.
 // Structural only. Core validates selector values, obligations and the exported document.
-import { digestBytes, object, only } from './intake.mjs';
+import { digestJson, hash, object, only, stable } from './primitives.mjs';
 export const ORGANIZATION_DRAFT_RECORD_SCHEMA = 'urn:aihq:workbench:journey-record:organization-draft:1.0.0';
 export const ORGANIZATION_DRAFT_RECORD_ID = 'organization-draft';
 export const ORGANIZATION_OBLIGATIONS = ['required', 'recommended', 'permitted', 'prohibited'];
@@ -10,11 +10,7 @@ export const ORGANIZATION_SCOPES = ['project', 'user'];
 export const ORGANIZATION_REVISION_KINDS = ['branch', 'tag', 'commit'];
 export const MAX_ENTRIES = 4096, MAX_TARGETS = 64;
 export const idPattern = /^[\w.-]{1,180}$/;
-const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
-// Same canonical JSON as headless `stable`; kept local so this module has no host dependency.
-const stable = value => JSON.stringify(value, (_key, member) => member && typeof member === 'object' && !Array.isArray(member)
-  ? Object.fromEntries(Object.entries(member).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : member);
-const digest = async value => (await digestBytes(new TextEncoder().encode(stable(value)))).slice(0, 32);
+const digest = async value => (await digestJson(value)).slice(0, 32);
 export async function organizationEntryId({ releaseSha256, itemId, scope }) { return `entry-${await digest({ releaseSha256, itemId, scope })}`; }
 export async function organizationTargetId({ scope, client, repository }) {
   return `target-${await digest({ scope, ...(client !== undefined ? { client } : {}), ...(repository !== undefined ? { repository } : {}) })}`;

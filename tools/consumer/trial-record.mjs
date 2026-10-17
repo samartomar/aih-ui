@@ -3,7 +3,7 @@
 // decision. Internal to the journey reader and the trials module (not a package export): both validate records with exactly
 // these rules. A record never holds a local path, binding or credential; stop and restoration are separate facts. Its `revision` is
 // the digest of the record without it, so any change to a trial that does not recompute it is refused.
-import { digestBytes, hash, object, only } from './intake.mjs';
+import { digestJson as digest, hash, object, only } from './primitives.mjs';
 import { isUtcTimestamp } from './maintenance-record.mjs';
 import { isSlug } from './workspace-record.mjs';
 import { IMPROVEMENT_SUGGESTION_RECORD_SCHEMA } from './improvement-record.mjs';
@@ -18,10 +18,6 @@ export const RESTORATION_STATUSES = ['proposed', 'pending', 'completed', 'partia
 export const TRIAL_ID_PATTERN = /^trial-[a-f0-9]{32}$/;
 export const MAX_OBSERVATIONS = 256;
 const suggestionIdPattern = /^suggestion-[a-f0-9]{32}$/, versionPattern = /^\d+\.\d+\.\d+$/, itemIdPattern = /^[\w.-]{1,180}$/;
-// Same canonical JSON as headless `stable`; kept local so this module has no host dependency.
-const stable = value => JSON.stringify(value, (_key, member) => member && typeof member === 'object' && !Array.isArray(member)
-  ? Object.fromEntries(Object.entries(member).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : member);
-export const digest = async value => digestBytes(new TextEncoder().encode(stable(value)));
 const text = (value, max) => typeof value === 'string' && value.length >= 1 && value.length <= max;
 const list = (value, max, each, min = 0) => Array.isArray(value) && value.length >= min && value.length <= max && value.every(each);
 const unique = values => new Set(values).size === values.length;

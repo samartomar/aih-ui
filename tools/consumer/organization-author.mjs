@@ -5,7 +5,8 @@
 import { parseOrganizationPolicy, previewOrganizationObligations } from '@aihq/core/contracts';
 import { nativeClientIds } from '@aihq/core/harness';
 import { isCheckedRelease, listItems } from '@aihq/catalog/reader';
-import { composeAuthoring, describeAuthoringSubject, freshAuthoring, managementIdOf, refuse, ok, stable } from './headless.mjs';
+import { refuse, ok, stable } from './primitives.mjs';
+import { composeAuthoring, describeAuthoringSubject, freshAuthoring, managementIdOf } from './headless.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { ORGANIZATION_DRAFT_RECORD_SCHEMA, ORGANIZATION_DRAFT_RECORD_ID, ORGANIZATION_OBLIGATIONS, ORGANIZATION_SCOPES,
   organizationDraftProblem, organizationEntryId, organizationTargetId, organizationSourceProblem, organizationPermissionProblem, MAX_ENTRIES, MAX_TARGETS, idPattern, boundedStrings } from './organization-draft-record.mjs';

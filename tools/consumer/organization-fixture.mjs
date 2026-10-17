@@ -4,7 +4,8 @@ import { deriveRecipeIdentity, validateOrganizationPolicy } from '@aihq/core/con
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { intakeDeclaration, digestBytes } from './intake.mjs';
+import { digestBytes } from './primitives.mjs';
+import { intakeDeclaration } from './intake.mjs';
 import { freshAuthoring, composeAuthoring } from './headless.mjs';
 import { noteFixture } from './note-fixture.mjs';
 const encode = value => new TextEncoder().encode(JSON.stringify(value) + '\n');

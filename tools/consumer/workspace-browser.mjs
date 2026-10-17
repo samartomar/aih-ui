@@ -12,8 +12,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { listItems } from '@aihq/catalog/reader';
-import { composeAuthoring, freshAuthoring, openDraft, stable } from './headless.mjs';
-import { digestBytes } from './intake.mjs';
+import { composeAuthoring, freshAuthoring, openDraft } from './headless.mjs';
+import { stable, digestBytes } from './primitives.mjs';
 import { installedFamilies } from './installed-families.mjs';
 import { WORKSPACE_DECLARATION_RECORD_SCHEMA, LOCAL_BINDING_RECORD_SCHEMA } from './workspace-record.mjs';
 

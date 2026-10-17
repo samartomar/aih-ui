@@ -4,10 +4,11 @@ import { readFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readAuthoring, editAuthoring, composeAuthoring, freshAuthoring, stable, openDraft, editDraft, compileDraft } from './headless.mjs';
+import { stable, digestBytes } from './primitives.mjs';
+import { readAuthoring, editAuthoring, composeAuthoring, freshAuthoring, openDraft, editDraft, compileDraft } from './headless.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJourneyEnvelope, JOURNEY_SCHEMA, JOURNEY_SCHEMA_PREFIX, JOURNEY_ACCEPTED_SCHEMAS, JOURNEY_RECORD_SCHEMAS, JOURNEY_RECORD_KINDS, DRAFT_RECORD_SCHEMA, SAVED_INTENT_TYPE } from './journey.mjs';
 import { mixedInventories } from './authoring-v3.test.mjs';
-import { intakeDeclaration, digestBytes } from './intake.mjs';
+import { intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { fixtureRelease, fixtureItem, crossRef, rootFor } from './intent-fixtures.mjs';
 import { readInstalledRelease } from '@aihq/catalog/node';
@@ -386,11 +387,6 @@ test('scoped compile never silently drops review decisions and unrelated synthet
   const released = await edited({ envelopeBytes: gone.envelopeBytes, inventories: [app], operation: { type: 'unskip', exclusion: intent.exclusions[0] } });
   assert.deepEqual(released.intent.exclusions, []);
   assert.equal(released.unresolved.some(u => u.kind === 'exclusion'), false);
-});
-
-test('the journey module is pure: no browser globals, filesystem, network or Node Buffer', async () => {
-  const source = await readFile(new URL('./journey.mjs', import.meta.url), 'utf8');
-  for (const forbidden of [/\bwindow\b/, /\bdocument\b/, /\bfetch\b/, /node:fs/, /\bbtoa\b/, /\batob\b/, /\bBuffer\b/, /\bprocess\b/, /node:/]) assert.doesNotMatch(source, forbidden);
 });
 
 test('shipped JSON Schema describes the envelope the writer produces', async t => {

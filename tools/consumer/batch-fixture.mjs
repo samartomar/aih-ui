@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHost } from './host.mjs';
-import { stable } from './headless.mjs';
+import { stable } from './primitives.mjs';
 import { planBatch } from './batch.mjs';
 import { digestMaterial } from './batch-host.mjs';
 import { homeEnvironment } from './home-environment.mjs';

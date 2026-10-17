@@ -19,17 +19,11 @@
  *   core-adapter.mjs       calls to @aihq/core's public API
  *   scan-verifier.mjs      the Scan verifier wiring and its trust boundary
  *   artifacts.mjs          exact-byte artifact I/O
- *   catalog-collections.mjs Catalog's current collection view
- *   catalog-publisher.mjs   Catalog's publisher titles and descriptions
- *   catalog-served.mjs     the catalog document the page is served: the
- *                          public reader's result, member by member
- *   catalog-qualification.mjs  Catalog's publisher qualification, via its reader
- *   catalog-categories.mjs  Catalog's curated categories, via its reader
  *   core-targets.mjs       Core's supported AI client ids and labels
  *   validation-fixture.mjs VALIDATION ONLY: the one module that manufactures
  *                          anything, and it labels everything it makes
  */
-let catalogEntry, catalogIntegrity, entryContentDir, readCatalog, servedCatalogDocument;
+let catalogEntry, catalogIntegrity, entryContentDir;
 let consume, parseEvidence, prepare, subject, buildValidationFixture;
 const OPS = {
   /** Identity only. Structure is validated; artifact bytes are not read. */
@@ -50,44 +44,19 @@ const OPS = {
     const { entry, content } = catalogEntry(entryId, { verifyArtifacts: true });
     return catalogIntegrity(content, entry);
   },
-  /**
-   * The catalog document the page is served: what readCatalogContentV1
-   * returned, projected member by member. The raw index bytes never reach the
-   * page, so it cannot render a field the public reader does not carry.
-   */
-  servedCatalog() {
-    const { content } = readCatalog();
-    return { catalog: servedCatalogDocument(content) };
-  },
   parseEvidence(request) { return parseEvidence(request); },
   prepare(request) { return prepare(request); },
   consume(request) { return consume(request); },
   fixture(request) { return buildValidationFixture(request); },
 
   /**
-   * Catalog's current collection view and Core's supported target list. Each
-   * is loaded only when asked for, so a package that predates the export fails
-   * that one operation and says so, instead of every operation failing to load.
+   * Core's supported target list and the policy-file reviews. Each is loaded
+   * only when asked for, so a package that predates the export fails that one
+   * operation and says so, instead of every operation failing to load.
    */
-  async collections() {
-    const { catalogCollections } = await import("./catalog-collections.mjs");
-    return catalogCollections();
-  },
   async coreTargets() {
     const { coreTargets } = await import("./core-targets.mjs");
     return coreTargets();
-  },
-  async publisher() {
-    const { catalogPublisher } = await import("./catalog-publisher.mjs");
-    return catalogPublisher();
-  },
-  async qualification() {
-    const { catalogQualification } = await import("./catalog-qualification.mjs");
-    return catalogQualification();
-  },
-  async categories() {
-    const { catalogCategories } = await import("./catalog-categories.mjs");
-    return catalogCategories();
   },
   async policyBundleStructure({ base64 }) {
     const { reviewPolicyBundle } = await import("./policy-review.mjs");
@@ -115,9 +84,8 @@ async function main() {
     return;
   }
   try {
-    if (['subject', 'catalogIntegrity', 'servedCatalog', 'parseEvidence', 'prepare', 'consume', 'fixture'].includes(request.op)) {
-      ({ catalogEntry, catalogIntegrity, entryContentDir, readCatalog } = await import('./catalog-access.mjs'));
-      ({ servedCatalogDocument } = await import('./catalog-served.mjs'));
+    if (['subject', 'catalogIntegrity', 'parseEvidence', 'prepare', 'consume', 'fixture'].includes(request.op)) {
+      ({ catalogEntry, catalogIntegrity, entryContentDir } = await import('./catalog-access.mjs'));
       ({ consume, parseEvidence, prepare, subject } = await import('./core-adapter.mjs'));
       ({ buildValidationFixture } = await import('./validation-fixture.mjs'));
     }
