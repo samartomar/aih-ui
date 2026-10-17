@@ -497,3 +497,16 @@ test('the DOM words the source and each update order with the orderText the host
   assert.ok(text.includes('Later entries are newer — the order this host declared.')); assert.ok(text.includes('Newer than your selected revision (the order this host declared).'));
   assert.ok(text.includes('offline (could not be read: ./release-ecc.json)'));
 });
+
+test('a first check that read only some sources says when it ran and that some updates are unknown, never that it failed', async () => {
+  const partial = ok({ ...checked, checkedAt: '2026-10-16T12:00:00Z', updates: [update('one', null, 'new')], categories: [{ category: 'content', selected: true, state: 'unknown', reason: 'sources-partly-unavailable' }] });
+  const notes = [], client = { draft, revision: 1, checkMaintenance: async () => partial, recordDisposition: async operation => { notes.push(operation); return ok({}); } };
+  const built = view(client); await built.open();
+  const text = textOf(built.node);
+  assert.match(text, /Last checked 2026-10-16T12:00:00Z\. Some updates are unknown\./); assert.doesNotMatch(text, /could not be completed/);
+  assert.ok(text.includes('revision one'));
+  const state = updatesState(null, partial, ['content']);
+  assert.equal(state.failed, false); assert.equal(state.unknown, true);
+  // Still not a successful check to note for saving.
+  await built.noteCheck(); assert.deepEqual(notes, []);
+});

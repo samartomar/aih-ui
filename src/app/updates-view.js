@@ -79,8 +79,10 @@ export function updatesState(previous, result, selected, dispositions) {
   const answered = value || !dispositions ? () => true : entry => dispositions.some(record => record.id === entry.record?.id);
   const preserved = (value?.preserved ?? previous?.value?.preserved ?? []).filter(entry => !shown.has(entry.record?.id) && answered(entry));
   const updateSource = value?.updateSource ?? previous?.value?.updateSource;
-  return { value: { ...value, updates, preserved, categories, lastCheck, ...(updateSource ? { updateSource } : {}), checkedAt: stale ? seen : categories.some(row => row.state === 'checked') ? value?.checkedAt : undefined },
-    unknown: unknownCategories.length > 0, stale, failed: !value || !categories.some(row => row.state === 'checked') };
+  // A check that read some sources ran, though what it could not read is unknown; it is still not a successful check to note.
+  const ran = categories.some(row => row.state === 'checked' || row.reason === 'sources-partly-unavailable');
+  return { value: { ...value, updates, preserved, categories, lastCheck, ...(updateSource ? { updateSource } : {}), checkedAt: stale ? seen : ran ? value?.checkedAt : undefined },
+    unknown: unknownCategories.length > 0, stale, failed: !value || !ran };
 }
 export function checkedLine(state) {
   const time = state?.value?.checkedAt;
