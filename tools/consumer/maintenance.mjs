@@ -2,7 +2,7 @@
 // envelope with the time and states of the last successful check. Pure and bounded: it reads the saved
 // envelope and the inventories it is handed, and writes only a new envelope revision through
 // recordMaintenance. A date never schedules anything.
-import { isCheckedRelease } from '@aihq/catalog/reader';
+import { isCheckedRelease, compareReleases } from '@aihq/catalog/reader';
 import { rootKey, pinKey } from './intent-shape.mjs';
 import { only, refuse, stable } from './primitives.mjs';
 import { releaseOrderProblem, orderRelation } from './release-order.mjs';
@@ -21,6 +21,15 @@ const checkedEntries = (value, most = 32) => {
   try { return Array.isArray(value) && value.length <= most && value.every(entry => entry && isCheckedRelease(entry.release)) && new Set(value.map(entry => entry.release.sha256)).size === value.length; }
   catch { return false; }
 };
+// The offered release's item that is `itemId`'s content slot: Catalog's compareReleases decides it is the same package and the item is in the offered
+// release. Without the exact selected release there is no checked release to compare, so the saved intent's recorded package name is the only
+// identity left; the update is then reported with that release named unavailable.
+function revisionsOf(entry, current, offered, itemId) {
+  if (!entry) return offered.release.package?.name === current.name ? offered.release.items.filter(i => i.id === itemId).map(i => ({ itemId: i.id, itemSha256: i.itemSha256 })) : [];
+  const compared = compareReleases({ first: entry.release, second: offered.release });
+  if (compared.status !== 'ok' || compared.value.package !== 'same-package') return [];
+  return compared.value.items.filter(i => i.itemId === itemId && i.presence !== 'only-in-first').map(i => ({ itemId: i.itemId, itemSha256: i.second.itemSha256 }));
+}
 async function load(envelopeBytes) {
   if (!(envelopeBytes instanceof Uint8Array)) return refuse('INPUT_INVALID', '/envelopeBytes', 'Supply original journey envelope bytes.');
   const read = await readJourneyEnvelope(envelopeBytes);
@@ -69,12 +78,14 @@ export async function checkMaintenance({ envelopeBytes, inventories, candidateIn
     if (current?.name === undefined) continue;
     const subject = { kind: 'selection', releaseSha256: root.releaseSha256, itemId: root.itemId, itemSha256: root.itemSha256 };
     for (const offered of candidateInventories) {
-      if (offered.release.sha256 === root.releaseSha256 || offered.release.package?.name !== current.name) continue;
+      if (offered.release.sha256 === root.releaseSha256) continue;
       if (input ? offered.input?.kind !== input.kind || stable(offered.input?.locator) !== stable(input.locator) : offered.input) continue;
+      const revisions = revisionsOf(entry, current, offered, root.itemId);
+      if (!revisions.length) continue;
       const order = orderRelation(releaseOrder ?? undefined, offered.release.sha256, root.releaseSha256);
       if (order?.relation === 'older') continue;
-      for (const item of offered.release.items.filter(i => i.id === root.itemId)) {
-        const candidate = { kind: 'content-revision', releaseSha256: offered.release.sha256, itemId: item.id, itemSha256: item.itemSha256 };
+      for (const item of revisions) {
+        const candidate = { kind: 'content-revision', releaseSha256: offered.release.sha256, itemId: item.itemId, itemSha256: item.itemSha256 };
         const id = await dispositionId({ category: 'content', subject, scope: root.scope, candidate }), disposition = recorded.find(r => r.id === id) ?? null;
         if (disposition) matched.add(id);
         const attention = !disposition ? 'new' : disposition.disposition === 'defer' && disposition.deferUntil !== undefined && disposition.deferUntil <= today ? 'defer-date-reached' : null;

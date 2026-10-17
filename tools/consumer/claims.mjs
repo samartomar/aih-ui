@@ -6,7 +6,7 @@
 // Rules: a claim never carries a machine-local path or free text from a check (reasons are Core
 // codes); a claim's revision is its source record's sha256, so a re-import is the same claim and
 // a same-id record with other content is a Core-visible conflict; unknown is never a value.
-// A supplied estimate or usage entry never carries a machine-local path.
+// A supplied estimate or usage entry never carries a machine-local path (Core's claim-set validation refuses one).
 import { CLAIMS_SCHEMA, projectClaims, validateClaimSet } from '@aihq/core/report';
 
 export const READINESS_RECORD_SCHEMA = 'urn:aih-ui:readiness-record:1.0.0';
@@ -66,22 +66,9 @@ function admit(records) {
   return unique.map((record, index) => [record, index]).sort(([a, i], [b, j]) => instant(a.capturedAt) - instant(b.capturedAt) || i - j).map(([record]) => record);
 }
 
-// A claim names things by stable identity, never by a location on this machine: absolute POSIX
-// and Windows paths, UNC shares, `~` and file: URLs are refused before any claim is built.
-const LOCAL_PATH = /^(?:file:|~(?:[\\/]|$)|[\\/][^\\/]|[\\/]{2})|(?:^|[^A-Za-z0-9])[A-Za-z]:[\\/]|[\s=,;([:](?:~?\/|\\\\)[^\s\\/]/i;
-export const isLocalPath = value => LOCAL_PATH.test(value);
-function assertNoLocalPath(value, what) {
-  if (typeof value === 'string' && isLocalPath(value)) throw new TypeError(`${what} looks like a machine-local path; supply a stable identifier instead.`);
-}
-// Every supplied string a claim keeps (ids, unit, amount, method, coverage) is checked, not a chosen few.
-function assertSupplied(list, name) {
-  // Keys are checked too, and never echoed: the label names only the entry.
-  const walk = (value, at) => {
-    if (typeof value === 'string') assertNoLocalPath(value, at);
-    else if (value && typeof value === 'object') for (const [key, inner] of Object.entries(value)) { assertNoLocalPath(key, at); walk(inner, at); }
-  };
-  list.forEach((entry, index) => walk(entry, `${name}[${index}]`));
-}
+// A claim names things by stable identity, never by a location on this machine. Core's claim-set validation refuses a set whose strings carry a
+// machine-local path, naming the field and the form but never the value; every claim this module builds, supplied estimates and usage included,
+// goes through it before it is returned.
 
 // A supplied claim's revision names its content, so an entry that repeats collapses and one that
 // differs from another of the same event stays a separate claim, which Core reports as a conflict.
@@ -97,8 +84,6 @@ export function fingerprint(value) {
 // Builds the validated claim set and its Core projection together, so a report projects once
 // unless an urgent review has to be ranked by Core as well.
 function assemble({ records = [], scanReports = [], estimates = [], usage = [], generatedAt = null } = {}) {
-  assertSupplied(estimates, 'estimates');
-  assertSupplied(usage, 'usage');
   const ordered = admit(records);
   const machines = ordered.filter(record => record.kind === 'machine-check');
   const repairs = ordered.filter(record => record.kind === 'repair');
@@ -206,8 +191,6 @@ function assemble({ records = [], scanReports = [], estimates = [], usage = [], 
   const scanned = new Set();
   for (const read of scanReports) {
     if (read?.status !== 'read' || !read.report?.source?.capture || scanned.has(read.scanId)) continue;
-    assertNoLocalPath(read.scanId, 'scan report id');
-    assertNoLocalPath(read.report.schema, 'scan report schema');
     scanned.add(read.scanId);
     const bytes = read.report.source.capture.entries.filter(entry => entry.kind === 'file' || entry.kind === 'file-link')
       .reduce((total, entry) => total + entry.byteLength, 0);
@@ -274,7 +257,7 @@ function assemble({ records = [], scanReports = [], estimates = [], usage = [], 
   const claimSet = { schema: CLAIMS_SCHEMA, claims: [...claims.values()], calculations, actions };
   const projectValid = candidate => {
     const validation = validateClaimSet(candidate);
-    if (!validation.valid) throw new Error(`The readiness claim set is not valid: ${validation.errors.join('; ')}`);
+    if (!validation.valid) throw new TypeError(`The readiness claim set is not valid: ${validation.errors.join('; ')}`);
     return projectClaims(candidate);
   };
   let projection = projectValid(claimSet);

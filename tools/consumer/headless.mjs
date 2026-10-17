@@ -1,6 +1,6 @@
 // Supported consumer boundary. No host acquisition or execution authority.
 import { parsePolicy } from '@aihq/core/contracts';
-import { isCheckedRelease, listItems, configureItem, resolveSelections, validateSelectionSet } from '@aihq/catalog/reader';
+import { isCheckedRelease, listItems, configureItem, resolveSelections, validateSelectionSet, compareReleases } from '@aihq/catalog/reader';
 import { checkIntentShape, checkReview, rootKey, pinKey, managementIdOf, AUTHORING_SCHEMA, REVIEW_SCHEMA } from './intent-shape.mjs';
 import { migrateIntent } from './migrate-intent.mjs';
 import { inspectReviewEvidence, compareReviewBindings, describeReviewJudgments, summarizeReviewJudgments } from './review-bindings.mjs';
@@ -155,8 +155,14 @@ export async function reconcileAuthoring({ savedPolicyBytes, inventories, candid
     const exclusions = missingExclusions.filter(e => root.originIds.includes(e.originId));
     const origins = missingOrigins.filter(o => root.originIds.includes(o.id));
     const oldEntry = previous.items.get(pinKey(root)).entry;
-    const updates = candidateInventories.filter(e => e.release.sha256 !== root.releaseSha256 && e.release.package.name === oldEntry.release.package.name
-      && (oldEntry.input ? e.input?.kind === oldEntry.input.kind && stable(e.input?.locator) === stable(oldEntry.input.locator) : !e.input)).flatMap(e => e.release.items.filter(i => i.id === root.itemId).map(i => ({ releaseSha256: e.release.sha256, itemId: i.id, itemSha256: i.itemSha256, scope: root.scope })));
+    // A candidate update is the same content item (Catalog's compareReleases: same package, the item in the candidate release) from the same
+    // acquired input; the input match is the saved intent's own acquisition identity.
+    const updates = candidateInventories.filter(e => e.release.sha256 !== root.releaseSha256
+      && (oldEntry.input ? e.input?.kind === oldEntry.input.kind && stable(e.input?.locator) === stable(oldEntry.input.locator) : !e.input)).flatMap(e => {
+      const compared = compareReleases({ first: oldEntry.release, second: e.release });
+      if (compared.status !== 'ok' || compared.value.package !== 'same-package') return [];
+      return compared.value.items.filter(i => i.itemId === root.itemId && i.presence !== 'only-in-first').map(i => ({ releaseSha256: e.release.sha256, itemId: i.itemId, itemSha256: i.second.itemSha256, scope: root.scope }));
+    });
     if (unavailable.length || exclusions.length || origins.length || updates.length) {
       affectedRoots.push(root);
       choices.push({ root, reason: unavailable.length || exclusions.length || origins.length ? 'source-unavailable' : 'source-changed', candidates: updates, options: ['keep-exact', 'remove', ...(updates.length ? ['accept-candidate'] : [])], affectedItems: [...unavailable.map(i => i.item), ...exclusions], affectedOrigins: origins });
@@ -334,25 +340,26 @@ function liveClosure(index, root, skips) {
   if (!validation.valid) return refusal('/selections', 'Catalog refused the resolved set.', validation.diagnostics);
   return { closure: new Set(resolved.value.inclusions.filter(i => rootKey(i.root) === rootKey(root)).map(i => rootKey(i.item))) };
 }
-// Required items of `root` that live in releases the supplied inventories do not include.
-function missingRequirements(index, root) {
-  const missing = new Map(), seen = new Set([pinKey(root)]), queue = [pinKey(root)];
-  while (queue.length) {
-    const found = index.items.get(queue.shift());
-    if (!found) continue;
-    for (const dependency of found.item.dependencies.requires) {
-      const releaseSha256 = 'release' in dependency ? dependency.release.manifest.sha256 : found.entry.release.sha256, key = pinKey({ releaseSha256, itemId: dependency.itemId });
-      if (seen.has(key)) continue;
-      seen.add(key);
-      if (index.items.has(key)) queue.push(key);
-      else missing.set(key, { releaseSha256, itemId: dependency.itemId, ...(dependency.itemSha256 !== undefined ? { itemSha256: dependency.itemSha256 } : {}) });
-    }
+// Required items Catalog could not resolve from the supplied inventories: the references its refusal names on each unavailable release or item a
+// dependency declaration requires (`reference`, with the declaring item as `declaredBy`), once each, in Catalog's order. The item digest a
+// declaration pins is read from the declaration Catalog points at (`path`, a JSON pointer into the request), since `reference` does not carry it (temporary until samartomar/aih-catalog#105 adds it).
+const UNAVAILABLE = new Set(['RELEASE_UNAVAILABLE', 'ITEM_UNAVAILABLE']);
+const pointed = (root, path) => typeof path === 'string' && path.startsWith('/')
+  ? path.slice(1).split('/').map(part => part.replaceAll('~1', '/').replaceAll('~0', '~')).reduce((value, key) => value != null && typeof value === 'object' && Object.hasOwn(value, key) ? value[key] : undefined, root) : undefined;
+function missingRequirements(diagnostics, releases) {
+  const missing = new Map();
+  for (const { code, path, reference, declaredBy } of diagnostics ?? []) {
+    if (!UNAVAILABLE.has(code) || !declaredBy || !isRef(reference)) continue;
+    const key = pinKey(reference), itemSha256 = pointed({ releases }, path)?.itemSha256;
+    if (!missing.has(key)) missing.set(key, { releaseSha256: reference.releaseSha256, itemId: reference.itemId, ...(typeof itemSha256 === 'string' ? { itemSha256 } : {}) });
   }
   return [...missing.values()];
 }
 // Pure classification of a saved intent against supplied exact inventories.
 function analyzeDraft({ intent, policy, inventories, live = true }) {
   const index = inventoryIndex(inventories), graph = recordedGraph(policy, intent.pins), entryOf = sha => inventories.find(e => e.release.sha256 === sha);
+  // The saved release is not supplied here, so there is no checked release to compare: the saved intent's recorded package name and acquired
+  // input are the only identity left, and a supplied release of either is another revision (reported, never substituted).
   const reasonFor = sha => {
     const name = intent.provenance.find(p => p.releaseSha256 === sha)?.package?.name, input = intent.inputs.find(i => i.releaseSha256 === sha);
     return inventories.some(e => e.release.sha256 !== sha && ((name !== undefined && e.release.package?.name === name)
@@ -386,7 +393,7 @@ function analyzeDraft({ intent, policy, inventories, live = true }) {
     if (evidence?.closure) for (const node of evidence.closure) nodes.add(node);
     else if (evidence) {
       complete = false; undeterminedRoots.add(key);
-      const missing = missingRequirements(index, root);
+      const missing = missingRequirements(evidence.diagnostics, index.releases);
       if (!missing.length) refusals.set(key, evidence.diagnostics);
       for (const need of missing) {
         const node = rootKey({ ...need, scope: root.scope });

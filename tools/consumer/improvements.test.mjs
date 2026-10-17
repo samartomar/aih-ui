@@ -14,11 +14,11 @@ import { intakeDeclaration } from './intake.mjs';
 import { declareReleaseOrder, RELEASE_ORDER_TEXT } from './release-order.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { createMixedService } from './mixed-service.mjs';
-import { nativeClientIds } from '@aihq/core/harness';
+import { nativeClientIds, targets as harnessTargets } from '@aihq/core/harness';
 import { suggestionRevision, suggestionProblem } from './improvement-record.mjs';
-import { suggestImprovements, lead, classifyImprovement, improvementPrompt, releaseRelation, unorderedSources, GOAL_RULES, UNKNOWNS, FRICTION_COVERAGE, FRICTION_UNREADABLE, FIXTURE_LABEL, FRICTION_RULE, IMPROVEMENT_RULES_VERSION, MAX_ALTERNATIVES } from './improvement-rules.mjs';
+import { CONFLICTS_UNKNOWN, suggestImprovements, lead, classifyImprovement, improvementPrompt, releaseRelation, unorderedSources, GOAL_RULES, UNKNOWNS, FRICTION_COVERAGE, FRICTION_UNREADABLE, FIXTURE_LABEL, FRICTION_RULE, IMPROVEMENT_RULES_VERSION, MAX_ALTERNATIVES } from './improvement-rules.mjs';
 import { frictionRecurrence } from './friction.mjs';
-import { catalogClosures } from './improvement-closures.mjs';
+import { catalogClosures, catalogComparison } from './improvement-closures.mjs';
 import { coreTargetsOf } from './executable-ties.mjs';
 import { installedFamilies } from './installed-families.mjs';
 import { READINESS_RECORD_SCHEMA } from './claims.mjs';
@@ -44,7 +44,7 @@ const byItem = (suggestions, itemId) => suggestions.find(s => s.change.itemId ==
 const shownItem = (checked, itemId) => byItem([checked.leading, ...checked.alternatives, ...checked.dismissed].filter(Boolean), itemId);
 
 test('the rules version and goal table are fixed and every rule names a distinct, well-formed reason', () => {
-  assert.equal(IMPROVEMENT_RULES_VERSION, '1.6.0');
+  assert.equal(IMPROVEMENT_RULES_VERSION, '1.7.0');
   assert.deepEqual(GOAL_RULES.map(rule => [rule.id, rule.itemId]), [['goal.fix', 'mattpocock.diagnosing-bugs'], ['goal.test', 'mattpocock.tdd'], ['goal.regressions', 'mattpocock.tdd'],
     ['goal.review', 'mattpocock.code-review'], ['goal.refactor', 'mattpocock.improve-codebase-architecture'], ['goal.plan', 'mattpocock.grill-me'], ['goal.context', 'aihq.project-context']]);
   for (const rule of GOAL_RULES) assert.match(rule.id, /^[a-z][a-z0-9.-]{0,63}$/);
@@ -140,7 +140,7 @@ test('the client rule names a client by its published label, and the label never
   const [plain] = await suggest({ clients: ['claude'] }), [named] = await suggest({ clients: ['claude'], labels: { claude: 'Claude Code', codex: 'Codex' } });
   assert.deepEqual(named.triggers, [{ ruleId: 'client.instructions', key: 'client:claude', text: 'You use Claude Code (Workbench setup), but this policy does not give it the shared project instructions.' }]);
   assert.equal(named.goal, 'Give Claude Code the same shared project instructions as your other AI clients.');
-  assert.equal(named.rulesVersion, '1.6.0');
+  assert.equal(named.rulesVersion, '1.7.0');
   // A label is wording: the same id and revision, so a dismissal made before a rename still applies.
   assert.deepEqual([named.id, named.revision], [plain.id, plain.revision]);
   assert.deepEqual(classifyImprovement(named, plain), { dismissed: true, reasons: [] });
@@ -190,47 +190,60 @@ test('suggestions are ranked: a request first, then more reasons, then a saved g
   assert.deepEqual(saved.map(s => s.change.itemId), ['mattpocock.diagnosing-bugs', 'aihq.client.claude']);
 });
 
+// Catalog's answer for one item, as improvement-closures.mjs gives it: `{ required }`, or `{ unavailable }` naming what it could not resolve, with `conflicts`.
+const answers = table => item => table[item.id] ?? { required: [], conflicts: [] };
 test('facts come from Catalog data and unknowns are always stated', async () => {
-  const tdd = item('mattpocock.tdd', { dependencies: { requires: [{ itemId: 'dep.a' }, { itemId: 'dep.missing' }], optional: [], conflicts: [{ itemId: 'rival.tool' }] } });
-  const depA = item('dep.a', { label: 'Dep A', dependencies: { requires: [{ itemId: 'dep.b' }, { itemId: 'mattpocock.tdd' }], optional: [], conflicts: [] } });
-  const depB = item('dep.b', { label: 'Dep B', materials: [], recipe: { sha256: hex(1), byteLength: 5 } });
-  const items = [tdd, depA, depB];
-  const [s] = await suggest({ items, goal: 'tests' });
+  const tdd = item('mattpocock.tdd'), depA = item('dep.a', { label: 'Dep A' }), depB = item('dep.b', { label: 'Dep B', materials: [], recipe: { sha256: hex(1), byteLength: 5 } });
+  const items = [tdd, depA, depB], resolved = answers({ 'mattpocock.tdd': { required: [depA, depB], conflicts: ['rival.tool'] } });
+  const [s] = await suggest({ items, goal: 'tests', closures: resolved });
   // Item 3 files / 130 bytes, Dep A 3 files / 130 bytes, Dep B 1 file / 5 bytes.
-  assert.deepEqual(s.facts.map(f => f.kind), ['overhead', 'scope', 'dependency']);
+  assert.deepEqual(s.facts.map(f => f.kind), ['overhead', 'scope']);
   assert.equal(s.facts[0].text, 'Adds 7 files, 265 bytes in total, and needs 2 other items: Dep A, Dep B.');
-  assert.equal(s.facts[2].text, 'Needs dep.missing, which the supplied Catalog does not offer.');
   assert.deepEqual(s.unknowns, UNKNOWNS);
   assert.deepEqual(UNKNOWNS, ['Whether it improves your results is unknown until you try it.', 'Actual usage and cost are unknown; no usage data is read.']);
-  // What the policy already selects is not counted again (nor what that item needs), and a selected conflict is a stated fact.
+  // What Catalog cannot resolve is named from its refusal; nothing else is found then.
+  const refusedAnswer = answers({ 'mattpocock.tdd': { required: [depA], unavailable: ['dep.missing', 'dep.missing'], complete: false, conflicts: [] } });
+  const [refused] = await suggest({ items, goal: 'tests', closures: refusedAnswer });
+  assert.deepEqual(refused.facts.map(f => f.kind), ['overhead', 'scope', 'dependency']);
+  // An unresolved closure is a lower bound: what Catalog's refusal names is kept (so the revision does not change), and the total is never claimed.
+  assert.equal(refused.facts[0].text, 'Adds at least 6 files and 260 bytes, and needs at least 1 other item: Dep A; the full set is unknown because Catalog cannot resolve everything it requires.');
+  assert.equal(refused.facts[2].text, 'Needs dep.missing, which the supplied Catalog does not offer.');
+  assert.deepEqual(refused.change.content.requires.map(r => r.itemId), ['dep.a']);
+  // Conflicts with a choice whose release is not supplied are said to be unknown.
+  const [unchecked] = await suggest({ items, goal: 'tests', closures: answers({ 'mattpocock.tdd': { required: [], complete: true, conflicts: [], conflictsComplete: false } }) });
+  assert.ok(unchecked.unknowns.includes(CONFLICTS_UNKNOWN));
+  // What the policy already selects is not counted again, and a conflict Catalog reports with a selected item is a stated fact.
   const pin = itemId => ({ releaseSha256: hex(9), itemId, itemSha256: hex(4) });
-  const [kept] = await suggest({ items, goal: 'tests', intent: intentOf({ pins: [pin('dep.a'), pin('dep.b'), pin('rival.tool')] }) });
+  const [kept] = await suggest({ items, goal: 'tests', closures: resolved, intent: intentOf({ pins: [pin('dep.a'), pin('dep.b'), pin('rival.tool')] }) });
   assert.equal(kept.facts[0].text, 'Adds 3 files, 130 bytes in total, and needs 0 other items.');
-  const [partly] = await suggest({ items, goal: 'tests', intent: intentOf({ pins: [pin('dep.b')] }) });
+  const [partly] = await suggest({ items, goal: 'tests', closures: resolved, intent: intentOf({ pins: [pin('dep.b')] }) });
   assert.equal(partly.facts[0].text, 'Adds 6 files, 260 bytes in total, and needs 1 other item: Dep A.');
   assert.ok(kept.facts.some(f => f.text === 'Conflicts with rival.tool, which this policy already selects.'));
+  assert.equal(partly.facts.some(f => f.kind === 'dependency'), false, 'a conflict with an item the policy does not select is not stated');
   const [alone] = await suggest({ goal: 'tests' });
   assert.equal(alone.facts[0].text, 'Adds 3 files, 130 bytes in total, and needs 0 other items.');
   assert.deepEqual(alone.facts.map(f => f.kind), ['overhead', 'scope']);
+  // The rules never read dependency declarations themselves.
+  assert.doesNotMatch(await readFile(new URL('./improvement-rules.mjs', import.meta.url), 'utf8'), /dependencies\??\.(requires|conflicts)/);
 });
 
 test('a change to an item the suggestion needs is material: a dismissed suggestion is shown again with that reason', async () => {
   const needed = item('needed.context'), changedNeed = item('needed.context', { materials: [{ sha256: hex(8), byteLength: 99 }] });
-  const tdd = item('mattpocock.tdd', { dependencies: { requires: [{ itemId: 'needed.context' }], optional: [], conflicts: [] } });
-  const [before] = await suggestImprovements({ intent: intentOf(), items: [tdd, needed], clients: [], goal: 'add tests' });
+  const tdd = item('mattpocock.tdd'), needing = need => answers({ 'mattpocock.tdd': { required: [need], conflicts: [] } });
+  const [before] = await suggestImprovements({ intent: intentOf(), items: [tdd, needed], clients: [], goal: 'add tests', closures: needing(needed) });
   assert.deepEqual(before.change.content.requires, [{ itemId: 'needed.context', recipeSha256: hex(1), materials: [hex(2), hex(3)] }]);
   // Already selecting the needed item changes neither the content nor the revision.
-  const [selected] = await suggestImprovements({ intent: intentOf({ pins: [rootOf('needed.context')] }), items: [tdd, needed], clients: [], goal: 'add tests' });
+  const [selected] = await suggestImprovements({ intent: intentOf({ pins: [rootOf('needed.context')] }), items: [tdd, needed], clients: [], goal: 'add tests', closures: needing(needed) });
   assert.equal(selected.revision, before.revision);
-  const [after] = await suggestImprovements({ intent: intentOf(), items: [tdd, changedNeed], clients: [], goal: 'add tests' });
+  const [after] = await suggestImprovements({ intent: intentOf(), items: [tdd, changedNeed], clients: [], goal: 'add tests', closures: needing(changedNeed) });
   assert.equal(after.id, before.id); assert.notEqual(after.revision, before.revision);
   assert.deepEqual(classifyImprovement(after, before), { dismissed: false, reasons: ['Shown again: the suggested item, or an item it needs, changed since you dismissed it.'] });
 });
 
 test('a required closure larger than the tracked bound is disclosed, and the suggestion still records', async () => {
   const needed = Array.from({ length: 257 }, (_, n) => item(`needed.${String(n).padStart(3, '0')}`));
-  const tdd = item('mattpocock.tdd', { dependencies: { requires: needed.map(i => ({ itemId: i.id })), optional: [], conflicts: [] } });
-  const [suggestion] = await suggestImprovements({ intent: intentOf(), items: [tdd, ...needed], clients: [], goal: 'add tests' });
+  const tdd = item('mattpocock.tdd');
+  const [suggestion] = await suggestImprovements({ intent: intentOf(), items: [tdd, ...needed], clients: [], goal: 'add tests', closures: answers({ 'mattpocock.tdd': { required: needed, conflicts: [] } }) });
   assert.equal(suggestion.change.content.requires.length, 256);
   assert.match(suggestion.unknowns.at(-1), /needs 257 items; changes to those after the first 256 by id are not tracked/);
   const { label: _label, description: _description, ...fields } = suggestion;
@@ -239,8 +252,8 @@ test('a required closure larger than the tracked bound is disclosed, and the sug
 
 test('long Catalog labels never make a suggestion impossible to dismiss', async () => {
   const needed = Array.from({ length: 9 }, (_, n) => item(`needed.${n}`, { label: 'L'.repeat(400) }));
-  const items = [item('mattpocock.tdd', { dependencies: { requires: needed.map(i => ({ itemId: i.id })), optional: [], conflicts: [] } }), ...needed];
-  const [suggestion] = await suggestImprovements({ intent: intentOf(), items, clients: [], goal: 'add tests' });
+  const items = [item('mattpocock.tdd'), ...needed];
+  const [suggestion] = await suggestImprovements({ intent: intentOf(), items, clients: [], goal: 'add tests', closures: answers({ 'mattpocock.tdd': { required: needed, conflicts: [] } }) });
   for (const fact of suggestion.facts) assert.ok(fact.text.length <= 1000, fact.text.length);
   const { label: _label, description: _description, ...fields } = suggestion;
   assert.equal(suggestionProblem({ ...fields, schema: IMPROVEMENT_SUGGESTION_SCHEMA, required: false, recordedAt: NOW }), null);
@@ -292,12 +305,29 @@ test('classification: unchanged or fewer reasons stay dismissed; a new reason or
 // ---- Goal-relevant content changes (synthetic Catalog) -------------------------------------------------------------
 const PACKAGE = 'review-notes-catalog', SOURCE = { id: 'notes', kind: 'local', locator: { input: 'notes' } }, GOAL = 'add tests to my app';
 const releaseOf = (n, version, items, input = SOURCE) => ({ release: { sha256: hex(n), package: { name: PACKAGE, ...(version ? { version } : {}) }, items }, ...(input ? { input } : {}) });
+// Catalog's update facts for these plain releases, declared by the fixtures (Catalog's compareReleases reads checked releases; the check tests below use
+// it on real ones): the fixture versions of one package in this order, any other version unordered, and an item changed when its fixture digests differ.
+const FIXTURE_VERSIONS = ['0.9.0', '1.0.0-rc.1', '1.0.0', '1.1.0-rc.2', '1.1.0', '1.2.0', '1.4.0', '1.10.0-rc.1', '1.10.0', '9.0.0'];
+const fixtureDigests = i => stable({ recipe: i.recipe.sha256, materials: [...new Set((i.materials ?? []).map(m => m.sha256))].sort() });
+function fixtureCompare(first, second) {
+  const same = first.package?.name === second.package?.name, [a, b] = [first, second].map(r => FIXTURE_VERSIONS.indexOf(r.package?.version));
+  const version = !same ? { secondIs: 'unknown', reason: 'different-package' } : a < 0 || b < 0 ? { secondIs: 'unknown', reason: 'version-not-semver' } : { secondIs: b > a ? 'newer' : b < a ? 'older' : 'equal' };
+  const ids = [...new Set([...first.items, ...second.items].map(i => i.id))].sort();
+  const items = !same ? [] : ids.map(itemId => {
+    const [x, y] = [first, second].map(r => r.items.find(i => i.id === itemId));
+    return !y ? { itemId, presence: 'only-in-first' } : !x ? { itemId, presence: 'only-in-second', second: { itemSha256: y.itemSha256 } }
+      : { itemId, presence: 'in-both', content: fixtureDigests(x) === fixtureDigests(y) ? 'unchanged' : 'changed', second: { itemSha256: y.itemSha256 } };
+  });
+  return { first: { sha256: first.sha256 }, second: { sha256: second.sha256 }, sameRelease: first.sha256 === second.sha256, package: same ? 'same-package' : 'different-package', version, items };
+}
+const relation = (saved, candidate, releaseOrder) => releaseRelation(saved, candidate, releaseOrder, fixtureCompare);
+const unordered = (intent, inventories, candidates, releaseOrder) => unorderedSources(intent, inventories, candidates, releaseOrder, fixtureCompare);
 const flat = entries => entries.flatMap(entry => entry.release.items.map(i => ({ ...i, root: { releaseSha256: entry.release.sha256 } })));
 const revised = (i, n, extra = {}) => ({ ...i, recipe: { sha256: hex(n), byteLength: 100 }, itemSha256: hex(n + 100), ...extra });
 const changeIntent = ({ inputs = [], ...extra } = {}) => ({ ...intentOf({ roots: [rootOf('x.root', savedReason('goal.test', GOAL))], ...extra }), inputs });
 // Suggestions for a policy saved from release 9, given a newer candidate revision (release 10) of the same source.
 const withChanges = ({ before, after = before, intent = changeIntent(), saved = [releaseOf(9, '1.0.0', before)], candidates = [releaseOf(10, '1.1.0', after)], ...rest }) =>
-  suggestImprovements({ intent, items: flat(saved), inventories: saved, candidates, clients: [], ...rest });
+  suggestImprovements({ intent, items: flat(saved), inventories: saved, candidates, clients: [], compare: fixtureCompare, ...rest });
 const changeTrigger = suggestion => suggestion?.triggers.find(t => t.key.startsWith('change:'));
 const SAVED_FROM = 'a newer revision of a source this policy was saved from';
 
@@ -361,7 +391,7 @@ test('a goal-relevant item that is new or revised in a newer revision of a saved
   assert.equal(changeTrigger(tdd).text, '“Label mattpocock.tdd” changed in review-notes-catalog 1.1.0 (its recipe or files differ from the revision this policy was saved from); your saved goal “add tests to my app” mentions “tests”.');
   assert.deepEqual(tdd.triggers.map(t => t.key), ['change:revised@1.1.0', 'goal:goal.test']);
   assert.deepEqual(tdd.references, [{ kind: 'saved-reason', ref: 'x.root' }, { kind: 'catalog-item', ref: 'mattpocock.tdd' }]);
-  assert.equal(tdd.goal, GOAL); assert.equal(tdd.rulesVersion, '1.6.0');
+  assert.equal(tdd.goal, GOAL); assert.equal(tdd.rulesVersion, '1.7.0');
   // The change describes the candidate item, the content the reason talks about.
   assert.deepEqual([tdd.change.releaseSha256, tdd.change.itemSha256, tdd.change.content.recipeSha256], [hex(10), hex(121), hex(21)]);
   const plan = byItem(got, 'notes.plan');
@@ -483,14 +513,16 @@ test('a change reason is shown once: dismissed with it, a goal suggestion stays 
 });
 
 test('a revision that changes only an item the suggested item needs is a revised change, and shows a dismissal again', async () => {
-  const needing = item('mattpocock.tdd', { dependencies: { requires: [{ itemId: 'dep.helper' }], optional: [], conflicts: [] } });
+  const needing = item('mattpocock.tdd');
   const before = [item('x.root'), needing, item('dep.helper')], after = [item('x.root'), needing, revised(item('dep.helper'), 24)];
-  const dismissedGoal = byItem(await withChanges({ before, candidates: [] }), 'mattpocock.tdd'), shown = byItem(await withChanges({ before, after }), 'mattpocock.tdd');
+  // Catalog resolves the item's required closure in the release it comes from.
+  const closuresOf = later => (found, releaseSha256) => found.id !== 'mattpocock.tdd' ? { required: [], conflicts: [] } : { required: [(releaseSha256 === hex(10) ? later : before)[2]], conflicts: [] }, closures = closuresOf(after);
+  const dismissedGoal = byItem(await withChanges({ before, candidates: [], closures }), 'mattpocock.tdd'), shown = byItem(await withChanges({ before, after, closures }), 'mattpocock.tdd');
   assert.equal(changeTrigger(shown).text, '“Label mattpocock.tdd” changed in review-notes-catalog 1.1.0 (an item it needs differs from the revision this policy was saved from); your saved goal “add tests to my app” mentions “tests”.');
   assert.deepEqual(shown.change.content.requires.map(r => [r.itemId, r.recipeSha256]), [['dep.helper', hex(24)]]);
   assert.deepEqual(classifyImprovement(shown, dismissedGoal).reasons, [`Shown again: a new reason applies — ${changeTrigger(shown).text}`, 'Shown again: the suggested item, or an item it needs, changed since you dismissed it.']);
   // An unchanged item whose needed item is unchanged too says nothing.
-  assert.equal(changeTrigger(byItem(await withChanges({ before, after: before }), 'mattpocock.tdd')), undefined);
+  assert.equal(changeTrigger(byItem(await withChanges({ before, after: before, closures: closuresOf(before) }), 'mattpocock.tdd')), undefined);
 });
 
 // ---- Records and the installed maintained Catalog ------------------------------------------------------------------
@@ -531,14 +563,14 @@ test('the rule table points at items the installed maintained Catalog really off
   const before = s.envelopeBytes.slice();
   const value = await check(s, s.envelopeBytes, { clients: ['claude', 'not-a-client'], goal: 'fewer regressions' });
   assert.deepEqual(s.envelopeBytes, before);
-  assert.equal(value.rulesVersion, '1.6.0'); assert.equal(value.checkedAt, NOW); assert.deepEqual(value.mutations, []);
+  assert.equal(value.rulesVersion, '1.7.0'); assert.equal(value.checkedAt, NOW); assert.deepEqual(value.mutations, []);
   assert.deepEqual(value.reads, ['envelope', 'supplied-inventories', 'declared-clients', 'request-goal']);
   // implement is the root; tdd arises from the saved goal and the request (two reasons), the client wiring from setup.
   assert.equal(value.leading.change.itemId, 'mattpocock.tdd');
   assert.deepEqual(value.leading.triggers.map(t => t.key), ['goal:goal.regressions', 'goal:goal.test']);
   assert.equal(value.leading.label, s.maintained.release.items.find(i => i.id === 'mattpocock.tdd').label);
   assert.equal(value.leading.scope, 'project'); assert.equal(value.leading.dismissal, null); assert.equal(value.leading.promotion, undefined);
-  assert.equal(value.leading.rulesVersion, '1.6.0'); assert.equal(value.leading.change.releaseSha256, s.maintained.release.sha256);
+  assert.equal(value.leading.rulesVersion, '1.7.0'); assert.equal(value.leading.change.releaseSha256, s.maintained.release.sha256);
   assert.match(value.leading.facts[0].text, /^Adds \d+ files, \d+ bytes in total, and needs 0 other items\.$/);
   assert.deepEqual(value.alternatives.map(a => a.change.itemId), ['aihq.client.claude']);
   assert.match(value.alternatives[0].facts[0].text, /^Adds \d+ files, \d+ bytes in total, and needs [1-9]\d* other items?: /);
@@ -550,24 +582,34 @@ test('the rule table points at items the installed maintained Catalog really off
   assert.equal(JSON.stringify(value).includes('base64'), false);
 });
 
-test('Catalog\'s resolved closure gives the identity, revision and content the declared walk gave, so an earlier dismissal still holds', async () => {
+test('the check takes every required closure and update fact from Catalog itself, and nothing falls back to a walk of declarations', async () => {
   const s = await scenario(), options = { clients: ['claude', 'codex'], goal: 'fewer regressions, reviews, planning and context' };
   const value = await check(s, s.envelopeBytes, options);
   const items = s.inventories.flatMap(entry => entry.release.items.map(item => ({ ...item, root: { releaseSha256: entry.release.sha256 } })));
-  const walked = await suggestImprovements({ intent: s.open.intent, items, inventories: s.inventories, ...options });
-  // The same rules with Catalog's closures, counting which non-empty closures Catalog itself resolved (none falls back to the walk here).
-  const fromCatalog = [], resolve = catalogClosures(Object.fromEntries(s.inventories.map(entry => [entry.release.sha256, entry.release])));
-  const resolved = await suggestImprovements({ intent: s.open.intent, items, inventories: s.inventories, ...options,
-    closures: (...args) => { const closure = resolve(...args); if (closure?.length) fromCatalog.push(args[0].id); return closure; } });
+  // The same rules with Catalog's answers, counting which non-empty closures Catalog itself resolved.
+  const fromCatalog = [], resolve = catalogClosures(Object.fromEntries(s.inventories.map(entry => [entry.release.sha256, entry.release])), s.open.intent.roots);
+  const resolved = await suggestImprovements({ intent: s.open.intent, items, inventories: s.inventories, ...options, compare: catalogComparison(),
+    closures: (...args) => { const closure = resolve(...args); if (closure?.required?.length) fromCatalog.push(args[0].id); return closure; } });
   assert.ok(fromCatalog.length > 0, 'at least one required closure came from Catalog');
   const shown = [value.leading, ...value.alternatives];
   assert.ok(shown.some(suggestion => suggestion.change.content.requires.length > 0 && fromCatalog.includes(suggestion.change.itemId)), 'a suggestion whose closure Catalog resolved is compared');
   for (const suggestion of shown) {
-    const same = walked.find(other => other.id === suggestion.id), catalog = resolved.find(other => other.id === suggestion.id);
-    assert.ok(same && catalog, suggestion.change.itemId);
+    const catalog = resolved.find(other => other.id === suggestion.id);
+    assert.ok(catalog, suggestion.change.itemId);
     assert.deepEqual([suggestion.revision, suggestion.change, suggestion.facts], [catalog.revision, catalog.change, catalog.facts], suggestion.change.itemId);
-    assert.deepEqual([suggestion.revision, suggestion.change, suggestion.facts], [same.revision, same.change, same.facts], suggestion.change.itemId);
   }
+  // Without Catalog's answers the rules find nothing an item needs: no declaration is walked in their place.
+  const bare = await suggestImprovements({ intent: s.open.intent, items, inventories: s.inventories, ...options });
+  assert.ok(bare.every(suggestion => suggestion.change.content.requires.length === 0));
+});
+
+test('a dismissal recorded under an earlier rules version still holds: the version is not part of a suggestion\'s id or revision', async () => {
+  const s = await scenario(), { checked, recorded } = await dismissLeading(s, undefined, { goal: 'tests' });
+  const earlier = await resign(recorded.envelopeBytes, doc => { const suggestion = doc.records.find(r => r.schema === IMPROVEMENT_SUGGESTION_SCHEMA); suggestion.rulesVersion = '1.6.0'; });
+  assert.equal(valueOf(await readJourneyEnvelope(earlier)).records.find(r => r.schema === IMPROVEMENT_SUGGESTION_SCHEMA).rulesVersion, '1.6.0');
+  const again = await check(s, earlier, { goal: 'tests' });
+  assert.equal(again.rulesVersion, IMPROVEMENT_RULES_VERSION);
+  assert.ok(again.dismissed.some(found => found.id === checked.leading.id && found.revision === checked.leading.revision));
 });
 
 test('a first check with nothing to say returns no suggestion and a dismissal round-trips as records', async () => {
@@ -870,6 +912,32 @@ async function changeScenario(version) {
   return { maintained, inventories, notes, next, noteId: note.id, envelopeBytes: open.envelopeBytes, policyBytes: composed.policyBytes };
 }
 
+// What the Workbench recorded as a suggestion's required content before Catalog named the references it refuses: the declared requirements walked by
+// item id over the supplied items (the candidate release's own first). Kept only here, as the oracle for revisions earlier versions stored.
+function earlierRequires(item, known) {
+  const found = new Map(), queue = [item];
+  while (queue.length) for (const dependency of queue.shift().dependencies?.requires ?? []) {
+    const id = dependency.itemId;
+    if (id !== item.id && !found.has(id) && known.has(id)) { found.set(id, known.get(id)); queue.push(known.get(id)); }
+  }
+  return [...found.values()].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0).map(i => i.id);
+}
+test('a suggestion whose closure Catalog refuses keeps the revision earlier versions stored, so its dismissal still holds', async () => {
+  // The maintained Catalog the notes depend on is not supplied, so Catalog refuses the closures that reach into it.
+  const full = await changeScenario(), s = { ...full, inventories: [full.notes] }, candidateInventories = [s.next], checked = await check(s, s.envelopeBytes, { goal: 'tests', candidateInventories });
+  const releases = Object.fromEntries([...s.inventories, s.next].map(entry => [entry.release.sha256, entry.release]));
+  const answer = catalogClosures(releases, []), offered = new Map();
+  for (const entry of s.inventories) for (const found of entry.release.items) if (!offered.has(found.id)) offered.set(found.id, found);
+  let refusedClosures = 0;
+  for (const suggestion of [checked.leading, ...checked.alternatives].filter(Boolean)) {
+    const release = releases[suggestion.change.releaseSha256], item = release.items.find(found => found.id === suggestion.change.itemId);
+    const known = s.inventories.some(entry => entry.release === release) ? offered : new Map([...offered, ...release.items.map(found => [found.id, found])]);
+    if (answer(item, release.sha256, suggestion.scope)?.complete === false) refusedClosures += 1;
+    assert.deepEqual(suggestion.change.content.requires.map(r => r.itemId), earlierRequires(item, known), suggestion.change.itemId);
+  }
+  assert.ok(refusedClosures > 0, 'at least one suggestion has a closure Catalog refuses');
+});
+
 test('checking equal-version packs forwards host order and names it in coverage and the suggestion', async () => {
   const s = await changeScenario('0.1.0'), candidateInventories = [s.next];
   const releaseOrder = declareReleaseOrder([[s.notes.release.sha256], [s.next.release.sha256]]);
@@ -966,7 +1034,7 @@ test('a partly readable update source still suggests from what was read, but nev
 test('a saved release supplied only by the update source is still the baseline for what changed', async () => {
   const before = [item('x.root'), item('mattpocock.tdd')], after = [item('x.root'), revised(item('mattpocock.tdd'), 21)];
   const a = releaseOf(9, '1.0.0', before), b = releaseOf(10, '1.1.0', after), releaseOrder = declareReleaseOrder([[hex(9)], [hex(10)]]);
-  const from = (inventories, candidates) => suggestImprovements({ intent: changeIntent(), items: flat([b]), inventories, candidates, clients: [], releaseOrder });
+  const from = (inventories, candidates) => suggestImprovements({ intent: changeIntent(), items: flat([b]), inventories, candidates, clients: [], releaseOrder, compare: fixtureCompare });
   for (const [inventories, candidates] of [[[], [a, b]], [[], [b, a]], [[a], [a, b]]]) {
     const got = byItem(await from(inventories, candidates), 'mattpocock.tdd');
     assert.equal(changeTrigger(got)?.key, 'change:revised@1.1.0'); assert.equal(got.change.releaseSha256, hex(10));
@@ -1076,7 +1144,7 @@ test('the prompt is attributed, tells the AI to change nothing, and carries no p
   for (const suggestion of [checked.leading, ...checked.alternatives]) {
     const prompt = suggestion.prompt;
     assert.equal(prompt, improvementPrompt(suggestion));
-    assert.ok(prompt.includes('Suggested by the AIH Workbench improvement rules 1.6.0 (fixed rules; no AI model was used).'));
+    assert.ok(prompt.includes('Suggested by the AIH Workbench improvement rules 1.7.0 (fixed rules; no AI model was used).'));
     assert.match(prompt, /Do not install, change or run anything/); assert.match(prompt, /do not ask me to upload/);
     assert.ok(prompt.includes('Start your reply with “AI advice:”.'));
     assert.ok(prompt.includes(suggestion.label)); assert.ok(prompt.includes(suggestion.change.itemId));
@@ -1207,9 +1275,9 @@ test('the authoring catalog the browser is served carries every installed adapte
 // ---- Recurring friction from stored Core results -------------------------------------------------------------------
 // The host holds Core's own results (file state, native verification, the Workbench's inspect record). Recurrence is Core's
 // calculation over claims made from them; these tests build full result objects and keep the policy's selection ids real.
-const FILE_STATE = 'urn:aihq:core:file-state-result:1.0.0', DIAGNOSING = 'mattpocock.diagnosing-bugs', DAYS = ['2026-10-10T09:00:00Z', '2026-10-11T09:00:00Z', '2026-10-12T09:00:00Z', '2026-10-13T09:00:00Z'];
+const FILE_STATE = 'urn:aihq:core:file-state-result:1.1.0', DIAGNOSING = 'mattpocock.diagnosing-bugs', DAYS = ['2026-10-10T09:00:00Z', '2026-10-11T09:00:00Z', '2026-10-12T09:00:00Z', '2026-10-13T09:00:00Z'];
 const fileStateResult = (selectionId, outcome) => ({ schema: FILE_STATE, package: { name: '@aihq/core', version: '1.0.0-dev.37' }, status: 'complete', fileState: outcome === 'match' ? 'match' : 'changed', authority: 'not-evaluated',
-  targets: [{ id: 'target-1', operationIds: [`${selectionId}/write`], target: { root: 'project', path: 'CLAUDE.md' }, outcome, reason: outcome }], checks: [], notChecked: [],
+  targets: [{ id: 'target-1', operationIds: [`${selectionId}/write`], selectionIds: [selectionId], target: { root: 'project', path: 'CLAUDE.md' }, outcome, reason: outcome }], checks: [], notChecked: [],
   coverage: { comparedTargets: 1, unavailableTargets: outcome === 'unavailable' ? 1 : 0, comparedChecks: 0, unavailableChecks: 0, notChecked: 0 }, diagnostics: [], limits: { budgetMs: 1000, elapsedMs: 1, targetBytes: 0, materialBytes: 0 } });
 const frictionScenario = (extra = {}) => scenario({ goal: 'ship it', rule: 'goal.build', ...extra });
 const selectionOf = (s, itemId, scope = 'project') => JSON.parse(decode(s.policyBytes)).selections.find(selection => selection.managementId === managementIdOf({ scope, packageName: s.maintained.release.package.name, itemId }));
@@ -1257,7 +1325,7 @@ test('a recurrence names the condition, the evidence and the scope, and records 
     text: `Recurring failure: the managed file state check for “${label}” failed (${DAYS[0]}), recovered (${DAYS[1]}) and failed again (${DAYS[2]}); 1 recurrence in 3 stored Core results.` }]);
   assert.match(suggestion.triggers[0].key, /^[a-z][a-z0-9-]{0,31}:[\w.@-]{1,180}$/);
   assert.equal(suggestion.goal, 'ship it'); assert.deepEqual(suggestion.references, [{ kind: 'saved-reason', ref: 'mattpocock.implement' }, { kind: 'catalog-item', ref: DIAGNOSING }]);
-  assert.equal(value.rulesVersion, '1.6.0'); assert.equal(suggestion.rulesVersion, '1.6.0'); assert.equal(suggestion.triggers[0].text.includes(FIXTURE_NOTE), false);
+  assert.equal(value.rulesVersion, '1.7.0'); assert.equal(suggestion.rulesVersion, '1.7.0'); assert.equal(suggestion.triggers[0].text.includes(FIXTURE_NOTE), false);
   assert.deepEqual(value.coverage[1], { trigger: 'recurring-friction', state: 'checked', text: FRICTION_COVERAGE.checked });
   assert.deepEqual(value.reads, ['envelope', 'supplied-inventories', 'core-evidence', 'declared-clients']);
   assert.deepEqual(suggestion.unknowns, [...UNKNOWNS, UNCONFIGURED]); assert.equal(suggestion.prompt, improvementPrompt(suggestion)); assert.match(suggestion.prompt, /Recurring failure: the managed file state check/);
@@ -1447,14 +1515,16 @@ test('the envelope\'s maintenance-check note never changes what the friction cov
   assert.equal(refused.status, 'refused'); assert.equal(refused.diagnostics[0].path, '/evidence');
 });
 
-test('a Catalog item\'s executables tie the Core target they run on: a target id ties itself, npx ties npm, and anything else ties nothing', async () => {
+test('a Catalog item\'s executables tie the Core target Core publishes them under, and anything else ties nothing', async () => {
   const running = (...names) => item('x.mcp', { targets: names.map(name => ({ kind: 'executable', name })) });
+  // Core's own target definitions decide: every executable a target lists ties that target (npx is listed under npm), and nothing else does.
+  for (const target of harnessTargets) for (const name of target.executables) assert.deepEqual(coreTargetsOf(running(name)), [target.id], name);
   assert.deepEqual(coreTargetsOf(running('npx')), ['npm']);
-  assert.deepEqual(coreTargetsOf(running('node')), ['node']);
   assert.deepEqual(coreTargetsOf(running('npx', 'node', 'npm', 'git')), ['git', 'node', 'npm']);
-  assert.deepEqual(coreTargetsOf(running('bash')), ['bash']);
   // No guessing: a name Core has no target for, a near miss, a different case and inherited object keys tie nothing.
-  assert.deepEqual(coreTargetsOf(running('uvx', 'python3', 'tsx', 'Node', 'NPX', 'npx.cmd', 'constructor', '__proto__', 'toString', '')), []);
+  assert.deepEqual(coreTargetsOf(running('uvx', 'tsx', 'Node', 'NPX', 'npx.cmd', 'constructor', '__proto__', 'toString', '')), []);
+  // The mapping is read from Core's published targets, never kept here.
+  assert.doesNotMatch(await readFile(new URL('./executable-ties.mjs', import.meta.url), 'utf8'), /ALIASES|'npx'/);
   // Only declared executables count.
   assert.deepEqual(coreTargetsOf(item('x.plain')), []);
   assert.deepEqual(coreTargetsOf(item('x.platform', { targets: [{ kind: 'platform', name: 'node' }, { kind: 'executable' }, { kind: 'executable', name: 5 }, null, 'node'] })), []);
@@ -1564,18 +1634,18 @@ test('recurring conditions beyond the record\'s trigger limit are disclosed, not
 
 // ---- Content-change coverage when a release's order is not known -----------------------------------------------------
 const ORDER = 'Content changes were only partly checked';
-test('releaseRelation consults the host-declared order first, then semantic-version precedence; a pair neither orders has no relation', () => {
+test('releaseRelation consults the host-declared order first, then Catalog\'s version order; a pair neither orders has no relation', () => {
   const saved = version => releaseOf(9, version, []), candidate = version => releaseOf(10, version, []);
-  assert.equal(releaseRelation(saved('1.0.0'), candidate('1.1.0')), 'newer'); assert.equal(releaseRelation(saved('1.1.0'), candidate('1.0.0')), 'older'); assert.equal(releaseRelation(saved('1.0.0-rc.1'), candidate('1.0.0')), 'newer');
-  for (const [before, after] of [['1.0.0', '1.0.0'], ['1.0.0+a', '1.0.0+b'], ['1.0.0', undefined], [undefined, '1.0.0'], ['1.0.0', 'latest'], ['v1', 'v2']]) assert.equal(releaseRelation(saved(before), candidate(after)), undefined, `${before} ${after}`);
+  assert.equal(relation(saved('1.0.0'), candidate('1.1.0')), 'newer'); assert.equal(relation(saved('1.1.0'), candidate('1.0.0')), 'older'); assert.equal(relation(saved('1.0.0-rc.1'), candidate('1.0.0')), 'newer');
+  for (const [before, after] of [['1.0.0', '1.0.0'], ['1.0.0+a', '1.0.0+b'], ['1.0.0', undefined], [undefined, '1.0.0'], ['1.0.0', 'latest'], ['v1', 'v2']]) assert.equal(relation(saved(before), candidate(after)), undefined, `${before} ${after}`);
   // A declared order that orders the pair decides it, even for releases that share a version, have none, or whose versions say the opposite.
   const newer = declareReleaseOrder([[hex(9)], [hex(10)]]), older = declareReleaseOrder([[hex(10)], [hex(9)]]);
-  for (const [before, after] of [['1.0.0', '1.0.0'], [undefined, undefined], ['1.0.0', 'latest']]) { assert.equal(releaseRelation(saved(before), candidate(after), newer), 'newer', `${before} ${after}`); assert.equal(releaseRelation(saved(before), candidate(after), older), 'older', `${before} ${after}`); }
-  assert.equal(releaseRelation(saved('1.0.0'), candidate('1.1.0'), older), 'older'); assert.equal(releaseRelation(saved('1.1.0'), candidate('1.0.0'), newer), 'newer');
+  for (const [before, after] of [['1.0.0', '1.0.0'], [undefined, undefined], ['1.0.0', 'latest']]) { assert.equal(relation(saved(before), candidate(after), newer), 'newer', `${before} ${after}`); assert.equal(relation(saved(before), candidate(after), older), 'older', `${before} ${after}`); }
+  assert.equal(relation(saved('1.0.0'), candidate('1.1.0'), older), 'older'); assert.equal(relation(saved('1.1.0'), candidate('1.0.0'), newer), 'newer');
   // A declared order that does not order the pair (a release it lacks, an ambiguous position or an unreadable value) leaves semver, or nothing, to decide.
   for (const unknown of [undefined, declareReleaseOrder([[hex(9)]]), declareReleaseOrder([[hex(9)], [hex(10)], [hex(9)]])]) {
-    assert.equal(releaseRelation(saved('1.0.0'), candidate('1.1.0'), unknown), 'newer'); assert.equal(releaseRelation(saved('1.1.0'), candidate('1.0.0'), unknown), 'older');
-    assert.equal(releaseRelation(saved('1.0.0'), candidate('1.0.0'), unknown), undefined);
+    assert.equal(relation(saved('1.0.0'), candidate('1.1.0'), unknown), 'newer'); assert.equal(relation(saved('1.1.0'), candidate('1.0.0'), unknown), 'older');
+    assert.equal(relation(saved('1.0.0'), candidate('1.0.0'), unknown), undefined);
   }
 });
 
@@ -1607,7 +1677,7 @@ test('a different release of a saved package whose order is unknown makes conten
 
 // The Catalog declaration format requires a semantic version, so an unversioned release cannot be built through intake; the rule-level test uses plain releases.
 test('unorderedSources names a package whose candidate release is unversioned, not a version or equal in version, and only for the same source', () => {
-  const intent = changeIntent(), saved = [releaseOf(9, '1.0.0', [])], names = candidates => unorderedSources(intent, saved, candidates);
+  const intent = changeIntent(), saved = [releaseOf(9, '1.0.0', [])], names = candidates => unordered(intent, saved, candidates);
   for (const unordered of [releaseOf(10, undefined, []), releaseOf(10, 'latest', []), releaseOf(10, '1.0.0', []), releaseOf(10, '1.0.0+other', [])]) assert.deepEqual(names([unordered]), [PACKAGE], JSON.stringify(unordered.release.package));
   assert.deepEqual(names([releaseOf(10, undefined, []), releaseOf(11, '1.0.0', [])]), [PACKAGE]);
   const other = { id: 'other', kind: 'local', locator: { input: 'other' } };
@@ -1615,7 +1685,7 @@ test('unorderedSources names a package whose candidate release is unversioned, n
     assert.deepEqual(names([known]), [], JSON.stringify(known.release.package));
   assert.deepEqual(names([]), []);
   // A saved release the intent does not name is not asked.
-  assert.deepEqual(unorderedSources(intent, [releaseOf(8, '1.0.0', [])], [releaseOf(10, undefined, [])]), []);
+  assert.deepEqual(unordered(intent, [releaseOf(8, '1.0.0', [])], [releaseOf(10, undefined, [])]), []);
 });
 
 test('releases the host orders are not version-order-unknown even when they share a version, and the newer one suggests labelled host-declared; without a host order they are', async () => {
@@ -1638,13 +1708,13 @@ test('releases the host orders are not version-order-unknown even when they shar
   assert.equal(partly.coverage[0].reason, 'sources-partly-unavailable');
 });
 
-test('unorderedSources asks the host-declared order first, then semver', () => {
-  const intent = changeIntent(), saved = [releaseOf(9, '1.0.0', [])], candidate = releaseOf(10, '1.0.0', []), names = releaseOrder => unorderedSources(intent, saved, [candidate], releaseOrder);
+test('unorderedSources asks the host-declared order first, then Catalog\'s version order', () => {
+  const intent = changeIntent(), saved = [releaseOf(9, '1.0.0', [])], candidate = releaseOf(10, '1.0.0', []), names = releaseOrder => unordered(intent, saved, [candidate], releaseOrder);
   assert.deepEqual(names(undefined), [PACKAGE]);
   assert.deepEqual(names(declareReleaseOrder([[hex(9)], [hex(10)]])), []); assert.deepEqual(names(declareReleaseOrder([[hex(10)], [hex(9)]])), []);
   assert.deepEqual(names(declareReleaseOrder([[hex(9)]])), [PACKAGE]); assert.deepEqual(names(declareReleaseOrder([[hex(9)], [hex(10)], [hex(9)]])), [PACKAGE]);
-  // Semver orders what the declared order does not.
-  assert.deepEqual(unorderedSources(intent, saved, [releaseOf(10, '1.1.0', [])], declareReleaseOrder([[hex(9)]])), []);
+  // Catalog's version order orders what the declared order does not.
+  assert.deepEqual(unordered(intent, saved, [releaseOf(10, '1.1.0', [])], declareReleaseOrder([[hex(9)]])), []);
 });
 
 test('an older release of the saved package is ordered, and a dismissal is unaffected by the unknown order', async () => {
