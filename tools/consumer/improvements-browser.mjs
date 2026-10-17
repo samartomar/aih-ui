@@ -14,8 +14,9 @@ import { composeAuthoring, freshAuthoring, openDraft } from './headless.mjs';
 import { installedFamilies } from './installed-families.mjs';
 import { intakeDeclaration, digestBytes } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
+import { frictionFixture } from './friction-fixture.mjs';
 import { IMPROVEMENT_SUGGESTION_SCHEMA, IMPROVEMENT_DISMISSAL_SCHEMA } from './improvements.mjs';
-import { UNKNOWNS, FRICTION_UNKNOWN, IMPROVEMENT_RULES_VERSION } from './improvement-rules.mjs';
+import { UNKNOWNS, FRICTION_COVERAGE, IMPROVEMENT_RULES_VERSION } from './improvement-rules.mjs';
 
 const decode = bytes => new TextDecoder().decode(bytes);
 const ROOT = 'mattpocock.implement', CLIENTS = ['claude', 'codex'];
@@ -23,7 +24,7 @@ const SAVED_REASON = 'guided-setup rules 1.0.0: goal.build. Goal: add tests to m
 const READS = ['read', 'draft-open', 'maintenance-check', 'improvements-check', 'workspace-read', 'trials-read'];
 const OPENED = /Saved draft reopened|Unresolved draft opened/;
 
-export async function runImprovementsBrowser({ origin, output, playwrightModule, settingsPath, sourcePath }) {
+export async function runImprovementsBrowser({ origin, output, playwrightModule, settingsPath, sourcePath, frictionPath }) {
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
   // Explicit setup step, never a Workbench action: the draft guided setup would have saved, built headlessly.
@@ -42,7 +43,7 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
 
   const browser = await chromium.launch({ headless: true });
   const errors = [], failedResponses = [], popups = [];
-  let observed, operations = [], requests = [], checkResponses = 0, setupRoute, previousSettings, previousSource;
+  let observed, operations = [], requests = [], checkResponses = 0, setupRoute, previousSettings, previousSource, previousFriction;
   const openPage = async () => {
     const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 1100 } });
     // Headless evidence stays on the supplied local origin.
@@ -132,6 +133,8 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
     steps.open = await openSaved(first, importPath);
     assert.deepEqual(steps.open.filter(operation => !READS.includes(operation)), [], 'Opening may only read.');
     assert.ok(steps.open.includes('improvements-check'));
+    const initialFrictionCoverage = await first.locator('#policy-improvements-coverage').innerText();
+    assert.ok(initialFrictionCoverage.includes(FRICTION_COVERAGE['history-unavailable']), 'Absent history is explicitly unavailable.');
     assert.deepEqual(await groupLabels(first), ['Leading suggestion', 'Alternatives']);
     assert.equal(await groupCards(first, 'Leading suggestion').count(), 1);
     const leading = groupCards(first, 'Leading suggestion').first();
@@ -281,7 +284,7 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
     assert.equal(await coverage.isVisible(), true);
     const expandedCoverage = await coverage.innerText();
     assert.match(expandedCoverage, /content[- ]changes?/i); assert.match(expandedCoverage, /\bchecked\b/i);
-    assert.ok(expandedCoverage.includes(FRICTION_UNKNOWN), 'The friction unknown names the missing interface.');
+    assert.ok(expandedCoverage.includes(FRICTION_COVERAGE['history-unavailable']), 'The friction unknown names the unavailable history.');
 
     steps.contentDismiss = await act(contentPage, () => testPlan.getByRole('button', { name: 'Dismiss', exact: true }).click());
     assert.ok(steps.contentDismiss.includes('improvements-record'));
@@ -306,10 +309,28 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
       expanded: { revisions: ['expanded'], coverage: expandedCoverage, suggestionId: contentId, text: contentText, styleSuggestions: 0 },
       dismissed: { suggestionId: contentId, text: dismissedText, sameReasonStaysDismissed: true } };
 
+    // 9. Host setup supplies controlled captures for this journey's selected root; checking only reads them.
+    assert.ok(frictionPath, 'The host supplies the fixture evidence file location.');
+    previousFriction = await readFile(frictionPath);
+    await writeFile(frictionPath, JSON.stringify({ entries: frictionFixture({ policyBytes: composed.value.policyBytes, itemId: ROOT }) }));
+    steps.friction = await suggestWith(reopened, '');
+    assert.deepEqual(steps.friction, ['improvements-check'], 'Checking friction only reads.');
+    const frictionCard = section(reopened).locator('[data-suggestion-id]').filter({ hasText: /fixture evidence, not observed on this computer/ });
+    assert.equal(await frictionCard.count(), 1, 'One suggestion names the controlled recurring friction.');
+    const frictionText = await frictionCard.innerText();
+    assert.match(frictionText, /file[- ]state/i); assert.match(frictionText, /recurr/i);
+    assert.match(frictionText, /fixture evidence, not observed on this computer/);
+    const frictionCoverage = reopened.locator('#policy-improvements-coverage'), checkedFrictionCoverage = await frictionCoverage.innerText();
+    assert.ok(checkedFrictionCoverage.includes(FRICTION_COVERAGE.checked), 'Supplied recurring history was checked.');
+    assert.match(checkedFrictionCoverage, /fixture evidence, not observed on this computer/);
+    await frictionCard.screenshot({ path: join(output, 'friction-suggestion.png') });
+    await frictionCoverage.screenshot({ path: join(output, 'friction-coverage.png') });
+    screenshots.push('friction-suggestion.png', 'friction-coverage.png');
+
     assert.deepEqual(errors, []); assert.deepEqual(failedResponses, []);
     await writeFile(join(output, 'improvements-evidence.json'), JSON.stringify({ status: 'passed', entry: '/', chromium: browser.version(), rulesVersion: IMPROVEMENT_RULES_VERSION,
       savedGoal: SAVED_REASON, clients: CLIENTS, clientSetup: setupRoute, screenshots, operations: steps, tddSuggestionId: { beforeReopen: tddId, afterReopen: tddAfterReopen },
-      contentChange, copy: { requests: 0, popups: 0, clipboardEqualsPrompt: true }, errors, failedResponses }, null, 2));
+      contentChange, friction: { initialCoverage: initialFrictionCoverage, coverage: checkedFrictionCoverage, text: frictionText }, copy: { requests: 0, popups: 0, clipboardEqualsPrompt: true }, errors, failedResponses }, null, 2));
     console.log(`Improvements journey passed: ${output}`);
   } catch (error) {
     await observed?.screenshot({ path: join(output, 'improvements-failure.png'), fullPage: true }).catch(() => {});
@@ -317,6 +338,7 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
       text: await observed?.locator('body').innerText().catch(() => '') }, null, 2));
     throw error;
   } finally {
+    if (previousFriction !== undefined) await writeFile(frictionPath, previousFriction);
     if (previousSource !== undefined) await writeFile(sourcePath, previousSource);
     if (previousSettings) await writeFile(settingsPath, JSON.stringify(previousSettings, null, 2) + '\n');
     await browser.close();

@@ -11,7 +11,7 @@ const encode = value => new TextEncoder().encode(value);
 const bytesOf = value => Array.isArray(value) ? Uint8Array.from(value) : undefined;
 const WORKSPACE_OPERATIONS = ['workspace-read', 'workspace-edit', 'workspace-plan', 'workspace-bind', 'workspace-unbind', 'workspace-verify', 'workspace-export'];
 // `observeCheckout(root)` is the host's read of one local checkout (see ./workspace-host.mjs); a service made without one cannot inspect folders.
-export async function createMixedService(maintained, { suppliedInventories, familyInventories = [], maintenanceSource, observeCheckout } = {}) {
+export async function createMixedService(maintained, { suppliedInventories, familyInventories = [], maintenanceSource, frictionEvidence, observeCheckout } = {}) {
   async function supplied(snapshot, id = 'notes') {
     const input = { id, kind: 'local', locator: { input: id }, resolvedIdentity: { sha256: await digestBytes(snapshot.declarationBytes) } };
     const result = await intakeDeclaration({ input, ...snapshot, materialSource: { kind: 'local', input: id } });
@@ -106,6 +106,7 @@ export async function createMixedService(maintained, { suppliedInventories, fami
           const candidateInventories = maintenanceSource ? await Promise.resolve().then(() => maintenanceSource()).catch(() => null) : null;
           // Core's support list is the installed Core's own, read here; nothing the request carries can state it.
           return checkImprovements({ envelopeBytes, inventories: all, candidateInventories: candidateInventories ?? null, candidateSource: maintenanceSource ? 'configured' : 'unconfigured',
+            evidence: frictionEvidence ? await Promise.resolve().then(frictionEvidence).catch(() => null) : undefined,
             clients: body.clients ?? [], labels: body.labels ?? {}, coreClients: [...nativeClientIds], goal: body.goal, now });
         }
         // Reading trials writes nothing. This host can enforce no bound, so it has no mechanisms and every bound is advisory.
