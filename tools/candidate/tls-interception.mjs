@@ -13,7 +13,7 @@ import { createSampleCa } from './sample-ca.mjs';
 import { forgetSample } from './samples.mjs';
 
 export const STAGED_CONDITION_SCHEMA = 'urn:aih-ui:candidate-staged-condition:1.0.0';
-// One name for the condition everywhere: the page banners, the report bundle and the server log.
+// One name for the condition on the page banners and in the report bundle.
 export const STAGED_LABEL = 'Staged condition: TLS interception (sample)';
 export const TLS_ROUTE_MODULE = fileURLToPath(new URL('./tls-route.mjs', import.meta.url));
 const HOSTS = Object.freeze(['registry.npmjs.org']);

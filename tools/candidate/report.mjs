@@ -85,8 +85,9 @@ export async function writeReport({ dataDir, now = new Date(), realHome = homedi
     try { identity = candidateIdentity(readManifest(layout.manifest)); } catch (error) { identity = `unreadable: ${error.message}`; }
   } else missing.push(`${shown(layout.manifest)}: not present`);
   // A staged condition is part of the candidate's identity: a failure seen under it is not the same failure without it.
-  const staged = await safe(join(layout.stagedTls, 'condition.json')) ? stagedTlsCondition(layout) : null;
-  if (!staged && await safe(join(layout.stagedTls, 'condition.json'))) missing.push(`${shown(join(layout.stagedTls, 'condition.json'))}: present but incomplete or for a different CA, so the condition is not active`);
+  const conditionFile = join(layout.stagedTls, 'condition.json'), recorded = await safe(conditionFile);
+  const staged = recorded ? stagedTlsCondition(layout) : null;
+  if (recorded && !staged) missing.push(`${shown(conditionFile)}: present but incomplete or for a different CA, so the condition is not active`);
   const server = await json(layout.server), running = isAlive(server?.pid), ready = running && server.state === 'ready';
   await save('identity.json', {
     manifest: identity,

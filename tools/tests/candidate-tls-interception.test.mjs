@@ -15,6 +15,7 @@ import { claimDataDir, ensureLayout, resetDataDir } from '../candidate/data-dir.
 import { candidateLayout } from '../candidate/layout.mjs';
 import { serverEnvironment } from '../candidate/process.mjs';
 import { writeReport } from '../candidate/report.mjs';
+import { forgetSample } from '../candidate/samples.mjs';
 import { createSampleCa } from '../candidate/sample-ca.mjs';
 import { STAGED_CONDITION_SCHEMA, STAGED_LABEL, TLS_ROUTE_MODULE, activateStagedCondition, stageTlsInterception, stagedEnvironment, stagedTlsCondition, startInterceptor, unstageTlsInterception, writeStagedRepairs }
   from '../candidate/tls-interception.mjs';
@@ -408,4 +409,40 @@ test('activation changes nothing when the condition is not staged, or the readin
   assert.deepEqual(env, { KEEP: '1' });
   assert.equal(existsSync(layout.stagedRepairs), false);
   assert.deepEqual(said, ['staged condition: TLS interception is staged but the readiness sample is missing, so it stays inactive']);
+});
+
+test('activation closes the interceptor when the repair offer cannot be written, and changes no environment', async t => {
+  const { layout } = area(t), env = { KEEP: '1' };
+  stageTlsInterception(layout);
+  mkdirSync(layout.stagedRepairs, { recursive: true });
+  let closed = 0;
+  const start = async () => ({ tlsPort: 1, proxyPort: 2, close: async () => { closed++; } });
+  await assert.rejects(activateStagedCondition({ layout, seededEnv: { AIH_READINESS_HOME: 'x' }, env, start }));
+  assert.equal(closed, 1);
+  assert.deepEqual(env, { KEEP: '1' });
+});
+
+test('a bundle lists a staged record that is no longer complete under missing inputs, and does not call it active', async t => {
+  const { data, layout } = area(t);
+  stageTlsInterception(layout);
+  rmSync(join(layout.stagedTls, 'interceptor-key.pem'));
+  const bundle = readBundle((await writeReport({ dataDir: data, now: new Date('2026-01-03T00:00:00Z') })).bundleDir);
+  assert.match(bundle['README.md'], /staged\/tls-interception\/condition\.json: present but incomplete or for a different CA/);
+  assert.ok(!Object.keys(bundle).some(path => path.startsWith('staged/')));
+  assert.ok(!bundle['ISSUE.md'].includes(STAGED_LABEL));
+});
+
+test('forgetSample removes one recorded sample and its paths, and leaves a record in another format or without that sample alone', t => {
+  const { layout } = area(t), recordPath = join(layout.samples, '.seeded.json');
+  seedReadiness(layout);
+  forgetSample(layout, 'readiness', [layout.readiness]);
+  assert.equal(existsSync(layout.readiness), false);
+  assert.deepEqual(seeded(layout), ['organization']);
+  const before = readFileSync(recordPath, 'utf8');
+  forgetSample(layout, 'readiness', []);
+  assert.equal(readFileSync(recordPath, 'utf8'), before, 'a sample that is not recorded changes nothing');
+  const foreign = JSON.stringify({ schema: 'urn:example:other', samples: { readiness: {} } });
+  writeFileSync(recordPath, foreign);
+  forgetSample(layout, 'readiness', []);
+  assert.equal(readFileSync(recordPath, 'utf8'), foreign, 'a record in another format is left alone');
 });
