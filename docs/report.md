@@ -48,7 +48,7 @@ and the same check **passed** afterwards. Nothing else counts:
 
 The machine check records each condition for this host (`process`) and, when that inspection
 ran, with the persisted configuration (see [readiness](readiness.md#persisted-configuration)). The post-repair
-recheck uses the persisted configuration. The precheck Core sees is chosen so that a repair
+recheck uses the persisted configuration. (The friction check keeps the two configurations as separate timelines for the same reason.) The precheck Core sees is chosen so that a repair
 counts only when:
 
 1. the condition **failed in both** configurations before the repair;

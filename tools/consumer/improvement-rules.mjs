@@ -68,9 +68,10 @@ function precedence(a, b) {
 // Fact text is shown and recorded; long Catalog labels are cut so the record limit can never refuse a dismissal.
 const clip = text => text.length <= 1000 ? text : `${text.slice(0, 999)}…`;
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-// A condition in words, for a person: the two conditions Core results map to, else a readiness check by its id.
+// A condition in words, for a person: the two conditions Core results map to, else a readiness check by its id; one made with the trust Core's repairs persist
+// (`persisted-condition:<id>`, friction.mjs) says so, because it is a different timeline from the same check made with this host's own trust.
 const CONDITION_WORDS = { 'condition:file-state': 'managed file state', 'condition:native-use': 'native client use' };
-const conditionWords = condition => CONDITION_WORDS[condition] ?? `${condition.replace(/^condition:/, '')} readiness`;
+const conditionWords = condition => CONDITION_WORDS[condition] ?? (/^persisted-condition:/.test(condition) ? `persisted-configuration ${condition.replace(/^persisted-condition:/, '')} readiness` : `${condition.replace(/^condition:/, '')} readiness`);
 // The reason key names the condition and the subject. A key must be word characters, `.`, `@` and `-`, so any other character (a published check id's `/`)
 // is replaced and a longer name is cut; either keeps a short digest of the whole name so two different ones never share a key.
 const slug = text => text.replaceAll(/[^\w.@-]/g, '-');

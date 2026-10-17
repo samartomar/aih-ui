@@ -7,6 +7,8 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, readFileSync, statSync } from 'node:fs';
 import os from 'node:os';
 import { join, relative, isAbsolute } from 'node:path';
+import { fork } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { createReadinessFixture, FIXTURE_CA } from './readiness-fixture.mjs';
 import { projectConfigurationComparison, projectInspection, readinessGuidance } from './readiness.mjs';
 
@@ -311,4 +313,41 @@ test('invalid staged configuration is refused', () => {
     assert.throws(() => createReadinessHost({ staged }), TypeError);
   }
   assert.doesNotThrow(() => createReadinessHost({ staged: { label: 'x'.repeat(200), detail: 'x'.repeat(1000) } }));
+});
+
+// The friction input reads the host's own journal. These two tests use real records (the machine checks and the offline repair above), not built ones.
+test('real journal records map to persisted-configuration claims with the record id and sha256 as source and revision', async () => {
+  const { frictionRecurrence } = await import('./friction.mjs');
+  const records = host.records(), repairRecord = records.find(record => record.kind === 'repair');
+  assert.ok(repairRecord, 'the repair above journaled a record');
+  const subject = { kind: 'target', key: 'npm', itemId: 'ecc.claude.mcp.context7', rootItemId: 'ecc.claude.mcp.context7', label: 'Context7', scope: 'project' };
+  const { claimSet, results } = frictionRecurrence({ evidence: records.map(record => ({ id: record.id, capturedAt: record.capturedAt, sha256: record.sha256, result: record })), subjects: [subject] });
+  assert.ok(claimSet.claims.length > 0);
+  const conditions = new Set(results.map(result => result.condition));
+  assert.ok([...conditions].some(condition => condition.startsWith('persisted-condition:npm/tls/')), JSON.stringify([...conditions]));
+  assert.ok([...conditions].some(condition => condition.startsWith('condition:npm/tls/')), JSON.stringify([...conditions]));
+  const known = new Map(records.map(record => [record.id, record.sha256]));
+  assert.ok(claimSet.claims.every(claim => known.get(claim.sources[0].id) === claim.sources[0].sha256 && claim.revision === claim.sources[0].sha256));
+  assert.ok(claimSet.claims.some(claim => claim.sources[0].id === repairRecord.id && claim.sources[0].sha256 === repairRecord.sha256 && claim.revision === repairRecord.sha256 && claim.measure.startsWith('persisted-condition:')));
+});
+
+test('the readiness child answers records with its journal, read-only, and every other operation unchanged', async () => {
+  const child = fork(fileURLToPath(new URL('./readiness-child.mjs', import.meta.url)), [], { env: process.env, windowsHide: true, serialization: 'json', stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+  child.stderr.resume();
+  let counter = 0;
+  const ask = (op, body) => new Promise((resolve, reject) => {
+    const id = ++counter, timer = setTimeout(() => reject(new Error(`no answer to ${op}`)), 120_000);
+    const listen = message => { if (message?.id === id) { clearTimeout(timer); child.off('message', listen); resolve(message.result); } };
+    child.on('message', listen); child.send({ id, op, body });
+  });
+  try {
+    assert.deepEqual(await ask('records'), [], 'a child that has checked nothing holds an empty journal');
+    const checked = ok(await ask('check', { targets: ['jq'], network: 'off' }));
+    const records = await ask('records');
+    assert.equal(records.length, 1);
+    assert.deepEqual([records[0].kind, records[0].schema], ['machine-check', 'urn:aih-ui:readiness-record:1.0.0']);
+    assert.deepEqual(records[0].check, checked.projection);
+    assert.deepEqual(await ask('records'), records, 'reading the journal changes nothing');
+    assert.equal((await ask('nope')).diagnostics[0].code, 'INVALID_REQUEST');
+  } finally { child.removeAllListeners(); child.kill(); }
 });

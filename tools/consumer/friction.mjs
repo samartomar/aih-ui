@@ -1,14 +1,14 @@
-// Consumer adapter from the stored Core results a host already holds (file state, native verification and the Workbench's stored inspect
-// record) to Core's normalized claims 1.1.0, and Core's recurrence method over them (@aihq/core/report). This module only states what each
-// stored result says about a subject the draft ties to a selected item; whether a failure came back after it recovered is Core's answer, not
-// recomputed here. It collects nothing and reads no clock, network or file: callers pass the results they already hold.
+// Consumer adapter from the stored Core results a host already holds (file state, native verification and the Workbench's readiness journal:
+// machine-check and repair records) to Core's normalized claims 1.1.0, and Core's recurrence method over them (@aihq/core/report). This module only
+// states what each stored result says about a subject the draft ties to a selected item; whether a failure came back after it recovered is Core's
+// answer, not recomputed here. It collects nothing and reads no clock, network or file: callers pass the results they already hold.
 //
 // Rules: a claim never carries a machine-local path or free text from a result (reasons are Core codes); an untied subject is never
 // requested; a result of any other schema is counted as unread, never an error; unknown is never a value, and missing history is never zero.
 import { CLAIMS_SCHEMA_1_1_0, projectClaims, validateClaimSet } from '@aihq/core/report';
 import { READINESS_RECORD_SCHEMA, fingerprint, isLocalPath } from './claims.mjs';
 import { only, object, hash } from './intake.mjs';
-import { isUtcTimestamp } from './maintenance-record.mjs';
+import { isUtcTimestamp, MAINTENANCE_CHECK_RECORD_SCHEMA } from './maintenance-record.mjs';
 
 export const FILE_STATE_SCHEMA = 'urn:aihq:core:file-state-result:1.0.0';
 export const NATIVE_SCHEMA = 'urn:aihq:core:native-verification-result:1.0.0';
@@ -65,21 +65,37 @@ function nativeReadings(result, ties) {
 }
 // A published check id is kept whole, including the `/` Workbench readiness ids use (`claude/version`); Core takes any non-empty measure.
 const checkId = id => typeof id === 'string' && id.length >= 1 && id.length <= 128 && !/[\u0000-\u001f\u007f]/.test(id) && !isLocalPath(id);
-function inspectReadings(record, ties) {
+// A check is read with one of two trusts, each its own timeline. `condition:<id>` is this host's own trust. `persisted-condition:<id>` is the trust Core's
+// repairs persist for a program started later, which a long-running host never loads: after a verified repair its own readings keep failing, so one timeline would
+// call fail -> persisted pass -> fail a recurrence. A reading is a persisted one only when its projection reports that configuration.
+const HOST_TRUST = id => `condition:${id}`, PERSISTED_TRUST = id => `persisted-condition:${id}`;
+const persisted = projection => projection?.options?.configuration === 'persisted';
+// The check rows of one stored projection (the host's check, its persisted check or a repair's recheck), `within` the targets it covers when given.
+function checkReadings(projection, ties, conditionOf, within) {
   const readings = [];
-  for (const item of list(record.check?.items)) {
-    const tie = item?.kind === 'check' && typeof item.target === 'string' ? ties.targets.get(item.target) : undefined;
+  for (const item of list(projection?.items)) {
+    const tie = item?.kind === 'check' && typeof item.target === 'string' && (within === undefined || within.includes(item.target)) ? ties.targets.get(item.target) : undefined;
     if (!tie || !checkId(item.id)) continue;
     const outcome = item.outcome === 'passed' || item.outcome === 'failed' ? { outcome: item.outcome } : { outcome: 'unknown', reason: code(item.reason) ?? code(item.outcome) ?? 'unavailable' };
-    readings.push({ tie, subject: { kind: 'target', id: item.target }, condition: `condition:${item.id}`, scopeKind: 'machine', complete: record.check?.status === 'complete', ...outcome });
+    readings.push({ tie, subject: { kind: 'target', id: item.target }, condition: conditionOf(item.id), scopeKind: 'machine', complete: projection.status === 'complete', ...outcome });
   }
   return readings;
 }
+// A machine check is the host's trust beside the same check made with the persisted trust; a repair record's recheck was made with the persisted trust.
+function readinessReadings(record, ties) {
+  if (record.kind === 'machine-check') return [...checkReadings(record.check, ties, HOST_TRUST), ...(persisted(record.persistedCheck) ? checkReadings(record.persistedCheck, ties, PERSISTED_TRUST) : [])];
+  const recheck = record.repair?.outcome?.condition;
+  return persisted(recheck) ? checkReadings(recheck, ties, PERSISTED_TRUST, list(record.repair?.targets)) : [];
+}
+// The Workbench's maintenance-check note holds only { id: 'maintenance-check', checkedAt, categories: [{ category, state, reason? }] }. Recurrence needs a
+// subject, a passed or failed outcome per check and more than the latest check, and the note has none of them (its id is the constant 'maintenance-check' and
+// each save replaces it), so it is a known record that makes no claim, not an unread one.
 // undefined when this module does not read the result.
 function readingsOf(result, ties) {
   if (result.schema === FILE_STATE_SCHEMA) return fileStateReadings(result, ties);
   if (result.schema === NATIVE_SCHEMA) return nativeReadings(result, ties);
-  if (result.schema === READINESS_RECORD_SCHEMA && result.kind === 'machine-check') return inspectReadings(result, ties);
+  if (result.schema === READINESS_RECORD_SCHEMA && (result.kind === 'machine-check' || result.kind === 'repair')) return readinessReadings(result, ties);
+  if (result.schema === MAINTENANCE_CHECK_RECORD_SCHEMA) return [];
   return undefined;
 }
 

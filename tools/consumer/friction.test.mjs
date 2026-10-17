@@ -5,6 +5,7 @@ import { CLAIMS_SCHEMA_1_1_0, CLAIMS_PROJECTION_SCHEMA_1_1_0, validateClaimSet }
 import { validateNativeVerificationResult } from '@aihq/core/contracts';
 import { frictionRecurrence, FILE_STATE_SCHEMA, NATIVE_SCHEMA, FRICTION_PRODUCER } from './friction.mjs';
 import { READINESS_RECORD_SCHEMA } from './claims.mjs';
+import { MAINTENANCE_CHECK_RECORD_SCHEMA } from './maintenance-record.mjs';
 
 // The adapter reads stored Core results the host holds and asks Core's recurrence method; these tests build full result objects.
 const T = ['2026-10-10T09:00:00Z', '2026-10-11T09:00:00Z', '2026-10-12T09:00:00Z', '2026-10-13T09:00:00Z', '2026-10-14T09:00:00Z'];
@@ -179,4 +180,98 @@ test('the same evidence gives the same claim set, whatever the order it is suppl
 test('friction.mjs reads no clock, network or file', async () => {
   const source = await readFile(new URL('./friction.mjs', import.meta.url), 'utf8');
   for (const forbidden of [/Date\.now/, /new Date\(\)/, /fetch\(/, /node:/, /Math\.random/, /\bprocess\b/]) assert.doesNotMatch(source, forbidden);
+});
+
+// ---- The readiness journal: machine-check and repair records, and the maintenance-check note ------------------------------------
+// A long-running host never loads a CA a repair persists, so its own readings keep failing after a verified repair. Its readings and the
+// persisted-configuration readings of the same check are two timelines: sharing one would call fail -> persisted pass -> fail a recurrence.
+const TLS = 'npm/tls/node/registry.npmjs.org', HOST = `condition:${TLS}`, PERSISTED = `persisted-condition:${TLS}`, npmTie = tie('target', 'npm', { itemId: 'ecc.claude.mcp.context7', label: 'Context7' });
+const tls = (outcome, extra = {}) => ({ kind: 'check', id: TLS, target: 'npm', outcome, reason: outcome, ...extra });
+const inspected = (configuration, status, ...rows) => ({ kind: 'machine-check', status, options: { targets: null, network: 'declared', configuration }, items: rows });
+const journalCheck = (n, at, host, persisted, status = 'complete') => ({ schema: READINESS_RECORD_SCHEMA, kind: 'machine-check', id: `chk-${n}`, sha256: sha(n), capturedAt: at,
+  check: inspected('process', status, tls(host)), persistedCheck: persisted ? inspected('persisted', status, tls(persisted)) : { status: 'incomplete', items: [] } });
+const journalRepair = (n, at, recheck) => ({ schema: READINESS_RECORD_SCHEMA, kind: 'repair', id: `rep-${n}`, sha256: sha(n), capturedAt: at,
+  repair: { repairId: 'node-npm-ca', targets: ['npm'], before: 'chk-1', run: { id: 'run-1', schema: 'urn:aihq:core:run-result:1.0.0' }, appliedAt: at, recheckedAt: at,
+    outcome: { condition: { ...inspected('persisted', 'complete', ...(Array.isArray(recheck) ? recheck : [tls(recheck)])), kind: 'repair-recheck' } } } });
+const journal = (...records) => records.map(result => entry(result.id, result.capturedAt, result, { sha256: result.sha256 }));
+const byMeasure = (a, b) => a.measure < b.measure ? -1 : 1;
+
+test('a machine check gives the host-trust and the persisted-configuration readings as two conditions, each with the record\'s id and sha256', () => {
+  const { claimSet, results } = run(journal(journalCheck(1, T[0], 'failed', 'passed')), [npmTie]);
+  assert.equal(validateClaimSet(claimSet).valid, true);
+  assert.deepEqual([...claimSet.claims].sort(byMeasure).map(c => [c.measure, c.value.amount, c.subject, c.scope, c.recordSchema, c.revision, c.sources]),
+    [[HOST, 'failed'], [PERSISTED, 'passed']].map(([measure, amount]) => [measure, amount, { kind: 'target', id: 'npm' }, { kind: 'machine', targets: ['npm'] }, READINESS_RECORD_SCHEMA, sha(1),
+      [{ id: 'chk-1', schema: READINESS_RECORD_SCHEMA, sha256: sha(1) }]]).sort((a, b) => a[0] < b[0] ? -1 : 1));
+  assert.deepEqual(results.map(r => r.condition).sort(), [HOST, PERSISTED].sort());
+  assert.equal(new Set(claimSet.claims.map(c => c.id)).size, 2);
+  // Only a persisted inspection counts as one: a failed one (no effective options) and one that reports another configuration make no persisted claim.
+  assert.deepEqual(run(journal(journalCheck(2, T[0], 'failed', null)), [npmTie]).claimSet.claims.map(c => c.measure), [HOST]);
+  const odd = journalCheck(3, T[0], 'failed', 'passed'); odd.persistedCheck.options.configuration = 'process';
+  assert.deepEqual(run(journal(odd), [npmTie]).claimSet.claims.map(c => c.measure), [HOST]);
+  // An incomplete inspection is partial coverage, as for the host's own.
+  assert.deepEqual(run(journal(journalCheck(4, T[0], 'failed', 'failed', 'incomplete')), [npmTie]).claimSet.claims.map(c => c.coverage.state), ['partial', 'partial']);
+});
+
+test('a repair record\'s recheck rows are readings of the persisted configuration, with the repair record as their source and revision', () => {
+  const { claimSet } = run(journal(journalRepair(2, T[1], 'passed')), [npmTie]);
+  assert.deepEqual(claimSet.claims.map(c => [c.measure, c.kind, c.value.amount, c.subject, c.scope, c.capturedAt, c.revision, c.sources, c.recordSchema]),
+    [[PERSISTED, 'measured', 'passed', { kind: 'target', id: 'npm' }, { kind: 'machine', targets: ['npm'] }, T[1], sha(2), [{ id: 'rep-2', schema: READINESS_RECORD_SCHEMA, sha256: sha(2) }], READINESS_RECORD_SCHEMA]]);
+  // A failed or unverifiable row is just as much a reading; a row of a target the repair did not cover, an observation and a recheck of another configuration make none.
+  assert.deepEqual(run(journal(journalRepair(3, T[1], 'failed')), [npmTie]).claimSet.claims.map(c => c.value.amount), ['failed']);
+  const unknown = run(journal(journalRepair(4, T[1], [tls('unavailable', { reason: 'network-off' })])), [npmTie]).claimSet.claims;
+  assert.deepEqual([unknown.length, unknown[0].kind, unknown[0].unknownReason], [1, 'unknown', 'network-off']);
+  assert.equal(run(journal(journalRepair(5, T[1], [tls('passed', { target: 'node' })])), [tie('target', 'node')]).claimSet.claims.length, 0);
+  assert.equal(run(journal(journalRepair(6, T[1], [{ kind: 'observation', id: `${TLS}/loading`, target: 'npm', outcome: null, reason: 'loading-unverified' }])), [npmTie]).claimSet.claims.length, 0);
+  const other = journalRepair(7, T[1], 'passed'); other.repair.outcome.condition.options.configuration = 'process';
+  assert.equal(run(journal(other), [npmTie]).claimSet.claims.length, 0);
+  const none = journalRepair(8, T[1], 'passed'); none.repair.outcome.condition = null;
+  const answered = run(journal(none), [npmTie]);
+  assert.deepEqual([answered.claimSet.claims.length, answered.unread], [0, 0]);
+});
+
+test('check -> repair -> persisted pass -> persisted fail is one recurrence of the persisted condition, and the host\'s own failing readings are none', () => {
+  const evidence = journal(journalCheck(1, T[0], 'failed', 'failed'), journalRepair(2, T[1], 'passed'), journalCheck(3, T[2], 'failed', 'passed'), journalCheck(4, T[3], 'failed', 'failed'));
+  const { results, claimSet, projection } = run(evidence, [npmTie]), by = condition => results.find(r => r.condition === condition);
+  assert.equal(validateClaimSet(claimSet).valid, true); assert.deepEqual(projection.observations.conflicts, []);
+  assert.deepEqual([by(PERSISTED).result.status, by(PERSISTED).result.count, by(PERSISTED).stored, by(PERSISTED).subject], ['available', 1, 4, { kind: 'target', id: 'npm' }]);
+  const [{ failure, recovery, recurrence }] = by(PERSISTED).result.recurrences;
+  assert.deepEqual([failure, recovery, recurrence].map(ref => ref.id.split('/')[0]), ['chk-1', 'rep-2', 'chk-4']);
+  assert.deepEqual([by(HOST).result.status, by(HOST).result.reason, by(HOST).result.count, by(HOST).result.recurrences.length], ['unavailable', 'no-recovery', null, 0]);
+});
+
+test('recovery without a later failure is an available result with no recurrence', () => {
+  const { results } = run(journal(journalCheck(1, T[0], 'failed', 'failed'), journalRepair(2, T[1], 'passed')), [npmTie]);
+  const persisted = results.find(r => r.condition === PERSISTED);
+  assert.deepEqual([persisted.result.status, persisted.result.count, persisted.result.recurrences.length], ['available', 0, 0]);
+});
+
+test('a maintenance-check note is a known record that makes no claim, apart from a result of a schema this module does not read', () => {
+  const note = { id: 'maintenance-check', schema: MAINTENANCE_CHECK_RECORD_SCHEMA, required: false, checkedAt: T[0], categories: [{ category: 'content', state: 'checked' }, { category: 'friction', state: 'unknown', reason: 'history-unavailable' }] };
+  const known = run([entry('maintenance-check', T[0], note)], [npmTie, selectionTie, clientTie]);
+  assert.deepEqual([known.claimSet.claims.length, known.claimSet.calculations.length, known.results, known.unread], [0, 0, [], 0]);
+  const mixed = run([...journal(journalCheck(1, T[0], 'failed', 'failed')), entry('maintenance-check', T[0], note), entry('odd', T[0], { schema: 'urn:aihq:core:run-result:1.0.0' })], [npmTie]);
+  assert.deepEqual([mixed.unread, mixed.claimSet.claims.length], [1, 2]);
+});
+
+test('the same journal record supplied twice is one claim; both timelines count it once', () => {
+  const records = journal(journalCheck(1, T[0], 'failed', 'failed'), journalRepair(2, T[1], 'passed'), journalCheck(3, T[2], 'failed', 'failed'));
+  const once = run(records, [npmTie]), twice = run([...records, ...structuredClone(records), records[0]], [npmTie]);
+  assert.deepEqual([once.claimSet.claims.length, twice.claimSet.claims.length], [5, 5]);
+  assert.deepEqual(twice.results.map(r => [r.condition, r.result.status, r.result.count, r.stored]), once.results.map(r => [r.condition, r.result.status, r.result.count, r.stored]));
+  assert.equal(twice.results.find(r => r.condition === PERSISTED).result.count, 1);
+  assert.deepEqual(twice.projection.observations.conflicts, []);
+});
+
+test('a condition on an untied target, another check id and another target stay unrelated', () => {
+  const evidence = journal(journalCheck(1, T[0], 'failed', 'failed'), journalRepair(2, T[1], 'passed'), journalCheck(3, T[2], 'failed', 'failed'));
+  assert.deepEqual(run(evidence, [tie('target', 'git')]).claimSet.claims, []);
+  assert.deepEqual(run(evidence, []).results, []);
+  // A different check id of the same target is its own calculation: a failure of one never recurs the other.
+  const other = journalCheck(9, T[2], 'failed', 'failed'); for (const part of [other.check, other.persistedCheck]) part.items[0].id = 'npm/version';
+  const { results } = run([...evidence.slice(0, 2), ...journal(other)], [npmTie]);
+  assert.deepEqual(results.map(r => [r.condition, r.result.status, r.result.count]).sort((a, b) => a[0] < b[0] ? -1 : 1), [
+    ['condition:npm/version', 'unavailable', null], [HOST, 'unavailable', null], ['persisted-condition:npm/version', 'unavailable', null], [PERSISTED, 'available', 0]].sort((a, b) => a[0] < b[0] ? -1 : 1));
+  // One tie covers one target: a node check beside an npm tie makes nothing.
+  const node = journalCheck(8, T[0], 'failed', 'failed'); for (const part of [node.check, node.persistedCheck]) part.items[0].target = 'node';
+  assert.deepEqual(run(journal(node), [npmTie]).claimSet.claims, []);
 });
