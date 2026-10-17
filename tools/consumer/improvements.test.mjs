@@ -16,6 +16,7 @@ import { nativeClientIds } from '@aihq/core/harness';
 import { suggestionRevision, suggestionProblem } from './improvement-record.mjs';
 import { suggestImprovements, lead, classifyImprovement, improvementPrompt, releaseRelation, unorderedSources, GOAL_RULES, UNKNOWNS, FRICTION_COVERAGE, FRICTION_UNREADABLE, FIXTURE_LABEL, FRICTION_RULE, IMPROVEMENT_RULES_VERSION, MAX_ALTERNATIVES } from './improvement-rules.mjs';
 import { frictionRecurrence } from './friction.mjs';
+import { installedFamilies } from './installed-families.mjs';
 import { READINESS_RECORD_SCHEMA } from './claims.mjs';
 import * as rules from './improvement-rules.mjs';
 import { checkImprovements, recordImprovement, projectDismissals, IMPROVEMENT_SUGGESTION_SCHEMA, IMPROVEMENT_DISMISSAL_SCHEMA } from './improvements.mjs';
@@ -1429,6 +1430,32 @@ test('the npm tie from an npx item names the persisted check for the item, and t
   assert.equal(found.change.itemId, DIAGNOSING);
   assert.match(frictionOf(found).text, /^Recurring failure: the persisted-configuration npm\/tls\/node\/registry\.npmjs\.org readiness check for “Context7” failed/);
   assert.equal(frictionOf(found).text.includes(FIXTURE_NOTE), false); assert.deepEqual(found.references, [{ kind: 'catalog-item', ref: context7.id }, { kind: 'catalog-item', ref: DIAGNOSING }]);
+});
+
+// A real draft over the installed maintained Catalog and the four family releases that selects one family item (the ECC MCP items declare the npx they run).
+async function familyScenario(itemId) {
+  const found = await installed(), families = await installedFamilies(), inventories = [{ release: found.release, materialSource: found.source }, ...families];
+  const entry = families.find(family => family.release.items.some(i => i.id === itemId)), offered = entry?.release.items.find(i => i.id === itemId);
+  assert.ok(offered, `${itemId} is offered by an installed family release.`); assert.ok(found.release.items.some(i => i.id === DIAGNOSING), `${DIAGNOSING} is offered by the maintained release.`);
+  const intent = { ...freshAuthoring(), roots: [{ releaseSha256: entry.release.sha256, itemId, itemSha256: offered.itemSha256, scope: offered.scopes[0], configuration: {}, originIds: ['direct'] }] };
+  const base = valueOf(await composeAuthoring({ intent: freshAuthoring(), inventories })), composed = valueOf(await composeAuthoring({ basePolicyBytes: base.policyBytes, intent, inventories }));
+  return { inventories, offered, scope: offered.scopes[0], envelopeBytes: valueOf(await openDraft({ bytes: composed.policyBytes, inventories })).envelopeBytes };
+}
+const onTarget = (target, records) => records.map(result => JSON.parse(JSON.stringify(result).replaceAll('"claude"', `"${target}"`).replaceAll('claude/tls', `${target}/tls`)));
+
+test('an installed ECC family item that runs npx ties the npm check through the public check; recovery alone and another target give no suggestion', async () => {
+  const s = await familyScenario('ecc.claude.mcp.context7'), { label } = s.offered, readings = [journalCheck(1, 'failed', 'failed'), journalRepair(2, 'passed'), journalCheck(3, 'failed', 'passed'), journalCheck(4, 'failed', 'failed')];
+  assert.deepEqual(s.offered.targets.filter(t => t.kind === 'executable').map(t => t.name), ['npx']);
+  const value = await check(s, s.envelopeBytes, { evidence: stored(onTarget('npm', readings)) }), friction = frictionOf(value.leading);
+  assert.equal(value.leading.change.itemId, DIAGNOSING); assert.equal(value.leading.scope, s.scope);
+  assert.equal(friction.text.startsWith(`Recurring failure: the persisted-configuration npm/tls/node/registry.npmjs.org readiness check for “${label}” failed`), true);
+  assert.equal(JSON.stringify(value).includes(FIXTURE_NOTE), false); assert.deepEqual(value.coverage[1], { trigger: 'recurring-friction', state: 'checked', text: FRICTION_COVERAGE.checked });
+  // Recovery with no later failure is checked with nothing to suggest.
+  const held = await check(s, s.envelopeBytes, { evidence: stored(onTarget('npm', readings.slice(0, 2))) });
+  assert.deepEqual(held.coverage[1], { trigger: 'recurring-friction', state: 'checked', text: FRICTION_COVERAGE.checked }); assert.equal(held.leading, null);
+  // The same records on a target the item does not run on settle nothing for it.
+  const other = await check(s, s.envelopeBytes, { evidence: stored(onTarget('node', readings)) });
+  assert.deepEqual(other.coverage[1], { trigger: 'recurring-friction', state: 'unknown', reason: 'no-recurrence-evidence', text: FRICTION_COVERAGE['no-recurrence-evidence'] }); assert.equal(other.leading, null);
 });
 
 // ---- Scope and the record's trigger limit -------------------------------------------------------------------------
