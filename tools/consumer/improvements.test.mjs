@@ -13,7 +13,9 @@ import { noteFixture } from './note-fixture.mjs';
 import { createMixedService } from './mixed-service.mjs';
 import { nativeClientIds } from '@aihq/core/harness';
 import { suggestionRevision, suggestionProblem } from './improvement-record.mjs';
-import { suggestImprovements, lead, classifyImprovement, improvementPrompt, releaseOrder, unorderedSources, GOAL_RULES, UNKNOWNS, FRICTION_COVERAGE, FIXTURE_LABEL, FRICTION_RULE, IMPROVEMENT_RULES_VERSION, MAX_ALTERNATIVES } from './improvement-rules.mjs';
+import { suggestImprovements, lead, classifyImprovement, improvementPrompt, releaseOrder, unorderedSources, GOAL_RULES, UNKNOWNS, FRICTION_COVERAGE, FRICTION_UNREADABLE, FIXTURE_LABEL, FRICTION_RULE, IMPROVEMENT_RULES_VERSION, MAX_ALTERNATIVES } from './improvement-rules.mjs';
+import { frictionRecurrence } from './friction.mjs';
+import { READINESS_RECORD_SCHEMA } from './claims.mjs';
 import * as rules from './improvement-rules.mjs';
 import { checkImprovements, recordImprovement, projectDismissals, IMPROVEMENT_SUGGESTION_SCHEMA, IMPROVEMENT_DISMISSAL_SCHEMA } from './improvements.mjs';
 const encode = value => new TextEncoder().encode(value), decode = bytes => new TextDecoder().decode(bytes);
@@ -1044,6 +1046,7 @@ test('the friction rule and its coverage texts are fixed', () => {
   assert.deepEqual(FRICTION_COVERAGE, { checked: 'Recurring friction was checked against the stored Core results this host supplied.',
     'no-recurrence-evidence': 'Recurring friction was not established: no stored Core result shows a failure recovering for something this policy selects, and missing history is never counted as none.',
     'history-unavailable': 'Recurring friction was not checked: this host supplied no stored Core results.' });
+  assert.equal(FRICTION_UNREADABLE, "Recurring friction was not checked: this host's stored Core results could not be read.");
   assert.equal(FIXTURE_LABEL, FIXTURE_NOTE); assert.equal('FRICTION_UNKNOWN' in rules, false); assert.equal(JSON.stringify(rules.UNKNOWNS).includes('no-published-interface'), false);
 });
 
@@ -1112,10 +1115,8 @@ test('fixture evidence is said to be fixture evidence in the trigger, the covera
 
 test('coverage: no stored results is history-unavailable; stored results that settle nothing are no-recurrence-evidence', async () => {
   const s = await frictionScenario();
-  for (const evidence of [undefined, null]) {
-    const value = await check(s, s.envelopeBytes, { evidence });
-    assert.deepEqual(value.coverage[1], UNAVAILABLE); assert.equal(value.reads.includes('core-evidence'), false); assert.equal(value.leading, null);
-  }
+  const value = await check(s, s.envelopeBytes, { evidence: undefined });
+  assert.deepEqual(value.coverage[1], UNAVAILABLE); assert.equal(value.reads.includes('core-evidence'), false); assert.equal(value.leading, null);
   const none = await check(s, s.envelopeBytes, { evidence: [] });
   assert.deepEqual(none.coverage[1], { trigger: 'recurring-friction', state: 'unknown', reason: 'no-recurrence-evidence', text: FRICTION_COVERAGE['no-recurrence-evidence'] });
   assert.equal(JSON.stringify(none).includes('no-published-interface'), false);
@@ -1124,6 +1125,17 @@ test('coverage: no stored results is history-unavailable; stored results that se
   assert.equal((await check(s, s.envelopeBytes, { evidence: other })).coverage[1].reason, 'no-recurrence-evidence');
   const mid = selectionOf(s, 'mattpocock.implement');
   assert.equal((await check(s, s.envelopeBytes, { evidence: [...other, ...history(mid.id, ['changed', 'match', 'changed'])] })).coverage[1].state, 'checked');
+});
+
+test('a configured store that could not be read is history-unavailable too, but never described as holding none', async () => {
+  const s = await frictionScenario(), unreadable = await check(s, s.envelopeBytes, { evidence: null }), none = await check(s, s.envelopeBytes, { evidence: undefined });
+  assert.deepEqual(unreadable.coverage[1], { trigger: 'recurring-friction', state: 'unknown', reason: 'history-unavailable', text: FRICTION_UNREADABLE });
+  assert.equal(none.coverage[1].reason, unreadable.coverage[1].reason); assert.notEqual(none.coverage[1].text, unreadable.coverage[1].text);
+  assert.match(FRICTION_UNREADABLE, /could not be read/); assert.doesNotMatch(FRICTION_UNREADABLE, /supplied no stored/);
+  assert.equal(unreadable.reads.includes('core-evidence'), false); assert.equal(unreadable.leading, null);
+  // The unknown is said on each suggestion too, with the text that is true for this host.
+  const asked = await check(s, s.envelopeBytes, { evidence: null, goal: 'tests' });
+  assert.equal(asked.leading.unknowns.includes(FRICTION_UNREADABLE), true); assert.equal(asked.leading.unknowns.includes(FRICTION_COVERAGE['history-unavailable']), false);
 });
 
 test('supplied evidence is validated like the other check inputs', async () => {
@@ -1165,6 +1177,86 @@ test('an item that is already selected is not suggested for friction', async () 
   const value = await check(s, s.envelopeBytes, { evidence: history(mid.id, ['changed', 'match', 'changed']) });
   assert.equal(shownItem(value, DIAGNOSING), undefined); assert.equal(value.coverage[1].state, 'checked');
   assert.deepEqual(await suggestImprovements({ intent: intentOf(), items: [], friction: [] }), []);
+});
+
+test('a published check id with a path separator is a recurring condition, keeps its id, and still gives a valid trigger key that records and dismisses', async () => {
+  const s = await frictionScenario({ rootIds: ['mattpocock.implement', 'aihq.client.claude'] });
+  const readiness = (id, at, ...items) => ({ id, capturedAt: at, result: { schema: READINESS_RECORD_SCHEMA, kind: 'machine-check', id, sha256: hex(5), capturedAt: at,
+    check: { status: 'complete', items: items.map(([name, outcome]) => ({ kind: 'check', id: name, target: 'claude', outcome, reason: outcome })) } } });
+  const outcomes = ['failed', 'passed', 'failed'], series = (name, prefix) => outcomes.map((outcome, index) => readiness(`${prefix}-${index + 1}`, DAYS[index], [name, outcome]));
+  const value = await check(s, s.envelopeBytes, { evidence: series('claude/version', 'chk') }), friction = frictionOf(value.leading);
+  assert.equal(value.leading.change.itemId, DIAGNOSING); assert.equal(value.coverage[1].state, 'checked');
+  assert.match(friction.text, /^Recurring failure: the claude\/version readiness check for “Claude Code context wiring” failed/);
+  assert.match(friction.key, /^[a-z][a-z0-9-]{0,31}:[\w.@-]{1,180}$/); assert.equal(friction.key.includes('/'), false);
+  // Ids that differ only by the separator are different conditions, so their keys differ too.
+  const both = await check(s, s.envelopeBytes, { evidence: [...series('claude/version', 'chk'), ...series('claude-version', 'dash')] });
+  assert.equal(both.leading.triggers.length, 2); assert.equal(new Set(both.leading.triggers.map(t => t.key)).size, 2);
+  const recorded = await record(s.envelopeBytes, dismissOperation(value.leading));
+  assert.equal(recorded.envelope.records.find(r => r.schema === IMPROVEMENT_SUGGESTION_SCHEMA).triggers[0].key, friction.key);
+});
+
+// ---- Scope and the record's trigger limit -------------------------------------------------------------------------
+const tiedSelection = (name, scope, extra = {}) => ({ kind: 'managed-selection', key: `${scope}--pkg--${name}`, selectionId: `sel-${scope}-${name}`, itemId: `x.${name}`, rootItemId: `x.${name}`, label: `Label ${name}`, scope, ...extra });
+const recurringResults = ties => frictionRecurrence({ subjects: ties, evidence: ties.flatMap(t => history(t.selectionId, ['changed', 'match', 'changed']).map(entry => ({ ...entry, id: `${t.selectionId}-${entry.id}` }))) }).results;
+const diagnosing = scopes => item(DIAGNOSING, { scopes });
+const frictionSuggestions = async (ties, scopes = ['project', 'user'], extra = {}) => suggestImprovements({ intent: intentOf(), items: [diagnosing(scopes)], friction: recurringResults(ties), ...extra });
+const recordable = async (suggestions, s) => {
+  for (const suggestion of suggestions) {
+    const saved = { id: suggestion.id, schema: IMPROVEMENT_SUGGESTION_SCHEMA, required: false, rulesVersion: suggestion.rulesVersion, revision: suggestion.revision, scope: suggestion.scope, change: suggestion.change,
+      triggers: suggestion.triggers, goal: suggestion.goal, references: suggestion.references, facts: suggestion.facts, unknowns: suggestion.unknowns, recordedAt: NOW };
+    assert.equal(suggestionProblem(saved), null, suggestion.id);
+    const recorded = await record(s.envelopeBytes, dismissOperation(suggestion, 'Not now.'));
+    assert.equal(recorded.envelope.records.some(r => r.schema === IMPROVEMENT_DISMISSAL_SCHEMA && r.suggestion.id === suggestion.id), true);
+  }
+};
+
+test('a project and a user selection that both recur are two suggestions, one per scope, each with its own reasons', async () => {
+  const project = tiedSelection('a', 'project'), user = tiedSelection('b', 'user'), s = await frictionScenario();
+  const found = await frictionSuggestions([user, project]);
+  assert.deepEqual(found.map(f => [f.change.itemId, f.scope]), [[DIAGNOSING, 'project'], [DIAGNOSING, 'user']]);
+  assert.notEqual(found[0].id, found[1].id);
+  assert.deepEqual(found[0].triggers.map(t => t.key), [`friction:file-state@${project.key}`]); assert.deepEqual(found[1].triggers.map(t => t.key), [`friction:file-state@${user.key}`]);
+  assert.match(found[0].triggers[0].text, /“Label a”/); assert.match(found[1].triggers[0].text, /“Label b”/);
+  assert.deepEqual(found[0].references, [{ kind: 'catalog-item', ref: 'x.a' }, { kind: 'catalog-item', ref: DIAGNOSING }]); assert.deepEqual(found[1].references, [{ kind: 'catalog-item', ref: 'x.b' }, { kind: 'catalog-item', ref: DIAGNOSING }]);
+  assert.notEqual(found[0].facts.find(f => f.kind === 'scope').text, found[1].facts.find(f => f.kind === 'scope').text);
+  // The order the ties arrive in changes nothing.
+  assert.deepEqual((await frictionSuggestions([project, user])).map(f => [f.id, f.revision]), found.map(f => [f.id, f.revision]));
+  await recordable(found, s);
+  // Two selections of one scope stay one suggestion; an item that offers one scope only takes it for both.
+  const same = await frictionSuggestions([project, tiedSelection('c', 'project')]);
+  assert.deepEqual(same.map(f => [f.scope, f.triggers.length]), [['project', 2]]);
+  assert.deepEqual((await frictionSuggestions([project, user], ['project'])).map(f => [f.scope, f.triggers.length]), [['project', 2]]);
+  assert.deepEqual((await frictionSuggestions([project, user], ['user'])).map(f => [f.scope, f.triggers.length]), [['user', 2]]);
+});
+
+test('a friction scope never moves another rule: a goal suggestion keeps its identity and merges only into the same scope', async () => {
+  const goalOnly = await suggestImprovements({ intent: intentOf({ roots: [rootOf('x.root', savedReason('goal.fix', 'fix the bug'))] }), items: [diagnosing(['project', 'user'])] });
+  assert.deepEqual(goalOnly.map(f => [f.change.itemId, f.scope]), [[DIAGNOSING, 'project']]);
+  const mixed = await suggestImprovements({ intent: intentOf({ roots: [rootOf('x.root', savedReason('goal.fix', 'fix the bug'))] }), items: [diagnosing(['project', 'user'])], friction: recurringResults([tiedSelection('a', 'user')]) });
+  assert.deepEqual(mixed.map(f => [f.scope, f.triggers.map(t => t.ruleId)]), [['project', ['goal.fix']], ['user', ['friction.recurrence']]]);
+  assert.equal(mixed[0].id, goalOnly[0].id); assert.equal(mixed[0].revision, goalOnly[0].revision);
+  const merged = await suggestImprovements({ intent: intentOf({ roots: [rootOf('x.root', savedReason('goal.fix', 'fix the bug'))] }), items: [diagnosing(['project', 'user'])], friction: recurringResults([tiedSelection('a', 'project')]) });
+  assert.deepEqual(merged.map(f => [f.scope, f.triggers.map(t => t.ruleId).sort()]), [['project', ['friction.recurrence', 'goal.fix']]]);
+  assert.equal(merged[0].id, goalOnly[0].id);
+});
+
+test('recurring conditions beyond the record\'s trigger limit are disclosed, not listed, and every suggestion records and dismisses', async () => {
+  const s = await frictionScenario(), names = Array.from({ length: 17 }, (_, i) => `a${String(i + 1).padStart(2, '0')}`), ties = names.map(name => tiedSelection(name, 'project'));
+  const found = await frictionSuggestions(ties);
+  assert.equal(found.length, 1); assert.equal(found[0].triggers.length, 16);
+  assert.deepEqual(found[0].triggers.map(t => t.key), names.slice(0, 16).map(name => `friction:file-state@project--pkg--${name}`));
+  assert.equal(found[0].unknowns.includes('1 more recurring condition is not listed.'), true);
+  assert.deepEqual((await frictionSuggestions([...ties].reverse())).map(f => [f.id, f.revision, f.triggers.map(t => t.key)]), found.map(f => [f.id, f.revision, f.triggers.map(t => t.key)]));
+  await recordable(found, s);
+  // Other reasons for the same suggestion count against the same limit, and the disclosure says how many were cut.
+  const goalIntent = intentOf({ roots: [rootOf('x.root', savedReason('goal.fix', 'fix the bug'))] }), more = [...ties, ...['b01', 'b02'].map(name => tiedSelection(name, 'project'))];
+  const withGoal = await suggestImprovements({ intent: goalIntent, items: [diagnosing(['project', 'user'])], friction: recurringResults(more) });
+  assert.equal(withGoal.length, 1); assert.equal(withGoal[0].triggers.length, 16); assert.equal(withGoal[0].triggers.some(t => t.ruleId === 'goal.fix'), true);
+  assert.equal(withGoal[0].unknowns.includes('4 more recurring conditions are not listed.'), true);
+  await recordable(withGoal, s);
+  // At the limit nothing is said to be missing.
+  const exact = await frictionSuggestions(ties.slice(0, 16));
+  assert.equal(exact[0].triggers.length, 16); assert.equal(exact[0].unknowns.some(u => /more recurring condition/.test(u)), false);
 });
 
 // ---- Content-change coverage when a release's order is not known -----------------------------------------------------

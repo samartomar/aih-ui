@@ -6,7 +6,7 @@
 // Rules: a claim never carries a machine-local path or free text from a result (reasons are Core codes); an untied subject is never
 // requested; a result of any other schema is counted as unread, never an error; unknown is never a value, and missing history is never zero.
 import { CLAIMS_SCHEMA_1_1_0, projectClaims, validateClaimSet } from '@aihq/core/report';
-import { READINESS_RECORD_SCHEMA } from './claims.mjs';
+import { READINESS_RECORD_SCHEMA, fingerprint, isLocalPath } from './claims.mjs';
 import { only, object, hash } from './intake.mjs';
 import { isUtcTimestamp } from './maintenance-record.mjs';
 
@@ -16,18 +16,9 @@ export const FRICTION_PRODUCER = Object.freeze({ id: 'aih-ui/friction', version:
 export const MAX_EVIDENCE = 256, MAX_CLAIMS = 4096;
 const FILE_STATE = 'condition:file-state', NATIVE_USE = 'condition:native-use';
 
-// A claim names things by stable identity, never by a location on this machine (the same refusal claims.mjs makes).
-const LOCAL_PATH = /^(?:file:|~(?:[\\/]|$)|[\\/][^\\/]|[\\/]{2})|(?:^|[^A-Za-z0-9])[A-Za-z]:[\\/]|[\s=,;([:](?:~?\/|\\\\)[^\s\\/]/i;
-const local = value => typeof value === 'string' ? LOCAL_PATH.test(value)
-  : value !== null && typeof value === 'object' && Object.entries(value).some(([key, inner]) => LOCAL_PATH.test(key) || local(inner));
-// FNV-1a over canonical JSON, as claims.mjs: deterministic, with no clock, randomness or crypto.
-const canonical = value => Array.isArray(value) ? value.map(canonical) : value !== null && typeof value === 'object'
-  ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
-function fingerprint(value) {
-  let hashed = 0xcbf29ce484222325n;
-  for (const char of JSON.stringify(canonical(value))) hashed = BigInt.asUintN(64, (hashed ^ BigInt(char.codePointAt(0))) * 0x100000001b3n);
-  return hashed.toString(16).padStart(16, '0');
-}
+// A claim names things by stable identity, never by a location on this machine (the refusal and the content fingerprint are claims.mjs's own).
+const local = value => typeof value === 'string' ? isLocalPath(value)
+  : value !== null && typeof value === 'object' && Object.entries(value).some(([key, inner]) => isLocalPath(key) || local(inner));
 const fit = text => text.length <= 240 ? text : `${text.slice(0, 200)}~${fingerprint(text)}`;
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 // Core's own reason codes only; anything else (free text, a path) is the generic code.
@@ -72,11 +63,13 @@ function nativeReadings(result, ties) {
   const outcome = result.verdict === 'verified' ? { outcome: 'passed' } : result.verdict === 'failed' ? { outcome: 'failed' } : { outcome: 'unknown', reason: 'unverified' };
   return [{ tie, subject: { kind: 'client', id }, condition: NATIVE_USE, scopeKind: 'machine', complete: result.status === 'complete', ...outcome }];
 }
+// A published check id is kept whole, including the `/` Workbench readiness ids use (`claude/version`); Core takes any non-empty measure.
+const checkId = id => typeof id === 'string' && id.length >= 1 && id.length <= 128 && !/[\u0000-\u001f\u007f]/.test(id) && !isLocalPath(id);
 function inspectReadings(record, ties) {
   const readings = [];
   for (const item of list(record.check?.items)) {
     const tie = item?.kind === 'check' && typeof item.target === 'string' ? ties.targets.get(item.target) : undefined;
-    if (!tie || typeof item.id !== 'string' || !/^[\w.-]{1,80}$/.test(item.id)) continue;
+    if (!tie || !checkId(item.id)) continue;
     const outcome = item.outcome === 'passed' || item.outcome === 'failed' ? { outcome: item.outcome } : { outcome: 'unknown', reason: code(item.reason) ?? code(item.outcome) ?? 'unavailable' };
     readings.push({ tie, subject: { kind: 'target', id: item.target }, condition: `condition:${item.id}`, scopeKind: 'machine', complete: record.check?.status === 'complete', ...outcome });
   }
@@ -99,7 +92,7 @@ function checkEvidence(evidence) {
     if (!only(entry, ['id', 'capturedAt', 'result'], ['sha256', 'fixture']) || typeof entry.id !== 'string' || entry.id.length < 1 || entry.id.length > 128 || /[\u0000-\u001f\u007f]/.test(entry.id)
       || !isUtcTimestamp(entry.capturedAt) || !object(entry.result) || (entry.sha256 !== undefined && !hash(entry.sha256)) || (entry.fixture !== undefined && typeof entry.fixture !== 'boolean'))
       throw new TypeError(`${at} must be {id, capturedAt, result} with an optional sha256 and fixture flag.`);
-    if (local(entry.id)) throw new TypeError(`${at}.id looks like a machine-local path; supply a stable identifier instead.`);
+    if (isLocalPath(entry.id)) throw new TypeError(`${at}.id looks like a machine-local path; supply a stable identifier instead.`);
   });
 }
 

@@ -574,28 +574,27 @@ Core's `recurrence` 1.0.0 method (`@aihq/core/report`) whether a failure came ba
 |---|---|---|---|---|---|
 | `checkFileState` (file-state-result 1.0.0) | the policy selection, by its management id | `condition:file-state` | any of its targets `changed` or `absent` | all its targets `match` | otherwise |
 | `verifyNativeClient` (native-verification-result 1.0.0) | the client in its environment, `claude@win32-native` | `condition:native-use` | verdict `failed` | `verified` | `unverified` |
-| the Workbench's stored `inspect` record (a machine check) | the check target | `condition:<check id>` | `failed` | `passed` | `unavailable`, `skipped` |
+| the Workbench's stored `inspect` record (a machine check) | the check target | `condition:<check id>` (the published id as is, `/` included, as in `claude/version`) | `failed` | `passed` | `unavailable`, `skipped` |
 
 A selection's targets fold to one outcome per capture, so a passed and a failed target never tie at one instant. Only subjects the draft ties to a selected
 root or pin are asked about: a policy selection of that item, or the client or check a selected client adapter names. A result of any other schema is
 ignored, never an error. The same stored result imported twice counts once; one id with other content is a Core conflict and is left out of the count.
 
 A recurrence on a tied subject suggests `mattpocock.diagnosing-bugs` (when offered and not already selected) at the narrowest scope that fits: the
-selection's own scope if the item offers it, else project, else its first scope. The reason names the condition in words, the first failure, recovery
+selection's own scope if the item offers it, else project, else its first scope. The scope is resolved for each recurring reason and a suggestion is one item at one scope, so a project selection and a user selection that both recur (where the item offers both) are two suggestions, each with its own reasons. A suggestion lists at most 16 reasons (the record's limit): the recurring conditions beyond what fits, taken in key order, are not listed and the suggestion's unknowns say how many ("N more recurring conditions are not listed"). The reason names the condition in words, the first failure, recovery
 and recurrence instants from Core, the number of recurrences and of stored results, and is recorded as an ordinary `add-item` suggestion (no record
 schema changes), so dismissing it works like any other. A failure that never recovered (failed, failed), a recovery without recurrence, unknown-only
 history and an untied subject suggest nothing. Fixture evidence says so in the reason and the coverage: "fixture evidence, not observed on this computer".
 
 Coverage for `recurring-friction` is `checked` (some tied condition has a verified recovery, so Core could say whether it recurred), or `unknown` with a
-reason: `history-unavailable` (the host passed no stored results) or `no-recurrence-evidence` (it passed some, but none settles a tied condition; Core never
+reason: `history-unavailable` (the host passed no stored results, or its configured store could not be read; the coverage text says which: "this host supplied no stored Core results" or "this host's stored Core results could not be read") or `no-recurrence-evidence` (it passed some, but none settles a tied condition; Core never
 turns missing history into zero). The same unknowns are written on each suggestion's unknowns, and the check reports
 `core-evidence` among what it read when stored results were passed.
 
 Content-change coverage gains `version-order-unknown`: a configured source offers a different release of a package this policy was saved from, from the same
 input, and the two are not ordered (unversioned, not a semantic version, or the same version with other content). It is never called newer, so it suggests
-nothing, other candidates still do, and the coverage names the package. The order is one function, `releaseOrder(saved, candidate, hostDeclaredOrder)`: today
-it is semantic-version precedence and ignores `hostDeclaredOrder`, which is where an order a host's update source declares (the update-source ticket, aih-ui#66) will be
-read, labelled as host-declared.
+nothing, other candidates still do, and the coverage names the package. The order is one function, `releaseOrder(saved, candidate, hostDeclaredOrder)`: it is
+semantic-version precedence, and no host supplies a declared order yet, so `hostDeclaredOrder` is not read.
 
 The Governance pane's **Target** field reads that same list and keeps no copy
 either: its options are Core's clients in Core's own order (not a ranking), shown

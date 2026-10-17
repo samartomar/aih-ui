@@ -9,7 +9,7 @@ import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, DRAF
 import { isUtcTimestamp } from './maintenance-record.mjs';
 import { IMPROVEMENT_SUGGESTION_RECORD_SCHEMA, IMPROVEMENT_DISMISSAL_RECORD_SCHEMA, SUGGESTION_FIELDS, suggestionProblem, suggestionDerivedProblem, dismissalProblem, dismissalId } from './improvement-record.mjs';
 import { TRIAL_RECORD_SCHEMA } from './trial-record.mjs';
-import { IMPROVEMENT_RULES_VERSION, FRICTION_COVERAGE, FIXTURE_LABEL, suggestImprovements, classifyImprovement, lead, improvementPrompt, unorderedSources, savedGoalOf, MAX_GOAL } from './improvement-rules.mjs';
+import { IMPROVEMENT_RULES_VERSION, FRICTION_COVERAGE, FRICTION_UNREADABLE, FIXTURE_LABEL, suggestImprovements, classifyImprovement, lead, improvementPrompt, unorderedSources, savedGoalOf, MAX_GOAL } from './improvement-rules.mjs';
 import { adapterTargetOf } from './client-identity.mjs';
 import { frictionRecurrence } from './friction.mjs';
 export const IMPROVEMENT_SUGGESTION_SCHEMA = IMPROVEMENT_SUGGESTION_RECORD_SCHEMA;
@@ -67,7 +67,8 @@ export function projectDismissals(envelope) {
 // them; `goal` is an optional request. `candidateInventories` is null/undefined when the host's update source could not be
 // read, and `candidateSource` says whether the host has one at all ('unconfigured' is unknown, never checked). A caller that
 // supplies neither has no update source, so earlier callers keep their meaning. `evidence` (optional) is the host's own stored Core results
-// (see friction.mjs), never a request field; null or undefined means the host holds none, which is unknown, never "no friction".
+// (see friction.mjs), never a request field. `undefined` means the host holds none and `null` means its configured store could not be read; both are unknown
+// (`history-unavailable`), never "no friction", and the coverage text says which.
 // `coreClients` (optional) is the host's own reading of Core's nativeClientIds, never a request field; it only fills the `client` facts of an adapter suggestion, a display field a recorded suggestion never carries.
 export async function checkImprovements({ envelopeBytes, inventories, candidateInventories, candidateSource = candidateInventories === undefined ? 'unconfigured' : 'configured', clients = [], labels = {}, coreClients, goal, evidence, now } = {}) {
   const loaded = await load(envelopeBytes);
@@ -97,7 +98,7 @@ export async function checkImprovements({ envelopeBytes, inventories, candidateI
   const coverage = [{ trigger: 'content-change', state: contentReason === undefined ? 'checked' : 'unknown', ...(contentReason !== undefined ? { reason: contentReason } : {}),
       text: contentReason === 'version-order-unknown' ? orderText(unordered) : CONTENT_COVERAGE[contentReason ?? 'checked'] },
     { trigger: 'recurring-friction', state: frictionReason === undefined ? 'checked' : 'unknown', ...(frictionReason !== undefined ? { reason: frictionReason } : {}),
-      text: `${FRICTION_COVERAGE[frictionReason ?? 'checked']}${fixture ? ` (${FIXTURE_LABEL})` : ''}` }];
+      text: `${evidence === null ? FRICTION_UNREADABLE : FRICTION_COVERAGE[frictionReason ?? 'checked']}${fixture ? ` (${FIXTURE_LABEL})` : ''}` }];
   // What was not checked is said on each suggestion too; unknowns are not part of its identity.
   const suggested = await suggestImprovements({ intent: draft.intent, items, inventories, candidates: reason === undefined ? candidateInventories : [], clients, labels, goal, coreClients, friction: friction?.results });
   const unchecked = coverage.filter(entry => entry.state === 'unknown').map(entry => entry.text);

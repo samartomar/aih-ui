@@ -94,6 +94,27 @@ test('the Workbench stored inspect result (a machine check) gives one claim per 
   assert.deepEqual([results.length, results[0].condition, results[0].result.count, results[0].result.timeline.at(-1).outcome], [1, 'condition:on-path', 1, 'unknown']);
 });
 
+test('a published check id keeps its path separator in the condition; control characters, local paths and oversized ids make no claim', () => {
+  const claudeTie = tie('target', 'claude', { itemId: 'aihq.client.claude' }), version = outcome => probe(outcome, { id: 'claude/version', target: 'claude' });
+  const evidence = ['failed', 'passed', 'failed'].map((outcome, index) => entry(`chk-${index + 1}`, T[index], readiness(`chk-${index + 1}`, [version(outcome)])));
+  const { claimSet, results } = run(evidence, [claudeTie]);
+  assert.equal(validateClaimSet(claimSet).valid, true);
+  assert.deepEqual(claimSet.claims.map(c => [c.subject, c.measure, c.value.amount]), ['failed', 'passed', 'failed'].map(amount => [{ kind: 'target', id: 'claude' }, 'condition:claude/version', amount]));
+  assert.deepEqual([results.length, results[0].condition, results[0].result.status, results[0].result.count], [1, 'condition:claude/version', 'available', 1]);
+  for (const id of ['a\nb', 'a\u0000b', 'a\u007fb', 'C:\\Users\\a\\b', '/etc/passwd', '~/x', '', 'x'.repeat(129), 'a/'.repeat(80)]) {
+    assert.equal(run([entry('chk-1', T[0], readiness('chk-1', [probe('failed', { id, target: 'claude' })]))], [claudeTie]).claimSet.claims.length, 0, JSON.stringify(id));
+  }
+});
+
+test('the local-path refusal and the content fingerprint are claims.mjs\'s own, imported rather than copied', async () => {
+  const claims = await import('./claims.mjs'), source = await readFile(new URL('./friction.mjs', import.meta.url), 'utf8');
+  assert.equal(typeof claims.fingerprint, 'function'); assert.equal(typeof claims.isLocalPath, 'function');
+  assert.equal(claims.fingerprint({ b: 1, a: [2] }), claims.fingerprint({ a: [2], b: 1 })); assert.match(claims.fingerprint({ a: 1 }), /^[0-9a-f]{16}$/);
+  for (const path of ['C:\\Users\\a', '/home/a', '~/a', 'file:///a', '\\\\server\\share']) assert.equal(claims.isLocalPath(path), true, path);
+  for (const stable of ['claude/version', 'cap-1', 'project--pkg--item']) assert.equal(claims.isLocalPath(stable), false, stable);
+  assert.doesNotMatch(source, /const LOCAL_PATH\b/); assert.doesNotMatch(source, /function fingerprint\b/); assert.doesNotMatch(source, /const canonical\b/);
+});
+
 test('only tied subjects are requested; untied selections and results of another schema are ignored, never an error', () => {
   const mixed = [...recurring, entry('other', T[3], { schema: 'urn:aihq:core:run-result:1.0.0', status: 'complete' }), entry('odd', T[3], { notASchema: true })];
   const { claimSet, results, unread } = run(mixed);

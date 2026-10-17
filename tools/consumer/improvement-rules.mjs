@@ -30,6 +30,8 @@ export const FIXTURE_LABEL = 'fixture evidence, not observed on this computer';
 export const FRICTION_COVERAGE = { checked: 'Recurring friction was checked against the stored Core results this host supplied.',
   'no-recurrence-evidence': 'Recurring friction was not established: no stored Core result shows a failure recovering for something this policy selects, and missing history is never counted as none.',
   'history-unavailable': 'Recurring friction was not checked: this host supplied no stored Core results.' };
+// Still `history-unavailable`, but a host whose configured store could not be read must not be described as holding none.
+export const FRICTION_UNREADABLE = "Recurring friction was not checked: this host's stored Core results could not be read.";
 export const UNKNOWNS = ['Whether it improves your results is unknown until you try it.', 'Actual usage and cost are unknown; no usage data is read.'];
 // The reason format guided setup writes on each chosen root.
 const SAVED_GOAL = /^guided-setup rules \d+\.\d+\.\d+: [a-z][a-z0-9.-]*\. Goal: (.+?)\. Project: /;
@@ -67,15 +69,19 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 // A condition in words, for a person: the two conditions Core results map to, else a readiness check by its id.
 const CONDITION_WORDS = { 'condition:file-state': 'managed file state', 'condition:native-use': 'native client use' };
 const conditionWords = condition => CONDITION_WORDS[condition] ?? `${condition.replace(/^condition:/, '')} readiness`;
-// The reason key names the condition and the subject; a longer one is cut and keeps a short digest so two never collide.
+// The reason key names the condition and the subject. A key must be word characters, `.`, `@` and `-`, so any other character (a published check id's `/`)
+// is replaced and a longer name is cut; either keeps a short digest of the whole name so two different ones never share a key.
 const slug = text => text.replaceAll(/[^\w.@-]/g, '-');
 function frictionKey(condition, subject) {
-  const named = `${slug(condition.replace(/^condition:/, ''))}@${slug(subject)}`;
-  if (named.length <= 180) return `friction:${named}`;
+  const raw = `${condition.replace(/^condition:/, '')}@${subject}`, named = `${slug(condition.replace(/^condition:/, ''))}@${slug(subject)}`;
+  if (named === raw && named.length <= 180) return `friction:${named}`;
   let hash = 5381;
-  for (const char of named) hash = (hash * 33 ^ char.codePointAt(0)) >>> 0;
+  for (const char of raw) hash = (hash * 33 ^ char.codePointAt(0)) >>> 0;
   return `friction:${named.slice(0, 171)}-${hash.toString(16).padStart(8, '0')}`;
 }
+// The record holds at most this many triggers (improvement-record.mjs); recurring conditions beyond what fits are said, not listed.
+const MAX_TRIGGERS = 16;
+const scopeFor = (item, hint) => [hint, 'project'].find(name => item.scopes.includes(name)) ?? item.scopes[0];
 const digestsOf = item => ({ recipeSha256: item.recipe.sha256, materials: [...new Set((item.materials ?? []).map(m => m.sha256))].sort() });
 const bytesOf = item => (item.recipe?.byteLength ?? 0) + (item.materials ?? []).reduce((sum, m) => sum + m.byteLength, 0);
 // The item's required items, transitively, that this policy does not already select.
@@ -104,9 +110,8 @@ function facts(item, scope, offered, selected) {
   return result;
 }
 // Which of two releases of one package is later: positive when the candidate is, negative when the saved one is, undefined when neither is known to be
-// (an unversioned or non-semver release, or the same version with other content). Today the order is semantic-version precedence alone. `hostDeclaredOrder`
-// is the seam for an order the host's update source declares (the update-source ticket, aih-ui#66): it is not read yet, and when it is the order must be
-// labelled host-declared wherever it is shown.
+// (an unversioned or non-semver release, or the same version with other content). The order is semantic-version precedence. No host supplies a declared
+// order yet, so `hostDeclaredOrder` is not read.
 export function releaseOrder(saved, candidate, hostDeclaredOrder) {
   const order = precedence(candidate.release.package?.version, saved.release.package?.version);
   return order === 0 ? undefined : order;
@@ -172,14 +177,15 @@ export async function suggestImprovements({ intent, items = [], inventories = []
   const offered = new Map();
   for (const item of items) if (!offered.has(item.id)) offered.set(item.id, item);
   const candidates = new Map();
-  // `from` is a changed candidate item; the suggestion then describes that item, the content its reason talks about. `scope` is the narrowest
-  // scope the reason itself points at; the suggestion takes it when the item offers it.
-  const add = (itemId, key, ruleId, textOf, reference, goalText, from, scope) => {
+  // `from` is a changed candidate item; the suggestion then describes that item, the content its reason talks about. `hint` is the narrowest
+  // scope the reason itself points at; the suggestion takes it when the item offers it, else project, else the item's first scope. A suggestion is
+  // one item at one scope, so reasons that resolve to different scopes are different suggestions.
+  const add = (itemId, key, ruleId, textOf, reference, goalText, from, hint) => {
     const item = from?.item ?? offered.get(itemId);
     if (!item || selected.has(itemId) || excluded.has(itemId) || !item.scopes?.length) return;
-    const candidate = candidates.get(itemId) ?? { item, known: offered, triggers: new Map(), references: [], hints: new Set() };
-    candidates.set(itemId, candidate);
-    if (scope) candidate.hints.add(scope);
+    const scope = scopeFor(item, hint), slot = `${itemId}\u0000${scope}`;
+    const candidate = candidates.get(slot) ?? { item, scope, known: offered, triggers: new Map(), references: [] };
+    candidates.set(slot, candidate);
     if (from) Object.assign(candidate, { item, known: from.known });
     // A later source (the request) supplies the text shown for a reason a saved goal already gave.
     candidate.triggers.set(key, { ruleId, key, text: textOf });
@@ -230,18 +236,21 @@ export async function suggestImprovements({ intent, items = [], inventories = []
       `Give ${name} the same shared project instructions as your other AI clients.`);
   }
   const suggestions = [];
-  for (const { item, known, triggers, references, hints, goal: goalText } of candidates.values()) {
-    const scope = ['project', 'user'].find(name => hints.has(name) && item.scopes.includes(name)) ?? (item.scopes.includes('project') ? 'project' : item.scopes[0]);
+  for (const { item, scope, known, triggers, references, goal: goalText } of candidates.values()) {
     const closure = needs(item, known, new Set()).found;
     const change = { kind: 'add-item', itemId: item.id, releaseSha256: item.root.releaseSha256, itemSha256: item.itemSha256,
       // Material content: the item and its whole required closure, whatever this policy already selects.
       content: { ...digestsOf(item), requires: closure.slice(0, MAX_TRACKED_NEEDS).map(needed => ({ itemId: needed.id, ...digestsOf(needed) })) } };
     // Bounded like the record; a larger closure is said so, never silently truncated.
     const untracked = closure.length > MAX_TRACKED_NEEDS ? [`It needs ${closure.length} items; changes to those after the first ${MAX_TRACKED_NEEDS} by id are not tracked, so they will not show a dismissed suggestion again.`] : [];
-    const sorted = [...triggers.values()].sort((a, b) => compare(a.key, b.key)), id = await suggestionId({ change, scope });
+    // Every other reason is listed; the recurring conditions that still fit under the record's limit are too, in key order, and the rest are said to be missing.
+    const all = [...triggers.values()].sort((a, b) => compare(a.key, b.key)), others = all.filter(t => t.ruleId !== FRICTION_RULE.id), recurring = all.filter(t => t.ruleId === FRICTION_RULE.id);
+    const room = Math.max(0, MAX_TRIGGERS - others.length), hidden = Math.max(0, recurring.length - room);
+    const sorted = [...others, ...recurring.slice(0, room)].sort((a, b) => compare(a.key, b.key)), id = await suggestionId({ change, scope });
+    const omitted = hidden ? [`${hidden} more recurring ${hidden === 1 ? 'condition is' : 'conditions are'} not listed.`] : [];
     suggestions.push({ id, rulesVersion: IMPROVEMENT_RULES_VERSION, revision: await suggestionRevision({ id, change, triggers: sorted }), scope, change, triggers: sorted,
       ...(goalText !== undefined ? { goal: goalText } : {}), references: [...references.slice(0, 31), { kind: 'catalog-item', ref: item.id }],
-      facts: facts(item, scope, known, selected), ...clientFacts(item, coreClients), unknowns: [...UNKNOWNS, ...untracked], label: item.label ?? item.id, description: item.description ?? '' });
+      facts: facts(item, scope, known, selected), ...clientFacts(item, coreClients), unknowns: [...UNKNOWNS, ...untracked, ...omitted], label: item.label ?? item.id, description: item.description ?? '' });
   }
   const rank = s => [s.references.some(r => r.kind === 'request') ? 0 : 1, -s.triggers.length, s.references.some(r => r.kind === 'saved-reason') ? 0 : 1];
   return suggestions.sort((a, b) => {

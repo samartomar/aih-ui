@@ -69,8 +69,9 @@ function admit(records) {
 // A claim names things by stable identity, never by a location on this machine: absolute POSIX
 // and Windows paths, UNC shares, `~` and file: URLs are refused before any claim is built.
 const LOCAL_PATH = /^(?:file:|~(?:[\\/]|$)|[\\/][^\\/]|[\\/]{2})|(?:^|[^A-Za-z0-9])[A-Za-z]:[\\/]|[\s=,;([:](?:~?\/|\\\\)[^\s\\/]/i;
+export const isLocalPath = value => LOCAL_PATH.test(value);
 function assertNoLocalPath(value, what) {
-  if (typeof value === 'string' && LOCAL_PATH.test(value)) throw new TypeError(`${what} looks like a machine-local path; supply a stable identifier instead.`);
+  if (typeof value === 'string' && isLocalPath(value)) throw new TypeError(`${what} looks like a machine-local path; supply a stable identifier instead.`);
 }
 // Every supplied string a claim keeps (ids, unit, amount, method, coverage) is checked, not a chosen few.
 function assertSupplied(list, name) {
@@ -87,7 +88,7 @@ function assertSupplied(list, name) {
 // FNV-1a over canonical JSON: deterministic, with no clock, randomness or crypto.
 const canonical = value => Array.isArray(value) ? value.map(canonical) : value !== null && typeof value === 'object'
   ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
-function fingerprint(value) {
+export function fingerprint(value) {
   let hash = 0xcbf29ce484222325n;
   for (const char of JSON.stringify(canonical(value))) hash = BigInt.asUintN(64, (hash ^ BigInt(char.codePointAt(0))) * 0x100000001b3n);
   return hash.toString(16).padStart(16, '0');
