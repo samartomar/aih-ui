@@ -3,8 +3,8 @@
 // verifiable one. Everything is confined to the candidate: a generated sample CA, an interceptor on loopback, and environment
 // variables that only the processes the candidate's server starts afterwards inherit. Nothing in the machine's trust store,
 // npm configuration, PATH or user environment is touched, and the CA's private key is never kept.
-import { X509Certificate, createHash } from 'node:crypto';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, rmdirSync, writeFileSync } from 'node:fs';
+import { X509Certificate, createHash, createPrivateKey } from 'node:crypto';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, rmdirSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
 import tls from 'node:tls';
@@ -21,8 +21,15 @@ const OFF_COMMAND = 'node tools/candidate.mjs tls-interception off';
 const refusal = (code, message) => Object.assign(new Error(message), { code });
 const fold = name => (process.platform === 'win32' ? name.toUpperCase() : name);
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
-const files = layout => ({ condition: join(layout.stagedTls, 'condition.json'), ca: join(layout.stagedTls, 'sample-ca.pem'), cert: join(layout.stagedTls, 'interceptor.pem'),
-  key: join(layout.stagedTls, 'interceptor-key.pem'), notice: join(layout.stagedTls, 'STAGED.md') });
+const files = (layout, condition) => {
+  const root = condition?.generation ? join(layout.stagedTls, condition.generation) : layout.stagedTls;
+  return { condition: join(layout.stagedTls, 'condition.json'), ca: join(root, 'sample-ca.pem'), cert: join(root, 'interceptor.pem'),
+    key: join(root, 'interceptor-key.pem'), notice: join(layout.stagedTls, 'STAGED.md') };
+};
+const writeJson = (file, value) => {
+  writeFileSync(`${file}.tmp`, `${JSON.stringify(value, null, 2)}\n`);
+  renameSync(`${file}.tmp`, file);
+};
 
 // A repair applied earlier must not hide the staged failure, so the readiness sample is made again by the next start.
 const resetReadinessSample = layout => forgetSample(layout, 'readiness', [layout.readiness]);
@@ -58,6 +65,23 @@ export function stageTlsInterception(layout, { now = new Date() } = {}) {
   return condition;
 }
 
+// Keep all earlier repair inputs intact: a persisted reference to an earlier CA must stay stale, not silently gain trust.
+export function rotateTlsInterception(layout, { now = new Date() } = {}) {
+  const previous = stagedTlsCondition(layout);
+  if (!previous) throw refusal('CANDIDATE_NOT_STAGED', 'The TLS-interception condition is not staged; stage it before rotating the sample CA.');
+  const { caPem, leafPem, leafKeyPem } = createSampleCa({ hosts: [...previous.hosts], now });
+  const digest = sha256(new X509Certificate(caPem).raw), condition = { ...previous, caSha256: digest, generation: digest };
+  const at = files(layout, condition);
+  mkdirSync(dirname(at.ca), { recursive: true });
+  writeFileSync(at.ca, caPem);
+  writeFileSync(at.cert, leafPem);
+  writeFileSync(at.key, leafKeyPem, { mode: 0o600 });
+  writeStagedRepairs(layout, condition);
+  // Publish last, so a new connection sees either complete generation. The readiness sample and its earlier repair stay put.
+  writeJson(at.condition, condition);
+  return condition;
+}
+
 // Idempotent. Says whether anything was there to remove; the readiness sample is made again only then.
 export function unstageTlsInterception(layout) {
   const changed = existsSync(layout.stagedTls) || existsSync(layout.stagedRepairs);
@@ -71,10 +95,11 @@ export function unstageTlsInterception(layout) {
 
 // The parsed condition when it is staged and complete (its files exist and the recorded digest is the CA's), else null.
 export function stagedTlsCondition(layout) {
-  const at = files(layout);
   try {
-    const condition = JSON.parse(readFileSync(at.condition, 'utf8'));
+    const condition = JSON.parse(readFileSync(files(layout).condition, 'utf8'));
     if (condition?.schema !== STAGED_CONDITION_SCHEMA || condition.condition !== 'tls-interception' || !Array.isArray(condition.hosts) || !condition.hosts.length || typeof condition.caSha256 !== 'string') return null;
+    if (condition.generation !== undefined && (!/^[a-f0-9]{64}$/.test(condition.generation) || condition.generation !== condition.caSha256)) return null;
+    const at = files(layout, condition);
     for (const file of [at.cert, at.key]) if (!existsSync(file)) return null;
     return sha256(new X509Certificate(readFileSync(at.ca)).raw) === condition.caSha256 ? condition : null;
   } catch { return null; }
@@ -86,7 +111,7 @@ export function stagedTlsCondition(layout) {
 // upstream is verified with default trust (plus `upstreamCa`, which only tests supply).
 export async function startInterceptor({ layout, condition = stagedTlsCondition(layout), log = layout.tlsLog, upstream = { host: 'registry.npmjs.org', port: 443 }, upstreamCa } = {}) {
   if (!condition) throw refusal('CANDIDATE_NOT_STAGED', 'The TLS-interception condition is not staged.');
-  const at = files(layout), hosts = condition.hosts.map(host => host.toLowerCase());
+  const at = files(layout, condition), hosts = condition.hosts.map(host => host.toLowerCase());
   mkdirSync(dirname(log), { recursive: true });
   const record = line => { try { appendFileSync(log, `${new Date().toISOString()} ${line}\n`); } catch { /* logging is never a reason to fail a connection */ } };
   const counts = { intercepted: 0, refusedByClient: 0, upstreamErrors: 0, connectAccepted: 0, connectRefused: 0 };
@@ -106,6 +131,29 @@ export async function startInterceptor({ layout, condition = stagedTlsCondition(
     onward.on('error', error => { counts.upstreamErrors++; record(`upstream error for ${servername}: ${error.code ?? ''} ${error.message}`); clear.destroy(); });
     clear.on('error', () => onward.destroy());
     clear.pipe(onward).pipe(clear);
+  });
+  let activeDigest = condition.caSha256, refusedMaterial;
+  // Prepend to Node's connection listener: both direct TLS and proxy CONNECT must select the context before the handshake.
+  terminator.prependListener('connection', () => {
+    let material;
+    try {
+      material = readFileSync(files(layout).condition, 'utf8');
+      const next = stagedTlsCondition(layout);
+      if (!next) throw new Error('incomplete condition or CA digest mismatch');
+      if (next.caSha256 === activeDigest) return;
+      const current = files(layout, next), cert = readFileSync(current.cert), key = readFileSync(current.key);
+      const authority = new X509Certificate(readFileSync(current.ca)), leaf = new X509Certificate(cert);
+      if (!authority.ca || !leaf.verify(authority.publicKey) || !leaf.checkPrivateKey(createPrivateKey(key)) ||
+        hosts.some(host => !leaf.checkHost(host)) || JSON.stringify(next.hosts) !== JSON.stringify(condition.hosts)) throw new Error('leaf, key or hosts do not match the staged CA');
+      terminator.setSecureContext({ key, cert });
+      activeDigest = next.caSha256;
+      refusedMaterial = undefined;
+      record(`TLS sample CA rotated to ${activeDigest}`);
+    } catch (error) {
+      const reason = `${material ?? ''}:${error.message}`;
+      if (reason !== refusedMaterial) record(`TLS sample rotation refused; keeping previous context: ${error.message}`);
+      refusedMaterial = reason;
+    }
   });
   // A client that rejects the sample chain ends the handshake, but so does a probe that only needed the handshake and hung up
   // before this side finished it; the error alone cannot tell the two apart.
@@ -186,7 +234,7 @@ export async function activateStagedCondition({ layout, seededEnv, env = process
 export function writeStagedRepairs(layout, condition) {
   const staged = { label: STAGED_LABEL,
     detail: `An intercepting proxy with a generated sample CA stands between this candidate's services and ${condition.hosts.join(', ')}; nothing on this machine outside the candidate is changed. Turn it off with: ${OFF_COMMAND}` };
-  const repairs = [{ key: 'npm-ca', id: 'node-npm-ca', targets: ['npm'], inputs: { caFile: files(layout).ca }, network: 'declared' }];
+  const repairs = [{ key: 'npm-ca', id: 'node-npm-ca', targets: ['npm'], inputs: { caFile: files(layout, condition).ca }, network: 'declared' }];
   mkdirSync(dirname(layout.stagedRepairs), { recursive: true });
-  writeFileSync(layout.stagedRepairs, `${JSON.stringify({ staged, repairs }, null, 2)}\n`);
+  writeJson(layout.stagedRepairs, { staged, repairs });
 }

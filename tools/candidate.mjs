@@ -8,7 +8,7 @@
  *   node tools/candidate.mjs reset  [--data <dir>]
  *   node tools/candidate.mjs report [--data <dir>]
  *   node tools/candidate.mjs status [--data <dir>]
- *   node tools/candidate.mjs tls-interception <on|off|status> [--data <dir>]   a staged sample condition (tools/candidate/tls-interception.mjs)
+ *   node tools/candidate.mjs tls-interception <on|off|status|rotate> [--data <dir>]   a staged sample condition (tools/candidate/tls-interception.mjs)
  *
  * The data directory (default .aih-ui/candidate, git-ignored) holds everything the candidate writes. See tools/candidate/layout.mjs.
  */
@@ -21,12 +21,12 @@ import { checkRealHome, recordRealHome } from './candidate/guard.mjs';
 import { DEFAULT_PORT, candidateLayout } from './candidate/layout.mjs';
 import { absoluteManifest, candidateIdentity, readManifest, verifyManifest } from './candidate/manifest.mjs';
 import { assertPortAvailable } from './candidate/port.mjs';
-import { stageTlsInterception, stagedTlsCondition, unstageTlsInterception } from './candidate/tls-interception.mjs';
+import { rotateTlsInterception, stageTlsInterception, stagedTlsCondition, unstageTlsInterception } from './candidate/tls-interception.mjs';
 import { isAlive, readServerRecord, runSeedOnly, serverEnvironment, spawnServer, stopServer, waitForReady } from './candidate/process.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const READY_TIMEOUT_MS = 5 * 60_000, SEED_TIMEOUT_MS = 10 * 60_000;
-const USAGE = 'usage: node tools/candidate.mjs <start|stop|reset|report|status> [--manifest <file>] [--data <dir>] [--port <n>] [--no-smoke]\n       node tools/candidate.mjs tls-interception <on|off|status> [--data <dir>]';
+const USAGE = 'usage: node tools/candidate.mjs <start|stop|reset|report|status> [--manifest <file>] [--data <dir>] [--port <n>] [--no-smoke]\n       node tools/candidate.mjs tls-interception <on|off|status|rotate> [--data <dir>]';
 const refusal = (code, message) => Object.assign(new Error(message), { code });
 const out = line => process.stdout.write(`${line}\n`);
 
@@ -45,7 +45,7 @@ function parseArguments(argv) {
     } else throw refusal('CANDIDATE_USAGE', `Unknown argument ${flag}.\n${USAGE}`);
   }
   if (!['start', 'stop', 'reset', 'report', 'status', 'tls-interception'].includes(command)) throw refusal('CANDIDATE_USAGE', USAGE);
-  if (command === 'tls-interception' && !['on', 'off', 'status'].includes(options.mode)) throw refusal('CANDIDATE_USAGE', `tls-interception needs on, off or status.\n${USAGE}`);
+  if (command === 'tls-interception' && !['on', 'off', 'status', 'rotate'].includes(options.mode)) throw refusal('CANDIDATE_USAGE', `tls-interception needs on, off, status or rotate.\n${USAGE}`);
   return { command, options };
 }
 
@@ -165,8 +165,7 @@ function status({ data }) {
   describeCandidate(record);
 }
 
-// The staged TLS-interception condition lives in the data directory and is read at the next start, so it only changes while nothing of
-// the candidate is running (the server's environment and the readiness sample are made once, at start).
+// On and off reset the readiness sample at the next start; only rotation can change the staged condition while services run.
 function tlsInterception({ data, mode }) {
   if (mode === 'status') {
     const condition = stagedTlsCondition(candidateLayout(data));
@@ -174,6 +173,14 @@ function tlsInterception({ data, mode }) {
     return;
   }
   const { layout } = assertCandidateDir(data, 'stage a condition in');
+  if (mode === 'rotate') {
+    const condition = rotateTlsInterception(layout);
+    out(`staged sample rotation: TLS interception for ${condition.hosts.join(', ')} (sample CA sha256 ${condition.caSha256}).`);
+    out("Only the candidate's own services are affected. The earlier repair stays as it was; the readiness sample is kept.");
+    out('The Node certificate check now fails again until the repair is applied again with the new sample CA.');
+    out('The readiness page reads its repair offer when it starts, so it offers the new sample CA after the next start: node tools/candidate.mjs stop, then start.');
+    return;
+  }
   const already = running(layout);
   if (already) throw refusal('CANDIDATE_RUNNING', `The candidate is already ${isStarting(already) ? phase(already) : `running at ${already.url}`} (process ${already.pid}), so its staged condition cannot be changed now. Stop it first: node tools/candidate.mjs stop`);
   if (mode === 'on') {
