@@ -209,6 +209,7 @@ Data persists across stop and start until reset.
 | `config/` | Host configuration: settings, organization source, maintenance source, readiness repairs, batch host. |
 | `samples/` | Sample projects, repositories and fixtures, each with a `SAMPLE.md`. |
 | `samples/repositories/sample-web/.claude`, `sample-api/.codex` | The two controlled client configuration folders, inside the two sample checkouts. |
+| `staged/` | Present only while a staged condition is on: the sample CA and notice for [TLS interception](#staged-tls-interception). |
 | `tmp/` | Temporary files of the server process and everything it starts. |
 | `state/`, `logs/`, `reports/` | The running server's record (starting or ready), logs, and failure reports. |
 | `run/` | The installed consumer and served page, rebuilt by every start. |
@@ -262,6 +263,76 @@ labelled as such and is not observed evidence.
   selects the review note the source publishes revisions of) to keep, skip or
   defer an update and to get suggestions; trials also need AI clients chosen in
   setup.
+
+### Staged TLS interception
+
+An optional condition you switch on yourself, so the readiness journey has a
+real failure to repair instead of a repair that only shows configuration. It
+stands in for a corporate inspection proxy: an interceptor on loopback, using a
+generated sample CA, sits between the candidate's own services and
+`registry.npmjs.org`. It decrypts the connection with a certificate that CA
+signed, then connects to the real registry and relays the traffic.
+
+PowerShell, from the repository root:
+
+```powershell
+node tools/candidate.mjs tls-interception on
+node tools/candidate.mjs tls-interception status
+node tools/candidate.mjs tls-interception off
+```
+
+POSIX shells:
+
+```sh
+node tools/candidate.mjs tls-interception on
+node tools/candidate.mjs tls-interception status
+node tools/candidate.mjs tls-interception off
+```
+
+Use the same `--data <dir>` as for the other commands. `on` and `off` refuse
+while the candidate is starting, running or making its sample data, and they
+take effect at the next start. Both reset the readiness sample, so the next
+start makes a fresh fixture home and an earlier repair cannot hide the staged
+failure. `status` says whether it is staged and prints the sample CA's SHA-256.
+
+The journey, after `tls-interception on` and a start:
+
+1. Open readiness and check with the target **npm**. The check
+   `npm/tls/node/registry.npmjs.org` **fails** with a certificate-chain reason
+   (`npm/version` and `npm/tls/os/registry.npmjs.org` are unaffected). A banner
+   says which staged condition is active.
+2. Prepare the offered npm CA repair (two operations), then apply it. Its
+   `trust/material-digest` and `trust/npm-behavior` verifications pass: npm's
+   own ping goes through the interceptor and is relayed to the real registry.
+3. The re-check now passes, and the readiness report counts **1 verified
+   repair**.
+
+Confinement:
+
+- The sample CA, interceptor certificate and key, and a notice (`STAGED.md`) are
+  written to `staged/tls-interception/` in the data directory, the repair offer
+  to `config/readiness-repairs-staged.json`, and the interceptor's events to
+  `logs/tls-interception.log`. The CA's private key is used once to sign the
+  interceptor's certificate and is never kept.
+- Only the processes the candidate's server starts after it has installed its
+  packages (the readiness check and what Core runs from it) see the condition:
+  a preload that reroutes their TLS connection for `registry.npmjs.org:443` to
+  the interceptor, and npm's own proxy setting (`npm_config_https_proxy`,
+  `npm_config_proxy`) pointing at it. Your shell, the launcher, npm's installs
+  for the candidate and every other program are unchanged.
+- Nothing is written to the system or user certificate store, `~/.npmrc`, npm's
+  global configuration, `PATH`, the registry setting, or any client
+  configuration. `HTTPS_PROXY`, `HTTP_PROXY`, `NODE_EXTRA_CA_CERTS` and
+  `npm_config_cafile` are not set.
+- `npm/tls/os/registry.npmjs.org` is deliberately unaffected: a failure in the
+  operating system's own check could only be repaired by changing its trust
+  store, which the candidate never does.
+- `reset` removes the data directory and with it the condition. The report
+  bundle states the active condition and includes its record and notice
+  (`staged/`), never the key.
+
+The relayed ping and the interceptor's connection to the real registry need
+network access to `registry.npmjs.org`; offline, the repair cannot be verified.
 
 ### Optional native clients
 

@@ -28,6 +28,8 @@ export function candidateLayout(dataDir) {
     organizationSource: join(config, 'organization-source.json'),
     maintenanceSource: join(config, 'maintenance-source.json'),
     readinessRepairs: join(config, 'readiness-repairs.json'),
+    // Written at start while the TLS-interception condition is staged: the repair offer that goes with it (tls-interception.mjs).
+    stagedRepairs: join(config, 'readiness-repairs-staged.json'),
     batchHost: join(config, 'batch-host.json'),
     samples,
     projects: join(samples, 'projects'),
@@ -43,6 +45,8 @@ export function candidateLayout(dataDir) {
     batchEnvelope: join(continuity, 'batch-envelope.json'),
     // The two controlled client configuration folders the continuity sample uses: one inside each sample checkout.
     clients: Object.freeze({ claude: join(sampleWeb, '.claude'), codex: join(sampleApi, '.codex') }),
+    // A condition the owner stages on purpose: today only TLS interception, with its generated sample CA and certificate.
+    stagedTls: join(root, 'staged', 'tls-interception'),
     // Temporary files of the server process (and every process it starts) land here, not in the account's.
     tmp: join(root, 'tmp'),
     state,
@@ -52,6 +56,7 @@ export function candidateLayout(dataDir) {
     logs,
     serverLog: join(logs, 'server.log'),
     authorityLog: join(logs, 'authority-transport.log'),
+    tlsLog: join(logs, 'tls-interception.log'),
     checks: join(logs, 'checks'),
     reports: join(root, 'reports'),
   });
