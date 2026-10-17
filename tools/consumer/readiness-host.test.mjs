@@ -323,12 +323,11 @@ test('real journal records map to persisted-configuration claims with the record
   const subject = { kind: 'target', key: 'npm', itemId: 'ecc.claude.mcp.context7', rootItemId: 'ecc.claude.mcp.context7', label: 'Context7', scope: 'project' };
   const { claimSet, results } = frictionRecurrence({ evidence: records.map(record => ({ id: record.id, capturedAt: record.capturedAt, sha256: record.sha256, result: record })), subjects: [subject] });
   assert.ok(claimSet.claims.length > 0);
-  const conditions = new Set(results.map(result => result.condition));
-  assert.ok([...conditions].some(condition => condition.startsWith('persisted-condition:npm/tls/')), JSON.stringify([...conditions]));
-  assert.ok([...conditions].some(condition => condition.startsWith('condition:npm/tls/')), JSON.stringify([...conditions]));
+  const trusts = new Set(results.filter(result => result.condition.startsWith('condition:npm/tls/')).map(result => result.method?.id ?? 'host'));
+  assert.deepEqual([...trusts].sort(), ['aih-ui/persisted-configuration', 'host'], JSON.stringify(results.map(result => [result.condition, result.method])));
   const known = new Map(records.map(record => [record.id, record.sha256]));
   assert.ok(claimSet.claims.every(claim => known.get(claim.sources[0].id) === claim.sources[0].sha256 && claim.revision === claim.sources[0].sha256));
-  assert.ok(claimSet.claims.some(claim => claim.sources[0].id === repairRecord.id && claim.sources[0].sha256 === repairRecord.sha256 && claim.revision === repairRecord.sha256 && claim.measure.startsWith('persisted-condition:')));
+  assert.ok(claimSet.claims.some(claim => claim.sources[0].id === repairRecord.id && claim.sources[0].sha256 === repairRecord.sha256 && claim.revision === repairRecord.sha256 && claim.method?.id === 'aih-ui/persisted-configuration' && claim.measure.startsWith('condition:npm/tls/')));
 });
 
 test('the readiness child answers records with its journal, read-only, and every other operation unchanged', async () => {

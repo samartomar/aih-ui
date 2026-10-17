@@ -13,6 +13,8 @@ import { isUtcTimestamp, MAINTENANCE_CHECK_RECORD_SCHEMA } from './maintenance-r
 export const FILE_STATE_SCHEMA = 'urn:aihq:core:file-state-result:1.0.0';
 export const NATIVE_SCHEMA = 'urn:aihq:core:native-verification-result:1.0.0';
 export const FRICTION_PRODUCER = Object.freeze({ id: 'aih-ui/friction', version: '1.0.0' });
+// The check method of a claim made with the trust Core's repairs persist; a host's own reading names none. Core walks only claims of one method.
+export const PERSISTED_METHOD = Object.freeze({ id: 'aih-ui/persisted-configuration', version: '1.0.0' });
 export const MAX_EVIDENCE = 256, MAX_CLAIMS = 4096;
 const FILE_STATE = 'condition:file-state', NATIVE_USE = 'condition:native-use';
 
@@ -65,27 +67,27 @@ function nativeReadings(result, ties) {
 }
 // A published check id is kept whole, including the `/` Workbench readiness ids use (`claude/version`); Core takes any non-empty measure.
 const checkId = id => typeof id === 'string' && id.length >= 1 && id.length <= 128 && !/[\u0000-\u001f\u007f]/.test(id) && !isLocalPath(id);
-// A check is read with one of two trusts, each its own timeline. `condition:<id>` is this host's own trust. `persisted-condition:<id>` is the trust Core's
-// repairs persist for a program started later, which a long-running host never loads: after a verified repair its own readings keep failing, so one timeline would
-// call fail -> persisted pass -> fail a recurrence. A reading is a persisted one only when its projection reports that configuration.
-const HOST_TRUST = id => `condition:${id}`, PERSISTED_TRUST = id => `persisted-condition:${id}`;
+// A check is read with one of two trusts, each its own timeline of the one condition `condition:<id>` (Core's measure for an `inspect` check). This host's own trust
+// names no method. The trust Core's repairs persist for a program started later, which a long-running host never loads, carries PERSISTED_METHOD: after a verified repair
+// the host's own readings keep failing, so one timeline would call fail -> persisted pass -> fail a recurrence. A reading is a persisted one only when its projection
+// reports that configuration.
 const persisted = projection => projection?.options?.configuration === 'persisted';
 // The check rows of one stored projection (the host's check, its persisted check or a repair's recheck), `within` the targets it covers when given.
-function checkReadings(projection, ties, conditionOf, within) {
+function checkReadings(projection, ties, method, within) {
   const readings = [];
   for (const item of list(projection?.items)) {
     const tie = item?.kind === 'check' && typeof item.target === 'string' && (within === undefined || within.includes(item.target)) ? ties.targets.get(item.target) : undefined;
     if (!tie || !checkId(item.id)) continue;
     const outcome = item.outcome === 'passed' || item.outcome === 'failed' ? { outcome: item.outcome } : { outcome: 'unknown', reason: code(item.reason) ?? code(item.outcome) ?? 'unavailable' };
-    readings.push({ tie, subject: { kind: 'target', id: item.target }, condition: conditionOf(item.id), scopeKind: 'machine', complete: projection.status === 'complete', ...outcome });
+    readings.push({ tie, subject: { kind: 'target', id: item.target }, condition: `condition:${item.id}`, method, scopeKind: 'machine', complete: projection.status === 'complete', ...outcome });
   }
   return readings;
 }
 // A machine check is the host's trust beside the same check made with the persisted trust; a repair record's recheck was made with the persisted trust.
 function readinessReadings(record, ties) {
-  if (record.kind === 'machine-check') return [...checkReadings(record.check, ties, HOST_TRUST), ...(persisted(record.persistedCheck) ? checkReadings(record.persistedCheck, ties, PERSISTED_TRUST) : [])];
+  if (record.kind === 'machine-check') return [...checkReadings(record.check, ties), ...(persisted(record.persistedCheck) ? checkReadings(record.persistedCheck, ties, PERSISTED_METHOD) : [])];
   const recheck = record.repair?.outcome?.condition;
-  return persisted(recheck) ? checkReadings(recheck, ties, PERSISTED_TRUST, list(record.repair?.targets)) : [];
+  return persisted(recheck) ? checkReadings(recheck, ties, PERSISTED_METHOD, list(record.repair?.targets)) : [];
 }
 // The Workbench's maintenance-check note holds only { id: 'maintenance-check', checkedAt, categories: [{ category, state, reason? }] }. Recurrence needs a
 // subject, a passed or failed outcome per check and more than the latest check, and the note has none of them (its id is the constant 'maintenance-check' and
@@ -114,8 +116,8 @@ function checkEvidence(evidence) {
 
 // `evidence`: the host's stored Core results, at most 256 of { id, sha256?, capturedAt, fixture?, result }. `subjects`: what the draft ties to a selected
 // item, { kind: 'managed-selection' | 'client' | 'target', key, selectionId?, itemId, rootItemId, label, scope, goal? }. Returns the claim set, Core's
-// projection, `results` (one per tied subject and condition with any claim: { tie, subject, condition, result: Core's recurrence result, stored: distinct
-// stored results read, fixture }) and `unread` (stored results of a schema this module does not read).
+// projection, `results` (one per tied subject, condition and check method with any claim, each requested apart: { tie, subject, condition, method? (the persisted
+// configuration's), result: Core's recurrence result, stored: distinct stored results read, fixture }) and `unread` (stored results of a schema this module does not read).
 export function frictionRecurrence({ evidence, subjects }) {
   checkEvidence(evidence);
   const ties = tiesOf(subjects), claims = new Map(), groups = new Map();
@@ -125,8 +127,8 @@ export function frictionRecurrence({ evidence, subjects }) {
     if (readings === undefined) { unread += 1; continue; }
     for (const reading of readings) {
       const body = { producer: { ...FRICTION_PRODUCER }, recordSchema: entry.result.schema, subject: { ...reading.subject }, scope: { kind: reading.scopeKind, targets: [reading.subject.id] },
-        sources: [{ id: entry.id, schema: entry.result.schema, ...(entry.sha256 ? { sha256: entry.sha256 } : {}) }], observation: fit(`${entry.id}/${reading.subject.id}/${reading.condition}`),
-        capturedAt: entry.capturedAt, measure: reading.condition,
+        sources: [{ id: entry.id, schema: entry.result.schema, ...(entry.sha256 ? { sha256: entry.sha256 } : {}) }], observation: fit(`${entry.id}/${reading.subject.id}/${reading.condition}${reading.method ? '/persisted-configuration' : ''}`),
+        capturedAt: entry.capturedAt, measure: reading.condition, ...(reading.method ? { method: { ...reading.method } } : {}),
         ...(reading.outcome === 'unknown' ? { kind: 'unknown', unknownReason: reading.reason } : { kind: 'measured', value: { amount: reading.outcome, unit: 'outcome' } }),
         coverage: reading.complete ? { state: 'complete', reason: 'The stored Core result covers every selected check.' } : { state: 'partial', reason: 'The stored Core result was not complete.' },
         authentication: { status: 'not-authenticated' }, applicability: { state: 'unknown', reason: 'No later observation was compared with this one.', inputs: [] } };
@@ -137,8 +139,9 @@ export function frictionRecurrence({ evidence, subjects }) {
       if (claims.has(key) && claims.get(key).print !== print) claim.revision = `${claim.revision}~${print}`;
       const stored = claims.get(`${claim.id}\u0000${claim.revision}`);
       if (!stored) claims.set(`${claim.id}\u0000${claim.revision}`, { claim, print });
-      const groupKey = `${reading.subject.kind}\u0000${reading.subject.id}\u0000${reading.condition}`;
-      const group = groups.get(groupKey) ?? { tie: reading.tie, subject: reading.subject, condition: reading.condition, refs: new Map(), entries: new Set(), fixture: false };
+      // One request per subject, condition and check method: Core's recurrence method walks claims of one method only.
+      const groupKey = `${reading.subject.kind}\u0000${reading.subject.id}\u0000${reading.condition}\u0000${reading.method?.id}\u0000${reading.method?.version}`;
+      const group = groups.get(groupKey) ?? { tie: reading.tie, subject: reading.subject, condition: reading.condition, method: reading.method, refs: new Map(), entries: new Set(), fixture: false };
       group.refs.set(`${claim.id}\u0000${claim.revision}`, { id: claim.id, revision: claim.revision });
       group.entries.add(entry.id);
       group.fixture ||= entry.fixture === true;
@@ -146,13 +149,13 @@ export function frictionRecurrence({ evidence, subjects }) {
     }
   }
   if (claims.size > MAX_CLAIMS) throw new TypeError(`The stored Core results make more than ${MAX_CLAIMS} claims; supply fewer.`);
-  const ordered = [...groups.values()].map(group => ({ ...group, id: fit(`recurrence/${group.subject.kind}/${group.subject.id}/${group.condition}`) })).sort((a, b) => compare(a.id, b.id));
+  const ordered = [...groups.values()].map(group => ({ ...group, id: fit(`recurrence/${group.subject.kind}/${group.subject.id}/${group.condition}${group.method ? `/${group.method.id}` : ''}`) })).sort((a, b) => compare(a.id, b.id));
   const claimSet = { schema: CLAIMS_SCHEMA_1_1_0, claims: [...claims.values()].map(entry => entry.claim).sort((a, b) => compare(a.id, b.id) || compare(a.revision, b.revision)),
     calculations: ordered.map(group => ({ id: group.id, method: 'recurrence', version: '1.0.0', subject: { ...group.subject }, condition: group.condition,
       observations: [...group.refs.values()].sort((a, b) => compare(a.id, b.id) || compare(a.revision, b.revision)) })) };
   const validation = validateClaimSet(claimSet);
   if (!validation.valid) throw new TypeError(`The friction claim set is not valid: ${validation.errors.join('; ')}`);
   const projection = projectClaims(claimSet);
-  return { claimSet, projection, unread, results: ordered.map((group, index) => ({ tie: group.tie, subject: { ...group.subject }, condition: group.condition,
+  return { claimSet, projection, unread, results: ordered.map((group, index) => ({ tie: group.tie, subject: { ...group.subject }, condition: group.condition, ...(group.method ? { method: { ...group.method } } : {}),
     result: projection.calculations[index], stored: group.entries.size, fixture: group.fixture })) };
 }

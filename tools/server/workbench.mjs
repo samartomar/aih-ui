@@ -6,7 +6,8 @@ import { createStaticServer } from './static.mjs';
 
 // The ordinary preview and its regression share this composition boundary.
 export async function createWorkbench({ consumerDir, runDir, summary, settingsPath }) {
-  // The readiness journal is the friction input for what the person ran here; the readiness adapter starts first because the authoring host reads it afresh on each improvements check.
+  // The readiness journal is the friction input for what the person ran here. The readiness adapter is created first because the authoring host's journal provider closes over it
+  // and reads it afresh on each improvements check; its child is forked lazily, on the first readiness request.
   const readiness = createReadinessAdapter(consumerDir);
   const authoring = await createAuthoringAdapter(consumerDir, { frictionEvidence: await journalFrictionEvidence(consumerDir, () => readiness.records()) });
   const batch = createBatchAdapter(consumerDir);

@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
-import { journalFrictionEvidence } from '../server/authoring.mjs';
+import { createAuthoringAdapter, journalFrictionEvidence } from '../server/authoring.mjs';
 import { createReadinessAdapter } from '../server/readiness.mjs';
 
 // The Workbench's own readiness journal is the friction input for checks the person triggered. It lives in the readiness child's memory only, so a child that
@@ -57,15 +57,48 @@ test('the journal is bounded by the consumer directory\'s MAX_EVIDENCE, whatever
   });
 });
 
-test('authoring.mjs keeps the demo file labelled fixture and the journal unlabelled, and holds no copy of the limit', async () => {
-  const source = await readFile(new URL('../server/authoring.mjs', import.meta.url), 'utf8');
-  assert.match(source, /AIH_FRICTION_EVIDENCE \? await fileFrictionEvidence/, 'the demo file keeps precedence');
-  assert.equal((source.match(/fixture: true/g) ?? []).length, 1);
-  assert.doesNotMatch(source, /records\.length\s*>\s*\d+/);
+// The adapter hands the consumer host one friction provider: the demo file when AIH_FRICTION_EVIDENCE is set, else the journal's. A stand-in consumer host keeps the
+// options it is started with, so the choice is observed where the real host takes it. `inspect` runs before the directory is removed.
+async function withStartedOptions({ demo, provider }, inspect) {
+  const dir = await mkdtemp(join(tmpdir(), 'aih-friction-choice-')), saved = process.env.AIH_FRICTION_EVIDENCE;
+  try {
+    await mkdir(join(dir, 'consumer'));
+    await writeFile(join(dir, 'consumer', 'friction.mjs'), 'export const MAX_EVIDENCE = 8;\n');
+    await writeFile(join(dir, 'consumer', 'server.mjs'), `export async function startConsumer(options) { globalThis.aihStartedWith = options; return { origin: 'http://127.0.0.1:1', server: { close() {} } }; }\n`);
+    if (demo) { await writeFile(join(dir, 'demo.json'), JSON.stringify({ entries: [{ id: 'demo-1', capturedAt: '2026-10-10T09:00:00Z', result: { n: 1 } }] })); process.env.AIH_FRICTION_EVIDENCE = join(dir, 'demo.json'); }
+    else delete process.env.AIH_FRICTION_EVIDENCE;
+    await createAuthoringAdapter(dir, provider ? { frictionEvidence: await journalFrictionEvidence(dir, provider) } : {});
+    await inspect(globalThis.aihStartedWith);
+  } finally {
+    delete globalThis.aihStartedWith;
+    if (saved === undefined) delete process.env.AIH_FRICTION_EVIDENCE; else process.env.AIH_FRICTION_EVIDENCE = saved;
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+test('with AIH_FRICTION_EVIDENCE set the demo file is the evidence, labelled fixture, and the journal is not read', async () => {
+  let asked = 0;
+  await withStartedOptions({ demo: true, provider: async () => { asked += 1; return journal(1); } }, async options => {
+    const entries = await options.frictionEvidence();
+    assert.deepEqual(entries.map(entry => [entry.id, entry.fixture]), [['demo-1', true]]);
+    assert.equal(asked, 0);
+  });
 });
 
-// A child that records each start and answers what the test asks, in place of Core, so the adapter's own behaviour is what is observed.
-async function withFakeChild(run) {
+test('without it the journal is the evidence, unlabelled and read afresh; with no provider the host is given none', async () => {
+  let asked = 0;
+  await withStartedOptions({ provider: async () => { asked += 1; return journal(2); } }, async options => {
+    const entries = await options.frictionEvidence();
+    assert.deepEqual(entries.map(entry => entry.id), ['rec-0', 'rec-1']); assert.equal(entries.some(entry => 'fixture' in entry), false);
+    await options.frictionEvidence();
+    assert.equal(asked, 2);
+  });
+  await withStartedOptions({}, async options => assert.equal('frictionEvidence' in options, false));
+});
+
+// A child that records each start and answers what the test asks, in place of Core, so the adapter's own behaviour is what is observed. `records` is what it answers
+// to the journal request and `exit` makes it stop on that request; both are set for the child only while `run` does, and the earlier values come back after.
+async function withFakeChild({ records, exit } = {}, run) {
   const dir = await mkdtemp(join(tmpdir(), 'aih-readiness-journal-')), marker = join(dir, 'starts.txt');
   await mkdir(join(dir, 'consumer'));
   await writeFile(join(dir, 'consumer', 'readiness-child.mjs'), `
@@ -78,7 +111,9 @@ process.on('message', ({ id, op }) => {
 });
 process.on('disconnect', () => process.exit(0));
 `);
-  const saved = { FAKE_RECORDS: process.env.FAKE_RECORDS, FAKE_EXIT: process.env.FAKE_EXIT }, adapter = createReadinessAdapter(dir);
+  const saved = { FAKE_RECORDS: process.env.FAKE_RECORDS, FAKE_EXIT: process.env.FAKE_EXIT };
+  for (const [name, value] of [['FAKE_RECORDS', records === undefined ? undefined : JSON.stringify(records)], ['FAKE_EXIT', exit]]) { if (value === undefined) delete process.env[name]; else process.env[name] = value; }
+  const adapter = createReadinessAdapter(dir);
   const startsOf = async () => existsSync(marker) ? (await readFile(marker, 'utf8')).split('\n').filter(Boolean).length : 0;
   const start = async () => {
     const request = { method: 'GET', headers: { host: '127.0.0.1:4999' }, socket: { localPort: 4999 } }, response = { writeHead() { return this; }, end() {} };
@@ -95,8 +130,7 @@ process.on('disconnect', () => process.exit(0));
 
 test('the adapter answers undefined without starting the child, then the child\'s journal once it has started', async () => {
   const records = journal(2);
-  process.env.FAKE_RECORDS = JSON.stringify(records);
-  await withFakeChild(async ({ adapter, start, startsOf }) => {
+  await withFakeChild({ records }, async ({ adapter, start, startsOf }) => {
     assert.equal(await adapter.records(), undefined);
     await wait(400);
     assert.equal(await startsOf(), 0, 'asking for the journal must not fork the readiness child');
@@ -112,16 +146,15 @@ test('the adapter answers undefined without starting the child, then the child\'
 });
 
 test('a child that answers something other than a list, or stops while asked, is unreadable (null), never an empty journal', async () => {
-  process.env.FAKE_RECORDS = JSON.stringify({ status: 'error', diagnostics: [{ code: 'READINESS_CONFIG_INVALID' }] });
-  await withFakeChild(async ({ adapter, start }) => { await start(); assert.equal(await adapter.records(), null); });
-  process.env.FAKE_RECORDS = JSON.stringify(journal(1)); process.env.FAKE_EXIT = 'records';
-  await withFakeChild(async ({ adapter, start }) => { await start(); assert.equal(await adapter.records(), null); });
+  const refused = { status: 'error', diagnostics: [{ code: 'READINESS_CONFIG_INVALID' }] };
+  await withFakeChild({ records: refused }, async ({ adapter, start }) => { await start(); assert.equal(await adapter.records(), null); });
+  await withFakeChild({ records: journal(1), exit: 'records' }, async ({ adapter, start }) => { await start(); assert.equal(await adapter.records(), null); });
 });
 
 test('the journal is not an HTTP route: the page cannot read it', async () => {
   const source = await readFile(new URL('../server/readiness.mjs', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /'\/api\/readiness-records'/);
-  await withFakeChild(async ({ adapter, startsOf }) => {
+  await withFakeChild({}, async ({ adapter, startsOf }) => {
     const request = { method: 'GET', headers: { host: '127.0.0.1:4999' }, socket: { localPort: 4999 } }, seen = [];
     const response = { writeHead(code) { seen.push(code); return this; }, end() {} };
     assert.equal(await adapter.handle(request, response, '/api/readiness-records'), true);

@@ -103,7 +103,8 @@ export async function checkImprovements({ envelopeBytes, inventories, candidateI
   const stored = evidence !== undefined && evidence !== null;
   let friction;
   if (stored) {
-    // The envelope's own maintenance-check note is read beside the host's results; it makes no claim (friction.mjs), so it never decides the coverage.
+    // The envelope's own maintenance-check note is read beside the host's results, as the issue asks. It makes no claim (friction.mjs), so its fixed id can never conflict
+    // with a host result and it never decides the coverage. It is left out only when the host's results are already at the limit.
     const note = read.records.find(record => record.schema === MAINTENANCE_CHECK_RECORD_SCHEMA);
     const results = Array.isArray(evidence) && note && evidence.length < MAX_EVIDENCE ? [...evidence, { id: note.id, capturedAt: note.checkedAt, result: note }] : evidence;
     try { friction = frictionRecurrence({ evidence: results, subjects: tiedSubjects({ intent: draft.intent, items, inventories, savedBytes: read.savedIntentBytes }) }); }
