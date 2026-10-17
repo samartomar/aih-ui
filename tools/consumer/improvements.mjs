@@ -21,7 +21,7 @@ const CANDIDATE_SOURCES = ['configured', 'unconfigured'], CANDIDATE_COVERAGES = 
 const CONTENT_COVERAGE = { checked: 'Content changes since this policy was saved were checked against the configured update source.',
   'no-configured-source': 'Content changes were not checked: no update source is configured.', 'sources-unavailable': 'Content changes were not checked: the update source could not be read.',
   'sources-partly-unavailable': 'Content changes were checked against only part of the update source: some sources could not be read.',
-  'saved-release-not-supplied': 'The exact release this policy was saved from is not supplied, so changes to it were not compared.' };
+  'saved-release-not-supplied': 'Not every exact release this policy was saved from is supplied, so changes to the missing ones were not compared.' };
 const byId = (a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 const checkedEntries = (value, max = 32) => {
   try { return Array.isArray(value) && value.length <= max && value.every(entry => entry && isCheckedRelease(entry.release)) && new Set(value.map(entry => entry.release.sha256)).size === value.length; }
@@ -66,7 +66,7 @@ export async function checkImprovements({ envelopeBytes, inventories, candidateI
     || Object.entries(labels).some(([id, label]) => !/^[a-z0-9][a-z0-9-]{0,63}$/.test(id) || typeof label !== 'string' || label.length < 1 || label.length > 128 || /[\u0000-\u001f\u007f]/.test(label))) return fail('/labels', 'Supply at most 32 client labels of 1 to 128 characters, without control characters.');
   if (goal !== undefined && (typeof goal !== 'string' || goal.length > MAX_GOAL)) return fail('/goal', `Supply a goal of at most ${MAX_GOAL} characters.`);
   const baselines = unread === undefined ? savedBaselines(draft.intent, inventories, candidateInventories) : undefined;
-  const reason = unread ?? (candidateCoverage === 'partial' ? 'sources-partly-unavailable' : baselines.saved > 0 && !baselines.resolved.length ? 'saved-release-not-supplied' : undefined);
+  const reason = unread ?? (candidateCoverage === 'partial' ? 'sources-partly-unavailable' : baselines.resolved.length < baselines.saved ? 'saved-release-not-supplied' : undefined);
   const requested = goal !== undefined && goal.trim() !== '';
   const items = inventories.flatMap(entry => entry.release.items.map(item => ({ ...item, root: { releaseSha256: entry.release.sha256 } })));
   const text = reason === undefined && releaseOrder !== undefined

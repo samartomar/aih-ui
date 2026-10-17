@@ -15,7 +15,19 @@ export function groupImprovements(value) {
     { label: 'Alternatives', rows: (value?.alternatives ?? []).slice(0, 3) },
     { label: 'Dismissed', rows: value?.dismissed ?? [] },
     { label: 'Preserved dismissals', rows: value?.preserved ?? [] },
+    ...(value?.earlier?.length ? [{ label: `Earlier suggestions (as of ${value.contentAsOf})`, rows: value.earlier, earlier: true }] : []),
   ];
+}
+const contentState = value => value?.coverage?.find(entry => entry.trigger === 'content-change')?.state;
+// A check that cannot read every source keeps the content changes the last complete check suggested and it no longer does,
+// as of that check; they are shown without actions until a complete check answers again.
+export function keepEarlier(previous, next) {
+  const asOf = previous?.contentAsOf ?? (contentState(previous) === 'checked' ? previous.checkedAt : undefined);
+  if (contentState(next) !== 'unknown' || !asOf) return next;
+  const shown = new Set([next.leading, ...(next.alternatives ?? []), ...(next.dismissed ?? [])].filter(Boolean).map(row => row.id)), earlier = [];
+  for (const row of [...(previous.earlier ?? []), previous.leading, ...(previous.alternatives ?? [])])
+    if (row && !shown.has(row.id) && row.triggers?.some(trigger => trigger.key.startsWith('change:'))) { shown.add(row.id); earlier.push(row); }
+  return earlier.length ? { ...next, earlier, contentAsOf: asOf } : next;
 }
 export function promotionText(suggestion) {
   return (suggestion.promotion?.reasons ?? []).map(reason => reason.startsWith('Shown again:') ? reason : `Shown again: ${reason}`);
@@ -46,7 +58,8 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
   const groups = el('div', 'space-y-2');
   // `checked` is the client revision the shown suggestions answer; any later change to the open artifact retires them.
   // `recording` marks the revision change this view's own record request makes, which never retires its cards.
-  let value, checked, pending = false, attempt = 0, failed = false, changed = false, recording = false;
+  // `kept` is the result a recorded choice retired, so the next check can still keep its earlier content changes.
+  let value, kept, checked, pending = false, attempt = 0, failed = false, changed = false, recording = false;
   let published = null, saved = [];
   const diagnostic = result => result?.diagnostics?.map(row => row.message).join(' ') || result?.error || 'The improvement check could not be completed.';
   const safe = action => async () => { try { await action(); } catch (error) { showStatus(error.message); } };
@@ -68,7 +81,7 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
     // A refused choice changed nothing: the shown suggestions still answer the open artifact.
     if (result.status !== 'ok') { checked = client.revision; render(); return showStatus(diagnostic(result)); }
     // Old cards describe the previous envelope; a failed recheck must not show stale actions.
-    value = undefined;
+    kept = value; value = undefined;
     showStatus('Improvement choice recorded. Save the draft to keep it.');
     await check();
   }
@@ -89,22 +102,22 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
   }
   function render() {
     node.hidden = !(client.draft || client.intent);
-    if (value && !recording && checked !== client.revision) { value = undefined; changed = true; }
-    if (node.hidden) { attempt++; value = undefined; pending = false; failed = false; changed = false; saved = []; unlisted.hidden = true; unlisted.textContent = ''; goal.value = ''; coverage.replaceChildren(); groups.replaceChildren(); return; }
+    if (value && !recording && checked !== client.revision) { value = undefined; kept = undefined; changed = true; }
+    if (node.hidden) { attempt++; value = undefined; kept = undefined; pending = false; failed = false; changed = false; saved = []; unlisted.hidden = true; unlisted.textContent = ''; goal.value = ''; coverage.replaceChildren(); groups.replaceChildren(); return; }
     const omitted = saved.filter(id => !offersClient(published?.ids ?? [], id));
     unlisted.hidden = !omitted.length;
     unlisted.textContent = !omitted.length ? '' : omitted.length === 1
       ? `Saved AI client ${omitted[0]} is not listed by the installed Core, so no suggestion is made for it. Your saved setup is unchanged.`
       : `Saved AI clients ${omitted.join(', ')} are not listed by the installed Core, so no suggestions are made for them. Your saved setup is unchanged.`;
     suggest.disabled = pending || recording;
-    status.textContent = pending ? 'Checking improvements…' : failed ? 'The improvement check could not be completed; suggestions are unknown.' : changed ? 'The open policy or its inputs changed since the last check; Suggest again to update the suggestions.' : value ? `Checked ${value.checkedAt}.` : 'Suggest improvements using the fixed rules.';
+    status.textContent = pending ? 'Checking improvements…' : failed ? 'The improvement check could not be completed; suggestions are unknown.' : changed ? 'The open policy or its inputs changed since the last check; Suggest again to update the suggestions.' : value ? `Checked ${value.checkedAt}.${value.contentAsOf ? ` Content changes as of ${value.contentAsOf}.` : ''}` : 'Suggest improvements using the fixed rules.';
     // What the check covered, once per check, whether or not it found anything.
     coverage.replaceChildren(...(value?.coverage ?? []).map(entry => el('p', '', entry.text)));
     groups.replaceChildren();
     for (const group of groupImprovements(value)) {
       if (!group.rows.length) continue;
       const section = el('div', 'space-y-1'); section.append(el('h4', 'font-medium', group.label));
-      const preserved = group.label === 'Preserved dismissals', dismissed = group.label === 'Dismissed';
+      const preserved = group.label === 'Preserved dismissals', dismissed = group.label === 'Dismissed', earlier = !!group.earlier;
       for (const row of group.rows) {
         const suggestion = preserved ? row.suggestion : row;
         const card = el('div', 'p-2 border border-wb-border rounded space-y-1'); card.dataset.suggestionId = suggestion.id;
@@ -125,7 +138,8 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
         if (dismissal?.reason) card.append(el('p', 'text-outline text-[11px]', dismissal.reason));
         if (preserved) card.append(el('p', 'text-on-surface-variant', 'This suggestion is not current: none of its reasons applies now. Its dismissal is preserved; forgetting it shows nothing until a reason applies again.'));
         // A preserved dismissal's suggestion no longer arises, so clearing it forgets the choice rather than showing a card.
-        if (preserved) card.append(choice('Forget dismissal', safe(() => record(restoreOperation(suggestion.id)))));
+        if (earlier) card.append(el('p', 'text-on-surface-variant', `Suggested by the check at ${value.contentAsOf}; the latest check could not read every update source, so it is shown as of then.`));
+        else if (preserved) card.append(choice('Forget dismissal', safe(() => record(restoreOperation(suggestion.id)))));
         // A suggestion that arose from a typed goal is shown again for that goal, so restoring it never makes it vanish.
         else if (dismissed) card.append(choice('Show again', safe(() => { if (suggestion.references?.some(r => r.kind === 'request')) goal.value = suggestion.goal; return record(restoreOperation(suggestion.id)); })));
         else {
@@ -157,11 +171,11 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
     pending = false;
     if (revision !== client.revision || result?.status === 'superseded') { render(); return; }
     failed = result?.status !== 'ok';
-    value = failed ? undefined : result.value; checked = revision; changed = false;
+    value = failed ? undefined : keepEarlier(value ?? kept, result.value); kept = undefined; checked = revision; changed = false;
     if (failed) showStatus(diagnostic(result));
     render();
   }
-  function open() { attempt++; value = undefined; changed = false; goal.value = ''; return check(); }
+  function open() { attempt++; value = undefined; kept = undefined; changed = false; goal.value = ''; return check(); }
   render();
   function setTargets(coreTargets) {
     // A check in flight was made under the old list: it is discarded and made again under this one.

@@ -336,3 +336,30 @@ test('each suggestion cites the exact release and item digests it describes, in 
   const bare = view({ draft, revision: 1, checkImprovements: async () => ok(checked) }); await bare.open();
   assert.doesNotMatch(textOf(bare.node), /Content: release/);
 });
+
+test('a content change suggested by a complete check stays, as of that check, while a later check cannot read every source', async () => {
+  const change = { ...suggestion, id: 'suggestion-change', promotion: undefined, label: 'Revised plan', triggers: [{ ruleId: 'change.revised', key: 'change:revised@0.1.0', text: 'Revised plan changed.' }] };
+  const content = (state, reason) => [{ trigger: 'content-change', state, ...(reason ? { reason } : {}), text: `content ${state}` }];
+  const results = [ok({ ...checked, leading: change, coverage: content('checked') }),
+    ok({ ...checked, checkedAt: '2026-10-16T13:00:00Z', leading: suggestion, coverage: content('unknown', 'sources-partly-unavailable') }),
+    ok({ ...checked, checkedAt: '2026-10-16T14:00:00Z', leading: suggestion, coverage: content('unknown', 'sources-partly-unavailable') }),
+    ok({ ...checked, checkedAt: '2026-10-16T15:00:00Z', leading: suggestion, coverage: content('checked') })];
+  const client = { draft, revision: 1, checkImprovements: async () => results.shift() };
+  const built = view(client), cards = () => elements(built.node).filter(node => node.dataset.suggestionId).map(node => node.dataset.suggestionId);
+  await built.open();
+  assert.deepEqual(cards(), ['suggestion-change']);
+  await find(built, 'Suggest').listeners.click();
+  // The earlier change is still shown, labelled with the check that found it and without actions.
+  assert.deepEqual(cards(), ['suggestion-one', 'suggestion-change']);
+  assert.ok(textOf(built.node).includes('Earlier suggestions (as of 2026-10-16T12:00:00Z)'));
+  assert.ok(textOf(built.node).includes('Content changes as of 2026-10-16T12:00:00Z.'));
+  const earlier = elements(built.node).find(node => node.dataset.suggestionId === 'suggestion-change');
+  assert.equal(elements(earlier).filter(node => node.tag === 'button').length, 0);
+  // Still partial: kept with the same time. Complete again: only what that check found.
+  await find(built, 'Suggest').listeners.click();
+  assert.deepEqual(cards(), ['suggestion-one', 'suggestion-change']);
+  assert.ok(textOf(built.node).includes('as of 2026-10-16T12:00:00Z'));
+  await find(built, 'Suggest').listeners.click();
+  assert.deepEqual(cards(), ['suggestion-one']);
+  assert.ok(!textOf(built.node).includes('Earlier suggestions'));
+});

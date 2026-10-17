@@ -913,7 +913,7 @@ test('a real newer revision of the saved notes source offers its new goal-releva
 });
 
 const PARTLY = 'Content changes were checked against only part of the update source: some sources could not be read.';
-const NO_BASELINE = 'The exact release this policy was saved from is not supplied, so changes to it were not compared.';
+const NO_BASELINE = 'Not every exact release this policy was saved from is supplied, so changes to the missing ones were not compared.';
 
 test('a partly readable update source still suggests from what was read, but never says content changes were checked', async () => {
   const s = await changeScenario(), candidateInventories = [s.next], partly = { candidateInventories, candidateCoverage: 'partial' };
@@ -951,13 +951,17 @@ test('a saved release supplied only by the update source is still the baseline f
 
 test('the check says so when no baseline for the saved policy could be found, and compares through the update source when it can', async () => {
   const s = await changeScenario(), releaseOrder = declareReleaseOrder([[s.notes.release.sha256], [s.next.release.sha256]]);
-  // The policy also pins the maintained Catalog it depends on, so neither release is supplied to the check.
-  const supplied = { inventories: [] };
+  // The policy also pins the maintained Catalog it depends on; the saved note release is supplied only by the update source.
+  const [maintained] = s.inventories, supplied = { inventories: [maintained] };
   const viaSource = await check(s, s.envelopeBytes, { ...supplied, candidateInventories: [s.notes, s.next], releaseOrder });
   assert.ok(shownItem(viaSource, PLAN_ID)); assert.equal(viaSource.coverage[0].state, 'checked');
   const lost = await check(s, s.envelopeBytes, { ...supplied, candidateInventories: [s.next], releaseOrder }), plan = shownItem(lost, PLAN_ID);
   assert.deepEqual(lost.coverage[0], { trigger: 'content-change', state: 'unknown', reason: 'saved-release-not-supplied', text: NO_BASELINE });
   assert.equal(plan, undefined);
+  // One saved release missing is enough to say so, while what can be compared still is.
+  const partly = await check(s, s.envelopeBytes, { inventories: [], candidateInventories: [s.notes, s.next], releaseOrder });
+  assert.deepEqual(partly.coverage[0], { trigger: 'content-change', state: 'unknown', reason: 'saved-release-not-supplied', text: NO_BASELINE });
+  assert.ok(shownItem(partly, PLAN_ID));
   // A policy with nothing saved from a release has nothing to compare, which is not a missing baseline.
   const empty = valueOf(await composeAuthoring({ intent: freshAuthoring(), inventories: s.inventories })), open = valueOf(await openDraft({ bytes: empty.policyBytes, inventories: s.inventories }));
   assert.equal((await check(s, open.envelopeBytes, { candidateInventories: [s.next] })).coverage[0].state, 'checked');
