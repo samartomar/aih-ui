@@ -12,7 +12,7 @@ import { nativeClientIds } from '@aihq/core/harness';
 import { createHost } from './host.mjs';
 import { refuse, stable } from './primitives.mjs';
 import { readBatch, planBatch, isVerifiable } from './batch.mjs';
-import { envelopePolicy } from './batch-policy.mjs';
+import { parsePolicy } from './batch-policy.mjs';
 import { revisionOf } from './envelope-file.mjs';
 const MAX_MATERIAL_FILES = 2000, MAX_SNAPSHOT_ENTRIES = 2000, MAX_SNAPSHOT_BYTES = 256 * 1024 * 1024;
 const FAULTS = ['stale-target'];
@@ -101,12 +101,11 @@ function observed(applied) {
 export function createBatchHost({ clients = nativeClientIds, materialRoots = {}, controls, hostFor, faults = {} } = {}) {
   if (Object.values(faults).some(fault => !FAULTS.includes(fault))) throw new TypeError(`Unknown fault; supported: ${FAULTS.join(', ')}`);
   const hostAt = hostFor ?? (root => createHost({ projectRoot: root, materialRoots, controls }));
-  // Core's reading of the saved policy, made once here and handed to the batch module; a policy Core refuses refuses the batch there.
+  // The batch module reads the saved policy with Core's parsePolicy and returns that reading; a policy Core refuses refuses the batch there.
   async function open(envelopeBytes, batchId) {
-    const policy = await envelopePolicy(envelopeBytes);
-    const read = await readBatch({ envelopeBytes, batchId, policy });
+    const read = await readBatch({ envelopeBytes, batchId, parsePolicy });
     if (read.status !== 'ok') return read;
-    return { status: 'ok', value: { record: read.value.record, current: read.value.current, supported: read.value.supported, diagnostics: read.diagnostics, policy,
+    return { status: 'ok', value: { record: read.value.record, current: read.value.current, supported: read.value.supported, diagnostics: read.diagnostics, policy: read.value.policy,
       revision: revisionOf(envelopeBytes) } };
   }
   // An envelope with a required record this Workbench does not know is read-only: it may be reviewed, never run, recovered or changed.
@@ -235,7 +234,7 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
         if (typeof persist !== 'function') return [{ code: 'BATCH_CONSENT_UNRECORDABLE', reason: 'no-persist' }];
         const first = action.retain !== true, { record: kept } = latest;
         try {
-          const planned = await planBatch({ envelopeBytes: latest.bytes, policy, scopes: kept.scopes, inputs: kept.inputs, continuation: kept.continuation, categories: kept.categories,
+          const planned = await planBatch({ envelopeBytes: latest.bytes, parsePolicy, scopes: kept.scopes, inputs: kept.inputs, continuation: kept.continuation, categories: kept.categories,
             actions: first ? kept.actions.map(other => other.id === action.id ? { ...other, retain: true } : other) : kept.actions, now: first ? now : kept.recordedAt, supersedes: first ? kept.id : kept.supersedes });
           if (planned.status !== 'ok') return codes(planned.diagnostics);
           await persist(planned.value.envelopeBytes, { expectedRevisionSha256: latest.revision });
@@ -292,7 +291,7 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
       const stands = action => observeRetained(hosts.get(action.scope), policy, selectionOf(policy, action)).then(seen => seen === 'retained-earlier-result');
       const kept = await Promise.all(record.actions.map(action => isVerifiable(selectionOf(policy, action)) ? stands(action) : true));
       const actions = record.actions.map(({ retain: _retain, ...action }, index) => kept[index] ? { ...action, retain: true } : action);
-      const planned = await planBatch({ envelopeBytes, policy, scopes: record.scopes, inputs: record.inputs, actions, continuation: record.continuation, categories: record.categories, now, supersedes: record.id });
+      const planned = await planBatch({ envelopeBytes, parsePolicy, scopes: record.scopes, inputs: record.inputs, actions, continuation: record.continuation, categories: record.categories, now, supersedes: record.id });
       if (planned.status !== 'ok') return planned;
       const review = await this.reviewBatch({ envelopeBytes: planned.value.envelopeBytes, batchId: planned.value.record.id });
       return { status: 'ok', diagnostics: [], envelopeBytes: planned.value.envelopeBytes, record: planned.value.record, projection: planned.value.projection, retained: actions.filter(a => a.retain).map(a => a.id), review };

@@ -93,7 +93,8 @@ const byItemId = (a, b) => compare(a.id, b.id);
 // The item's required items, transitively, that this policy does not already select. `required` is Catalog's resolved closure of the
 // item (see `closures` on suggestImprovements), given when every release it needs is supplied; then nothing is missing. Without it the
 // item's declared requirements are walked by item id over the supplied items: Catalog does not yet name the unavailable reference it
-// refuses, so only the walk can say which item the supplied Catalog does not offer.
+// refuses (gap G-1), so only the walk can say which item the supplied Catalog does not offer. The "conflicts with" fact below still reads
+// the declared conflicts by item id, because Catalog's conflict diagnostic names neither item (gap G-3).
 function needs(item, offered, selected, required) {
   if (required) return { found: required.filter(needed => !selected.has(needed.id)).sort(byItemId), missing: [] };
   const found = new Map(), missing = new Set(), queue = [item];

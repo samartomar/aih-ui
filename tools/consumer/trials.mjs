@@ -118,10 +118,9 @@ function configuredSize({ draft, change, scope, inventories }) {
   // Catalog's required closure when every release it needs is supplied, each item in the release Catalog resolved it from.
   const releases = {};
   for (const candidate of inventories) if (candidate?.release && !Object.hasOwn(releases, candidate.release.sha256)) releases[candidate.release.sha256] = candidate.release;
-  let resolved;
-  try { resolved = resolveSelections({ releases, roots: [{ releaseSha256: change.releaseSha256, itemId: change.itemId, scope, configuration: {} }], skips: [] }); }
-  catch { /* inventories Catalog did not check are walked below */ }
-  if (resolved?.status === 'ok') {
+  // Catalog refuses (never throws for) inventories it did not check, an unavailable release, an input the item needs or a scope it does not admit.
+  const resolved = resolveSelections({ releases, roots: [{ releaseSha256: change.releaseSha256, itemId: change.itemId, scope, configuration: {} }], skips: [] });
+  if (resolved.status === 'ok') {
     const closure = new Map();
     for (const { item: ref } of resolved.value.inclusions) {
       const key = `${ref.releaseSha256}/${ref.itemId}`;
@@ -130,8 +129,8 @@ function configuredSize({ draft, change, scope, inventories }) {
     const missing = [...closure.values()].find(({ item }) => !sized(item));
     if (!missing) return { baseline, trial: trial([...closure.values()].filter(({ key }) => !pinned.has(key))) };
   }
-  // Otherwise the declared requirements are walked within the item's release: Catalog does not yet name the unavailable reference it refuses,
-  // so only the walk can say whose size is not known.
+  // Otherwise the declared requirements are walked within the item's release: Catalog does not yet name the unavailable reference it refuses
+  // (gap G-1), so only the walk can say whose size is not known.
   const items = new Map(entry.release.items.map(item => [item.id, item])), added = [], seen = new Set(), queue = [change.itemId];
   while (queue.length) {
     const id = queue.shift();

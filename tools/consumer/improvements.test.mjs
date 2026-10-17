@@ -18,6 +18,7 @@ import { nativeClientIds } from '@aihq/core/harness';
 import { suggestionRevision, suggestionProblem } from './improvement-record.mjs';
 import { suggestImprovements, lead, classifyImprovement, improvementPrompt, releaseRelation, unorderedSources, GOAL_RULES, UNKNOWNS, FRICTION_COVERAGE, FRICTION_UNREADABLE, FIXTURE_LABEL, FRICTION_RULE, IMPROVEMENT_RULES_VERSION, MAX_ALTERNATIVES } from './improvement-rules.mjs';
 import { frictionRecurrence } from './friction.mjs';
+import { catalogClosures } from './improvement-closures.mjs';
 import { coreTargetsOf } from './executable-ties.mjs';
 import { installedFamilies } from './installed-families.mjs';
 import { READINESS_RECORD_SCHEMA } from './claims.mjs';
@@ -554,11 +555,17 @@ test('Catalog\'s resolved closure gives the identity, revision and content the d
   const value = await check(s, s.envelopeBytes, options);
   const items = s.inventories.flatMap(entry => entry.release.items.map(item => ({ ...item, root: { releaseSha256: entry.release.sha256 } })));
   const walked = await suggestImprovements({ intent: s.open.intent, items, inventories: s.inventories, ...options });
+  // The same rules with Catalog's closures, counting which non-empty closures Catalog itself resolved (none falls back to the walk here).
+  const fromCatalog = [], resolve = catalogClosures(Object.fromEntries(s.inventories.map(entry => [entry.release.sha256, entry.release])));
+  const resolved = await suggestImprovements({ intent: s.open.intent, items, inventories: s.inventories, ...options,
+    closures: (...args) => { const closure = resolve(...args); if (closure?.length) fromCatalog.push(args[0].id); return closure; } });
+  assert.ok(fromCatalog.length > 0, 'at least one required closure came from Catalog');
   const shown = [value.leading, ...value.alternatives];
-  assert.ok(shown.some(suggestion => suggestion.change.content.requires.length > 0), 'a suggestion with a required closure is compared');
+  assert.ok(shown.some(suggestion => suggestion.change.content.requires.length > 0 && fromCatalog.includes(suggestion.change.itemId)), 'a suggestion whose closure Catalog resolved is compared');
   for (const suggestion of shown) {
-    const same = walked.find(other => other.id === suggestion.id);
-    assert.ok(same, suggestion.change.itemId);
+    const same = walked.find(other => other.id === suggestion.id), catalog = resolved.find(other => other.id === suggestion.id);
+    assert.ok(same && catalog, suggestion.change.itemId);
+    assert.deepEqual([suggestion.revision, suggestion.change, suggestion.facts], [catalog.revision, catalog.change, catalog.facts], suggestion.change.itemId);
     assert.deepEqual([suggestion.revision, suggestion.change, suggestion.facts], [same.revision, same.change, same.facts], suggestion.change.itemId);
   }
 });
@@ -1044,7 +1051,7 @@ test('checking, dismissing and building the prompt never touch the network or a 
 
 test('the improvement modules import only the allowed seams and contain no network, process or random calls', async () => {
   const allowed = [/^\.\/primitives\.mjs$/, /^\.\/journey\.mjs$/, /^\.\/headless\.mjs$/, /^\.\/intent-shape\.mjs$/, /^\.\/maintenance-record\.mjs$/, /^\.\/improvement-[a-z]+\.mjs$/, /^\.\/client-identity\.mjs$/, /^\.\/trial-record\.mjs$/, /^\.\/release-order\.mjs$/, /^\.\/friction\.mjs$/, /^\.\/executable-ties\.mjs$/, /^\.\/claims\.mjs$/, /^@aihq\/catalog\/reader$/, /^@aihq\/core\/report$/, /^@aihq\/core\/contracts$/];
-  for (const name of ['improvement-record.mjs', 'improvement-rules.mjs', 'improvements.mjs', 'friction.mjs']) {
+  for (const name of ['improvement-record.mjs', 'improvement-rules.mjs', 'improvement-closures.mjs', 'improvements.mjs', 'friction.mjs']) {
     const source = await readFile(new URL(`./${name}`, import.meta.url), 'utf8');
     const specifiers = [...source.matchAll(/^(?:import|export)\b[^;]*?\bfrom\s+'([^']+)'/gm)].map(match => match[1]);
     assert.ok(specifiers.length > 0, name);

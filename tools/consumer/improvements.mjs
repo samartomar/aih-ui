@@ -3,7 +3,8 @@
 // declared clients it is handed, calls no model and reads no network, and writes only a new envelope revision through
 // recordImprovement. Nothing is applied and nothing is sent anywhere.
 import { parsePolicy } from '@aihq/core/contracts';
-import { isCheckedRelease, resolveSelections } from '@aihq/catalog/reader';
+import { isCheckedRelease } from '@aihq/catalog/reader';
+import { catalogClosures } from './improvement-closures.mjs';
 import { releaseOrderProblem } from './release-order.mjs';
 import { only, refuse } from './primitives.mjs';
 import { managementIdOf } from './intent-shape.mjs';
@@ -33,11 +34,11 @@ const orderText = names => `Content changes were only partly checked: ${names.sl
 // What the draft ties friction to: the policy selections of its selected roots and pins (a pin carries no scope, so either scope's selection is looked for), and the
 // clients and checks its client adapters name and the Core targets its items' executables run on (executable-ties.mjs). Roots come first, so a root's saved goal wins over the pin of the same item.
 function tiedSubjects({ intent, items, inventories, savedBytes }) {
-  let selections = [];
-  try {
-    const parsed = parsePolicy(new TextDecoder('utf-8', { fatal: true }).decode(savedBytes));
-    if (parsed.valid) selections = parsed.document.selections.filter(s => typeof s.managementId === 'string');
-  } catch { /* a policy Core does not read ties no selection */ }
+  let selections = [], text;
+  // Bytes that are not UTF-8, or a policy Core refuses, tie no selection.
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(savedBytes); } catch (error) { if (!(error instanceof TypeError)) throw error; }
+  const parsed = text === undefined ? undefined : parsePolicy(text);
+  if (parsed?.valid) selections = parsed.document.selections.filter(s => typeof s.managementId === 'string');
   const packages = new Map(inventories.map(entry => [entry.release.sha256, entry.release.package?.name])), catalog = new Map(items.map(item => [`${item.root.releaseSha256}/${item.id}`, item]));
   const managed = new Map(selections.map(s => [s.managementId, s])), ties = new Map(), order = (a, b) => compare(a.itemId, b.itemId) || compare(a.scope ?? '', b.scope ?? '');
   for (const entry of [...[...intent.roots].sort(order), ...[...intent.pins].sort(order)]) {
@@ -55,23 +56,6 @@ function tiedSubjects({ intent, items, inventories, savedBytes }) {
   }
   return [...ties.values()];
 }
-// Catalog's required closure of `item` from the supplied release `releaseSha256` at `scope`, as plain items, or undefined when Catalog refuses it
-// (a required release that is not supplied, an input the item needs, a scope it does not admit) or when two needed items share an id, which a
-// suggestion record cannot tell apart. The improvement rules then walk the declared requirements instead (improvement-rules.mjs, needs).
-const catalogClosures = releases => (item, releaseSha256, scope) => {
-  if (!Object.hasOwn(releases, releaseSha256) || typeof scope !== 'string') return undefined;
-  let resolved;
-  try { resolved = resolveSelections({ releases, roots: [{ releaseSha256, itemId: item.id, scope, configuration: {} }], skips: [] }); } catch { return undefined; }
-  if (resolved.status !== 'ok') return undefined;
-  const found = new Map();
-  for (const { item: needed } of resolved.value.inclusions) {
-    if (needed.itemId === item.id) continue;
-    const key = `${needed.releaseSha256}/${needed.itemId}`, entry = releases[needed.releaseSha256].items.find(candidate => candidate.id === needed.itemId);
-    if (!found.has(key) && entry) found.set(key, { ...entry, root: { releaseSha256: needed.releaseSha256 } });
-  }
-  const required = [...found.values()];
-  return new Set(required.map(needed => needed.id)).size === required.length ? required : undefined;
-};
 const checkedEntries = (value, max = 32) => {
   try { return Array.isArray(value) && value.length <= max && value.every(entry => entry && isCheckedRelease(entry.release)) && new Set(value.map(entry => entry.release.sha256)).size === value.length; }
   catch { return false; }
