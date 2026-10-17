@@ -263,9 +263,6 @@
 <div class="font-mono text-[10px] uppercase tracking-wider text-outline">01 / Start</div>
 <h2 class="font-semibold text-on-surface text-[14px]" id="policy-start-title">Start</h2>
 <p class="text-on-surface-variant leading-relaxed" id="policy-start-description"></p>
-  <button class="px-3 py-1.5 rounded bg-primary-container text-on-primary font-medium hover:bg-primary" id="open-org-policy-btn" type="button" hidden>Open local PolicyBundle</button>
-  <button class="px-3 py-1.5 rounded bg-surface-container text-on-surface font-medium hover:bg-surface-container-high" id="open-decision-btn" type="button" hidden>Inspect local Decision V2</button>
-<p class="text-on-surface-variant leading-relaxed" id="policy-file-review" role="status" hidden></p>
 </section>
 <section class="rounded border border-wb-border bg-surface-container-lowest p-4 space-y-2" aria-labelledby="policy-choices-title">
 <div class="font-mono text-[10px] uppercase tracking-wider text-outline">02 / Choices</div>
@@ -293,7 +290,6 @@
 <div class="inspector-tabs inline-flex items-center shrink-0 bg-transparent" role="tablist" aria-label="Entry inspector">
 <button class="inspector-tab-btn rounded transition-colors text-primary" data-tab="details" type="button" role="tab" id="tab-details" aria-label="Details" title="Details" aria-controls="pane-details" aria-selected="true" tabindex="0"><span class="material-symbols-outlined" aria-hidden="true">info</span></button>
 <button class="inspector-tab-btn rounded transition-colors text-on-surface-variant hover:text-on-surface" data-tab="security" type="button" role="tab" id="tab-security" aria-label="Security Scan" title="Security Scan" aria-controls="pane-security" aria-selected="false" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">shield</span></button>
-<button class="inspector-tab-btn rounded transition-colors text-on-surface-variant hover:text-on-surface" data-tab="governance" type="button" role="tab" id="tab-governance" aria-label="Governance" title="Governance" aria-controls="pane-governance" aria-selected="false" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">gavel</span></button>
 <button class="inspector-tab-btn rounded transition-colors text-on-surface-variant hover:text-on-surface" data-tab="json" type="button" role="tab" id="tab-json" aria-label="Policy JSON" title="Policy JSON · not published" aria-controls="pane-json" aria-selected="false" tabindex="-1">
 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 4H6v6l-2 2 2 2v6h2M16 4h2v6l2 2-2 2v6h-2"/><circle cx="12" cy="12" r="1"/></svg>
 </button>
@@ -305,7 +301,7 @@
 <div class="inspector-content flex-1 overflow-y-auto p-3 text-[12px]">
 <div class="space-y-3" id="pane-details" role="tabpanel" aria-labelledby="tab-details">
 <div class="space-y-1">
-<span class="text-[10px] font-mono uppercase tracking-wider text-outline">Publisher Overview</span>
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline">Overview</span>
 <p class="text-on-surface leading-relaxed text-[11px]" id="details-desc">Not published</p>
 </div>
 <div class="space-y-1.5">
@@ -330,8 +326,7 @@
 <div class="space-y-3 hidden" id="pane-security" role="tabpanel" aria-labelledby="tab-security">
 <div class="space-y-1.5">
 <span class="text-[10px] font-mono uppercase tracking-wider text-outline font-medium">Scanner Telemetry</span>
-<!-- Catalog does not supply a verified per-entry scan with annex bytes. The
-     Governance pane can display Scan's typed findings after operator verification;
+<!-- Catalog does not supply a verified per-entry scan with annex bytes, so
      these Catalog inspector slots keep their absence reasons. -->
 <div class="p-2 rounded bg-surface-container-low border border-wb-border flex items-center justify-between text-[11px]" id="detector-run-state">
 <span class="text-on-surface-variant">Detector identities and per-engine run state</span>
@@ -341,17 +336,6 @@
 <span class="text-on-surface-variant">Finding rule, severity, message and location</span>
 <span class="font-mono text-outline text-[10px] font-medium">Not published</span>
 </div>
-</div>
-<div class="space-y-1.5">
-<!-- Catalog's publisher qualification for the selected entry, as its
-     qualification reader states it. catalog/details.js fills it; the footer is
-     said under every state, because qualified is never approval. -->
-<div class="inspector-section-heading flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-outline font-medium">
-<span class="">Qualification</span>
-<span class="text-on-surface-variant font-mono text-[10px] normal-case tracking-normal font-normal" id="qualification-evaluated">-</span>
-</div>
-<div class="p-2 rounded bg-surface-container-low border border-wb-border space-y-1 text-[10.5px] text-outline" id="security-qualification">Not published</div>
-<div class="text-[10px] text-outline leading-snug" id="qualification-footer">Publisher qualification is not organizational authorization.</div>
 </div>
 <div class="space-y-1.5">
 <div class="inspector-section-heading flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-outline font-medium">
@@ -384,191 +368,6 @@
 </label>
 </div>
 </div>
-</div>
-<div class="space-y-3 hidden" id="pane-governance" role="tabpanel" aria-labelledby="tab-governance">
-
-<div class="p-2 rounded bg-surface-container-low border border-wb-border text-[10.5px] text-on-surface-variant leading-snug">
-<span class="font-medium text-on-surface">Operator inputs only.</span> This page never
-manufactures a decision, an approval, verifier trust or a signing key. What you do not supply
-is reported as <span class="font-mono text-outline">Not supplied</span> and refused.
-</div>
-
-<div class="space-y-1">
-<span class="text-[10px] font-mono uppercase tracking-wider text-outline">1 &middot; Subject identity (Core-derived)</span>
-<div class="p-2 rounded bg-surface-container-low border border-wb-border font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-subject"></div>
-</div>
-
-<div class="space-y-1">
-<span class="text-[10px] font-mono uppercase tracking-wider text-outline">2 &middot; Import evidence</span>
-<label class="flex items-center gap-2 p-2 rounded bg-surface-container-low border border-wb-border cursor-pointer hover:border-primary/40 transition-colors">
-<span class="material-symbols-outlined text-[14px] text-primary">upload_file</span>
-<span class="text-[11px] text-on-surface-variant">Choose an organization evidence envelope</span>
-<input class="hidden" id="gov-evidence-file" type="file" accept=".json,application/json">
-</label>
-<div class="p-2 rounded bg-surface-container-low border border-wb-border font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-evidence"></div>
-</div>
-
-<div class="space-y-1">
-<span class="text-[10px] font-mono uppercase tracking-wider text-outline">3 &middot; Operator decision, target and effect</span>
-<div class="space-y-1.5">
-<label class="block">
-<span class="text-[10px] text-outline font-mono">Decision id</span>
-<input class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-wb-control-border font-mono text-[10.5px] text-on-surface focus:border-primary focus:outline-none" id="gov-decision-id" type="text" placeholder="Not supplied" autocomplete="off">
-</label>
-<label class="block">
-<span class="text-[10px] text-outline font-mono">Decision digest</span>
-<input class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-wb-control-border font-mono text-[10.5px] text-on-surface focus:border-primary focus:outline-none" id="gov-decision-digest" type="text" placeholder="sha256:..." autocomplete="off">
-</label>
-<div class="flex gap-1.5">
-<label class="flex-1">
-<span class="text-[10px] text-outline font-mono">Target</span>
-<!-- The options are built at run time from @aihq/core's public nativeClientIds,
-     labelled from Harness, by governance/inputs.js. The page keeps no list of
-     its own: a Core listing different targets changes this field with no UI
-     edit, and a Core that publishes no list leaves it disabled, reading Not
-     connected. -->
-<select class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-wb-control-border font-mono text-[10.5px] text-on-surface focus:border-primary focus:outline-none" id="gov-target"></select>
-</label>
-<label class="flex-1">
-<span class="text-[10px] text-outline font-mono">Effect</span>
-<select class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-wb-control-border font-mono text-[10.5px] text-on-surface focus:border-primary focus:outline-none" id="gov-effect">
-<option value="observe">observe</option>
-<option value="configure">configure</option>
-<option value="install">install</option>
-<option value="use">use</option>
-</select>
-</label>
-</div>
-<div class="flex gap-1.5">
-<label class="flex-1">
-<span class="text-[10px] text-outline font-mono">Route (descriptive only)</span>
-<select class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-wb-control-border font-mono text-[10.5px] text-on-surface focus:border-primary focus:outline-none" id="gov-route">
-<option value="catalog">catalog</option>
-<option value="organization">organization</option>
-</select>
-</label>
-</div>
-</div>
-</div>
-
-<div class="space-y-1">
-<span class="text-[10px] font-mono uppercase tracking-wider text-outline">3b &middot; Operator configuration</span>
-<div class="p-2 rounded bg-surface-container-low border border-wb-border text-[10.5px] text-on-surface-variant leading-snug">
-Your authority and your verifier trust, supplied separately from the evidence. They are held
-beside the session, never inside the imported material: material that carries its own
-<span class="font-mono text-outline">roots</span> or keys is refused.
-</div>
-<div class="space-y-1">
-<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-wb-border cursor-pointer hover:border-primary/40 transition-colors">
-<span class="material-symbols-outlined text-[14px] text-secondary">gavel</span>
-<span class="text-[10.5px] text-on-surface-variant">Authority bundle (policy bundle JSON)</span>
-<input class="hidden" id="gov-authority-file" type="file" accept=".json,application/json">
-</label>
-<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-wb-border cursor-pointer hover:border-primary/40 transition-colors">
-<span class="material-symbols-outlined text-[14px] text-secondary">key</span>
-<span class="text-[10.5px] text-on-surface-variant">Verifier trust (roots and expected)</span>
-<input class="hidden" id="gov-trust-file" type="file" accept=".json,application/json">
-</label>
-<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-wb-border cursor-pointer hover:border-primary/40 transition-colors">
-<span class="material-symbols-outlined text-[14px] text-secondary">inventory_2</span>
-<span class="text-[10.5px] text-on-surface-variant">Scan attestation material</span>
-<input class="hidden" id="gov-material-file" type="file" accept=".json,application/json">
-</label>
-</div>
-<div class="p-2 rounded bg-surface-container-low border border-wb-border font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-operator-files"></div>
-</div>
-
-<div class="space-y-1">
-<span class="text-[10px] font-mono uppercase tracking-wider text-outline">4 &middot; Prepare and save</span>
-<button class="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-primary/15 border border-primary/40 text-primary text-[11.5px] font-medium hover:bg-primary/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed" id="gov-prepare-btn" type="button" disabled>
-<span class="material-symbols-outlined text-[14px]">build</span>
-<span class="">Prepare through Core</span>
-</button>
-<div class="p-2 rounded bg-surface-container-low border border-wb-border font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-prepared"></div>
-<div class="inspector-downloads flex gap-1.5">
-<button class="flex-1 text-[10px] font-mono px-1.5 py-1 rounded bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-40 disabled:cursor-not-allowed" id="gov-download-input" type="button" disabled>Download governance-input.json</button>
-<button class="flex-1 text-[10px] font-mono px-1.5 py-1 rounded bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-40 disabled:cursor-not-allowed" id="gov-download-evidence" type="button" disabled>Download evidence</button>
-</div>
-</div>
-
-<div class="space-y-1">
-<span class="text-[10px] font-mono uppercase tracking-wider text-outline">4b &middot; Observe installed files &middot; optional</span>
-<div class="p-2 rounded bg-surface-container-low border border-wb-border text-[10.5px] text-on-surface-variant leading-snug">
-Supply the upstream artifact manifest, the root the files sit under, and the folder itself.
-They are uploaded into this session's temporary workspace, where <span class="font-mono text-outline">@aihq/core</span>
-checks the uploaded copies one to one against the verified scan, at their exact paths. That proves the
-snapshot you supplied matches the scan; it does not independently prove those files are still in place
-on your own machine. Nothing here installs, applies or executes anything, and nothing is written
-outside the session.
-</div>
-<div class="space-y-1">
-<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-wb-border cursor-pointer hover:border-primary/40 transition-colors">
-<span class="material-symbols-outlined text-[14px] text-secondary">receipt_long</span>
-<span class="text-[10.5px] text-on-surface-variant">Upstream artifact manifest (manifest.json)</span>
-<input class="hidden" id="gov-observation-manifest-file" type="file" accept=".json,application/json">
-</label>
-<label class="block">
-<span class="text-[10px] text-outline font-mono">Install root (root-relative directory)</span>
-<input class="w-full mt-0.5 px-1.5 py-1 rounded bg-surface-container-lowest border border-wb-control-border font-mono text-[10.5px] text-on-surface focus:border-primary focus:outline-none" id="gov-observation-root" type="text" placeholder="packs/governance-quality/aih-gov-doctor" autocomplete="off">
-</label>
-<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-wb-border cursor-pointer hover:border-primary/40 transition-colors">
-<span class="material-symbols-outlined text-[14px] text-secondary">folder_open</span>
-<span class="text-[10.5px] text-on-surface-variant">The folder that root names</span>
-<input class="hidden" id="gov-observation-files" type="file" webkitdirectory multiple>
-</label>
-</div>
-<div class="p-2 rounded bg-surface-container-low border border-wb-border font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-observation"></div>
-</div>
-
-<div class="space-y-1">
-<span class="text-[10px] font-mono uppercase tracking-wider text-outline">5 &middot; Reopen and consume independently</span>
-<button class="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-secondary/15 border border-secondary/40 text-secondary text-[11.5px] font-medium hover:bg-secondary/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed" id="gov-consume-btn" type="button" disabled>
-<span class="material-symbols-outlined text-[14px]">rule</span>
-<span class="">Reopen saved bytes and consume</span>
-</button>
-<div class="grid grid-cols-2 gap-1" id="gov-statuses"></div>
-<div class="p-2 rounded bg-surface-container-low border border-wb-border text-[10.5px] space-y-1 text-on-surface-variant" id="gov-verdict"></div>
-</div>
-
-<div class="space-y-1">
-<span class="text-[10px] font-mono uppercase tracking-wider text-outline">6 &middot; Reopen downloaded files in a fresh session</span>
-<div class="p-2 rounded bg-surface-container-low border border-wb-border text-[10.5px] text-on-surface-variant leading-snug">
-Load the exact bytes you downloaded back into a new session that knows nothing about the one
-that produced them. Consumption then re-derives the whole verdict from those bytes alone.
-</div>
-<div class="space-y-1">
-<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-wb-border cursor-pointer hover:border-primary/40 transition-colors">
-<span class="material-symbols-outlined text-[14px] text-primary">description</span>
-<span class="text-[10.5px] text-on-surface-variant">governance-input.json</span>
-<input class="hidden" id="gov-reopen-input-file" type="file" accept=".json,application/json">
-</label>
-<label class="flex items-center gap-2 p-1.5 rounded bg-surface-container-low border border-wb-border cursor-pointer hover:border-primary/40 transition-colors">
-<span class="material-symbols-outlined text-[14px] text-primary">description</span>
-<span class="text-[10.5px] text-on-surface-variant">organization-evidence.json</span>
-<input class="hidden" id="gov-reopen-evidence-file" type="file" accept=".json,application/json">
-</label>
-</div>
-<button class="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-surface-container border border-primary/40 text-primary text-[11px] font-medium hover:bg-surface-container-high transition-colors disabled:opacity-40 disabled:cursor-not-allowed" id="gov-reopen-btn" type="button" disabled>
-<span class="material-symbols-outlined text-[14px]">restore_page</span>
-<span class="">Open these bytes in a fresh session</span>
-</button>
-<div class="p-2 rounded bg-surface-container-low border border-wb-border font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-reopen"></div>
-</div>
-
-<div class="space-y-1 pt-1 border-t border-wb-border">
-<span class="text-[10px] font-mono uppercase tracking-wider text-outline">Validation mode</span>
-<div class="p-2 rounded bg-tertiary/10 border border-tertiary/30 text-[10.5px] text-on-surface-variant leading-snug" id="gov-fixture-note">
-Generates a <span class="font-medium text-tertiary">signed test fixture</span> and its matching
-operator trust, so the plumbing can be exercised without a detector. A verified signature
-authenticates a statement; it never establishes that the claimed measurements occurred.
-</div>
-<button class="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-surface-container border border-tertiary/40 text-tertiary text-[11px] font-medium hover:bg-surface-container-high transition-colors disabled:opacity-40 disabled:cursor-not-allowed" id="gov-fixture-btn" type="button" disabled>
-<span class="material-symbols-outlined text-[14px]">science</span>
-<span class="">Load labelled validation fixture</span>
-</button>
-<div class="p-2 rounded bg-surface-container-low border border-wb-border font-mono text-[10px] space-y-1 text-on-surface-variant" id="gov-detector"></div>
-</div>
-
 </div>
 <div class="space-y-2.5 hidden" id="pane-json" role="tabpanel" aria-labelledby="tab-json">
 <div class="flex items-center justify-between">
@@ -615,29 +414,6 @@ authenticates a statement; it never establishes that the claimed measurements oc
 </footer>
 </form>
   </dialog>
-  <dialog id="decision-dialog" class="setup-dialog" aria-labelledby="decision-dialog-title" aria-describedby="decision-description">
-  <div class="setup-frame">
-  <header class="setup-header">
-  <div class="font-mono text-outline text-[10px] uppercase tracking-wider">Enterprise · Local decision</div>
-  <h2 id="decision-dialog-title" class="text-wb-heading font-light text-on-surface mt-2">Inspect Governance Decision V2</h2>
-  <p id="decision-description" class="text-on-surface-variant leading-relaxed mt-2">Choose a local decision file. Core checks its decoded structure. This inspection does not verify a signature, evidence, organizational authority or current validity.</p>
-  </header>
-  <div class="setup-content space-y-3">
-  <label class="block text-on-surface font-medium" for="decision-file">Decision JSON</label>
-  <input id="decision-file" class="setup-input" type="file" accept=".json,application/json">
-  <p id="decision-status" class="text-on-surface-variant" role="status" aria-live="polite">Choose a file to begin.</p>
-  <dl id="decision-summary" class="setup-summary" hidden></dl>
-  <div id="decision-source-wrap" hidden>
-  <div class="font-mono text-outline text-[10px] uppercase tracking-wider mb-2">Original file text · review only</div>
-  <pre id="decision-source" class="org-policy-source"></pre>
-  </div>
-  </div>
-  <footer class="setup-footer">
-  <span class="text-outline text-[10px]">No decision is saved or approved.</span>
-  <button id="close-decision-btn" class="setup-button" type="button">Close</button>
-  </footer>
-  </div>
-  </dialog>
 <dialog id="org-modal-overlay" class="setup-dialog" aria-labelledby="org-modal-title">
 <div class="setup-frame">
 <header class="setup-header">
@@ -647,29 +423,6 @@ authenticates a statement; it never establishes that the claimed measurements oc
 <footer class="setup-footer setup-summary-actions">
 <button id="update-org-setup-btn" type="button" class="setup-button setup-primary">Update my Workbench information</button>
 <button id="close-org-modal-btn" type="button" class="setup-button" aria-label="Close saved setup">Close</button>
-</footer>
-</div>
-</dialog>
-<dialog id="org-policy-dialog" class="setup-dialog" aria-labelledby="org-policy-title" aria-describedby="org-policy-description">
-<div class="setup-frame">
-<header class="setup-header">
-<div class="font-mono text-outline text-[10px] uppercase tracking-wider" id="org-policy-context">Enterprise · Local policy</div>
-<h2 id="org-policy-title" class="text-wb-heading font-light text-on-surface mt-2">Open organization PolicyBundle</h2>
-<p id="org-policy-description" class="text-on-surface-variant leading-relaxed mt-2">Choose a local JSON file to review its original text and check its decoded structure with Core. This does not validate CLI file handling or establish policy authority.</p>
-</header>
-<div class="setup-content space-y-3">
-<label class="block text-on-surface font-medium" for="org-policy-file">PolicyBundle JSON</label>
-<input id="org-policy-file" class="setup-input" type="file" accept=".json,application/json">
-<p id="org-policy-status" class="text-on-surface-variant" role="status" aria-live="polite">Choose a file to begin.</p>
-<dl id="org-policy-summary" class="setup-summary" hidden></dl>
-<div id="org-policy-source-wrap" hidden>
-<div class="font-mono text-outline text-[10px] uppercase tracking-wider mb-2">Original file text · review only</div>
-<pre id="org-policy-source" class="org-policy-source"></pre>
-</div>
-</div>
-<footer class="setup-footer">
-<span class="text-outline text-[10px]">No file is saved or published.</span>
-<button id="close-org-policy-btn" class="setup-button" type="button">Close</button>
 </footer>
 </div>
 </dialog>

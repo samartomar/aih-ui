@@ -151,7 +151,7 @@ check("index.html loads the module entry point", referenced.includes("main.js"),
 const runDir = resolve(REPO_ROOT, "src");
 const cases = [
   ["/", 200, "the page"],
-  ["/catalog-index.json", 200, "the served index"],
+  ["/summary.json", 200, "the preview summary"],
   ["/main.js", 200, "the page entry module"],
   ["/catalog/cards.js", 200, "a page module in a subdirectory"],
   ["/styles/workbench.css", 200, "the Workbench stylesheet"],

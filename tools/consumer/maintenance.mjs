@@ -4,8 +4,7 @@
 // recordMaintenance. A date never schedules anything.
 import { isCheckedRelease } from '@aihq/catalog/reader';
 import { rootKey, pinKey } from './intent-shape.mjs';
-import { only } from './intake.mjs';
-import { refuse, stable } from './headless.mjs';
+import { only, refuse, stable } from './primitives.mjs';
 import { releaseOrderProblem, orderRelation } from './release-order.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { isUtcTimestamp, dispositionProblem, dispositionId, checkProblem, MAINTENANCE_DISPOSITION_RECORD_SCHEMA, MAINTENANCE_CHECK_RECORD_SCHEMA,

@@ -2,7 +2,7 @@
 // saved-intent (policy) bytes by reference and is never an execution policy.
 // Digests use the shared Web Crypto; no host, filesystem or network is touched.
 import { checkIntentShape } from './intent-shape.mjs';
-import { digestBytes, hash, object, only } from './intake.mjs';
+import { digestBytes, hash, object, only, stable, ok, refuse } from './primitives.mjs';
 import { MAINTENANCE_DISPOSITION_RECORD_SCHEMA, MAINTENANCE_CHECK_RECORD_SCHEMA, dispositionProblem, dispositionId, checkProblem } from './maintenance-record.mjs';
 import { IMPROVEMENT_SUGGESTION_RECORD_SCHEMA, IMPROVEMENT_DISMISSAL_RECORD_SCHEMA, suggestionProblem, suggestionDerivedProblem, dismissalProblem, dismissalId as improvementDismissalId, unlinkedDismissal } from './improvement-record.mjs';
 import { WORKSPACE_DECLARATION_RECORD_SCHEMA, LOCAL_BINDING_RECORD_SCHEMA, declarationProblem, declarationDerivedProblem, bindingProblem, bindingDerivedProblem } from './workspace-record.mjs';
@@ -39,11 +39,6 @@ export function isJourneyEnvelope(bytesOrText) {
 }
 const recordSchemaUrn = /^urn:aihq:workbench:journey-record:[a-z0-9-]+:\d+\.\d+\.\d+$/;
 const idPattern = /^[\w.-]{1,180}$/;
-// Same canonical JSON as headless `stable`; kept local so this module has no host dependency.
-const stable = value => JSON.stringify(value, (_key, member) => member && typeof member === 'object' && !Array.isArray(member)
-  ? Object.fromEntries(Object.entries(member).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : member);
-const ok = (value, diagnostics = []) => ({ status: 'ok', value, diagnostics });
-const refuse = (code, path, message, originalBytes) => ({ status: 'refused', diagnostics: [{ code, path, message }], ...(originalBytes ? { originalBytes: originalBytes.slice() } : {}) });
 const encode = value => new TextEncoder().encode(value);
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 export function encodeBase64(bytes) {

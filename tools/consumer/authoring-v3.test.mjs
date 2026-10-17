@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { digestBytes } from './primitives.mjs';
 import { readAuthoring, composeAuthoring, reconcileAuthoring, freshAuthoring, editAuthoring, describeAuthoringSubject } from './headless.mjs';
 import { composeIntent, indexReleases, freshIntent } from './saved-intent.mjs';
 import { composeSetup } from './setup.mjs';
 import { fixtureRelease, fixtureItem, rootFor, crossRef } from './intent-fixtures.mjs';
 import { noteFixture, NOTE_SOURCE_REVISION } from './note-fixture.mjs';
-import { intakeDeclaration, digestBytes } from './intake.mjs';
+import { intakeDeclaration } from './intake.mjs';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';

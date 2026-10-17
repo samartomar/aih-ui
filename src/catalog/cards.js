@@ -3,27 +3,14 @@
  *
  * Each slot keeps the meaning the design source gives it:
  *
- *   header   kind icon, the item's name, its CATEGORY badge when categories vary
- *   body     the publisher's PRODUCT DESCRIPTION
+ *   header   kind icon, the item's name, its content-family badge
+ *   body     the item's description from the installed Catalog release
  *   footer   the SCAN STATUS pill, the TOKEN ESTIMATE chip, local preference
  *
- * The title and description come from Catalog's publisher metadata: the
- * upstream publisher's own text, verbatim, where Catalog publishes it. The
- * category badge is Catalog's CURATED category when the installed Catalog
- * publishes its curated dataset - its label, or "Not curated", with the
- * rationale on the tooltip - and otherwise the category the upstream publisher
- * declares, as before. A curated category is never called an upstream
- * declaration, and an upstream one is never called curated. Where
- * it does not - and for scan status and token estimate, which nothing publishes -
- * each slot keeps its place and its look and says "Not published"; it is not
- * borrowed for something else. The
- * evidence statements that used to fill the description slot, the provider and
- * kind that used to fill the category slot and the repository that used to fill
- * the token slot all live in the inspector now, where they are labelled as what
- * they are.
- *
- * When every visible entry shares a category, its label is shown once above the
- * grid; each card retains its own provenance and rationale in its tooltip.
+ * Scan status and token estimate are published by nothing, so each slot keeps
+ * its place and its look and says "Not published"; it is not borrowed for
+ * something else. When every visible entry shares a family, its label is shown
+ * once above the grid.
  * Local preferences stay unavailable until Catalog publishes an exact mapping
  * from every displayed entry to its authoring asset identity.
  */
@@ -31,28 +18,14 @@
 import { el } from "../app/dom.js";
 import { NOT_PUBLISHED } from "../app/absence.js";
 import { KIND_ICON, KIND_TONE, identity } from "./entry.js";
-import { provenanceNote, publishedText, publisherOf } from "./publisher.js";
-import { categoryBadge } from "./categories.js";
 
-/** The category badge's text, whether it reads as a value, and its tooltip. */
-function badgeOf(entry, record, categories, publisher) {
-  const curated = categoryBadge(categories, entry);
-  if (curated !== null) return { text: curated.text, value: curated.curated, title: curated.title, source: "Catalog category" };
-  const declared = publishedText(record, "category");
-  return {
-    text: declared ?? NOT_PUBLISHED,
-    value: declared !== null,
-    title: provenanceNote(record, "category", "Category", publisher),
-    source: "Upstream category",
-  };
-}
+const NO_FAMILY = { text: NOT_PUBLISHED, value: false, title: "Content family: not published for this entry.", source: "Content family" };
 
-function card(entry, selectedId, onSelect, publisher, categories, model) {
+function card(entry, selectedId, onSelect, model) {
   const id = identity(entry);
-  const record = publisherOf(publisher, entry);
-  const title = entry.authoringItem?.label ?? publishedText(record, "title");
-  const description = entry.authoringItem?.description ?? publishedText(record, "description");
-  const badge = entry.authoringItem ? { text: entry.authoringItem.family, value: true, title: 'Installed content family; upstream origins are shown in the inspector.', source: 'Content family' } : badgeOf(entry, record, categories, publisher);
+  const title = entry.authoringItem?.label ?? null;
+  const description = entry.authoringItem?.description ?? null;
+  const badge = entry.authoringItem ? { text: entry.authoringItem.family, value: true, title: 'Installed content family; upstream origins are shown in the inspector.', source: 'Content family' } : NO_FAMILY;
   const isSelected = selectedId === id.entryId;
 
   const node = el("div", "wb-card group rounded border p-3 flex flex-col justify-between cursor-pointer");
@@ -76,7 +49,7 @@ function card(entry, selectedId, onSelect, publisher, categories, model) {
       KIND_ICON[id.kind] ?? "extension",
     ),
   );
-  // The publisher's own name when Catalog publishes one; otherwise the item's id.
+  // The item's label from the installed release; otherwise its id.
   name.appendChild(el("span", "wb-card-title text-wb-body font-mono font-medium text-wb-title tracking-tight truncate", title ?? id.name));
   head.appendChild(name);
   const badges = el("div", "flex items-center gap-1 shrink-0");
@@ -94,7 +67,7 @@ function card(entry, selectedId, onSelect, publisher, categories, model) {
   // show: an unavailable state holds the component's dimensions, so the grid
   // keeps the design source's card proportions instead of closing up.
   const body = el("p", "wb-card-description text-wb-card-description text-on-surface-variant mt-2 line-clamp-3 break-words", description ?? NOT_PUBLISHED);
-  body.title = provenanceNote(record, "description", "Description", publisher);
+  body.title = description === null ? "Description: not published for this entry." : "Description from the installed Catalog release.";
   top.appendChild(body);
   node.appendChild(top);
 
@@ -155,7 +128,7 @@ function card(entry, selectedId, onSelect, publisher, categories, model) {
  */
 export function createCards({ elements, onSelect }) {
   return {
-    /** @param model { entries, total, noun, selectedId, publisher, categories } */
+    /** @param model { entries, total, noun, selectedId, intent, onChoose } */
     render(model) {
       elements.cardsGrid.replaceChildren();
       elements.categoryContext.textContent = "";
@@ -164,11 +137,11 @@ export function createCards({ elements, onSelect }) {
         empty.appendChild(el("span", "font-mono text-on-surface", String(model.total)));
         elements.cardsGrid.appendChild(empty);
       } else {
-        const nodes = model.entries.map((entry) => card(entry, model.selectedId, onSelect, model.publisher, model.categories, model));
+        const nodes = model.entries.map((entry) => card(entry, model.selectedId, onSelect, model));
         const shared = nodes[0].dataset.categoryLabel;
         if (shared !== NOT_PUBLISHED && nodes.every((node) => node.dataset.categoryLabel === shared && node.dataset.categorySource === nodes[0].dataset.categorySource)) {
           elements.categoryContext.textContent = `${nodes[0].dataset.categorySource} · ${shared}`;
-          elements.categoryContext.title = "Hover an item for its own category provenance and rationale.";
+          elements.categoryContext.title = "Every visible item shares this content family.";
           for (const node of nodes) {
             node.dataset.sharedCategory = "true";
             node.title = `${node.dataset.cardId}\n${node.dataset.categoryExplanation}`;

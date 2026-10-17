@@ -7,10 +7,9 @@
  *   app/        the shell - rails, inspector tabs, the error banner, the theme
  *               settling, first-run setup and the AI tools control
  *   catalog/    Sources & Catalogs: it presents published catalog data only
- *   governance/ the Governance pane: one vertical slice through @aihq/core
  *
  * The features do not know about each other. The catalog reports a selection;
- * this file is what opens the inspector and hands the entry to Governance.
+ * this file is what opens the inspector and hands the entry to authoring.
  */
 
 import { createShell } from "./app/shell.js";
@@ -19,15 +18,12 @@ import { createAiTools } from "./app/ai-tools.js";
 import { createOrganization } from "./app/organization.js";
 import { createTheme } from "./app/theme.js";
 import { createOnboarding } from "./app/onboarding.js";
-import { createPolicyImport } from "./app/policy-import.js";
-import { createDecisionImport } from "./app/decision-import.js";
 import { createPolicyWorkspace } from "./app/policy-workspace.js";
 import { createAuthoringClient } from './app/authoring-client.js';
 import { createAuthoringWorkspace } from './app/authoring-workspace.js';
 import { createEvidenceReview } from './app/evidence-review.js';
 import { saveClients } from "./app/settings-client.js";
 import { createCatalog } from "./catalog/controller.js";
-import { createGovernance } from "./governance/controller.js";
 
 async function main() {
   // Before anything renders: a theme change has to reach elements that are
@@ -35,18 +31,14 @@ async function main() {
   createTheme();
   const shell = createShell(shellElements());
   try {
-    const governance = createGovernance();
-    governance.mount();
     const policyWorkspace = createPolicyWorkspace();
     const authoring = createAuthoringClient();
     const authoringWorkspace = createAuthoringWorkspace(authoring);
     const evidenceReview = createEvidenceReview(authoring, result => authoringWorkspace.present(result));
-    const policyImport = createPolicyImport({ onReview: (review) => policyWorkspace.setFileReview(review) });
-    const decisionImport = createDecisionImport();
 
     // Core's supported targets arrive with the preview summary the catalog
-    // loads. Two controls read the SAME list and keep no copy of their own: the
-    // header's AI tools control, and the Governance pane's Target field.
+    // loads. Every control that offers a client reads that SAME list and keeps
+    // no copy of its own.
     const organization = createOrganization({ elements: organizationElements(), onEdit: () => onboarding.edit() });
     const aiTools = createAiTools({
       elements: aiToolsElements(),
@@ -60,8 +52,6 @@ async function main() {
       onCloseEdit: () => organization.open(),
       onComplete: (settings, location) => {
         organization.setSettings(settings, location);
-        policyImport.setSettings(settings);
-        decisionImport.setSettings(settings);
         policyWorkspace.setSettings(settings);
         void evidenceReview.setDefaultRecipient(settings.reviewer ?? null);
         aiTools.setSelection(settings.clients);
@@ -78,16 +68,14 @@ async function main() {
       onSelectEntry: (entry) => {
         authoringWorkspace.select(entry);
         shell.setInspectorSelection(entry !== null);
-        void governance.select(entry?.authoringItem ? null : entry);
       },
       // The same card again only brings the inspector back if it was
-      // collapsed. Governance is not told: its workflow for the entry stays.
+      // collapsed.
       onReselectEntry: () => shell.openInspector(),
       onSummary: (summary) => {
         const coreTargets = summary?.coreTargets ?? null;
         aiTools.setTargets(coreTargets);
         onboarding.setTargets(coreTargets);
-        governance.setTargets(coreTargets);
         authoringWorkspace.setTargets(coreTargets);
       },
     });

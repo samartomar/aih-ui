@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, open, readdir, readlink, realpath, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
-import { refuse } from './headless.mjs';
+import { refuse } from './primitives.mjs';
 import { remoteIdentity, UNRECOGNIZED_REMOTE } from './workspace-record.mjs';
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 const unavailable = message => refuse('CHECKOUT_UNAVAILABLE', '/root', message);

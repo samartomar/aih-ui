@@ -2,7 +2,7 @@
 // checkout binding. Internal to the journey reader and the workspace module (not a package export): both validate
 // records with exactly these rules. A declaration never holds an absolute local path or a credential; a binding is
 // local state and never portable execution permission.
-import { digestBytes, hash, object, only } from './intake.mjs';
+import { digestJson as digest, hash, object, only } from './primitives.mjs';
 import { isUtcTimestamp } from './maintenance-record.mjs';
 export const WORKSPACE_DECLARATION_RECORD_SCHEMA = 'urn:aihq:workbench:journey-record:workspace-declaration:1.0.0';
 export const LOCAL_BINDING_RECORD_SCHEMA = 'urn:aihq:workbench:journey-record:local-binding:1.0.0';
@@ -14,10 +14,6 @@ export const MAX_MEMBERS = 64, MAX_RELATIONSHIPS = 256, MAX_BINDINGS = 256;
 const slugPattern = /^[a-z0-9][a-z0-9-]{0,63}$/, commitPattern = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/, remoteName = /^(?:[\w./-]{1,200}|\(unrecognized\))$/;
 // A remote whose name this module cannot carry is recorded under this name with no identity, so it still counts as an unresolved remote.
 export const UNRECOGNIZED_REMOTE = '(unrecognized)';
-// Same canonical JSON as headless `stable`; kept local so this module has no host dependency.
-const stable = value => JSON.stringify(value, (_key, member) => member && typeof member === 'object' && !Array.isArray(member)
-  ? Object.fromEntries(Object.entries(member).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : member);
-export const digest = async value => digestBytes(new TextEncoder().encode(stable(value)));
 const list = (value, max, each, min = 0) => Array.isArray(value) && value.length >= min && value.length <= max && value.every(each);
 const sortedUnique = values => values.every((value, index) => index === 0 || values[index - 1] < value);
 // A drive path, a UNC path, a file URL, a home path, an absolute POSIX path under a root a local machine uses (at any depth), a

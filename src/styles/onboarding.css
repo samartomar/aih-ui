@@ -52,7 +52,6 @@
 .setup-reviewer select { width: 10rem; flex: none; }
 .setup-reviewer input { flex: 1; min-width: 0; }
 .setup-path { font-family: var(--mono); overflow-wrap: anywhere; resize: none; }
-.org-policy-source { max-height: min(40dvh, 360px); overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; padding: 12px; border: 1px solid var(--color-border); border-radius: var(--r); background: var(--color-subtle); color: var(--color-text); font: 11px/1.5 var(--mono); }
 .setup-summary-actions { flex-wrap: wrap; }
 .setup-summary-actions .setup-button { white-space: normal; }
 .setup-notice { padding: 12px; border: 1px solid var(--color-border); border-radius: var(--r); background: var(--color-subtle); color: var(--color-meta); line-height: 1.6; }

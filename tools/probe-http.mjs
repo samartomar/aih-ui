@@ -26,5 +26,5 @@ for (const target of targets) {
   const result = await request(target);
   console.log(`GET ${target.padEnd(16)} -> ${result.status}${result.bytes ? ` (${result.bytes} bytes)` : ""}`);
 }
-const after = await request("/catalog-index.json");
-console.log(`after the malformed requests, GET /catalog-index.json -> ${after.status} (${after.bytes} bytes)`);
+const after = await request("/summary.json");
+console.log(`after the malformed requests, GET /summary.json -> ${after.status} (${after.bytes} bytes)`);

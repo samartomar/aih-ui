@@ -6,8 +6,9 @@ import { dirname, join } from 'node:path';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { runScan, prepareArtifact } from '@aihq/scan/host';
 import { fileURLToPath } from 'node:url';
+import { digestBytes } from './primitives.mjs';
 import { readAuthoring } from './headless.mjs';
-import { intakeDeclaration, digestBytes } from './intake.mjs';
+import { intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { installedFamilies } from './installed-families.mjs';
 

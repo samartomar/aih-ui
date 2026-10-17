@@ -2,7 +2,8 @@
 // projections name public fields; they neither mint Scan digests nor grant custody.
 import { readScanBytes, presentReport } from './report-view.mjs';
 import { isCheckedRelease, listItems } from '@aihq/catalog/reader';
-import { describeAuthoringSubject, stable, ok, refuse } from './headless.mjs';
+import { stable, ok, refuse } from './primitives.mjs';
+import { deriveRecipeIdentity } from '@aihq/core/contracts';
 import { checkIntentShape } from './intent-shape.mjs';
 
 const bindingFailure = message => refuse('REVIEW_BINDING_UNAVAILABLE', '/reviews/records', message);
@@ -102,4 +103,20 @@ export function summarizeReviewJudgments(judgments) {
   const current = judgments.filter(judgment => judgment.state === 'current'), count = test => current.filter(test).length;
   return { recipientDecisions: count(j => j.origin === 'recipient'), importedDecisions: count(j => j.origin === 'imported'),
     applies: count(j => j.applicability === 'applies'), changed: count(j => j.applicability === 'changed'), unverified: count(j => j.applicability === 'unverified') };
+}
+// Use Core's public identity semantics for exact supplied recipe snapshots.
+// This describes content, not human approval or observation custody.
+export async function describeAuthoringSubject({ inventory, itemId }) {
+  if (!inventory || !isCheckedRelease(inventory.release)) return refuse('SOURCE_IDENTITY_MISMATCH', '/inventory', 'Supply an actual checked Catalog reader value.');
+  const item = listItems(inventory.release).find(item => item.id === itemId);
+  if (!item) return refuse('SOURCE_REVISION_UNAVAILABLE', '/itemId', 'Exact item unavailable.');
+  const recipeBytes = inventory.materials?.find(material => material.path === item.recipe.path)?.bytes;
+  if (!recipeBytes) return refuse('SOURCE_REVISION_UNAVAILABLE', '/recipeBytes', 'Exact recipe bytes are required for identity derivation.');
+  // Identity describes the checked recipe declaration, independent of the
+  // authored values for its required inputs. Core validates this public shape.
+  const reference = { source: inventory.materialSource, path: item.recipe.path, sha256: item.recipe.sha256, byteLength: item.recipe.byteLength,
+    materials: item.materials.map(({ id, path, sha256, byteLength }) => ({ id, path, sha256, byteLength })) };
+  const identity = await deriveRecipeIdentity({ recipeBytes, reference });
+  if (identity.status !== 'ok') return identity;
+  return ok({ releaseSha256: inventory.release.sha256, itemId, itemSha256: item.itemSha256, recipeIdentity: identity.value.recipeIdentity, materials: identity.value.materials });
 }

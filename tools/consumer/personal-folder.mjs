@@ -1,6 +1,6 @@
 // Browser-granted bytes only. No path acquisition, scripts, Git or network.
-import { intakeDeclaration, digestBytes, only, checkInput } from './intake.mjs';
-import { refuse, stable } from './headless.mjs';
+import { intakeDeclaration, checkInput } from './intake.mjs';
+import { digestBytes, only, refuse, stable } from './primitives.mjs';
 const encode = value => new TextEncoder().encode(value);
 export const FOLDER_LIMITS = { files: 256, fileBytes: 250_000, totalBytes: 1_000_000, skills: 32 };
 const safePath = path => typeof path === 'string' && path.length <= 240

@@ -232,9 +232,9 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
     else if (current() === "clients") renderClients();
     else {
       elements.setupDescription.textContent = draft.experience === "vibe"
-        ? "Your personal setup opens the existing catalog and governance tools. Vibe-specific automation and connected assistance are not available in this version. Your choices persist across restarts."
+        ? "Your personal setup opens the catalog and project policy authoring. Vibe-specific automation and connected assistance are not available in this version. Your choices persist across restarts."
         : draft.role === "developer"
-          ? "Your role and assistance preferences persist. Open the admin-supplied organization policy in the Policy workspace after setup; it is not chosen or approved by this profile."
+          ? "Your role and assistance preferences persist. The organization policy your admin publishes is read by the configured execution host; it is not chosen or approved by this profile."
           : "Your organization details and preferences persist. Policy authority and connected assistance are follow-on work.";
       elements.setupContent.append(renderReviewer(), setupSummary(draft, location));
     }

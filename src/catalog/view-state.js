@@ -6,13 +6,12 @@
  * the installed index, so a control and the grid can never disagree.
  */
 
-import { SORT_KEYS, scopeEntries, sourceScopes } from "./selectors.js";
-import { categoryRows } from "./categories.js";
+import { SORT_KEYS, sourceScopes } from "./selectors.js";
 
 const SAVED_KEY = "aih-ui-sources-view";
 
 export function emptyView() {
-  return { query: "", kind: null, sourceType: null, sort: "name", source: null, category: null };
+  return { query: "", kind: null, sourceType: null, sort: "name", source: null };
 }
 
 export function saveView(view) {
@@ -29,7 +28,7 @@ export function saveView(view) {
  * The counts must already be computed: validating against empty maps silently
  * discards every saved filter.
  */
-export function restoreView(view, counts, categories = null, entries = []) {
+export function restoreView(view, counts) {
   let saved = null;
   try {
     saved = JSON.parse(sessionStorage.getItem(SAVED_KEY) ?? "null");
@@ -44,14 +43,6 @@ export function restoreView(view, counts, categories = null, entries = []) {
   }
   if (typeof saved.source === "string") {
     if (sourceScopes(counts).some((scope) => scope.filterValue === saved.source)) view.source = saved.source;
-  }
-  // A saved category must still be offered by the selected source. Missing
-  // records or unavailable curation never become "Not curated" by inference.
-  if (view.source && categories?.state === "published" && saved.category && typeof saved.category === "object" && Object.keys(saved.category).length === 1) {
-    const available = categoryRows(categories, scopeEntries(entries, view, counts.membership));
-    if ((saved.category.id === null && available.notCurated > 0) || available.rows.some((row) => row.id === saved.category.id)) {
-      view.category = { id: saved.category.id };
-    }
   }
   if (SORT_KEYS.includes(saved.sort)) view.sort = saved.sort;
   return view;

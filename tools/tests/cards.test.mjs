@@ -11,6 +11,7 @@ function element(tag) {
     append(...children) { this.children.push(...children); },
     replaceChildren(...children) { this.children = children; },
     setAttribute(name, value) { this.attributes[name] = value; },
+    removeAttribute(name) { delete this.attributes[name]; },
     addEventListener(name, callback) { this.listeners[name] = callback; },
   };
 }
@@ -21,11 +22,11 @@ function renderCard(t, description) {
     if (previous) Object.defineProperty(globalThis, "document", previous);
     else delete globalThis.document;
   });
-  const entry = { entryId: "fixture.skill", subject: { id: "fixture", kind: "skill", subjectDigest: "sha256:fixture", source: { type: "github" } } };
+  const entry = { entryId: "fixture.skill", subject: { id: "fixture", kind: "skill", subjectDigest: "sha256:fixture", source: { type: "github" } },
+    ...(description === null ? {} : { authoringItem: { id: "fixture", label: "Fixture", family: "fixture-family", description, root: { releaseSha256: "a".repeat(64), itemId: "fixture" } } }) };
   const elements = Object.fromEntries(["cardsGrid", "visibleCount", "visibleCaption", "categoryContext"].map(key => [key, element("div")]));
   const selections = [];
-  const publisher = { byEntryId: new Map([[entry.entryId, { description: { state: "published", value: description } }]]) };
-  createCards({ elements, onSelect: id => selections.push(id) }).render({ entries: [entry], total: 1, selectedId: null, publisher });
+  createCards({ elements, onSelect: id => selections.push(id) }).render({ entries: [entry], total: 1, selectedId: null });
   return { node: elements.cardsGrid.children[0], selections };
 }
 function descendants(node) { return [node, ...node.children.flatMap(descendants)]; }

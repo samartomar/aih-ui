@@ -1,14 +1,11 @@
 // Portable consumer composition. Catalog validates content/dependencies; Core validates policy.
 import { configureItem, listItems, validateSelectionSet } from '@aihq/catalog/reader';
 import { parsePolicy } from '@aihq/core/contracts';
+import { hash, object, stable } from './primitives.mjs';
 
 export const SAVED_INTENT_SCHEMA = 'urn:aihq:workbench:saved-intent:2.0.0';
 export const LIMITS = Object.freeze({ bytes: 850_000, roots: 4096, pins: 4096, origins: 256, releases: 32 });
-const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
-const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const bytes = value => new TextEncoder().encode(JSON.stringify(value)).length;
-const stable = value => JSON.stringify(value, (_key, member) => object(member)
-  ? Object.fromEntries(Object.entries(member).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : member);
 const sort = values => [...values].sort();
 export const itemKey = ref => `${ref.releaseSha256}/${ref.itemId}`;
 const failure = (reason, message, extra = {}) => ({ valid: false, diagnostics: [{ code: 'SAVED_INTENT_INVALID', reason, message, blocking: true, ...extra }] });

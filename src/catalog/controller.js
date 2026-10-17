@@ -14,20 +14,12 @@ import { createMetrics } from "./metrics.js";
 import { createNavigation } from "./navigation.js";
 import { createProvenance } from "./provenance.js";
 import { createToolbar } from "./toolbar.js";
-import { categoryCoverage } from "./publisher.js";
-import { categoryRows } from "./categories.js";
 import { projectItems, capabilityFacts, declaredTargets, supportedEntries } from "./authoring-model.js";
 import { publishedClients } from "../app/core-targets.js";
-import { inventoryCounts, scopeEntries, scopeTotal, selectedScope, visibleEntries } from "./selectors.js";
+import { inventoryCounts, scopeTotal, selectedScope, visibleEntries } from "./selectors.js";
 import { emptyView, restoreView, saveView } from "./view-state.js";
 import { text } from "../app/dom.js";
 
-/**
- * @param onSelectEntry  called with the selected entry (or null), so the shell
- *                       and the Governance feature can follow the selection
- * @param onSummary      called once with the preview summary it loaded, for the
- *                       header controls that report installed package facts
- */
 /**
  * @param onSelectEntry    called with the entry when the selection changes
  * @param onReselectEntry  called when the selected card is activated again
@@ -42,12 +34,6 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     // Catalog's collection view as applied to the index: current members,
     // and how many entries it holds only for reference.
     inventory: null,
-    // Catalog's publisher titles and descriptions, bound to the served index.
-    publisher: null,
-    // Catalog's publisher qualification and curated categories, each bound to
-    // the served index, or the reason the installed Catalog has none.
-    qualification: null,
-    categories: null,
     context: { membership: new Map(), installed: new Map() },
     view: emptyView(),
     selectedId: null,
@@ -71,11 +57,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     elements: elements.navigation,
     onSelectSource: (source) => {
       family.value = '';
-      changeView({ source, sourceType: null, category: null });
+      changeView({ source, sourceType: null });
     },
-    onToggleCategory: (category) => changeView({
-      category: state.view.category !== null && state.view.category.id === category.id ? null : category,
-    }),
   });
   const toolbar = createToolbar({
     elements: elements.toolbar,
@@ -83,10 +66,9 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     onToggleKind: (kind) => changeView({ kind: kind === null || state.view.kind === kind ? null : kind }),
     onSourceType: (sourceType) => {
       const scope = selectedScope(state.counts, state.view);
-      // A compatible source-type choice can narrow alongside the category.
-      // Moving to another type leaves this source and its category together.
+      // A compatible source-type choice narrows within the source; another type leaves the source.
       const keepsScope = sourceType === null || scope?.type === sourceType;
-      changeView({ sourceType, ...(keepsScope ? {} : { source: null, category: null }) });
+      changeView({ sourceType, ...(keepsScope ? {} : { source: null }) });
     },
     onSort: (sort) => changeView({ sort }),
   });
@@ -96,11 +78,11 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   const target = document.getElementById('browse-target');
   const support = document.getElementById('browse-support');
   const counts = document.getElementById('support-counts');
-  family.addEventListener('change', () => changeView({ source: null, sourceType: null, category: null }));
+  family.addEventListener('change', () => changeView({ source: null, sourceType: null }));
   for (const control of [target, support]) control.addEventListener('change', () => render());
 
   function browseEntries() {
-    return visibleEntries(state.entries, state.view, state.context.membership, state.publisher, state.categories)
+    return visibleEntries(state.entries, state.view, state.context.membership)
       .filter(entry => !family.value || entry.authoringItem.family === family.value);
   }
 
@@ -115,8 +97,6 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       total: scopeTotal(state.entries, state.view, state.context.membership),
       noun: scope === null ? "catalog entries" : "entries from this source",
       selectedId: state.selectedId,
-      publisher: state.publisher,
-      categories: state.categories,
       intent: authoring.intent,
       onChoose: async item => {
         try { onProposal(await authoring.propose({ type: 'select', root: item.root })); }
@@ -125,23 +105,18 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     };
   }
 
-  /** The rail's model: its categories are counted here, over the selected scope only. */
+  /** The rail's model. */
   function navigationModel() {
-    const curated = state.categories?.state === "published" && state.view.source
-      ? { view: state.categories, ...categoryRows(state.categories, scopeEntries(state.entries, state.view, state.context.membership)) }
-      : { view: state.categories, rows: [], notCurated: 0 };
     return {
       view: state.view,
       total: state.entries.length,
       counts: state.counts,
       organizationName: state.organizationName,
-      categoryCoverage: categoryCoverage(state.publisher, state.summary?.entryCount),
-      curated,
     };
   }
 
   function detailsModel(entry) {
-    return { entry, counts: state.counts, publisher: state.publisher, qualification: state.qualification, target: target.value,
+    return { entry, counts: state.counts, target: target.value,
       // Core's nativeClientIds when it published them, otherwise null (support unknown).
       coreClients: publishedClients(state.summary?.coreTargets)?.ids ?? null };
   }
@@ -155,7 +130,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     const scoped = browseEntries();
     const count = status => scoped.filter(entry => capabilityFacts(entry.authoringItem, target.value).some(fact => fact.support === status)).length;
     counts.textContent = `${target.value || 'No declared target'} · ${scoped.length} items in family/search/source scope: ${count('supported')} with supported facts · ${count('unsupported')} with unsupported facts · ${count('unknown')} with unknown facts. Mixed items can count in more than one group.`;
-    const availableKinds = visibleEntries(state.entries, { ...state.view, kind: null }, state.context.membership, state.publisher, state.categories);
+    const availableKinds = visibleEntries(state.entries, { ...state.view, kind: null }, state.context.membership);
     const filteredCounts = inventoryCounts(availableKinds);
     provenance.render({
       summary: state.summary,
@@ -181,8 +156,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
 
   function select(entryId) {
     // The selected card again is not a new selection. The inspector is shown
-    // if it was collapsed, and nothing else moves: the Governance workflow for
-    // this entry stays exactly as it is.
+    // if it was collapsed, and nothing else moves.
     if (entryId === state.selectedId) {
       onReselectEntry();
       return;
@@ -222,7 +196,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       refresh();      // Counts first: restoreView validates every saved filter against them, so
       // restoring before they exist silently discards the saved kind and source.
       state.counts = inventoryCounts(state.entries, state.context);
-      restoreView(state.view, state.counts, state.categories, state.entries);
+      restoreView(state.view, state.counts);
       toolbar.setQuery(state.view.query);
       render();
     },

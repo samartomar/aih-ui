@@ -1,6 +1,6 @@
 // Shapes of the optional maintenance records a journey envelope carries. Internal to the journey reader and the
 // maintenance module (not a package export): both validate records with exactly these rules.
-import { digestBytes, hash, object, only } from './intake.mjs';
+import { digestJson, hash, object, only } from './primitives.mjs';
 export const MAINTENANCE_DISPOSITION_RECORD_SCHEMA = 'urn:aihq:workbench:journey-record:maintenance-disposition:1.0.0';
 export const MAINTENANCE_CHECK_RECORD_SCHEMA = 'urn:aihq:workbench:journey-record:maintenance-check:1.0.0';
 export const MAINTENANCE_CHECK_RECORD_ID = 'maintenance-check';
@@ -8,9 +8,6 @@ export const UPDATE_CATEGORIES = ['content', 'software', 'client', 'environment'
 const SUBJECT_KINDS = ['selection'], CANDIDATE_KINDS = ['content-revision'], DISPOSITIONS = ['keep-current', 'skip', 'defer'];
 const CHECK_STATES = ['checked', 'unknown', 'not-selected'];
 const idPattern = /^[\w.-]{1,180}$/;
-// Same canonical JSON as headless `stable`; kept local so this module has no host dependency.
-const stable = value => JSON.stringify(value, (_key, member) => member && typeof member === 'object' && !Array.isArray(member)
-  ? Object.fromEntries(Object.entries(member).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : member);
 // A real UTC timestamp: the pattern alone would accept 2026-13-01.
 export const isUtcTimestamp = value => typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(value)
   && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 19) === value.slice(0, 19);
@@ -37,7 +34,7 @@ export function dispositionProblem(record) {
 }
 // One record per exact (category, subject, scope, candidate); setting it again replaces it.
 export async function dispositionId({ category, subject, scope, candidate }) {
-  return `disposition-${(await digestBytes(new TextEncoder().encode(stable({ category, subject, scope, candidate })))).slice(0, 32)}`;
+  return `disposition-${(await digestJson({ category, subject, scope, candidate })).slice(0, 32)}`;
 }
 // The category states of one check: each known category at most once, with a reason only where it is unknown.
 const checkCategories = value => Array.isArray(value) && value.length >= 1 && value.length <= UPDATE_CATEGORIES.length

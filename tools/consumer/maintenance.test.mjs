@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { composeAuthoring, freshAuthoring, stable, openDraft, editDraft } from './headless.mjs';
+import { stable, digestBytes } from './primitives.mjs';
+import { composeAuthoring, freshAuthoring, openDraft, editDraft } from './headless.mjs';
 import * as journey from './journey.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { checkMaintenance, recordMaintenance, projectDispositions, MAINTENANCE_DISPOSITION_SCHEMA, MAINTENANCE_CHECK_SCHEMA, UPDATE_CATEGORIES } from './maintenance.mjs';
 import { createMixedService } from './mixed-service.mjs';
 import { mixedInventories } from './authoring-v3.test.mjs';
-import { intakeDeclaration, digestBytes } from './intake.mjs';
+import { intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { declareReleaseOrder, RELEASE_ORDER_TEXT } from './release-order.mjs';
 const encode = value => new TextEncoder().encode(value), decode = bytes => new TextDecoder().decode(bytes);
