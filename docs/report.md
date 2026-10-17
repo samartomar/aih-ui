@@ -2,7 +2,7 @@
 
 `/report.html` shows what this Workbench recorded about the machine since it started, as
 Core's normalized claims. The page fetches `GET /api/readiness-report`; the host turns its
-readiness journal into a claim set (`aih-ui/claims`), `@aihq/core/report` validates and projects
+readiness journal into a claim set (`tools/consumer/claims.mjs`), `@aihq/core/report` validates and projects
 it, and `src/app/claims-view.js` turns the projection into panels. The page and the headless
 `reportText()` print the same panel strings and compute no meaning of their own.
 

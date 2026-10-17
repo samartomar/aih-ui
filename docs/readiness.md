@@ -6,9 +6,9 @@ every repair; this repo projects Core's public records onto five words and puts 
 in front of the developer.
 
 - `tools/consumer/readiness.mjs` — pure projection, shared by the page and headless callers
-  (`aih-ui/readiness`).
+  (application-internal; not a package entry).
 - `tools/consumer/readiness-host.mjs` — Node-only host over Core `inspect`, `prepare` and
-  `apply` (`aih-ui/readiness-host`).
+  `apply` (application-internal; not a package entry).
 - `tools/server/readiness.mjs` + `tools/consumer/readiness-child.mjs` — the HTTP routes and
   the child process Core runs in.
 

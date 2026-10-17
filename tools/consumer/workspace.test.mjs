@@ -8,8 +8,9 @@ import { spawnSync } from 'node:child_process';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { freshAuthoring, composeAuthoring, openDraft, editDraft } from './headless.mjs';
 import * as publicApi from './workspace.mjs';
-import { readWorkspace, editWorkspace, planBinding, bindCheckout, unbindCheckout, verifyBindings, exportWorkspace, remoteIdentity, sameIdentity,
+import { readWorkspace, editWorkspace, planBinding, bindCheckout, unbindCheckout, verifyBindings, exportWorkspace,
   validateDeclaration, validateBinding, WORKSPACE_DECLARATION_SCHEMA, LOCAL_BINDING_SCHEMA } from './workspace.mjs';
+import { remoteIdentity, sameIdentity } from './workspace-record.mjs';
 import { observeCheckout } from './workspace-host.mjs';
 import { readJourneyEnvelope, JOURNEY_RECORD_KINDS, encodeBase64 } from './journey.mjs';
 import { unsafeText, identityOf } from './workspace-record.mjs';
@@ -1095,8 +1096,8 @@ test('the pure modules import only the allowed seams and contain no network, pro
   }
   const host = await readFile(new URL('./workspace-host.mjs', import.meta.url), 'utf8');
   assert.match(host, /windowsHide: true/); assert.doesNotMatch(host, /fetch\(|shell: true|(?<![.\w])exec\(|execSync|spawnSync|GIT_ASKPASS|['"]push['"]|['"]fetch['"]|['"]pull['"]|['"]clone['"]/);
-  assert.deepEqual(Object.keys(publicApi).sort(), ['BINDING_REASONS', 'LOCAL_BINDING_SCHEMA', 'RELATIONSHIP_KINDS', 'WORKSPACE_DECLARATION_SCHEMA', 'bindCheckout', 'editWorkspace', 'exportWorkspace', 'planBinding',
-    'projectWorkspace', 'readWorkspace', 'remoteIdentity', 'sameIdentity', 'unbindCheckout', 'validateBinding', 'validateDeclaration', 'verifyBindings']);
+  assert.deepEqual(Object.keys(publicApi).sort(), ['LOCAL_BINDING_SCHEMA', 'WORKSPACE_DECLARATION_SCHEMA', 'bindCheckout', 'editWorkspace', 'exportWorkspace', 'planBinding',
+    'projectWorkspace', 'readWorkspace', 'unbindCheckout', 'validateBinding', 'validateDeclaration', 'verifyBindings']);
 });
 
 test('no operation touches a folder, the network, a timer or the clock: the module is pure over bytes and observations', async () => {

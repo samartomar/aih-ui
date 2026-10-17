@@ -2,10 +2,12 @@
 // and what a person chose to do about it. Pure and bounded: it reads the saved envelope, the inventories and the
 // declared clients it is handed, calls no model and reads no network, and writes only a new envelope revision through
 // recordImprovement. Nothing is applied and nothing is sent anywhere.
+import { parsePolicy } from '@aihq/core/contracts';
 import { isCheckedRelease } from '@aihq/catalog/reader';
+import { catalogClosures } from './improvement-closures.mjs';
 import { releaseOrderProblem } from './release-order.mjs';
 import { only, refuse } from './primitives.mjs';
-import { managementIdOf } from './headless.mjs';
+import { managementIdOf } from './intent-shape.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { isUtcTimestamp, MAINTENANCE_CHECK_RECORD_SCHEMA } from './maintenance-record.mjs';
 import { IMPROVEMENT_SUGGESTION_RECORD_SCHEMA, IMPROVEMENT_DISMISSAL_RECORD_SCHEMA, SUGGESTION_FIELDS, suggestionProblem, suggestionDerivedProblem, dismissalProblem, dismissalId } from './improvement-record.mjs';
@@ -16,7 +18,7 @@ import { frictionRecurrence, MAX_EVIDENCE } from './friction.mjs';
 import { coreTargetsOf } from './executable-ties.mjs';
 export const IMPROVEMENT_SUGGESTION_SCHEMA = IMPROVEMENT_SUGGESTION_RECORD_SCHEMA;
 export const IMPROVEMENT_DISMISSAL_SCHEMA = IMPROVEMENT_DISMISSAL_RECORD_SCHEMA;
-export { IMPROVEMENT_RULES_VERSION, improvementPrompt };
+export { IMPROVEMENT_RULES_VERSION };
 const isSuggestion = record => record.schema === IMPROVEMENT_SUGGESTION_RECORD_SCHEMA;
 const isDismissal = record => record.schema === IMPROVEMENT_DISMISSAL_RECORD_SCHEMA;
 const CANDIDATE_SOURCES = ['configured', 'unconfigured'], CANDIDATE_COVERAGES = ['complete', 'partial'];
@@ -32,8 +34,11 @@ const orderText = names => `Content changes were only partly checked: ${names.sl
 // What the draft ties friction to: the policy selections of its selected roots and pins (a pin carries no scope, so either scope's selection is looked for), and the
 // clients and checks its client adapters name and the Core targets its items' executables run on (executable-ties.mjs). Roots come first, so a root's saved goal wins over the pin of the same item.
 function tiedSubjects({ intent, items, inventories, savedBytes }) {
-  let selections = [];
-  try { const policy = JSON.parse(new TextDecoder().decode(savedBytes)); if (Array.isArray(policy?.selections)) selections = policy.selections.filter(s => typeof s?.id === 'string' && typeof s.managementId === 'string'); } catch { /* an unreadable policy ties no selection */ }
+  let selections = [], text;
+  // Bytes that are not UTF-8, or a policy Core refuses, tie no selection.
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(savedBytes); } catch (error) { if (!(error instanceof TypeError)) throw error; }
+  const parsed = text === undefined ? undefined : parsePolicy(text);
+  if (parsed?.valid) selections = parsed.document.selections.filter(s => typeof s.managementId === 'string');
   const packages = new Map(inventories.map(entry => [entry.release.sha256, entry.release.package?.name])), catalog = new Map(items.map(item => [`${item.root.releaseSha256}/${item.id}`, item]));
   const managed = new Map(selections.map(s => [s.managementId, s])), ties = new Map(), order = (a, b) => compare(a.itemId, b.itemId) || compare(a.scope ?? '', b.scope ?? '');
   for (const entry of [...[...intent.roots].sort(order), ...[...intent.pins].sort(order)]) {
@@ -119,7 +124,10 @@ export async function checkImprovements({ envelopeBytes, inventories, candidateI
     { trigger: 'recurring-friction', state: frictionReason === undefined ? 'checked' : 'unknown', ...(frictionReason !== undefined ? { reason: frictionReason } : {}),
       text: `${evidence === null ? FRICTION_UNREADABLE : FRICTION_COVERAGE[frictionReason ?? 'checked']}${fixture ? ` (${FIXTURE_LABEL})` : ''}` }];
   // What was not checked is said on each suggestion too; unknowns are not part of its identity.
-  const suggested = await suggestImprovements({ intent: draft.intent, items, inventories, candidates: unread === undefined ? candidateInventories : [], clients, labels, goal, coreClients, friction: friction?.results, releaseOrder });
+  const releases = {};
+  for (const entry of [...inventories, ...(unread === undefined ? candidateInventories : [])]) if (!Object.hasOwn(releases, entry.release.sha256)) releases[entry.release.sha256] = entry.release;
+  const suggested = await suggestImprovements({ intent: draft.intent, items, inventories, candidates: unread === undefined ? candidateInventories : [], clients, labels, goal, coreClients, friction: friction?.results, releaseOrder,
+    closures: catalogClosures(releases) });
   const unchecked = coverage.filter(entry => entry.state === 'unknown').map(entry => entry.text);
   const current = suggested.map(suggestion => ({ ...suggestion, unknowns: [...suggestion.unknowns, ...unchecked] }));
   const savedBy = new Map(read.records.filter(isSuggestion).map(record => [record.id, record]));

@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { digestBytes } from './primitives.mjs';
-import { readAuthoring, composeAuthoring, reconcileAuthoring, freshAuthoring, editAuthoring, describeAuthoringSubject } from './headless.mjs';
+import { readAuthoring, composeAuthoring, reconcileAuthoring, freshAuthoring, editAuthoring } from './headless.mjs';
+import { describeAuthoringSubject } from './review-bindings.mjs';
 import { composeIntent, indexReleases, freshIntent } from './saved-intent.mjs';
 import { composeSetup } from './setup.mjs';
 import { fixtureRelease, fixtureItem, rootFor, crossRef } from './intent-fixtures.mjs';

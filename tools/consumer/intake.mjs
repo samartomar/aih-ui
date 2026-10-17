@@ -3,9 +3,6 @@ import { compileProducerDeclaration } from '@aihq/catalog/producer';
 import { readRelease } from '@aihq/catalog/reader';
 import { digestBytes, ok, refuse } from './primitives.mjs';
 import { checkInput } from './intent-shape.mjs';
-// The ./intake entry has always exported these names; they come from the shared modules below it.
-export { digestBytes, hash, object, only } from './primitives.mjs';
-export { checkInput } from './intent-shape.mjs';
 export async function intakeDeclaration({ input, declarationBytes, sourceFiles, materialSource, archiveBytes }) {
   const fail = message => refuse('SOURCE_IDENTITY_MISMATCH', '/inputs', message, declarationBytes);
   if (!checkInput(input, false) || !(declarationBytes instanceof Uint8Array) || declarationBytes.length > 850_000) return fail('Supply a bounded declaration and portable exact source identity.');

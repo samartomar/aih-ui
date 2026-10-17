@@ -5,7 +5,8 @@ import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { stable, digestBytes } from './primitives.mjs';
-import { freshAuthoring, composeAuthoring, openDraft, editDraft, managementIdOf } from './headless.mjs';
+import { freshAuthoring, composeAuthoring, openDraft, editDraft } from './headless.mjs';
+import { managementIdOf } from './intent-shape.mjs';
 import * as publicApi from './improvements.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { recordMaintenance } from './maintenance.mjs';
@@ -17,6 +18,7 @@ import { nativeClientIds } from '@aihq/core/harness';
 import { suggestionRevision, suggestionProblem } from './improvement-record.mjs';
 import { suggestImprovements, lead, classifyImprovement, improvementPrompt, releaseRelation, unorderedSources, GOAL_RULES, UNKNOWNS, FRICTION_COVERAGE, FRICTION_UNREADABLE, FIXTURE_LABEL, FRICTION_RULE, IMPROVEMENT_RULES_VERSION, MAX_ALTERNATIVES } from './improvement-rules.mjs';
 import { frictionRecurrence } from './friction.mjs';
+import { catalogClosures } from './improvement-closures.mjs';
 import { coreTargetsOf } from './executable-ties.mjs';
 import { installedFamilies } from './installed-families.mjs';
 import { READINESS_RECORD_SCHEMA } from './claims.mjs';
@@ -548,6 +550,26 @@ test('the rule table points at items the installed maintained Catalog really off
   assert.equal(JSON.stringify(value).includes('base64'), false);
 });
 
+test('Catalog\'s resolved closure gives the identity, revision and content the declared walk gave, so an earlier dismissal still holds', async () => {
+  const s = await scenario(), options = { clients: ['claude', 'codex'], goal: 'fewer regressions, reviews, planning and context' };
+  const value = await check(s, s.envelopeBytes, options);
+  const items = s.inventories.flatMap(entry => entry.release.items.map(item => ({ ...item, root: { releaseSha256: entry.release.sha256 } })));
+  const walked = await suggestImprovements({ intent: s.open.intent, items, inventories: s.inventories, ...options });
+  // The same rules with Catalog's closures, counting which non-empty closures Catalog itself resolved (none falls back to the walk here).
+  const fromCatalog = [], resolve = catalogClosures(Object.fromEntries(s.inventories.map(entry => [entry.release.sha256, entry.release])));
+  const resolved = await suggestImprovements({ intent: s.open.intent, items, inventories: s.inventories, ...options,
+    closures: (...args) => { const closure = resolve(...args); if (closure?.length) fromCatalog.push(args[0].id); return closure; } });
+  assert.ok(fromCatalog.length > 0, 'at least one required closure came from Catalog');
+  const shown = [value.leading, ...value.alternatives];
+  assert.ok(shown.some(suggestion => suggestion.change.content.requires.length > 0 && fromCatalog.includes(suggestion.change.itemId)), 'a suggestion whose closure Catalog resolved is compared');
+  for (const suggestion of shown) {
+    const same = walked.find(other => other.id === suggestion.id), catalog = resolved.find(other => other.id === suggestion.id);
+    assert.ok(same && catalog, suggestion.change.itemId);
+    assert.deepEqual([suggestion.revision, suggestion.change, suggestion.facts], [catalog.revision, catalog.change, catalog.facts], suggestion.change.itemId);
+    assert.deepEqual([suggestion.revision, suggestion.change, suggestion.facts], [same.revision, same.change, same.facts], suggestion.change.itemId);
+  }
+});
+
 test('a first check with nothing to say returns no suggestion and a dismissal round-trips as records', async () => {
   const s = await scenario({ goal: 'ship it', rule: 'goal.build' });
   const none = await check(s, s.envelopeBytes);
@@ -998,7 +1020,7 @@ test('registry and public entry: both kinds are optional, the entry exposes only
   for (const [urn, kind] of [[IMPROVEMENT_SUGGESTION_SCHEMA, 'improvement-suggestion'], [IMPROVEMENT_DISMISSAL_SCHEMA, 'improvement-dismissal']]) assert.deepEqual(JOURNEY_RECORD_KINDS[urn], { kind, version: '1.0.0', required: false });
   assert.equal(IMPROVEMENT_SUGGESTION_SCHEMA, 'urn:aihq:workbench:journey-record:improvement-suggestion:1.0.0');
   assert.equal(IMPROVEMENT_DISMISSAL_SCHEMA, 'urn:aihq:workbench:journey-record:improvement-dismissal:1.0.0');
-  assert.deepEqual(Object.keys(publicApi).sort(), ['IMPROVEMENT_DISMISSAL_SCHEMA', 'IMPROVEMENT_RULES_VERSION', 'IMPROVEMENT_SUGGESTION_SCHEMA', 'checkImprovements', 'improvementPrompt', 'projectDismissals', 'recordImprovement']);
+  assert.deepEqual(Object.keys(publicApi).sort(), ['IMPROVEMENT_DISMISSAL_SCHEMA', 'IMPROVEMENT_RULES_VERSION', 'IMPROVEMENT_SUGGESTION_SCHEMA', 'checkImprovements', 'projectDismissals', 'recordImprovement']);
 });
 
 // ---- No network, no model, no upload -------------------------------------------------------------------------------
@@ -1028,14 +1050,14 @@ test('checking, dismissing and building the prompt never touch the network or a 
 });
 
 test('the improvement modules import only the allowed seams and contain no network, process or random calls', async () => {
-  const allowed = [/^\.\/primitives\.mjs$/, /^\.\/journey\.mjs$/, /^\.\/headless\.mjs$/, /^\.\/intent-shape\.mjs$/, /^\.\/maintenance-record\.mjs$/, /^\.\/improvement-[a-z]+\.mjs$/, /^\.\/client-identity\.mjs$/, /^\.\/trial-record\.mjs$/, /^\.\/release-order\.mjs$/, /^\.\/friction\.mjs$/, /^\.\/executable-ties\.mjs$/, /^\.\/claims\.mjs$/, /^@aihq\/catalog\/reader$/, /^@aihq\/core\/report$/];
-  for (const name of ['improvement-record.mjs', 'improvement-rules.mjs', 'improvements.mjs', 'friction.mjs']) {
+  const allowed = [/^\.\/primitives\.mjs$/, /^\.\/journey\.mjs$/, /^\.\/headless\.mjs$/, /^\.\/intent-shape\.mjs$/, /^\.\/maintenance-record\.mjs$/, /^\.\/improvement-[a-z]+\.mjs$/, /^\.\/client-identity\.mjs$/, /^\.\/trial-record\.mjs$/, /^\.\/release-order\.mjs$/, /^\.\/friction\.mjs$/, /^\.\/executable-ties\.mjs$/, /^\.\/claims\.mjs$/, /^@aihq\/catalog\/reader$/, /^@aihq\/core\/report$/, /^@aihq\/core\/contracts$/];
+  for (const name of ['improvement-record.mjs', 'improvement-rules.mjs', 'improvement-closures.mjs', 'improvements.mjs', 'friction.mjs']) {
     const source = await readFile(new URL(`./${name}`, import.meta.url), 'utf8');
     const specifiers = [...source.matchAll(/^(?:import|export)\b[^;]*?\bfrom\s+'([^']+)'/gm)].map(match => match[1]);
     assert.ok(specifiers.length > 0, name);
     for (const specifier of specifiers) assert.ok(allowed.some(pattern => pattern.test(specifier)), `${name} imports ${specifier}`);
     assert.equal(/\bimport\s*\(/.test(source), false, `${name} dynamic import`);
-    for (const forbidden of [/fetch\(/, /node:/, /child_process/, /http/i, /WebSocket/, /XMLHttpRequest/, /setTimeout/, /setInterval/, /Math\.random/, /Date\.now/, /new Date\(\)/, /\bprocess\b/, /\bBuffer\b/, /\bwindow\b/, /\bdocument\b/, /localStorage/])
+    for (const forbidden of [/fetch\(/, /node:/, /child_process/, /http/i, /WebSocket/, /XMLHttpRequest/, /setTimeout/, /setInterval/, /Math\.random/, /Date\.now/, /new Date\(\)/, /\bprocess\b/, /\bBuffer\b/, /\bwindow\b/, /(?<![.\w])document\b/, /localStorage/])
       assert.doesNotMatch(source, forbidden, `${name} ${forbidden}`);
   }
   const rules = await readFile(new URL('./improvement-rules.mjs', import.meta.url), 'utf8');

@@ -1,17 +1,14 @@
 // Supported consumer boundary. No host acquisition or execution authority.
 import { parsePolicy } from '@aihq/core/contracts';
 import { isCheckedRelease, listItems, configureItem, resolveSelections, validateSelectionSet } from '@aihq/catalog/reader';
-import { checkIntentShape, checkReview, rootKey, pinKey, AUTHORING_SCHEMA, REVIEW_SCHEMA } from './intent-shape.mjs';
+import { checkIntentShape, checkReview, rootKey, pinKey, managementIdOf, AUTHORING_SCHEMA, REVIEW_SCHEMA } from './intent-shape.mjs';
 import { migrateIntent } from './migrate-intent.mjs';
 import { inspectReviewEvidence, compareReviewBindings, describeReviewJudgments, summarizeReviewJudgments } from './review-bindings.mjs';
 import { stable, ok, refuse } from './primitives.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_KINDS } from './journey.mjs';
-export { inspectReviewEvidence, compareReviewBindings, describeReviewJudgments, summarizeReviewJudgments, describeAuthoringSubject } from './review-bindings.mjs';
+// The ./authoring entry: these names and the operations below. inspectReviewEvidence stays here until Scan reads exact-subject coverage.
+export { inspectReviewEvidence } from './review-bindings.mjs';
 export { AUTHORING_SCHEMA, REVIEW_SCHEMA, freshAuthoring } from './intent-shape.mjs';
-// The ./authoring entry has always exported these names; they come from the shared primitives.
-export { stable, ok, refuse } from './primitives.mjs';
-// The id ordinary Enterprise composition gives an item at a scope; also names an organization entry that is never composed.
-export const managementIdOf = ({ scope, packageName, itemId }) => `${scope}--${packageName.replace(/^@/, '').replaceAll('/', '.')}--${itemId}`;
 const sorted = values => [...values].sort((a, b) => stable(a) < stable(b) ? -1 : stable(a) > stable(b) ? 1 : 0);
 function inventoryIndex(inventories) {
   if (!Array.isArray(inventories) || inventories.length > 32) throw new Error('Supply at most 32 exact checked inventories.');
@@ -535,7 +532,17 @@ export async function editDraft({ envelopeBytes, inventories, operation, reviewE
   const { index } = before, intent = structuredClone(record.intent);
   const changes = { removedRoots: [], removedOrigins: [], removedExclusions: [], addedRoots: [], removedPins: [] };
   const closureOf = root => before.closures.get(rootKey(root)) ?? reach(before.graph, rootKey(root));
-  const dependentsOf = (key, retained) => retained.filter(r => rootKey(r) !== key && closureOf(r).has(key));
+  // Whether `root` still requires the choice `target`: Catalog's removal impact for a choice whose content is supplied, else the
+  // recorded graph, since Catalog cannot resolve content it is not given (or a reference it refuses, such as one in an unavailable release).
+  const requires = (root, target) => {
+    if (before.resolvable.has(rootKey(root))) {
+      const impact = resolveSelections({ releases: index.releases, roots: [{ releaseSha256: root.releaseSha256, itemId: root.itemId, scope: root.scope, configuration: root.configuration }],
+        skips: before.skips, remove: [{ releaseSha256: target.releaseSha256, itemId: target.itemId, scope: target.scope }] });
+      if (impact.status === 'ok') return impact.value.removalImpact.some(entry => entry.affectedRoots.some(affected => rootKey(affected) === rootKey(root)));
+    }
+    return closureOf(root).has(rootKey(target));
+  };
+  const dependentsOf = (target, retained) => retained.filter(r => rootKey(r) !== rootKey(target) && requires(r, target));
   const required = (target, dependents) => fail('DEPENDENCY_RETAINED', '/operation/root',
     `Cannot remove ${label(target)}: it is still required by ${dependents.map(label).join(', ')}. Remove or replace those choices first.`,
     { target: rootRef(target), dependents: dependents.map(rootRef) });
@@ -569,7 +576,7 @@ export async function editDraft({ envelopeBytes, inventories, operation, reviewE
     if (operation.type === 'remove-root') {
       if (!isRef(operation.root)) return fail('INPUT_INVALID', '/operation/root', 'Supply {releaseSha256,itemId,scope}.');
       const target = operation.root, key = rootKey(target), found = intent.roots.find(r => rootKey(r) === key), retained = intent.roots.filter(r => r !== found);
-      const dependents = dependentsOf(key, retained);
+      const dependents = dependentsOf(target, retained);
       if (!found) return dependents.length ? required(target, dependents) : fail('INPUT_INVALID', '/operation/root', 'That item is not a choice in this draft.');
       // A resolvable root that is also a dependency is simply no longer a direct choice, as in ordinary
       // authoring. An unavailable one would silently remain as an unresolved requirement, so it is refused.
@@ -591,7 +598,7 @@ export async function editDraft({ envelopeBytes, inventories, operation, reviewE
         mergeRoot({ releaseSha256: keep.releaseSha256, itemId: keep.itemId, scope: keep.scope, itemSha256: pin.itemSha256, configuration: selection.configuration, originIds: ['direct'] });
       }
       for (const root of dropped) {
-        const key = rootKey(root), dependents = dependentsOf(key, intent.roots);
+        const key = rootKey(root), dependents = dependentsOf(root, intent.roots);
         if (before.unavailableNodes.has(key) && dependents.length && !intent.roots.some(r => rootKey(r) === key)) return required(root, dependents);
       }
     } else if (operation.type === 'select') {

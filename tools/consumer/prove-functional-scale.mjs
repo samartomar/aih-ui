@@ -5,12 +5,16 @@ import { fileURLToPath } from 'node:url';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { resolveSelections, validateSelectionSet } from '@aihq/catalog/reader';
 import { parsePolicy } from '@aihq/core/contracts';
-import { freshAuthoring, composeAuthoring, readAuthoring, recordReview, inspectReviewEvidence, describeAuthoringSubject, editAuthoring } from 'aih-ui/authoring';
-import { intakeDeclaration, digestBytes } from 'aih-ui/intake';
+import { freshAuthoring, composeAuthoring, readAuthoring, recordReview, inspectReviewEvidence, editAuthoring } from 'aih-ui/authoring';
+import { intakeDeclaration } from 'aih-ui/intake';
+// Application-internal: subject identities through Core's deriveRecipeIdentity, outside the package entries.
+import { describeAuthoringSubject } from './review-bindings.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { createMixedService } from './mixed-service.mjs';
 import { scaleInventories, scaleFramework, rootFor, encode, digest } from './scale-fixture.mjs';
 import { proveScaleBrowser } from './scale-browser.mjs';
+// The proof's own SHA-256 over Web Crypto; the ./intake entry publishes only intakeDeclaration.
+const digestBytes = async bytes => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), byte => byte.toString(16).padStart(2, '0')).join('');
 
 const output = process.argv[2];
 if (!output || !process.env.REVIEW_EVIDENCE_FILE) throw new Error('Supply an output directory and REVIEW_EVIDENCE_FILE containing original checked review-note evidence.');

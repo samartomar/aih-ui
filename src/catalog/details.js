@@ -31,7 +31,7 @@ import {
   NOT_PUBLISHED,
 } from "../app/absence.js";
 import { KIND_ICON, KIND_TONE, identity, sourceDetailRows, sourceIdentity, statementsOf } from "./entry.js";
-import { collectionOf, scopeCountOf } from "./selectors.js";
+import { scopeCountOf } from "./selectors.js";
 
 /* These Catalog inspector slots have no verified per-entry scan input. */
 const DETECTOR_RUN_STATE_ABSENT =
@@ -219,22 +219,7 @@ export function createDetails({ elements }) {
       // Full source values live here, without an abbreviated second copy.
       for (const [label, value] of sourceDetailRows(source)) codeRow(elements.detailsSource, label, value);
       row(elements.detailsSource, "License", null, "The index carries no license field.");
-      const collection = collectionOf(entry, counts);
-      if (collection !== null) {
-        // Catalog's statement that this entry is current content of a
-        // collection - not an installation, and not the running version.
-        row(
-          elements.detailsSource,
-          "Collection",
-          `${collection.owner.package} ${collection.current.release}`,
-          `Catalog collection ${collection.id}: current content release ${collection.current.release}, owned by ${collection.owner.package}`,
-        );
-      }
-      countRow(
-        elements.detailsSource,
-        collection === null ? "Items from this source" : "Items in this collection",
-        scopeCountOf(entry, counts),
-      );
+      countRow(elements.detailsSource, "Items from this source", scopeCountOf(entry, counts));
 
       // --------------------------- identity and artifacts, behind disclosure
       codeRow(elements.detailsIdentity, "Entry id", id.entryId);

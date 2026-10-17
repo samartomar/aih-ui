@@ -6,11 +6,13 @@ import { parseOrganizationPolicy, previewOrganizationObligations } from '@aihq/c
 import { nativeClientIds } from '@aihq/core/harness';
 import { isCheckedRelease, listItems } from '@aihq/catalog/reader';
 import { refuse, ok, stable } from './primitives.mjs';
-import { composeAuthoring, describeAuthoringSubject, freshAuthoring, managementIdOf } from './headless.mjs';
+import { composeAuthoring, freshAuthoring } from './headless.mjs';
+import { describeAuthoringSubject } from './review-bindings.mjs';
+import { managementIdOf } from './intent-shape.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { ORGANIZATION_DRAFT_RECORD_SCHEMA, ORGANIZATION_DRAFT_RECORD_ID, ORGANIZATION_OBLIGATIONS, ORGANIZATION_SCOPES,
   organizationDraftProblem, organizationEntryId, organizationTargetId, organizationSourceProblem, organizationPermissionProblem, MAX_ENTRIES, MAX_TARGETS, idPattern, boundedStrings } from './organization-draft-record.mjs';
-export const ORGANIZATION_POLICY_SCHEMA = 'urn:aihq:core:organization-policy:1.1.0';
+const ORGANIZATION_POLICY_SCHEMA = 'urn:aihq:core:organization-policy:1.1.0';
 const encode = value => new TextEncoder().encode(value);
 const ENTERPRISE_BASE = encode(JSON.stringify({ schema: 'urn:aihq:core:execution-policy:1.3.0', mode: 'enterprise', selections: [], metadata: { 'aih.workbench': freshAuthoring() } }));
 const PREVIEW_POLICY_ID = 'organization-baseline-preview';

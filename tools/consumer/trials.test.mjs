@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { validateClaimSet } from '@aihq/core/report';
 import { freshAuthoring, composeAuthoring, openDraft, editDraft } from './headless.mjs';
-import * as publicApi from './trials.mjs';
+import * as publicApi from './trials-entry.mjs';
 import { recordTrial, proposeTrial, readTrials, evaluateTrial, TRIAL_SCHEMA, TRIAL_MECHANISMS_NONE } from './trials.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, JOURNEY_RECORD_KINDS, DRAFT_RECORD_SCHEMA } from './journey.mjs';
 import { checkImprovements, recordImprovement, IMPROVEMENT_SUGGESTION_SCHEMA, IMPROVEMENT_DISMISSAL_SCHEMA } from './improvements.mjs';
@@ -680,10 +680,10 @@ test('the shipped trial schema agrees structurally with the runtime records', as
 });
 
 test('the public entry exposes the trial operations only, and the trial modules import only the allowed seams and call nothing outside', async () => {
-  assert.deepEqual(Object.keys(publicApi).sort(), ['DIMENSION_LABELS', 'TRIAL_MECHANISMS_NONE', 'TRIAL_PRODUCER', 'TRIAL_SCHEMA', 'evaluateTrial', 'proposeTrial', 'readTrials', 'recordTrial']);
+  assert.deepEqual(Object.keys(publicApi).sort(), ['TRIAL_SCHEMA', 'readTrials', 'recordTrial']);
   assert.deepEqual([...TRIAL_MECHANISMS_NONE], []); assert.equal(Object.isFrozen(TRIAL_MECHANISMS_NONE), true);
-  const allowed = [/^\.\/primitives\.mjs$/, /^\.\/journey\.mjs$/, /^\.\/headless\.mjs$/, /^\.\/maintenance-record\.mjs$/, /^\.\/improvement-record\.mjs$/, /^\.\/workspace-record\.mjs$/, /^\.\/trial-record\.mjs$/, /^@aihq\/core\/report$/];
-  for (const name of ['trial-record.mjs', 'trials.mjs']) {
+  const allowed = [/^\.\/primitives\.mjs$/, /^\.\/journey\.mjs$/, /^\.\/headless\.mjs$/, /^\.\/maintenance-record\.mjs$/, /^\.\/improvement-record\.mjs$/, /^\.\/workspace-record\.mjs$/, /^\.\/trial-record\.mjs$/, /^\.\/trials\.mjs$/, /^@aihq\/core\/report$/, /^@aihq\/catalog\/reader$/];
+  for (const name of ['trial-record.mjs', 'trials.mjs', 'trials-entry.mjs']) {
     const source = await readFile(new URL(`./${name}`, import.meta.url), 'utf8');
     const specifiers = [...source.matchAll(/^(?:import|export)\b[^;]*?\bfrom\s+'([^']+)'/gm)].map(match => match[1]);
     assert.ok(specifiers.length > 0, name);

@@ -4,10 +4,12 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startConsumer } from './server.mjs';
 import { readAuthoring, composeAuthoring, editAuthoring, freshAuthoring, reconcileAuthoring } from 'aih-ui/authoring';
-import { intakeDeclaration, digestBytes } from 'aih-ui/intake';
+import { intakeDeclaration } from 'aih-ui/intake';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { createMixedService } from './mixed-service.mjs';
 import { noteFixture } from './note-fixture.mjs';
+// The proof's own SHA-256 over Web Crypto; the ./intake entry publishes only intakeDeclaration.
+const digestBytes = async bytes => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), byte => byte.toString(16).padStart(2, '0')).join('');
 const output = process.argv[2]; await mkdir(output, { recursive: true });
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE);
 const installed = await readInstalledRelease({ root: dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'))), sourceInput: 'maintained' });

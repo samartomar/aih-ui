@@ -31,10 +31,6 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     entries: [],
     summary: null,
     counts: inventoryCounts([]),
-    // Catalog's collection view as applied to the index: current members,
-    // and how many entries it holds only for reference.
-    inventory: null,
-    context: { membership: new Map(), installed: new Map() },
     view: emptyView(),
     selectedId: null,
     // The organization's own name, when the user has saved one. It labels the
@@ -82,7 +78,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   for (const control of [target, support]) control.addEventListener('change', () => render());
 
   function browseEntries() {
-    return visibleEntries(state.entries, state.view, state.context.membership)
+    return visibleEntries(state.entries, state.view)
       .filter(entry => !family.value || entry.authoringItem.family === family.value);
   }
 
@@ -94,7 +90,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     const scope = selectedScope(state.counts, state.view);
     return {
       entries: supportedEntries(browseEntries(), target.value, support.value),
-      total: scopeTotal(state.entries, state.view, state.context.membership),
+      total: scopeTotal(state.entries, state.view),
       noun: scope === null ? "catalog entries" : "entries from this source",
       selectedId: state.selectedId,
       intent: authoring.intent,
@@ -122,15 +118,15 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   }
 
   function render() {
-    state.counts = inventoryCounts(state.entries, state.context);
+    state.counts = inventoryCounts(state.entries);
     const total = state.entries.length;
     const scope = selectedScope(state.counts, state.view);
-    const inScope = scopeTotal(state.entries, state.view, state.context.membership);
+    const inScope = scopeTotal(state.entries, state.view);
     const cardsView = cardsModel();
     const scoped = browseEntries();
     const count = status => scoped.filter(entry => capabilityFacts(entry.authoringItem, target.value).some(fact => fact.support === status)).length;
     counts.textContent = `${target.value || 'No declared target'} · ${scoped.length} items in family/search/source scope: ${count('supported')} with supported facts · ${count('unsupported')} with unsupported facts · ${count('unknown')} with unknown facts. Mixed items can count in more than one group.`;
-    const availableKinds = visibleEntries(state.entries, { ...state.view, kind: null }, state.context.membership);
+    const availableKinds = visibleEntries(state.entries, { ...state.view, kind: null });
     const filteredCounts = inventoryCounts(availableKinds);
     provenance.render({
       summary: state.summary,
@@ -138,7 +134,6 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       scopeTotal: inScope,
       scope,
       counts: state.counts,
-      inventory: state.inventory,
     });
     metrics.render({ kindCounts: state.counts.kindCounts, total, activeKind: state.view.kind });
     navigation.render(navigationModel());
@@ -179,8 +174,6 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
         if (!authoring.catalog) return;
         state.entries = projectItems(authoring.catalog.items);
         if (state.selectedId && !selectedEntry()) { state.selectedId = null; onSelectEntry(null); }
-        state.inventory = { membership: new Map(), collections: [], notCurrent: 0 };
-        state.context = { membership: new Map(), installed: new Map() };
         const selectedFamily = family.value, selectedTarget = target.value;
         family.replaceChildren(new Option('All families', ''));
         for (const value of [...new Set(authoring.catalog.items.map(item => item.family))]) {
@@ -195,7 +188,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       authoring.subscribe(refresh);
       refresh();      // Counts first: restoreView validates every saved filter against them, so
       // restoring before they exist silently discards the saved kind and source.
-      state.counts = inventoryCounts(state.entries, state.context);
+      state.counts = inventoryCounts(state.entries);
       restoreView(state.view, state.counts);
       toolbar.setQuery(state.view.query);
       render();
