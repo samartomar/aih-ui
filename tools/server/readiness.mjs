@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { homeEnvironment } from '../consumer/home-environment.mjs';
 
 const MAX_BODY = 64 * 1024;
-const TIMEOUT_MS = { check: 200_000, 'repair-prepare': 120_000, 'repair-apply': 120_000, repairs: 10_000, report: 30_000 };
+const TIMEOUT_MS = { check: 200_000, 'repair-prepare': 120_000, 'repair-apply': 120_000, repairs: 10_000, report: 30_000, records: 10_000 };
 const ROUTES = { '/api/readiness-report': ['GET', 'report'], '/api/readiness-check': ['POST', 'check'], '/api/readiness-repairs': ['GET', 'repairs'],
   '/api/readiness-repair-prepare': ['POST', 'repair-prepare'], '/api/readiness-repair-apply': ['POST', 'repair-apply'] };
 // lost and rejected are decisions the page renders from the body status, not transport failures.
@@ -69,6 +69,12 @@ export function createReadinessAdapter(consumerDir) {
 
   return {
     close() { stop('The readiness host was closed.'); },
+    // The journal of checks and repairs the person triggered, read only by the host (it is not an HTTP route). It lives in the child's memory, so a child that has not
+    // started holds none: answer undefined without starting it. A timeout, a failure or anything but a list is unreadable (null).
+    async records() {
+      if (child === null) return undefined;
+      try { const records = await call('records'); return Array.isArray(records) ? records : null; } catch { return null; }
+    },
     async handle(request, response, pathname) {
       if (!pathname.startsWith('/api/readiness-')) return false;
       const route = ROUTES[pathname];

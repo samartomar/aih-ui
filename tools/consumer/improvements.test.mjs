@@ -16,6 +16,8 @@ import { nativeClientIds } from '@aihq/core/harness';
 import { suggestionRevision, suggestionProblem } from './improvement-record.mjs';
 import { suggestImprovements, lead, classifyImprovement, improvementPrompt, releaseRelation, unorderedSources, GOAL_RULES, UNKNOWNS, FRICTION_COVERAGE, FRICTION_UNREADABLE, FIXTURE_LABEL, FRICTION_RULE, IMPROVEMENT_RULES_VERSION, MAX_ALTERNATIVES } from './improvement-rules.mjs';
 import { frictionRecurrence } from './friction.mjs';
+import { coreTargetsOf } from './executable-ties.mjs';
+import { installedFamilies } from './installed-families.mjs';
 import { READINESS_RECORD_SCHEMA } from './claims.mjs';
 import * as rules from './improvement-rules.mjs';
 import { checkImprovements, recordImprovement, projectDismissals, IMPROVEMENT_SUGGESTION_SCHEMA, IMPROVEMENT_DISMISSAL_SCHEMA } from './improvements.mjs';
@@ -39,7 +41,7 @@ const byItem = (suggestions, itemId) => suggestions.find(s => s.change.itemId ==
 const shownItem = (checked, itemId) => byItem([checked.leading, ...checked.alternatives, ...checked.dismissed].filter(Boolean), itemId);
 
 test('the rules version and goal table are fixed and every rule names a distinct, well-formed reason', () => {
-  assert.equal(IMPROVEMENT_RULES_VERSION, '1.5.0');
+  assert.equal(IMPROVEMENT_RULES_VERSION, '1.6.0');
   assert.deepEqual(GOAL_RULES.map(rule => [rule.id, rule.itemId]), [['goal.fix', 'mattpocock.diagnosing-bugs'], ['goal.test', 'mattpocock.tdd'], ['goal.regressions', 'mattpocock.tdd'],
     ['goal.review', 'mattpocock.code-review'], ['goal.refactor', 'mattpocock.improve-codebase-architecture'], ['goal.plan', 'mattpocock.grill-me'], ['goal.context', 'aihq.project-context']]);
   for (const rule of GOAL_RULES) assert.match(rule.id, /^[a-z][a-z0-9.-]{0,63}$/);
@@ -135,7 +137,7 @@ test('the client rule names a client by its published label, and the label never
   const [plain] = await suggest({ clients: ['claude'] }), [named] = await suggest({ clients: ['claude'], labels: { claude: 'Claude Code', codex: 'Codex' } });
   assert.deepEqual(named.triggers, [{ ruleId: 'client.instructions', key: 'client:claude', text: 'You use Claude Code (Workbench setup), but this policy does not give it the shared project instructions.' }]);
   assert.equal(named.goal, 'Give Claude Code the same shared project instructions as your other AI clients.');
-  assert.equal(named.rulesVersion, '1.5.0');
+  assert.equal(named.rulesVersion, '1.6.0');
   // A label is wording: the same id and revision, so a dismissal made before a rename still applies.
   assert.deepEqual([named.id, named.revision], [plain.id, plain.revision]);
   assert.deepEqual(classifyImprovement(named, plain), { dismissed: true, reasons: [] });
@@ -356,7 +358,7 @@ test('a goal-relevant item that is new or revised in a newer revision of a saved
   assert.equal(changeTrigger(tdd).text, '“Label mattpocock.tdd” changed in review-notes-catalog 1.1.0 (its recipe or files differ from the revision this policy was saved from); your saved goal “add tests to my app” mentions “tests”.');
   assert.deepEqual(tdd.triggers.map(t => t.key), ['change:revised@1.1.0', 'goal:goal.test']);
   assert.deepEqual(tdd.references, [{ kind: 'saved-reason', ref: 'x.root' }, { kind: 'catalog-item', ref: 'mattpocock.tdd' }]);
-  assert.equal(tdd.goal, GOAL); assert.equal(tdd.rulesVersion, '1.5.0');
+  assert.equal(tdd.goal, GOAL); assert.equal(tdd.rulesVersion, '1.6.0');
   // The change describes the candidate item, the content the reason talks about.
   assert.deepEqual([tdd.change.releaseSha256, tdd.change.itemSha256, tdd.change.content.recipeSha256], [hex(10), hex(121), hex(21)]);
   const plan = byItem(got, 'notes.plan');
@@ -526,14 +528,14 @@ test('the rule table points at items the installed maintained Catalog really off
   const before = s.envelopeBytes.slice();
   const value = await check(s, s.envelopeBytes, { clients: ['claude', 'not-a-client'], goal: 'fewer regressions' });
   assert.deepEqual(s.envelopeBytes, before);
-  assert.equal(value.rulesVersion, '1.5.0'); assert.equal(value.checkedAt, NOW); assert.deepEqual(value.mutations, []);
+  assert.equal(value.rulesVersion, '1.6.0'); assert.equal(value.checkedAt, NOW); assert.deepEqual(value.mutations, []);
   assert.deepEqual(value.reads, ['envelope', 'supplied-inventories', 'declared-clients', 'request-goal']);
   // implement is the root; tdd arises from the saved goal and the request (two reasons), the client wiring from setup.
   assert.equal(value.leading.change.itemId, 'mattpocock.tdd');
   assert.deepEqual(value.leading.triggers.map(t => t.key), ['goal:goal.regressions', 'goal:goal.test']);
   assert.equal(value.leading.label, s.maintained.release.items.find(i => i.id === 'mattpocock.tdd').label);
   assert.equal(value.leading.scope, 'project'); assert.equal(value.leading.dismissal, null); assert.equal(value.leading.promotion, undefined);
-  assert.equal(value.leading.rulesVersion, '1.5.0'); assert.equal(value.leading.change.releaseSha256, s.maintained.release.sha256);
+  assert.equal(value.leading.rulesVersion, '1.6.0'); assert.equal(value.leading.change.releaseSha256, s.maintained.release.sha256);
   assert.match(value.leading.facts[0].text, /^Adds \d+ files, \d+ bytes in total, and needs 0 other items\.$/);
   assert.deepEqual(value.alternatives.map(a => a.change.itemId), ['aihq.client.claude']);
   assert.match(value.alternatives[0].facts[0].text, /^Adds \d+ files, \d+ bytes in total, and needs [1-9]\d* other items?: /);
@@ -1025,7 +1027,7 @@ test('checking, dismissing and building the prompt never touch the network or a 
 });
 
 test('the improvement modules import only the allowed seams and contain no network, process or random calls', async () => {
-  const allowed = [/^\.\/intake\.mjs$/, /^\.\/journey\.mjs$/, /^\.\/headless\.mjs$/, /^\.\/intent-shape\.mjs$/, /^\.\/maintenance-record\.mjs$/, /^\.\/improvement-[a-z]+\.mjs$/, /^\.\/client-identity\.mjs$/, /^\.\/trial-record\.mjs$/, /^\.\/release-order\.mjs$/, /^\.\/friction\.mjs$/, /^\.\/claims\.mjs$/, /^@aihq\/catalog\/reader$/, /^@aihq\/core\/report$/];
+  const allowed = [/^\.\/intake\.mjs$/, /^\.\/journey\.mjs$/, /^\.\/headless\.mjs$/, /^\.\/intent-shape\.mjs$/, /^\.\/maintenance-record\.mjs$/, /^\.\/improvement-[a-z]+\.mjs$/, /^\.\/client-identity\.mjs$/, /^\.\/trial-record\.mjs$/, /^\.\/release-order\.mjs$/, /^\.\/friction\.mjs$/, /^\.\/executable-ties\.mjs$/, /^\.\/claims\.mjs$/, /^@aihq\/catalog\/reader$/, /^@aihq\/core\/report$/];
   for (const name of ['improvement-record.mjs', 'improvement-rules.mjs', 'improvements.mjs', 'friction.mjs']) {
     const source = await readFile(new URL(`./${name}`, import.meta.url), 'utf8');
     const specifiers = [...source.matchAll(/^(?:import|export)\b[^;]*?\bfrom\s+'([^']+)'/gm)].map(match => match[1]);
@@ -1037,6 +1039,10 @@ test('the improvement modules import only the allowed seams and contain no netwo
   }
   const rules = await readFile(new URL('./improvement-rules.mjs', import.meta.url), 'utf8');
   assert.deepEqual([...rules.matchAll(/^import\b[^;]*?\bfrom\s+'([^']+)'/gm)].map(m => m[1]), ['./improvement-record.mjs', './release-order.mjs', './client-identity.mjs']);
+  // The tie table reads only Core's published target ids.
+  const ties = await readFile(new URL('./executable-ties.mjs', import.meta.url), 'utf8');
+  assert.deepEqual([...ties.matchAll(/^import\b[^;]*?\bfrom\s+'([^']+)'/gm)].map(m => m[1]), ['@aihq/core/harness']);
+  for (const forbidden of [/fetch\(/, /node:/, /child_process/, /setTimeout/, /Math\.random/, /Date\.now/, /\bprocess\b/, /\bBuffer\b/]) assert.doesNotMatch(ties, forbidden, `executable-ties.mjs ${forbidden}`);
 });
 
 // ---- The copy-only prompt ------------------------------------------------------------------------------------------
@@ -1047,7 +1053,7 @@ test('the prompt is attributed, tells the AI to change nothing, and carries no p
   for (const suggestion of [checked.leading, ...checked.alternatives]) {
     const prompt = suggestion.prompt;
     assert.equal(prompt, improvementPrompt(suggestion));
-    assert.ok(prompt.includes('Suggested by the AIH Workbench improvement rules 1.5.0 (fixed rules; no AI model was used).'));
+    assert.ok(prompt.includes('Suggested by the AIH Workbench improvement rules 1.6.0 (fixed rules; no AI model was used).'));
     assert.match(prompt, /Do not install, change or run anything/); assert.match(prompt, /do not ask me to upload/);
     assert.ok(prompt.includes('Start your reply with “AI advice:”.'));
     assert.ok(prompt.includes(suggestion.label)); assert.ok(prompt.includes(suggestion.change.itemId));
@@ -1228,7 +1234,7 @@ test('a recurrence names the condition, the evidence and the scope, and records 
     text: `Recurring failure: the managed file state check for “${label}” failed (${DAYS[0]}), recovered (${DAYS[1]}) and failed again (${DAYS[2]}); 1 recurrence in 3 stored Core results.` }]);
   assert.match(suggestion.triggers[0].key, /^[a-z][a-z0-9-]{0,31}:[\w.@-]{1,180}$/);
   assert.equal(suggestion.goal, 'ship it'); assert.deepEqual(suggestion.references, [{ kind: 'saved-reason', ref: 'mattpocock.implement' }, { kind: 'catalog-item', ref: DIAGNOSING }]);
-  assert.equal(value.rulesVersion, '1.5.0'); assert.equal(suggestion.rulesVersion, '1.5.0'); assert.equal(suggestion.triggers[0].text.includes(FIXTURE_NOTE), false);
+  assert.equal(value.rulesVersion, '1.6.0'); assert.equal(suggestion.rulesVersion, '1.6.0'); assert.equal(suggestion.triggers[0].text.includes(FIXTURE_NOTE), false);
   assert.deepEqual(value.coverage[1], { trigger: 'recurring-friction', state: 'checked', text: FRICTION_COVERAGE.checked });
   assert.deepEqual(value.reads, ['envelope', 'supplied-inventories', 'core-evidence', 'declared-clients']);
   assert.deepEqual(suggestion.unknowns, [...UNKNOWNS, UNCONFIGURED]); assert.equal(suggestion.prompt, improvementPrompt(suggestion)); assert.match(suggestion.prompt, /Recurring failure: the managed file state check/);
@@ -1327,11 +1333,24 @@ test('an item that is already selected is not suggested for friction', async () 
   assert.deepEqual(await suggestImprovements({ intent: intentOf(), items: [], friction: [] }), []);
 });
 
+// The readiness journal's records, as the Workbench holds them: a machine check (this host's inspection, and the persisted one when given) and a repair's recheck.
+// `target` is the Core target the rows are about.
+const TLS = 'claude/tls/node/registry.npmjs.org';
+const checkRow = (id, target, outcome) => ({ kind: 'check', id, target, outcome, reason: outcome });
+const inspected = (configuration, rows) => ({ status: 'complete', options: { configuration }, items: rows });
+const machineCheck = (id, n, rows, persistedRows) => ({ schema: READINESS_RECORD_SCHEMA, kind: 'machine-check', id, sha256: hex(40 + n), capturedAt: DAYS[n - 1],
+  check: inspected('process', rows), ...(persistedRows ? { persistedCheck: inspected('persisted', persistedRows) } : {}) });
+const journalCheck = (n, host, persisted) => machineCheck(`chk-${n}`, n, [checkRow(TLS, 'claude', host)], [checkRow(TLS, 'claude', persisted)]);
+const journalRepair = (n, outcome) => ({ schema: READINESS_RECORD_SCHEMA, kind: 'repair', id: `rep-${n}`, sha256: hex(40 + n), capturedAt: DAYS[n - 1],
+  repair: { repairId: 'node-npm-ca', targets: ['claude'], before: null, run: null, appliedAt: DAYS[n - 1], recheckedAt: DAYS[n - 1],
+    outcome: { condition: { kind: 'repair-recheck', ...inspected('persisted', [checkRow(TLS, 'claude', outcome)]) } } } });
+const stored = records => records.map(result => ({ id: result.id, capturedAt: result.capturedAt, sha256: result.sha256, result }));
+// The same records about another Core target.
+const onTarget = (target, records) => records.map(result => JSON.parse(JSON.stringify(result).replaceAll('"claude"', `"${target}"`).replaceAll('claude/tls', `${target}/tls`)));
+
 test('a published check id with a path separator is a recurring condition, keeps its id, and still gives a valid trigger key that records and dismisses', async () => {
   const s = await frictionScenario({ rootIds: ['mattpocock.implement', 'aihq.client.claude'] });
-  const readiness = (id, at, ...items) => ({ id, capturedAt: at, result: { schema: READINESS_RECORD_SCHEMA, kind: 'machine-check', id, sha256: hex(5), capturedAt: at,
-    check: { status: 'complete', items: items.map(([name, outcome]) => ({ kind: 'check', id: name, target: 'claude', outcome, reason: outcome })) } } });
-  const outcomes = ['failed', 'passed', 'failed'], series = (name, prefix) => outcomes.map((outcome, index) => readiness(`${prefix}-${index + 1}`, DAYS[index], [name, outcome]));
+  const outcomes = ['failed', 'passed', 'failed'], series = (name, prefix) => stored(outcomes.map((outcome, index) => machineCheck(`${prefix}-${index + 1}`, index + 1, [checkRow(name, 'claude', outcome)])));
   const value = await check(s, s.envelopeBytes, { evidence: series('claude/version', 'chk') }), friction = frictionOf(value.leading);
   assert.equal(value.leading.change.itemId, DIAGNOSING); assert.equal(value.coverage[1].state, 'checked');
   assert.match(friction.text, /^Recurring failure: the claude\/version readiness check for “Claude Code context wiring” failed/);
@@ -1341,6 +1360,119 @@ test('a published check id with a path separator is a recurring condition, keeps
   assert.equal(both.leading.triggers.length, 2); assert.equal(new Set(both.leading.triggers.map(t => t.key)).size, 2);
   const recorded = await record(s.envelopeBytes, dismissOperation(value.leading));
   assert.equal(recorded.envelope.records.find(r => r.schema === IMPROVEMENT_SUGGESTION_SCHEMA).triggers[0].key, friction.key);
+});
+
+// ---- Friction from the readiness journal ---------------------------------------------------------------------------------------
+// The journal's records are the host's own, so unlike the fixture file they carry no fixture flag. A check has two timelines (this host's trust and the
+// trust a repair persists); a repair that held and a later host failure are not a recurrence.
+
+test('a journal recurrence of a persisted-configuration check gives a suggestion that is not labelled fixture; recovery alone gives coverage checked and none', async () => {
+  const s = await frictionScenario({ rootIds: ['mattpocock.implement', 'aihq.client.claude'] });
+  const recurs = stored([journalCheck(1, 'failed', 'failed'), journalRepair(2, 'passed'), journalCheck(3, 'failed', 'passed'), journalCheck(4, 'failed', 'failed')]);
+  const value = await check(s, s.envelopeBytes, { evidence: recurs }), friction = frictionOf(value.leading);
+  assert.equal(value.leading.change.itemId, DIAGNOSING);
+  assert.equal(friction.key.startsWith('friction:persisted-configuration-claude-tls-node'), true); assert.match(friction.key, /^[a-z][a-z0-9-]{0,31}:[\w.@-]{1,180}$/);
+  assert.match(friction.text, /^Recurring failure: the persisted-configuration claude\/tls\/node\/registry\.npmjs\.org readiness check for “Claude Code context wiring” failed \(2026-10-10T09:00:00Z\), recovered \(2026-10-11T09:00:00Z\) and failed again \(2026-10-13T09:00:00Z\); 1 recurrence in 4 stored Core results\.$/);
+  assert.equal(value.leading.goal, 'ship it'); assert.equal(JSON.stringify(value).includes(FIXTURE_NOTE), false);
+  assert.deepEqual(value.coverage[1], { trigger: 'recurring-friction', state: 'checked', text: FRICTION_COVERAGE.checked });
+  // Recovery with no later failure is checked, with nothing to suggest; the host's own failing readings after the repair are not a recurrence.
+  const held = await check(s, s.envelopeBytes, { evidence: stored([journalCheck(1, 'failed', 'failed'), journalRepair(2, 'passed')]) });
+  assert.deepEqual(held.coverage[1], { trigger: 'recurring-friction', state: 'checked', text: FRICTION_COVERAGE.checked }); assert.equal(held.leading, null);
+  const afterRepair = await check(s, s.envelopeBytes, { evidence: stored([journalCheck(1, 'failed', 'failed'), journalRepair(2, 'passed'), journalCheck(3, 'failed', 'passed'), journalCheck(4, 'failed', 'passed')]) });
+  assert.equal(afterRepair.coverage[1].state, 'checked'); assert.equal(afterRepair.leading, null);
+  // The same journal read twice gives the same suggestion, and the suggestion records and dismisses like any other.
+  const again = await check(s, s.envelopeBytes, { evidence: [...recurs, ...structuredClone(recurs)] });
+  assert.deepEqual([again.leading.id, again.leading.revision], [value.leading.id, value.leading.revision]);
+  assert.equal((await record(s.envelopeBytes, dismissOperation(value.leading))).envelope.records.find(r => r.schema === IMPROVEMENT_SUGGESTION_SCHEMA).triggers[0].key, friction.key);
+  // A host-only failure that recovers and recurs is the host's own condition, named as it always was.
+  const host = await check(s, s.envelopeBytes, { evidence: stored([journalCheck(1, 'failed', 'passed'), journalCheck(2, 'passed', 'passed'), journalCheck(3, 'failed', 'passed')]) });
+  assert.match(frictionOf(host.leading).text, /^Recurring failure: the claude\/tls\/node\/registry\.npmjs\.org readiness check for/);
+  assert.equal(frictionOf(host.leading).key.startsWith('friction:persisted'), false);
+});
+
+test('a check that recurs under both trusts gives two reasons with distinct keys and wording, each recorded and dismissed on its own', async () => {
+  const s = await frictionScenario({ rootIds: ['mattpocock.implement', 'aihq.client.claude'] });
+  const both = await check(s, s.envelopeBytes, { evidence: stored([journalCheck(1, 'failed', 'failed'), journalCheck(2, 'passed', 'passed'), journalCheck(3, 'failed', 'failed')]) });
+  const reasons = both.leading.triggers.filter(t => t.ruleId === 'friction.recurrence');
+  assert.equal(reasons.length, 2); assert.equal(new Set(reasons.map(t => t.key)).size, 2);
+  assert.deepEqual(reasons.map(t => t.text.startsWith('Recurring failure: the persisted-configuration claude/tls/node/registry.npmjs.org readiness check')).sort(), [false, true]);
+  const recorded = await record(s.envelopeBytes, dismissOperation(both.leading));
+  assert.deepEqual(recorded.envelope.records.find(r => r.schema === IMPROVEMENT_SUGGESTION_SCHEMA).triggers.map(t => t.key).sort(), reasons.map(t => t.key).sort());
+  // A dismissal made when only the host's trust recurred does not hide the persisted one when it joins.
+  const hostOnly = await check(s, s.envelopeBytes, { evidence: stored([journalCheck(1, 'failed', 'passed'), journalCheck(2, 'passed', 'passed'), journalCheck(3, 'failed', 'passed')]) });
+  const dismissed = await record(s.envelopeBytes, dismissOperation(hostOnly.leading));
+  const later = await check(s, dismissed.envelopeBytes, { evidence: stored([journalCheck(1, 'failed', 'failed'), journalCheck(2, 'passed', 'passed'), journalCheck(3, 'failed', 'failed')]) });
+  assert.equal(later.leading.id, hostOnly.leading.id); assert.equal(later.leading.promotion.reasons.length, 1);
+  assert.match(later.leading.promotion.reasons[0], /^Shown again: a new reason applies — Recurring failure: the persisted-configuration claude/);
+});
+
+test('the envelope\'s maintenance-check note never changes what the friction coverage says on its own', async () => {
+  const s = await frictionScenario(), mid = selectionOf(s, 'mattpocock.implement');
+  const noted = valueOf(await recordMaintenance({ envelopeBytes: s.envelopeBytes, operation: { type: 'note-check', checkedAt: '2026-10-15T08:00:00Z', categories: [{ category: 'content', state: 'checked' }] }, now: NOW }));
+  assert.equal(noted.envelope.records.some(r => r.id === 'maintenance-check'), true);
+  assert.deepEqual((await check(s, noted.envelopeBytes, { evidence: undefined })).coverage[1], UNAVAILABLE);
+  assert.deepEqual((await check(s, noted.envelopeBytes, { evidence: null })).coverage[1], { trigger: 'recurring-friction', state: 'unknown', reason: 'history-unavailable', text: FRICTION_UNREADABLE });
+  const none = await check(s, noted.envelopeBytes, { evidence: [] });
+  assert.deepEqual(none.coverage[1], { trigger: 'recurring-friction', state: 'unknown', reason: 'no-recurrence-evidence', text: FRICTION_COVERAGE['no-recurrence-evidence'] });
+  assert.equal(none.reads.includes('core-evidence'), true); assert.equal(none.leading, null);
+  // Beside real history it changes nothing, and a full history is not refused for the note.
+  const recurring = history(mid.id, ['changed', 'match', 'changed']);
+  assert.deepEqual([(await check(s, noted.envelopeBytes, { evidence: recurring })).leading.id, (await check(s, s.envelopeBytes, { evidence: recurring })).leading.id].every(Boolean), true);
+  const full = Array.from({ length: 256 }, (_, index) => ({ id: `capture-${index}`, capturedAt: DAYS[0], result: { schema: 'urn:aihq:core:run-result:1.0.0' } }));
+  assert.equal((await check(s, noted.envelopeBytes, { evidence: full })).coverage[1].reason, 'no-recurrence-evidence');
+  const refused = await checkImprovements({ envelopeBytes: noted.envelopeBytes, inventories: s.inventories, now: NOW, evidence: [...full, full[0]] });
+  assert.equal(refused.status, 'refused'); assert.equal(refused.diagnostics[0].path, '/evidence');
+});
+
+test('a Catalog item\'s executables tie the Core target they run on: a target id ties itself, npx ties npm, and anything else ties nothing', async () => {
+  const running = (...names) => item('x.mcp', { targets: names.map(name => ({ kind: 'executable', name })) });
+  assert.deepEqual(coreTargetsOf(running('npx')), ['npm']);
+  assert.deepEqual(coreTargetsOf(running('node')), ['node']);
+  assert.deepEqual(coreTargetsOf(running('npx', 'node', 'npm', 'git')), ['git', 'node', 'npm']);
+  assert.deepEqual(coreTargetsOf(running('bash')), ['bash']);
+  // No guessing: a name Core has no target for, a near miss, a different case and inherited object keys tie nothing.
+  assert.deepEqual(coreTargetsOf(running('uvx', 'python3', 'tsx', 'Node', 'NPX', 'npx.cmd', 'constructor', '__proto__', 'toString', '')), []);
+  // Only declared executables count.
+  assert.deepEqual(coreTargetsOf(item('x.plain')), []);
+  assert.deepEqual(coreTargetsOf(item('x.platform', { targets: [{ kind: 'platform', name: 'node' }, { kind: 'executable' }, { kind: 'executable', name: 5 }, null, 'node'] })), []);
+  assert.deepEqual(coreTargetsOf(item('x.bad', { targets: 'node' })), []);
+  assert.deepEqual(coreTargetsOf(undefined), []);
+});
+
+test('the npm tie from an npx item names the persisted check for the item, and the suggestion is not labelled fixture', async () => {
+  const context7 = item('ecc.claude.mcp.context7', { label: 'Context7', targets: [{ kind: 'executable', name: 'npx' }] });
+  const subjects = coreTargetsOf(context7).map(key => ({ kind: 'target', key, itemId: context7.id, rootItemId: context7.id, label: context7.label, scope: 'project' }));
+  const records = onTarget('npm', [journalCheck(1, 'failed', 'failed'), journalRepair(2, 'passed'), journalCheck(3, 'failed', 'passed'), journalCheck(4, 'failed', 'failed')]);
+  const { results } = frictionRecurrence({ evidence: stored(records), subjects });
+  const [found] = await suggestImprovements({ intent: intentOf({ roots: [rootOf(context7.id)] }), items: [context7, item(DIAGNOSING)], friction: results });
+  assert.equal(found.change.itemId, DIAGNOSING);
+  assert.match(frictionOf(found).text, /^Recurring failure: the persisted-configuration npm\/tls\/node\/registry\.npmjs\.org readiness check for “Context7” failed/);
+  assert.equal(frictionOf(found).text.includes(FIXTURE_NOTE), false); assert.deepEqual(found.references, [{ kind: 'catalog-item', ref: context7.id }, { kind: 'catalog-item', ref: DIAGNOSING }]);
+});
+
+// A real draft over the installed maintained Catalog and the four family releases that selects one family item (the ECC MCP items declare the npx they run).
+async function familyScenario(itemId) {
+  const found = await installed(), families = await installedFamilies(), inventories = [{ release: found.release, materialSource: found.source }, ...families];
+  const entry = families.find(family => family.release.items.some(i => i.id === itemId)), offered = entry?.release.items.find(i => i.id === itemId);
+  assert.ok(offered, `${itemId} is offered by an installed family release.`); assert.ok(found.release.items.some(i => i.id === DIAGNOSING), `${DIAGNOSING} is offered by the maintained release.`);
+  const intent = { ...freshAuthoring(), roots: [{ releaseSha256: entry.release.sha256, itemId, itemSha256: offered.itemSha256, scope: offered.scopes[0], configuration: {}, originIds: ['direct'] }] };
+  const base = valueOf(await composeAuthoring({ intent: freshAuthoring(), inventories })), composed = valueOf(await composeAuthoring({ basePolicyBytes: base.policyBytes, intent, inventories }));
+  return { inventories, offered, scope: offered.scopes[0], envelopeBytes: valueOf(await openDraft({ bytes: composed.policyBytes, inventories })).envelopeBytes };
+}
+
+test('an installed ECC family item that runs npx ties the npm check through the public check; recovery alone and another target give no suggestion', async () => {
+  const s = await familyScenario('ecc.claude.mcp.context7'), { label } = s.offered, readings = [journalCheck(1, 'failed', 'failed'), journalRepair(2, 'passed'), journalCheck(3, 'failed', 'passed'), journalCheck(4, 'failed', 'failed')];
+  assert.deepEqual(s.offered.targets.filter(t => t.kind === 'executable').map(t => t.name), ['npx']);
+  const value = await check(s, s.envelopeBytes, { evidence: stored(onTarget('npm', readings)) }), friction = frictionOf(value.leading);
+  assert.equal(value.leading.change.itemId, DIAGNOSING); assert.equal(value.leading.scope, s.scope);
+  assert.equal(friction.text.startsWith(`Recurring failure: the persisted-configuration npm/tls/node/registry.npmjs.org readiness check for “${label}” failed`), true);
+  assert.equal(JSON.stringify(value).includes(FIXTURE_NOTE), false); assert.deepEqual(value.coverage[1], { trigger: 'recurring-friction', state: 'checked', text: FRICTION_COVERAGE.checked });
+  // Recovery with no later failure is checked with nothing to suggest.
+  const held = await check(s, s.envelopeBytes, { evidence: stored(onTarget('npm', readings.slice(0, 2))) });
+  assert.deepEqual(held.coverage[1], { trigger: 'recurring-friction', state: 'checked', text: FRICTION_COVERAGE.checked }); assert.equal(held.leading, null);
+  // The same records on a target the item does not run on settle nothing for it.
+  const other = await check(s, s.envelopeBytes, { evidence: stored(onTarget('node', readings)) });
+  assert.deepEqual(other.coverage[1], { trigger: 'recurring-friction', state: 'unknown', reason: 'no-recurrence-evidence', text: FRICTION_COVERAGE['no-recurrence-evidence'] }); assert.equal(other.leading, null);
 });
 
 // ---- Scope and the record's trigger limit -------------------------------------------------------------------------

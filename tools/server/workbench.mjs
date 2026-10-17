@@ -1,14 +1,16 @@
 import { createApi } from './api.mjs';
-import { createAuthoringAdapter } from './authoring.mjs';
+import { createAuthoringAdapter, journalFrictionEvidence } from './authoring.mjs';
 import { createBatchAdapter } from './batch.mjs';
 import { createReadinessAdapter } from './readiness.mjs';
 import { createStaticServer } from './static.mjs';
 
 // The ordinary preview and its regression share this composition boundary.
 export async function createWorkbench({ consumerDir, runDir, summary, settingsPath }) {
-  const authoring = await createAuthoringAdapter(consumerDir);
-  const batch = createBatchAdapter(consumerDir);
+  // The readiness journal is the friction input for what the person ran here. The readiness adapter is created first because the authoring host's journal provider closes over it
+  // and reads it afresh on each improvements check; its child is forked lazily, on the first readiness request.
   const readiness = createReadinessAdapter(consumerDir);
+  const authoring = await createAuthoringAdapter(consumerDir, { frictionEvidence: await journalFrictionEvidence(consumerDir, () => readiness.records()) });
+  const batch = createBatchAdapter(consumerDir);
   const existingApi = createApi({ consumerDir, runDir, summary, settingsPath });
   const server = createStaticServer(runDir, async (request, response, pathname) => {
     try { return await batch.handle(request, response, pathname) || await readiness.handle(request, response, pathname) || await authoring.handle(request, response, pathname) || await existingApi(request, response, pathname); }

@@ -10,7 +10,8 @@ import { adapterFor, describeClientIdentity } from './client-identity.mjs';
 // 1.3.0: the client rule matches adapters by Catalog clientId; an adapter without one is not suggested.
 // 1.4.0: content-change rules use the host-declared release order when known.
 // 1.5.0: recurring friction from stored Core results via Core's recurrence method; a different release of a saved package whose order is unknown is reported as version-order-unknown.
-export const IMPROVEMENT_RULES_VERSION = '1.5.0';
+// 1.6.0: recurring friction also reads the readiness journal (a check made with this host's trust and with the persisted configuration are two timelines) and the Core targets a selected item's executables run on; wording only otherwise.
+export const IMPROVEMENT_RULES_VERSION = '1.6.0';
 export const MAX_GOAL = 300, MAX_ALTERNATIVES = 3, MAX_TRACKED_NEEDS = 256;
 // Independent of the guided-setup rules on purpose: each rule set is versioned alone, so changing one never changes
 // the saved reasons the other wrote.
@@ -68,14 +69,18 @@ function precedence(a, b) {
 // Fact text is shown and recorded; long Catalog labels are cut so the record limit can never refuse a dismissal.
 const clip = text => text.length <= 1000 ? text : `${text.slice(0, 999)}…`;
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-// A condition in words, for a person: the two conditions Core results map to, else a readiness check by its id.
+// A condition in words, for a person: the two conditions Core results map to, else a readiness check by its id. A reading made with the trust Core's repairs persist
+// (`persisted`: friction.mjs gives a result a method only then) is a different timeline of the same check, so it says so.
 const CONDITION_WORDS = { 'condition:file-state': 'managed file state', 'condition:native-use': 'native client use' };
-const conditionWords = condition => CONDITION_WORDS[condition] ?? `${condition.replace(/^condition:/, '')} readiness`;
-// The reason key names the condition and the subject. A key must be word characters, `.`, `@` and `-`, so any other character (a published check id's `/`)
+function conditionWords(condition, persisted) {
+  const words = CONDITION_WORDS[condition] ?? `${condition.replace(/^condition:/, '')} readiness`;
+  return persisted ? `persisted-configuration ${words}` : words;
+}
+// The reason key names the condition, its trust and the subject. A key must be word characters, `.`, `@` and `-`, so any other character (a published check id's `/`)
 // is replaced and a longer name is cut; either keeps a short digest of the whole name so two different ones never share a key.
 const slug = text => text.replaceAll(/[^\w.@-]/g, '-');
-function frictionKey(condition, subject) {
-  const raw = `${condition.replace(/^condition:/, '')}@${subject}`, named = `${slug(condition.replace(/^condition:/, ''))}@${slug(subject)}`;
+function frictionKey(condition, subject, persisted) {
+  const check = `${persisted ? 'persisted-configuration/' : ''}${condition.replace(/^condition:/, '')}`, raw = `${check}@${subject}`, named = `${slug(check)}@${slug(subject)}`;
   if (named === raw && named.length <= 180) return `friction:${named}`;
   let hash = 5381;
   for (const char of raw) hash = (hash * 33 ^ char.codePointAt(0)) >>> 0;
@@ -229,12 +234,12 @@ export async function suggestImprovements({ intent, items = [], inventories = []
       : `${name} changed in ${where} (${change.needed ? 'an item it needs differs' : 'its recipe or files differ'} from the revision this policy was saved from)${why}`), { kind: 'saved-reason', ref: found.root.itemId }, found.saved, change);
   }
   for (const found of friction) {
-    const { tie, condition, result } = found;
+    const { tie, condition, result } = found, persisted = found.method !== undefined;
     if (result.status !== 'available' || !(result.count >= 1)) continue;
-    const words = conditionWords(condition), label = inline(tie.label), at = ref => result.timeline.find(entry => entry.claim.id === ref.id && entry.claim.revision === ref.revision)?.capturedAt;
+    const words = conditionWords(condition, persisted), label = inline(tie.label), at = ref => result.timeline.find(entry => entry.claim.id === ref.id && entry.claim.revision === ref.revision)?.capturedAt;
     const [first] = result.recurrences;
     const text = clip(`Recurring failure: the ${words} check for “${label}” failed (${at(first.failure)}), recovered (${at(first.recovery)}) and failed again (${at(first.recurrence)}); ${plural(result.count, 'recurrence')} in ${plural(found.stored, 'stored Core result')}.${found.fixture ? ` This is ${FIXTURE_LABEL}.` : ''}`);
-    add(FRICTION_RULE.itemId, frictionKey(condition, found.subject.id), FRICTION_RULE.id, text, tie.goal !== undefined ? { kind: 'saved-reason', ref: tie.rootItemId } : { kind: 'catalog-item', ref: tie.itemId },
+    add(FRICTION_RULE.itemId, frictionKey(condition, found.subject.id, persisted), FRICTION_RULE.id, text, tie.goal !== undefined ? { kind: 'saved-reason', ref: tie.rootItemId } : { kind: 'catalog-item', ref: tie.itemId },
       tie.goal ?? `Stop the same ${words} failure coming back for “${label}”.`.slice(0, MAX_GOAL), undefined, tie.scope);
   }
   const asked = inline(goal);

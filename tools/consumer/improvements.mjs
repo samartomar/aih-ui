@@ -7,12 +7,13 @@ import { releaseOrderProblem } from './release-order.mjs';
 import { only } from './intake.mjs';
 import { refuse, managementIdOf } from './headless.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_KINDS } from './journey.mjs';
-import { isUtcTimestamp } from './maintenance-record.mjs';
+import { isUtcTimestamp, MAINTENANCE_CHECK_RECORD_SCHEMA } from './maintenance-record.mjs';
 import { IMPROVEMENT_SUGGESTION_RECORD_SCHEMA, IMPROVEMENT_DISMISSAL_RECORD_SCHEMA, SUGGESTION_FIELDS, suggestionProblem, suggestionDerivedProblem, dismissalProblem, dismissalId } from './improvement-record.mjs';
 import { TRIAL_RECORD_SCHEMA } from './trial-record.mjs';
 import { IMPROVEMENT_RULES_VERSION, FRICTION_COVERAGE, FRICTION_UNREADABLE, FIXTURE_LABEL, savedBaselines, suggestImprovements, classifyImprovement, lead, improvementPrompt, unorderedSources, savedGoalOf, MAX_GOAL } from './improvement-rules.mjs';
 import { adapterTargetOf } from './client-identity.mjs';
-import { frictionRecurrence } from './friction.mjs';
+import { frictionRecurrence, MAX_EVIDENCE } from './friction.mjs';
+import { coreTargetsOf } from './executable-ties.mjs';
 export const IMPROVEMENT_SUGGESTION_SCHEMA = IMPROVEMENT_SUGGESTION_RECORD_SCHEMA;
 export const IMPROVEMENT_DISMISSAL_SCHEMA = IMPROVEMENT_DISMISSAL_RECORD_SCHEMA;
 export { IMPROVEMENT_RULES_VERSION, improvementPrompt };
@@ -29,7 +30,7 @@ const byId = (a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 const orderText = names => `Content changes were only partly checked: ${names.slice(0, 3).join(', ')}${names.length > 3 ? ` and ${names.length - 3} more` : ''} offers a different release than the one this policy was saved from, but which is newer is unknown (the host's update source declares no order between them, and their versions do not order them: unversioned, not a semantic version, or the same version), so it is not suggested as an update.`;
 // What the draft ties friction to: the policy selections of its selected roots and pins (a pin carries no scope, so either scope's selection is looked for), and the
-// clients and checks its client adapters name. Roots come first, so a root's saved goal wins over the pin of the same item.
+// clients and checks its client adapters name and the Core targets its items' executables run on (executable-ties.mjs). Roots come first, so a root's saved goal wins over the pin of the same item.
 function tiedSubjects({ intent, items, inventories, savedBytes }) {
   let selections = [];
   try { const policy = JSON.parse(new TextDecoder().decode(savedBytes)); if (Array.isArray(policy?.selections)) selections = policy.selections.filter(s => typeof s?.id === 'string' && typeof s.managementId === 'string'); } catch { /* an unreadable policy ties no selection */ }
@@ -44,8 +45,9 @@ function tiedSubjects({ intent, items, inventories, savedBytes }) {
       const selection = typeof name === 'string' ? managed.get(managementIdOf({ scope, packageName: name, itemId: entry.itemId })) : undefined;
       if (selection) tie('managed-selection', selection.managementId, { selectionId: selection.id, scope });
     }
-    const clientId = adapterTargetOf(item)?.clientId;
-    if (clientId) for (const kind of ['client', 'target']) tie(kind, clientId, entry.scope ? { scope: entry.scope } : {});
+    const clientId = adapterTargetOf(item)?.clientId, within = entry.scope ? { scope: entry.scope } : {};
+    if (clientId) for (const kind of ['client', 'target']) tie(kind, clientId, within);
+    for (const name of coreTargetsOf(item)) tie('target', name, within);
   }
   return [...ties.values()];
 }
@@ -101,7 +103,11 @@ export async function checkImprovements({ envelopeBytes, inventories, candidateI
   const stored = evidence !== undefined && evidence !== null;
   let friction;
   if (stored) {
-    try { friction = frictionRecurrence({ evidence, subjects: tiedSubjects({ intent: draft.intent, items, inventories, savedBytes: read.savedIntentBytes }) }); }
+    // The envelope's own maintenance-check note is read beside the host's results, as the issue asks. It makes no claim (friction.mjs), so its fixed id can never conflict
+    // with a host result and it never decides the coverage. It is left out only when the host's results are already at the limit.
+    const note = read.records.find(record => record.schema === MAINTENANCE_CHECK_RECORD_SCHEMA);
+    const results = Array.isArray(evidence) && note && evidence.length < MAX_EVIDENCE ? [...evidence, { id: note.id, capturedAt: note.checkedAt, result: note }] : evidence;
+    try { friction = frictionRecurrence({ evidence: results, subjects: tiedSubjects({ intent: draft.intent, items, inventories, savedBytes: read.savedIntentBytes }) }); }
     catch (error) { if (error instanceof TypeError) return fail('/evidence', error.message); throw error; }
   }
   // A different release of a saved package that neither the host's declared order nor semver orders cannot be called newer: the check says so instead of "checked".

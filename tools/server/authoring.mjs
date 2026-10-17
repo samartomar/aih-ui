@@ -54,15 +54,33 @@ export async function fileFrictionEvidence(consumerDir, path) {
   };
 }
 
-export async function createAuthoringAdapter(consumerDir) {
+// The Workbench's own readiness journal is the friction input for the checks and repairs the person triggered. `records` is the readiness adapter's: the journal
+// the readiness child holds in memory, undefined when this host holds none (the child never started) and null when it could not be read. Those records are
+// observations of this computer, so unlike the demo file nothing is labelled a fixture; an empty journal is no history (undefined), never an empty list. The
+// count bound is the friction adapter's own, so a journal beyond it reads as unreadable (null) instead of making the adapter refuse the check.
+export async function journalFrictionEvidence(consumerDir, records) {
+  const { MAX_EVIDENCE } = await import(pathToFileURL(join(consumerDir, 'consumer', 'friction.mjs')).href);
+  return async () => {
+    try {
+      const held = await records();
+      if (held === undefined) return undefined;
+      if (!Array.isArray(held) || held.length > MAX_EVIDENCE || held.some(record => !record || typeof record !== 'object' || Array.isArray(record))) return null;
+      return held.length === 0 ? undefined : held.map(record => ({ id: record.id, capturedAt: record.capturedAt, sha256: record.sha256, result: record }));
+    } catch { return null; }
+  };
+}
+
+// `frictionEvidence` (optional) is the host's own provider of stored Core results (journalFrictionEvidence). The demo file, when set, keeps precedence and stays fixture-labelled.
+export async function createAuthoringAdapter(consumerDir, { frictionEvidence } = {}) {
   const { startConsumer } = await import(pathToFileURL(join(consumerDir, 'consumer/server.mjs')).href);
   const selectedJson = async name => process.env[name] ? JSON.parse(await readFile(process.env[name], 'utf8')) : undefined;
+  const evidence = process.env.AIH_FRICTION_EVIDENCE ? await fileFrictionEvidence(consumerDir, process.env.AIH_FRICTION_EVIDENCE) : frictionEvidence;
   const host = await startConsumer({ projectRoot: process.env.AIH_CONSUMER_PROJECT,
     controls: await selectedJson('AIH_CONSUMER_CONTROLS'),
     organizationSource: await selectedJson('AIH_ORGANIZATION_SOURCE'),
     reviewTrust: await selectedJson('AIH_REVIEW_TRUST'),
     previousCatalogRoot: process.env.AIH_CONSUMER_PREVIOUS_CATALOG,
-    ...(process.env.AIH_FRICTION_EVIDENCE ? { frictionEvidence: await fileFrictionEvidence(consumerDir, process.env.AIH_FRICTION_EVIDENCE) } : {}),
+    ...(evidence ? { frictionEvidence: evidence } : {}),
     ...(process.env.AIH_UPDATE_SOURCE_CATALOG_ROOTS ? { updateSourceCatalogRoots: process.env.AIH_UPDATE_SOURCE_CATALOG_ROOTS.split(delimiter) } : {}),
     ...(process.env.AIH_MAINTENANCE_SOURCE ? { maintenanceSource: await fileMaintenanceSource(consumerDir, process.env.AIH_MAINTENANCE_SOURCE) } : {}) });
   return {

@@ -14,7 +14,8 @@ try {
   // Answer every request with the configuration error instead of crashing into a restart loop.
   startupError = { status: 'error', diagnostics: [{ code: 'READINESS_CONFIG_INVALID', message: `Readiness host configuration is invalid: ${error.message}` }] };
 }
-const operations = { check: body => host.check(body), repairs: () => host.repairs(), report: () => host.report(),
+// `records` is read-only: the in-memory journal this child holds, which is lost with the child.
+const operations = { check: body => host.check(body), repairs: () => host.repairs(), report: () => host.report(), records: () => host.records(),
   'repair-prepare': body => host.prepareRepair(body), 'repair-apply': body => host.applyRepair(body) };
 
 process.on('message', async ({ id, op, body } = {}) => {

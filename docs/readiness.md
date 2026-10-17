@@ -113,7 +113,8 @@ UTC timestamps, the Core package name/version when known, and a SHA-256 of the
 exact Core result records. A machine check also carries its persisted inspection
 (`persistedCheck`). Repairs link to the machine check held when apply
 started and carry Core's run identity, apply/recheck instants and projected outcome.
-`records()` returns a deep copy; restarting the host loses the journal.
+`records()` returns a deep copy; restarting the host loses the journal. The improvements check reads these records as friction evidence
+(see the README's "Recurring friction from stored Core results").
 
 ## HTTP routes
 

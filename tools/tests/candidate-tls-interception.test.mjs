@@ -17,7 +17,7 @@ import { serverEnvironment } from '../candidate/process.mjs';
 import { writeReport } from '../candidate/report.mjs';
 import { forgetSample } from '../candidate/samples.mjs';
 import { createSampleCa } from '../candidate/sample-ca.mjs';
-import { STAGED_CONDITION_SCHEMA, STAGED_LABEL, TLS_ROUTE_MODULE, activateStagedCondition, stageTlsInterception, stagedEnvironment, stagedTlsCondition, startInterceptor, unstageTlsInterception, writeStagedRepairs }
+import { STAGED_CONDITION_SCHEMA, STAGED_LABEL, TLS_ROUTE_MODULE, activateStagedCondition, rotateTlsInterception, stageTlsInterception, stagedEnvironment, stagedTlsCondition, startInterceptor, unstageTlsInterception, writeStagedRepairs }
   from '../candidate/tls-interception.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -91,6 +91,49 @@ test('a staged condition with a missing file or a different CA is not staged', t
   stageTlsInterception(layout);
   rmSync(join(layout.stagedTls, 'interceptor-key.pem'));
   assert.equal(stagedTlsCondition(layout), null);
+});
+
+test('rotation requires a staged condition and preserves old trust and the readiness sample', t => {
+  const { layout } = area(t);
+  assert.throws(() => rotateTlsInterception(layout), error => error.code === 'CANDIDATE_NOT_STAGED');
+  const before = stageTlsInterception(layout), oldCa = join(layout.stagedTls, 'sample-ca.pem'), oldBytes = readFileSync(oldCa, 'utf8');
+  seedReadiness(layout);
+  const sample = readFileSync(join(layout.samples, '.seeded.json'), 'utf8');
+  const after = rotateTlsInterception(layout);
+  assert.notEqual(after.caSha256, before.caSha256);
+  assert.equal(after.stagedAt, before.stagedAt);
+  assert.deepEqual(stagedTlsCondition(layout), after);
+  assert.equal(readFileSync(oldCa, 'utf8'), oldBytes);
+  assert.equal(readFileSync(join(layout.readiness, 'SAMPLE.md'), 'utf8'), 'made earlier');
+  assert.equal(readFileSync(join(layout.samples, '.seeded.json'), 'utf8'), sample);
+  const offer = JSON.parse(readFileSync(layout.stagedRepairs, 'utf8')).repairs[0].inputs.caFile;
+  assert.notEqual(offer, oldCa);
+  assert.equal(new X509Certificate(readFileSync(offer)).fingerprint256.replaceAll(':', '').toLowerCase(), after.caSha256);
+  const bytes = readFileSync(offer, 'utf8');
+  rotateTlsInterception(layout);
+  assert.equal(readFileSync(offer, 'utf8'), bytes, 'every earlier repair input stays untouched');
+  unstageTlsInterception(layout);
+  assert.equal(existsSync(layout.stagedTls), false);
+  assert.equal(existsSync(layout.stagedRepairs), false);
+});
+
+test('CLI rotation is refused unstaged and works with a live candidate record', t => {
+  const { data, layout } = area(t);
+  const refused = cli(data, 'rotate');
+  assert.notEqual(refused.status, 0);
+  assert.match(refused.stderr, /not staged/i);
+  const before = stageTlsInterception(layout);
+  seedReadiness(layout);
+  writeFileSync(layout.server, JSON.stringify({ pid: process.pid, state: 'ready', url: 'http://127.0.0.1:1/' }));
+  const rotated = cli(data, 'rotate');
+  assert.equal(rotated.status, 0, rotated.stderr);
+  assert.match(rotated.stdout, /staged sample rotation/i);
+  assert.match(rotated.stdout, /only the candidate's.*services/i);
+  assert.match(rotated.stdout, /earlier repair stays as it was/i);
+  assert.match(rotated.stdout, /Node certificate check.*fails again.*repair.*again/i);
+  assert.match(rotated.stdout, /offers the new sample CA after the next start/);
+  assert.notEqual(stagedTlsCondition(layout).caSha256, before.caSha256);
+  assert.ok(existsSync(layout.readiness));
 });
 
 test('the command stages, reports status and turns off, and refuses while a recorded process is alive', t => {
@@ -268,6 +311,24 @@ test('a staged process cannot verify the interceptor without the sample CA, and 
   const log = readFileSync(layout.tlsLog, 'utf8');
   assert.match(log, /intercepted registry\.npmjs\.org/);
   assert.match(log, /handshake ended by the client/);
+});
+
+test('a running interceptor rotates its chain and keeps its previous context when new material is invalid', async t => {
+  const { layout, running, env } = await interceptor(t), oldCa = join(layout.stagedTls, 'sample-ca.pem');
+  assert.deepEqual(JSON.parse((await runNode(CLIENT, { ...env, CA_FILE: oldCa })).out), { body: 'upstream-body' });
+  const after = rotateTlsInterception(layout);
+  const newCa = JSON.parse(readFileSync(layout.stagedRepairs, 'utf8')).repairs[0].inputs.caFile;
+  const stale = await runNode(CLIENT, { ...env, CA_FILE: oldCa });
+  assert.match(JSON.parse(stale.out).error, /UNABLE_TO_VERIFY_LEAF_SIGNATURE|SELF_SIGNED_CERT_IN_CHAIN|UNABLE_TO_GET_ISSUER_CERT/);
+  assert.deepEqual(JSON.parse((await runNode(CLIENT, { ...env, CA_FILE: newCa })).out), { body: 'upstream-body' });
+  assert.equal(readFileSync(layout.tlsLog, 'utf8').split('TLS sample CA rotated to').length - 1, 1);
+  assert.ok(readFileSync(layout.tlsLog, 'utf8').includes(after.caSha256));
+  rotateTlsInterception(layout);
+  const brokenCa = JSON.parse(readFileSync(layout.stagedRepairs, 'utf8')).repairs[0].inputs.caFile;
+  writeFileSync(brokenCa, readFileSync(oldCa));
+  assert.equal(stagedTlsCondition(layout), null);
+  assert.deepEqual(JSON.parse((await runNode(CLIENT, { ...env, CA_FILE: newCa })).out), { body: 'upstream-body' });
+  assert.match(readFileSync(layout.tlsLog, 'utf8'), /TLS sample rotation refused.*digest|TLS sample rotation refused.*incomplete/);
 });
 
 test('a process without the staged environment is not rerouted', async t => {
