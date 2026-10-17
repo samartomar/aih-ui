@@ -114,13 +114,10 @@
 </span>
 <span class="font-mono text-[10px] px-1 rounded bg-surface-container-highest text-on-surface-variant font-medium" id="nav-sources-count">-</span>
 </a>
-<a class="flex items-center justify-between px-2 py-1 rounded text-on-surface-variant opacity-50 cursor-not-allowed" href="#" aria-disabled="true" title="Not connected: no organization workflow read contract">
-<span class="flex items-center gap-1.5">
-<span class="material-symbols-outlined text-[14px] text-outline">security_update_good</span>
-<span class="">Scan Review</span>
-</span>
-<span class="font-mono text-[10px] text-outline">Not connected</span>
-</a>
+<button class="flex w-full items-center justify-between px-2 py-1 rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface" id="nav-scan-review" type="button" aria-controls="evidence-review" title="Review Scan evidence you supply. No organization scan queue is connected and no scanner runs from this page.">
+<span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[14px] text-outline">security_update_good</span><span>Scan Review</span></span>
+<span class="font-mono text-[10px] text-outline">Supplied evidence</span>
+</button>
 <button class="flex w-full items-center justify-between px-2 py-1 rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface" id="nav-policy" type="button" aria-controls="policy-workspace">
 <span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[14px] text-outline">policy</span><span>Policy workspace</span></span>
 </button>
@@ -256,7 +253,7 @@
 <p class="text-on-surface-variant mt-1 max-w-3xl" id="policy-workspace-intro"></p>
 </div>
 <div class="p-4 space-y-3">
-<p class="px-3 py-2 rounded border border-wb-border bg-surface-container-low text-on-surface-variant" id="policy-workspace-boundary">Your setup selects this view. Project authoring below saves a portable policy; organization authority and execution require a separately configured operator host.</p><details class="rounded border border-wb-border bg-surface-container-low p-3 text-on-surface-variant" id="workbench-connections"><summary class="cursor-pointer font-medium">Working capabilities and remaining connections</summary><ul class="list-disc pl-4 space-y-1 mt-2"><li>Available: installed families, target declarations, personal folder validation, project configuration, dependency proposals, exact policy save/reopen and source reconciliation.</li><li>Evidence review: supply exact evidence in the section below. Human decisions and reconsideration use checked bindings; producer authentication requires separately configured trust.</li><li>Scan Review is not connected to an organization scan queue. Review supplied evidence below; no scanner is run from this page.</li><li>Audit Feed and Compliance Matrix have no connected audit source or organization aggregate. Saved review history remains available below.</li><li>Publish has no connected Git workflow. Save the policy, then review and publish through your own repository.</li><li>Host Prepare/Apply requires an operator-selected project, controls and material; Enterprise also requires current organization authority. Native client use remains unverified and automatic guardrails are not connected. Setup preferences establish none of these capabilities.</li></ul></details>
+<p class="px-3 py-2 rounded border border-wb-border bg-surface-container-low text-on-surface-variant" id="policy-workspace-boundary">Your setup selects this view. Project authoring below saves a portable policy; organization authority and execution require a separately configured operator host.</p><details class="rounded border border-wb-border bg-surface-container-low p-3 text-on-surface-variant" id="workbench-connections"><summary class="cursor-pointer font-medium">Working capabilities and remaining connections</summary><ul class="list-disc pl-4 space-y-1 mt-2"><li>Available: installed families, target declarations, personal folder validation, project configuration, dependency proposals, exact policy save/reopen and source reconciliation.</li><li>Evidence review: supply exact evidence in the section below. Human decisions and reconsideration use checked bindings; producer authentication requires separately configured trust.</li><li>Scan Review opens the supplied-evidence review below. No organization scan queue is connected and no scanner is run from this page.</li><li>Audit Feed and Compliance Matrix have no connected audit source or organization aggregate. Saved review history remains available below.</li><li>Publish has no connected Git workflow. Save the policy, then review and publish through your own repository.</li><li>Host Prepare/Apply requires an operator-selected project, controls and material; Enterprise also requires current organization authority. Native client use remains unverified and automatic guardrails are not connected. Setup preferences establish none of these capabilities.</li></ul></details>
 <div class="grid grid-cols-1 xl:grid-cols-3 gap-3">
 <section class="rounded border border-wb-border bg-surface-container-lowest p-4 space-y-2" aria-labelledby="policy-start-title">
 <div class="font-mono text-[10px] uppercase tracking-wider text-outline">01 / Start</div>

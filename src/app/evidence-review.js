@@ -14,13 +14,24 @@ const applicabilityText = judgment => ({
   unverified: `Applicability not checked — ${reasonText[judgment.applicabilityReason] ?? judgment.applicabilityReason}`,
   'reconsideration-requested': 'Reconsideration requested',
 })[judgment.applicability] ?? judgment.applicability;
+// The inspected document's state for the chosen subject, from Scan's read and coverage on the host. A human judgment
+// recorded below stays separate from it: neither makes the producer authentic or authorizes execution.
+const inspectedState = value => value.reportSupport === 'invalid' ? 'invalid' : value.reportSupport !== 'supported' ? 'unsupported'
+  : ['matched', 'mismatched'].includes(value.sourceAssociation) ? value.sourceAssociation : 'unavailable';
+const stateText = {
+  invalid: 'Evidence invalid: this is not a valid Scan report or artifact.',
+  unsupported: 'Evidence unsupported: this Scan reader does not support the report version.',
+  unavailable: 'Evidence not assessable for this subject.',
+  mismatched: "Evidence mismatched: the report did not capture this subject's exact files.",
+  matched: "Evidence matched: the report captured this subject's exact files.",
+};
 const originText = judgment => judgment.origin === 'recipient' ? 'Your decision'
   : `Imported — recorded by ${judgment.owner.kind} ${judgment.owner.id}; not counted as your decision`;
 
 // Human evidence decisions remain distinct from producer authentication and
 // organization authority. The existing headless contracts own every binding.
 export function createEvidenceReview(client, onProposal) {
-  const panel = el('details', 'p-4 border border-wb-border rounded bg-surface-container-lowest space-y-2');
+  const panel = el('details', 'p-4 border border-wb-border rounded bg-surface-container-lowest space-y-2'); panel.id = 'evidence-review';
   panel.append(el('summary', 'cursor-pointer font-medium', 'Evidence review and reconsideration'));
   panel.append(el('p', 'text-on-surface-variant', 'Optional: supply exact evidence bytes, inspect their subject binding, and record a portable human review. A checked binding does not authenticate a producer or authorize execution.'));
   panel.append(el('p', 'text-on-surface-variant', 'Recording a new judgment is optional; changed evidence never blocks editing.'));
@@ -35,7 +46,7 @@ export function createEvidenceReview(client, onProposal) {
     const node = el('button', 'px-3 py-1.5 rounded bg-surface-container border border-wb-border', label); node.type = 'button';
     node.addEventListener('click', async () => { try { await callback(); } catch (error) { status.textContent = error.message; } }); return node;
   };
-  const invalidate = () => { revision++; inspected = undefined; record.disabled = true; finding.replaceChildren(); };
+  const invalidate = () => { revision++; inspected = undefined; delete status.dataset.evidenceState; record.disabled = true; finding.replaceChildren(); };
   const subject = () => { const [releaseSha256, itemId] = target.value.split('/'); return { releaseSha256, itemId }; };
   const details = el('details'); details.append(el('summary', 'cursor-pointer text-outline', 'Checked evidence diagnostics'));
   const diagnostic = el('pre', 'whitespace-pre-wrap break-all text-[10px]'); details.append(diagnostic);
@@ -46,7 +57,8 @@ export function createEvidenceReview(client, onProposal) {
     diagnostic.textContent = JSON.stringify(result, null, 2);
     if (result.status !== 'ok') { status.textContent = result.diagnostics?.map(value => value.message).join(' ') ?? result.status; return; }
     inspected = { ...result.value, target: subject() };
-    status.textContent = `${inspected.bindings.length} findings bound to the checked subject. Producer authentication is separate; inspect diagnostics for authentication and report support.`;
+    const state = inspectedState(inspected); status.dataset.evidenceState = state;
+    status.textContent = `${stateText[state]} ${inspected.bindings.length} findings bound to the checked subject. Producer authentication is separate; inspect diagnostics for authentication and report support.`;
     for (const [index, binding] of inspected.bindings.entries()) finding.append(new Option(`${binding.finding.detectorId} · ${binding.finding.ruleId} · ${binding.finding.findingId}`, index));
     record.disabled = !inspected.bindings.length;
   }), action('Forget supplied evidence', async () => { invalidate(); file.value = ''; evidence.replaceChildren(); client.setReviewEvidence([]); if (await refresh()) status.textContent = 'Supplied evidence forgotten. Saved review history remains in the original artifact.'; }),
@@ -117,6 +129,11 @@ export function createEvidenceReview(client, onProposal) {
     if (!judgments.length) history.append(el('li', '', 'No human review decisions recorded. Supply evidence to review a pinned selection.'));
   });
   document.querySelector('#policy-workspace > .p-4').append(panel);
+  // Scan Review is this supplied-evidence review: it opens the panel, and nothing is scanned or fetched.
+  document.getElementById('nav-scan-review').addEventListener('click', () => {
+    document.getElementById('nav-policy').click();
+    panel.open = true; panel.scrollIntoView({ block: 'start' }); file.focus({ preventScroll: true });
+  });
   return {
     // The saved setup identity is only a default: a choice made with "Use identity" this session wins.
     async setDefaultRecipient(reviewer) {

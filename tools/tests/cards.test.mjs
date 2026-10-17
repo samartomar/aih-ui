@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createCards } from "../../src/catalog/cards.js";
+import { createCards, EVIDENCE_STATE } from "../../src/catalog/cards.js";
 import { KIND_ICON, KIND_TONE } from "../../src/catalog/entry.js";
 
 function element(tag) {
@@ -15,7 +15,7 @@ function element(tag) {
     addEventListener(name, callback) { this.listeners[name] = callback; },
   };
 }
-function renderCard(t, description) {
+function renderCard(t, description, evidence) {
   const previous = Object.getOwnPropertyDescriptor(globalThis, "document");
   globalThis.document = { createElement: element };
   t.after(() => {
@@ -26,7 +26,7 @@ function renderCard(t, description) {
     ...(description === null ? {} : { authoringItem: { id: "fixture", label: "Fixture", family: "fixture-family", description, root: { releaseSha256: "a".repeat(64), itemId: "fixture" } } }) };
   const elements = Object.fromEntries(["cardsGrid", "visibleCount", "visibleCaption", "categoryContext"].map(key => [key, element("div")]));
   const selections = [];
-  createCards({ elements, onSelect: id => selections.push(id) }).render({ entries: [entry], total: 1, selectedId: null });
+  createCards({ elements, onSelect: id => selections.push(id) }).render({ entries: [entry], total: 1, selectedId: null, ...(evidence ? { evidence: new Map([["fixture.skill", evidence]]) } : {}) });
   return { node: elements.cardsGrid.children[0], selections };
 }
 function descendants(node) { return [node, ...node.children.flatMap(descendants)]; }
@@ -56,4 +56,25 @@ test("unmapped local preferences remain unavailable without claiming an off stat
   assert.match(button.title, /Local preference not saved/);
   assert.equal(button.attributes["aria-checked"], undefined);
   assert.equal(button.dataset.active, undefined);
+});
+
+const pill = node => descendants(node).find(e => e.dataset.evidenceState);
+test("missing evidence reads not supplied, never not published, and tokens stay unknown", (t) => {
+  const { node } = renderCard(t, "Described");
+  const status = pill(node);
+  assert.equal(status.dataset.evidenceState, "not-supplied");
+  assert.equal(status.children[1].textContent, "Not supplied");
+  const text = descendants(node).map(e => e.textContent).join("|");
+  assert.equal(text.includes("Not published"), false);
+  assert.match(text, /\|Unknown\|/);
+});
+
+test("each supplied evidence state renders its own text, and matched is not authentication", (t) => {
+  for (const [state, text] of [["invalid", "Invalid evidence"], ["unsupported", "Unsupported report"], ["mismatched", "Mismatched"], ["matched", "Matched"]]) {
+    const status = pill(renderCard(t, "Described", { state, scanId: "scan-1" }).node);
+    assert.equal(status.dataset.evidenceState, state);
+    assert.equal(status.children[1].textContent, text);
+    assert.equal(EVIDENCE_STATE[state].text, text);
+  }
+  assert.match(pill(renderCard(t, "Described", { state: "matched", scanId: "scan-1" }).node).title, /scan-1.*unchecked; this is not an approval or execution authority/);
 });

@@ -33,6 +33,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     counts: inventoryCounts([]),
     view: emptyView(),
     selectedId: null,
+    // entryId -> { state, scanId } from the host's read of the supplied Scan evidence; empty means not supplied.
+    evidence: new Map(),
     // The organization's own name, when the user has saved one. It labels the
     // organization's additions row; nothing here reads or invents it.
     organizationName: null,
@@ -77,8 +79,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   family.addEventListener('change', () => changeView({ source: null, sourceType: null }));
   for (const control of [target, support]) control.addEventListener('change', () => render());
 
-  function browseEntries() {
-    return visibleEntries(state.entries, state.view)
+  function browseEntries(view = state.view) {
+    return visibleEntries(state.entries, view)
       .filter(entry => !family.value || entry.authoringItem.family === family.value);
   }
 
@@ -94,6 +96,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       noun: scope === null ? "catalog entries" : "entries from this source",
       selectedId: state.selectedId,
       intent: authoring.intent,
+      evidence: state.evidence,
       onChoose: async item => {
         try { onProposal(await authoring.propose({ type: 'select', root: item.root })); }
         catch (error) { onProposal({ status: 'refused', diagnostics: [{ message: error.message }] }); }
@@ -135,7 +138,9 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       scope,
       counts: state.counts,
     });
-    metrics.render({ kindCounts: state.counts.kindCounts, total, activeKind: state.view.kind });
+    // The tiles count the list's own scope, before the kind selection so a selected tile can be cleared.
+    const metricScope = supportedEntries(browseEntries({ ...state.view, kind: null }), target.value, support.value);
+    metrics.render({ kindCounts: inventoryCounts(metricScope).kindCounts, total: metricScope.length, activeKind: state.view.kind });
     navigation.render(navigationModel());
     toolbar.render({
       // Keep zero-result kinds visible so an active kind can still be cleared.
@@ -147,6 +152,29 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     });
     cards.render(cardsView);
     details.render(detailsModel(selectedEntry()));
+  }
+
+  // Supplied evidence changes only through the review panel; each change, or a new catalog, re-reads every item's state once.
+  const EVIDENCE_BATCH = 2048;
+  let evidenceRead = { revision: 0, catalog: undefined }, evidenceAttempt = 0;
+  async function refreshEvidence() {
+    const catalog = authoring.catalog, revision = authoring.evidenceRevision;
+    if (!catalog || (evidenceRead.revision === revision && evidenceRead.catalog === catalog)) return;
+    evidenceRead = { revision, catalog };
+    const attempt = ++evidenceAttempt, next = new Map();
+    if (!authoring.reviewEvidenceCount && !state.evidence.size) return;
+    if (authoring.reviewEvidenceCount) {
+      const subjects = catalog.items.map(item => ({ releaseSha256: item.root.releaseSha256, itemId: item.id }));
+      for (let start = 0; start < subjects.length; start += EVIDENCE_BATCH) {
+        const batch = subjects.slice(start, start + EVIDENCE_BATCH);
+        const result = await authoring.evidenceStates(batch).catch(error => ({ status: 'refused', diagnostics: [{ message: error.message }] }));
+        if (attempt !== evidenceAttempt) return;
+        if (result.status === 'ok') for (const value of result.value) next.set(`${value.releaseSha256}/${value.itemId}`, value);
+        else for (const subject of batch) next.set(`${subject.releaseSha256}/${subject.itemId}`, { state: 'unavailable' });
+      }
+    }
+    state.evidence = next;
+    render();
   }
 
   function select(entryId) {
@@ -184,6 +212,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
         target.value = [...target.options].some(option => option.value === selectedTarget) ? selectedTarget
           : [...target.options].some(option => option.value === 'claude-code') ? 'claude-code' : target.options[0]?.value ?? '';
         render();
+        refreshEvidence();
       };
       authoring.subscribe(refresh);
       refresh();      // Counts first: restoreView validates every saved filter against them, so

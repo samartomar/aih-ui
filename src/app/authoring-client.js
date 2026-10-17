@@ -25,7 +25,7 @@ const asDraft = ({ originalBytes: _kept, ...value }) => ({ ...value,
 export function createAuthoringClient() {
   const headers = { 'x-aih-client': crypto.randomUUID() };
   const listeners = new Set();
-  let catalog, bytes = new Uint8Array(), intent, candidate, draftValue, compiled, revision = 0, catalogRevision = 0, hostRevision = 0, reviewEvidence = [], recipient, judgments = [], judgmentSummary;
+  let catalog, bytes = new Uint8Array(), intent, candidate, draftValue, compiled, revision = 0, catalogRevision = 0, hostRevision = 0, reviewEvidence = [], evidenceRevision = 0, recipient, judgments = [], judgmentSummary;
   const notify = () => { for (const listener of listeners) listener(); };
   // Saved judgments are a derived display of the latest read, publish or accept; they never gate editing.
   const keepJudgments = value => { judgments = value?.reviewJudgments ?? []; judgmentSummary = value?.reviewSummary; };
@@ -100,7 +100,10 @@ export function createAuthoringClient() {
       const result = await request(operation, body);
       return attempt === hostRevision && draft === revision ? result : { status: 'superseded' };
     },
-    setReviewEvidence(values) { revision++; candidate = undefined; reviewEvidence = values.map(value => value.slice()); notify(); },
+    setReviewEvidence(values) { revision++; evidenceRevision++; candidate = undefined; reviewEvidence = values.map(value => value.slice()); notify(); },
+    get reviewEvidenceCount() { return reviewEvidence.length; }, get evidenceRevision() { return evidenceRevision; },
+    // Each exact item's state against the supplied evidence, read by the host through Scan; it changes nothing.
+    evidenceStates(subjects) { return request('evidence-states', { subjects, policyBytes: undefined }); },
     // Only labels saved judgments as yours or imported; it never changes what is recorded.
     setRecipient(value) { revision++; candidate = undefined; recipient = value ? { kind: value.kind, id: value.id } : undefined; notify(); },
     async loadCatalog({ expectedRevision } = {}) {

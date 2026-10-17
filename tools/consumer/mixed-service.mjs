@@ -1,6 +1,7 @@
 import { digestBytes, stable, refuse } from './primitives.mjs';
 import { intakeDeclaration } from './intake.mjs';
 import { composeAuthoring, readAuthoring, reconcileAuthoring, editAuthoring, freshAuthoring, inspectReviewEvidence, recordReview, reconsiderReviews, openDraft, editDraft, compileDraft } from './headless.mjs';
+import { describeEvidenceStates } from './review-bindings.mjs';
 import { checkMaintenance, recordMaintenance } from './maintenance.mjs';
 import { checkImprovements, recordImprovement } from './improvements.mjs';
 import { readTrials, recordTrial, TRIAL_MECHANISMS_NONE } from './trials.mjs';
@@ -143,6 +144,8 @@ export async function createMixedService(maintained, { suppliedInventories, fami
       if (operation === 'edit') return editAuthoring({ policyBytes, inventories: all, operation: body.operation, ...reviewContext });
       if (operation === 'reconcile') return reconcileAuthoring({ savedPolicyBytes: policyBytes, inventories: all, candidateInventories: candidates(body.candidateMode), ...reviewContext });
       if (operation === 'inspect-review') return inspectReviewEvidence({ evidenceBytes, inventory: all.find(entry => entry.release.sha256 === body.target?.releaseSha256), itemId: body.target?.itemId });
+      // Per-item evidence state for the catalog cards: read only, from the supplied evidence documents.
+      if (operation === 'evidence-states') return describeEvidenceStates({ reviewEvidence, inventories: all, subjects: body.subjects });
       if (operation === 'record-review') return recordReview({ policyBytes, inventories: all, evidenceBytes, target: body.target, finding: body.finding, decision: body.decision, ...reviewContext });
       if (operation === 'reconsider-reviews') return reconsiderReviews({ policyBytes, inventories: all, ...reviewContext });
       if (operation === 'intake') {

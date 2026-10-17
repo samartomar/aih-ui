@@ -67,7 +67,7 @@ The machine-readiness host tests run Core only against a disposable fixture home
 
 Pack each local package with `npm pack`, install the tarballs into a throwaway consumer project, and run the scenario there. Do not use `npm link`: it hides packaging errors such as a wrong `exports` map or a missing file.
 
-The application declares `@aihq/core` 1.0.0-dev.37, `@aihq/catalog` 0.1.0 and `@aihq/scan` 0.5.0 as optional peer dependencies. They are peers because the consumer installs the reviewed archives beside the application, and optional because those versions exist only as local archives, so npm must not fetch them for this repository's own install. An installation that supplies another version of any of them is reported by npm as an unmet peer. The package entries are application-tier readers and writers of the Workbench's stored formats, not an SDK: `aih-ui/authoring`, `aih-ui/intake`, `aih-ui/journey`, `aih-ui/maintenance`, `aih-ui/improvements`, `aih-ui/trials`, `aih-ui/workspace`, `aih-ui/batch`, `aih-ui/organization-author` and the twelve record schemas. Host adapters (review, execution, readiness, workspace and batch hosts), the readiness and claims projections and shared helpers are application-internal and are not entries. The portable entries (`aih-ui/journey`, `aih-ui/workspace`, `aih-ui/batch`) import none of the three; `aih-ui/batch` therefore takes the policy reader as `parsePolicy` (Core's, supplied by the caller) and reads the exact saved policy bytes it binds through it; `tools/tests/pure-imports.test.mjs` keeps their whole import graph free of packages, Node built-ins, host modules and browser globals.
+The application declares `@aihq/core` 1.0.0-dev.37, `@aihq/catalog` 0.1.0 and `@aihq/scan` 0.5.0 as optional peer dependencies. Evidence review and the catalog's evidence states call `readContentCoverage` from `@aihq/scan/read`, so the Scan archive must publish it; an earlier 0.5.0 archive without it cannot load them. They are peers because the consumer installs the reviewed archives beside the application, and optional because those versions exist only as local archives, so npm must not fetch them for this repository's own install. An installation that supplies another version of any of them is reported by npm as an unmet peer. The package entries are application-tier readers and writers of the Workbench's stored formats, not an SDK: `aih-ui/authoring`, `aih-ui/intake`, `aih-ui/journey`, `aih-ui/maintenance`, `aih-ui/improvements`, `aih-ui/trials`, `aih-ui/workspace`, `aih-ui/batch`, `aih-ui/organization-author` and the twelve record schemas. Host adapters (review, execution, readiness, workspace and batch hosts), the readiness and claims projections and shared helpers are application-internal and are not entries. The portable entries (`aih-ui/journey`, `aih-ui/workspace`, `aih-ui/batch`) import none of the three; `aih-ui/batch` therefore takes the policy reader as `parsePolicy` (Core's, supplied by the caller) and reads the exact saved policy bytes it binds through it; `tools/tests/pure-imports.test.mjs` keeps their whole import graph free of packages, Node built-ins, host modules and browser globals.
 
 For the saved-intent local proof, set `CORE_TGZ`, `CATALOG_TGZ` and `SCAN_TGZ`
 to reviewed archives, then run `node tools/saved-intent-proof.mjs <output-directory> --serve`
@@ -474,8 +474,12 @@ Absence is worded by what is actually absent:
 - **Not supplied** — organization information. Organizations supply it; the catalog
   never will. The header scope is one of these.
 - **Not connected** — a page action or telemetry feed with no Core contract wired yet
-  (Review Changes, Check Policy, Publish, Scan Review, Policies & Publish, Audit Feed,
+  (Review Changes, Check Policy, Publish, Policies & Publish, Audit Feed,
   Compliance Matrix, whether an AI tool is installed or connected, Egress Guard).
+- **Unknown** — a value no defined producer supplies (token values).
+
+Scan Review opens the Policy workspace's supplied-evidence review. It is not an
+organization scan queue: no queue source is connected and no scanner runs.
 
 No entry, count or label comes from a hardcoded total: every number on the page is
 counted from the installed index at run time. Absence markers are never counted as
@@ -684,9 +688,20 @@ label or enabled state is invented.
 ### Cards keep each slot's meaning
 
 A card's slots mean what the Workbench design says they mean: the content-family
-badge, the item's description, the scan status and the token estimate. Where a slot
+badge, the item's description, the evidence state and the token value. Where a slot
 has no published value it keeps its place, its look and its size and reads
-**Not published**. Card descriptions use the dedicated 10.5px type token and a
+**Not published**.
+
+The evidence pill is the item's state against the Scan evidence the person
+supplied in Scan Review: **Not supplied** (no document), **Invalid evidence**,
+**Unsupported report**, **Mismatched** (the report did not capture this exact
+item's recipe and material files) or **Matched** (it did). The host reads each
+document with `@aihq/scan/read` `readReport`/`readArtifact` and each item with
+`readContentCoverage` against the item's exact `{path, sha256, byteLength}`
+descriptors; with several documents the most specific state is shown. Missing
+evidence is never shown as unpublished. Matched is unchecked coverage, not
+producer authentication, a human judgment or execution authority. The token chip
+reads **Unknown**: no defined producer supplies token values. Card descriptions use the dedicated 10.5px type token and a
 1.5 line height, reserving three lines even for unavailable text. The inspector
 retains the fuller description. This keeps
 the Workbench design's card proportions.
@@ -730,8 +745,8 @@ The primary toolbar is **All Items**, **Needs Review**, **Egress Out**, with the
 places. Only "All Items" can be derived, so it is the selected state and counts the
 cards matching the active filters. The other two keep their purpose but are unavailable, with no count:
 
-- no scan result or Core disposition is published per item, so no review state can
-  be derived;
+- supplied Scan evidence gives an evidence state, not a review state, and no Core
+  disposition is published per item, so no review state can be derived;
 - no item declares egress, and an empty declaration is not a measurement of none.
 
 The technical filters that ARE available -- kind, source type and sort -- are in the
@@ -830,8 +845,11 @@ moves the operator's focus or state without their asking:
 
 ### Unavailable states keep their component's size
 
-A metric tile with nothing published is still a tile of the same size reading
-**Not published**, never an invented count or percentage. The same holds for the
+The kind tiles (Skills, Commands, Agents, MCP Servers, Hook Items) count the
+entries the list shows, in the same family, source, search and target-support
+scope, before the kind selection itself. Hook Items counts hook items; one item
+may declare several events, and no event count is published. The Tokens tile is
+a tile of the same size reading **Unknown**, never an invented count or percentage. The same holds for the
 source-policy segment, the egress readout and the policy determination choices.
 
 ## Running it
@@ -965,7 +983,7 @@ Where the Workbench design showed a field the index does not publish, the page k
 layout, shows **Not published**, **Not supplied** or **Not connected** as above, and
 disables the control. The current list:
 organization scope; Vibe/Enterprise and the AI tools counter; Review Changes count,
-Check Policy and Publish; the Commands, Hook Events and Token Budget ledger kinds;
+Check Policy and Publish; token values (shown as **Unknown**);
 allowed/active numerators and percentages; the source-policy posture segment;
 search-result egress classification; per-engine scanner telemetry and detector
 identities; network egress, execution sandbox and required secrets; the policy

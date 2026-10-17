@@ -9,11 +9,12 @@ import { readInstalledRelease } from '@aihq/catalog/node';
 import { runScan, prepareArtifact, createRetainedObservationsV1 } from '@aihq/scan/host';
 import { signArtifact, authenticateArtifact } from '@aihq/scan/host';
 import { generateKeyPairSync, createHash } from 'node:crypto';
-import { digestBytes } from './primitives.mjs';
+import { digestBytes, stable } from './primitives.mjs';
 import { intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import * as authoring from './headless.mjs';
-import { compareReviewBindings } from './review-bindings.mjs';
+import { compareReviewBindings, describeEvidenceStates } from './review-bindings.mjs';
+import { readArtifact } from '@aihq/scan/read';
 import { writeJourneyEnvelope, readJourneyEnvelope } from './journey.mjs';
 import { inspectAuthenticatedReviewEvidence } from './review-host.mjs';
 const encode = value => new TextEncoder().encode(JSON.stringify(value));
@@ -467,5 +468,49 @@ test('drafts report saved judgments and neither refuse nor convert them when edi
     assert.equal('reviewsReconsidered' in compiled.value, false);
     assert.deepEqual(compiled.value.intent.reviews, saved.value.intent.reviews);
     assert.equal(compiled.value.reviewJudgments[0].state, 'current');
+  } finally { await f.cleanup(); }
+});
+
+test('review identities name the covering observation fields exactly as stored review-decisions 1.0.0 records do', async () => {
+  const f = await reviewFixture();
+  try {
+    const evidence = await f.scan(), read = await readArtifact(evidence.bytes);
+    const inspected = await authoring.inspectReviewEvidence({ evidenceBytes: evidence.bytes, inventory: f.inventory, itemId: f.item.id });
+    assert.equal(inspected.value.sourceAssociation, 'matched');
+    const [detector] = read.report.results, [observation] = detector.observations, { input } = observation.body;
+    const annexIds = [...new Set([...observation.body.annexIds, ...observation.body.findings.filter(value => value.supportingEvidence.state === 'present').map(value => value.supportingEvidence.value.annexId)])].sort();
+    const exact = (tag, value) => `${tag}:${stable(value)}`;
+    assert.deepEqual(inspected.value.bindings[0].evidence, {
+      observationIdentity: exact('observation', { id: observation.observationId, annexes: annexIds.map(id => read.report.annexes.find(annex => annex.id === id)) }),
+      detectorIdentity: exact('detector', { id: input.detectorId, version: input.detectorVersion, adapterSha256: input.adapterSha256, platform: input.platform }),
+      rulesIdentity: `sha256:${input.rulesSha256}`, configurationIdentity: `sha256:${input.configurationSha256}`,
+      profileIdentity: exact('profile', { id: input.profileId, sha256: input.profileSha256 }),
+      scopeIdentity: `${observation.observationId}#input`, coverageIdentity: exact(`${observation.observationId}#coverage`, detector.coverage) });
+    assert.equal(inspected.value.bindings[0].finding.detectorId, detector.detectorId);
+  } finally { await f.cleanup(); }
+});
+
+test('per-item evidence states: not supplied, matched, mismatched, invalid and unsupported come from Scan read and coverage', async () => {
+  const f = await reviewFixture();
+  try {
+    const subject = { releaseSha256: f.inventory.release.sha256, itemId: f.item.id };
+    const other = f.inventories[0].release.items[0], otherSubject = { releaseSha256: f.inventories[0].release.sha256, itemId: other.id };
+    const states = async reviewEvidence => {
+      const result = await describeEvidenceStates({ reviewEvidence, inventories: f.inventories, subjects: [subject, otherSubject] });
+      assert.equal(result.status, 'ok', JSON.stringify(result.diagnostics)); return result.value.map(value => value.state);
+    };
+    assert.deepEqual(await states([]), ['not-supplied', 'not-supplied']);
+    const valid = await f.scan();
+    assert.deepEqual(await states([valid.bytes]), ['matched', 'mismatched']);
+    const material = f.inventory.materials.at(-1);
+    await writeFile(join(f.root, material.path), Buffer.concat([Buffer.from(material.bytes), Buffer.from('changed after review')]));
+    const changed = await f.scan();
+    assert.deepEqual(await states([changed.bytes]), ['mismatched', 'mismatched']);
+    assert.deepEqual(await states([encode({})]), ['invalid', 'invalid']);
+    // A report schema version this Scan reader does not support.
+    assert.deepEqual(await states([encode({ schema: 'urn:aihq:scan:report:9.0.0', scanId: valid.scanId })]), ['unsupported', 'unsupported']);
+    // The most specific state of several documents is kept: one matching report outranks an invalid and a mismatched one.
+    assert.deepEqual(await states([encode({}), changed.bytes, valid.bytes]), ['matched', 'mismatched']);
+    assert.equal((await describeEvidenceStates({ reviewEvidence: [], inventories: f.inventories, subjects: Array.from({ length: 2049 }, () => subject) })).status, 'refused');
   } finally { await f.cleanup(); }
 });
