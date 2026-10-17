@@ -19,15 +19,18 @@ export function groupImprovements(value) {
   ];
 }
 const contentState = value => value?.coverage?.find(entry => entry.trigger === 'content-change')?.state;
-// A check that cannot read every source keeps the content changes the last complete check suggested and it no longer does,
-// as of that check; they are shown without actions until a complete check answers again.
+const UNREAD = ['sources-partly-unavailable', 'sources-unavailable'];
+const changes = value => [value?.leading, ...(value?.alternatives ?? [])].filter(row => row?.triggers?.some(trigger => trigger.key.startsWith('change:')));
+// A check that cannot read every update source keeps the content changes of the last complete check, as of that check, through
+// any number of such checks; those it no longer shows appear without actions until a complete check answers again.
 export function keepEarlier(previous, next) {
-  const asOf = previous?.contentAsOf ?? (contentState(previous) === 'checked' ? previous.checkedAt : undefined);
-  if (contentState(next) !== 'unknown' || !asOf) return next;
-  const shown = new Set([next.leading, ...(next.alternatives ?? []), ...(next.dismissed ?? [])].filter(Boolean).map(row => row.id)), earlier = [];
-  for (const row of [...(previous.earlier ?? []), previous.leading, ...(previous.alternatives ?? [])])
-    if (row && !shown.has(row.id) && row.triggers?.some(trigger => trigger.key.startsWith('change:'))) { shown.add(row.id); earlier.push(row); }
-  return earlier.length ? { ...next, earlier, contentAsOf: asOf } : next;
+  const reason = next?.coverage?.find(entry => entry.trigger === 'content-change')?.reason;
+  if (contentState(next) !== 'unknown' || !UNREAD.includes(reason)) return next;
+  const complete = previous?.complete ?? (contentState(previous) === 'checked' ? { checkedAt: previous.checkedAt, rows: changes(previous) } : undefined);
+  if (!complete) return next;
+  const shown = new Set([next.leading, ...(next.alternatives ?? []), ...(next.dismissed ?? [])].filter(Boolean).map(row => row.id));
+  const earlier = complete.rows.filter(row => !shown.has(row.id));
+  return { ...next, complete, contentAsOf: complete.checkedAt, ...(earlier.length ? { earlier } : {}) };
 }
 export function promotionText(suggestion) {
   return (suggestion.promotion?.reasons ?? []).map(reason => reason.startsWith('Shown again:') ? reason : `Shown again: ${reason}`);
@@ -81,7 +84,8 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
     // A refused choice changed nothing: the shown suggestions still answer the open artifact.
     if (result.status !== 'ok') { checked = client.revision; render(); return showStatus(diagnostic(result)); }
     // Old cards describe the previous envelope; a failed recheck must not show stale actions.
-    kept = value; value = undefined;
+    // The recorded choice is this view's own change, so the kept result still answers the policy it now holds.
+    kept = value; value = undefined; checked = client.revision;
     showStatus('Improvement choice recorded. Save the draft to keep it.');
     await check();
   }
@@ -102,7 +106,7 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
   }
   function render() {
     node.hidden = !(client.draft || client.intent);
-    if (value && !recording && checked !== client.revision) { value = undefined; kept = undefined; changed = true; }
+    if (!recording && checked !== client.revision) { kept = undefined; if (value) { value = undefined; changed = true; } }
     if (node.hidden) { attempt++; value = undefined; kept = undefined; pending = false; failed = false; changed = false; saved = []; unlisted.hidden = true; unlisted.textContent = ''; goal.value = ''; coverage.replaceChildren(); groups.replaceChildren(); return; }
     const omitted = saved.filter(id => !offersClient(published?.ids ?? [], id));
     unlisted.hidden = !omitted.length;
@@ -180,6 +184,7 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
   function setTargets(coreTargets) {
     // A check in flight was made under the old list: it is discarded and made again under this one.
     const rerun = pending; published = publishedClients(coreTargets); attempt++; pending = false;
+    kept = undefined;
     if (value) { value = undefined; changed = true; }
     render();
     if (rerun) return check();
