@@ -16,7 +16,8 @@ function show(status, html, mode) {
     return;
   }
   frame.srcdoc = html; frame.hidden = false;
-  saved = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+  // Download only: an octet-stream blob is saved, never opened as a page in the Workbench origin.
+  saved = URL.createObjectURL(new Blob([html], { type: 'application/octet-stream' }));
   link.href = saved; link.download = mode === 'demo' ? 'report-design-sample.html' : 'report.html'; link.hidden = false;
 }
 

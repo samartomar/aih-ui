@@ -22,6 +22,10 @@ export async function runReportPageBrowser({ origin, consumerDir, output, playwr
   assert.equal((await post({ origin, 'content-type': 'text/plain' })).status, 415, 'only JSON is accepted');
   assert.equal((await post({ origin, 'content-type': 'application/json' }, WORKFLOW_SNAPSHOT_TEXT, '?mode=live')).status, 400, 'an unknown mode is refused');
   assert.equal((await fetch(`${origin}/api/report-render`)).status, 405, 'GET is refused');
+  assert.equal((await post({ origin, 'content-type': 'application/json' }, ' '.repeat(2_097_153))).status, 413, 'a body past the cap is refused');
+  // Far past the cap the host stops reading and closes: the client sees the 413 or a closed connection, and the host keeps serving.
+  const far = await post({ origin, 'content-type': 'application/json' }, ' '.repeat(4 * 1024 * 1024)).then(response => response.status, () => 'closed');
+  assert.ok(far === 413 || far === 'closed', `a body far past the cap is refused (${far})`);
   const invalid = await post({ origin, 'content-type': 'application/json' }, '{"schema":');
   assert.equal(invalid.status, 422); assert.equal((await invalid.json()).diagnostics[0].code, 'INPUT_INVALID');
 
@@ -44,6 +48,7 @@ export async function runReportPageBrowser({ origin, consumerDir, output, playwr
       await frame.locator('#sec-skillgov').waitFor({ state: 'attached' });
       assert.equal(await frame.locator('main section').count(), 14, `${mode}: the 14 V9 sections`);
       assert.equal(await page.locator('#snapshot-save').isHidden(), false, `${mode}: the same bytes can be saved`);
+      assert.equal(await page.locator('#snapshot-save').evaluate(async link => (await (await fetch(link.href)).blob()).type), 'application/octet-stream', `${mode}: the save is download-only`);
       if (mode === 'report') {
         assert.equal(await frame.locator('main section[data-state="live"]').count(), 5);
         assert.equal(await page.locator('#snapshot-demo-note').isHidden(), true);

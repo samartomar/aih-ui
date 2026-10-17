@@ -177,6 +177,5 @@ screenshots with `visual-check.json` under `report-evidence/visual/` in the chec
 a page or console error, any network request, a missing section, an invisible or mis-sized outcome
 bar, report-mode states other than 5 LIVE and 9 EMPTY, hydrated sections that differ from static
 ones, or a broken palette. The integrated Workbench check drives the page section in Chromium
-(`tools/report/page-browser.mjs`). The screenshots, `visual-check.json` and `report-equivalence.json`
-from one run against Core 1.0.0-dev.37 are kept in [report-evidence](report-evidence/). Only Core's
-single supported diagnostic contract is bound, and only Chromium is checked.
+(`tools/report/page-browser.mjs`). Only Core's single supported diagnostic contract is bound, and
+only Chromium is checked.
