@@ -93,7 +93,7 @@ test('ordinary target changes refresh counts and reasons while preserving accept
     };
     const nodes = await openPage(pageFetch);
     assert.equal(nodes.get('target').value, 'claude-code');
-    assert.deepEqual(nodes.get('target').children.map(option => option.value), ['claude-code', 'copilot-vscode', 'generic', 'kiro-ide']);
+    assert.deepEqual(nodes.get('target').children.map(option => option.value), ['claude-code', 'codex', 'copilot-vscode', 'generic', 'kiro-ide']);
     for (const family of ['Extensions', 'ECC', 'Superpowers', 'Anthropic']) {
       assert.ok(nodes.get('family').children.some(option => option.value === family));
       assert.ok(nodes.get('items').children.some(box => box.children[0].textContent.startsWith(family + ' ·')));
