@@ -55,27 +55,32 @@ export async function inspectReviewEvidence({ evidenceBytes, inventory, itemId }
 // matched state is Scan's unchecked coverage of exact bytes, not producer authentication or authority.
 export const MAX_EVIDENCE_SUBJECTS = 2048;
 // One coverage read per batch of items that agree on every shared path. A matched batch matches every item in it;
-// a mismatched one matches exactly the items none of whose paths Scan lists as unmatched.
+// a mismatched one matches exactly the items none of whose paths Scan lists as unmatched. Descriptors Scan refuses
+// (an item's own `invalid` coverage) make that item not assessable; they say nothing about the evidence.
+const withinBounds = descriptors => descriptors.length > 0 && descriptors.length <= maxContentDescriptors
+  && descriptors.every(({ path, sha256, byteLength }) => typeof path === 'string' && path.length > 0 && /^[a-f0-9]{64}$/.test(sha256 ?? '') && Number.isSafeInteger(byteLength) && byteLength >= 0)
+  && new Set(descriptors.map(descriptor => descriptor.path)).size === descriptors.length;
 async function coverageStates(read, entries) {
   const states = new Map();
   let batch = [], byPath = new Map();
   const flush = async () => {
     if (!batch.length) return;
-    const coverage = await readContentCoverage({ read, descriptors: [...byPath.values()] });
-    // Descriptors Scan refuses as a set are read again one item at a time, so one item cannot decide another's state.
-    if (coverage.status === 'invalid' && batch.length > 1) {
-      const items = batch; batch = []; byPath = new Map();
+    const items = batch, descriptors = [...byPath.values()];
+    batch = []; byPath = new Map();
+    const coverage = await readContentCoverage({ read, descriptors });
+    // A refused set is read again one item at a time, so one item cannot decide another's state.
+    if (coverage.status === 'invalid' && items.length > 1) {
       for (const entry of items) for (const [key, state] of await coverageStates(read, [entry])) states.set(key, state);
       return;
     }
     const unmatched = coverage.status === 'mismatched' ? new Set(coverage.unmatchedPaths) : undefined;
-    const other = coverage.status === 'unavailable' && coverage.reason === 'unsupported-report' ? 'unsupported' : 'invalid';
-    for (const { key, descriptors } of batch) states.set(key, coverage.status === 'matched' ? 'matched'
-      : unmatched ? (descriptors.some(descriptor => unmatched.has(descriptor.path)) ? 'mismatched' : 'matched') : other);
-    batch = []; byPath = new Map();
+    const other = coverage.status === 'invalid' ? 'unavailable' : coverage.reason === 'unsupported-report' ? 'unsupported' : 'invalid';
+    for (const { key, descriptors: own } of items) states.set(key, coverage.status === 'matched' ? 'matched'
+      : unmatched ? (own.some(descriptor => unmatched.has(descriptor.path)) ? 'mismatched' : 'matched') : other);
   };
   for (const entry of entries) {
-    if (entry.descriptors.length > maxContentDescriptors) { states.set(entry.key, 'unavailable'); continue; }
+    // Bounds are checked before batching: an item outside them is not assessable and never joins a batch.
+    if (!withinBounds(entry.descriptors)) { states.set(entry.key, 'unavailable'); continue; }
     const conflicts = entry.descriptors.some(descriptor => byPath.has(descriptor.path) && stable(byPath.get(descriptor.path)) !== stable(descriptor));
     if (conflicts || byPath.size + entry.descriptors.length > maxContentDescriptors) await flush();
     for (const descriptor of entry.descriptors) byPath.set(descriptor.path, descriptor);

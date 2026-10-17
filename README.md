@@ -67,7 +67,7 @@ The machine-readiness host tests run Core only against a disposable fixture home
 
 Pack each local package with `npm pack`, install the tarballs into a throwaway consumer project, and run the scenario there. Do not use `npm link`: it hides packaging errors such as a wrong `exports` map or a missing file.
 
-The application declares `@aihq/core` 1.0.0-dev.37, `@aihq/catalog` 0.1.0 and `@aihq/scan` 0.5.0 as optional peer dependencies. Evidence review and the catalog's evidence states call `readContentCoverage` from `@aihq/scan/read`, so the Scan archive must publish it; an earlier 0.5.0 archive without it cannot load them. They are peers because the consumer installs the reviewed archives beside the application, and optional because those versions exist only as local archives, so npm must not fetch them for this repository's own install. An installation that supplies another version of any of them is reported by npm as an unmet peer. The package entries are application-tier readers and writers of the Workbench's stored formats, not an SDK: `aih-ui/authoring`, `aih-ui/intake`, `aih-ui/journey`, `aih-ui/maintenance`, `aih-ui/improvements`, `aih-ui/trials`, `aih-ui/workspace`, `aih-ui/batch`, `aih-ui/organization-author` and the twelve record schemas. Host adapters (review, execution, readiness, workspace and batch hosts), the readiness and claims projections and shared helpers are application-internal and are not entries. The portable entries (`aih-ui/journey`, `aih-ui/workspace`, `aih-ui/batch`) import none of the three; `aih-ui/batch` therefore takes the policy reader as `parsePolicy` (Core's, supplied by the caller) and reads the exact saved policy bytes it binds through it; `tools/tests/pure-imports.test.mjs` keeps their whole import graph free of packages, Node built-ins, host modules and browser globals.
+The application declares `@aihq/core` 1.0.0-dev.37, `@aihq/catalog` 0.1.0 and `@aihq/scan` 0.5.0 as optional peer dependencies. The `aih-ui/authoring` entry and the authoring host (review bindings, the headless operations and the mixed authoring service) import `readContentCoverage` from `@aihq/scan/read`, so they require a Scan 0.5.0 archive that exports it; with an archive that does not, these modules fail to load. They are peers because the consumer installs the reviewed archives beside the application, and optional because those versions exist only as local archives, so npm must not fetch them for this repository's own install. An installation that supplies another version of any of them is reported by npm as an unmet peer. The package entries are application-tier readers and writers of the Workbench's stored formats, not an SDK: `aih-ui/authoring`, `aih-ui/intake`, `aih-ui/journey`, `aih-ui/maintenance`, `aih-ui/improvements`, `aih-ui/trials`, `aih-ui/workspace`, `aih-ui/batch`, `aih-ui/organization-author` and the twelve record schemas. Host adapters (review, execution, readiness, workspace and batch hosts), the readiness and claims projections and shared helpers are application-internal and are not entries. The portable entries (`aih-ui/journey`, `aih-ui/workspace`, `aih-ui/batch`) import none of the three; `aih-ui/batch` therefore takes the policy reader as `parsePolicy` (Core's, supplied by the caller) and reads the exact saved policy bytes it binds through it; `tools/tests/pure-imports.test.mjs` keeps their whole import graph free of packages, Node built-ins, host modules and browser globals.
 
 For the saved-intent local proof, set `CORE_TGZ`, `CATALOG_TGZ` and `SCAN_TGZ`
 to reviewed archives, then run `node tools/saved-intent-proof.mjs <output-directory> --serve`
@@ -693,14 +693,17 @@ has no published value it keeps its place, its look and its size and reads
 **Not published**.
 
 The evidence pill is the item's state against the Scan evidence the person
-supplied in Scan Review: **Not supplied** (no document), **Invalid evidence**,
-**Unsupported report**, **Mismatched** (the report did not capture this exact
-item's recipe and material files) or **Matched** (it did). The host reads each
+supplied in Scan Review: **Not supplied** (no document), **Invalid evidence**
+(the document is not a valid Scan report or artifact), **Unsupported report**,
+**Not assessable** (Scan cannot assess this item's descriptors against the
+report), **Mismatched** (the report did not capture this exact item's recipe and
+material files) or **Matched** (the report captured these exact files; detector
+coverage is shown in Scan Review). The host reads each
 document with `@aihq/scan/read` `readReport`/`readArtifact` and each item with
 `readContentCoverage` against the item's exact `{path, sha256, byteLength}`
 descriptors; with several documents the most specific state is shown. Missing
-evidence is never shown as unpublished. Matched is unchecked coverage, not
-producer authentication, a human judgment or execution authority. The token chip
+evidence is never shown as unpublished. Matched is not producer
+authentication, a human judgment or execution authority. The token chip
 reads **Unknown**: no defined producer supplies token values. Card descriptions use the dedicated 10.5px type token and a
 1.5 line height, reserving three lines even for unavailable text. The inspector
 retains the fuller description. This keeps
