@@ -109,6 +109,8 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
         const suggestion = preserved ? row.suggestion : row;
         const card = el('div', 'p-2 border border-wb-border rounded space-y-1'); card.dataset.suggestionId = suggestion.id;
         card.append(el('p', 'font-medium', suggestion.label ?? suggestion.change.itemId), el('p', 'text-outline text-[11px]', `Scope: ${suggestion.scope}`));
+        // The exact content the suggestion describes, in full, like the digest lines of an update.
+        if (suggestion.change?.releaseSha256 && suggestion.change?.itemSha256) card.append(el('p', 'font-mono text-[10px] text-outline break-all', `Content: release ${suggestion.change.releaseSha256} · item ${suggestion.change.itemSha256}`));
         // Why a dismissed suggestion is back comes first, so it is not mistaken for repeated nudging.
         for (const reason of promotionText(suggestion)) card.append(el('p', 'px-1.5 py-0.5 rounded bg-tertiary-container text-tertiary', reason));
         if (suggestion.description) card.append(el('p', 'text-on-surface-variant', suggestion.description));

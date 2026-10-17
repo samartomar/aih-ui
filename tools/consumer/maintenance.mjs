@@ -15,7 +15,7 @@ export const MAINTENANCE_CHECK_SCHEMA = MAINTENANCE_CHECK_RECORD_SCHEMA;
 export { UPDATE_CATEGORIES };
 const isDisposition = record => record.schema === MAINTENANCE_DISPOSITION_RECORD_SCHEMA;
 const isCheck = record => record.schema === MAINTENANCE_CHECK_RECORD_SCHEMA;
-const CANDIDATE_SOURCES = ['configured', 'unconfigured'];
+const CANDIDATE_SOURCES = ['configured', 'unconfigured'], CANDIDATE_COVERAGES = ['complete', 'partial'];
 const byId = (a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 const checkedEntries = (value, most = 32) => {
@@ -38,7 +38,9 @@ export function projectDispositions(envelope) {
 // `now`; `candidateInventories` is null/undefined when the maintenance source could not be read, and
 // `candidateSource` says whether the host has one at all ('unconfigured' is unknown, never checked). A `releaseOrder` the
 // host's update source declares says, per offered update, whether it is newer or of unknown order; an older one is not offered.
-export async function checkMaintenance({ envelopeBytes, inventories, candidateInventories, candidateSource = 'configured', releaseOrder, categories = ['content'], now } = {}) {
+// `candidateCoverage` is 'partial' when only some of the source's roots could be read: the updates those offer are listed, but
+// content stays unknown, never checked, because a root that was not read may hold more.
+export async function checkMaintenance({ envelopeBytes, inventories, candidateInventories, candidateSource = 'configured', candidateCoverage = 'complete', releaseOrder, categories = ['content'], now } = {}) {
   const loaded = await load(envelopeBytes);
   if (loaded.status !== 'ok') return loaded;
   const { read, draft } = loaded.value, { intent } = draft;
@@ -46,6 +48,7 @@ export async function checkMaintenance({ envelopeBytes, inventories, candidateIn
   if (!isUtcTimestamp(now)) return fail('/now', 'Supply the check time as an ISO UTC timestamp.');
   if (!Array.isArray(categories) || !categories.length || categories.some(category => !UPDATE_CATEGORIES.includes(category))) return fail('/categories', `Supply one or more of: ${UPDATE_CATEGORIES.join(', ')}.`);
   if (!CANDIDATE_SOURCES.includes(candidateSource)) return fail('/candidateSource', `Supply one of: ${CANDIDATE_SOURCES.join(', ')}.`);
+  if (!CANDIDATE_COVERAGES.includes(candidateCoverage)) return fail('/candidateCoverage', `Supply one of: ${CANDIDATE_COVERAGES.join(', ')}.`);
   const orderProblem = releaseOrder === undefined || releaseOrder === null ? null : releaseOrderProblem(releaseOrder);
   if (orderProblem !== null) return fail(`/releaseOrder${orderProblem}`, 'Supply the release order a host update source declares.');
   if (!checkedEntries(inventories)) return fail('/inventories', 'Supply at most 32 unique checked inventories.');
@@ -53,11 +56,14 @@ export async function checkMaintenance({ envelopeBytes, inventories, candidateIn
   const states = UPDATE_CATEGORIES.map(category => !selected.has(category) ? { category, selected: false, state: 'not-selected' }
     : category !== 'content' ? { category, selected: true, state: 'unknown', reason: 'no-supported-reader' }
     : unconfigured ? { category, selected: true, state: 'unknown', reason: 'no-configured-source' }
-    : offline ? { category, selected: true, state: 'unknown', reason: 'sources-unavailable' } : { category, selected: true, state: 'checked' });
+    : offline ? { category, selected: true, state: 'unknown', reason: 'sources-unavailable' }
+    : candidateCoverage === 'partial' ? { category, selected: true, state: 'unknown', reason: 'sources-partly-unavailable' } : { category, selected: true, state: 'checked' });
+  // Candidates are read when any source was; only a complete read is a check that nothing else is offered.
   const contentChecked = states.find(state => state.category === 'content').state === 'checked';
-  if (contentChecked && !checkedEntries(candidateInventories, 40)) return fail('/candidateInventories', 'Supply at most 40 unique checked candidate inventories.');
+  const contentRead = selected.has('content') && !unconfigured && !offline;
+  if (contentRead && !checkedEntries(candidateInventories, 40)) return fail('/candidateInventories', 'Supply at most 40 unique checked candidate inventories.');
   const recorded = read.records.filter(isDisposition), today = now.slice(0, 10), matched = new Set(), updates = [];
-  for (const root of contentChecked ? intent.roots : []) {
+  for (const root of contentRead ? intent.roots : []) {
     const entry = inventories.find(e => e.release.sha256 === root.releaseSha256);
     const current = intent.provenance.find(p => p.releaseSha256 === root.releaseSha256)?.package ?? entry?.release.package;
     const input = intent.inputs.find(i => i.releaseSha256 === root.releaseSha256) ?? entry?.input;
@@ -94,7 +100,7 @@ export async function checkMaintenance({ envelopeBytes, inventories, candidateIn
   // The last successful check the envelope recorded, if any; this check itself writes nothing.
   const note = read.records.find(isCheck);
   return { status: 'ok', diagnostics: loaded.diagnostics, value: { checkedAt: now,
-    reads: ['envelope', 'supplied-inventories', ...(contentChecked ? ['candidate-inventories'] : [])], mutations: [], categories: states, updates, preserved,
+    reads: ['envelope', 'supplied-inventories', ...(contentRead ? ['candidate-inventories'] : [])], mutations: [], categories: states, updates, preserved,
     ...(note ? { lastCheck: { checkedAt: note.checkedAt, categories: structuredClone(note.categories) } } : {}) } };
 }
 // A deliberate choice, or the note of a successful check, becomes a new envelope revision; the saved intent

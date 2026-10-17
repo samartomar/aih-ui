@@ -323,3 +323,16 @@ test('an adapter suggestion shows its target, Core support and installed state a
   for (const line of [client.target.text, client.core.text, client.installed.text]) assert.ok(shown.includes(line), line);
   assert.deepEqual(dismissOperation(withClient), { type: 'dismiss', suggestion: record });
 });
+
+test('each suggestion cites the exact release and item digests it describes, in full', async () => {
+  const release = 'c'.repeat(64), item = 'd'.repeat(64), cited = { ...suggestion, change: { ...suggestion.change, releaseSha256: release, itemSha256: item } };
+  const stored = { ...record, change: cited.change };
+  const client = { draft, revision: 1, checkImprovements: async () => ok({ ...checked, leading: cited, alternatives: [{ ...cited, id: 'two' }], dismissed: [{ ...cited, id: 'three' }], preserved: [{ suggestion: stored, dismissal: { reason: 'Later' }, state: 'not-current' }] }) };
+  const built = view(client); await built.open();
+  const lines = elements(built.node).filter(node => node.textContent === `Content: release ${release} · item ${item}`);
+  assert.equal(lines.length, 4, 'every card cites its content');
+  for (const line of lines) assert.match(line.className, /font-mono/);
+  // A record without digests (an earlier shape) shows no citation rather than a blank one.
+  const bare = view({ draft, revision: 1, checkImprovements: async () => ok(checked) }); await bare.open();
+  assert.doesNotMatch(textOf(bare.node), /Content: release/);
+});

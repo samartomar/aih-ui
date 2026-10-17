@@ -21,15 +21,15 @@ export function createCatalogUpdateSource({ roots, installedPackage, readRelease
   validateCatalogRoots(roots);
   if (typeof installedPackage?.name !== 'string') throw new Error('Supply the installed Catalog package.');
   const lastRead = new Map();
-  // One root: every export valid and from the installed package, else the first reason it is offline.
+  // One root: every export valid and from the installed package, else the first reason it is offline and the export that failed.
   async function readRoot(root) {
     const entries = [];
     for (const release of releaseExports) {
       let read;
       try { read = await readRelease({ root, release, sourceInput: 'maintained' }); }
-      catch { return { reason: 'unreadable' }; }
-      if (!read?.valid || !read.release) return { reason: 'invalid' };
-      if (read.release.package?.name !== installedPackage.name) return { reason: 'package-mismatch' };
+      catch { return { reason: 'unreadable', export: release }; }
+      if (!read?.valid || !read.release) return { reason: 'invalid', export: release };
+      if (read.release.package?.name !== installedPackage.name) return { reason: 'package-mismatch', export: release };
       entries.push({ release: read.release, materialSource: read.source });
     }
     return { entries };
@@ -38,10 +38,10 @@ export function createCatalogUpdateSource({ roots, installedPackage, readRelease
     async read() {
       const readAt = now(), sources = [], positions = [], inventories = [], seen = new Set();
       for (const [index, root] of roots.entries()) {
-        const position = index + 1, { entries, reason } = await readRoot(root);
+        const position = index + 1, { entries, reason, export: failed } = await readRoot(root);
         if (!entries) {
           positions.push([]);
-          sources.push({ position, state: 'offline', reason, ...(lastRead.has(position) ? { lastReadAt: lastRead.get(position) } : {}) });
+          sources.push({ position, state: 'offline', reason, export: failed, ...(lastRead.has(position) ? { lastReadAt: lastRead.get(position) } : {}) });
           continue;
         }
         lastRead.set(position, readAt);

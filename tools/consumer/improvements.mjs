@@ -10,16 +10,18 @@ import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, DRAF
 import { isUtcTimestamp } from './maintenance-record.mjs';
 import { IMPROVEMENT_SUGGESTION_RECORD_SCHEMA, IMPROVEMENT_DISMISSAL_RECORD_SCHEMA, SUGGESTION_FIELDS, suggestionProblem, suggestionDerivedProblem, dismissalProblem, dismissalId } from './improvement-record.mjs';
 import { TRIAL_RECORD_SCHEMA } from './trial-record.mjs';
-import { IMPROVEMENT_RULES_VERSION, FRICTION_UNKNOWN, suggestImprovements, classifyImprovement, lead, improvementPrompt, MAX_GOAL } from './improvement-rules.mjs';
+import { IMPROVEMENT_RULES_VERSION, FRICTION_UNKNOWN, savedBaselines, suggestImprovements, classifyImprovement, lead, improvementPrompt, MAX_GOAL } from './improvement-rules.mjs';
 export const IMPROVEMENT_SUGGESTION_SCHEMA = IMPROVEMENT_SUGGESTION_RECORD_SCHEMA;
 export const IMPROVEMENT_DISMISSAL_SCHEMA = IMPROVEMENT_DISMISSAL_RECORD_SCHEMA;
 export { IMPROVEMENT_RULES_VERSION, improvementPrompt };
 const isSuggestion = record => record.schema === IMPROVEMENT_SUGGESTION_RECORD_SCHEMA;
 const isDismissal = record => record.schema === IMPROVEMENT_DISMISSAL_RECORD_SCHEMA;
-const CANDIDATE_SOURCES = ['configured', 'unconfigured'];
+const CANDIDATE_SOURCES = ['configured', 'unconfigured'], CANDIDATE_COVERAGES = ['complete', 'partial'];
 // What a check covered, in words: content changes depend on the host's update source; recurring friction has no published interface.
 const CONTENT_COVERAGE = { checked: 'Content changes since this policy was saved were checked against the configured update source.',
-  'no-configured-source': 'Content changes were not checked: no update source is configured.', 'sources-unavailable': 'Content changes were not checked: the update source could not be read.' };
+  'no-configured-source': 'Content changes were not checked: no update source is configured.', 'sources-unavailable': 'Content changes were not checked: the update source could not be read.',
+  'sources-partly-unavailable': 'Content changes were checked against only part of the update source: some sources could not be read.',
+  'saved-release-not-supplied': 'The exact release this policy was saved from is not supplied, so changes to it were not compared.' };
 const byId = (a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 const checkedEntries = (value, max = 32) => {
   try { return Array.isArray(value) && value.length <= max && value.every(entry => entry && isCheckedRelease(entry.release)) && new Set(value.map(entry => entry.release.sha256)).size === value.length; }
@@ -42,9 +44,11 @@ export function projectDismissals(envelope) {
 // them; `goal` is an optional request. `candidateInventories` is null/undefined when the host's update source could not be
 // read, and `candidateSource` says whether the host has one at all ('unconfigured' is unknown, never checked). A caller that
 // supplies neither has no update source, so earlier callers keep their meaning.
+// `candidateCoverage` is 'partial' when only some of the update source's roots could be read: suggestions from those are still made, but content
+// changes are unknown, not checked. A policy none of whose saved releases can be found is likewise unknown, not "nothing changed".
 // `releaseOrder` (optional) is the host's declared source order; unknown relations keep semver precedence.
 // `coreClients` (optional) is the host's own reading of Core's nativeClientIds, never a request field; it only fills the `client` facts of an adapter suggestion, a display field a recorded suggestion never carries.
-export async function checkImprovements({ envelopeBytes, inventories, candidateInventories, candidateSource = candidateInventories === undefined ? 'unconfigured' : 'configured', clients = [], labels = {}, coreClients, goal, now, releaseOrder } = {}) {
+export async function checkImprovements({ envelopeBytes, inventories, candidateInventories, candidateSource = candidateInventories === undefined ? 'unconfigured' : 'configured', candidateCoverage = 'complete', clients = [], labels = {}, coreClients, goal, now, releaseOrder } = {}) {
   const loaded = await load(envelopeBytes);
   if (loaded.status !== 'ok') return loaded;
   const { read, draft } = loaded.value;
@@ -52,27 +56,31 @@ export async function checkImprovements({ envelopeBytes, inventories, candidateI
   if (!isUtcTimestamp(now)) return fail('/now', 'Supply the check time as an ISO UTC timestamp.');
   if (releaseOrder !== undefined && releaseOrderProblem(releaseOrder) !== null) return fail('/releaseOrder', 'Supply a valid host-declared release order.');
   if (!CANDIDATE_SOURCES.includes(candidateSource)) return fail('/candidateSource', `Supply one of: ${CANDIDATE_SOURCES.join(', ')}.`);
+  if (!CANDIDATE_COVERAGES.includes(candidateCoverage)) return fail('/candidateCoverage', `Supply one of: ${CANDIDATE_COVERAGES.join(', ')}.`);
   if (!checkedEntries(inventories)) return fail('/inventories', 'Supply at most 32 unique checked inventories.');
-  const reason = candidateSource === 'unconfigured' ? 'no-configured-source' : candidateInventories === null || candidateInventories === undefined ? 'sources-unavailable' : undefined;
-  if (reason === undefined && !checkedEntries(candidateInventories, 40)) return fail('/candidateInventories', 'Supply at most 40 unique checked candidate inventories.');
+  // `unread`: nothing came from the update source. `reason`: why content changes are not a complete check, if they are not.
+  const unread = candidateSource === 'unconfigured' ? 'no-configured-source' : candidateInventories === null || candidateInventories === undefined ? 'sources-unavailable' : undefined;
+  if (unread === undefined && !checkedEntries(candidateInventories, 40)) return fail('/candidateInventories', 'Supply at most 40 unique checked candidate inventories.');
   if (!Array.isArray(clients) || clients.length > 32 || clients.some(client => typeof client !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(client))) return fail('/clients', 'Supply at most 32 AI client ids.');
   if (!labels || typeof labels !== 'object' || Array.isArray(labels) || Object.keys(labels).length > 32
     || Object.entries(labels).some(([id, label]) => !/^[a-z0-9][a-z0-9-]{0,63}$/.test(id) || typeof label !== 'string' || label.length < 1 || label.length > 128 || /[\u0000-\u001f\u007f]/.test(label))) return fail('/labels', 'Supply at most 32 client labels of 1 to 128 characters, without control characters.');
   if (goal !== undefined && (typeof goal !== 'string' || goal.length > MAX_GOAL)) return fail('/goal', `Supply a goal of at most ${MAX_GOAL} characters.`);
+  const baselines = unread === undefined ? savedBaselines(draft.intent, inventories, candidateInventories) : undefined;
+  const reason = unread ?? (candidateCoverage === 'partial' ? 'sources-partly-unavailable' : baselines.saved > 0 && !baselines.resolved.length ? 'saved-release-not-supplied' : undefined);
   const requested = goal !== undefined && goal.trim() !== '';
   const items = inventories.flatMap(entry => entry.release.items.map(item => ({ ...item, root: { releaseSha256: entry.release.sha256 } })));
   const text = reason === undefined && releaseOrder !== undefined
     ? "Content changes since this policy was saved were checked against the configured update source using the release order declared by this host's update source." : CONTENT_COVERAGE[reason ?? 'checked'], coverage = [{ trigger: 'content-change', state: reason === undefined ? 'checked' : 'unknown', ...(reason !== undefined ? { reason } : {}), text },
     { trigger: 'recurring-friction', state: 'unknown', reason: 'no-published-interface', text: FRICTION_UNKNOWN }];
   // Unchecked content changes are said on each suggestion too; unknowns are not part of its identity.
-  const suggested = await suggestImprovements({ intent: draft.intent, items, inventories, candidates: reason === undefined ? candidateInventories : [], clients, labels, goal, coreClients, releaseOrder });
+  const suggested = await suggestImprovements({ intent: draft.intent, items, inventories, candidates: unread === undefined ? candidateInventories : [], clients, labels, goal, coreClients, releaseOrder });
   const current = reason === undefined ? suggested : suggested.map(suggestion => ({ ...suggestion, unknowns: [...suggestion.unknowns, text] }));
   const savedBy = new Map(read.records.filter(isSuggestion).map(record => [record.id, record]));
   const dismissals = new Map(read.records.filter(isDismissal).map(record => [record.suggestion.id, record]));
   const shown = (suggestion, dismissal, reasons = []) => ({ ...suggestion, prompt: improvementPrompt(suggestion), dismissal: dismissal ? structuredClone(dismissal) : null,
     ...(reasons.length ? { promotion: { reasons } } : {}) });
   // Package versions of every supplied release, so a dismissed change can tell older content from newer.
-  const versions = new Map([...inventories, ...(reason === undefined ? candidateInventories : [])].map(entry => [entry.release.sha256, entry.release.package?.version]));
+  const versions = new Map([...inventories, ...(unread === undefined ? candidateInventories : [])].map(entry => [entry.release.sha256, entry.release.package?.version]));
   const active = [], dismissed = [], matched = new Set();
   for (const suggestion of current) {
     const dismissal = dismissals.get(suggestion.id);
@@ -84,7 +92,7 @@ export async function checkImprovements({ envelopeBytes, inventories, candidateI
   const preserved = [...dismissals.values()].filter(dismissal => !matched.has(dismissal.id)).sort(byId)
     .map(dismissal => ({ dismissal: structuredClone(dismissal), suggestion: structuredClone(savedBy.get(dismissal.suggestion.id)), state: 'not-current' }));
   return { status: 'ok', diagnostics: loaded.diagnostics, value: { rulesVersion: IMPROVEMENT_RULES_VERSION, checkedAt: now,
-    reads: ['envelope', 'supplied-inventories', ...(reason === undefined ? ['candidate-inventories'] : []), 'declared-clients', ...(requested ? ['request-goal'] : [])], mutations: [], coverage, ...lead(active), dismissed, preserved } };
+    reads: ['envelope', 'supplied-inventories', ...(unread === undefined ? ['candidate-inventories'] : []), 'declared-clients', ...(requested ? ['request-goal'] : [])], mutations: [], coverage, ...lead(active), dismissed, preserved } };
 }
 // Dismissing a suggestion, or showing it again on request, becomes a new envelope revision; the saved intent and the
 // draft are untouched. A dismissal binds the exact suggestion revision it dismissed.

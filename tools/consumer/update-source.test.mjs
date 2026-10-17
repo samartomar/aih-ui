@@ -65,8 +65,8 @@ test('an offline root keeps its position and the last time it was read, and says
   assert.deepEqual(first.sources.map(row => [row.position, row.state, row.readAt, row.lastReadAt]), [[1, 'read', 'T1', undefined], [2, 'read', 'T1', undefined], [3, 'read', 'T1', undefined]]);
   failures.push([ROOTS[0], () => { throw new Error('gone'); }], [ROOTS[1], () => ({ valid: false, diagnostics: [] })], [ROOTS[2], () => ({ valid: true, release: foreign.release, source: SOURCE })]);
   const second = await source.read();
-  assert.deepEqual(second.sources, [{ position: 1, state: 'offline', reason: 'unreadable', lastReadAt: 'T1' }, { position: 2, state: 'offline', reason: 'invalid', lastReadAt: 'T1' },
-    { position: 3, state: 'offline', reason: 'package-mismatch', lastReadAt: 'T1' }]);
+  assert.deepEqual(second.sources, [{ position: 1, state: 'offline', reason: 'unreadable', export: './main.json', lastReadAt: 'T1' }, { position: 2, state: 'offline', reason: 'invalid', export: './main.json', lastReadAt: 'T1' },
+    { position: 3, state: 'offline', reason: 'package-mismatch', export: './main.json', lastReadAt: 'T1' }]);
   assert.equal(second.inventories, null);
   assert.deepEqual(second.releaseOrder.ranks, {});
   // One root back keeps the others offline at their own positions, so the order is still by position.
@@ -80,7 +80,7 @@ test('an offline root keeps its position and the last time it was read, and says
 test('a root that was never read has no last read time', async () => {
   const main = await revision('current');
   const source = createCatalogUpdateSource({ roots: ROOTS.slice(0, 1), installedPackage: main.release.package, releaseExports: ['./main.json'], now: () => 'T1', readRelease: reader({}) });
-  assert.deepEqual((await source.read()).sources, [{ position: 1, state: 'offline', reason: 'invalid' }]);
+  assert.deepEqual((await source.read()).sources, [{ position: 1, state: 'offline', reason: 'invalid', export: './main.json' }]);
 });
 
 test('a root with any invalid export is offline as a whole', async () => {
@@ -88,6 +88,8 @@ test('a root with any invalid export is offline as a whole', async () => {
   const source = createCatalogUpdateSource({ roots: ROOTS.slice(0, 1), installedPackage: main.release.package, releaseExports: EXPORTS, now: () => 'T1', readRelease: reader({ [ROOTS[0]]: { './main.json': main } }) });
   const result = await source.read();
   assert.equal(result.inventories, null); assert.equal(result.sources[0].reason, 'invalid');
+  // The failing export is named, so a root missing one of the five exports can be fixed.
+  assert.equal(result.sources[0].export, './family.json');
 });
 
 test('configuration is validated: at most 8 absolute, non-empty roots', () => {
@@ -113,7 +115,7 @@ test('the real installed Catalog root reads its five releases; a missing root is
     const first = await source.read(), second = await source.read();
     assert.equal(first.sources.length, 2);
     assert.deepEqual([first.sources[0].state, first.sources[0].package, first.sources[0].releaseSha256], ['read', main.release.package, main.release.sha256]);
-    assert.deepEqual([first.sources[1].state, first.sources[1].reason, 'lastReadAt' in first.sources[1]], ['offline', 'invalid', false]);
+    assert.deepEqual([first.sources[1].state, first.sources[1].reason, first.sources[1].export, 'lastReadAt' in first.sources[1]], ['offline', 'invalid', './release.json', false]);
     assert.equal(first.inventories.length, UPDATE_SOURCE_RELEASE_EXPORTS.length);
     assert.equal(first.inventories[0].release.sha256, main.release.sha256);
     assert.deepEqual(first.inventories[0].materialSource, { kind: 'local', input: 'maintained' });
@@ -134,9 +136,10 @@ test('a host started with Catalog roots answers a maintenance check with the sou
     assert.equal(checked.status, 'ok', JSON.stringify(checked.diagnostics));
     const { updateSource } = checked.value;
     assert.deepEqual([updateSource.kind, updateSource.order, updateSource.orderText], ['catalog-roots', 'host-declared', RELEASE_ORDER_TEXT]);
-    assert.deepEqual(updateSource.sources.map(row => [row.position, row.state, row.reason]), [[1, 'read', undefined], [2, 'offline', 'invalid']]);
+    assert.deepEqual(updateSource.sources.map(row => [row.position, row.state, row.reason, row.export]), [[1, 'read', undefined, undefined], [2, 'offline', 'invalid', './release.json']]);
     assert.equal(JSON.stringify(updateSource).includes(JSON.stringify(scratch).slice(1, -1)), false);
-    assert.deepEqual(checked.value.categories[0], { category: 'content', selected: true, state: 'checked' });
+    // One root read and one offline is a partial check: unknown, never a complete one.
+    assert.deepEqual(checked.value.categories[0], { category: 'content', selected: true, state: 'unknown', reason: 'sources-partly-unavailable' });
     assert.deepEqual(checked.value.updates, []);
   } finally { server.close(); await rm(scratch, { recursive: true, force: true }); }
   await assert.rejects(startConsumer({ updateSourceCatalogRoots: [root], maintenanceSource: async () => [] }), /not both/);

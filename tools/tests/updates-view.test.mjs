@@ -39,6 +39,7 @@ test('groups every disposition and preserves a newer candidate beside a skipped 
 test('category lines explain checked, unavailable readers, offline sources and not selected', () => {
   assert.match(categoryLine(categories[0]), /Content: checked/);
   assert.match(categoryLine({ category: 'content', state: 'unknown', reason: 'sources-unavailable' }), /unknown.*sources.*unavailable/i);
+  assert.equal(categoryLine({ category: 'content', state: 'unknown', reason: 'sources-partly-unavailable' }), 'Content: unknown — some update sources could not be read');
   assert.match(categoryLine({ category: 'software', state: 'unknown', reason: 'no-supported-reader' }), /unknown.*no supported reader/i);
   assert.match(categoryLine(categories[1]), /not selected/);
 });
@@ -124,14 +125,18 @@ test('the DOM shows facts in every group, preserved states, and read-only/save c
 const SHA = letter => letter.repeat(64);
 const catalogSource = { kind: 'catalog-roots', order: 'host-declared', orderText: "order declared by this host's update source", sources: [
   { position: 1, state: 'read', package: { name: '@aihq/catalog', version: '0.1.0' }, releaseSha256: SHA('c'), readAt: '2026-10-16T10:00:00.000Z' },
-  { position: 2, state: 'offline', reason: 'unreadable', lastReadAt: '2026-10-16T09:00:00.000Z' }, { position: 3, state: 'offline', reason: 'package-mismatch' }] };
+  { position: 2, state: 'offline', reason: 'unreadable', export: './release-ecc.json', lastReadAt: '2026-10-16T09:00:00.000Z' }, { position: 3, state: 'offline', reason: 'package-mismatch', export: './release.json' }] };
 
 test('the update source is described as a declaration of this host, and a fixture is never called a real source', () => {
   assert.deepEqual(updateSourceLines(catalogSource).map(line => line.text), [
     "Update source: 3 Catalog package roots configured by this host. Later entries are newer — order declared by this host's update source.",
     `Source 1: @aihq/catalog 0.1.0 · release ${SHA('c')} — read 2026-10-16T10:00:00.000Z`,
-    'Source 2: offline (could not be read) — last read 2026-10-16T09:00:00.000Z',
-    'Source 3: offline (a different package from the one this Workbench installs) — never read in this session']);
+    'Source 2: offline (could not be read: ./release-ecc.json) — last read 2026-10-16T09:00:00.000Z',
+    'Source 3: offline (a different package from the one this Workbench installs: ./release.json) — never read in this session']);
+  // The order is worded by the host that declared it; the page's own wording is only a fallback.
+  assert.match(updateSourceLines({ ...catalogSource, orderText: 'order this host declared' })[0].text, /Later entries are newer — order this host declared.$/);
+  assert.match(updateSourceLines({ ...catalogSource, orderText: undefined })[0].text, /order declared by this host's update source.$/);
+  assert.equal(orderLine({ relation: 'newer' }, 'order this host declared'), 'Newer than your selected revision (order this host declared).');
   assert.match(updateSourceLines({ ...catalogSource, sources: catalogSource.sources.slice(0, 1) })[0].text, /1 Catalog package root configured/);
   assert.deepEqual(updateSourceLines({ kind: 'test-fixture', sources: [] }), [{ text: 'Test fixture source — not a real update source.' }]);
   assert.deepEqual(updateSourceLines(undefined), []);
@@ -149,7 +154,9 @@ test('the DOM shows the update source above the category lines, with each update
   const built = view(client); await built.open();
   const source = elements(built.node).find(node => node.id === 'policy-updates-source');
   assert.equal(source.hidden, false); assert.match(textOf(source), /Update source: 3 Catalog package roots configured by this host/);
-  assert.ok(built.node.children.indexOf(source) < built.node.children.findIndex(node => node.textContent?.startsWith('Content:') || node.children?.some(child => child.textContent?.startsWith('Content:'))));
+  const categoryNode = elements(built.node).find(node => node.id === 'policy-updates-categories');
+  assert.match(textOf(categoryNode), /Content: checked/);
+  assert.ok(built.node.children.indexOf(source) < built.node.children.indexOf(categoryNode));
   const text = textOf(built.node);
   for (const expected of [`Selected: release ${SHA('a')} · item ${SHA('b')}`, `Offered: release ${SHA('d')} · item ${SHA('e')}`, "Newer than your selected revision (order declared by this host's update source).",
     'Order relative to your selected revision is unknown (listed both before and after it).']) assert.ok(text.includes(expected), expected);
@@ -460,4 +467,33 @@ test('a recorded check later than the current check does not block noting the cu
     recordDisposition: async operation => { notes.push(operation); return ok({}); } };
   const built = view(client); await built.open(); await built.noteCheck();
   assert.deepEqual(notes.map(note => note.checkedAt), [checked.checkedAt]);
+});
+
+test('a partly readable source keeps the earlier row from the unread source, shows the earlier check time and never counts as a successful check', async () => {
+  const sourced = id => update(id, null, 'new');
+  const first = ok({ ...checked, updates: [sourced('one'), sourced('two')] });
+  const partial = ok({ ...checked, checkedAt: '2026-10-16T12:00:00Z', updates: [sourced('one')], categories: [{ category: 'content', selected: true, state: 'unknown', reason: 'sources-partly-unavailable' }] });
+  const results = [first, partial], notes = [];
+  const client = { draft, revision: 1, checkMaintenance: async () => results.shift(), recordDisposition: async operation => { notes.push(operation); return ok({}); } };
+  const built = view(client); await built.open();
+  assert.match(textOf(built.node), /Last checked 2026-10-15T12:00:00Z./);
+  await built.check();
+  const text = textOf(built.node);
+  assert.match(text, /Updates as of 2026-10-15T12:00:00Z./); assert.match(text, /Some updates are unknown/);
+  assert.doesNotMatch(text, /Last checked 2026-10-16/); assert.doesNotMatch(text, /No updates were offered/);
+  assert.match(text, /Content: unknown — some update sources could not be read/);
+  assert.ok(text.includes('revision two'), 'the update from the source that is no longer read is still shown'); assert.ok(text.includes('revision one'));
+  const state = updatesState(updatesState(null, first, ['content']), partial, ['content']);
+  assert.equal(state.stale, true); assert.equal(state.unknown, true); assert.deepEqual(state.value.updates.map(row => row.id).sort(), ['one', 'two']);
+  // Only the complete check is noted for saving.
+  await built.noteCheck(); assert.deepEqual(notes.map(note => note.checkedAt), [checked.checkedAt]);
+});
+
+test('the DOM words the source and each update order with the orderText the host declared', async () => {
+  const row = { ...update('newer', null, 'new'), order: { relation: 'newer', basis: 'host-declared' } };
+  const client = { draft, revision: 1, checkMaintenance: async () => ok({ ...checked, updates: [row], updateSource: { ...catalogSource, orderText: 'the order this host declared' } }) };
+  const built = view(client); await built.open();
+  const text = textOf(built.node);
+  assert.ok(text.includes('Later entries are newer — the order this host declared.')); assert.ok(text.includes('Newer than your selected revision (the order this host declared).'));
+  assert.ok(text.includes('offline (could not be read: ./release-ecc.json)'));
 });

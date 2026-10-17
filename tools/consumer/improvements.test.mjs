@@ -912,6 +912,57 @@ test('a real newer revision of the saved notes source offers its new goal-releva
   }
 });
 
+const PARTLY = 'Content changes were checked against only part of the update source: some sources could not be read.';
+const NO_BASELINE = 'The exact release this policy was saved from is not supplied, so changes to it were not compared.';
+
+test('a partly readable update source still suggests from what was read, but never says content changes were checked', async () => {
+  const s = await changeScenario(), candidateInventories = [s.next], partly = { candidateInventories, candidateCoverage: 'partial' };
+  const value = await check(s, s.envelopeBytes, partly), plan = shownItem(value, PLAN_ID);
+  assert.deepEqual(value.coverage, [{ trigger: 'content-change', state: 'unknown', reason: 'sources-partly-unavailable', text: PARTLY }, FRICTION]);
+  assert.ok(plan); assert.equal(changeTrigger(plan).key, 'change:new@1.0.1');
+  assert.equal(plan.unknowns.at(-1), PARTLY); assert.deepEqual(plan.unknowns.slice(0, UNKNOWNS.length), UNKNOWNS);
+  assert.ok(value.reads.includes('candidate-inventories'));
+  // Not identity: the same suggestion, and a dismissal of it, is the same once the whole source is read.
+  const whole = await check(s, s.envelopeBytes, { candidateInventories, candidateCoverage: 'complete' }), also = shownItem(whole, PLAN_ID);
+  assert.deepEqual([plan.id, plan.revision], [also.id, also.revision]); assert.deepEqual(also.unknowns, UNKNOWNS);
+  assert.deepEqual(whole.coverage[0], { trigger: 'content-change', state: 'checked', text: CHECKED });
+  assert.deepEqual((await check(s, s.envelopeBytes, { candidateInventories })).coverage, whole.coverage);
+  // Nothing readable or configured keeps its own reason.
+  assert.equal((await check(s, s.envelopeBytes, { candidateInventories: null, candidateCoverage: 'partial' })).coverage[0].reason, 'sources-unavailable');
+  assert.equal((await check(s, s.envelopeBytes, { candidateSource: 'unconfigured', candidateCoverage: 'partial' })).coverage[0].reason, 'no-configured-source');
+  for (const candidateCoverage of ['some', null, 1]) {
+    const refused = await checkImprovements({ envelopeBytes: s.envelopeBytes, inventories: s.inventories, now: NOW, candidateInventories, candidateCoverage });
+    assert.equal(refused.status, 'refused', String(candidateCoverage)); assert.equal(refused.diagnostics[0].path, '/candidateCoverage'); assert.deepEqual(refused.originalBytes, s.envelopeBytes);
+  }
+});
+
+test('a saved release supplied only by the update source is still the baseline for what changed', async () => {
+  const before = [item('x.root'), item('mattpocock.tdd')], after = [item('x.root'), revised(item('mattpocock.tdd'), 21)];
+  const a = releaseOf(9, '1.0.0', before), b = releaseOf(10, '1.1.0', after), releaseOrder = declareReleaseOrder([[hex(9)], [hex(10)]]);
+  const from = (inventories, candidates) => suggestImprovements({ intent: changeIntent(), items: flat([b]), inventories, candidates, clients: [], releaseOrder });
+  for (const [inventories, candidates] of [[[], [a, b]], [[], [b, a]], [[a], [a, b]]]) {
+    const got = byItem(await from(inventories, candidates), 'mattpocock.tdd');
+    assert.equal(changeTrigger(got)?.key, 'change:revised@1.1.0'); assert.equal(got.change.releaseSha256, hex(10));
+  }
+  // The exact saved release is found by digest, in neither place it is not compared, and a candidate that is not it is not a baseline.
+  assert.equal(changeTrigger(byItem(await from([], [b]), 'mattpocock.tdd')), undefined);
+  assert.equal(changeTrigger(byItem(await from([], [releaseOf(8, '0.9.0', before), b]), 'mattpocock.tdd')), undefined);
+});
+
+test('the check says so when no baseline for the saved policy could be found, and compares through the update source when it can', async () => {
+  const s = await changeScenario(), releaseOrder = declareReleaseOrder([[s.notes.release.sha256], [s.next.release.sha256]]);
+  // The policy also pins the maintained Catalog it depends on, so neither release is supplied to the check.
+  const supplied = { inventories: [] };
+  const viaSource = await check(s, s.envelopeBytes, { ...supplied, candidateInventories: [s.notes, s.next], releaseOrder });
+  assert.ok(shownItem(viaSource, PLAN_ID)); assert.equal(viaSource.coverage[0].state, 'checked');
+  const lost = await check(s, s.envelopeBytes, { ...supplied, candidateInventories: [s.next], releaseOrder }), plan = shownItem(lost, PLAN_ID);
+  assert.deepEqual(lost.coverage[0], { trigger: 'content-change', state: 'unknown', reason: 'saved-release-not-supplied', text: NO_BASELINE });
+  assert.equal(plan, undefined);
+  // A policy with nothing saved from a release has nothing to compare, which is not a missing baseline.
+  const empty = valueOf(await composeAuthoring({ intent: freshAuthoring(), inventories: s.inventories })), open = valueOf(await openDraft({ bytes: empty.policyBytes, inventories: s.inventories }));
+  assert.equal((await check(s, open.envelopeBytes, { candidateInventories: [s.next] })).coverage[0].state, 'checked');
+});
+
 test('host route: improvements-check reads the configured update source and recording does not', async () => {
   const s = await changeScenario(), calls = [];
   let source = async (...args) => { calls.push(args); return [s.next]; };

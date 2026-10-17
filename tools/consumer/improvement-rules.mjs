@@ -102,12 +102,18 @@ function difference(before, beforeKnown, item, known) {
   if (!sameContent(digestsOf(before), digestsOf(item))) return 'own';
   return sameContent(closureOf(before, beforeKnown), closureOf(item, known)) ? undefined : 'needed';
 }
+// The releases this policy was saved from, found by exact digest among the supplied inventories and then the update source's
+// checked candidates (which may be the only place an older pack is offered). `saved` counts the digests the policy names; a digest found
+// in neither is not compared.
+export function savedBaselines(intent, inventories, candidates = []) {
+  const shas = [...new Set([...intent.roots, ...intent.pins, ...intent.provenance].map(entry => entry.releaseSha256))].sort(compare);
+  return { saved: shas.length, resolved: shas.flatMap(sha => [...inventories, ...candidates].filter(entry => entry.release.sha256 === sha).slice(0, 1)) };
+}
 // Items that candidate releases add or change against the saved releases they revise, by item id, newest candidate first. An item is new
 // when none of those saved releases has it and revised when each one that has it differs; a candidate that revises none says nothing.
 // `known` is what the item's requirements resolve against: its own release first, then the supplied items.
 function changedItems(intent, inventories, candidates, offered, releaseOrder) {
-  const saved = [...new Set([...intent.roots, ...intent.pins, ...intent.provenance].map(entry => entry.releaseSha256))].sort(compare)
-    .flatMap(sha => inventories.filter(entry => entry.release.sha256 === sha).slice(0, 1));
+  const { resolved: saved } = savedBaselines(intent, inventories, candidates);
   const changed = new Map();
   const rank = entry => releaseOrder?.ranks[entry.release.sha256]?.[1] ?? 0;
   const versioned = entry => SEMVER.test(entry.release.package?.version ?? '');

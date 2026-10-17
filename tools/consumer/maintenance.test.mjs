@@ -489,6 +489,56 @@ test('a release order that is not the closed host-declared shape is refused', as
   assert.equal((await checkMaintenance({ ...base, releaseOrder: null })).status, 'ok');
 });
 
+test('a partly readable update source keeps the updates it read but never claims a complete content check', async () => {
+  const s = await scenario(), sha = entry => entry.release.sha256;
+  const base = { envelopeBytes: s.envelopeBytes, inventories: s.inventories };
+  const skipped = await record(s.envelopeBytes, setOp(s, s.newer, 'skip'));
+  const partial = await check({ ...base, candidateInventories: [s.updated], candidateCoverage: 'partial' });
+  assert.deepEqual(partial.categories[0], { category: 'content', selected: true, state: 'unknown', reason: 'sources-partly-unavailable' });
+  assert.deepEqual(partial.updates.map(u => u.candidate.releaseSha256), [sha(s.updated)]);
+  assert.deepEqual(partial.reads, ['envelope', 'supplied-inventories', 'candidate-inventories']);
+  // A choice about a revision this partial read did not offer is unknown, not "not offered": the missing source may hold it.
+  const kept = await check({ envelopeBytes: skipped.envelopeBytes, inventories: s.inventories, candidateInventories: [s.updated], candidateCoverage: 'partial' });
+  assert.deepEqual(kept.preserved.map(p => [p.record.disposition, p.state]), [['skip', 'unknown']]);
+  const complete = await check({ envelopeBytes: skipped.envelopeBytes, inventories: s.inventories, candidateInventories: [s.updated], candidateCoverage: 'complete' });
+  assert.deepEqual(complete.categories[0], { category: 'content', selected: true, state: 'checked' });
+  assert.deepEqual(complete.preserved.map(p => p.state), ['not-offered']);
+  assert.deepEqual((await check({ envelopeBytes: skipped.envelopeBytes, inventories: s.inventories, candidateInventories: [s.updated] })).categories, complete.categories);
+  // Nothing readable or nothing configured keeps its own reason, whatever the coverage says.
+  assert.equal((await check({ ...base, candidateInventories: null, candidateCoverage: 'partial' })).categories[0].reason, 'sources-unavailable');
+  assert.equal((await check({ ...base, candidateInventories: null, candidateSource: 'unconfigured', candidateCoverage: 'partial' })).categories[0].reason, 'no-configured-source');
+  // Content not selected is not a coverage question.
+  assert.equal((await check({ ...base, candidateInventories: [s.updated], candidateCoverage: 'partial', categories: ['software'] })).categories[0].state, 'not-selected');
+  for (const candidateCoverage of ['some', null, 1]) {
+    const refused = await checkMaintenance({ ...base, candidateInventories: [s.updated], candidateCoverage, now: NOW });
+    assert.equal(refused.status, 'refused', String(candidateCoverage)); assert.equal(refused.diagnostics[0].path, '/candidateCoverage'); assert.deepEqual(refused.originalBytes, s.envelopeBytes);
+  }
+});
+
+test('host route: an update source with one offline root is a partial check, and an all-offline source stays unavailable', async () => {
+  const s = await scenario(), [maintained] = s.inventories, base = { release: maintained.release, materials: maintained.materials, materialSource: maintained.materialSource };
+  const sha = entry => entry.release.sha256, bytes = [...s.envelopeBytes];
+  const read = (inventories, states) => ({ kind: 'catalog-roots', inventories, releaseOrder: declareReleaseOrder(states.map(() => [])),
+    sources: states.map((state, index) => state === 'read' ? { position: index + 1, state, package: { name: 'notes' }, releaseSha256: sha(s.notes), readAt: NOW } : { position: index + 1, state, reason: 'unreadable', export: './release.json' }) });
+  let source = read([s.updated], ['read', 'offline']);
+  const service = await createMixedService(base, { maintenanceSource: async () => source });
+  const partial = (await service.run('maintenance-check', { envelopeBytes: bytes })).value;
+  assert.deepEqual(partial.categories[0], { category: 'content', selected: true, state: 'unknown', reason: 'sources-partly-unavailable' });
+  assert.equal(partial.updates.length, 1);
+  assert.deepEqual(partial.updateSource.sources[1], { position: 2, state: 'offline', reason: 'unreadable', export: './release.json' });
+  source = read([s.updated], ['read', 'read']);
+  assert.equal((await service.run('maintenance-check', { envelopeBytes: bytes })).value.categories[0].state, 'checked');
+  source = read(null, ['offline', 'offline']);
+  assert.equal((await service.run('maintenance-check', { envelopeBytes: bytes })).value.categories[0].reason, 'sources-unavailable');
+  // A fixture list has no sources to be partly offline.
+  const fixture = await createMixedService(base, { maintenanceSource: async () => [s.updated] });
+  assert.equal((await fixture.run('maintenance-check', { envelopeBytes: bytes })).value.categories[0].state, 'checked');
+  // The improvements check takes the same coverage from the same read.
+  source = read([s.updated], ['read', 'offline']);
+  const suggested = (await service.run('improvements-check', { envelopeBytes: bytes })).value;
+  assert.deepEqual(suggested.coverage[0].reason, 'sources-partly-unavailable');
+});
+
 test('host route: an update source object brings its description and the order of each update; a fixture list stays labelled as one', async () => {
   const s = await scenario();
   const [maintained] = s.inventories, base = { release: maintained.release, materials: maintained.materials, materialSource: maintained.materialSource };
