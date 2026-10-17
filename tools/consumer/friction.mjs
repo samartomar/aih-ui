@@ -20,8 +20,14 @@ export const MAX_EVIDENCE = 256, MAX_CLAIMS = 4096;
 const FILE_STATE = 'condition:file-state', NATIVE_USE = 'condition:native-use';
 
 // A claim names things by stable identity, never by a location on this machine. Core's claim-set validation refuses a set whose strings carry a
-// machine-local path, so a claim it would refuse on its own is left out: one such result never refuses the others. The fingerprint is claims.mjs's own.
+// machine-local path, so a claim it would refuse on its own is left out and counted (`refused`): one such result never refuses the others. The fingerprint
+// is claims.mjs's own.
 const portable = claim => validateClaimSet({ schema: CLAIMS_SCHEMA_1_1_0, claims: [claim], calculations: [] }).valid;
+// The claim an entry id would be carried in, with nothing else from its result: Core's answer for it says whether the id itself is portable.
+const entryClaim = id => ({ id: `${id}/entry`, revision: '1', producer: { ...FRICTION_PRODUCER }, recordSchema: FILE_STATE_SCHEMA, subject: { kind: 'target', id: 'entry' },
+  scope: { kind: 'machine', targets: ['entry'] }, sources: [{ id, schema: FILE_STATE_SCHEMA }], observation: `${id}/entry`, capturedAt: '2026-01-01T00:00:00Z', measure: 'condition:entry',
+  kind: 'unknown', unknownReason: 'unavailable', coverage: { state: 'complete', reason: 'entry' }, authentication: { status: 'not-authenticated' },
+  applicability: { state: 'unknown', reason: 'entry', inputs: [] } });
 const fit = text => text.length <= 240 ? text : `${text.slice(0, 200)}~${fingerprint(text)}`;
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 // Core's own reason codes only; anything else (free text, a path) is the generic code.
@@ -108,18 +114,19 @@ function checkEvidence(evidence) {
     if (!only(entry, ['id', 'capturedAt', 'result'], ['sha256', 'fixture']) || typeof entry.id !== 'string' || entry.id.length < 1 || entry.id.length > 128 || /[\u0000-\u001f\u007f]/.test(entry.id)
       || !isUtcTimestamp(entry.capturedAt) || !object(entry.result) || (entry.sha256 !== undefined && !hash(entry.sha256)) || (entry.fixture !== undefined && typeof entry.fixture !== 'boolean'))
       throw new TypeError(`${at} must be {id, capturedAt, result} with an optional sha256 and fixture flag.`);
+    if (!portable(entryClaim(entry.id))) throw new TypeError(`${at}.id looks like a machine-local path; supply a stable identifier instead.`);
   });
 }
 
 // `evidence`: the host's stored Core results, at most 256 of { id, sha256?, capturedAt, fixture?, result }. `subjects`: what the draft ties to a selected
 // item, { kind: 'managed-selection' | 'client' | 'target', key, selectionId?, itemId, rootItemId, label, scope, goal? }. Returns the claim set, Core's
 // projection, `results` (one per tied subject, condition and check method with any claim, each requested apart: { tie, subject, condition, method? (the persisted
-// configuration's), result: Core's recurrence result, stored: distinct stored results read, fixture }) and `unread` (stored results of a schema this module does not read).
+// configuration's), result: Core's recurrence result, stored: distinct stored results read, fixture }), `unread` (stored results of a schema this module does not read) and `refused` (claims Core refused because a result carried a machine-local path).
 export function frictionRecurrence({ evidence, subjects }) {
   checkEvidence(evidence);
   const ties = tiesOf(subjects), claims = new Map(), groups = new Map();
-  let unread = 0;
-  for (const [index, entry] of evidence.entries()) {
+  let unread = 0, refused = 0;
+  for (const entry of evidence) {
     const readings = readingsOf(entry.result, ties);
     if (readings === undefined) { unread += 1; continue; }
     for (const reading of readings) {
@@ -132,12 +139,8 @@ export function frictionRecurrence({ evidence, subjects }) {
       // The digest the host gives names the revision; otherwise the content does. A repeat of one claim is one claim; the same id and revision
       // with other content stays separate, which Core reports as a conflict.
       const body = bodyOf(entry.id), claim = { id: body.observation, revision: entry.sha256 ?? fingerprint(body), ...body }, print = fingerprint(body), key = `${claim.id}\u0000${claim.revision}`;
-      if (!portable(claim)) {
-        // The host's own entry id is refused, as any other invalid entry is; a path inside a result only leaves that claim out.
-        const neutral = bodyOf('evidence');
-        if (portable({ id: neutral.observation, revision: claim.revision, ...neutral })) throw new TypeError(`evidence[${index}].id looks like a machine-local path; supply a stable identifier instead.`);
-        continue;
-      }
+      // The entry id was checked above; a claim Core refuses here carries a path from inside the result, so it is left out and counted.
+      if (!portable(claim)) { refused += 1; continue; }
       if (claims.has(key) && claims.get(key).print !== print) claim.revision = `${claim.revision}~${print}`;
       const stored = claims.get(`${claim.id}\u0000${claim.revision}`);
       if (!stored) claims.set(`${claim.id}\u0000${claim.revision}`, { claim, print });
@@ -158,6 +161,6 @@ export function frictionRecurrence({ evidence, subjects }) {
   const validation = validateClaimSet(claimSet);
   if (!validation.valid) throw new TypeError(`The friction claim set is not valid: ${validation.errors.join('; ')}`);
   const projection = projectClaims(claimSet);
-  return { claimSet, projection, unread, results: ordered.map((group, index) => ({ tie: group.tie, subject: { ...group.subject }, condition: group.condition, ...(group.method ? { method: { ...group.method } } : {}),
+  return { claimSet, projection, unread, refused, results: ordered.map((group, index) => ({ tie: group.tie, subject: { ...group.subject }, condition: group.condition, ...(group.method ? { method: { ...group.method } } : {}),
     result: projection.calculations[index], stored: group.entries.size, fixture: group.fixture })) };
 }

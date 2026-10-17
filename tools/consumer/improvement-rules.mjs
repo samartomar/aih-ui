@@ -13,7 +13,9 @@ import { adapterFor, describeClientIdentity } from './client-identity.mjs';
 // 1.4.0: content-change rules use the host-declared release order when known.
 // 1.5.0: recurring friction from stored Core results via Core's recurrence method; a different release of a saved package whose order is unknown is reported as version-order-unknown.
 // 1.6.0: recurring friction also reads the readiness journal (a check made with this host's trust and with the persisted configuration are two timelines) and the Core targets a selected item's executables run on; wording only otherwise.
-export const IMPROVEMENT_RULES_VERSION = '1.6.0';
+// 1.7.0: dependency and update facts are Catalog's (resolveSelections, compareReleases); an unresolved closure is stated as a lower bound; executables tie the
+// targets Core publishes them under. Suggestion ids, revisions and dismissals are unchanged; only newly written suggestion records carry this version.
+export const IMPROVEMENT_RULES_VERSION = '1.7.0';
 export const MAX_GOAL = 300, MAX_ALTERNATIVES = 3, MAX_TRACKED_NEEDS = 256;
 // Independent of the guided-setup rules on purpose: each rule set is versioned alone, so changing one never changes
 // the saved reasons the other wrote.
@@ -37,6 +39,8 @@ export const FRICTION_COVERAGE = { checked: 'Recurring friction was checked agai
   'history-unavailable': 'Recurring friction was not checked: this host supplied no stored Core results.' };
 // Still `history-unavailable`, but a host whose configured store could not be read must not be described as holding none.
 export const FRICTION_UNREADABLE = "Recurring friction was not checked: this host's stored Core results could not be read.";
+// Conflicts with a choice whose release is not supplied cannot be checked, so they are said to be unknown rather than absent.
+export const CONFLICTS_UNKNOWN = 'Conflicts with choices whose release is not supplied were not checked.';
 export const UNKNOWNS = ['Whether it improves your results is unknown until you try it.', 'Actual usage and cost are unknown; no usage data is read.'];
 // The reason format guided setup writes on each chosen root.
 const SAVED_GOAL = /^guided-setup rules \d+\.\d+\.\d+: [a-z][a-z0-9.-]*\. Goal: (.+?)\. Project: /;
@@ -53,7 +57,8 @@ function firstPhrase(source, phrases) {
 }
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 // Semantic-version precedence of two version strings (build metadata ignored), or undefined when either side is absent or not a version. Kept only for a
-// dismissal's remembered version (classifyImprovement): the dismissed release may no longer be supplied, and Catalog compares checked releases, not version strings.
+// dismissal's remembered version (classifyImprovement): the dismissed release may no longer be supplied, and Catalog compares checked releases, not version
+// strings. Temporary until Catalog publishes a version comparison (samartomar/aih-catalog#105, item 2).
 const NUMBER = '0|[1-9]\\d*', PART = `(?:${NUMBER}|\\d*[A-Za-z-][0-9A-Za-z-]*)`;
 const SEMVER = new RegExp(`^(${NUMBER})\\.(${NUMBER})\\.(${NUMBER})(?:-(${PART}(?:\\.${PART})*))?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$`);
 function precedence(a, b) {
@@ -93,19 +98,25 @@ const scopeFor = (item, hint) => [hint, 'project'].find(name => item.scopes.incl
 const digestsOf = item => ({ recipeSha256: item.recipe.sha256, materials: [...new Set((item.materials ?? []).map(m => m.sha256))].sort() });
 const bytesOf = item => (item.recipe?.byteLength ?? 0) + (item.materials ?? []).reduce((sum, m) => sum + m.byteLength, 0);
 const byItemId = (a, b) => compare(a.id, b.id);
-// The item's required items, transitively, that this policy does not already select, and the ids of those Catalog could not resolve. `closure` is
-// Catalog's answer for the item (see `closures` on suggestImprovements): `{ required }` when it resolved the closure, or `{ unavailable }` naming the
-// references its refusal could not resolve (less what the policy already selects); nothing is found otherwise, and nothing is walked here.
+// The item's required items, transitively, that this policy does not already select, the ids of those Catalog could not resolve, and whether the set is
+// complete. `closure` is Catalog's answer for the item (see `closures` on suggestImprovements): its whole required closure (`complete`), or, when
+// Catalog refuses it, the available items its refusal names as requiring what it could not resolve, with `unavailable` naming those references (less
+// what the policy already selects). Nothing is walked here.
 function needs(selected, closure) {
-  return { found: (closure?.required ?? []).filter(needed => !selected.has(needed.id)).sort(byItemId), missing: [...new Set(closure?.unavailable ?? [])].filter(id => !selected.has(id)).sort(compare) };
+  return { found: (closure?.required ?? []).filter(needed => !selected.has(needed.id)).sort(byItemId), missing: [...new Set(closure?.unavailable ?? [])].filter(id => !selected.has(id)).sort(compare),
+    complete: closure?.complete !== false };
 }
 // Observed presence is not an input here: nothing this check reads observes a client, so installed is always "not checked".
 const clientFacts = (item, coreClients) => { const client = describeClientIdentity({ item, coreClients }); return client ? { client } : {}; };
 // `closure.conflicts` are the items Catalog reports in conflict with this item or what it needs, among the policy's own choices.
 function facts(item, scope, selected, closure) {
-  const { found, missing } = needs(selected, closure), all = [item, ...found];
+  const { found, missing, complete } = needs(selected, closure), all = [item, ...found];
   const labels = found.map(i => i.label ?? i.id), shown = labels.slice(0, 8).join(', ') + (labels.length > 8 ? ` and ${labels.length - 8} more` : '');
-  const result = [{ kind: 'overhead', text: clip(`Adds ${plural(all.reduce((n, i) => n + 1 + (i.materials ?? []).length, 0), 'file')}, ${all.reduce((n, i) => n + bytesOf(i), 0)} bytes in total, and needs ${plural(found.length, 'other item')}${found.length ? `: ${shown}` : ''}.`) },
+  const files = plural(all.reduce((n, i) => n + 1 + (i.materials ?? []).length, 0), 'file'), bytes = all.reduce((n, i) => n + bytesOf(i), 0);
+  // An unresolved closure is a lower bound, never a total.
+  const overhead = complete ? `Adds ${files}, ${bytes} bytes in total, and needs ${plural(found.length, 'other item')}${found.length ? `: ${shown}` : ''}.`
+    : `Adds at least ${files} and ${bytes} bytes, and needs at least ${plural(found.length, 'other item')}${found.length ? `: ${shown}` : ''}; the full set is unknown because Catalog cannot resolve everything it requires.`;
+  const result = [{ kind: 'overhead', text: clip(overhead) },
     { kind: 'scope', text: scope === 'project' ? 'Applies in this project only; other repositories and AI clients are unchanged.'
       : 'Applies to your user account on this computer; every project of that account is affected.' }];
   for (const id of missing.slice(0, 4)) result.push({ kind: 'dependency', text: `Needs ${id}, which the supplied Catalog does not offer.` });
@@ -275,7 +286,7 @@ export async function suggestImprovements({ intent, items = [], inventories = []
     const omitted = hidden ? [`${hidden} more recurring ${hidden === 1 ? 'condition is' : 'conditions are'} not listed.`] : [];
     suggestions.push({ id, rulesVersion: IMPROVEMENT_RULES_VERSION, revision: await suggestionRevision({ id, change, triggers: sorted }), scope, change, triggers: sorted,
       ...(goalText !== undefined ? { goal: goalText } : {}), references: [...references.slice(0, 31), { kind: 'catalog-item', ref: item.id }],
-      facts: facts(item, scope, selected, required), ...clientFacts(item, coreClients), unknowns: [...UNKNOWNS, ...untracked, ...omitted], label: item.label ?? item.id, description: item.description ?? '' });
+      facts: facts(item, scope, selected, required), ...clientFacts(item, coreClients), unknowns: [...UNKNOWNS, ...untracked, ...omitted, ...(required?.conflictsComplete === false ? [CONFLICTS_UNKNOWN] : [])], label: item.label ?? item.id, description: item.description ?? '' });
   }
   const rank = s => [s.references.some(r => r.kind === 'request') ? 0 : 1, -s.triggers.length, s.references.some(r => r.kind === 'saved-reason') ? 0 : 1];
   return suggestions.sort((a, b) => {

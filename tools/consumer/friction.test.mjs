@@ -109,6 +109,9 @@ test('a published check id keeps its path separator in the condition; control ch
   for (const id of ['a\nb', 'a\u0000b', 'a\u007fb', 'C:\\Users\\a\\b', '/etc/passwd', '~/x', '', 'x'.repeat(129), 'a/'.repeat(80)]) {
     assert.equal(run([entry('chk-1', T[0], readiness('chk-1', [probe('failed', { id, target: 'claude' })]))], [claudeTie]).claimSet.claims.length, 0, JSON.stringify(id));
   }
+  // A claim Core refuses for a machine-local path inside a result is counted, never silently dropped.
+  for (const id of ['C:\\Users\\a\\b', '/etc/passwd', '~/x']) assert.equal(run([entry('chk-1', T[0], readiness('chk-1', [probe('failed', { id, target: 'claude' })]))], [claudeTie]).refused, 1, id);
+  assert.equal(run([entry('chk-1', T[0], readiness('chk-1', [version('failed')]))], [claudeTie]).refused, 0);
 });
 
 test('the local-path refusal is Core\'s claim-set validation and the content fingerprint is claims.mjs\'s own, never copied', async () => {

@@ -342,7 +342,7 @@ function liveClosure(index, root, skips) {
 }
 // Required items Catalog could not resolve from the supplied inventories: the references its refusal names on each unavailable release or item a
 // dependency declaration requires (`reference`, with the declaring item as `declaredBy`), once each, in Catalog's order. The item digest a
-// declaration pins is read from the declaration Catalog points at (`path`, a JSON pointer into the request), since `reference` does not carry it.
+// declaration pins is read from the declaration Catalog points at (`path`, a JSON pointer into the request), since `reference` does not carry it (temporary until samartomar/aih-catalog#105 adds it).
 const UNAVAILABLE = new Set(['RELEASE_UNAVAILABLE', 'ITEM_UNAVAILABLE']);
 const pointed = (root, path) => typeof path === 'string' && path.startsWith('/')
   ? path.slice(1).split('/').map(part => part.replaceAll('~1', '/').replaceAll('~0', '~')).reduce((value, key) => value != null && typeof value === 'object' && Object.hasOwn(value, key) ? value[key] : undefined, root) : undefined;

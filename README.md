@@ -594,9 +594,13 @@ list from the installed `@aihq/core/harness` on the host; a list in a request is
 ### Recurring friction from stored Core results
 
 Rules 1.5.0 added one rule, `friction.recurrence`, and name what the check could not know; 1.6.0 also reads the readiness journal and the Core targets a selected item's
-executables run on, with new wording for the two trusts below (suggestion identity and dismissals ignore the rules version, so nothing saved is reset). No new data source is added and nothing is collected: the
+executables run on, with new wording for the two trusts below (suggestion identity and dismissals ignore the rules version, so nothing saved is reset). 1.7.0 takes
+dependency and update facts from Catalog (`resolveSelections` references and conflicts, `compareReleases`) and executable targets from Core; a closure
+Catalog refuses keeps the items its refusal names and is stated as a lower bound ("needs at least …; the full set is unknown"), and conflicts with a
+choice whose release is not supplied are stated as unknown. Suggestion ids, revisions and dismissals are unchanged; only newly written suggestion
+records carry 1.7.0. No new data source is added and nothing is collected: the
 host passes the Core results it already stores as `evidence` (never a request field), at most 256 of `{ id, sha256?, capturedAt, fixture?, result }` where
-`id` is a stable stored-result id (one Core's claim-set validation finds machine-local is refused, and a claim Core would refuse for a path inside a result is left out), `capturedAt` is when the host captured it and `fixture: true` marks controlled
+`id` is a stable stored-result id (an id Core's claim-set validation finds machine-local is refused before any claim is built; a claim Core refuses for a path inside a result is left out and counted as `refused`), `capturedAt` is when the host captured it and `fixture: true` marks controlled
 demo or test evidence. `tools/consumer/friction.mjs` (pure; no clock, network or file) normalizes the published Core results and the Workbench's readiness
 records into claims 1.1.0 and asks Core's `recurrence` 1.0.0 method (`@aihq/core/report`) whether a failure came back after a verified recovery:
 
