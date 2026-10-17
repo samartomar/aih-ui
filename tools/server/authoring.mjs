@@ -34,6 +34,26 @@ async function fileMaintenanceSource(consumerDir, path) {
   };
 }
 
+// Demo/test evidence is read afresh so a check sees only the host's current stored history.
+// Force the fixture label at this boundary: imported captures cannot claim to be observations of this computer.
+// The count bound is the friction adapter's own, so a file beyond it reads as unreadable (null) here instead of making the adapter refuse the check.
+const FRICTION_EVIDENCE_BYTES = 262144;
+export async function fileFrictionEvidence(consumerDir, path) {
+  const { MAX_EVIDENCE } = await import(pathToFileURL(join(consumerDir, 'consumer', 'friction.mjs')).href);
+  return async () => {
+    try {
+      if ((await stat(path)).size > FRICTION_EVIDENCE_BYTES) return null;
+      const bytes = await readFile(path);
+      if (bytes.length > FRICTION_EVIDENCE_BYTES) return null;
+      const { entries } = JSON.parse(bytes.toString('utf8'));
+      // `entries: null` is a host that keeps no history yet (undefined), not one whose store failed (null).
+      if (entries === null) return undefined;
+      if (!Array.isArray(entries) || entries.length > MAX_EVIDENCE || entries.some(entry => !entry || typeof entry !== 'object' || Array.isArray(entry))) return null;
+      return entries.map(entry => ({ ...entry, fixture: true }));
+    } catch { return null; }
+  };
+}
+
 export async function createAuthoringAdapter(consumerDir) {
   const { startConsumer } = await import(pathToFileURL(join(consumerDir, 'consumer/server.mjs')).href);
   const selectedJson = async name => process.env[name] ? JSON.parse(await readFile(process.env[name], 'utf8')) : undefined;
@@ -42,6 +62,7 @@ export async function createAuthoringAdapter(consumerDir) {
     organizationSource: await selectedJson('AIH_ORGANIZATION_SOURCE'),
     reviewTrust: await selectedJson('AIH_REVIEW_TRUST'),
     previousCatalogRoot: process.env.AIH_CONSUMER_PREVIOUS_CATALOG,
+    ...(process.env.AIH_FRICTION_EVIDENCE ? { frictionEvidence: await fileFrictionEvidence(consumerDir, process.env.AIH_FRICTION_EVIDENCE) } : {}),
     ...(process.env.AIH_UPDATE_SOURCE_CATALOG_ROOTS ? { updateSourceCatalogRoots: process.env.AIH_UPDATE_SOURCE_CATALOG_ROOTS.split(delimiter) } : {}),
     ...(process.env.AIH_MAINTENANCE_SOURCE ? { maintenanceSource: await fileMaintenanceSource(consumerDir, process.env.AIH_MAINTENANCE_SOURCE) } : {}) });
   return {

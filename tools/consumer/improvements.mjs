@@ -5,24 +5,50 @@
 import { isCheckedRelease } from '@aihq/catalog/reader';
 import { releaseOrderProblem } from './release-order.mjs';
 import { only } from './intake.mjs';
-import { refuse } from './headless.mjs';
+import { refuse, managementIdOf } from './headless.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { isUtcTimestamp } from './maintenance-record.mjs';
 import { IMPROVEMENT_SUGGESTION_RECORD_SCHEMA, IMPROVEMENT_DISMISSAL_RECORD_SCHEMA, SUGGESTION_FIELDS, suggestionProblem, suggestionDerivedProblem, dismissalProblem, dismissalId } from './improvement-record.mjs';
 import { TRIAL_RECORD_SCHEMA } from './trial-record.mjs';
-import { IMPROVEMENT_RULES_VERSION, FRICTION_UNKNOWN, savedBaselines, suggestImprovements, classifyImprovement, lead, improvementPrompt, MAX_GOAL } from './improvement-rules.mjs';
+import { IMPROVEMENT_RULES_VERSION, FRICTION_COVERAGE, FRICTION_UNREADABLE, FIXTURE_LABEL, savedBaselines, suggestImprovements, classifyImprovement, lead, improvementPrompt, unorderedSources, savedGoalOf, MAX_GOAL } from './improvement-rules.mjs';
+import { adapterTargetOf } from './client-identity.mjs';
+import { frictionRecurrence } from './friction.mjs';
 export const IMPROVEMENT_SUGGESTION_SCHEMA = IMPROVEMENT_SUGGESTION_RECORD_SCHEMA;
 export const IMPROVEMENT_DISMISSAL_SCHEMA = IMPROVEMENT_DISMISSAL_RECORD_SCHEMA;
 export { IMPROVEMENT_RULES_VERSION, improvementPrompt };
 const isSuggestion = record => record.schema === IMPROVEMENT_SUGGESTION_RECORD_SCHEMA;
 const isDismissal = record => record.schema === IMPROVEMENT_DISMISSAL_RECORD_SCHEMA;
 const CANDIDATE_SOURCES = ['configured', 'unconfigured'], CANDIDATE_COVERAGES = ['complete', 'partial'];
-// What a check covered, in words: content changes depend on the host's update source; recurring friction has no published interface.
+// What a check covered, in words: content changes depend on the host's update source (and on knowing which release is later); recurring friction on the
+// stored Core results the host holds.
 const CONTENT_COVERAGE = { checked: 'Content changes since this policy was saved were checked against the configured update source.',
   'no-configured-source': 'Content changes were not checked: no update source is configured.', 'sources-unavailable': 'Content changes were not checked: the update source could not be read.',
   'sources-partly-unavailable': 'Content changes were checked against only part of the update source: some sources could not be read.',
   'saved-release-not-supplied': 'Not every exact release this policy was saved from is supplied, so changes to the missing ones were not compared.' };
 const byId = (a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+const orderText = names => `Content changes were only partly checked: ${names.slice(0, 3).join(', ')}${names.length > 3 ? ` and ${names.length - 3} more` : ''} offers a different release than the one this policy was saved from, but which is newer is unknown (the host's update source declares no order between them, and their versions do not order them: unversioned, not a semantic version, or the same version), so it is not suggested as an update.`;
+// What the draft ties friction to: the policy selections of its selected roots and pins (a pin carries no scope, so either scope's selection is looked for), and the
+// clients and checks its client adapters name. Roots come first, so a root's saved goal wins over the pin of the same item.
+function tiedSubjects({ intent, items, inventories, savedBytes }) {
+  let selections = [];
+  try { const policy = JSON.parse(new TextDecoder().decode(savedBytes)); if (Array.isArray(policy?.selections)) selections = policy.selections.filter(s => typeof s?.id === 'string' && typeof s.managementId === 'string'); } catch { /* an unreadable policy ties no selection */ }
+  const packages = new Map(inventories.map(entry => [entry.release.sha256, entry.release.package?.name])), catalog = new Map(items.map(item => [`${item.root.releaseSha256}/${item.id}`, item]));
+  const managed = new Map(selections.map(s => [s.managementId, s])), ties = new Map(), order = (a, b) => compare(a.itemId, b.itemId) || compare(a.scope ?? '', b.scope ?? '');
+  for (const entry of [...[...intent.roots].sort(order), ...[...intent.pins].sort(order)]) {
+    const item = catalog.get(`${entry.releaseSha256}/${entry.itemId}`), name = packages.get(entry.releaseSha256);
+    if (!item) continue;
+    const goal = savedGoalOf(entry.reason), base = { itemId: entry.itemId, rootItemId: entry.itemId, label: item.label ?? item.id, ...(goal !== undefined ? { goal } : {}) };
+    const tie = (kind, key, extra) => { if (!ties.has(`${kind}/${key}`)) ties.set(`${kind}/${key}`, { kind, key, ...base, ...extra }); };
+    for (const scope of entry.scope ? [entry.scope] : ['project', 'user']) {
+      const selection = typeof name === 'string' ? managed.get(managementIdOf({ scope, packageName: name, itemId: entry.itemId })) : undefined;
+      if (selection) tie('managed-selection', selection.managementId, { selectionId: selection.id, scope });
+    }
+    const clientId = adapterTargetOf(item)?.clientId;
+    if (clientId) for (const kind of ['client', 'target']) tie(kind, clientId, entry.scope ? { scope: entry.scope } : {});
+  }
+  return [...ties.values()];
+}
 const checkedEntries = (value, max = 32) => {
   try { return Array.isArray(value) && value.length <= max && value.every(entry => entry && isCheckedRelease(entry.release)) && new Set(value.map(entry => entry.release.sha256)).size === value.length; }
   catch { return false; }
@@ -43,12 +69,15 @@ export function projectDismissals(envelope) {
 // checked inventories and the AI clients the person declared in Workbench setup, with the labels Harness publishes for
 // them; `goal` is an optional request. `candidateInventories` is null/undefined when the host's update source could not be
 // read, and `candidateSource` says whether the host has one at all ('unconfigured' is unknown, never checked). A caller that
-// supplies neither has no update source, so earlier callers keep their meaning.
+// supplies neither has no update source, so earlier callers keep their meaning. `evidence` (optional) is the host's own stored Core results
+// (see friction.mjs), never a request field. `undefined` means the host holds none and `null` means its configured store could not be read; both are unknown
+// (`history-unavailable`), never "no friction", and the coverage text says which.
 // `candidateCoverage` is 'partial' when only some of the update source's roots could be read: suggestions from those are still made, but content
 // changes are unknown, not checked. A policy none of whose saved releases can be found is likewise unknown, not "nothing changed".
-// `releaseOrder` (optional) is the host's declared source order; unknown relations keep semver precedence.
+// `releaseOrder` (optional) is the host's declared source order; where it orders two releases of a package it decides which is newer, else semver precedence does,
+// and a pair neither orders is `version-order-unknown`, never "nothing changed".
 // `coreClients` (optional) is the host's own reading of Core's nativeClientIds, never a request field; it only fills the `client` facts of an adapter suggestion, a display field a recorded suggestion never carries.
-export async function checkImprovements({ envelopeBytes, inventories, candidateInventories, candidateSource = candidateInventories === undefined ? 'unconfigured' : 'configured', candidateCoverage = 'complete', clients = [], labels = {}, coreClients, goal, now, releaseOrder } = {}) {
+export async function checkImprovements({ envelopeBytes, inventories, candidateInventories, candidateSource = candidateInventories === undefined ? 'unconfigured' : 'configured', candidateCoverage = 'complete', clients = [], labels = {}, coreClients, goal, evidence, now, releaseOrder } = {}) {
   const loaded = await load(envelopeBytes);
   if (loaded.status !== 'ok') return loaded;
   const { read, draft } = loaded.value;
@@ -69,12 +98,24 @@ export async function checkImprovements({ envelopeBytes, inventories, candidateI
   const reason = unread ?? (candidateCoverage === 'partial' ? 'sources-partly-unavailable' : baselines.resolved.length < baselines.saved ? 'saved-release-not-supplied' : undefined);
   const requested = goal !== undefined && goal.trim() !== '';
   const items = inventories.flatMap(entry => entry.release.items.map(item => ({ ...item, root: { releaseSha256: entry.release.sha256 } })));
-  const text = reason === undefined && releaseOrder !== undefined
-    ? "Content changes since this policy was saved were checked against the configured update source using the release order declared by this host's update source." : CONTENT_COVERAGE[reason ?? 'checked'], coverage = [{ trigger: 'content-change', state: reason === undefined ? 'checked' : 'unknown', ...(reason !== undefined ? { reason } : {}), text },
-    { trigger: 'recurring-friction', state: 'unknown', reason: 'no-published-interface', text: FRICTION_UNKNOWN }];
-  // Unchecked content changes are said on each suggestion too; unknowns are not part of its identity.
-  const suggested = await suggestImprovements({ intent: draft.intent, items, inventories, candidates: unread === undefined ? candidateInventories : [], clients, labels, goal, coreClients, releaseOrder });
-  const current = reason === undefined ? suggested : suggested.map(suggestion => ({ ...suggestion, unknowns: [...suggestion.unknowns, text] }));
+  const stored = evidence !== undefined && evidence !== null;
+  let friction;
+  if (stored) {
+    try { friction = frictionRecurrence({ evidence, subjects: tiedSubjects({ intent: draft.intent, items, inventories, savedBytes: read.savedIntentBytes }) }); }
+    catch (error) { if (error instanceof TypeError) return fail('/evidence', error.message); throw error; }
+  }
+  // A different release of a saved package that neither the host's declared order nor semver orders cannot be called newer: the check says so instead of "checked".
+  const unordered = reason === undefined ? unorderedSources(draft.intent, inventories, candidateInventories, releaseOrder) : [], contentReason = reason ?? (unordered.length ? 'version-order-unknown' : undefined);
+  const checkedText = releaseOrder !== undefined ? "Content changes since this policy was saved were checked against the configured update source using the release order declared by this host's update source." : CONTENT_COVERAGE.checked;
+  const fixture = stored && evidence.some(entry => entry.fixture === true), frictionReason = !stored ? 'history-unavailable' : friction.results.some(found => found.result.status === 'available') ? undefined : 'no-recurrence-evidence';
+  const coverage = [{ trigger: 'content-change', state: contentReason === undefined ? 'checked' : 'unknown', ...(contentReason !== undefined ? { reason: contentReason } : {}),
+      text: contentReason === 'version-order-unknown' ? orderText(unordered) : contentReason === undefined ? checkedText : CONTENT_COVERAGE[contentReason] },
+    { trigger: 'recurring-friction', state: frictionReason === undefined ? 'checked' : 'unknown', ...(frictionReason !== undefined ? { reason: frictionReason } : {}),
+      text: `${evidence === null ? FRICTION_UNREADABLE : FRICTION_COVERAGE[frictionReason ?? 'checked']}${fixture ? ` (${FIXTURE_LABEL})` : ''}` }];
+  // What was not checked is said on each suggestion too; unknowns are not part of its identity.
+  const suggested = await suggestImprovements({ intent: draft.intent, items, inventories, candidates: unread === undefined ? candidateInventories : [], clients, labels, goal, coreClients, friction: friction?.results, releaseOrder });
+  const unchecked = coverage.filter(entry => entry.state === 'unknown').map(entry => entry.text);
+  const current = suggested.map(suggestion => ({ ...suggestion, unknowns: [...suggestion.unknowns, ...unchecked] }));
   const savedBy = new Map(read.records.filter(isSuggestion).map(record => [record.id, record]));
   const dismissals = new Map(read.records.filter(isDismissal).map(record => [record.suggestion.id, record]));
   const shown = (suggestion, dismissal, reasons = []) => ({ ...suggestion, prompt: improvementPrompt(suggestion), dismissal: dismissal ? structuredClone(dismissal) : null,
@@ -92,7 +133,7 @@ export async function checkImprovements({ envelopeBytes, inventories, candidateI
   const preserved = [...dismissals.values()].filter(dismissal => !matched.has(dismissal.id)).sort(byId)
     .map(dismissal => ({ dismissal: structuredClone(dismissal), suggestion: structuredClone(savedBy.get(dismissal.suggestion.id)), state: 'not-current' }));
   return { status: 'ok', diagnostics: loaded.diagnostics, value: { rulesVersion: IMPROVEMENT_RULES_VERSION, checkedAt: now,
-    reads: ['envelope', 'supplied-inventories', ...(unread === undefined ? ['candidate-inventories'] : []), 'declared-clients', ...(requested ? ['request-goal'] : [])], mutations: [], coverage, ...lead(active), dismissed, preserved } };
+    reads: ['envelope', 'supplied-inventories', ...(unread === undefined ? ['candidate-inventories'] : []), ...(stored ? ['core-evidence'] : []), 'declared-clients', ...(requested ? ['request-goal'] : [])], mutations: [], coverage, ...lead(active), dismissed, preserved } };
 }
 // Dismissing a suggestion, or showing it again on request, becomes a new envelope revision; the saved intent and the
 // draft are untouched. A dismissal binds the exact suggestion revision it dismissed.

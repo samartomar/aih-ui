@@ -137,7 +137,7 @@ test('dismiss, show again and suggest use injected clients, goal and closed oper
 
 test('a check says once what it covered, with or without a suggestion, and not before a check or after the result is retired', async () => {
   const coverage = [{ trigger: 'content-change', state: 'unknown', reason: 'no-configured-source', text: 'Content changes were not checked: no update source is configured.' },
-    { trigger: 'recurring-friction', state: 'unknown', reason: 'no-published-interface', text: 'Recurring friction is not checked: no published interface.' }];
+    { trigger: 'recurring-friction', state: 'unknown', reason: 'history-unavailable', text: 'Recurring friction was not checked: this host supplied no stored Core results.' }];
   const results = [ok({ ...checked, coverage }), ok({ ...checked, leading: null, coverage }), ok({ ...checked, leading: null })];
   const client = { draft, revision: 1, checkImprovements: async () => results.shift() };
   const built = view(client), area = () => elements(built.node).find(node => node.id === 'policy-improvements-coverage');

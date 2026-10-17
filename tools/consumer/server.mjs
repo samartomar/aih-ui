@@ -19,7 +19,7 @@ import { intakePersonalFolder } from './personal-folder.mjs';
 import { observeCheckout } from './workspace-host.mjs';
 import { createCatalogUpdateSource } from './update-source.mjs';
 
-export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, updateSourceCatalogRoots, port = 0 } = {}) {
+export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, updateSourceCatalogRoots, port = 0 } = {}) {
   // The fixture is a test source; a host names one update source, so both together would be ambiguous.
   if (updateSourceCatalogRoots !== undefined && maintenanceSource) throw new Error('Configure one update source: Catalog package roots or the test fixture, not both.');
   const installed = await readInstalledRelease({
@@ -43,7 +43,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   // One source object per host, so the last time each root was read lives as long as the server.
   const updateSource = updateSourceCatalogRoots !== undefined ? createCatalogUpdateSource({ roots: updateSourceCatalogRoots, installedPackage: release.package }) : null;
   if (updateSource) maintenanceSource = () => updateSource.read();
-  const mixedService = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, maintenanceSource, observeCheckout });
+  const mixedService = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, maintenanceSource, frictionEvidence, observeCheckout });
   const authoringRoots = { maintained: catalogRoot };
   if (projectRoot) {
     const staging = await mkdtemp(join(tmpdir(), 'aih-authoring-materials-'));
@@ -78,7 +78,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
       const client = { usedAt: now, stages: [], grants: new Map(), roots: { ...authoringRoots } };
       clients.set(id, client);
       client.ready = (async () => {
-        client.mixed = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, maintenanceSource, observeCheckout });
+        client.mixed = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, maintenanceSource, frictionEvidence, observeCheckout });
         client.recipeMaterials = client.mixed.inventories.flatMap(i => i.materials ?? []);
         client.host = projectRoot ? createHost({ projectRoot, materialRoots: client.roots, organizationSource, recipeMaterials: client.recipeMaterials, controls }) : null;
       })();

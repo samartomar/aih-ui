@@ -30,6 +30,9 @@ const summary = { packages: await Promise.all(packages.map(async item => ({ ...i
 const maintenanceSource = join(consumerDir, 'maintenance-source.json');
 await writeFile(maintenanceSource, JSON.stringify({ revisions: ['current'] }));
 process.env.AIH_MAINTENANCE_SOURCE = maintenanceSource;
+const frictionPath = join(consumerDir, 'friction-evidence.json');
+await writeFile(frictionPath, JSON.stringify({ entries: null }));
+process.env.AIH_FRICTION_EVIDENCE = frictionPath;
 // Disposable reviewed-batch host input. batchFixture owns policy and record construction (conflict variant first: B's first
 // target already holds unowned content); the journey removes that file as test setup. The stale-target fault is host
 // configuration for B's first action, never an HTTP input. Each run uses a new fixture folder: Core keeps custody of what it
@@ -56,7 +59,7 @@ try {
   const { runReviewIdentityBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/review-identity-browser.mjs')));
   await runReviewIdentityBrowser({ origin, output: join(consumerDir, 'review-identity-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
   const { runImprovementsBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/improvements-browser.mjs')));
-  await runImprovementsBrowser({ origin, output: join(consumerDir, 'improvements-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, settingsPath: join(consumerDir, 'prototype-settings.json'), sourcePath: maintenanceSource });
+  await runImprovementsBrowser({ origin, output: join(consumerDir, 'improvements-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, settingsPath: join(consumerDir, 'prototype-settings.json'), sourcePath: maintenanceSource, frictionPath });
   const { runTrialsBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/trials-browser.mjs')));
   await runTrialsBrowser({ origin, output: join(consumerDir, 'trials-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, settingsPath: join(consumerDir, 'prototype-settings.json'), sourcePath: maintenanceSource });
   const { runWorkspaceBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/workspace-browser.mjs')));
@@ -64,7 +67,7 @@ try {
   const { runBatchBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/batch-browser.mjs')));
   await runBatchBrowser({ origin, output: join(consumerDir, 'batch-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, fixturePath: batchFixturePath,
     conflictFile: batch.conflictFile, procMarker: batch.procMarker, procCount: batch.procCount, userFiles: batch.userFiles });
-} finally { delete process.env.AIH_BATCH_FIXTURE; delete process.env.AIH_MAINTENANCE_SOURCE; await new Promise(resolve => started.server.close(resolve)); }
+} finally { delete process.env.AIH_FRICTION_EVIDENCE; delete process.env.AIH_BATCH_FIXTURE; delete process.env.AIH_MAINTENANCE_SOURCE; await new Promise(resolve => started.server.close(resolve)); }
 
 // The normal application's startup must refuse an absent required family,
 // before it can serve a deceptively incomplete inventory. Only this isolated

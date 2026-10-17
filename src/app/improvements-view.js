@@ -4,7 +4,7 @@ import { publishedClients, offersClient, clientLabel } from './core-targets.js';
 // Mirrors the record URNs in tools/consumer/improvement-record.mjs, the source of truth; the page cannot import it.
 export const SUGGESTION_RECORD = 'urn:aihq:workbench:journey-record:improvement-suggestion:1.0.0';
 export const DISMISSAL_RECORD = 'urn:aihq:workbench:journey-record:improvement-dismissal:1.0.0';
-export const IMPROVEMENTS_NOTE = 'Suggestions come from fixed improvement rules using this policy, your saved AI clients and the Catalog. No model is called and nothing is applied or sent. Save the draft to keep a dismissal.';
+export const IMPROVEMENTS_NOTE = 'Suggestions come from fixed improvement rules using this policy, your saved AI clients, the Catalog and any Core results the Workbench has stored. No model is called and nothing is applied or sent. Save the draft to keep a dismissal.';
 const PROMPT_NOTE = 'AI advice — paste this into an AI client you already use. The Workbench sends nothing, runs nothing and calls no model.';
 // Mirrors SUGGESTION_FIELDS in tools/consumer/improvement-record.mjs: what a dismissal records.
 const RECORD_FIELDS = ['id', 'revision', 'rulesVersion', 'scope', 'change', 'triggers', 'goal', 'references', 'facts', 'unknowns'];
