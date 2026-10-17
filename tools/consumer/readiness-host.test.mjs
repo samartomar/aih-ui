@@ -288,3 +288,27 @@ test('the host journal reports verified repairs end to end through the adapter a
 test('the owner configuration was not touched', () => {
   assert.equal(stamp(realNpmrc), realNpmrcBefore);
 });
+
+test('staged configuration is copied, frozen and returned beside repairs', () => {
+  const staged = { label: 'Staged condition: TLS interception (sample)', detail: 'A generated sample CA.' };
+  const configured = createReadinessHost({ repairs: [offlineRepair], staged });
+  const value = ok(configured.repairs());
+  assert.deepEqual(value.staged, staged);
+  assert.equal(Object.isFrozen(value.staged), true);
+  staged.label = 'changed';
+  assert.equal(ok(configured.repairs()).staged.label, 'Staged condition: TLS interception (sample)');
+  assert.deepEqual(ok(createReadinessHost({ staged: { label: 'Sample' } }).repairs()).staged, { label: 'Sample' });
+});
+
+test('repairs keep their existing shape without staged configuration', () => {
+  assert.deepEqual(ok(createReadinessHost().repairs()), { repairs: [] });
+  assert.equal(Object.hasOwn(ok(host.repairs()), 'staged'), false);
+});
+
+test('invalid staged configuration is refused', () => {
+  for (const staged of [null, 'sample', 1, [], {}, { label: '' }, { label: ' ' }, { label: 1 },
+    { label: 'Sample', extra: true }, { label: 'x'.repeat(201) }, { label: 'Sample', detail: 'x'.repeat(1001) }, { label: 'Sample', detail: null }]) {
+    assert.throws(() => createReadinessHost({ staged }), TypeError);
+  }
+  assert.doesNotThrow(() => createReadinessHost({ staged: { label: 'x'.repeat(200), detail: 'x'.repeat(1000) } }));
+});

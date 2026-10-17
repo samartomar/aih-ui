@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { READINESS_STATES, projectInspection, projectRepairPreparation, projectRepairOutcome, readinessGuidance } from '../consumer/readiness.mjs';
-import { stateLabel, stateTone, overallLine, notRecheckedLine, rowsFor, summaryCounts } from '../../src/app/readiness-view.js';
+import { stagedNotice, stateLabel, stateTone, overallLine, notRecheckedLine, rowsFor, summaryCounts } from '../../src/app/readiness-view.js';
 
 // Core-shaped records, in the style of tools/consumer/readiness.test.mjs.
 const options = { targets: { value: ['npm', 'jq'], origin: 'explicit' }, network: { value: 'declared', origin: 'default' } };
@@ -167,4 +167,13 @@ test('page and guidance preserve the same recheck scope with their existing chan
     assert.equal(notRecheckedLine(condition), pageText);
     assert.ok(readinessGuidance([condition]).includes(`\n${guidanceText}\n`));
   }
+});
+
+test('staged notice keeps host text as plain label and optional detail', () => {
+  assert.deepEqual(stagedNotice({ label: 'Staged condition: TLS interception (sample)', detail: '<sample CA>' }),
+    { label: 'Staged condition: TLS interception (sample)', detail: '<sample CA>' });
+  assert.deepEqual(stagedNotice({ label: 'Staged condition' }), { label: 'Staged condition', detail: '' });
+  for (const value of [undefined, null, [], 'sample', {}, { label: '' }, { label: '  ' }, { label: 7 },
+    { label: 'x', detail: 7 }, { label: 'x', extra: true }, { label: 'x'.repeat(201) }, { label: 'x', detail: 'x'.repeat(1001) }]) assert.equal(stagedNotice(value), null);
+  assert.equal(stagedNotice({ label: 'x'.repeat(200), detail: 'x'.repeat(1000) }).detail.length, 1000);
 });

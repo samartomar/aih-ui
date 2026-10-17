@@ -1,7 +1,7 @@
 // Check this machine: a read-only machine check, copyable guidance, and an
 // explicitly approved repair. The host owns Core; this page only renders the
 // projections it returns and never applies anything without the approval control.
-import { overallLine, rowsFor, summaryCounts } from './app/readiness-view.js';
+import { overallLine, rowsFor, summaryCounts, stagedNotice } from './app/readiness-view.js';
 import { clientNodes, publishedClients } from './app/core-targets.js';
 
 const $ = id => document.getElementById(id);
@@ -142,6 +142,9 @@ async function copyGuidance() {
 async function loadRepairs() {
   const result = await call('/api/readiness-repairs');
   if (result.status !== 'ok') { $('repairs-note').textContent = `Supported repairs could not be listed: ${result.message} Guidance remains available.`; return; }
+  const notice = stagedNotice(result.value.staged);
+  $('staged-condition').replaceChildren(...(notice ? [el('p', 'font-semibold', notice.label), ...(notice.detail ? [el('p', '', notice.detail)] : [])] : []));
+  $('staged-condition').hidden = !notice;
   const repairs = result.value.repairs ?? [];
   $('repairs-note').textContent = repairs.length ? 'These repairs were configured by the host. Preparing one shows exactly what would change; nothing is applied without your approval.'
     : 'No repair is configured for this Workbench. Supported repairs require host configuration; guidance remains available.';

@@ -49,8 +49,14 @@ function normalizeRepairs(repairs) {
   });
 }
 
-export function createReadinessHost({ repairs = [] } = {}) {
+export function createReadinessHost({ repairs = [], staged } = {}) {
   if (!Array.isArray(repairs)) throw new TypeError('repairs must be a list');
+  if (staged !== undefined && (!isRecord(staged) || Object.keys(staged).some(key => !['label', 'detail'].includes(key))
+    || typeof staged.label !== 'string' || !staged.label.trim() || staged.label.length > 200
+    || (Object.hasOwn(staged, 'detail') && (typeof staged.detail !== 'string' || staged.detail.length > 1000)))) {
+    throw new TypeError('staged needs a non-empty label (at most 200 characters) and optional detail (at most 1000 characters)');
+  }
+  const staging = staged === undefined ? undefined : Object.freeze({ label: staged.label, ...(Object.hasOwn(staged, 'detail') ? { detail: staged.detail } : {}) });
   const configured = normalizeRepairs(repairs);
   const sessions = new Map();
   // The latest machine check lets a repair outcome say which targets its recheck did not cover.
@@ -109,7 +115,7 @@ export function createReadinessHost({ repairs = [] } = {}) {
     },
 
     repairs() {
-      return { status: 'ok', value: { repairs: configured.map(({ key, id, targets, network }) => ({ key, id, targets: [...targets], network })) } };
+      return { status: 'ok', value: { repairs: configured.map(({ key, id, targets, network }) => ({ key, id, targets: [...targets], network })), ...(staging === undefined ? {} : { staged: staging }) } };
     },
 
     async prepareRepair(body = {}) {
