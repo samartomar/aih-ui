@@ -14,6 +14,7 @@ const ROOT_ITEM = 'mattpocock.implement', NOTE_ITEM = 'consumer-proof.review-not
 const MEMBERS = ['sample-web', 'sample-api'].map(id => ({ id, identity: `github.com/sample-org/${id}`, label: id }));
 // The shape the guided setup records and the improvement rules read the goal from.
 const SAVED_REASON = 'guided-setup rules 1.0.0: goal.build. Goal: add tests to my app. Project: JavaScript.';
+const UPDATE_SOURCE_NOTE = '**This candidate uses a configured Catalog update source instead of the fixture file above**, so the fixture is not published and the revisions named here do not apply; see the sample in update-source/SAMPLE.md and its saved draft, sample-update-source-draft.json.';
 const clear = (...paths) => Promise.all(paths.map(path => rm(path, { recursive: true, force: true, maxRetries: 3 })));
 const write = (path, text) => { mkdirSync(join(path, '..'), { recursive: true }); writeFileSync(path, text); };
 
@@ -58,10 +59,10 @@ async function authoringBase(consumerDir, load) {
   const maintained = await catalogNode.readInstalledRelease({ root: join(consumerDir, 'node_modules', '@aihq', 'catalog'), sourceInput: 'maintained' });
   if (!maintained.valid) throw new Error(JSON.stringify(maintained.diagnostics));
   const inventories = [{ release: maintained.release, materialSource: { kind: 'local', input: 'maintained' } }, ...await installedFamilies()];
-  const rootOf = (release, id, reason) => {
+  const rootOf = (release, id, reason, scope = 'project') => {
     const item = catalogReader.listItems(release).find(entry => entry.id === id);
     if (!item) throw new Error(`${id} is not offered by the installed Catalog.`);
-    return { releaseSha256: release.sha256, itemId: id, itemSha256: item.itemSha256, scope: 'project', configuration: {}, originIds: ['direct'], ...(reason ? { reason } : {}) };
+    return { releaseSha256: release.sha256, itemId: id, itemSha256: item.itemSha256, scope, configuration: {}, originIds: ['direct'], ...(reason ? { reason } : {}) };
   };
   async function draft(roots, more = []) {
     const all = [...inventories, ...more], composed = await composeAuthoring({ intent: { ...freshAuthoring(), roots }, inventories: all });
@@ -70,7 +71,18 @@ async function authoringBase(consumerDir, load) {
     if (opened.status !== 'ok') throw new Error(JSON.stringify(opened.diagnostics));
     return opened.value.envelopeBytes;
   }
-  return { maintained, rootOf, draft };
+  return { maintained, rootOf, draft, catalogNode, catalogReader };
+}
+
+// The update source's oldest root (position 1), read through the same public release reader the update source uses, and the
+// client adapter its draft selects: `aihq.client.claude` when that release offers it, else the first `aihq.client.*` item.
+async function oldestUpdateSourceRelease({ catalogNode, catalogReader }, root) {
+  const read = await catalogNode.readInstalledRelease({ root, sourceInput: 'maintained' });
+  if (!read.valid) throw new Error(`the oldest update-source root is not a valid release: ${JSON.stringify(read.diagnostics)}`);
+  const clients = catalogReader.listItems(read.release).filter(item => item.id.startsWith('aihq.client.'));
+  const item = clients.find(entry => entry.id === 'aihq.client.claude') ?? clients[0];
+  if (!item) throw new Error('the oldest update-source root offers no aihq.client.* item to select.');
+  return { entry: { release: read.release, materialSource: read.source }, item, scope: item.scopes?.includes('project') ? 'project' : item.scopes?.[0] ?? 'project' };
 }
 
 // The workspace the two sample checkouts belong to, declared through the published workspace module: members by remote identity, no local binding.
@@ -97,7 +109,9 @@ export function forgetSample(layout, key, owned) {
   writeFileSync(recordPath, `${JSON.stringify(record, null, 2)}\n`);
 }
 
-export async function seedSamples({ layout, consumerDir }) {
+// `updateSourceRoots` are the extracted Catalog package roots of the manifest's update source, oldest first. When there are
+// some, the maintenance fixture is not the update source (its host input is not set) and a draft built from the oldest root is seeded.
+export async function seedSamples({ layout, consumerDir, updateSourceRoots = [] }) {
   const load = name => import(pathToFileURL(join(consumerDir, 'consumer', name)).href);
   let authoring;
   const base = () => authoring ??= authoringBase(consumerDir, load);
@@ -110,12 +124,13 @@ export async function seedSamples({ layout, consumerDir }) {
 
   // A sample already recorded is left exactly as the owner has it. One never recorded is incomplete, so its own paths are
   // cleared and it is made again; a failure is reported and retried on the next start.
-  async function sample(key, owned, make) {
-    if (record.samples[key]) return true;
+  // `recordKey` lets a sample that depends on its input be made again when the input changes (a different record, same name).
+  async function sample(key, owned, make, recordKey = key) {
+    if (record.samples[recordKey]) return true;
     try {
       await clear(...owned);
       const note = await make();
-      record.samples[key] = { seededAt: new Date().toISOString(), ...(note ? { note } : {}) };
+      record.samples[recordKey] = { seededAt: new Date().toISOString(), ...(note ? { note } : {}) };
       save(); seeded.push(key);
       return true;
     } catch (error) {
@@ -276,7 +291,16 @@ the test plan note is suggested and the unrelated style note is not.
 
 **Trials.** Choose AI clients in setup first (a trial needs them), then plan and propose a trial from a suggestion on the reopened draft.
 `));
-  })) env.AIH_MAINTENANCE_SOURCE = layout.maintenanceSource;
+  })) {
+    // The fixture is a test source and is never combined with a configured update source.
+    if (updateSourceRoots.length) {
+      const file = join(layout.samples, 'maintenance', 'SAMPLE.md');
+      try {
+        const text = readFileSync(file, 'utf8');
+        if (!text.includes(UPDATE_SOURCE_NOTE)) writeFileSync(file, `${text.trimEnd()}\n\n${UPDATE_SOURCE_NOTE}\n`);
+      } catch { /* the note is documentation; an owner who removed the file keeps it removed */ }
+    } else env.AIH_MAINTENANCE_SOURCE = layout.maintenanceSource;
+  }
   // The saved draft that selects that review note is its own sample, so the update source stays configured if the draft cannot be built.
   await sample('maintenance-draft', [layout.maintenanceDraft], async () => {
     // The same input the update source publishes revisions of (id `notes`), taken at its `current` revision as the page's service holds it.
@@ -289,6 +313,27 @@ the test plan note is suggested and the unrelated style note is not.
     mkdirSync(layout.savedIntents, { recursive: true });
     writeFileSync(layout.maintenanceDraft, bytes);
   });
+
+  // Update source: a saved draft selecting a client adapter of the oldest configured Catalog root, so a later root can offer it as a newer revision.
+  if (updateSourceRoots.length) {
+    try {
+      const parts = await base(), oldest = await oldestUpdateSourceRelease(parts, updateSourceRoots[0]);
+      const { maintained, rootOf, draft } = parts, { release } = oldest.entry;
+      // Keyed by the oldest release, so a candidate whose oldest root changed makes its draft again.
+      await sample('update-source-draft', [layout.updateSourceDraft, layout.updateSourceSample], async () => {
+        const bytes = await draft([rootOf(release, oldest.item.id, undefined, oldest.scope)], release.sha256 === maintained.release.sha256 ? [] : [oldest.entry]);
+        mkdirSync(layout.savedIntents, { recursive: true });
+        writeFileSync(layout.updateSourceDraft, bytes);
+        write(join(layout.updateSourceSample, 'SAMPLE.md'), notice('Catalog update source', 'A saved draft whose selected client adapter can be offered as a newer revision by the Catalog update source this candidate was started with.', `
+**The draft.** ${layout.updateSourceDraft} selects \`${oldest.item.id}\` (scope \`${oldest.scope}\`) exactly as the oldest update-source root offers it (release ${release.sha256}), position 1 of the manifest's \`updateSourceCatalogs\`.
+
+**Updates.** In **Policy** choose **Open file**, pick the draft and select **Validate and reopen**. When a later update-source root offers that client adapter with different content, the updates show it as a newer revision, with both exact digests. You can keep, skip or defer it, as for any update.
+
+**Order.** The order shown is the order declared by this host's update source (the manifest's list, oldest first); it is not a fact stated by the Catalog. Include the installed Catalog pack in that list to place it.
+`));
+      }, `update-source-draft:${release.sha256}`);
+    } catch (error) { problems.push({ sample: 'update-source-draft', message: error.message }); }
+  }
 
   env.AIH_UI_SETTINGS_PATH = layout.settings;
   return { env, seeded, problems };

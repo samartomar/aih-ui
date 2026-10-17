@@ -36,6 +36,8 @@ export function candidateLayout(dataDir) {
     personalProject: join(samples, 'projects', 'sample-js-app'),
     savedIntents: join(samples, 'saved-intents'),
     maintenanceDraft: join(samples, 'saved-intents', 'sample-maintenance-draft.json'),
+    updateSourceDraft: join(samples, 'saved-intents', 'sample-update-source-draft.json'),
+    updateSourceSample: join(samples, 'update-source'),
     repositories,
     sampleWeb,
     sampleApi,

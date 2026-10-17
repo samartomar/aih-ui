@@ -2,7 +2,12 @@
 export const DISPOSITION_RECORD = 'urn:aihq:workbench:journey-record:maintenance-disposition:1.0.0';
 const CATEGORIES = ['content', 'software', 'client', 'environment'];
 const LABELS = { content: 'Content', software: 'Software', client: 'Client', environment: 'Environment' };
-const REASONS = { 'sources-unavailable': 'sources are unavailable', 'no-configured-source': 'no update source is configured on this host', 'no-supported-reader': 'no supported reader in this Workbench', 'check-failed': 'the check could not be completed', 'not-checked': 'not checked yet' };
+const REASONS = { 'sources-unavailable': 'sources are unavailable', 'sources-partly-unavailable': 'some update sources could not be read', 'no-configured-source': 'no update source is configured on this host', 'no-supported-reader': 'no supported reader in this Workbench', 'check-failed': 'the check could not be completed', 'not-checked': 'not checked yet' };
+// Mirrors RELEASE_ORDER_TEXT in tools/consumer/release-order.mjs, the source of truth; the page cannot import it. Used only when the host's
+// update source description carries no orderText of its own.
+const ORDER_TEXT = "order declared by this host's update source";
+const SOURCE_REASONS = { unreadable: 'could not be read', invalid: 'not a valid Catalog release', 'package-mismatch': 'a different package from the one this Workbench installs' };
+const ORDER_REASONS = { 'not-in-source': "the selected revision is not in this host's update source", ambiguous: 'listed both before and after it' };
 export const UPDATES_NOTE = 'Opening and Check now only read the supplied sources; nothing is applied or scheduled. A defer date is only considered when the Workbench is opened or checked. Save the draft to keep your choices.';
 
 export function groupUpdates(value) {
@@ -27,6 +32,21 @@ export function dispositionText(row) {
   if (record.disposition === 'keep-current') return 'Keep current — this update remains available.';
   if (record.disposition === 'skip') return 'Skipped this exact revision.';
   return record.deferUntil ? `Deferred until ${record.deferUntil}.` : 'Deferred until you revisit it.';
+}
+// The lines that say where updates come from; the order is the host's declaration, never a Catalog or producer fact.
+export function updateSourceLines(source) {
+  if (source?.kind === 'test-fixture') return [{ text: 'Test fixture source — not a real update source.' }];
+  if (source?.kind !== 'catalog-roots') return [];
+  const count = source.sources?.length ?? 0;
+  return [{ text: `Update source: ${count} Catalog package root${count === 1 ? '' : 's'} configured by this host. Later entries are newer — ${source.orderText ?? ORDER_TEXT}.` },
+    ...(source.sources ?? []).map(row => row.state === 'read'
+      ? { text: `Source ${row.position}: ${row.package?.name}${row.package?.version ? ` ${row.package.version}` : ''} · release ${row.releaseSha256} — read ${row.readAt}`, mono: true }
+      : { text: `Source ${row.position}: offline (${SOURCE_REASONS[row.reason] ?? row.reason}${row.export ? `: ${row.export}` : ''}) — ${row.lastReadAt ? `last read ${row.lastReadAt}` : 'never read in this session'}` })];
+}
+export function orderLine(order, orderText = ORDER_TEXT) {
+  if (order?.relation === 'newer') return `Newer than your selected revision (${orderText}).`;
+  if (order?.relation === 'unknown') return `Order relative to your selected revision is unknown (${ORDER_REASONS[order.reason] ?? order.reason}).`;
+  return '';
 }
 export const factText = fact => `${fact.kind === 'authority' ? 'Authority' : fact.kind === 'evidence' ? 'Evidence' : 'Availability'}: ${fact.message}`;
 export function categoryLine(row) {
@@ -58,8 +78,11 @@ export function updatesState(previous, result, selected, dispositions) {
   // Without a response the kept entries answer to the envelope's current choices: a revisited one is gone.
   const answered = value || !dispositions ? () => true : entry => dispositions.some(record => record.id === entry.record?.id);
   const preserved = (value?.preserved ?? previous?.value?.preserved ?? []).filter(entry => !shown.has(entry.record?.id) && answered(entry));
-  return { value: { ...value, updates, preserved, categories, lastCheck, checkedAt: stale ? seen : categories.some(row => row.state === 'checked') ? value?.checkedAt : undefined },
-    unknown: unknownCategories.length > 0, stale, failed: !value || !categories.some(row => row.state === 'checked') };
+  const updateSource = value?.updateSource ?? previous?.value?.updateSource;
+  // A check that read some sources ran, though what it could not read is unknown; it is still not a successful check to note.
+  const ran = categories.some(row => row.state === 'checked' || row.reason === 'sources-partly-unavailable');
+  return { value: { ...value, updates, preserved, categories, lastCheck, ...(updateSource ? { updateSource } : {}), checkedAt: stale ? seen : ran ? value?.checkedAt : undefined },
+    unknown: unknownCategories.length > 0, stale, failed: !value || !ran };
 }
 export function checkedLine(state) {
   const time = state?.value?.checkedAt;
@@ -77,7 +100,9 @@ export function createUpdatesView({ client, el, button, showStatus }) {
   const node = el('section', 'p-3 border border-wb-border rounded bg-surface-container-low space-y-2'); node.id = 'policy-updates';
   const checked = el('p', 'text-on-surface-variant'); checked.id = 'policy-updates-checked'; checked.setAttribute('role', 'status');
   const recordedNote = el('p', 'text-outline text-[11px]'); recordedNote.id = 'policy-updates-recorded';
-  const categoryRows = el('div', 'space-y-1'), groups = el('div', 'space-y-2');
+  const sourceNode = el('div', 'space-y-1'); sourceNode.id = 'policy-updates-source';
+  const categoryRows = el('div', 'space-y-1'); categoryRows.id = 'policy-updates-categories';
+  const groups = el('div', 'space-y-2');
   const controls = el('div', 'flex flex-wrap items-center gap-2');
   // The last successful check seen by this page, and the newest check time the envelope is known to record.
   let state, pending = false, attempt = 0, lastSuccess, recorded;
@@ -97,7 +122,7 @@ export function createUpdatesView({ client, el, button, showStatus }) {
     label.append(input, el('span', '', LABELS[category])); controls.append(label);
   }
   controls.append(checkNow);
-  node.append(el('h3', 'font-medium', 'Available updates'), el('p', 'text-on-surface-variant', UPDATES_NOTE), controls, checked, recordedNote, categoryRows, groups);
+  node.append(el('h3', 'font-medium', 'Available updates'), el('p', 'text-on-surface-variant', UPDATES_NOTE), controls, checked, recordedNote, sourceNode, categoryRows, groups);
   const diagnostic = result => result?.diagnostics?.map(row => row.message).join(' ') || result?.error || 'The update choice could not be saved.';
   async function record(operation) {
     const result = await client.recordDisposition(operation);
@@ -126,6 +151,8 @@ export function createUpdatesView({ client, el, button, showStatus }) {
     checkNow.disabled = pending || selected.size === 0;
     checked.textContent = pending ? `Checking… ${checkedLine(state)}` : checkedLine(state);
     recordedNote.textContent = recordedLine(state); recordedNote.hidden = !recordedNote.textContent;
+    const sourceLines = updateSourceLines(state?.value.updateSource);
+    sourceNode.replaceChildren(...sourceLines.map(line => el('p', line.mono ? 'font-mono text-[10px] text-outline break-all' : 'text-on-surface-variant text-[11px] break-words', line.text))); sourceNode.hidden = !sourceLines.length;
     const currentCategories = state?.value.categories ?? CATEGORIES.map(category => ({ category, state: selected.has(category) ? 'unknown' : 'not-selected', reason: 'not-checked' }));
     categoryRows.replaceChildren(...currentCategories.map(row => el('p', 'text-outline text-[11px]', categoryLine(row))));
     if (!selected.size) categoryRows.append(el('p', 'text-outline', 'Select at least one update category to check.'));
@@ -137,6 +164,9 @@ export function createUpdatesView({ client, el, button, showStatus }) {
         const preserved = group.label === 'Preserved choices', item = preserved ? row.record : row;
         const entry = el('div', 'p-2 border border-wb-border rounded space-y-1');
         entry.append(el('p', 'font-medium', updateLabel(item, client.catalog)), el('p', 'font-mono text-[10px] text-outline break-all', `${item.scope} · revision ${item.candidate.releaseSha256}`));
+        if (!preserved) entry.append(el('p', 'font-mono text-[10px] text-outline break-all', `Selected: release ${item.subject.releaseSha256} · item ${item.subject.itemSha256}`),
+          el('p', 'font-mono text-[10px] text-outline break-all', `Offered: release ${item.candidate.releaseSha256} · item ${item.candidate.itemSha256}`));
+        if (!preserved && item.order) entry.append(el('p', 'text-on-surface-variant text-[11px] break-words', orderLine(item.order, state?.value.updateSource?.orderText)));
         const description = preserved ? `${dispositionText({ disposition: item })} ${row.state === 'orphaned' ? 'Its saved choice is no longer in this draft.' : row.state === 'not-offered' ? 'This revision was not offered in this check.' : 'Availability is unknown.'}` : dispositionText(row);
         entry.append(el('p', 'px-1.5 py-0.5 rounded border border-wb-border text-on-surface-variant text-[10px]', description));
         for (const fact of item.facts ?? []) entry.append(el('p', 'text-on-surface-variant text-[11px] break-words', factText(fact)));

@@ -102,3 +102,59 @@ test('bad JSON and a missing manifest file are refused with the file named', t =
   assert.throws(() => readManifest(join(root, 'bad.json')), refused('CANDIDATE_MANIFEST_INVALID', /bad\.json.*JSON/));
   assert.throws(() => readManifest(join(root, 'absent.json')), refused('CANDIDATE_MANIFEST_INVALID', /absent\.json does not exist/));
 });
+
+test('update-source Catalogs are optional and leave the identity shape unchanged when absent', t => {
+  const { manifest } = area(t);
+  const read = readManifest(manifest());
+  assert.equal(read.packages.updateSourceCatalogs, undefined);
+  assert.equal('updateSource' in candidateIdentity(read), false);
+  assert.equal('updateSourceCatalogs' in absoluteManifest(read), false);
+});
+
+test('update-source Catalogs read in the declared order, resolve against the manifest, verify and appear in the identity', async t => {
+  const { root, entry, manifest } = area(t);
+  const list = [entry('catalog', '0.0.1'), entry('catalog', '0.0.2')];
+  const read = readManifest(manifest(value => ({ ...value, updateSourceCatalogs: list })));
+  await verifyManifest(read);
+  assert.equal(read.packages.updateSourceCatalogs.length, 2);
+  for (const item of read.packages.updateSourceCatalogs) { assert.ok(isAbsolute(item.tarball)); assert.ok(item.tarball.startsWith(root)); }
+  assert.match(read.packages.updateSourceCatalogs[1].tarball, /aihq-catalog-0\.0\.2\.tgz$/);
+  const identity = candidateIdentity(read);
+  assert.equal(identity.packages.length, 3);
+  assert.deepEqual(identity.updateSource, [
+    { position: 1, sha256: list[0].sha256, commit: COMMIT, tarball: 'aihq-catalog-0.0.1.tgz' },
+    { position: 2, sha256: list[1].sha256, commit: COMMIT, tarball: 'aihq-catalog-0.0.2.tgz' }]);
+  const kept = absoluteManifest(read);
+  assert.deepEqual(kept.updateSourceCatalogs.map(item => item.tarball), read.packages.updateSourceCatalogs.map(item => item.tarball));
+  assert.equal(readManifest(manifest(() => kept)).packages.updateSourceCatalogs.length, 2);
+});
+
+test('up to 8 update-source Catalogs are accepted', t => {
+  const { entry, manifest } = area(t);
+  const read = readManifest(manifest(value => ({ ...value, updateSourceCatalogs: Array.from({ length: 8 }, (_, index) => entry('catalog', `0.0.${index}`)) })));
+  assert.equal(read.packages.updateSourceCatalogs.length, 8);
+});
+
+test('update-source Catalogs that are not a list of 1 to 8 valid entries are refused naming the entry', t => {
+  const { entry, manifest } = area(t);
+  const invalid = pattern => refused('CANDIDATE_MANIFEST_INVALID', pattern);
+  const read = list => () => readManifest(manifest(value => ({ ...value, updateSourceCatalogs: list })));
+  assert.throws(read(entry('catalog', '0.0.1')), invalid(/updateSourceCatalogs must be a list/));
+  assert.throws(read('x'), invalid(/updateSourceCatalogs must be a list/));
+  assert.throws(read(null), invalid(/updateSourceCatalogs must be a list/));
+  assert.throws(read([]), invalid(/updateSourceCatalogs.*1 to 8/));
+  assert.throws(read(Array.from({ length: 9 }, (_, index) => entry('catalog', `0.0.${index}`))), invalid(/updateSourceCatalogs.*1 to 8.*9/));
+  assert.throws(read([entry('catalog', '0.0.1'), 'tarball.tgz']), invalid(/updateSourceCatalogs\[1\] must be an object/));
+  assert.throws(read([{ ...entry('catalog', '0.0.1'), sha256: 'ABC' }]), invalid(/updateSourceCatalogs\[0\]\.sha256/));
+  assert.throws(read([entry('catalog', '0.0.1'), { ...entry('catalog', '0.0.2'), commit: 'zz' }]), invalid(/updateSourceCatalogs\[1\]\.commit/));
+  assert.throws(read([{ ...entry('catalog', '0.0.1'), extra: 1 }]), invalid(/updateSourceCatalogs\[0\] has unknown key: extra/));
+});
+
+test('an update-source Catalog whose bytes differ or are missing is refused naming its position', async t => {
+  const { root, entry, manifest } = area(t);
+  const read = readManifest(manifest(value => ({ ...value, updateSourceCatalogs: [entry('catalog', '0.0.1'), entry('catalog', '0.0.2')] })));
+  writeFileSync(join(root, 'tarballs', 'aihq-catalog-0.0.2.tgz'), 'changed bytes');
+  await assert.rejects(verifyManifest(read), refused('CANDIDATE_DIGEST_MISMATCH', new RegExp(`updateSourceCatalogs\\[1\\].*${sha('changed bytes')}`)));
+  rmSync(join(root, 'tarballs', 'aihq-catalog-0.0.1.tgz'));
+  await assert.rejects(verifyManifest(read), refused('CANDIDATE_TARBALL_MISSING', /updateSourceCatalogs\[0\]/));
+});
