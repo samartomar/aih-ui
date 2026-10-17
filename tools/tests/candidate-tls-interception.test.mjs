@@ -265,7 +265,7 @@ test('a staged process cannot verify the interceptor without the sample CA, and 
   await until(() => running.counts().refusedByClient >= 1 && running.counts().intercepted >= 1);
   const log = readFileSync(layout.tlsLog, 'utf8');
   assert.match(log, /intercepted registry\.npmjs\.org/);
-  assert.match(log, /refused by the client/);
+  assert.match(log, /handshake ended by the client/);
 });
 
 test('a process without the staged environment is not rerouted', async t => {

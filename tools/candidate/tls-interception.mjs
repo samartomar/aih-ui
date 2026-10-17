@@ -114,7 +114,9 @@ export async function startInterceptor({ layout, condition = stagedTlsCondition(
     clear.on('error', () => onward.destroy());
     clear.pipe(onward).pipe(clear);
   });
-  terminator.on('tlsClientError', error => { counts.refusedByClient++; record(`refused by the client: ${error.code ?? ''} ${error.message}`); });
+  // A client that rejects the sample chain ends the handshake, but so does a probe that only needed the handshake and hung up
+  // before this side finished it; the error alone cannot tell the two apart.
+  terminator.on('tlsClientError', error => { counts.refusedByClient++; record(`handshake ended by the client (an untrusted chain, or a probe that closed early): ${error.code ?? ''} ${error.message}`); });
 
   const proxy = createServer((request, response) => {
     counts.connectRefused++;
