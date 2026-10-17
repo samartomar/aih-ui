@@ -2,7 +2,7 @@
 // deterministic: it reads the open draft's saved intent, the Catalog items it is handed, the inventories the policy was saved
 // from and newer candidate revisions of them, the person's declared AI clients with their published labels and an optional request goal. It calls no model, reads no network or file and keeps no clock; the same
 // inputs always give the same suggestions. Rule text is not part of a suggestion's identity (see improvement-record.mjs).
-import { suggestionId, suggestionRevision, sameContent } from './improvement-record.mjs';
+import { suggestionId, suggestionRevision, sameContent, MAX_TRIGGERS } from './improvement-record.mjs';
 import { adapterFor, describeClientIdentity } from './client-identity.mjs';
 // 1.1.0: the client rule names a client by its published label when one is supplied (wording only; identity is unchanged).
 // 1.2.0: a goal-relevant item new or revised in a newer revision of a saved source is suggested from that revision; recurring friction is named as unchecked.
@@ -79,8 +79,6 @@ function frictionKey(condition, subject) {
   for (const char of raw) hash = (hash * 33 ^ char.codePointAt(0)) >>> 0;
   return `friction:${named.slice(0, 171)}-${hash.toString(16).padStart(8, '0')}`;
 }
-// The record holds at most this many triggers (improvement-record.mjs); recurring conditions beyond what fits are said, not listed.
-const MAX_TRIGGERS = 16;
 const scopeFor = (item, hint) => [hint, 'project'].find(name => item.scopes.includes(name)) ?? item.scopes[0];
 const digestsOf = item => ({ recipeSha256: item.recipe.sha256, materials: [...new Set((item.materials ?? []).map(m => m.sha256))].sort() });
 const bytesOf = item => (item.recipe?.byteLength ?? 0) + (item.materials ?? []).reduce((sum, m) => sum + m.byteLength, 0);
@@ -110,8 +108,8 @@ function facts(item, scope, offered, selected) {
   return result;
 }
 // Which of two releases of one package is later: positive when the candidate is, negative when the saved one is, undefined when neither is known to be
-// (an unversioned or non-semver release, or the same version with other content). The order is semantic-version precedence. No host supplies a declared
-// order yet, so `hostDeclaredOrder` is not read.
+// (an unversioned or non-semver release, or the same version with other content). The order is semantic-version precedence. `hostDeclaredOrder` is the seam
+// for an order a host's update source declares; no host supplies one, so it is not read. An order taken from it must be shown labelled host-declared.
 export function releaseOrder(saved, candidate, hostDeclaredOrder) {
   const order = precedence(candidate.release.package?.version, saved.release.package?.version);
   return order === 0 ? undefined : order;

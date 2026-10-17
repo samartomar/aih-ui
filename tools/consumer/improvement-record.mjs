@@ -6,6 +6,8 @@ import { digestBytes, hash, object, only } from './intake.mjs';
 import { isUtcTimestamp } from './maintenance-record.mjs';
 export const IMPROVEMENT_SUGGESTION_RECORD_SCHEMA = 'urn:aihq:workbench:journey-record:improvement-suggestion:1.0.0';
 export const IMPROVEMENT_DISMISSAL_RECORD_SCHEMA = 'urn:aihq:workbench:journey-record:improvement-dismissal:1.0.0';
+// The record's reason limit; the rules bound what they list by it.
+export const MAX_TRIGGERS = 16;
 export const SUGGESTION_FIELDS = ['id', 'revision', 'rulesVersion', 'scope', 'change', 'triggers', 'goal', 'references', 'facts', 'unknowns'];
 const REFERENCE_KINDS = ['setting', 'saved-reason', 'request', 'catalog-item'], FACT_KINDS = ['overhead', 'scope', 'dependency'];
 const idPattern = /^[\w.-]{1,180}$/, ruleIdPattern = /^[a-z][a-z0-9.-]{0,63}$/, keyPattern = /^[a-z][a-z0-9-]{0,31}:[\w.@-]{1,180}$/, versionPattern = /^\d+\.\d+\.\d+$/;
@@ -35,7 +37,7 @@ export function suggestionProblem(record) {
   if (!hash(record.revision)) return '/revision';
   if (!['project', 'user'].includes(record.scope)) return '/scope';
   if (!change(record.change)) return '/change';
-  if (!list(record.triggers, 16, trigger, 1) || new Set(record.triggers.map(t => t.key)).size !== record.triggers.length) return '/triggers';
+  if (!list(record.triggers, MAX_TRIGGERS, trigger, 1) || new Set(record.triggers.map(t => t.key)).size !== record.triggers.length) return '/triggers';
   if (!text(record.goal, 300)) return '/goal';
   if (!list(record.references, 32, r => only(r, ['kind', 'ref']) && REFERENCE_KINDS.includes(r.kind) && text(r.ref, 300))) return '/references';
   if (!list(record.facts, 16, f => only(f, ['kind', 'text']) && FACT_KINDS.includes(f.kind) && text(f.text, 1000))) return '/facts';
