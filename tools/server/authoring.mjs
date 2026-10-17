@@ -12,7 +12,7 @@ import { readFile, stat } from 'node:fs/promises';
 const MAINTENANCE_SOURCE_BYTES = 4096, MAINTENANCE_REVISIONS = ['current', 'updated', 'newer', 'additional', 'expanded'];
 async function fileMaintenanceSource(consumerDir, path) {
   const load = name => import(pathToFileURL(join(consumerDir, 'consumer', name)).href);
-  const [{ noteFixture }, { intakeDeclaration, digestBytes }] = await Promise.all([load('note-fixture.mjs'), load('intake.mjs')]);
+  const [{ noteFixture }, { intakeDeclaration }, { digestBytes }] = await Promise.all([load('note-fixture.mjs'), load('intake.mjs'), load('primitives.mjs')]);
   return async () => {
     try {
       if ((await stat(path)).size > MAINTENANCE_SOURCE_BYTES) return null;

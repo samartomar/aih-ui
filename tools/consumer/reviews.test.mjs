@@ -13,6 +13,7 @@ import { digestBytes } from './primitives.mjs';
 import { intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import * as authoring from './headless.mjs';
+import { compareReviewBindings } from './review-bindings.mjs';
 import { writeJourneyEnvelope, readJourneyEnvelope } from './journey.mjs';
 import { inspectAuthenticatedReviewEvidence } from './review-host.mjs';
 const encode = value => new TextEncoder().encode(JSON.stringify(value));
@@ -235,7 +236,7 @@ test('explicit unchanged subject comparison across a new release retains the ori
     assert.equal(updated.value.reviewJudgments[0].applicability, 'applies');
     const reopened = await authoring.readAuthoring({ policyBytes: updated.value.policyBytes, inventories, reviewEvidence: [evidence.bytes], comparisons });
     assert.equal(reopened.value.editing, 'available', JSON.stringify(reopened.value.diagnostics));
-    const compared = await authoring.compareReviewBindings({ intent: reopened.value.intent, inventories, reviewEvidence: [evidence.bytes], comparisons });
+    const compared = await compareReviewBindings({ intent: reopened.value.intent, inventories, reviewEvidence: [evidence.bytes], comparisons });
     assert.equal(compared.value[0].state, 'unchanged');
     assert.equal(compared.value[0].reviewedSubject.releaseSha256, f.inventory.release.sha256);
     assert.equal(compared.value[0].comparedSubject.releaseSha256, next.release.sha256);

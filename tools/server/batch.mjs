@@ -42,6 +42,12 @@ export function createBatchAdapter(consumerDir) {
   // The batch module lives in the installed consumer, so its constants are read from there once, never repeated here.
   let batchModule;
   const loadBatch = () => batchModule ??= import(pathToFileURL(join(consumerDir, 'consumer', 'batch.mjs')).href);
+  // Core's reading of the saved policy the batch binds is the host's to make (batch-policy.mjs); batch.mjs reads no policy bytes.
+  let policyModule;
+  const loadPolicy = () => policyModule ??= import(pathToFileURL(join(consumerDir, 'consumer', 'batch-policy.mjs')).href);
+  // The request vocabularies are the reviewed-batch record's own.
+  let recordModule;
+  const loadRecord = () => recordModule ??= import(pathToFileURL(join(consumerDir, 'consumer', 'batch-record.mjs')).href);
   const settleAll = reason => {
     for (const [id, entry] of pending) { clearTimeout(entry.timer); entry.reject(problem(reason, 'BATCH_HOST_UNAVAILABLE')); pending.delete(id); }
   };
@@ -104,9 +110,10 @@ export function createBatchAdapter(consumerDir) {
     }
     // Core writes protected records into the current account's home; with no disposable home named, nothing starts.
     if (typeof config.coreHome !== 'string' || !isAbsolute(config.coreHome)) throw problem('No isolated Core home is configured.', 'BATCH_HOST_UNAVAILABLE');
-    const { readBatch, setContinuation } = await loadBatch();
+    const [{ readBatch, setContinuation }, { envelopePolicy }] = await Promise.all([loadBatch(), loadPolicy()]);
     const envelopeBytes = new Uint8Array(await readFile(config.envelopePath));
-    const read = await readBatch({ envelopeBytes });
+    const policy = await envelopePolicy(envelopeBytes);
+    const read = await readBatch({ envelopeBytes, policy });
     if (read.status !== 'ok') return passed(read);
     const { record, projection, supported } = read.value;
     // Core's published client list is fixed for the installed archive, so it is asked for once.
@@ -117,7 +124,7 @@ export function createBatchAdapter(consumerDir) {
     if (pathname === '/api/batch') return { status: 'ok', batchId: record.id, projection, supported, revision: revisionOf(envelopeBytes), clients: { targets: clients.targets, labels: clients.labels } };
     if (body.batchId !== record.id) return refusal('BATCH_CHANGED', 'The current batch changed. Reopen and review it again.');
     if (pathname === '/api/batch-continuation') {
-      const edited = await setContinuation({ envelopeBytes, batchId: record.id, continuation: body.continuation, now: new Date().toISOString() });
+      const edited = await setContinuation({ envelopeBytes, batchId: record.id, policy, continuation: body.continuation, now: new Date().toISOString() });
       if (edited.status !== 'ok') return passed(edited);
       const refused = await replacing(config.envelopePath, edited.value.envelopeBytes, envelopeBytes);
       return refused ?? { status: 'ok', batchId: edited.value.record.id, projection: edited.value.projection, revision: revisionOf(edited.value.envelopeBytes) };
@@ -135,7 +142,7 @@ export function createBatchAdapter(consumerDir) {
       // revision of the same one). The page is shown that record and revision as they now stand, read from the file, never rebuilt from what it sent.
       // Work has run by now, so a failed re-read never turns the report into a refusal: the report is returned without `current`.
       const storedBytes = await readFile(config.envelopePath).then(bytes => new Uint8Array(bytes), () => null);
-      const after = storedBytes ? await readBatch({ envelopeBytes: storedBytes }) : { status: 'error', diagnostics: [{ code: 'BATCH_ENVELOPE_UNREADABLE', message: 'The saved batch could not be read again.' }] };
+      const after = storedBytes ? await readBatch({ envelopeBytes: storedBytes, policy: await envelopePolicy(storedBytes) }) : { status: 'error', diagnostics: [{ code: 'BATCH_ENVELOPE_UNREADABLE', message: 'The saved batch could not be read again.' }] };
       if (after.status !== 'ok') return { status: 'ok', batchId: record.id, report, diagnostics: after.diagnostics };
       return { status: 'ok', batchId: record.id, report, revision: revisionOf(storedBytes), current: { batchId: after.value.record.id, projection: after.value.projection } };
     }
@@ -167,7 +174,7 @@ export function createBatchAdapter(consumerDir) {
           if (read.tooLarge) { fail(413, `The request body is larger than ${MAX_BODY} bytes.`, 'PAYLOAD_TOO_LARGE'); return true; }
           if (read.malformed) { fail(400, 'The request body must be a JSON object.', 'INVALID_REQUEST'); return true; }
           body = read.value;
-          const { BATCH_ID_PATTERN, CONTINUATIONS, MAX_ACTIONS } = await loadBatch();
+          const { BATCH_ID_PATTERN, CONTINUATIONS, MAX_ACTIONS } = await loadRecord();
           const keys = { '/api/batch-continuation': ['batchId', 'continuation'], '/api/batch-review': ['batchId', 'rerun', 'rerunRevision'], '/api/batch-run': ['batchId', 'rerun', 'rerunRevision'] }[pathname] ?? ['batchId'];
           const names = body.rerun === undefined || (Array.isArray(body.rerun) && body.rerun.length <= MAX_ACTIONS && body.rerun.every(id => typeof id === 'string' && id.length <= 64));
           if (Object.keys(body).some(key => !keys.includes(key)) || !BATCH_ID_PATTERN.test(body.batchId ?? '') || !names || (body.rerunRevision !== undefined && !REVISION_PATTERN.test(body.rerunRevision))

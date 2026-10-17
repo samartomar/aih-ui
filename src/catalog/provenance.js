@@ -6,8 +6,8 @@
  * preview actually installed, each with the version npm recorded installing
  * and, because these are local packages that can share a released version
  * number, its short checkpoint. Hashes, full commits, the index's own package
- * block, raw entry counts and the collection view are diagnostic detail and
- * open in place behind "provenance".
+ * block and raw entry counts are diagnostic detail and open in place behind
+ * "provenance".
  *
  * The masthead names the SELECTED SOURCE, as the design source's masthead names
  * its framework, and the status line under the Source Policy control carries
@@ -42,27 +42,10 @@ export function createProvenance({ elements }) {
     return PACKAGE_ORDER.map((name) => ({ name, pkg: installed.get(name) ?? null }));
   }
 
-  /**
-   * Installed packages whose Catalog content release differs from them. Only a
-   * release Catalog identified as a version of that package is compared.
-   */
-  function contentMismatches(model) {
-    const out = new Map();
-    for (const collection of model.inventory?.collections ?? []) {
-      if (collection.current.origin?.name !== collection.owner.package) continue;
-      const installed = model.counts.installed.get(collection.owner.package);
-      if (installed !== undefined && installed !== collection.current.release) {
-        out.set(collection.owner.package, collection.current.release);
-      }
-    }
-    return out;
-  }
-
   function renderStrip(model) {
     const strip = elements.provenanceStrip;
     strip.replaceChildren();
     const summary = model.summary ?? {};
-    const mismatches = contentMismatches(model);
 
     strip.appendChild(el("span", "material-symbols-outlined text-[14px] text-primary shrink-0", "account_tree"));
     packagesInOrder(summary).forEach(({ name, pkg }, position) => {
@@ -81,13 +64,6 @@ export function createProvenance({ elements }) {
         chip.title = `Local package packed from checkpoint ${commit}. Not a registry release.`;
         group.appendChild(chip);
       }
-      // Catalog indexes a different content release from the installed one.
-      // Said here, beside the running version, and never relabelled away.
-      if (mismatches.has(name)) {
-        const note = el("span", "px-1.5 py-0.5 rounded bg-tertiary-container border border-tertiary/40 text-tertiary font-mono text-[10px]", `content ${mismatches.get(name)}`);
-        note.title = `The Catalog content indexed for ${name} is release ${mismatches.get(name)}; the installed ${name} is ${version}.`;
-        group.appendChild(note);
-      }
       strip.appendChild(group);
     });
     strip.appendChild(el("span", "px-1.5 py-0.2 rounded bg-surface-container text-outline font-mono text-[10px] shrink-0", "read-only-mirror"));
@@ -100,7 +76,7 @@ export function createProvenance({ elements }) {
     const indexPkg = summary.indexPackage ?? {};
     const details = el("details", "relative shrink-0");
     const summaryNode = el("summary", "cursor-pointer list-none px-1.5 py-0.2 rounded bg-surface-container hover:bg-surface-container-high text-outline hover:text-on-surface font-mono text-[10px] select-none", "provenance");
-    summaryNode.title = "Package hashes, commits, index metadata and the collection view";
+    summaryNode.title = "Package hashes, commits and index metadata";
     details.appendChild(summaryNode);
 
     const panel = el("div", "absolute left-0 top-[18px] z-40 w-[460px] max-w-[90vw] max-h-[70vh] overflow-y-auto p-2 rounded bg-surface-container-lowest border border-wb-border shadow-panel space-y-1 text-[10px] font-mono select-text");
@@ -117,19 +93,7 @@ export function createProvenance({ elements }) {
     line("index sha256", text(summary.indexSha256) ?? NOT_PUBLISHED);
     line("index entries", String(summary.entryCount ?? NOT_PUBLISHED));
     line("current inventory", String(model.total));
-    line("kept for reference only", String(model.inventory?.notCurrent ?? 0), "text-outline");
     line("organization admission", text(summary.organizationAdmission) ?? NOT_PUBLISHED, "text-tertiary");
-
-    heading("Catalog collections");
-    line("collection view sha256", text(summary.collections?.digest) ?? NOT_PUBLISHED);
-    line("collected source types", (summary.collections?.collectedSourceTypes ?? []).join(", ") || NOT_PUBLISHED);
-    for (const collection of summary.collections?.collections ?? []) {
-      const origin = collection.current?.origin ?? {};
-      line(
-        collection.id,
-        `${collection.owner?.package} content ${collection.current?.release} · ${collection.members?.length ?? 0} members · identified by ${origin.kind ?? NOT_PUBLISHED}`,
-      );
-    }
 
     heading("Core targets");
     const targets = summary.coreTargets ?? {};
@@ -203,7 +167,6 @@ export function createProvenance({ elements }) {
 
   /** What Catalog recorded for the source: a commit, a version or a content release. */
   function recordedNode(model, scope) {
-    if (model.scope.collection) return fact("content", scope.badge, scope.badgeTitle);
     if (model.scope.type === "github") {
       return scope.revision === null
         ? fact("recorded", `${model.scope.revisionCount} commits`, "Items of this repository were recorded at more than one commit")
@@ -230,8 +193,8 @@ export function createProvenance({ elements }) {
         "Catalog inventory",
         indexed === null ? `${model.total} current` : `${model.total} current / ${indexed} indexed`,
         indexed === null
-          ? "Current entries selected by Catalog's published collection view."
-          : `${model.inventory?.notCurrent ?? indexed - model.total} older entries remain in the installed index for reference. Current membership comes from Catalog's published collection view.`,
+          ? "Entries of the Catalog releases this Workbench reads."
+          : `Entries of the Catalog releases this Workbench reads, of ${indexed} the served summary counts.`,
       ));
     } else {
       const scope = describeScope(model.scope);
@@ -247,7 +210,7 @@ export function createProvenance({ elements }) {
   }
 
   return {
-    /** @param model { summary, total, scopeTotal, scope, counts, inventory } */
+    /** @param model { summary, total, scopeTotal, scope, counts } */
     render(model) {
       renderMasthead(model);
       renderStatus(model);

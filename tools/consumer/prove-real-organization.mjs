@@ -6,7 +6,8 @@ import { spawnSync } from 'node:child_process';
 import { mkdir, readFile, writeFile, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { createHost } from 'aih-ui/execution-host';
+// The execution host is application-internal, not a package entry.
+import { createHost } from './host.mjs';
 import { readAuthoring, inspectReviewEvidence, recordReview, composeAuthoring, editAuthoring } from 'aih-ui/authoring';
 import { organizationFixture } from './organization-fixture.mjs';
 import { startConsumer } from './server.mjs';

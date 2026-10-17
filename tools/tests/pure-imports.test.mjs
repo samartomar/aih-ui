@@ -8,10 +8,10 @@ import { fileURLToPath } from 'node:url';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const exportsMap = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf8')).exports;
-// Package entries documented as portable (README, docs/authoring.md, docs/readiness.md), plus the browser-shared
-// client identity module.
-const PURE_EXPORTS = ['./journey', './readiness', './workspace', './batch'];
-const PURE_FILES = ['tools/consumer/client-identity.mjs'];
+// Package entries documented as portable (README, docs/authoring.md), plus the browser-shared client identity module and the
+// readiness projection (docs/readiness.md), which is application-internal.
+const PURE_EXPORTS = ['./journey', './workspace', './batch'];
+const PURE_FILES = ['tools/consumer/client-identity.mjs', 'tools/consumer/readiness.mjs'];
 // Modules that acquire, run or host; a pure reader never reaches them even if they stopped importing a package.
 const HOST_MODULE = /(^|\/)(intake|headless|host|server|envelope-file|home-environment)\.mjs$|-(host|child|browser|fixture|service)\.mjs$/;
 // Globals a portable module may not touch: environment, I/O, timers and scheduling. Web Crypto (`crypto`) and the

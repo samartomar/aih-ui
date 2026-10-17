@@ -2,18 +2,12 @@
  * Source navigation: the left rail's Catalog Scopes.
  *
  * One row per PUBLISHED SOURCE IDENTITY - a repository for github, a package
- * for npm - and one row per Catalog COLLECTION for the source types Catalog
- * governs by collection, with the current item count, largest first. Nothing
- * is read out of an entry id, and no release is chosen here: Core-derived
- * content is one @aihq/core row holding exactly the members Catalog names as
- * current, and older releases kept in the index for reference are not rows.
- * @aihq/catalog is not a row: it is the package that transports these sources.
+ * for npm, a release for aih - with the current item count, largest first.
+ * Nothing is read out of an entry id, and no release is chosen here.
  *
  * A revision is shown only as what it is:
  *   - github:     the commit, when every item of that repository shares one;
- *   - npm:        the version - an integrity value is not a commit;
- *   - collection: its current content release, with a marker when the
- *                 installed owning package is a different release.
+ *   - npm:        the version - an integrity value is not a commit.
  *
  * The organization's own additions come last and are empty until something is
  * actually imported.
@@ -64,14 +58,6 @@ function scopeRow(row, selected, onSelect) {
   );
   const badge = badgeNode(scope, selected);
   if (badge) left.appendChild(badge);
-  if (scope.differs) {
-    // Catalog's current content for this package is a different release from
-    // the installed package. Shown, never relabelled.
-    const marker = el("span", "material-symbols-outlined text-[13px] text-tertiary shrink-0", "sync_problem");
-    marker.title = scope.badgeTitle;
-    marker.setAttribute("aria-label", scope.badgeTitle);
-    left.appendChild(marker);
-  }
   head.appendChild(left);
   head.appendChild(
     el(

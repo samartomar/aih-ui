@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { ORGANIZATION_DRAFT_RECORD_SCHEMA, organizationDraftProblem, organizationEntryId, organizationTargetId } from './organization-draft-record.mjs';
 import { digestBytes, stable } from './primitives.mjs';
-import { managementIdOf } from './headless.mjs';
+import { managementIdOf } from './intent-shape.mjs';
 import { startConsumer } from './server.mjs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

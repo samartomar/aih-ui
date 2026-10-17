@@ -4,7 +4,8 @@ import { readFile, readdir, mkdir, writeFile, mkdtemp } from 'node:fs/promises';
 import { mkdtempSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { planBatch, readBatch, setContinuation, projectBatch } from './batch.mjs';
+import * as batch from './batch.mjs';
+import { planPolicy, envelopePolicy, readSavedPolicy } from './batch-policy.mjs';
 import { batchId, batchProblem, batchDerivedProblem, BATCH_RECORD_SCHEMA } from './batch-record.mjs';
 import { readJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { digestBytes, stable } from './primitives.mjs';
@@ -17,6 +18,11 @@ import { replaceEnvelope, revisionOf } from './envelope-file.mjs';
 // Core keeps ownership records, recovery manifests, snapshots and run history under the current account's `~/.aih/core`, even
 // with logging off. It resolves the account home with os.homedir() whenever it is used (not at import), so pointing this
 // test process (node --test gives each file its own) at a disposable home before the first Core call keeps every record here.
+// Callers hand batch.mjs Core's reading of the saved policy, as the host does.
+const planBatch = async input => batch.planBatch({ ...input, policy: await planPolicy(input) });
+const readBatch = async input => batch.readBatch({ ...input, policy: await envelopePolicy(input.envelopeBytes) });
+const setContinuation = async input => batch.setContinuation({ ...input, policy: await envelopePolicy(input.envelopeBytes) });
+const { projectBatch } = batch;
 const FIXTURE_HOME = mkdtempSync(join(tmpdir(), 'ui35-home-'));
 Object.assign(process.env, homeEnvironment(FIXTURE_HOME));
 
@@ -103,6 +109,19 @@ test('planning binds real selections of the saved policy and mirrors Core requir
   assert.equal(other.status, 'refused'); assert.equal(other.diagnostics[0].code, 'JOURNEY_REFERENCE_MISMATCH');
 });
 
+test('the batch module binds only Core\'s reading of the saved policy, and reads no policy bytes itself', async () => {
+  const f = await pure();
+  // Bytes Core refuses (here: not JSON at all) leave no policy, and the batch is refused the same way as a policy without selections.
+  assert.equal(readSavedPolicy(encode('not a policy')), null);
+  for (const policy of [null, undefined, { selections: 'none' }]) {
+    const refused = await batch.readBatch({ envelopeBytes: f.envelopeBytes, policy });
+    assert.equal(refused.status, 'refused'); assert.equal(refused.diagnostics[0].path, ''); assert.match(refused.diagnostics[0].message, /not an execution policy with a selection list/);
+  }
+  assert.equal(valueOf(await batch.readBatch({ envelopeBytes: f.envelopeBytes, policy: await envelopePolicy(f.envelopeBytes) })).record.id, f.batchId);
+  const source = await readFile(new URL('./batch.mjs', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /JSON\.parse|TextDecoder|@aihq\//);
+});
+
 test('planning refuses a selection whose Core requires no action of the batch covers', async () => {
   const f = await pure(), plan = f.plan;
   // b-dependent needs b-core in Core's policy; with b-core gone from the batch the host would run it without its prerequisite.
@@ -126,8 +145,10 @@ test('planning binds shared inputs to exactly the material sources the recipe of
     const sha256 = await digestBytes(encode(stable(selection)));
     return { ...plan, savedPolicyBytes: encode(JSON.stringify(policy)), actions: plan.actions.map(a => a.selection.id === id ? { ...a, selection: { id, sha256 } } : a) };
   };
-  await refused(await edited('b-proc', selection => { selection.recipe = { reference: 'elsewhere' }; }), '/actions/3/selection');
-  await refused(await edited('b-core', selection => { selection.recipe.inline.materials = selection.recipe.inline.materials.map(({ source: _source, ...material }) => material); }), '/actions/0/selection');
+  // A recipe reference or a material source Core does not accept makes the saved policy one Core refuses, so the whole plan is refused
+  // before any action is bound.
+  await refused(await edited('b-proc', selection => { selection.recipe = { reference: 'elsewhere' }; }), '');
+  await refused(await edited('b-core', selection => { selection.recipe.inline.materials = selection.recipe.inline.materials.map(({ source: _source, ...material }) => material); }), '');
   // An archive material is pinned by its own digest in the selection, so it needs no shared input.
   const archived = await edited('a-extra', selection => { selection.recipe.inline.materials[0].source = { kind: 'archive', url: 'https://example.invalid/shared.tgz', sha256: 'c'.repeat(64), byteLength: 12 }; });
   valueOf(await planBatch({ ...archived, actions: archived.actions.map(a => a.id === 'a-extra' ? { ...a, inputs: [] } : a) }));

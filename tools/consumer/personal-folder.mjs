@@ -1,5 +1,6 @@
 // Browser-granted bytes only. No path acquisition, scripts, Git or network.
-import { intakeDeclaration, checkInput } from './intake.mjs';
+import { intakeDeclaration } from './intake.mjs';
+import { checkInput } from './intent-shape.mjs';
 import { digestBytes, only, refuse, stable } from './primitives.mjs';
 const encode = value => new TextEncoder().encode(value);
 export const FOLDER_LIMITS = { files: 256, fileBytes: 250_000, totalBytes: 1_000_000, skills: 32 };

@@ -1,7 +1,7 @@
 # Mixed-source authoring contract
 
-The supported consumer entry is `aih-ui/authoring` (this private application is
-not an npm authoring library). It uses public Core and Catalog interfaces and is
+The application-tier entry is `aih-ui/authoring` (this private application is
+not an npm authoring library or SDK). It uses public Core and Catalog interfaces and is
 shared with the ordinary prototype-derived application at `/` and the separate
 `/authoring` contract exploration page. Install reviewed Core/Catalog/Scan
 archives through `tools/preview.mjs` and open its printed local URL for the
@@ -402,7 +402,7 @@ The `/authoring` page and `aih-ui/authoring` share these effect-free operations:
 
 ```js
 import {
-  inspectReviewEvidence, recordReview, reconsiderReviews, compareReviewBindings, describeReviewJudgments
+  inspectReviewEvidence, recordReview, reconsiderReviews
 } from 'aih-ui/authoring';
 const target = { releaseSha256: inventory.release.sha256, itemId };
 const inspected = await inspectReviewEvidence({ evidenceBytes, inventory, itemId });
@@ -434,7 +434,7 @@ the view even when they cannot support a decision. Missing optional evidence
 affects review availability, never independent Core policy validity. A portable
 reader always reports authentication as `unchecked`, including signed artifacts.
 
-The Node-only `aih-ui/review-host` export supplies
+The Node-only review host (`tools/consumer/review-host.mjs`, application-internal) supplies
 `inspectAuthenticatedReviewEvidence({evidenceBytes,inventory,itemId,trust,expectedScanId?})`.
 It adds the public Scan `authenticateArtifact` result as `producerAuthentication`.
 Trust comes independently from the host, never the imported report/policy.
@@ -480,7 +480,7 @@ when the optional `recipient:{kind,id}` equals the record's `owner`; otherwise,
 including an absent or invalid recipient, it is `imported`. `reviewSummary` is
 `{recipientDecisions,importedDecisions,applies,changed,unverified}` over current
 records, so an imported judgment is never counted as the recipient's decision.
-`describeReviewJudgments` and `compareReviewBindings` expose the same derivation;
+Authoring and draft results carry this derivation as `reviewJudgments`;
 comparison results gain `reason`, and a selected subject whose release is not
 supplied is now `unavailable` (`source-unavailable`) rather than `changed`. If the
 judgments cannot be described (for example malformed `comparisons`), results carry
@@ -509,8 +509,8 @@ intact. Unrelated policy metadata, evidence, managed selections and removals
 continue through ordinary Core validation.
 
 For an explicitly selected new release with unchanged relevant item material,
-supply `comparisons:[{recordId,target:{releaseSha256,itemId}}]` to authoring and
-`compareReviewBindings({intent,inventories,reviewEvidence,comparisons})`. The
+supply `comparisons:[{recordId,target:{releaseSha256,itemId}}]` to the authoring
+and draft operations. The
 comparison returns separate `reviewedSubject` and `comparedSubject`; exact Core
 recipe/material identities and checked finding/evidence must match. The saved
 record is never silently retargeted. The comparison is host-owned context and
@@ -523,7 +523,8 @@ authenticity or execution authorization. There is no expiry or zero-findings gat
 
 ## Current organization authority and execution host
 
-`aih-ui/execution-host` exports the Node-only `createHost`. The `/authoring`
+The Node-only execution host (`tools/consumer/host.mjs`, application-internal and
+not a package entry) provides `createHost`. The `/authoring`
 page and headless consumers use this same host for current authority, preparation,
 approval and managed recovery. Configure `projectRoot`, `materialRoots`, exact
 `recipeMaterials`, optional `organizationSource`, and private `controls` independently
@@ -541,7 +542,7 @@ against a controlled in-process GitHub fixture through `tools/check-authority-so
 <consumerDir> <evidenceDir> [--port N]`, using a consumer it installed.
 
 ```js
-import { createHost } from 'aih-ui/execution-host';
+import { createHost } from './tools/consumer/host.mjs'; // application-internal
 const host = createHost({ projectRoot, materialRoots, recipeMaterials,
   organizationSource, controls });
 const advisory = await host.inspectAuthority({ policyText });

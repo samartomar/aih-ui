@@ -5,12 +5,11 @@
 import { only, refuse, stable, digestJson as digest } from './primitives.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { isUtcTimestamp } from './maintenance-record.mjs';
-import { unsafeText, parseIdentity, WORKSPACE_DECLARATION_RECORD_SCHEMA, LOCAL_BINDING_RECORD_SCHEMA, WORKSPACE_DECLARATION_RECORD_ID, RELATIONSHIP_KINDS, BINDING_REASONS, MAX_MEMBERS, MAX_RELATIONSHIPS, MAX_BINDINGS,
+import { unsafeText, parseIdentity, WORKSPACE_DECLARATION_RECORD_SCHEMA, LOCAL_BINDING_RECORD_SCHEMA, WORKSPACE_DECLARATION_RECORD_ID, MAX_MEMBERS, MAX_RELATIONSHIPS, MAX_BINDINGS,
   declarationProblem, declarationDerivedProblem, bindingProblem, bindingDerivedProblem, memberProblem, edgeProblem, observationProblem, relationshipId, workspaceId, workspaceRevision,
-  bindingId, remoteIdentity, sameIdentity, identityOf, sameRoot } from './workspace-record.mjs';
+  bindingId, sameIdentity, identityOf, sameRoot } from './workspace-record.mjs';
 export const WORKSPACE_DECLARATION_SCHEMA = WORKSPACE_DECLARATION_RECORD_SCHEMA;
 export const LOCAL_BINDING_SCHEMA = LOCAL_BINDING_RECORD_SCHEMA;
-export { RELATIONSHIP_KINDS, BINDING_REASONS, remoteIdentity, sameIdentity };
 const isDeclaration = record => record.schema === WORKSPACE_DECLARATION_RECORD_SCHEMA;
 const isBinding = record => record.schema === LOCAL_BINDING_RECORD_SCHEMA;
 const family = /^urn:aihq:workbench:journey-record:(?:workspace-declaration|local-binding):/;

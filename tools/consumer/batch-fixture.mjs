@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { createHost } from './host.mjs';
 import { stable } from './primitives.mjs';
 import { planBatch } from './batch.mjs';
+import { readSavedPolicy } from './batch-policy.mjs';
 import { digestMaterial } from './batch-host.mjs';
 import { homeEnvironment } from './home-environment.mjs';
 const SHARED = 'shared bytes', NOW = '2026-10-16T09:00:00Z';
@@ -61,7 +62,7 @@ export async function batchFixture(root, { conflict = false, applyEarlier = true
     inputs: [{ id: 'shared', kind: 'material', ...(await digestMaterial(materialRoot)) }],
     actions: [action('b-core', 'scope-b', 'b-core', [], ['shared']), action('b-dependent', 'scope-b', 'b-dependent', ['b-core'], ['shared']),
       action('a-extra', 'scope-a', 'a-extra', [], ['shared']), action('b-proc', 'scope-b', 'b-proc')] };
-  const planned = await planBatch(plan);
+  const planned = await planBatch({ ...plan, policy: readSavedPolicy(savedPolicyBytes) });
   if (planned.status !== 'ok') throw new Error(`Fixture plan refused: ${JSON.stringify(planned.diagnostics)}`);
   return { homes, coreHome, materialRoot, userFiles, savedPolicyBytes, plan, envelopeBytes: planned.value.envelopeBytes, batchId: planned.value.record.id, action, materialRoots: { shared: materialRoot }, procMarker: join(homes.b, 'proc-ok'), procRuns, procCount: () => readFile(procRuns, 'utf8').then(text => text.length, error => { if (error.code === 'ENOENT') return 0; throw error; }), conflictFile };
 }

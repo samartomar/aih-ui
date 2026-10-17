@@ -5,6 +5,7 @@
 // the chosen scope through the ordinary draft edit and nothing else; stopping ends the evaluation and says nothing about
 // anything being undone, which is tracked separately as a restoration. Core's claim and calculation format carries the evidence.
 import { CLAIMS_SCHEMA, projectClaims, validateClaimSet } from '@aihq/core/report';
+import { resolveSelections } from '@aihq/catalog/reader';
 import { object, only, refuse, digestJson as digest } from './primitives.mjs';
 import { editDraft } from './headless.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_KINDS } from './journey.mjs';
@@ -107,22 +108,41 @@ export async function readTrials({ envelopeBytes, mechanisms = TRIAL_MECHANISMS_
 const size = descriptors => descriptors.reduce((total, descriptor) => total + descriptor.byteLength, 0);
 // Configured material size, never observed usage, of the draft the trial was proposed against: the recipe and materials of every pinned item, and what the tested item adds
 // (itself and what it requires, unless already pinned). A size that cannot be known is unknown with its reason.
-function configuredSize({ draft, change, inventories }) {
+const sized = item => !!item && Number.isSafeInteger(item.recipe?.byteLength) && (item.materials ?? []).every(m => Number.isSafeInteger(m.byteLength));
+function configuredSize({ draft, change, scope, inventories }) {
   const pins = draft.intent.pins, pinned = new Set(pins.map(pin => `${pin.releaseSha256}/${pin.itemId}`));
   const baseline = pins.reduce((total, pin) => total + pin.recipe.byteLength + size(pin.materials), 0);
   const entry = Array.isArray(inventories) ? inventories.find(candidate => candidate.release?.sha256 === change.releaseSha256) : undefined;
   if (!entry) return { baseline, unknown: 'The suggested item is not in the supplied inventories, so its configured size is unknown.' };
+  const trial = items => baseline + items.reduce((total, { item }) => total + item.recipe.byteLength + size(item.materials), 0);
+  // Catalog's required closure when every release it needs is supplied, each item in the release Catalog resolved it from.
+  const releases = {};
+  for (const candidate of inventories) if (candidate?.release && !Object.hasOwn(releases, candidate.release.sha256)) releases[candidate.release.sha256] = candidate.release;
+  let resolved;
+  try { resolved = resolveSelections({ releases, roots: [{ releaseSha256: change.releaseSha256, itemId: change.itemId, scope, configuration: {} }], skips: [] }); }
+  catch { /* inventories Catalog did not check are walked below */ }
+  if (resolved?.status === 'ok') {
+    const closure = new Map();
+    for (const { item: ref } of resolved.value.inclusions) {
+      const key = `${ref.releaseSha256}/${ref.itemId}`;
+      if (!closure.has(key)) closure.set(key, { key, item: releases[ref.releaseSha256].items.find(item => item.id === ref.itemId) });
+    }
+    const missing = [...closure.values()].find(({ item }) => !sized(item));
+    if (!missing) return { baseline, trial: trial([...closure.values()].filter(({ key }) => !pinned.has(key))) };
+  }
+  // Otherwise the declared requirements are walked within the item's release: Catalog does not yet name the unavailable reference it refuses,
+  // so only the walk can say whose size is not known.
   const items = new Map(entry.release.items.map(item => [item.id, item])), added = [], seen = new Set(), queue = [change.itemId];
   while (queue.length) {
     const id = queue.shift();
     if (seen.has(id)) continue;
     seen.add(id);
     const item = items.get(id);
-    if (!item || !Number.isSafeInteger(item.recipe?.byteLength) || !(item.materials ?? []).every(m => Number.isSafeInteger(m.byteLength))) return { baseline, unknown: `The size of ${id} is not known, so the configured size with the suggested item is unknown.` };
-    if (!pinned.has(`${entry.release.sha256}/${id}`)) added.push(item);
+    if (!sized(item)) return { baseline, unknown: `The size of ${id} is not known, so the configured size with the suggested item is unknown.` };
+    if (!pinned.has(`${entry.release.sha256}/${id}`)) added.push({ item });
     queue.push(...(item.dependencies?.requires ?? []).map(required => required.itemId));
   }
-  return { baseline, trial: baseline + added.reduce((total, item) => total + item.recipe.byteLength + size(item.materials), 0) };
+  return { baseline, trial: trial(added) };
 }
 // ---- Recording -----------------------------------------------------------------------------------------------------------
 const PROPOSAL_FIELDS = ['scope', 'task', 'quality', 'conditions'];
@@ -240,7 +260,7 @@ export async function recordTrial({ envelopeBytes, operation, inventories, mecha
       additions = [{ ...observation, source: 'person' }];
     } else {
       // Sizes are the configured size of the draft the trial started from; once the draft is another one, neither side is known.
-      const measured = await digest(draft.intent) === trial.baseline.draftSha256 ? configuredSize({ draft, change: trial.change, inventories }) : { unknown: DRIFTED };
+      const measured = await digest(draft.intent) === trial.baseline.draftSha256 ? configuredSize({ draft, change: trial.change, scope: trial.scope, inventories }) : { unknown: DRIFTED };
       const side = (option, amount, reason) => ({ option, target: { dimension: 'runtime-context' }, source: 'host', ...(amount !== undefined ? { kind: 'measured', value: { amount, unit: 'bytes' } } : { kind: 'unknown', unknownReason: reason }) });
       additions = [side('baseline', measured.baseline, measured.unknown), side('trial', measured.trial, measured.unknown)];
     }

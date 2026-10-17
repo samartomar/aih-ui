@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { FILTER_SEPARATOR, inventoryCounts, sourceFilterValue, sourceScopes, visibleEntries } from "../../src/catalog/selectors.js";
+import { FILTER_SEPARATOR, inventoryCounts, sourceFilterValue, visibleEntries } from "../../src/catalog/selectors.js";
 import { emptyView, restoreView, saveView } from "../../src/catalog/view-state.js";
 
 // Test-only entries; production uses the installed Catalog releases.
@@ -17,7 +17,7 @@ const entries = [
 const counts = inventoryCounts(entries);
 const source = sourceFilterValue("github", "fixture/one", "abcdef1");
 const view = (patch = {}) => ({ ...emptyView(), source, ...patch });
-const visibleIds = (patch = {}) => visibleEntries(entries, view(patch), counts.membership).map((item) => item.entryId);
+const visibleIds = (patch = {}) => visibleEntries(entries, view(patch)).map((item) => item.entryId);
 
 test("source separator stays a runtime NUL without literal NUL bytes in JavaScript", () => {
   assert.equal(FILTER_SEPARATOR, String.fromCharCode(0));
@@ -48,12 +48,4 @@ test("a saved view restores only the filters the installed inventory still offer
   // A view saved by an earlier build may carry a retired category filter; it is not restored.
   saveView({ ...view(), category: { id: "build" } });
   assert.equal("category" in restoreView(emptyView(), counts), false);
-});
-
-test("collection scopes filter only Catalog's named members", () => {
-  const collection = { id: "fixture-collection", owner: { package: "fixture-owner" }, current: { release: "1.0.0" } };
-  const membership = new Map([[entries[0].entryId, collection], [entries[1].entryId, collection]]);
-  const collectionCounts = inventoryCounts(entries, { membership });
-  const scope = sourceScopes(collectionCounts).find((row) => row.collection === collection);
-  assert.deepEqual(visibleEntries(entries, view({ source: scope.filterValue }), membership).map((item) => item.entryId), ["alpha", "beta"]);
 });

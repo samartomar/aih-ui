@@ -89,8 +89,13 @@ function frictionKey(condition, subject, persisted) {
 const scopeFor = (item, hint) => [hint, 'project'].find(name => item.scopes.includes(name)) ?? item.scopes[0];
 const digestsOf = item => ({ recipeSha256: item.recipe.sha256, materials: [...new Set((item.materials ?? []).map(m => m.sha256))].sort() });
 const bytesOf = item => (item.recipe?.byteLength ?? 0) + (item.materials ?? []).reduce((sum, m) => sum + m.byteLength, 0);
-// The item's required items, transitively, that this policy does not already select.
-function needs(item, offered, selected) {
+const byItemId = (a, b) => compare(a.id, b.id);
+// The item's required items, transitively, that this policy does not already select. `required` is Catalog's resolved closure of the
+// item (see `closures` on suggestImprovements), given when every release it needs is supplied; then nothing is missing. Without it the
+// item's declared requirements are walked by item id over the supplied items: Catalog does not yet name the unavailable reference it
+// refuses, so only the walk can say which item the supplied Catalog does not offer.
+function needs(item, offered, selected, required) {
+  if (required) return { found: required.filter(needed => !selected.has(needed.id)).sort(byItemId), missing: [] };
   const found = new Map(), missing = new Set(), queue = [item];
   while (queue.length) {
     for (const dependency of queue.shift().dependencies?.requires ?? []) {
@@ -103,8 +108,8 @@ function needs(item, offered, selected) {
 }
 // Observed presence is not an input here: nothing this check reads observes a client, so installed is always "not checked".
 const clientFacts = (item, coreClients) => { const client = describeClientIdentity({ item, coreClients }); return client ? { client } : {}; };
-function facts(item, scope, offered, selected) {
-  const { found, missing } = needs(item, offered, selected), all = [item, ...found];
+function facts(item, scope, offered, selected, required) {
+  const { found, missing } = needs(item, offered, selected, required), all = [item, ...found];
   const labels = found.map(i => i.label ?? i.id), shown = labels.slice(0, 8).join(', ') + (labels.length > 8 ? ` and ${labels.length - 8} more` : '');
   const result = [{ kind: 'overhead', text: clip(`Adds ${plural(all.reduce((n, i) => n + 1 + (i.materials ?? []).length, 0), 'file')}, ${all.reduce((n, i) => n + bytesOf(i), 0)} bytes in total, and needs ${plural(found.length, 'other item')}${found.length ? `: ${shown}` : ''}.`) },
     { kind: 'scope', text: scope === 'project' ? 'Applies in this project only; other repositories and AI clients are unchanged.'
@@ -143,10 +148,12 @@ export function unorderedSources(intent, inventories, candidates, releaseOrder) 
 }
 // Labels, descriptions and item digests alone are not material: the recipe and the sorted material digests are, the item's own
 // and those of every item it requires (resolved where each revision offers it), as a dismissal's content is.
-const closureOf = (item, known) => needs(item, known, new Set()).found.map(needed => ({ itemId: needed.id, ...digestsOf(needed) }));
-function difference(before, beforeKnown, item, known) {
+// `releaseSha256` is the release the item comes from, which Catalog resolves its requirements in.
+const requiredOf = (closures, item, releaseSha256, scope) => closures?.(item, releaseSha256, item.scopes?.includes(scope) ? scope : item.scopes?.[0]);
+const closureOf = (item, known, required) => needs(item, known, new Set(), required).found.map(needed => ({ itemId: needed.id, ...digestsOf(needed) }));
+function difference(before, beforeKnown, beforeRelease, item, known, closures) {
   if (!sameContent(digestsOf(before), digestsOf(item))) return 'own';
-  return sameContent(closureOf(before, beforeKnown), closureOf(item, known)) ? undefined : 'needed';
+  return sameContent(closureOf(before, beforeKnown, requiredOf(closures, before, beforeRelease)), closureOf(item, known, requiredOf(closures, item, item.root.releaseSha256))) ? undefined : 'needed';
 }
 // The releases this policy was saved from, found by exact digest among the supplied inventories and then the update source's
 // checked candidates (which may be the only place an older pack is offered). `saved` counts the digests the policy names; a digest found
@@ -158,7 +165,7 @@ export function savedBaselines(intent, inventories, candidates = []) {
 // Items that candidate releases add or change against the saved releases they revise, by item id, newest candidate first. An item is new
 // when none of those saved releases has it and revised when each one that has it differs; a candidate that revises none says nothing.
 // `known` is what the item's requirements resolve against: its own release first, then the supplied items.
-function changedItems(intent, inventories, candidates, offered, releaseOrder) {
+function changedItems(intent, inventories, candidates, offered, releaseOrder, closures) {
   const { resolved: saved } = savedBaselines(intent, inventories, candidates);
   const changed = new Map();
   const rank = entry => releaseOrder?.ranks[entry.release.sha256]?.[1] ?? 0;
@@ -174,7 +181,7 @@ function changedItems(intent, inventories, candidates, offered, releaseOrder) {
     for (const item of own) {
       if (changed.has(item.id)) continue;
       const prior = sources.flatMap(entry => entry.release.items.filter(i => i.id === item.id).slice(0, 1).map(before =>
-        difference(before, new Map([...offered, ...entry.release.items.map(i => [i.id, i])]), item, known)));
+        difference(before, new Map([...offered, ...entry.release.items.map(i => [i.id, i])]), entry.release.sha256, item, known, closures)));
       const kind = !prior.length ? 'new' : prior.every(Boolean) ? 'revised' : undefined;
       if (kind) changed.set(item.id, { kind, item, release, known, hostOrdered: sources.some(entry => orderRelation(releaseOrder, release.sha256, entry.release.sha256)?.relation === 'newer'), needed: prior.length > 0 && prior.every(part => part === 'needed') });
     }
@@ -189,8 +196,9 @@ function changedItems(intent, inventories, candidates, offered, releaseOrder) {
 // without one is named by its id. `coreClients` (optional) is Core's nativeClientIds; it only fills the `client` facts of an adapter
 // suggestion (target, Core support, installed) and never decides whether one is made. `friction` (optional) is the recurrence results
 // frictionRecurrence returns for the subjects the draft ties; only an available result with a recurrence suggests anything. `releaseOrder` (optional) is the
-// order the host's update source declares for its releases (release-order.mjs).
-export async function suggestImprovements({ intent, items = [], inventories = [], candidates: revisions = [], clients = [], labels = {}, goal, coreClients, friction = [], releaseOrder } = {}) {
+// order the host's update source declares for its releases (release-order.mjs). `closures` (optional) gives Catalog's required closure of an
+// item from a release at a scope as plain items, or undefined when Catalog cannot resolve it from what was supplied; the walk then decides.
+export async function suggestImprovements({ intent, items = [], inventories = [], candidates: revisions = [], clients = [], labels = {}, goal, coreClients, friction = [], releaseOrder, closures } = {}) {
   const selected = new Set([...intent.roots, ...intent.pins].map(entry => entry.itemId)), excluded = new Set(intent.exclusions.map(entry => entry.itemId));
   const offered = new Map();
   for (const item of items) if (!offered.has(item.id)) offered.set(item.id, item);
@@ -219,7 +227,7 @@ export async function suggestImprovements({ intent, items = [], inventories = []
     if (matches.length) goals.push({ root, saved: inline(saved[1]), matches });
   }
   // Novelty alone never promotes: a saved goal's rule must name the changed item, or one of the rule's phrases must be in its label or description.
-  for (const [itemId, change] of changedItems(intent, inventories, revisions, offered, releaseOrder)) {
+  for (const [itemId, change] of changedItems(intent, inventories, revisions, offered, releaseOrder, closures)) {
     const found = goals.flatMap(({ root, saved, matches }) => matches.flatMap(({ rule, phrase }) => {
       if (rule.itemId === itemId) return [{ root, saved, phrase }];
       const topic = ['label', 'description'].flatMap(field => { const hit = firstPhrase(String(change.item[field] ?? '').toLowerCase(), rule.phrases); return hit === undefined ? [] : [{ field, hit }]; })[0];
@@ -255,7 +263,7 @@ export async function suggestImprovements({ intent, items = [], inventories = []
   }
   const suggestions = [];
   for (const { item, scope, known, triggers, references, goal: goalText } of candidates.values()) {
-    const closure = needs(item, known, new Set()).found;
+    const required = requiredOf(closures, item, item.root.releaseSha256, scope), closure = needs(item, known, new Set(), required).found;
     const change = { kind: 'add-item', itemId: item.id, releaseSha256: item.root.releaseSha256, itemSha256: item.itemSha256,
       // Material content: the item and its whole required closure, whatever this policy already selects.
       content: { ...digestsOf(item), requires: closure.slice(0, MAX_TRACKED_NEEDS).map(needed => ({ itemId: needed.id, ...digestsOf(needed) })) } };
@@ -268,7 +276,7 @@ export async function suggestImprovements({ intent, items = [], inventories = []
     const omitted = hidden ? [`${hidden} more recurring ${hidden === 1 ? 'condition is' : 'conditions are'} not listed.`] : [];
     suggestions.push({ id, rulesVersion: IMPROVEMENT_RULES_VERSION, revision: await suggestionRevision({ id, change, triggers: sorted }), scope, change, triggers: sorted,
       ...(goalText !== undefined ? { goal: goalText } : {}), references: [...references.slice(0, 31), { kind: 'catalog-item', ref: item.id }],
-      facts: facts(item, scope, known, selected), ...clientFacts(item, coreClients), unknowns: [...UNKNOWNS, ...untracked, ...omitted], label: item.label ?? item.id, description: item.description ?? '' });
+      facts: facts(item, scope, known, selected, required), ...clientFacts(item, coreClients), unknowns: [...UNKNOWNS, ...untracked, ...omitted], label: item.label ?? item.id, description: item.description ?? '' });
   }
   const rank = s => [s.references.some(r => r.kind === 'request') ? 0 : 1, -s.triggers.length, s.references.some(r => r.kind === 'saved-reason') ? 0 : 1];
   return suggestions.sort((a, b) => {
