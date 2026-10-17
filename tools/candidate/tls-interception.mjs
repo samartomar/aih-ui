@@ -173,6 +173,20 @@ export function stagedEnvironment({ base, routeModule, tlsPort, proxyPort, repai
   return { ...Object.fromEntries(kept), ...set };
 }
 
+// The server's last start step, after every install and the samples: when the condition is staged and the readiness sample was
+// made, start the interceptor, write the staged repair offer and set the staged environment on `env` (the server's own
+// process.env), so only processes started from then on inherit it. Returns the interceptor, or null when nothing was activated.
+export async function activateStagedCondition({ layout, seededEnv, env = process.env, say = () => {}, start = startInterceptor }) {
+  const condition = stagedTlsCondition(layout);
+  if (!condition) return null;
+  if (!seededEnv.AIH_READINESS_HOME) { say('staged condition: TLS interception is staged but the readiness sample is missing, so it stays inactive'); return null; }
+  const interceptor = await start({ layout, condition });
+  writeStagedRepairs(layout, condition);
+  Object.assign(env, stagedEnvironment({ base: env, routeModule: TLS_ROUTE_MODULE, tlsPort: interceptor.tlsPort, proxyPort: interceptor.proxyPort, repairsFile: layout.stagedRepairs }));
+  say(`staged condition: TLS interception (proxy 127.0.0.1:${interceptor.proxyPort}, tls 127.0.0.1:${interceptor.tlsPort})`);
+  return interceptor;
+}
+
 // The repair offer that goes with the condition. `staged` is read by the readiness child and shown as a banner on the readiness
 // and report pages: exactly these two strings.
 export function writeStagedRepairs(layout, condition) {

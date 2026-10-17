@@ -16,7 +16,7 @@ import { candidateLayout } from '../candidate/layout.mjs';
 import { serverEnvironment } from '../candidate/process.mjs';
 import { writeReport } from '../candidate/report.mjs';
 import { createSampleCa } from '../candidate/sample-ca.mjs';
-import { STAGED_CONDITION_SCHEMA, STAGED_LABEL, TLS_ROUTE_MODULE, stageTlsInterception, stagedEnvironment, stagedTlsCondition, startInterceptor, unstageTlsInterception, writeStagedRepairs }
+import { STAGED_CONDITION_SCHEMA, STAGED_LABEL, TLS_ROUTE_MODULE, activateStagedCondition, stageTlsInterception, stagedEnvironment, stagedTlsCondition, startInterceptor, unstageTlsInterception, writeStagedRepairs }
   from '../candidate/tls-interception.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -370,4 +370,40 @@ test('a staged bundle names the condition and includes its record and notice, ne
   assert.match(bundle['ISSUE.md'], new RegExp(STAGED_LABEL.replace(/[()]/g, '\\$&')));
   assert.equal(JSON.parse(bundle['identity.json']).stagedCondition, STAGED_LABEL);
   assert.match(bundle['logs/tls-interception.log'], /intercepted registry\.npmjs\.org/);
+});
+
+// The server's start boundary (serve.mjs): its installs and samples run with the environment it started with; activation then sets
+// the condition on that environment only, so a process started before activation is not rerouted and one started after is.
+test('start boundary: activation changes only the environment it is given, and only processes started after it are rerouted', async t => {
+  const { root, data, layout } = area(t), registry = await fakeRegistry(t);
+  stageTlsInterception(layout);
+  const outside = () => listing(root).filter(path => !path.startsWith(relative(root, data)));
+  const outsideBefore = outside(), processEnvBefore = { ...process.env };
+  const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !['NODE_EXTRA_CA_CERTS', 'NODE_USE_SYSTEM_CA', 'NODE_OPTIONS'].includes(name.toUpperCase())));
+  const atInstall = { ...env }, said = [];
+  const running = await activateStagedCondition({ layout, seededEnv: { AIH_READINESS_HOME: join(layout.readiness, 'home') }, env, say: line => said.push(line),
+    start: options => startInterceptor({ ...options, upstream: { host: '127.0.0.1', port: registry.port }, upstreamCa: registry.caPem }) });
+  t.after(() => running.close());
+  assert.match(said.join('\n'), new RegExp(`proxy 127\.0\.0\.1:${running.proxyPort}, tls 127\.0\.0\.1:${running.tlsPort}`));
+  assert.equal(env.AIH_CANDIDATE_TLS_ROUTE, `registry.npmjs.org=127.0.0.1:${running.tlsPort}`);
+  assert.equal(env.npm_config_https_proxy, `http://127.0.0.1:${running.proxyPort}`);
+  assert.equal(env.AIH_READINESS_REPAIRS, layout.stagedRepairs);
+  assert.ok(existsSync(layout.stagedRepairs) && !relative(layout.root, layout.stagedRepairs).startsWith('..'));
+  assert.deepEqual(outside(), outsideBefore, 'nothing is written outside the data directory');
+  assert.deepEqual({ ...process.env }, processEnvBefore, "this process's own environment is not changed");
+  for (const name of ['AIH_CANDIDATE_TLS_ROUTE', 'npm_config_https_proxy', 'npm_config_proxy', 'HTTPS_PROXY', 'HTTP_PROXY']) assert.equal(atInstall[name], undefined, name);
+  assert.deepEqual(JSON.parse((await runNode(PROBE, atInstall)).out), { hook: 'connect' }, 'a process started before activation is not rerouted');
+  const after = await runNode(CLIENT, { ...env, CA_FILE: join(layout.stagedTls, 'sample-ca.pem') });
+  assert.deepEqual(JSON.parse(after.out), { body: 'upstream-body' }, after.err);
+});
+
+test('activation changes nothing when the condition is not staged, or the readiness sample is missing', async t => {
+  const { layout } = area(t), env = { KEEP: '1' }, said = [];
+  const refuse = () => { throw new Error('the interceptor must not start'); };
+  assert.equal(await activateStagedCondition({ layout, seededEnv: { AIH_READINESS_HOME: 'x' }, env, say: line => said.push(line), start: refuse }), null);
+  stageTlsInterception(layout);
+  assert.equal(await activateStagedCondition({ layout, seededEnv: {}, env, say: line => said.push(line), start: refuse }), null);
+  assert.deepEqual(env, { KEEP: '1' });
+  assert.equal(existsSync(layout.stagedRepairs), false);
+  assert.deepEqual(said, ['staged condition: TLS interception is staged but the readiness sample is missing, so it stays inactive']);
 });

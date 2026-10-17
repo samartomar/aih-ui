@@ -29,7 +29,7 @@ import { candidateIdentity, readManifest, verifyManifest } from './manifest.mjs'
 import { readServerRecord } from './process.mjs';
 import { installLocalAuthority } from './local-authority.mjs';
 import { seedSamples } from './samples.mjs';
-import { TLS_ROUTE_MODULE, stagedEnvironment, stagedTlsCondition, startInterceptor, writeStagedRepairs } from './tls-interception.mjs';
+import { activateStagedCondition } from './tls-interception.mjs';
 
 const say = message => process.stdout.write(`${new Date().toISOString()} ${message}\n`);
 const option = name => { const at = process.argv.indexOf(name); return at >= 0 ? process.argv[at + 1] : undefined; };
@@ -101,14 +101,7 @@ async function main() {
         Object.assign(process.env, seeded.env);
         // A staged condition (tls-interception.mjs) starts only now, after every install: npm's own installs and this process never see it,
         // and only the processes started from here on (the readiness check and what Core runs from it) inherit its environment.
-        const staged = stagedTlsCondition(layout);
-        if (staged && !seeded.env.AIH_READINESS_HOME) say('staged condition: TLS interception is staged but the readiness sample is missing, so it stays inactive');
-        else if (staged) {
-          interceptor = await startInterceptor({ layout, condition: staged });
-          writeStagedRepairs(layout, staged);
-          Object.assign(process.env, stagedEnvironment({ base: process.env, routeModule: TLS_ROUTE_MODULE, tlsPort: interceptor.tlsPort, proxyPort: interceptor.proxyPort, repairsFile: layout.stagedRepairs }));
-          say(`staged condition: TLS interception (proxy 127.0.0.1:${interceptor.proxyPort}, tls 127.0.0.1:${interceptor.tlsPort})`);
-        }
+        interceptor = await activateStagedCondition({ layout, seededEnv: seeded.env, say });
       },
     });
   } catch (error) {
