@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readInstalledRelease } from '@aihq/catalog/node';
-import { freshAuthoring, composeAuthoring, openDraft, editDraft, stable } from './headless.mjs';
+import { freshAuthoring, composeAuthoring, openDraft, editDraft, stable, managementIdOf } from './headless.mjs';
 import * as publicApi from './improvements.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { recordMaintenance } from './maintenance.mjs';
@@ -13,7 +13,8 @@ import { noteFixture } from './note-fixture.mjs';
 import { createMixedService } from './mixed-service.mjs';
 import { nativeClientIds } from '@aihq/core/harness';
 import { suggestionRevision, suggestionProblem } from './improvement-record.mjs';
-import { suggestImprovements, lead, classifyImprovement, improvementPrompt, GOAL_RULES, UNKNOWNS, IMPROVEMENT_RULES_VERSION, MAX_ALTERNATIVES } from './improvement-rules.mjs';
+import { suggestImprovements, lead, classifyImprovement, improvementPrompt, releaseOrder, unorderedSources, GOAL_RULES, UNKNOWNS, FRICTION_COVERAGE, FIXTURE_LABEL, FRICTION_RULE, IMPROVEMENT_RULES_VERSION, MAX_ALTERNATIVES } from './improvement-rules.mjs';
+import * as rules from './improvement-rules.mjs';
 import { checkImprovements, recordImprovement, projectDismissals, IMPROVEMENT_SUGGESTION_SCHEMA, IMPROVEMENT_DISMISSAL_SCHEMA } from './improvements.mjs';
 const encode = value => new TextEncoder().encode(value), decode = bytes => new TextDecoder().decode(bytes);
 const NOW = '2026-10-16T09:00:00Z';
@@ -35,7 +36,7 @@ const byItem = (suggestions, itemId) => suggestions.find(s => s.change.itemId ==
 const shownItem = (checked, itemId) => byItem([checked.leading, ...checked.alternatives, ...checked.dismissed].filter(Boolean), itemId);
 
 test('the rules version and goal table are fixed and every rule names a distinct, well-formed reason', () => {
-  assert.equal(IMPROVEMENT_RULES_VERSION, '1.3.0');
+  assert.equal(IMPROVEMENT_RULES_VERSION, '1.4.0');
   assert.deepEqual(GOAL_RULES.map(rule => [rule.id, rule.itemId]), [['goal.fix', 'mattpocock.diagnosing-bugs'], ['goal.test', 'mattpocock.tdd'], ['goal.regressions', 'mattpocock.tdd'],
     ['goal.review', 'mattpocock.code-review'], ['goal.refactor', 'mattpocock.improve-codebase-architecture'], ['goal.plan', 'mattpocock.grill-me'], ['goal.context', 'aihq.project-context']]);
   for (const rule of GOAL_RULES) assert.match(rule.id, /^[a-z][a-z0-9.-]{0,63}$/);
@@ -131,7 +132,7 @@ test('the client rule names a client by its published label, and the label never
   const [plain] = await suggest({ clients: ['claude'] }), [named] = await suggest({ clients: ['claude'], labels: { claude: 'Claude Code', codex: 'Codex' } });
   assert.deepEqual(named.triggers, [{ ruleId: 'client.instructions', key: 'client:claude', text: 'You use Claude Code (Workbench setup), but this policy does not give it the shared project instructions.' }]);
   assert.equal(named.goal, 'Give Claude Code the same shared project instructions as your other AI clients.');
-  assert.equal(named.rulesVersion, '1.3.0');
+  assert.equal(named.rulesVersion, '1.4.0');
   // A label is wording: the same id and revision, so a dismissal made before a rename still applies.
   assert.deepEqual([named.id, named.revision], [plain.id, plain.revision]);
   assert.deepEqual(classifyImprovement(named, plain), { dismissed: true, reasons: [] });
@@ -192,8 +193,7 @@ test('facts come from Catalog data and unknowns are always stated', async () => 
   assert.equal(s.facts[0].text, 'Adds 7 files, 265 bytes in total, and needs 2 other items: Dep A, Dep B.');
   assert.equal(s.facts[2].text, 'Needs dep.missing, which the supplied Catalog does not offer.');
   assert.deepEqual(s.unknowns, UNKNOWNS);
-  assert.deepEqual(UNKNOWNS, ['Whether it improves your results is unknown until you try it.', 'Actual usage and cost are unknown; no usage data is read.',
-    'Recurring friction is not checked: no published evidence interface reports recurring friction in your work (readiness checks cover machine setup only).']);
+  assert.deepEqual(UNKNOWNS, ['Whether it improves your results is unknown until you try it.', 'Actual usage and cost are unknown; no usage data is read.']);
   // What the policy already selects is not counted again (nor what that item needs), and a selected conflict is a stated fact.
   const pin = itemId => ({ releaseSha256: hex(9), itemId, itemSha256: hex(4) });
   const [kept] = await suggest({ items, goal: 'tests', intent: intentOf({ pins: [pin('dep.a'), pin('dep.b'), pin('rival.tool')] }) });
@@ -310,7 +310,7 @@ test('a goal-relevant item that is new or revised in a newer revision of a saved
   assert.equal(changeTrigger(tdd).text, '“Label mattpocock.tdd” changed in review-notes-catalog 1.1.0 (its recipe or files differ from the revision this policy was saved from); your saved goal “add tests to my app” mentions “tests”.');
   assert.deepEqual(tdd.triggers.map(t => t.key), ['change:revised@1.1.0', 'goal:goal.test']);
   assert.deepEqual(tdd.references, [{ kind: 'saved-reason', ref: 'x.root' }, { kind: 'catalog-item', ref: 'mattpocock.tdd' }]);
-  assert.equal(tdd.goal, GOAL); assert.equal(tdd.rulesVersion, '1.3.0');
+  assert.equal(tdd.goal, GOAL); assert.equal(tdd.rulesVersion, '1.4.0');
   // The change describes the candidate item, the content the reason talks about.
   assert.deepEqual([tdd.change.releaseSha256, tdd.change.itemSha256, tdd.change.content.recipeSha256], [hex(10), hex(121), hex(21)]);
   const plan = byItem(got, 'notes.plan');
@@ -480,14 +480,14 @@ test('the rule table points at items the installed maintained Catalog really off
   const before = s.envelopeBytes.slice();
   const value = await check(s, s.envelopeBytes, { clients: ['claude', 'not-a-client'], goal: 'fewer regressions' });
   assert.deepEqual(s.envelopeBytes, before);
-  assert.equal(value.rulesVersion, '1.3.0'); assert.equal(value.checkedAt, NOW); assert.deepEqual(value.mutations, []);
+  assert.equal(value.rulesVersion, '1.4.0'); assert.equal(value.checkedAt, NOW); assert.deepEqual(value.mutations, []);
   assert.deepEqual(value.reads, ['envelope', 'supplied-inventories', 'declared-clients', 'request-goal']);
   // implement is the root; tdd arises from the saved goal and the request (two reasons), the client wiring from setup.
   assert.equal(value.leading.change.itemId, 'mattpocock.tdd');
   assert.deepEqual(value.leading.triggers.map(t => t.key), ['goal:goal.regressions', 'goal:goal.test']);
   assert.equal(value.leading.label, s.maintained.release.items.find(i => i.id === 'mattpocock.tdd').label);
   assert.equal(value.leading.scope, 'project'); assert.equal(value.leading.dismissal, null); assert.equal(value.leading.promotion, undefined);
-  assert.equal(value.leading.rulesVersion, '1.3.0'); assert.equal(value.leading.change.releaseSha256, s.maintained.release.sha256);
+  assert.equal(value.leading.rulesVersion, '1.4.0'); assert.equal(value.leading.change.releaseSha256, s.maintained.release.sha256);
   assert.match(value.leading.facts[0].text, /^Adds \d+ files, \d+ bytes in total, and needs 0 other items\.$/);
   assert.deepEqual(value.alternatives.map(a => a.change.itemId), ['aihq.client.claude']);
   assert.match(value.alternatives[0].facts[0].text, /^Adds \d+ files, \d+ bytes in total, and needs [1-9]\d* other items?: /);
@@ -640,7 +640,7 @@ test('check inputs are validated like the maintenance check', async () => {
 
 const UNREAD = 'Content changes were not checked: the update source could not be read.', UNCONFIGURED = 'Content changes were not checked: no update source is configured.';
 const CHECKED = 'Content changes since this policy was saved were checked against the configured update source.';
-const FRICTION = { trigger: 'recurring-friction', state: 'unknown', reason: 'no-published-interface', text: UNKNOWNS[2] };
+const UNAVAILABLE = { trigger: 'recurring-friction', state: 'unknown', reason: 'history-unavailable', text: FRICTION_COVERAGE['history-unavailable'] };
 
 test('the update source inputs are validated like the maintenance check, and ignored when the source is not read', async () => {
   const s = await scenario();
@@ -654,21 +654,21 @@ test('the update source inputs are validated like the maintenance check, and ign
   for (const options of [{ candidateSource: 'unconfigured', candidateInventories: 'x' }, { candidateInventories: null }, { candidateInventories: undefined }]) assert.equal((await checkImprovements({ envelopeBytes: s.envelopeBytes, inventories: s.inventories, now: NOW, ...options })).status, 'ok');
 });
 
-test('the check says whether content changes were checked; recurring friction is always unknown, naming the missing interface', async () => {
+test('the check says whether content changes were checked; without stored Core results recurring friction is unknown as history-unavailable', async () => {
   const s = await scenario(), quiet = { goal: 'tests' };
   const unread = await check(s, s.envelopeBytes, { ...quiet, candidateSource: 'configured' }), unconfigured = await check(s, s.envelopeBytes, { ...quiet, candidateSource: 'unconfigured' });
   // A caller that supplies no update source at all has none configured.
   assert.deepEqual((await check(s, s.envelopeBytes, quiet)).coverage, unconfigured.coverage);
   const checked = await check(s, s.envelopeBytes, { ...quiet, candidateInventories: [] });
-  assert.deepEqual(unread.coverage, [{ trigger: 'content-change', state: 'unknown', reason: 'sources-unavailable', text: UNREAD }, FRICTION]);
-  assert.deepEqual(unconfigured.coverage, [{ trigger: 'content-change', state: 'unknown', reason: 'no-configured-source', text: UNCONFIGURED }, FRICTION]);
-  assert.deepEqual(checked.coverage, [{ trigger: 'content-change', state: 'checked', text: CHECKED }, FRICTION]);
-  assert.equal(FRICTION.text, 'Recurring friction is not checked: no published evidence interface reports recurring friction in your work (readiness checks cover machine setup only).');
+  assert.deepEqual(unread.coverage, [{ trigger: 'content-change', state: 'unknown', reason: 'sources-unavailable', text: UNREAD }, UNAVAILABLE]);
+  assert.deepEqual(unconfigured.coverage, [{ trigger: 'content-change', state: 'unknown', reason: 'no-configured-source', text: UNCONFIGURED }, UNAVAILABLE]);
+  assert.deepEqual(checked.coverage, [{ trigger: 'content-change', state: 'checked', text: CHECKED }, UNAVAILABLE]);
+  assert.equal(UNAVAILABLE.text, 'Recurring friction was not checked: this host supplied no stored Core results.');
   // Candidates are read only when the source was read; the unknown is said once on each suggestion and is not identity.
   assert.deepEqual(unread.reads, ['envelope', 'supplied-inventories', 'declared-clients', 'request-goal']);
   assert.deepEqual(unconfigured.reads, unread.reads);
   assert.deepEqual(checked.reads, ['envelope', 'supplied-inventories', 'candidate-inventories', 'declared-clients', 'request-goal']);
-  assert.deepEqual(unread.leading.unknowns, [...UNKNOWNS, UNREAD]); assert.deepEqual(unconfigured.leading.unknowns, [...UNKNOWNS, UNCONFIGURED]); assert.deepEqual(checked.leading.unknowns, UNKNOWNS);
+  assert.deepEqual(unread.leading.unknowns, [...UNKNOWNS, UNREAD, UNAVAILABLE.text]); assert.deepEqual(unconfigured.leading.unknowns, [...UNKNOWNS, UNCONFIGURED, UNAVAILABLE.text]); assert.deepEqual(checked.leading.unknowns, [...UNKNOWNS, UNAVAILABLE.text]);
   assert.deepEqual([unread.leading.id, unread.leading.revision], [checked.leading.id, checked.leading.revision]);
   // With nothing to suggest the coverage is still said.
   const quietScenario = await scenario({ goal: 'ship it', rule: 'goal.build' }), empty = await check(quietScenario, quietScenario.envelopeBytes);
@@ -834,11 +834,11 @@ test('host route: improvements-check reads the configured update source and reco
     source = unreadable;
     const down = valueOf(await service.run('improvements-check', { envelopeBytes: [...s.envelopeBytes] }));
     assert.deepEqual(down.coverage[0], { trigger: 'content-change', state: 'unknown', reason: 'sources-unavailable', text: UNREAD });
-    assert.equal(shownItem(down, PLAN_ID), undefined); assert.equal(down.leading.unknowns.at(-1), UNREAD); assert.equal(down.reads.includes('candidate-inventories'), false);
+    assert.equal(shownItem(down, PLAN_ID), undefined); assert.deepEqual(down.leading.unknowns.slice(-2), [UNREAD, UNAVAILABLE.text]); assert.equal(down.reads.includes('candidate-inventories'), false);
   }
   const plain = valueOf(await (await createMixedService(s.maintained)).run('improvements-check', { envelopeBytes: [...s.envelopeBytes] }));
-  assert.deepEqual(plain.coverage, [{ trigger: 'content-change', state: 'unknown', reason: 'no-configured-source', text: UNCONFIGURED }, FRICTION]);
-  assert.equal(plain.leading.unknowns.at(-1), UNCONFIGURED);
+  assert.deepEqual(plain.coverage, [{ trigger: 'content-change', state: 'unknown', reason: 'no-configured-source', text: UNCONFIGURED }, UNAVAILABLE]);
+  assert.deepEqual(plain.leading.unknowns.slice(-2), [UNCONFIGURED, UNAVAILABLE.text]);
 });
 
 test('registry and public entry: both kinds are optional, the entry exposes only the check, the record and the prompt', () => {
@@ -875,8 +875,8 @@ test('checking, dismissing and building the prompt never touch the network or a 
 });
 
 test('the improvement modules import only the allowed seams and contain no network, process or random calls', async () => {
-  const allowed = [/^\.\/intake\.mjs$/, /^\.\/journey\.mjs$/, /^\.\/headless\.mjs$/, /^\.\/intent-shape\.mjs$/, /^\.\/maintenance-record\.mjs$/, /^\.\/improvement-[a-z]+\.mjs$/, /^\.\/client-identity\.mjs$/, /^\.\/trial-record\.mjs$/, /^@aihq\/catalog\/reader$/];
-  for (const name of ['improvement-record.mjs', 'improvement-rules.mjs', 'improvements.mjs']) {
+  const allowed = [/^\.\/intake\.mjs$/, /^\.\/journey\.mjs$/, /^\.\/headless\.mjs$/, /^\.\/intent-shape\.mjs$/, /^\.\/maintenance-record\.mjs$/, /^\.\/improvement-[a-z]+\.mjs$/, /^\.\/client-identity\.mjs$/, /^\.\/trial-record\.mjs$/, /^\.\/friction\.mjs$/, /^\.\/claims\.mjs$/, /^@aihq\/catalog\/reader$/, /^@aihq\/core\/report$/];
+  for (const name of ['improvement-record.mjs', 'improvement-rules.mjs', 'improvements.mjs', 'friction.mjs']) {
     const source = await readFile(new URL(`./${name}`, import.meta.url), 'utf8');
     const specifiers = [...source.matchAll(/^(?:import|export)\b[^;]*?\bfrom\s+'([^']+)'/gm)].map(match => match[1]);
     assert.ok(specifiers.length > 0, name);
@@ -897,7 +897,7 @@ test('the prompt is attributed, tells the AI to change nothing, and carries no p
   for (const suggestion of [checked.leading, ...checked.alternatives]) {
     const prompt = suggestion.prompt;
     assert.equal(prompt, improvementPrompt(suggestion));
-    assert.ok(prompt.includes('Suggested by the AIH Workbench improvement rules 1.3.0 (fixed rules; no AI model was used).'));
+    assert.ok(prompt.includes('Suggested by the AIH Workbench improvement rules 1.4.0 (fixed rules; no AI model was used).'));
     assert.match(prompt, /Do not install, change or run anything/); assert.match(prompt, /do not ask me to upload/);
     assert.ok(prompt.includes('Start your reply with “AI advice:”.'));
     assert.ok(prompt.includes(suggestion.label)); assert.ok(prompt.includes(suggestion.change.itemId));
@@ -1023,4 +1023,206 @@ test('the authoring catalog the browser is served carries every installed adapte
     assert.equal(item.clientId, published.clientId, item.id);
   }
   assert.deepEqual(served.filter(item => item.kind !== 'client-adapter' && 'clientId' in item), []);
+});
+
+// ---- Recurring friction from stored Core results -------------------------------------------------------------------
+// The host holds Core's own results (file state, native verification, the Workbench's inspect record). Recurrence is Core's
+// calculation over claims made from them; these tests build full result objects and keep the policy's selection ids real.
+const FILE_STATE = 'urn:aihq:core:file-state-result:1.0.0', DIAGNOSING = 'mattpocock.diagnosing-bugs', DAYS = ['2026-10-10T09:00:00Z', '2026-10-11T09:00:00Z', '2026-10-12T09:00:00Z', '2026-10-13T09:00:00Z'];
+const fileStateResult = (selectionId, outcome) => ({ schema: FILE_STATE, package: { name: '@aihq/core', version: '1.0.0-dev.37' }, status: 'complete', fileState: outcome === 'match' ? 'match' : 'changed', authority: 'not-evaluated',
+  targets: [{ id: 'target-1', operationIds: [`${selectionId}/write`], target: { root: 'project', path: 'CLAUDE.md' }, outcome, reason: outcome }], checks: [], notChecked: [],
+  coverage: { comparedTargets: 1, unavailableTargets: outcome === 'unavailable' ? 1 : 0, comparedChecks: 0, unavailableChecks: 0, notChecked: 0 }, diagnostics: [], limits: { budgetMs: 1000, elapsedMs: 1, targetBytes: 0, materialBytes: 0 } });
+const frictionScenario = (extra = {}) => scenario({ goal: 'ship it', rule: 'goal.build', ...extra });
+const selectionOf = (s, itemId, scope = 'project') => JSON.parse(decode(s.policyBytes)).selections.find(selection => selection.managementId === managementIdOf({ scope, packageName: s.maintained.release.package.name, itemId }));
+const history = (selectionId, outcomes) => outcomes.map((outcome, index) => ({ id: `capture-${index + 1}`, capturedAt: DAYS[index], result: fileStateResult(selectionId, outcome) }));
+const labelOf = (s, itemId) => s.maintained.release.items.find(i => i.id === itemId).label;
+const frictionOf = suggestion => suggestion?.triggers.find(t => t.ruleId === 'friction.recurrence');
+const FIXTURE_NOTE = 'fixture evidence, not observed on this computer';
+
+test('the friction rule and its coverage texts are fixed', () => {
+  assert.deepEqual(FRICTION_RULE, { id: 'friction.recurrence', itemId: DIAGNOSING });
+  assert.deepEqual(FRICTION_COVERAGE, { checked: 'Recurring friction was checked against the stored Core results this host supplied.',
+    'no-recurrence-evidence': 'Recurring friction was not established: no stored Core result shows a failure recovering for something this policy selects, and missing history is never counted as none.',
+    'history-unavailable': 'Recurring friction was not checked: this host supplied no stored Core results.' });
+  assert.equal(FIXTURE_LABEL, FIXTURE_NOTE); assert.equal('FRICTION_UNKNOWN' in rules, false); assert.equal(JSON.stringify(rules.UNKNOWNS).includes('no-published-interface'), false);
+});
+
+test('table: a recurrence on a selected item gives one scoped suggestion; a non-recurring failure, a recovery, unknown-only history and an untied subject give nothing', async () => {
+  const s = await frictionScenario(), mid = selectionOf(s, 'mattpocock.implement');
+  assert.ok(mid, 'the policy selects the root');
+  const table = [
+    ['recurring failure', history(mid.id, ['changed', 'match', 'changed']), true, 'checked'],
+    ['recurring twice', [...history(mid.id, ['changed', 'match', 'changed', 'match']), { id: 'capture-5', capturedAt: '2026-10-14T09:00:00Z', result: fileStateResult(mid.id, 'changed') }], true, 'checked'],
+    ['failed, failed (no recovery)', history(mid.id, ['changed', 'changed']), false, 'no-recurrence-evidence'],
+    ['recovered without recurrence', history(mid.id, ['changed', 'match']), false, 'checked'],
+    ['passing only', history(mid.id, ['match', 'match']), false, 'no-recurrence-evidence'],
+    ['unknown only', history(mid.id, ['unavailable', 'unavailable']), false, 'no-recurrence-evidence'],
+    ['absent target recurs', history(mid.id, ['absent', 'match', 'absent']), true, 'checked'],
+    ['untied subject', history('catalog-not-in-this-policy', ['changed', 'match', 'changed']), false, 'no-recurrence-evidence'],
+    ['empty history', [], false, 'no-recurrence-evidence']];
+  for (const [name, evidence, suggests, reason] of table) {
+    const value = await check(s, s.envelopeBytes, { evidence }), friction = shownItem(value, DIAGNOSING);
+    assert.equal(frictionOf(friction) !== undefined, suggests, name);
+    assert.deepEqual(value.coverage[1], reason === 'checked' ? { trigger: 'recurring-friction', state: 'checked', text: FRICTION_COVERAGE.checked } : { trigger: 'recurring-friction', state: 'unknown', reason, text: FRICTION_COVERAGE[reason] }, name);
+    assert.equal(value.reads.includes('core-evidence'), true, name);
+    if (!suggests) assert.equal(value.leading, null, name);
+  }
+});
+
+test('a recurrence names the condition, the evidence and the scope, and records and dismisses like any suggestion', async () => {
+  const s = await frictionScenario(), mid = selectionOf(s, 'mattpocock.implement'), evidence = history(mid.id, ['changed', 'match', 'changed']);
+  const value = await check(s, s.envelopeBytes, { evidence }), suggestion = value.leading, label = labelOf(s, 'mattpocock.implement');
+  assert.equal(suggestion.change.itemId, DIAGNOSING); assert.equal(suggestion.scope, 'project'); assert.equal(value.alternatives.length, 0);
+  assert.deepEqual(suggestion.triggers, [{ ruleId: 'friction.recurrence', key: `friction:file-state@${mid.managementId}`,
+    text: `Recurring failure: the managed file state check for “${label}” failed (${DAYS[0]}), recovered (${DAYS[1]}) and failed again (${DAYS[2]}); 1 recurrence in 3 stored Core results.` }]);
+  assert.match(suggestion.triggers[0].key, /^[a-z][a-z0-9-]{0,31}:[\w.@-]{1,180}$/);
+  assert.equal(suggestion.goal, 'ship it'); assert.deepEqual(suggestion.references, [{ kind: 'saved-reason', ref: 'mattpocock.implement' }, { kind: 'catalog-item', ref: DIAGNOSING }]);
+  assert.equal(value.rulesVersion, '1.4.0'); assert.equal(suggestion.rulesVersion, '1.4.0'); assert.equal(suggestion.triggers[0].text.includes(FIXTURE_NOTE), false);
+  assert.deepEqual(value.coverage[1], { trigger: 'recurring-friction', state: 'checked', text: FRICTION_COVERAGE.checked });
+  assert.deepEqual(value.reads, ['envelope', 'supplied-inventories', 'core-evidence', 'declared-clients']);
+  assert.deepEqual(suggestion.unknowns, [...UNKNOWNS, UNCONFIGURED]); assert.equal(suggestion.prompt, improvementPrompt(suggestion)); assert.match(suggestion.prompt, /Recurring failure: the managed file state check/);
+  // Counts are not identity: more history is the same suggestion.
+  const more = await check(s, s.envelopeBytes, { evidence: [...evidence, { id: 'capture-9', capturedAt: '2026-10-20T09:00:00Z', result: fileStateResult(mid.id, 'match') }] });
+  assert.deepEqual([more.leading.id, more.leading.revision], [suggestion.id, suggestion.revision]);
+  // Dismissal works and holds; no evidence leaves the dismissal preserved, and restoring shows it again.
+  const recorded = await record(s.envelopeBytes, dismissOperation(suggestion, 'Not now.'));
+  assert.equal(recorded.envelope.records.find(r => r.schema === IMPROVEMENT_SUGGESTION_SCHEMA).triggers[0].key, `friction:file-state@${mid.managementId}`);
+  const again = await check(s, recorded.envelopeBytes, { evidence });
+  assert.deepEqual(again.dismissed.map(d => d.id), [suggestion.id]); assert.equal(again.dismissed[0].promotion, undefined); assert.equal(again.leading, null);
+  const gone = await check(s, recorded.envelopeBytes);
+  assert.deepEqual(gone.preserved.map(p => [p.suggestion.id, p.state]), [[suggestion.id, 'not-current']]); assert.equal(gone.leading, null);
+  const restored = await record(recorded.envelopeBytes, { type: 'restore', id: suggestion.id });
+  assert.equal((await check(s, restored.envelopeBytes, { evidence })).leading.id, suggestion.id);
+});
+
+test('fixture evidence is said to be fixture evidence in the trigger, the coverage and the unknown coverage', async () => {
+  const s = await frictionScenario(), mid = selectionOf(s, 'mattpocock.implement');
+  const fixtures = history(mid.id, ['changed', 'match', 'changed']).map(entry => ({ ...entry, fixture: true })), value = await check(s, s.envelopeBytes, { evidence: fixtures });
+  const text = frictionOf(value.leading).text;
+  assert.ok(text.endsWith(` This is ${FIXTURE_NOTE}.`), text);
+  assert.deepEqual(value.coverage[1], { trigger: 'recurring-friction', state: 'checked', text: `${FRICTION_COVERAGE.checked} (${FIXTURE_NOTE})` });
+  const quiet = await check(s, s.envelopeBytes, { evidence: fixtures.slice(0, 1) });
+  assert.deepEqual(quiet.coverage[1], { trigger: 'recurring-friction', state: 'unknown', reason: 'no-recurrence-evidence', text: `${FRICTION_COVERAGE['no-recurrence-evidence']} (${FIXTURE_NOTE})` });
+  assert.equal(quiet.leading, null);
+  const observed = await check(s, s.envelopeBytes, { evidence: history(mid.id, ['changed', 'match', 'changed']) });
+  assert.equal(JSON.stringify(observed).includes(FIXTURE_NOTE), false);
+  // The label is wording, not identity.
+  assert.deepEqual([value.leading.id, value.leading.revision], [observed.leading.id, observed.leading.revision]);
+});
+
+test('coverage: no stored results is history-unavailable; stored results that settle nothing are no-recurrence-evidence', async () => {
+  const s = await frictionScenario();
+  for (const evidence of [undefined, null]) {
+    const value = await check(s, s.envelopeBytes, { evidence });
+    assert.deepEqual(value.coverage[1], UNAVAILABLE); assert.equal(value.reads.includes('core-evidence'), false); assert.equal(value.leading, null);
+  }
+  const none = await check(s, s.envelopeBytes, { evidence: [] });
+  assert.deepEqual(none.coverage[1], { trigger: 'recurring-friction', state: 'unknown', reason: 'no-recurrence-evidence', text: FRICTION_COVERAGE['no-recurrence-evidence'] });
+  assert.equal(JSON.stringify(none).includes('no-published-interface'), false);
+  // A result of a schema this check does not read is not evidence either, and does not hide the rest.
+  const other = [{ id: 'run-1', capturedAt: DAYS[0], result: { schema: 'urn:aihq:core:run-result:1.0.0' } }];
+  assert.equal((await check(s, s.envelopeBytes, { evidence: other })).coverage[1].reason, 'no-recurrence-evidence');
+  const mid = selectionOf(s, 'mattpocock.implement');
+  assert.equal((await check(s, s.envelopeBytes, { evidence: [...other, ...history(mid.id, ['changed', 'match', 'changed'])] })).coverage[1].state, 'checked');
+});
+
+test('supplied evidence is validated like the other check inputs', async () => {
+  const s = await frictionScenario(), mid = selectionOf(s, 'mattpocock.implement'), good = history(mid.id, ['changed']);
+  for (const evidence of ['x', {}, [{ ...good[0], id: 'C:\\Users\\a\\r.json' }], [{ ...good[0], capturedAt: 'yesterday' }], Array.from({ length: 257 }, () => good[0])]) {
+    const refused = await checkImprovements({ envelopeBytes: s.envelopeBytes, inventories: s.inventories, now: NOW, evidence });
+    assert.equal(refused.status, 'refused'); assert.equal(refused.diagnostics[0].path, '/evidence'); assert.deepEqual(refused.originalBytes, s.envelopeBytes);
+  }
+});
+
+test('ties: a selected client adapter and a pulled-in dependency are tied; an item the draft no longer selects is not', async () => {
+  const s = await frictionScenario({ rootIds: ['mattpocock.implement', 'aihq.client.claude'] });
+  const native = verdict => ({ schema: 'urn:aihq:core:native-verification-result:1.0.0', package: { name: '@aihq/core', version: '1.0.0-dev.37' }, status: 'complete', verdict, client: { id: 'claude', observedVersion: null },
+    platform: { os: 'win32', arch: 'x64', osRelease: '10.0', execution: 'native' } });
+  const clientHistory = ['failed', 'verified', 'failed'].map((verdict, index) => ({ id: `native-${index + 1}`, capturedAt: DAYS[index], result: native(verdict) }));
+  const viaClient = await check(s, s.envelopeBytes, { evidence: clientHistory }), client = frictionOf(viaClient.leading);
+  assert.equal(viaClient.leading.change.itemId, DIAGNOSING); assert.equal(client.key, 'friction:native-use@claude@win32-native');
+  assert.match(client.text, /^Recurring failure: the native client use check for “Claude Code context wiring” failed/);
+  assert.deepEqual(viaClient.leading.references, [{ kind: 'saved-reason', ref: 'aihq.client.claude' }, { kind: 'catalog-item', ref: DIAGNOSING }]);
+  // A dependency the policy pulls in is a pin: it is tied too, without a saved goal of its own.
+  const pin = selectionOf(s, 'aihq.project-context');
+  assert.ok(pin, 'the policy carries the dependency');
+  const pinned = (await check(s, s.envelopeBytes, { evidence: history(pin.id, ['changed', 'match', 'changed']) })).leading;
+  assert.equal(pinned.change.itemId, DIAGNOSING);
+  assert.deepEqual(pinned.references, [{ kind: 'catalog-item', ref: 'aihq.project-context' }, { kind: 'catalog-item', ref: DIAGNOSING }]);
+  assert.equal(pinned.goal, `Stop the same managed file state failure coming back for “${labelOf(s, 'aihq.project-context')}”.`);
+  // Both reasons for one item are one suggestion with two reasons.
+  const both = await check(s, s.envelopeBytes, { evidence: [...history(pin.id, ['changed', 'match', 'changed']), ...clientHistory] });
+  assert.equal(both.leading.triggers.length, 2); assert.equal(both.alternatives.length, 0);
+  // Removing the root from the draft ends the tie, though the saved policy still has its selection.
+  const edited = valueOf(await editDraft({ envelopeBytes: s.envelopeBytes, inventories: s.inventories,
+    operation: { type: 'remove-root', root: { releaseSha256: s.maintained.release.sha256, itemId: 'mattpocock.implement', scope: 'project' } } }));
+  const implement = selectionOf(s, 'mattpocock.implement'), removed = await check(s, edited.envelopeBytes, { evidence: history(implement.id, ['changed', 'match', 'changed']) });
+  assert.equal(shownItem(removed, DIAGNOSING), undefined); assert.equal(removed.coverage[1].reason, 'no-recurrence-evidence');
+});
+
+test('an item that is already selected is not suggested for friction', async () => {
+  const s = await frictionScenario({ rootIds: ['mattpocock.implement', DIAGNOSING] }), mid = selectionOf(s, 'mattpocock.implement');
+  const value = await check(s, s.envelopeBytes, { evidence: history(mid.id, ['changed', 'match', 'changed']) });
+  assert.equal(shownItem(value, DIAGNOSING), undefined); assert.equal(value.coverage[1].state, 'checked');
+  assert.deepEqual(await suggestImprovements({ intent: intentOf(), items: [], friction: [] }), []);
+});
+
+// ---- Content-change coverage when a release's order is not known -----------------------------------------------------
+const ORDER = 'Content changes were only partly checked';
+test('releaseOrder is semantic-version precedence; an unversioned, non-semver or equal-version release has no order and a host-declared order is not yet read', () => {
+  const entry = version => ({ release: { sha256: hex(1), package: { name: PACKAGE, ...(version ? { version } : {}) }, items: [] } });
+  assert.ok(releaseOrder(entry('1.0.0'), entry('1.1.0')) > 0); assert.ok(releaseOrder(entry('1.1.0'), entry('1.0.0')) < 0); assert.ok(releaseOrder(entry('1.0.0-rc.1'), entry('1.0.0')) > 0);
+  for (const [saved, candidate] of [['1.0.0', '1.0.0'], ['1.0.0+a', '1.0.0+b'], ['1.0.0', undefined], [undefined, '1.0.0'], ['1.0.0', 'latest'], ['v1', 'v2']]) assert.equal(releaseOrder(entry(saved), entry(candidate)), undefined, `${saved} ${candidate}`);
+  // The host-declared order is the seam: today it changes nothing, whatever it says.
+  for (const declared of [undefined, 'later', 'earlier', { order: 1 }]) assert.equal(releaseOrder(entry('1.0.0'), entry('1.0.0'), declared), undefined);
+  assert.equal(releaseOrder(entry('1.0.0'), entry('1.1.0'), 'earlier') > 0, true);
+});
+
+async function sameSourceCandidate(mutate) {
+  const snapshot = await noteFixture('updated'), declaration = JSON.parse(decode(snapshot.declarationBytes));
+  mutate(declaration); snapshot.declarationBytes = encode(JSON.stringify(declaration));
+  return intakeNotes(snapshot);
+}
+
+test('a different release of a saved package whose order is unknown makes content-change coverage unknown(version-order-unknown); a strictly newer one still suggests', async () => {
+  const s = await changeScenario(), equal = await sameSourceCandidate(d => { d.package.version = '1.0.0'; });
+  assert.equal(equal.release.package.version, '1.0.0'); assert.notEqual(equal.release.sha256, s.notes.release.sha256);
+  const value = await check(s, s.envelopeBytes, { candidateInventories: [equal] });
+  assert.equal(value.coverage[0].trigger, 'content-change'); assert.equal(value.coverage[0].state, 'unknown'); assert.equal(value.coverage[0].reason, 'version-order-unknown');
+  assert.ok(value.coverage[0].text.startsWith(ORDER), value.coverage[0].text); assert.ok(value.coverage[0].text.includes(PACKAGE));
+  assert.equal(shownItem(value, PLAN_ID), undefined); assert.equal(value.reads.includes('candidate-inventories'), true);
+  assert.equal(value.leading.unknowns.includes(value.coverage[0].text), true);
+  // Other candidates still suggest; the unknown is said beside them.
+  const both = await check(s, s.envelopeBytes, { candidateInventories: [equal, s.next] });
+  assert.ok(shownItem(both, PLAN_ID)); assert.equal(both.coverage[0].reason, 'version-order-unknown');
+  // Strictly newer alone is checked, and so is a source that offers nothing different.
+  assert.deepEqual((await check(s, s.envelopeBytes, { candidateInventories: [s.next] })).coverage[0], { trigger: 'content-change', state: 'checked', text: CHECKED });
+  assert.equal((await check(s, s.envelopeBytes, { candidateInventories: [s.notes] })).coverage[0].state, 'checked');
+  assert.equal((await check(s, s.envelopeBytes, { candidateInventories: [] })).coverage[0].state, 'checked');
+  // Another package has no order to ask about.
+  const other = await intakeNotes(await noteFixture('additional'));
+  assert.equal((await check(s, s.envelopeBytes, { candidateInventories: [other] })).coverage[0].state, 'checked');
+});
+
+// The Catalog declaration format requires a semantic version, so an unversioned release cannot be built through intake; the rule-level test uses plain releases.
+test('unorderedSources names a package whose candidate release is unversioned, not a version or equal in version, and only for the same source', () => {
+  const intent = changeIntent(), saved = [releaseOf(9, '1.0.0', [])], names = candidates => unorderedSources(intent, saved, candidates);
+  for (const unordered of [releaseOf(10, undefined, []), releaseOf(10, 'latest', []), releaseOf(10, '1.0.0', []), releaseOf(10, '1.0.0+other', [])]) assert.deepEqual(names([unordered]), [PACKAGE], JSON.stringify(unordered.release.package));
+  assert.deepEqual(names([releaseOf(10, undefined, []), releaseOf(11, '1.0.0', [])]), [PACKAGE]);
+  const other = { id: 'other', kind: 'local', locator: { input: 'other' } };
+  for (const known of [releaseOf(10, '1.1.0', []), releaseOf(10, '0.9.0', []), releaseOf(9, undefined, []), releaseOf(10, undefined, [], other), releaseOf(10, undefined, [], null), { release: { sha256: hex(10), package: { name: 'another-package' }, items: [] }, input: SOURCE }])
+    assert.deepEqual(names([known]), [], JSON.stringify(known.release.package));
+  assert.deepEqual(names([]), []);
+  // A saved release the intent does not name is not asked.
+  assert.deepEqual(unorderedSources(intent, [releaseOf(8, '1.0.0', [])], [releaseOf(10, undefined, [])]), []);
+});
+
+test('an older release of the saved package is ordered, and a dismissal is unaffected by the unknown order', async () => {
+  const s = await changeScenario();
+  const older = await sameSourceCandidate(d => { d.package.version = '0.9.0'; });
+  assert.equal((await check(s, s.envelopeBytes, { candidateInventories: [older] })).coverage[0].state, 'checked');
+  const equal = await sameSourceCandidate(d => { d.package.version = '1.0.0'; }), first = await check(s, s.envelopeBytes, { goal: 'tests', candidateInventories: [equal] });
+  const recorded = await record(s.envelopeBytes, dismissOperation(first.leading));
+  const second = await check(s, recorded.envelopeBytes, { goal: 'tests', candidateInventories: [equal] });
+  assert.deepEqual(second.dismissed.map(d => d.id), [first.leading.id]); assert.equal(second.dismissed[0].promotion, undefined);
 });

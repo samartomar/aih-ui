@@ -7,7 +7,8 @@ import { adapterFor, describeClientIdentity } from './client-identity.mjs';
 // 1.1.0: the client rule names a client by its published label when one is supplied (wording only; identity is unchanged).
 // 1.2.0: a goal-relevant item new or revised in a newer revision of a saved source is suggested from that revision; recurring friction is named as unchecked.
 // 1.3.0: the client rule matches adapters by Catalog clientId; an adapter without one is not suggested.
-export const IMPROVEMENT_RULES_VERSION = '1.3.0';
+// 1.4.0: a failure that came back after it was fixed, as Core's recurrence method reports it for a selected item, is suggested the diagnosis practice; a release whose order is not known is never called newer.
+export const IMPROVEMENT_RULES_VERSION = '1.4.0';
 export const MAX_GOAL = 300, MAX_ALTERNATIVES = 3, MAX_TRACKED_NEEDS = 256;
 // Independent of the guided-setup rules on purpose: each rule set is versioned alone, so changing one never changes
 // the saved reasons the other wrote.
@@ -22,12 +23,18 @@ export const GOAL_RULES = [
 ];
 // The adapter for a client is the Catalog item whose clientId names it (see client-identity.mjs), never one matched by its id.
 export const CLIENT_RULE = { id: 'client.instructions' };
-// Readiness checks describe machine setup and name Readiness and Core repair as the remedy; nothing published ties recurring work friction to a Catalog item.
-export const FRICTION_UNKNOWN = 'Recurring friction is not checked: no published evidence interface reports recurring friction in your work (readiness checks cover machine setup only).';
-export const UNKNOWNS = ['Whether it improves your results is unknown until you try it.', 'Actual usage and cost are unknown; no usage data is read.', FRICTION_UNKNOWN];
+// A failure whose fix did not hold is what the diagnosis practice is for. Core's recurrence method over the host's stored Core results says whether it
+// did (friction.mjs); this rule only names it, for something this policy selects.
+export const FRICTION_RULE = { id: 'friction.recurrence', itemId: 'mattpocock.diagnosing-bugs' };
+export const FIXTURE_LABEL = 'fixture evidence, not observed on this computer';
+export const FRICTION_COVERAGE = { checked: 'Recurring friction was checked against the stored Core results this host supplied.',
+  'no-recurrence-evidence': 'Recurring friction was not established: no stored Core result shows a failure recovering for something this policy selects, and missing history is never counted as none.',
+  'history-unavailable': 'Recurring friction was not checked: this host supplied no stored Core results.' };
+export const UNKNOWNS = ['Whether it improves your results is unknown until you try it.', 'Actual usage and cost are unknown; no usage data is read.'];
 // The reason format guided setup writes on each chosen root.
 const SAVED_GOAL = /^guided-setup rules \d+\.\d+\.\d+: [a-z][a-z0-9.-]*\. Goal: (.+?)\. Project: /;
 const inline = value => String(value ?? '').replaceAll(/\s+/g, ' ').trim().slice(0, MAX_GOAL);
+export const savedGoalOf = reason => { const saved = SAVED_GOAL.exec(typeof reason === 'string' ? reason : ''); return saved ? inline(saved[1]) : undefined; };
 // Whole word or phrase, first by position, like the guided-setup matcher.
 function firstPhrase(source, phrases) {
   let best;
@@ -57,6 +64,18 @@ function precedence(a, b) {
 // Fact text is shown and recorded; long Catalog labels are cut so the record limit can never refuse a dismissal.
 const clip = text => text.length <= 1000 ? text : `${text.slice(0, 999)}…`;
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+// A condition in words, for a person: the two conditions Core results map to, else a readiness check by its id.
+const CONDITION_WORDS = { 'condition:file-state': 'managed file state', 'condition:native-use': 'native client use' };
+const conditionWords = condition => CONDITION_WORDS[condition] ?? `${condition.replace(/^condition:/, '')} readiness`;
+// The reason key names the condition and the subject; a longer one is cut and keeps a short digest so two never collide.
+const slug = text => text.replaceAll(/[^\w.@-]/g, '-');
+function frictionKey(condition, subject) {
+  const named = `${slug(condition.replace(/^condition:/, ''))}@${slug(subject)}`;
+  if (named.length <= 180) return `friction:${named}`;
+  let hash = 5381;
+  for (const char of named) hash = (hash * 33 ^ char.codePointAt(0)) >>> 0;
+  return `friction:${named.slice(0, 171)}-${hash.toString(16).padStart(8, '0')}`;
+}
 const digestsOf = item => ({ recipeSha256: item.recipe.sha256, materials: [...new Set((item.materials ?? []).map(m => m.sha256))].sort() });
 const bytesOf = item => (item.recipe?.byteLength ?? 0) + (item.materials ?? []).reduce((sum, m) => sum + m.byteLength, 0);
 // The item's required items, transitively, that this policy does not already select.
@@ -84,15 +103,32 @@ function facts(item, scope, offered, selected) {
     result.push({ kind: 'dependency', text: `Conflicts with ${conflict}, which this policy already selects.` });
   return result;
 }
-// A candidate release revises a saved one when it is the same package from the same input with a strictly later version: an
-// older, equal or unversioned release is never called newer, so its novelty stays unknown. The saved policy's own record of the
-// input wins over the supplied one; no input on either side is the same source.
-function revises(intent, saved, candidate) {
+// Which of two releases of one package is later: positive when the candidate is, negative when the saved one is, undefined when neither is known to be
+// (an unversioned or non-semver release, or the same version with other content). Today the order is semantic-version precedence alone. `hostDeclaredOrder`
+// is the seam for an order the host's update source declares (the update-source ticket, aih-ui#66): it is not read yet, and when it is the order must be
+// labelled host-declared wherever it is shown.
+export function releaseOrder(saved, candidate, hostDeclaredOrder) {
+  const order = precedence(candidate.release.package?.version, saved.release.package?.version);
+  return order === 0 ? undefined : order;
+}
+// A candidate is a different release of a saved one's package from the same input. The saved policy's own record of the input wins over the supplied
+// one; no input on either side is the same source.
+function sameSource(intent, saved, candidate) {
   const name = saved.release.package?.name;
   if (name === undefined || candidate.release.package?.name !== name || candidate.release.sha256 === saved.release.sha256) return false;
-  if (!(precedence(candidate.release.package.version, saved.release.package.version) > 0)) return false;
   const input = intent.inputs.find(i => i.releaseSha256 === saved.release.sha256) ?? saved.input;
   return input ? candidate.input?.kind === input.kind && sameContent(candidate.input?.locator, input.locator) : !candidate.input;
+}
+// It revises the saved release when its version is strictly later: an older, equal or unversioned release is never called newer, so its novelty stays unknown.
+const revises = (intent, saved, candidate) => sameSource(intent, saved, candidate) && releaseOrder(saved, candidate) > 0;
+// The inventories the policy was saved from, one per saved release the intent names.
+const savedReleases = (intent, inventories) => [...new Set([...intent.roots, ...intent.pins, ...intent.provenance].map(entry => entry.releaseSha256))].sort(compare)
+  .flatMap(sha => inventories.filter(entry => entry.release.sha256 === sha).slice(0, 1));
+// Packages for which a candidate is a different release of a saved one whose order is not known, so the check cannot say whether it is newer.
+export function unorderedSources(intent, inventories, candidates) {
+  const names = new Set();
+  for (const saved of savedReleases(intent, inventories)) for (const candidate of candidates) if (sameSource(intent, saved, candidate) && releaseOrder(saved, candidate) === undefined) names.add(saved.release.package.name);
+  return [...names].sort(compare);
 }
 // Labels, descriptions and item digests alone are not material: the recipe and the sorted material digests are, the item's own
 // and those of every item it requires (resolved where each revision offers it), as a dismissal's content is.
@@ -105,9 +141,7 @@ function difference(before, beforeKnown, item, known) {
 // when none of those saved releases has it and revised when each one that has it differs; a candidate that revises none says nothing.
 // `known` is what the item's requirements resolve against: its own release first, then the supplied items.
 function changedItems(intent, inventories, candidates, offered) {
-  const saved = [...new Set([...intent.roots, ...intent.pins, ...intent.provenance].map(entry => entry.releaseSha256))].sort(compare)
-    .flatMap(sha => inventories.filter(entry => entry.release.sha256 === sha).slice(0, 1));
-  const changed = new Map();
+  const saved = savedReleases(intent, inventories), changed = new Map();
   // Only versioned candidates can revise a saved source; dropping the rest first keeps the order total.
   const newest = candidates.filter(entry => SEMVER.test(entry.release.package?.version ?? ''))
     .sort((a, b) => precedence(b.release.package.version, a.release.package.version) || compare(a.release.sha256, b.release.sha256));
@@ -131,18 +165,21 @@ function changedItems(intent, inventories, candidates, offered) {
 // compared with the `inventories` the policy was saved from) adds or changes it in a way a saved goal makes relevant. Nothing absent
 // from them is ever suggested except such an item. `labels` maps a client id to the label Harness publishes for it; a client
 // without one is named by its id. `coreClients` (optional) is Core's nativeClientIds; it only fills the `client` facts of an adapter
-// suggestion (target, Core support, installed) and never decides whether one is made.
-export async function suggestImprovements({ intent, items = [], inventories = [], candidates: revisions = [], clients = [], labels = {}, goal, coreClients } = {}) {
+// suggestion (target, Core support, installed) and never decides whether one is made. `friction` (optional) is the recurrence results
+// frictionRecurrence returns for the subjects the draft ties; only an available result with a recurrence suggests anything.
+export async function suggestImprovements({ intent, items = [], inventories = [], candidates: revisions = [], clients = [], labels = {}, goal, coreClients, friction = [] } = {}) {
   const selected = new Set([...intent.roots, ...intent.pins].map(entry => entry.itemId)), excluded = new Set(intent.exclusions.map(entry => entry.itemId));
   const offered = new Map();
   for (const item of items) if (!offered.has(item.id)) offered.set(item.id, item);
   const candidates = new Map();
-  // `from` is a changed candidate item; the suggestion then describes that item, the content its reason talks about.
-  const add = (itemId, key, ruleId, textOf, reference, goalText, from) => {
+  // `from` is a changed candidate item; the suggestion then describes that item, the content its reason talks about. `scope` is the narrowest
+  // scope the reason itself points at; the suggestion takes it when the item offers it.
+  const add = (itemId, key, ruleId, textOf, reference, goalText, from, scope) => {
     const item = from?.item ?? offered.get(itemId);
     if (!item || selected.has(itemId) || excluded.has(itemId) || !item.scopes?.length) return;
-    const candidate = candidates.get(itemId) ?? { item, known: offered, triggers: new Map(), references: [] };
+    const candidate = candidates.get(itemId) ?? { item, known: offered, triggers: new Map(), references: [], hints: new Set() };
     candidates.set(itemId, candidate);
+    if (scope) candidate.hints.add(scope);
     if (from) Object.assign(candidate, { item, known: from.known });
     // A later source (the request) supplies the text shown for a reason a saved goal already gave.
     candidate.triggers.set(key, { ruleId, key, text: textOf });
@@ -172,6 +209,15 @@ export async function suggestImprovements({ intent, items = [], inventories = []
     add(itemId, key, `change.${change.kind}`, clip(change.kind === 'new' ? `${name} is new in ${where}, a newer revision of a source this policy was saved from${why}`
       : `${name} changed in ${where} (${change.needed ? 'an item it needs differs' : 'its recipe or files differ'} from the revision this policy was saved from)${why}`), { kind: 'saved-reason', ref: found.root.itemId }, found.saved, change);
   }
+  for (const found of friction) {
+    const { tie, condition, result } = found;
+    if (result.status !== 'available' || !(result.count >= 1)) continue;
+    const words = conditionWords(condition), label = inline(tie.label), at = ref => result.timeline.find(entry => entry.claim.id === ref.id && entry.claim.revision === ref.revision)?.capturedAt;
+    const [first] = result.recurrences;
+    const text = clip(`Recurring failure: the ${words} check for “${label}” failed (${at(first.failure)}), recovered (${at(first.recovery)}) and failed again (${at(first.recurrence)}); ${plural(result.count, 'recurrence')} in ${plural(found.stored, 'stored Core result')}.${found.fixture ? ` This is ${FIXTURE_LABEL}.` : ''}`);
+    add(FRICTION_RULE.itemId, frictionKey(condition, found.subject.id), FRICTION_RULE.id, text, tie.goal !== undefined ? { kind: 'saved-reason', ref: tie.rootItemId } : { kind: 'catalog-item', ref: tie.itemId },
+      tie.goal ?? `Stop the same ${words} failure coming back for “${label}”.`.slice(0, MAX_GOAL), undefined, tie.scope);
+  }
   const asked = inline(goal);
   for (const rule of asked ? GOAL_RULES : []) {
     const phrase = firstPhrase(asked.toLowerCase(), rule.phrases);
@@ -184,8 +230,8 @@ export async function suggestImprovements({ intent, items = [], inventories = []
       `Give ${name} the same shared project instructions as your other AI clients.`);
   }
   const suggestions = [];
-  for (const { item, known, triggers, references, goal: goalText } of candidates.values()) {
-    const scope = item.scopes.includes('project') ? 'project' : item.scopes[0];
+  for (const { item, known, triggers, references, hints, goal: goalText } of candidates.values()) {
+    const scope = ['project', 'user'].find(name => hints.has(name) && item.scopes.includes(name)) ?? (item.scopes.includes('project') ? 'project' : item.scopes[0]);
     const closure = needs(item, known, new Set()).found;
     const change = { kind: 'add-item', itemId: item.id, releaseSha256: item.root.releaseSha256, itemSha256: item.itemSha256,
       // Material content: the item and its whole required closure, whatever this policy already selects.
