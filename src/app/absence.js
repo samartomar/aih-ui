@@ -18,11 +18,9 @@ export const NOT_DECLARED = "Not declared";
 export const NOT_SUPPLIED = "Not supplied";
 export const NOT_CONNECTED = "Not connected";
 
-/** Why the Catalog inspector cannot show a per-entry finding. Governance can
- * show typed detail after an operator supplies a verified Scan attestation. */
+/** Why the Catalog inspector cannot show a per-entry finding. */
 export const FINDING_DETAIL_ABSENT =
-  "Catalog does not supply a verified per-entry Scan result and annex bytes. " +
-  "Open Governance to verify operator-supplied scan material and inspect typed findings.";
+  "Catalog does not supply a verified per-entry Scan result and annex bytes.";
 
 /**
  * The evidence summary slot when the installed Catalog's public reader does
@@ -33,12 +31,3 @@ export const FINDING_DETAIL_ABSENT =
 export const EVIDENCE_SUMMARY_ABSENT =
   `${NOT_PUBLISHED}: Catalog's public reader does not surface the evidence summary.`;
 
-/** The Security pane's Qualification block when Catalog ships no sidecar. */
-export const QUALIFICATION_ABSENT =
-  `${NOT_PUBLISHED}: the installed Catalog publishes no qualification sidecar.`;
-
-/** Said under every Qualification block, whatever state it shows. */
-export const QUALIFICATION_IS_NOT_AUTHORIZATION = "Publisher qualification is not organizational authorization.";
-
-/** A curated category the Catalog maintainers' curation does not assign. */
-export const NOT_CURATED = "Not curated";

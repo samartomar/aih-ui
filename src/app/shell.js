@@ -17,7 +17,6 @@ export function createShell(elements) {
   const panes = {
     details: elements.paneDetails,
     security: elements.paneSecurity,
-    governance: elements.paneGovernance,
     json: elements.paneJson,
   };
 

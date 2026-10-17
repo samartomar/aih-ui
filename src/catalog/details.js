@@ -3,7 +3,7 @@
  *
  * Details keeps the design source's order and meaning:
  *
- *   Publisher Overview     the publisher's description of the item
+ *   Overview               the item's description
  *   Declared Capabilities  network egress, execution sandbox, required secrets
  *   Upstream Provenance    origin, pinned commit (or version / release), license
  *
@@ -11,21 +11,14 @@
  * references - available, but not leading the pane.
  *
  * What the index does not carry says so in its own slot:
- *   - the publisher description is Catalog's publisher metadata, verbatim;
- *     where Catalog publishes none, and for sandbox, secrets and license:
- *     "Not published";
+ *   - a description the release does not carry, and sandbox, secrets and
+ *     license: "Not published";
  *   - capabilities it DOES carry, as empty lists: "Not declared". An empty
  *     declaration is not a measurement, so it is never shown as "none".
  *
  * The compact header identifies the item and its kind. Source fields appear
  * once in Upstream Provenance; evidence summaries appear once in Security's
  * evidence statements, exactly as Catalog's public reader returns them.
- *
- * The Security tab's Qualification block shows Catalog's publisher
- * qualification for the entry - the reader's state word, the receipt window,
- * the signed head's signature state and the attestation state - with the same
- * footer under every state: publisher qualification is not organizational
- * authorization. A qualified state is Catalog's word, never an approval.
  */
 
 import { el, text } from "../app/dom.js";
@@ -36,21 +29,13 @@ import {
   FINDING_DETAIL_ABSENT,
   NOT_DECLARED,
   NOT_PUBLISHED,
-  QUALIFICATION_IS_NOT_AUTHORIZATION,
 } from "../app/absence.js";
 import { KIND_ICON, KIND_TONE, identity, sourceDetailRows, sourceIdentity, statementsOf } from "./entry.js";
 import { collectionOf, scopeCountOf } from "./selectors.js";
-import { provenanceNote, publishedText, publisherOf } from "./publisher.js";
-import { QUALIFICATION_STATE_MEANING, attestationSentence, qualificationOf } from "./qualification.js";
 
-/* These Catalog inspector slots have no verified per-entry scan input. Scan
- * 0.5.0's typed finding reader is used in Governance after operator verification;
- * Catalog still cannot populate this slot from its index alone. */
+/* These Catalog inspector slots have no verified per-entry scan input. */
 const DETECTOR_RUN_STATE_ABSENT =
   `${NOT_PUBLISHED}: Scan publishes one detector per record and no per-detector run state.`;
-/** An entry the installed Catalog's qualification sidecar does not name. */
-const QUALIFICATION_NOT_COVERED =
-  `${NOT_PUBLISHED}: the installed Catalog's qualification sidecar does not cover this entry.`;
 
 function row(parent, label, value, title, code = false) {
   const present = text(value) !== null;
@@ -98,79 +83,12 @@ function declared(list) {
   return Array.isArray(list) && list.length > 0 ? list.join(", ") : NOT_DECLARED;
 }
 
-/** A "label value" line of the Qualification block; the value is the reader's word, as text. */
-function qualificationLine(parent, label, value, title, key) {
-  const line = el("div", "inspector-row");
-  line.appendChild(el("span", "shrink-0 font-mono text-outline", label));
-  const valueNode = el("span", "font-mono text-on-surface text-right break-all", value);
-  valueNode.dataset.qualification = key;
-  if (title) valueNode.title = title;
-  line.appendChild(valueNode);
-  parent.appendChild(line);
-}
-
-/**
- * The Qualification block for one entry, or its reason when there is none.
- * Nothing here is coloured as success: `qualified` is Catalog's statement
- * about its own signed catalog, not a decision anyone made about this item.
- */
-function renderQualification(elements, view, entry) {
-  const box = elements.securityQualification;
-  box.replaceChildren();
-  const sidecar = view?.state === "published" ? view.document : null;
-  elements.qualificationEvaluated.textContent = sidecar === null ? "-" : `evaluated ${sidecar.evaluatedAt}`;
-  elements.qualificationEvaluated.title = sidecar === null
-    ? ""
-    : `Catalog's qualification reader evaluated every receipt at ${sidecar.evaluatedAt}, when this preview started.`;
-  const reason = entry === null
-    ? "No entry is selected, so there is no qualification to state."
-    : sidecar === null
-      ? view?.reason ?? `${NOT_PUBLISHED}: the preview supplied no qualification.`
-      : qualificationOf(view, entry) === null
-        ? QUALIFICATION_NOT_COVERED
-        : null;
-  if (reason !== null) {
-    box.className = "p-2 rounded bg-surface-container-low border border-wb-border space-y-1 text-[10.5px] text-outline";
-    box.dataset.absence = "qualification";
-    box.textContent = NOT_PUBLISHED;
-    box.title = reason;
-    return;
-  }
-  delete box.dataset.absence;
-  box.title = "";
-  box.className = "p-2 rounded bg-surface-container-low border border-wb-border space-y-1 text-[10.5px] text-on-surface-variant";
-  const record = qualificationOf(view, entry);
-  qualificationLine(
-    box, "state", record.state,
-    `${record.state}: ${QUALIFICATION_STATE_MEANING[record.state] ?? "a state this build has no wording for"}, ` +
-      `at ${sidecar.evaluatedAt}. ${QUALIFICATION_IS_NOT_AUTHORIZATION}`,
-    "state",
-  );
-  qualificationLine(box, "notBefore", record.notBefore, "The receipt's validity window opens at this instant.", "notBefore");
-  qualificationLine(box, "expiresAt", record.expiresAt, "The receipt's validity window closes at this instant.", "expiresAt");
-  qualificationLine(
-    box, "signature", sidecar.signature,
-    `The shipped signed catalog head (sequence ${sidecar.catalog?.sequence}, signed by ${sidecar.catalog?.signerIdentity}), ` +
-      "re-verified against the shipped public signer root by Catalog's reader.",
-    "signature",
-  );
-  qualificationLine(
-    box, "attestation", sidecar.attestation,
-    `The outer attestation over the receipts, for ${sidecar.publisher?.repository}.`,
-    "attestation",
-  );
-  const sentence = el("p", "text-[10px] text-outline leading-snug break-words", attestationSentence(sidecar));
-  sentence.dataset.qualification = "attestation-sentence";
-  box.appendChild(sentence);
-}
-
 /** @param elements the inspector header and the two panes' containers */
 export function createDetails({ elements }) {
   // Two Scanner Telemetry slots the design source fills from a scan result.
   // Neither depends on the selection, so each states its reason once, here.
   elements.detectorRunState.title = DETECTOR_RUN_STATE_ABSENT;
   elements.detectorFindingDetail.title = `${NOT_PUBLISHED}: ${FINDING_DETAIL_ABSENT}`;
-  elements.qualificationFooter.textContent = QUALIFICATION_IS_NOT_AUTHORIZATION;
 
   function reset() {
     elements.detailsIdentity.replaceChildren();
@@ -224,12 +142,11 @@ export function createDetails({ elements }) {
 
   return {
     /**
-     * @param model { entry, counts, publisher, qualification, target, coreClients } `target` is the AI client whose capability facts the
+     * @param model { entry, counts, target, coreClients } `target` is the AI client whose capability facts the
      *   page shows; `coreClients` is Core's nativeClientIds, or null when Core published none (client support is then unknown)
      */
-    render({ entry, counts, publisher, qualification, target, coreClients }) {
+    render({ entry, counts, target, coreClients }) {
       reset();
-      renderQualification(elements, qualification, entry ?? null);
       if (!entry) {
         renderEmpty();
         return;
@@ -265,24 +182,19 @@ export function createDetails({ elements }) {
       const subject = entry.subject ?? {};
       const source = sourceIdentity(entry);
 
-      const record = publisherOf(publisher, entry);
-      const description = publishedText(record, "description");
 
       // ------------------------------------------------------------ header
-      elements.inspectorName.textContent = publishedText(record, "title") ?? id.name;
+      elements.inspectorName.textContent = id.name;
       elements.inspectorName.title = id.entryId;
       elements.inspectorKind.setAttribute("aria-label", `Kind: ${id.kind}`);
       elements.inspectorKind.dataset.label = `Kind: ${id.kind}`;
       elements.inspectorIcon.textContent = KIND_ICON[id.kind] ?? "extension";
       elements.inspectorIcon.className = `material-symbols-outlined text-[15px] ${KIND_TONE[id.kind] ?? "text-outline"}`;
 
-      // --------------------------------------------- Publisher Overview
-      // Upstream text, set as text: never markup, never an instruction.
-      elements.detailsDesc.textContent = description ?? NOT_PUBLISHED;
-      elements.detailsDesc.className = description === null
-        ? "text-outline leading-relaxed text-[11px]"
-        : "inspector-prose text-on-surface-variant text-[11px]";
-      elements.detailsDesc.title = provenanceNote(record, "description", "Publisher description", publisher);
+      // --------------------------------------------------------- Overview
+      elements.detailsDesc.textContent = NOT_PUBLISHED;
+      elements.detailsDesc.className = "text-outline leading-relaxed text-[11px]";
+      elements.detailsDesc.title = "The index carries no description for this entry.";
 
       // ---------------------------------------------- Declared Capabilities
       const capabilities = entry.capabilities ?? {};
@@ -335,19 +247,6 @@ export function createDetails({ elements }) {
         ? entry.platforms.map((platform) => `${text(platform?.os) ?? "?"}/${text(platform?.architecture) ?? "?"}`).join(", ")
         : null);
 
-      // Where the publisher text came from, so every value can be traced.
-      if (record?.source) {
-        codeRow(elements.detailsArtifacts, "Publisher text file", record.source.path);
-        codeRow(elements.detailsArtifacts, "Publisher text sha256", record.source.sha256);
-      } else {
-        row(elements.detailsArtifacts, "Publisher text file", null, provenanceNote(record, "description", "Publisher text", publisher));
-      }
-      // What the upstream publisher declares, kept apart from Catalog's
-      // curated category on the card badge.
-      row(
-        elements.detailsArtifacts, "Upstream category", publishedText(record, "category"),
-        provenanceNote(record, "category", "Upstream category", publisher),
-      );
       codeRow(elements.detailsArtifacts, "Seed path", entry.seed?.path);
       codeRow(elements.detailsArtifacts, "Seed sha256", entry.seed?.sha256);
       for (const [name, artifact] of Object.entries(entry.artifacts ?? {})) {

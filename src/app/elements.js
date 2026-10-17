@@ -8,7 +8,7 @@ import { collectIds } from "./dom.js";
 export function shellElements() {
   const ids = [
     "nav-rail", "toggle-nav-btn", "inspector-rail", "toggle-inspector-btn", "close-inspector-btn",
-    "pane-details", "pane-security", "pane-governance", "pane-json", "catalog-error",
+    "pane-details", "pane-security", "pane-json", "catalog-error",
     "nav-sources", "nav-policy", "catalog-scopes-section", "framework-matrix-tabs",
     "catalog-workspace", "policy-workspace", "policy-workspace-title",
   ];

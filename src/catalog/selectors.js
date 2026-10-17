@@ -10,8 +10,6 @@
 import { text } from "../app/dom.js";
 import { NOT_PUBLISHED } from "../app/absence.js";
 import { identity, searchText, sourceIdentity, sourceLabelOf } from "./entry.js";
-import { publisherOf } from "./publisher.js";
-import { curatedCategoryOf, matchesCategoryFilter } from "./categories.js";
 
 /* Nested source row that filters by source identity without naming one, used when a source
    type publishes its entries under a single identity (the npm package, for example). */
@@ -55,19 +53,14 @@ export function matchesSourceFilter(entry, value, membership) {
 }
 
 /** The entries this view shows, in this view's order. */
-export function visibleEntries(entries, view, membership, publisher = null, categories = null) {
+export function visibleEntries(entries, view, membership) {
   const query = view.query.trim().toLocaleLowerCase();
   const rows = entries.filter((entry) => {
     const source = sourceIdentity(entry);
     if (view.kind && text(entry?.subject?.kind) !== view.kind) return false;
     if (view.sourceType && source.type !== view.sourceType) return false;
     if (view.source && !matchesSourceFilter(entry, view.source, membership)) return false;
-    if (!matchesCategoryFilter(categories, entry, view.category)) return false;
-    if (query) {
-      const curated = curatedCategoryOf(categories, entry);
-      const label = curated?.state === "curated" ? curated.label : null;
-      if (!searchText(entry, publisherOf(publisher, entry), label).toLocaleLowerCase().includes(query)) return false;
-    }
+    if (query && !searchText(entry).toLocaleLowerCase().includes(query)) return false;
     return true;
   });
   const direction = view.sort.endsWith("-desc") ? -1 : 1;

@@ -11,7 +11,7 @@ export async function createWorkbench({ consumerDir, runDir, summary, settingsPa
   const readiness = createReadinessAdapter(consumerDir);
   const authoring = await createAuthoringAdapter(consumerDir, { frictionEvidence: await journalFrictionEvidence(consumerDir, () => readiness.records()) });
   const batch = createBatchAdapter(consumerDir);
-  const existingApi = createApi({ consumerDir, runDir, summary, settingsPath });
+  const existingApi = createApi({ summary, settingsPath });
   const server = createStaticServer(runDir, async (request, response, pathname) => {
     try { return await batch.handle(request, response, pathname) || await readiness.handle(request, response, pathname) || await authoring.handle(request, response, pathname) || await existingApi(request, response, pathname); }
     catch (error) {
