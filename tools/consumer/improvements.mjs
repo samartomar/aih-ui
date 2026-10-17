@@ -4,7 +4,7 @@
 // recordImprovement. Nothing is applied and nothing is sent anywhere.
 import { parsePolicy } from '@aihq/core/contracts';
 import { isCheckedRelease } from '@aihq/catalog/reader';
-import { catalogClosures } from './improvement-closures.mjs';
+import { catalogClosures, catalogComparison } from './improvement-closures.mjs';
 import { releaseOrderProblem } from './release-order.mjs';
 import { only, refuse } from './primitives.mjs';
 import { managementIdOf } from './intent-shape.mjs';
@@ -81,7 +81,7 @@ export function projectDismissals(envelope) {
 // (`history-unavailable`), never "no friction", and the coverage text says which.
 // `candidateCoverage` is 'partial' when only some of the update source's roots could be read: suggestions from those are still made, but content
 // changes are unknown, not checked. A policy none of whose saved releases can be found is likewise unknown, not "nothing changed".
-// `releaseOrder` (optional) is the host's declared source order; where it orders two releases of a package it decides which is newer, else semver precedence does,
+// `releaseOrder` (optional) is the host's declared source order; where it orders two releases of a package it decides which is newer, else Catalog's version order (compareReleases) does,
 // and a pair neither orders is `version-order-unknown`, never "nothing changed".
 // `coreClients` (optional) is the host's own reading of Core's nativeClientIds, never a request field; it only fills the `client` facts of an adapter suggestion, a display field a recorded suggestion never carries.
 export async function checkImprovements({ envelopeBytes, inventories, candidateInventories, candidateSource = candidateInventories === undefined ? 'unconfigured' : 'configured', candidateCoverage = 'complete', clients = [], labels = {}, coreClients, goal, evidence, now, releaseOrder } = {}) {
@@ -115,8 +115,9 @@ export async function checkImprovements({ envelopeBytes, inventories, candidateI
     try { friction = frictionRecurrence({ evidence: results, subjects: tiedSubjects({ intent: draft.intent, items, inventories, savedBytes: read.savedIntentBytes }) }); }
     catch (error) { if (error instanceof TypeError) return fail('/evidence', error.message); throw error; }
   }
-  // A different release of a saved package that neither the host's declared order nor semver orders cannot be called newer: the check says so instead of "checked".
-  const unordered = reason === undefined ? unorderedSources(draft.intent, inventories, candidateInventories, releaseOrder) : [], contentReason = reason ?? (unordered.length ? 'version-order-unknown' : undefined);
+  // A different release of a saved package that neither the host's declared order nor Catalog's version order orders cannot be called newer: the check says so instead of "checked".
+  const compare = catalogComparison();
+  const unordered = reason === undefined ? unorderedSources(draft.intent, inventories, candidateInventories, releaseOrder, compare) : [], contentReason = reason ?? (unordered.length ? 'version-order-unknown' : undefined);
   const checkedText = releaseOrder !== undefined ? "Content changes since this policy was saved were checked against the configured update source using the release order declared by this host's update source." : CONTENT_COVERAGE.checked;
   const fixture = stored && evidence.some(entry => entry.fixture === true), frictionReason = !stored ? 'history-unavailable' : friction.results.some(found => found.result.status === 'available') ? undefined : 'no-recurrence-evidence';
   const coverage = [{ trigger: 'content-change', state: contentReason === undefined ? 'checked' : 'unknown', ...(contentReason !== undefined ? { reason: contentReason } : {}),
@@ -127,7 +128,7 @@ export async function checkImprovements({ envelopeBytes, inventories, candidateI
   const releases = {};
   for (const entry of [...inventories, ...(unread === undefined ? candidateInventories : [])]) if (!Object.hasOwn(releases, entry.release.sha256)) releases[entry.release.sha256] = entry.release;
   const suggested = await suggestImprovements({ intent: draft.intent, items, inventories, candidates: unread === undefined ? candidateInventories : [], clients, labels, goal, coreClients, friction: friction?.results, releaseOrder,
-    closures: catalogClosures(releases) });
+    closures: catalogClosures(releases, draft.intent.roots), compare });
   const unchecked = coverage.filter(entry => entry.state === 'unknown').map(entry => entry.text);
   const current = suggested.map(suggestion => ({ ...suggestion, unknowns: [...suggestion.unknowns, ...unchecked] }));
   const savedBy = new Map(read.records.filter(isSuggestion).map(record => [record.id, record]));

@@ -15,7 +15,7 @@ const selectionTie = tie('managed-selection', MID, { selectionId: SEL, goal: 'sh
 const sha = n => String(n).repeat(64).slice(0, 64);
 
 const fileState = targets => ({ schema: FILE_STATE_SCHEMA, package: { ...CORE }, status: 'complete', fileState: 'unverified', authority: 'not-evaluated',
-  targets: targets.map(({ selection = SEL, outcome, reason }, index) => ({ id: `target-${index}`, operationIds: [`${selection}/write`], target: { root: 'project', path: 'CLAUDE.md' }, outcome, reason: reason ?? outcome })),
+  targets: targets.map(({ selection = SEL, outcome, reason }, index) => ({ id: `target-${index}`, operationIds: [`${selection}/write`], selectionIds: [selection], target: { root: 'project', path: 'CLAUDE.md' }, outcome, reason: reason ?? outcome })),
   checks: [], notChecked: [], coverage: { comparedTargets: targets.length, unavailableTargets: 0, comparedChecks: 0, unavailableChecks: 0, notChecked: 0 }, diagnostics: [],
   limits: { budgetMs: 1000, elapsedMs: 1, targetBytes: 0, materialBytes: 0 } });
 const files = (...outcomes) => fileState(outcomes.map(outcome => ({ outcome })));
@@ -64,8 +64,12 @@ test('a capture folds to one outcome per selection: any changed or absent target
   // Targets of another selection, and a result with no target of this one, make no claim.
   assert.equal(folded({ selection: 'catalog-other', outcome: 'changed' }).length, 0);
   assert.equal(run([entry('cap-1', T[0], fileState([]))]).claimSet.claims.length, 0);
-  // Selection ids are matched as whole path segments of the operation id, so a longer id never matches a shorter one.
+  // The selection is the one Core names for the target (selectionIds), never one recovered from the operation id: a longer id never matches a shorter one.
   assert.equal(folded({ selection: `${SEL}0`, outcome: 'changed' }).length, 0);
+  // A 1.0.0 result names no selection, so it ties nothing and is counted as unread rather than split by operation id.
+  const old = { ...fileState([{ outcome: 'changed' }]), schema: 'urn:aihq:core:file-state-result:1.0.0' };
+  old.targets = old.targets.map(({ selectionIds: _ids, ...target }) => target);
+  assert.deepEqual([run([entry('cap-1', T[0], old)]).claimSet.claims.length, run([entry('cap-1', T[0], old)]).unread], [0, 1]);
   // One passed and one failed target at one instant fold to one claim, so Core never sees a tie.
   const tied = run([entry('cap-1', T[0], fileState([{ outcome: 'changed' }, { outcome: 'match' }])), entry('cap-2', T[1], files('match')), entry('cap-3', T[2], files('changed'))]);
   assert.equal(tied.results[0].result.status, 'available'); assert.equal(tied.results[0].result.count, 1);
@@ -107,13 +111,12 @@ test('a published check id keeps its path separator in the condition; control ch
   }
 });
 
-test('the local-path refusal and the content fingerprint are claims.mjs\'s own, imported rather than copied', async () => {
+test('the local-path refusal is Core\'s claim-set validation and the content fingerprint is claims.mjs\'s own, never copied', async () => {
   const claims = await import('./claims.mjs'), source = await readFile(new URL('./friction.mjs', import.meta.url), 'utf8');
-  assert.equal(typeof claims.fingerprint, 'function'); assert.equal(typeof claims.isLocalPath, 'function');
+  assert.equal(typeof claims.fingerprint, 'function'); assert.equal(claims.isLocalPath, undefined);
   assert.equal(claims.fingerprint({ b: 1, a: [2] }), claims.fingerprint({ a: [2], b: 1 })); assert.match(claims.fingerprint({ a: 1 }), /^[0-9a-f]{16}$/);
-  for (const path of ['C:\\Users\\a', '/home/a', '~/a', 'file:///a', '\\\\server\\share']) assert.equal(claims.isLocalPath(path), true, path);
-  for (const stable of ['claude/version', 'cap-1', 'project--pkg--item']) assert.equal(claims.isLocalPath(stable), false, stable);
-  assert.doesNotMatch(source, /const LOCAL_PATH\b/); assert.doesNotMatch(source, /function fingerprint\b/); assert.doesNotMatch(source, /const canonical\b/);
+  for (const text of [source, await readFile(new URL('./claims.mjs', import.meta.url), 'utf8')]) assert.doesNotMatch(text, /LOCAL_PATH|isLocalPath/);
+  assert.doesNotMatch(source, /function fingerprint\b/); assert.doesNotMatch(source, /const canonical\b/);
 });
 
 test('only tied subjects are requested; untied selections and results of another schema are ignored, never an error', () => {
@@ -158,9 +161,10 @@ test('a fixture entry marks the result it contributes to, and only that one', ()
   assert.equal(run([...recurring, entry('cap-x', T[3], native('failed'), { fixture: true })], [selectionTie, clientTie]).results.find(r => r.tie.kind === 'managed-selection').fixture, false);
 });
 
-test('supplied entries are validated and a machine-local path is refused before any claim is built', () => {
+test('supplied entries are validated and an entry id Core finds machine-local is refused before any claim is returned', () => {
   const refused = (evidence, pattern) => assert.throws(() => run(evidence), pattern);
-  for (const id of ['C:\\Users\\a\\result.json', '/home/a/result.json', '~/result.json', 'file:///a/b', '\\\\server\\share\\r']) refused([entry(id, T[0], files('changed'))], /machine-local path/);
+  // Core's claim-set validation decides what is machine-local; the refusal names the entry, never the value.
+  for (const id of ['C:\\Users\\a\\result.json', '/home/a/result.json', '~/result.json', 'file:///a/b', '\\\\server\\share\\r']) refused([entry(id, T[0], files('changed'))], error => /evidence\[0\]\.id looks like a machine-local path/.test(error.message) && !error.message.includes(id));
   refused('x', /array/); refused(Array.from({ length: 257 }, (_, i) => entry(`cap-${i}`, T[0], files('match'))), /at most 256/);
   for (const bad of [{ ...recurring[0], capturedAt: '2026-10-10' }, { ...recurring[0], capturedAt: '2026-02-30T00:00:00Z' }, { ...recurring[0], id: '' }, { ...recurring[0], id: 'x'.repeat(129) }, { ...recurring[0], sha256: 'abc' },
     { ...recurring[0], fixture: 'yes' }, { ...recurring[0], extra: 1 }, { ...recurring[0], result: null }, { ...recurring[0], result: [] }, null]) refused([bad], /evidence\[0\]/);

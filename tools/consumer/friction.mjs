@@ -6,11 +6,12 @@
 // Rules: a claim never carries a machine-local path or free text from a result (reasons are Core codes); an untied subject is never
 // requested; a result of any other schema is counted as unread, never an error; unknown is never a value, and missing history is never zero.
 import { CLAIMS_SCHEMA_1_1_0, projectClaims, validateClaimSet } from '@aihq/core/report';
-import { READINESS_RECORD_SCHEMA, fingerprint, isLocalPath } from './claims.mjs';
+import { READINESS_RECORD_SCHEMA, fingerprint } from './claims.mjs';
 import { only, object, hash } from './primitives.mjs';
 import { isUtcTimestamp, MAINTENANCE_CHECK_RECORD_SCHEMA } from './maintenance-record.mjs';
 
-export const FILE_STATE_SCHEMA = 'urn:aihq:core:file-state-result:1.0.0';
+// File-state results name the selection behind each target (`selectionIds`, from 1.1.0); a 1.0.0 result does not, so it ties nothing and is counted as unread.
+export const FILE_STATE_SCHEMA = 'urn:aihq:core:file-state-result:1.1.0';
 export const NATIVE_SCHEMA = 'urn:aihq:core:native-verification-result:1.0.0';
 export const FRICTION_PRODUCER = Object.freeze({ id: 'aih-ui/friction', version: '1.0.0' });
 // The check method of a claim made with the trust Core's repairs persist; a host's own reading names none. Core walks only claims of one method.
@@ -18,9 +19,9 @@ export const PERSISTED_METHOD = Object.freeze({ id: 'aih-ui/persisted-configurat
 export const MAX_EVIDENCE = 256, MAX_CLAIMS = 4096;
 const FILE_STATE = 'condition:file-state', NATIVE_USE = 'condition:native-use';
 
-// A claim names things by stable identity, never by a location on this machine (the refusal and the content fingerprint are claims.mjs's own).
-const local = value => typeof value === 'string' ? isLocalPath(value)
-  : value !== null && typeof value === 'object' && Object.entries(value).some(([key, inner]) => isLocalPath(key) || local(inner));
+// A claim names things by stable identity, never by a location on this machine. Core's claim-set validation refuses a set whose strings carry a
+// machine-local path, so a claim it would refuse on its own is left out: one such result never refuses the others. The fingerprint is claims.mjs's own.
+const portable = claim => validateClaimSet({ schema: CLAIMS_SCHEMA_1_1_0, claims: [claim], calculations: [] }).valid;
 const fit = text => text.length <= 240 ? text : `${text.slice(0, 200)}~${fingerprint(text)}`;
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 // Core's own reason codes only; anything else (free text, a path) is the generic code.
@@ -43,10 +44,7 @@ function fileStateReadings(result, ties) {
   const folds = new Map();
   for (const target of list(result.targets)) {
     const owners = new Set();
-    for (const operationId of list(target?.operationIds)) {
-      if (typeof operationId !== 'string') continue;
-      for (let at = operationId.indexOf('/'); at > 0; at = operationId.indexOf('/', at + 1)) { const tie = ties.selections.get(operationId.slice(0, at)); if (tie) owners.add(tie); }
-    }
+    for (const selectionId of list(target?.selectionIds)) { const tie = typeof selectionId === 'string' ? ties.selections.get(selectionId) : undefined; if (tie) owners.add(tie); }
     for (const tie of owners) {
       const fold = folds.get(tie) ?? { failed: 0, matched: 0, other: 0, reason: undefined };
       if (target.outcome === 'changed' || target.outcome === 'absent') fold.failed += 1;
@@ -66,7 +64,7 @@ function nativeReadings(result, ties) {
   return [{ tie, subject: { kind: 'client', id }, condition: NATIVE_USE, scopeKind: 'machine', complete: result.status === 'complete', ...outcome }];
 }
 // A published check id is kept whole, including the `/` Workbench readiness ids use (`claude/version`); Core takes any non-empty measure.
-const checkId = id => typeof id === 'string' && id.length >= 1 && id.length <= 128 && !/[\u0000-\u001f\u007f]/.test(id) && !isLocalPath(id);
+const checkId = id => typeof id === 'string' && id.length >= 1 && id.length <= 128 && !/[\u0000-\u001f\u007f]/.test(id);
 // A check is read with one of two trusts, each its own timeline of the one condition `condition:<id>` (Core's measure for an `inspect` check). This host's own trust
 // names no method. The trust Core's repairs persist for a program started later, which a long-running host never loads, carries PERSISTED_METHOD: after a verified repair
 // the host's own readings keep failing, so one timeline would call fail -> persisted pass -> fail a recurrence. A reading is a persisted one only when its projection
@@ -110,7 +108,6 @@ function checkEvidence(evidence) {
     if (!only(entry, ['id', 'capturedAt', 'result'], ['sha256', 'fixture']) || typeof entry.id !== 'string' || entry.id.length < 1 || entry.id.length > 128 || /[\u0000-\u001f\u007f]/.test(entry.id)
       || !isUtcTimestamp(entry.capturedAt) || !object(entry.result) || (entry.sha256 !== undefined && !hash(entry.sha256)) || (entry.fixture !== undefined && typeof entry.fixture !== 'boolean'))
       throw new TypeError(`${at} must be {id, capturedAt, result} with an optional sha256 and fixture flag.`);
-    if (isLocalPath(entry.id)) throw new TypeError(`${at}.id looks like a machine-local path; supply a stable identifier instead.`);
   });
 }
 
@@ -122,20 +119,25 @@ export function frictionRecurrence({ evidence, subjects }) {
   checkEvidence(evidence);
   const ties = tiesOf(subjects), claims = new Map(), groups = new Map();
   let unread = 0;
-  for (const entry of evidence) {
+  for (const [index, entry] of evidence.entries()) {
     const readings = readingsOf(entry.result, ties);
     if (readings === undefined) { unread += 1; continue; }
     for (const reading of readings) {
-      const body = { producer: { ...FRICTION_PRODUCER }, recordSchema: entry.result.schema, subject: { ...reading.subject }, scope: { kind: reading.scopeKind, targets: [reading.subject.id] },
-        sources: [{ id: entry.id, schema: entry.result.schema, ...(entry.sha256 ? { sha256: entry.sha256 } : {}) }], observation: fit(`${entry.id}/${reading.subject.id}/${reading.condition}${reading.method ? `/${reading.method.id}` : ''}`),
+      const bodyOf = id => ({ producer: { ...FRICTION_PRODUCER }, recordSchema: entry.result.schema, subject: { ...reading.subject }, scope: { kind: reading.scopeKind, targets: [reading.subject.id] },
+        sources: [{ id, schema: entry.result.schema, ...(entry.sha256 ? { sha256: entry.sha256 } : {}) }], observation: fit(`${id}/${reading.subject.id}/${reading.condition}${reading.method ? `/${reading.method.id}` : ''}`),
         capturedAt: entry.capturedAt, measure: reading.condition, ...(reading.method ? { method: { ...reading.method } } : {}),
         ...(reading.outcome === 'unknown' ? { kind: 'unknown', unknownReason: reading.reason } : { kind: 'measured', value: { amount: reading.outcome, unit: 'outcome' } }),
         coverage: reading.complete ? { state: 'complete', reason: 'The stored Core result covers every selected check.' } : { state: 'partial', reason: 'The stored Core result was not complete.' },
-        authentication: { status: 'not-authenticated' }, applicability: { state: 'unknown', reason: 'No later observation was compared with this one.', inputs: [] } };
-      if (local(body)) continue;
+        authentication: { status: 'not-authenticated' }, applicability: { state: 'unknown', reason: 'No later observation was compared with this one.', inputs: [] } });
       // The digest the host gives names the revision; otherwise the content does. A repeat of one claim is one claim; the same id and revision
       // with other content stays separate, which Core reports as a conflict.
-      const print = fingerprint(body), claim = { id: body.observation, revision: entry.sha256 ?? print, ...body }, key = `${claim.id}\u0000${claim.revision}`;
+      const body = bodyOf(entry.id), claim = { id: body.observation, revision: entry.sha256 ?? fingerprint(body), ...body }, print = fingerprint(body), key = `${claim.id}\u0000${claim.revision}`;
+      if (!portable(claim)) {
+        // The host's own entry id is refused, as any other invalid entry is; a path inside a result only leaves that claim out.
+        const neutral = bodyOf('evidence');
+        if (portable({ id: neutral.observation, revision: claim.revision, ...neutral })) throw new TypeError(`evidence[${index}].id looks like a machine-local path; supply a stable identifier instead.`);
+        continue;
+      }
       if (claims.has(key) && claims.get(key).print !== print) claim.revision = `${claim.revision}~${print}`;
       const stored = claims.get(`${claim.id}\u0000${claim.revision}`);
       if (!stored) claims.set(`${claim.id}\u0000${claim.revision}`, { claim, print });

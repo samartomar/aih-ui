@@ -12,7 +12,7 @@ import { nativeClientIds } from '@aihq/core/harness';
 import { createHost } from './host.mjs';
 import { refuse, stable } from './primitives.mjs';
 import { readBatch, planBatch, isVerifiable } from './batch.mjs';
-import { parsePolicy } from './batch-policy.mjs';
+import { parsePolicy, recipeOperationKinds as operationKinds } from './batch-policy.mjs';
 import { revisionOf } from './envelope-file.mjs';
 const MAX_MATERIAL_FILES = 2000, MAX_SNAPSHOT_ENTRIES = 2000, MAX_SNAPSHOT_BYTES = 256 * 1024 * 1024;
 const FAULTS = ['stale-target'];
@@ -61,7 +61,9 @@ async function prepareSelections(host, policy, selections) {
   try { return await host.prepareSession({ policyText: JSON.stringify({ ...policy, selections: selections.map(selection => ({ ...selection, requires: [] })) }) }); }
   catch { return { status: 'invalid', diagnostics: [{ code: 'PREPARE_THREW', reason: 'exception' }] }; }
 }
-const operationsOf = (prepared, actions) => (prepared.review?.operations ?? []).map(op => ({ action: actions.find(a => a.selection.id === op.id.split('/')[0])?.id ?? null, kind: op.kind,
+// Core reports the selection behind each review operation beside the review (`operationSelections`); generated cleanup has none, so it belongs to no action.
+const operationSelection = (prepared, op) => (prepared.operationSelections ?? []).find(entry => entry.id === op.id)?.selectionId ?? null;
+const operationsOf = (prepared, actions) => (prepared.review?.operations ?? []).map(op => ({ action: actions.find(a => a.selection.id === operationSelection(prepared, op))?.id ?? null, kind: op.kind,
   target: op.details?.target ?? op.details?.cwd ?? null, effects: op.effects, ownership: op.ownership }));
 const managedIds = async host => {
   try { const inventory = await host.managedInventory(); return new Set(inventory.status === 'complete' ? inventory.selections.map(s => s.managementId) : []); } catch { return new Set(); }
@@ -103,7 +105,7 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
   const hostAt = hostFor ?? (root => createHost({ projectRoot: root, materialRoots, controls }));
   // The batch module reads the saved policy with Core's parsePolicy and returns that reading; a policy Core refuses refuses the batch there.
   async function open(envelopeBytes, batchId) {
-    const read = await readBatch({ envelopeBytes, batchId, parsePolicy });
+    const read = await readBatch({ envelopeBytes, batchId, parsePolicy, operationKinds });
     if (read.status !== 'ok') return read;
     return { status: 'ok', value: { record: read.value.record, current: read.value.current, supported: read.value.supported, diagnostics: read.diagnostics, policy: read.value.policy,
       revision: revisionOf(envelopeBytes) } };
@@ -122,7 +124,7 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
     for (const [index, id] of rerun.entries()) {
       const action = record.actions.find(candidate => candidate.id === id), at = `/rerun/${index}`;
       if (!action) return refuse('BATCH_RERUN_REFUSED', at, 'No action of this batch has that id.', envelopeBytes);
-      if (isVerifiable(selectionOf(policy, action))) return refuse('BATCH_RERUN_REFUSED', at, 'Finished work Core can verify is kept, never run again.', envelopeBytes);
+      if (isVerifiable(selectionOf(policy, action), operationKinds)) return refuse('BATCH_RERUN_REFUSED', at, 'Finished work Core can verify is kept, never run again.', envelopeBytes);
       if (action.retain !== true) return refuse('BATCH_RERUN_REFUSED', at, 'Only an action kept without running can be run again; this one runs when the batch is applied.', envelopeBytes);
     }
     return new Set(rerun);
@@ -234,7 +236,7 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
         if (typeof persist !== 'function') return [{ code: 'BATCH_CONSENT_UNRECORDABLE', reason: 'no-persist' }];
         const first = action.retain !== true, { record: kept } = latest;
         try {
-          const planned = await planBatch({ envelopeBytes: latest.bytes, parsePolicy, scopes: kept.scopes, inputs: kept.inputs, continuation: kept.continuation, categories: kept.categories,
+          const planned = await planBatch({ envelopeBytes: latest.bytes, parsePolicy, operationKinds, scopes: kept.scopes, inputs: kept.inputs, continuation: kept.continuation, categories: kept.categories,
             actions: first ? kept.actions.map(other => other.id === action.id ? { ...other, retain: true } : other) : kept.actions, now: first ? now : kept.recordedAt, supersedes: first ? kept.id : kept.supersedes });
           if (planned.status !== 'ok') return codes(planned.diagnostics);
           await persist(planned.value.envelopeBytes, { expectedRevisionSha256: latest.revision });
@@ -250,7 +252,7 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
         if (record.continuation === 'stop' && broke) { end('untouched', 'stopped-by-choice'); continue; }
         if (action.retain === true && !again.has(action.id)) {
           // Only an inspectable result can be shown to stand. One that no longer does is a failure, not a quiet skip.
-          if (!isVerifiable(selection)) end('untouched', 'retained-unverifiable');
+          if (!isVerifiable(selection, operationKinds)) end('untouched', 'retained-unverifiable');
           else if (await observeRetained(host, policy, selection) === 'retained-earlier-result') end('untouched', 'retained-earlier-result');
           else end('failed', 'retained-result-missing');
           continue;
@@ -259,7 +261,7 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
         if (drift) { end('failed', 'shared-input-changed'); continue; }
         const prepared = await prepareSelections(host, policy, [selection]);
         if (prepared.status !== 'ready') { end('failed', `prepare-${prepared.status}`, { completion: null, runId: null, operations: [], diagnostics: codes(prepared.diagnostics) }); continue; }
-        const unspent = isVerifiable(selection) ? null : await attempt(action);
+        const unspent = isVerifiable(selection, operationKinds) ? null : await attempt(action);
         if (unspent) { end('failed', 'consent-not-recorded', { completion: null, runId: null, operations: [], diagnostics: unspent }); continue; }
         let restore = async () => {}, result;
         try {
@@ -289,9 +291,9 @@ export function createBatchHost({ clients = nativeClientIds, materialRoots = {},
       if (rerun !== undefined) return refuse('INPUT_INVALID', '/rerun', 'Recovery keeps every action Core cannot verify; choose Run again when reviewing or applying.', envelopeBytes);
       const hosts = new Map(record.scopes.map(scope => [scope.id, hostAt(scope.target.root)]));
       const stands = action => observeRetained(hosts.get(action.scope), policy, selectionOf(policy, action)).then(seen => seen === 'retained-earlier-result');
-      const kept = await Promise.all(record.actions.map(action => isVerifiable(selectionOf(policy, action)) ? stands(action) : true));
+      const kept = await Promise.all(record.actions.map(action => isVerifiable(selectionOf(policy, action), operationKinds) ? stands(action) : true));
       const actions = record.actions.map(({ retain: _retain, ...action }, index) => kept[index] ? { ...action, retain: true } : action);
-      const planned = await planBatch({ envelopeBytes, parsePolicy, scopes: record.scopes, inputs: record.inputs, actions, continuation: record.continuation, categories: record.categories, now, supersedes: record.id });
+      const planned = await planBatch({ envelopeBytes, parsePolicy, operationKinds, scopes: record.scopes, inputs: record.inputs, actions, continuation: record.continuation, categories: record.categories, now, supersedes: record.id });
       if (planned.status !== 'ok') return planned;
       const review = await this.reviewBatch({ envelopeBytes: planned.value.envelopeBytes, batchId: planned.value.record.id });
       return { status: 'ok', diagnostics: [], envelopeBytes: planned.value.envelopeBytes, record: planned.value.record, projection: planned.value.projection, retained: actions.filter(a => a.retain).map(a => a.id), review };

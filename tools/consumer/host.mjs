@@ -30,7 +30,8 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
 
   const retain = preparation => {
     const result = { status: preparation.status, diagnostics: preparation.diagnostics,
-      ...(preparation.resolutionInputs ? { resolutionInputs: preparation.resolutionInputs } : {}) };
+      ...(preparation.resolutionInputs ? { resolutionInputs: preparation.resolutionInputs } : {}),
+      ...(preparation.operationSelections ? { operationSelections: JSON.parse(JSON.stringify(preparation.operationSelections)) } : {}) };
     if (preparation.review) result.review = JSON.parse(JSON.stringify(preparation.review));
     if (preparation.prepared) {
       const sessionId = randomUUID();

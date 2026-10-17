@@ -5,7 +5,7 @@ import { mkdtempSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as batch from './batch.mjs';
-import { parsePolicy } from './batch-policy.mjs';
+import { parsePolicy, recipeOperationKinds as operationKinds } from './batch-policy.mjs';
 import { batchId, batchProblem, batchDerivedProblem, BATCH_RECORD_SCHEMA } from './batch-record.mjs';
 import { readJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { digestBytes, stable } from './primitives.mjs';
@@ -19,9 +19,9 @@ import { replaceEnvelope, revisionOf } from './envelope-file.mjs';
 // with logging off. It resolves the account home with os.homedir() whenever it is used (not at import), so pointing this
 // test process (node --test gives each file its own) at a disposable home before the first Core call keeps every record here.
 // Callers hand batch.mjs Core's policy reader, as the host does.
-const planBatch = input => batch.planBatch({ parsePolicy, ...input });
-const readBatch = input => batch.readBatch({ parsePolicy, ...input });
-const setContinuation = input => batch.setContinuation({ parsePolicy, ...input });
+const planBatch = input => batch.planBatch({ parsePolicy, operationKinds, ...input });
+const readBatch = input => batch.readBatch({ parsePolicy, operationKinds, ...input });
+const setContinuation = input => batch.setContinuation({ parsePolicy, operationKinds, ...input });
 const { projectBatch } = batch;
 const FIXTURE_HOME = mkdtempSync(join(tmpdir(), 'ui35-home-'));
 Object.assign(process.env, homeEnvironment(FIXTURE_HOME));
@@ -112,10 +112,15 @@ test('planning binds real selections of the saved policy and mirrors Core requir
 test('the batch module reads the exact saved bytes it binds with the reader it is given, and passes a refusal through with Core\'s diagnostics', async () => {
   const f = await pure(), stored = valueOf(await readJourneyEnvelope(f.envelopeBytes)).savedIntentBytes, seen = [];
   const reader = text => { seen.push(text); return parsePolicy(text); };
-  assert.equal(valueOf(await batch.readBatch({ envelopeBytes: f.envelopeBytes, parsePolicy: reader })).record.id, f.batchId);
+  assert.equal(valueOf(await batch.readBatch({ envelopeBytes: f.envelopeBytes, parsePolicy: reader, operationKinds })).record.id, f.batchId);
   assert.deepEqual(seen, [decode(stored)]);
   const unread = await batch.readBatch({ envelopeBytes: f.envelopeBytes });
   assert.equal(unread.status, 'refused'); assert.equal(unread.diagnostics[0].path, '/parsePolicy');
+  // Which actions Core can verify is Core's published recipe operation kinds, so a caller that supplies none is refused rather than guessed for.
+  const unjudged = await batch.readBatch({ envelopeBytes: f.envelopeBytes, parsePolicy });
+  assert.equal(unjudged.status, 'refused'); assert.equal(unjudged.diagnostics[0].path, '/operationKinds');
+  const opaque = valueOf(await batch.readBatch({ envelopeBytes: f.envelopeBytes, parsePolicy, operationKinds: {} }));
+  assert.ok(opaque.projection.actions.every(action => action.unverifiable), 'a recipe format Core does not list is never called verifiable');
   // Core's own refusal travels with the batch refusal, at the bytes it is about.
   const refused = await planBatch({ ...f.plan, savedPolicyBytes: encode('not a policy') });
   assert.equal(refused.status, 'refused'); assert.equal(refused.diagnostics[0].code, 'INPUT_INVALID'); assert.equal(refused.diagnostics[0].path, '/savedPolicyBytes');

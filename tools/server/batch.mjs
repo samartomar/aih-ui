@@ -42,7 +42,7 @@ export function createBatchAdapter(consumerDir) {
   // The batch module lives in the installed consumer, so its constants are read from there once, never repeated here.
   let batchModule;
   const loadBatch = () => batchModule ??= import(pathToFileURL(join(consumerDir, 'consumer', 'batch.mjs')).href);
-  // The batch module reads the saved policy it binds with the reader the host supplies: Core's parsePolicy (batch-policy.mjs).
+  // The batch module reads the saved policy it binds with the reader the host supplies, Core's parsePolicy, and judges verifiability by Core's recipeOperationKinds (batch-policy.mjs).
   let policyModule;
   const loadPolicy = () => policyModule ??= import(pathToFileURL(join(consumerDir, 'consumer', 'batch-policy.mjs')).href);
   // The request vocabularies are the reviewed-batch record's own.
@@ -110,9 +110,9 @@ export function createBatchAdapter(consumerDir) {
     }
     // Core writes protected records into the current account's home; with no disposable home named, nothing starts.
     if (typeof config.coreHome !== 'string' || !isAbsolute(config.coreHome)) throw problem('No isolated Core home is configured.', 'BATCH_HOST_UNAVAILABLE');
-    const [{ readBatch, setContinuation }, { parsePolicy }] = await Promise.all([loadBatch(), loadPolicy()]);
+    const [{ readBatch, setContinuation }, { parsePolicy, recipeOperationKinds: operationKinds }] = await Promise.all([loadBatch(), loadPolicy()]);
     const envelopeBytes = new Uint8Array(await readFile(config.envelopePath));
-    const read = await readBatch({ envelopeBytes, parsePolicy });
+    const read = await readBatch({ envelopeBytes, parsePolicy, operationKinds });
     if (read.status !== 'ok') return passed(read);
     const { record, projection, supported } = read.value;
     // Core's published client list is fixed for the installed archive, so it is asked for once.
@@ -123,7 +123,7 @@ export function createBatchAdapter(consumerDir) {
     if (pathname === '/api/batch') return { status: 'ok', batchId: record.id, projection, supported, revision: revisionOf(envelopeBytes), clients: { targets: clients.targets, labels: clients.labels } };
     if (body.batchId !== record.id) return refusal('BATCH_CHANGED', 'The current batch changed. Reopen and review it again.');
     if (pathname === '/api/batch-continuation') {
-      const edited = await setContinuation({ envelopeBytes, batchId: record.id, parsePolicy, continuation: body.continuation, now: new Date().toISOString() });
+      const edited = await setContinuation({ envelopeBytes, batchId: record.id, parsePolicy, operationKinds, continuation: body.continuation, now: new Date().toISOString() });
       if (edited.status !== 'ok') return passed(edited);
       const refused = await replacing(config.envelopePath, edited.value.envelopeBytes, envelopeBytes);
       return refused ?? { status: 'ok', batchId: edited.value.record.id, projection: edited.value.projection, revision: revisionOf(edited.value.envelopeBytes) };
@@ -141,7 +141,7 @@ export function createBatchAdapter(consumerDir) {
       // revision of the same one). The page is shown that record and revision as they now stand, read from the file, never rebuilt from what it sent.
       // Work has run by now, so a failed re-read never turns the report into a refusal: the report is returned without `current`.
       const storedBytes = await readFile(config.envelopePath).then(bytes => new Uint8Array(bytes), () => null);
-      const after = storedBytes ? await readBatch({ envelopeBytes: storedBytes, parsePolicy }) : { status: 'error', diagnostics: [{ code: 'BATCH_ENVELOPE_UNREADABLE', message: 'The saved batch could not be read again.' }] };
+      const after = storedBytes ? await readBatch({ envelopeBytes: storedBytes, parsePolicy, operationKinds }) : { status: 'error', diagnostics: [{ code: 'BATCH_ENVELOPE_UNREADABLE', message: 'The saved batch could not be read again.' }] };
       if (after.status !== 'ok') return { status: 'ok', batchId: record.id, report, diagnostics: after.diagnostics };
       return { status: 'ok', batchId: record.id, report, revision: revisionOf(storedBytes), current: { batchId: after.value.record.id, projection: after.value.projection } };
     }

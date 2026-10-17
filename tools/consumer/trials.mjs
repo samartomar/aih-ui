@@ -108,6 +108,7 @@ export async function readTrials({ envelopeBytes, mechanisms = TRIAL_MECHANISMS_
 const size = descriptors => descriptors.reduce((total, descriptor) => total + descriptor.byteLength, 0);
 // Configured material size, never observed usage, of the draft the trial was proposed against: the recipe and materials of every pinned item, and what the tested item adds
 // (itself and what it requires, unless already pinned). A size that cannot be known is unknown with its reason.
+const UNRESOLVED = 'Catalog cannot resolve what the suggested item requires at this scope from the supplied inventories, so the configured size with the suggested item is unknown.';
 const sized = item => !!item && Number.isSafeInteger(item.recipe?.byteLength) && (item.materials ?? []).every(m => Number.isSafeInteger(m.byteLength));
 function configuredSize({ draft, change, scope, inventories }) {
   const pins = draft.intent.pins, pinned = new Set(pins.map(pin => `${pin.releaseSha256}/${pin.itemId}`));
@@ -120,28 +121,19 @@ function configuredSize({ draft, change, scope, inventories }) {
   for (const candidate of inventories) if (candidate?.release && !Object.hasOwn(releases, candidate.release.sha256)) releases[candidate.release.sha256] = candidate.release;
   // Catalog refuses (never throws for) inventories it did not check, an unavailable release, an input the item needs or a scope it does not admit.
   const resolved = resolveSelections({ releases, roots: [{ releaseSha256: change.releaseSha256, itemId: change.itemId, scope, configuration: {} }], skips: [] });
-  if (resolved.status === 'ok') {
-    const closure = new Map();
-    for (const { item: ref } of resolved.value.inclusions) {
-      const key = `${ref.releaseSha256}/${ref.itemId}`;
-      if (!closure.has(key)) closure.set(key, { key, item: releases[ref.releaseSha256].items.find(item => item.id === ref.itemId) });
-    }
-    const missing = [...closure.values()].find(({ item }) => !sized(item));
-    if (!missing) return { baseline, trial: trial([...closure.values()].filter(({ key }) => !pinned.has(key))) };
+  const unknownSize = id => ({ baseline, unknown: `The size of ${id} is not known, so the configured size with the suggested item is unknown.` });
+  if (resolved.status !== 'ok') {
+    // Catalog names the required release or item it could not resolve; any other refusal leaves what the item adds unknown as a whole.
+    const unavailable = resolved.diagnostics.find(d => (d.code === 'RELEASE_UNAVAILABLE' || d.code === 'ITEM_UNAVAILABLE') && typeof d.reference?.itemId === 'string');
+    return unavailable ? unknownSize(unavailable.reference.itemId) : { baseline, unknown: UNRESOLVED };
   }
-  // Otherwise the declared requirements are walked within the item's release: Catalog does not yet name the unavailable reference it refuses
-  // (gap G-1), so only the walk can say whose size is not known.
-  const items = new Map(entry.release.items.map(item => [item.id, item])), added = [], seen = new Set(), queue = [change.itemId];
-  while (queue.length) {
-    const id = queue.shift();
-    if (seen.has(id)) continue;
-    seen.add(id);
-    const item = items.get(id);
-    if (!sized(item)) return { baseline, unknown: `The size of ${id} is not known, so the configured size with the suggested item is unknown.` };
-    if (!pinned.has(`${entry.release.sha256}/${id}`)) added.push({ item });
-    queue.push(...(item.dependencies?.requires ?? []).map(required => required.itemId));
+  const closure = new Map();
+  for (const { item: ref } of resolved.value.inclusions) {
+    const key = `${ref.releaseSha256}/${ref.itemId}`;
+    if (!closure.has(key)) closure.set(key, { key, itemId: ref.itemId, item: releases[ref.releaseSha256].items.find(item => item.id === ref.itemId) });
   }
-  return { baseline, trial: trial(added) };
+  const missing = [...closure.values()].find(({ item }) => !sized(item));
+  return missing ? unknownSize(missing.itemId) : { baseline, trial: trial([...closure.values()].filter(({ key }) => !pinned.has(key))) };
 }
 // ---- Recording -----------------------------------------------------------------------------------------------------------
 const PROPOSAL_FIELDS = ['scope', 'task', 'quality', 'conditions'];
