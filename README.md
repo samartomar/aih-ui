@@ -112,14 +112,14 @@ example, with the three tarballs beside the manifest:
   "candidate": "Core dev.37, Catalog 0.1.0 main, Scan 0.5.0",
   "packages": {
     "core": {
-      "tarball": "aihq-core-1.0.0-dev.37-main-dd5c9a5-sha256-e04c0d3cd9d4844f5f85a4f79718e6a3790738bcbc6331794c979b159973b4d1.tgz",
-      "sha256": "e04c0d3cd9d4844f5f85a4f79718e6a3790738bcbc6331794c979b159973b4d1",
-      "commit": "dd5c9a5"
+      "tarball": "aihq-core-1.0.0-dev.37-main-faa19b5-sha256-97213491a10ed4805a5fcaf912f22b366c900fba8f624ef041f0c93946a0b9d6.tgz",
+      "sha256": "97213491a10ed4805a5fcaf912f22b366c900fba8f624ef041f0c93946a0b9d6",
+      "commit": "faa19b5"
     },
     "catalog": {
-      "tarball": "aihq-catalog-0.1.0-main-29f4b8c7-sha256-9e84545b0cc0fefb9845d554ec53bd9c8a6d9910caf838be4e581ac85d47383a.tgz",
-      "sha256": "9e84545b0cc0fefb9845d554ec53bd9c8a6d9910caf838be4e581ac85d47383a",
-      "commit": "29f4b8c77af5fdbb9483f01469cae5f20205b0b4"
+      "tarball": "aihq-catalog-0.1.0-main-cc4d1fb0-sha256-544964be902f673f19932820b7d2bfe8e239860d236142542b6985577d29c32b.tgz",
+      "sha256": "544964be902f673f19932820b7d2bfe8e239860d236142542b6985577d29c32b",
+      "commit": "cc4d1fb0be4dd25662f9bbea49a5b64003f80a84"
     },
     "scan": {
       "tarball": "aihq-scan-0.5.0-main-9bbed5ae-sha256-a15f445acf940b7556d59c5d8ff61fae531085cac1bf3e062287f2175591f707.tgz",
