@@ -5,7 +5,8 @@
  *   node tools/candidate/serve.mjs --data <directory> --port <n>
  *   node tools/candidate/serve.mjs --data <directory> --seed-only
  *
- * It installs the manifest's three tarballs (and the optional previous Catalog) into a fresh run directory, seeds the sample
+ * It installs the manifest's three tarballs (and the optional previous Catalog) into a fresh run directory, unpacks the optional
+ * update-source Catalogs there as the Workbench's AIH_UPDATE_SOURCE_CATALOG_ROOTS (never together with the maintenance fixture), seeds the sample
  * data, points the Workbench's existing host configuration at it, serves the Workbench, and records itself in state/server.json
  * (the launcher wrote the record as "starting"; this rewrites it as "ready"). It ends when state/stop-request appears or on
  * SIGINT/SIGTERM (neither can be handled while npm blocks it during installation, so stop then ends its process tree after
@@ -19,7 +20,7 @@ import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { homeEnvironment } from '../consumer/home-environment.mjs';
 import { startPreview } from '../preview.mjs';
 import { candidateLayout } from './layout.mjs';
@@ -88,13 +89,22 @@ async function main() {
       // Host configuration is read when the Workbench is created, so the samples and the environment exist before that.
       async beforeServe({ consumerDir }) {
         if (packages.previousCatalog) process.env.AIH_CONSUMER_PREVIOUS_CATALOG = extractPackage(packages.previousCatalog.tarball, join(layout.run, 'previous-catalog'));
-        const seeded = await seedSamples({ layout, consumerDir });
+        // The update source: each tarball unpacked in the manifest's order (oldest first), listed to the Workbench as its Catalog roots.
+        // The maintenance fixture is a test source and is never combined with it.
+        const updateSourceRoots = (packages.updateSourceCatalogs ?? []).map((entry, index) => extractPackage(entry.tarball, join(layout.run, 'update-source', String(index + 1))));
+        if (updateSourceRoots.length) {
+          process.env.AIH_UPDATE_SOURCE_CATALOG_ROOTS = updateSourceRoots.join(delimiter);
+          delete process.env.AIH_MAINTENANCE_SOURCE;
+          say(`update source: ${updateSourceRoots.length} Catalog ${updateSourceRoots.length === 1 ? 'root' : 'roots'} configured`);
+        }
+        const seeded = await seedSamples({ layout, consumerDir, updateSourceRoots });
         say(`samples: ${seeded.seeded.length ? `seeded ${seeded.seeded.join(', ')}` : 'already present'}`);
         for (const problem of seeded.problems) say(`sample ${problem.sample} was not seeded: ${problem.message}`);
         problems = seeded.problems;
         if (seedOnly) throw new SeedOnlyDone();
         authority = installLocalAuthority({ repository: layout.authority, log: layout.authorityLog });
         Object.assign(process.env, seeded.env);
+        if (updateSourceRoots.length) delete process.env.AIH_MAINTENANCE_SOURCE;
       },
     });
   } catch (error) {

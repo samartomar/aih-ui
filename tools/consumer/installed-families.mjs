@@ -9,6 +9,8 @@ const families = [
   ['Extensions', './release-extensions.json'], ['ECC', './release-ecc.json'],
   ['Superpowers', './release-superpowers.json'], ['Anthropic', './release-anthropic.json']
 ];
+// The four family release exports of a Catalog package root, beside its main ./release.json.
+export const FAMILY_RELEASE_EXPORTS = families.map(([, releaseExport]) => releaseExport);
 export async function installedFamilies() {
   const root = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
   return Promise.all(families.map(async ([family, releaseExport]) => {
