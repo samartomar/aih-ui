@@ -7,6 +7,7 @@ import { readWorkspace, editWorkspace, planBinding, bindCheckout, unbindCheckout
 import { noteFixture } from './note-fixture.mjs';
 import { runOrganizationAuthor } from './organization-author.mjs';
 import { nativeClientIds } from '@aihq/core/harness';
+import { RELEASE_ORDER_BASIS, RELEASE_ORDER_TEXT } from './release-order.mjs';
 const encode = value => new TextEncoder().encode(value);
 const bytesOf = value => Array.isArray(value) ? Uint8Array.from(value) : undefined;
 const WORKSPACE_OPERATIONS = ['workspace-read', 'workspace-edit', 'workspace-plan', 'workspace-bind', 'workspace-unbind', 'workspace-verify', 'workspace-export'];
@@ -31,6 +32,14 @@ export async function createMixedService(maintained, { suppliedInventories, fami
   const maintainedInventories = [maintained, ...familyInventories];
   const current = [...maintainedInventories, notes], all = [...current, changed];
   const candidates = mode => mode === 'missing' ? maintainedInventories : mode === 'updated' ? [...maintainedInventories, changed] : current;
+  // The host's source is a fixture list of inventories or an update source's read; one that cannot be read at all is null.
+  const readSource = async () => {
+    const read = await Promise.resolve().then(() => maintenanceSource()).catch(() => null);
+    return Array.isArray(read) ? { kind: 'test-fixture', inventories: read } : read && typeof read === 'object' ? read : null;
+  };
+  // Some roots read and some offline: what was read is used, but it is not a complete check of the source.
+  const coverageOf = source => source?.inventories && source.sources?.some(entry => entry.state === 'offline') ? 'partial' : 'complete';
+  const describeSource = source => ({ kind: source.kind, ...(source.releaseOrder ? { order: RELEASE_ORDER_BASIS, orderText: RELEASE_ORDER_TEXT } : {}), sources: source.sources ?? [] });
   // The host observes a folder only when asked, and a bind or verify always observes it again: nothing observed earlier is trusted.
   const observe = async root => typeof root !== 'string' ? refuse('INPUT_INVALID', '/root', 'Supply the checkout folder.')
     : observeCheckout ? Promise.resolve().then(() => observeCheckout(root)).catch(() => refuse('CHECKOUT_UNAVAILABLE', '/root', 'The checkout could not be observed.'))
@@ -103,9 +112,10 @@ export async function createMixedService(maintained, { suppliedInventories, fami
         if (WORKSPACE_OPERATIONS.includes(operation)) return runWorkspace(operation, body, { envelopeBytes, now, adopt: bytes => openDraft({ bytes, inventories: available, ...reviewContext }) });
         if (operation === 'improvements-check') {
           // The same host-configured source as the maintenance check; unreachable (null or a failure) is unknown, never "nothing changed".
-          const candidateInventories = maintenanceSource ? await Promise.resolve().then(() => maintenanceSource()).catch(() => null) : null;
+          const source = maintenanceSource ? await readSource() : null;
           // Core's support list is the installed Core's own, read here; nothing the request carries can state it.
-          return checkImprovements({ envelopeBytes, inventories: all, candidateInventories: candidateInventories ?? null, candidateSource: maintenanceSource ? 'configured' : 'unconfigured',
+          return checkImprovements({ envelopeBytes, inventories: all, candidateInventories: source?.inventories ?? null, ...(source?.releaseOrder ? { releaseOrder: source.releaseOrder } : {}),
+            candidateSource: maintenanceSource ? 'configured' : 'unconfigured', candidateCoverage: coverageOf(source),
             evidence: frictionEvidence ? await Promise.resolve().then(frictionEvidence).catch(() => null) : undefined,
             clients: body.clients ?? [], labels: body.labels ?? {}, coreClients: [...nativeClientIds], goal: body.goal, now });
         }
@@ -123,9 +133,10 @@ export async function createMixedService(maintained, { suppliedInventories, fami
         // an unconfigured source is its own unknown: neither is an empty update list.
         const categories = body.categories ?? ['content'];
         const read = Array.isArray(categories) && categories.includes('content') && maintenanceSource;
-        const candidateInventories = read ? await Promise.resolve().then(() => maintenanceSource()).catch(() => null) : null;
-        return checkMaintenance({ envelopeBytes, inventories: all, candidateInventories: candidateInventories ?? null,
-          candidateSource: maintenanceSource ? 'configured' : 'unconfigured', ...(body.categories !== undefined ? { categories: body.categories } : {}), now });
+        const source = read ? await readSource() : null;
+        const checked = await checkMaintenance({ envelopeBytes, inventories: all, candidateInventories: source?.inventories ?? null, ...(source?.releaseOrder ? { releaseOrder: source.releaseOrder } : {}),
+          candidateSource: maintenanceSource ? 'configured' : 'unconfigured', candidateCoverage: coverageOf(source), ...(body.categories !== undefined ? { categories: body.categories } : {}), now });
+        return checked.status === 'ok' && source ? { ...checked, value: { ...checked.value, updateSource: describeSource(source) } } : checked;
       }
       if (operation === 'compose') return composeAuthoring({ basePolicyBytes: policyBytes, intent: body.intent, inventories: all, ...reviewContext });
       if (operation === 'edit') return editAuthoring({ policyBytes, inventories: all, operation: body.operation, ...reviewContext });

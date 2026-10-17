@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { readFile, mkdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve, sep } from 'node:path';
+import { delimiter, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { listItems } from '@aihq/catalog/reader';
@@ -17,8 +17,11 @@ import { installedFamilies } from './installed-families.mjs';
 import { inspectAuthenticatedReviewEvidence } from './review-host.mjs';
 import { intakePersonalFolder } from './personal-folder.mjs';
 import { observeCheckout } from './workspace-host.mjs';
+import { createCatalogUpdateSource } from './update-source.mjs';
 
-export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, port = 0 } = {}) {
+export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, updateSourceCatalogRoots, port = 0 } = {}) {
+  // The fixture is a test source; a host names one update source, so both together would be ambiguous.
+  if (updateSourceCatalogRoots !== undefined && maintenanceSource) throw new Error('Configure one update source: Catalog package roots or the test fixture, not both.');
   const installed = await readInstalledRelease({
     root: dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'))), sourceInput: 'catalog'
   });
@@ -37,6 +40,9 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
     return { ...descriptor, bytes: new Uint8Array(await readFile(path)) };
   }));
   const familyInventories = await installedFamilies();
+  // One source object per host, so the last time each root was read lives as long as the server.
+  const updateSource = updateSourceCatalogRoots !== undefined ? createCatalogUpdateSource({ roots: updateSourceCatalogRoots, installedPackage: release.package }) : null;
+  if (updateSource) maintenanceSource = () => updateSource.read();
   const mixedService = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, maintenanceSource, frictionEvidence, observeCheckout });
   const authoringRoots = { maintained: catalogRoot };
   if (projectRoot) {
@@ -214,6 +220,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     organizationSource: process.env.AIH_ORGANIZATION_SOURCE ? JSON.parse(await readFile(process.env.AIH_ORGANIZATION_SOURCE, 'utf8')) : undefined,
     reviewTrust: process.env.AIH_REVIEW_TRUST ? JSON.parse(await readFile(process.env.AIH_REVIEW_TRUST, 'utf8')) : undefined,
     previousCatalogRoot: process.env.AIH_CONSUMER_PREVIOUS_CATALOG,
+    ...(process.env.AIH_UPDATE_SOURCE_CATALOG_ROOTS ? { updateSourceCatalogRoots: process.env.AIH_UPDATE_SOURCE_CATALOG_ROOTS.split(delimiter) } : {}),
     port: Number(process.env.AIH_CONSUMER_PORT ?? 4817) });
   console.log(`Policy Workbench: ${result.origin}`);
 }

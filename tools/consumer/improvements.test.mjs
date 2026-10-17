@@ -9,11 +9,12 @@ import * as publicApi from './improvements.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
 import { recordMaintenance } from './maintenance.mjs';
 import { digestBytes, intakeDeclaration } from './intake.mjs';
+import { declareReleaseOrder, RELEASE_ORDER_TEXT } from './release-order.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { createMixedService } from './mixed-service.mjs';
 import { nativeClientIds } from '@aihq/core/harness';
 import { suggestionRevision, suggestionProblem } from './improvement-record.mjs';
-import { suggestImprovements, lead, classifyImprovement, improvementPrompt, releaseOrder, unorderedSources, GOAL_RULES, UNKNOWNS, FRICTION_COVERAGE, FRICTION_UNREADABLE, FIXTURE_LABEL, FRICTION_RULE, IMPROVEMENT_RULES_VERSION, MAX_ALTERNATIVES } from './improvement-rules.mjs';
+import { suggestImprovements, lead, classifyImprovement, improvementPrompt, releaseRelation, unorderedSources, GOAL_RULES, UNKNOWNS, FRICTION_COVERAGE, FRICTION_UNREADABLE, FIXTURE_LABEL, FRICTION_RULE, IMPROVEMENT_RULES_VERSION, MAX_ALTERNATIVES } from './improvement-rules.mjs';
 import { frictionRecurrence } from './friction.mjs';
 import { READINESS_RECORD_SCHEMA } from './claims.mjs';
 import * as rules from './improvement-rules.mjs';
@@ -38,7 +39,7 @@ const byItem = (suggestions, itemId) => suggestions.find(s => s.change.itemId ==
 const shownItem = (checked, itemId) => byItem([checked.leading, ...checked.alternatives, ...checked.dismissed].filter(Boolean), itemId);
 
 test('the rules version and goal table are fixed and every rule names a distinct, well-formed reason', () => {
-  assert.equal(IMPROVEMENT_RULES_VERSION, '1.4.0');
+  assert.equal(IMPROVEMENT_RULES_VERSION, '1.5.0');
   assert.deepEqual(GOAL_RULES.map(rule => [rule.id, rule.itemId]), [['goal.fix', 'mattpocock.diagnosing-bugs'], ['goal.test', 'mattpocock.tdd'], ['goal.regressions', 'mattpocock.tdd'],
     ['goal.review', 'mattpocock.code-review'], ['goal.refactor', 'mattpocock.improve-codebase-architecture'], ['goal.plan', 'mattpocock.grill-me'], ['goal.context', 'aihq.project-context']]);
   for (const rule of GOAL_RULES) assert.match(rule.id, /^[a-z][a-z0-9.-]{0,63}$/);
@@ -134,7 +135,7 @@ test('the client rule names a client by its published label, and the label never
   const [plain] = await suggest({ clients: ['claude'] }), [named] = await suggest({ clients: ['claude'], labels: { claude: 'Claude Code', codex: 'Codex' } });
   assert.deepEqual(named.triggers, [{ ruleId: 'client.instructions', key: 'client:claude', text: 'You use Claude Code (Workbench setup), but this policy does not give it the shared project instructions.' }]);
   assert.equal(named.goal, 'Give Claude Code the same shared project instructions as your other AI clients.');
-  assert.equal(named.rulesVersion, '1.4.0');
+  assert.equal(named.rulesVersion, '1.5.0');
   // A label is wording: the same id and revision, so a dismissal made before a rename still applies.
   assert.deepEqual([named.id, named.revision], [plain.id, plain.revision]);
   assert.deepEqual(classifyImprovement(named, plain), { dismissed: true, reasons: [] });
@@ -295,6 +296,49 @@ const withChanges = ({ before, after = before, intent = changeIntent(), saved = 
 const changeTrigger = suggestion => suggestion?.triggers.find(t => t.key.startsWith('change:'));
 const SAVED_FROM = 'a newer revision of a source this policy was saved from';
 
+test('host-declared newer order gives equal-version changed content a reason and short release digest', async () => {
+  const before = [item('x.root'), item('mattpocock.tdd')], after = [revised(item('mattpocock.tdd'), 21)];
+  const releaseOrder = declareReleaseOrder([[hex(9)], [hex(10)]]);
+  const got = byItem(await withChanges({ before, candidates: [releaseOf(10, '1.0.0', after)], releaseOrder }), 'mattpocock.tdd');
+  assert.equal(changeTrigger(got)?.key, 'change:revised@1.0.0');
+  assert.ok(changeTrigger(got).text.includes(`newer by the ${RELEASE_ORDER_TEXT}`));
+  assert.ok(changeTrigger(got).text.includes(`release ${hex(10).slice(0, 12)}…`));
+  assert.equal(got.change.releaseSha256, hex(10));
+});
+
+test('host-declared older order overrides semver; unknown and absent orders keep semver behavior', async () => {
+  const before = [item('x.root'), item('mattpocock.tdd')], after = [revised(item('mattpocock.tdd'), 21)];
+  const older = declareReleaseOrder([[hex(10)], [hex(9)]]), missing = declareReleaseOrder([[hex(9)]]);
+  const ambiguous = declareReleaseOrder([[hex(9)], [hex(10)], [hex(9)]]);
+  for (const version of ['1.0.0', '1.1.0']) {
+    const got = await withChanges({ before, candidates: [releaseOf(10, version, after)], releaseOrder: older });
+    assert.equal(changeTrigger(byItem(got, 'mattpocock.tdd')), undefined);
+  }
+  for (const releaseOrder of [undefined, missing, ambiguous]) for (const version of ['1.0.0', '1.1.0']) {
+    const got = byItem(await withChanges({ before, candidates: [releaseOf(10, version, after)], releaseOrder }), 'mattpocock.tdd');
+    assert.equal(changeTrigger(got)?.key, version === '1.1.0' ? 'change:revised@1.1.0' : undefined);
+    if (changeTrigger(got)) assert.equal(changeTrigger(got).text.includes(RELEASE_ORDER_TEXT), false);
+  }
+});
+
+test('declared newer order can revise an unversioned release without changing the trigger key shape', async () => {
+  const before = [item('x.root')], after = [item('notes.plan', { label: 'Test plan note' })];
+  const [got] = await withChanges({ before, candidates: [releaseOf(10, undefined, after)], releaseOrder: declareReleaseOrder([[hex(9)], [hex(10)]]) });
+  assert.equal(changeTrigger(got)?.key, 'change:new');
+  assert.ok(changeTrigger(got).text.includes(RELEASE_ORDER_TEXT));
+  assert.equal(changeTrigger(got).text.includes('undefined'), false);
+});
+
+test('candidate order uses last declared position before semver and digest, regardless of input order', async () => {
+  const before = [item('x.root')], after = [item('notes.plan', { label: 'Test plan note' })];
+  const candidates = [releaseOf(10, '9.0.0', after), releaseOf(11, '1.0.0', after), releaseOf(12, '1.0.0', after)];
+  const releaseOrder = declareReleaseOrder([[hex(9)], [hex(11)], [hex(10)], [hex(11), hex(12)]]);
+  for (const ordered of [candidates, [...candidates].reverse()]) {
+    const [got] = await withChanges({ before, candidates: ordered, releaseOrder });
+    assert.equal(got.change.releaseSha256, hex(11));
+  }
+});
+
 test('a goal-relevant item that is new or revised in a newer revision of a saved source gets a change reason; nothing else does', async () => {
   const before = [item('x.root'), item('mattpocock.tdd'), item('notes.same', { label: 'Test notes' }), item('notes.edited', { label: 'Test checklist' }), item('notes.other', { label: 'Release notes' })];
   const after = [item('x.root'), revised(item('mattpocock.tdd'), 21), item('notes.same', { label: 'Test notes, renamed', description: 'Reworded.', itemSha256: hex(77) }),
@@ -312,7 +356,7 @@ test('a goal-relevant item that is new or revised in a newer revision of a saved
   assert.equal(changeTrigger(tdd).text, '“Label mattpocock.tdd” changed in review-notes-catalog 1.1.0 (its recipe or files differ from the revision this policy was saved from); your saved goal “add tests to my app” mentions “tests”.');
   assert.deepEqual(tdd.triggers.map(t => t.key), ['change:revised@1.1.0', 'goal:goal.test']);
   assert.deepEqual(tdd.references, [{ kind: 'saved-reason', ref: 'x.root' }, { kind: 'catalog-item', ref: 'mattpocock.tdd' }]);
-  assert.equal(tdd.goal, GOAL); assert.equal(tdd.rulesVersion, '1.4.0');
+  assert.equal(tdd.goal, GOAL); assert.equal(tdd.rulesVersion, '1.5.0');
   // The change describes the candidate item, the content the reason talks about.
   assert.deepEqual([tdd.change.releaseSha256, tdd.change.itemSha256, tdd.change.content.recipeSha256], [hex(10), hex(121), hex(21)]);
   const plan = byItem(got, 'notes.plan');
@@ -420,7 +464,7 @@ test('a change reason is shown once: dismissed with it, a goal suggestion stays 
   assert.deepEqual(classifyImprovement(advanced, shown, versionOf).reasons, ['Shown again: the suggested item, or an item it needs, changed since you dismissed it.']);
   assert.equal(classifyImprovement(dismissedGoal, shown).dismissed, false);
   // A later version with the same content is neither a new reason nor changed content.
-  const later = byItem(await withChanges({ before, candidates: [releaseOf(12, '1.3.0', after)] }), 'mattpocock.tdd');
+  const later = byItem(await withChanges({ before, candidates: [releaseOf(12, '1.4.0', after)] }), 'mattpocock.tdd');
   assert.notEqual(later.revision, shown.revision); assert.deepEqual(classifyImprovement(later, shown, versionOf), { dismissed: true, reasons: [] });
   // A revised client-rule item that is not relevant to a saved goal is neither a new reason nor changed content.
   const clientBefore = byItem(await withChanges({ before, clients: ['claude'] }), 'aihq.client.claude');
@@ -482,14 +526,14 @@ test('the rule table points at items the installed maintained Catalog really off
   const before = s.envelopeBytes.slice();
   const value = await check(s, s.envelopeBytes, { clients: ['claude', 'not-a-client'], goal: 'fewer regressions' });
   assert.deepEqual(s.envelopeBytes, before);
-  assert.equal(value.rulesVersion, '1.4.0'); assert.equal(value.checkedAt, NOW); assert.deepEqual(value.mutations, []);
+  assert.equal(value.rulesVersion, '1.5.0'); assert.equal(value.checkedAt, NOW); assert.deepEqual(value.mutations, []);
   assert.deepEqual(value.reads, ['envelope', 'supplied-inventories', 'declared-clients', 'request-goal']);
   // implement is the root; tdd arises from the saved goal and the request (two reasons), the client wiring from setup.
   assert.equal(value.leading.change.itemId, 'mattpocock.tdd');
   assert.deepEqual(value.leading.triggers.map(t => t.key), ['goal:goal.regressions', 'goal:goal.test']);
   assert.equal(value.leading.label, s.maintained.release.items.find(i => i.id === 'mattpocock.tdd').label);
   assert.equal(value.leading.scope, 'project'); assert.equal(value.leading.dismissal, null); assert.equal(value.leading.promotion, undefined);
-  assert.equal(value.leading.rulesVersion, '1.4.0'); assert.equal(value.leading.change.releaseSha256, s.maintained.release.sha256);
+  assert.equal(value.leading.rulesVersion, '1.5.0'); assert.equal(value.leading.change.releaseSha256, s.maintained.release.sha256);
   assert.match(value.leading.facts[0].text, /^Adds \d+ files, \d+ bytes in total, and needs 0 other items\.$/);
   assert.deepEqual(value.alternatives.map(a => a.change.itemId), ['aihq.client.claude']);
   assert.match(value.alternatives[0].facts[0].text, /^Adds \d+ files, \d+ bytes in total, and needs [1-9]\d* other items?: /);
@@ -783,9 +827,12 @@ async function intakeNotes(snapshot) {
 }
 const PLAN_ID = 'consumer-proof.test-plan';
 // The saved policy selects the current review note with a testing goal; the newer revision (1.0.1) revises that note and adds a second item.
-async function changeScenario() {
+async function changeScenario(version) {
   const found = await installed(), maintained = { release: found.release, materialSource: found.source };
-  const notes = await intakeNotes(await noteFixture()), snapshot = await noteFixture('updated'), declaration = JSON.parse(decode(snapshot.declarationBytes));
+  const saved = await noteFixture();
+  if (version) { const declaration = JSON.parse(decode(saved.declarationBytes)); declaration.package.version = version; saved.declarationBytes = encode(JSON.stringify(declaration)); }
+  const notes = await intakeNotes(saved), snapshot = await noteFixture('updated'), declaration = JSON.parse(decode(snapshot.declarationBytes));
+  if (version) declaration.package.version = version;
   const [first] = declaration.items, files = snapshot.sourceFiles[0].files, path = first.recipePath.replace('recipe.json', 'plan-recipe.json');
   files[path] = encode(JSON.stringify({ ...JSON.parse(decode(files[first.recipePath])), id: PLAN_ID }));
   declaration.items.push({ ...structuredClone(first), id: PLAN_ID, label: 'Test plan note', description: 'A plan for tests.', recipePath: path });
@@ -797,6 +844,52 @@ async function changeScenario() {
   const open = valueOf(await openDraft({ bytes: composed.policyBytes, inventories }));
   return { maintained, inventories, notes, next, noteId: note.id, envelopeBytes: open.envelopeBytes, policyBytes: composed.policyBytes };
 }
+
+test('checking equal-version packs forwards host order and names it in coverage and the suggestion', async () => {
+  const s = await changeScenario('0.1.0'), candidateInventories = [s.next];
+  const releaseOrder = declareReleaseOrder([[s.notes.release.sha256], [s.next.release.sha256]]);
+  const checked = await check(s, s.envelopeBytes, { candidateInventories, releaseOrder }), plan = shownItem(checked, PLAN_ID);
+  assert.equal(changeTrigger(plan)?.key, 'change:new@0.1.0');
+  assert.ok(changeTrigger(plan).text.includes(RELEASE_ORDER_TEXT));
+  assert.ok(changeTrigger(plan).text.includes(`release ${s.next.release.sha256.slice(0, 12)}…`));
+  assert.deepEqual(checked.coverage, [{ trigger: 'content-change', state: 'checked',
+    text: "Content changes since this policy was saved were checked against the configured update source using the release order declared by this host's update source." }, UNAVAILABLE]);
+  for (const order of [undefined, declareReleaseOrder([[s.next.release.sha256], [s.notes.release.sha256]]), declareReleaseOrder([[s.notes.release.sha256]])]) {
+    const got = await check(s, s.envelopeBytes, { candidateInventories, releaseOrder: order });
+    assert.equal(shownItem(got, PLAN_ID), undefined);
+  }
+  for (const options of [{}, { candidateInventories: null }, { candidateInventories: [], candidateSource: 'unconfigured' }]) {
+    const got = await check(s, s.envelopeBytes, { ...options, releaseOrder });
+    assert.equal(got.coverage[0].state, 'unknown');
+    assert.equal(got.coverage[0].text.includes('using the release order'), false);
+  }
+});
+
+test('candidate inventories accept forty releases while supplied inventories stay capped at thirty-two', async () => {
+  const s = await scenario(), candidates = [];
+  for (let i = 0; i < 41; i += 1) {
+    const snapshot = await noteFixture(), declaration = JSON.parse(decode(snapshot.declarationBytes));
+    declaration.package.version = `0.1.${i}`; snapshot.declarationBytes = encode(JSON.stringify(declaration));
+    candidates.push(await intakeNotes(snapshot));
+  }
+  const checked = await check(s, s.envelopeBytes, { candidateInventories: candidates.slice(0, 40) });
+  assert.equal(checked.coverage[0].state, 'checked');
+  for (const [path, options] of [['/candidateInventories', { candidateInventories: candidates }], ['/inventories', { inventories: candidates.slice(0, 33) }]]) {
+    const got = await checkImprovements({ envelopeBytes: s.envelopeBytes, inventories: s.inventories, now: NOW, ...options });
+    assert.equal(got.status, 'refused'); assert.equal(got.diagnostics[0].path, path);
+  }
+});
+
+test('invalid release orders are refused at the receiving boundary', async () => {
+  const s = await scenario();
+  for (const releaseOrder of [null, [], {}, { basis: 'producer', ranks: {} }, { basis: 'host-declared', ranks: { bad: [1, 2] } }]) {
+    const got = await checkImprovements({ envelopeBytes: s.envelopeBytes, inventories: s.inventories, now: NOW, releaseOrder });
+    assert.equal(got.status, 'refused');
+    assert.equal(got.diagnostics[0].code, 'INPUT_INVALID');
+    assert.equal(got.diagnostics[0].path, '/releaseOrder');
+    assert.deepEqual(got.originalBytes, s.envelopeBytes);
+  }
+});
 
 test('a real newer revision of the saved notes source offers its new goal-relevant item; a selected revised item and a dismissal hold', async () => {
   const s = await changeScenario(), candidateInventories = [s.next];
@@ -819,6 +912,61 @@ test('a real newer revision of the saved notes source offers its new goal-releva
     const gone = await check(s, recorded.envelopeBytes, options);
     assert.deepEqual(gone.preserved.map(p => [p.suggestion.id, p.state]), [[plan.id, 'not-current']]); assert.equal(shownItem(gone, PLAN_ID), undefined);
   }
+});
+
+const PARTLY = 'Content changes were checked against only part of the update source: some sources could not be read.';
+const NO_BASELINE = 'Not every exact release this policy was saved from is supplied, so changes to the missing ones were not compared.';
+
+test('a partly readable update source still suggests from what was read, but never says content changes were checked', async () => {
+  const s = await changeScenario(), candidateInventories = [s.next], partly = { candidateInventories, candidateCoverage: 'partial' };
+  const value = await check(s, s.envelopeBytes, partly), plan = shownItem(value, PLAN_ID);
+  assert.deepEqual(value.coverage, [{ trigger: 'content-change', state: 'unknown', reason: 'sources-partly-unavailable', text: PARTLY }, UNAVAILABLE]);
+  assert.ok(plan); assert.equal(changeTrigger(plan).key, 'change:new@1.0.1');
+  assert.deepEqual(plan.unknowns, [...UNKNOWNS, PARTLY, UNAVAILABLE.text]);
+  assert.ok(value.reads.includes('candidate-inventories'));
+  // Not identity: the same suggestion, and a dismissal of it, is the same once the whole source is read.
+  const whole = await check(s, s.envelopeBytes, { candidateInventories, candidateCoverage: 'complete' }), also = shownItem(whole, PLAN_ID);
+  assert.deepEqual([plan.id, plan.revision], [also.id, also.revision]); assert.deepEqual(also.unknowns, [...UNKNOWNS, UNAVAILABLE.text]);
+  assert.deepEqual(whole.coverage[0], { trigger: 'content-change', state: 'checked', text: CHECKED });
+  assert.deepEqual((await check(s, s.envelopeBytes, { candidateInventories })).coverage, whole.coverage);
+  // Nothing readable or configured keeps its own reason.
+  assert.equal((await check(s, s.envelopeBytes, { candidateInventories: null, candidateCoverage: 'partial' })).coverage[0].reason, 'sources-unavailable');
+  assert.equal((await check(s, s.envelopeBytes, { candidateSource: 'unconfigured', candidateCoverage: 'partial' })).coverage[0].reason, 'no-configured-source');
+  for (const candidateCoverage of ['some', null, 1]) {
+    const refused = await checkImprovements({ envelopeBytes: s.envelopeBytes, inventories: s.inventories, now: NOW, candidateInventories, candidateCoverage });
+    assert.equal(refused.status, 'refused', String(candidateCoverage)); assert.equal(refused.diagnostics[0].path, '/candidateCoverage'); assert.deepEqual(refused.originalBytes, s.envelopeBytes);
+  }
+});
+
+test('a saved release supplied only by the update source is still the baseline for what changed', async () => {
+  const before = [item('x.root'), item('mattpocock.tdd')], after = [item('x.root'), revised(item('mattpocock.tdd'), 21)];
+  const a = releaseOf(9, '1.0.0', before), b = releaseOf(10, '1.1.0', after), releaseOrder = declareReleaseOrder([[hex(9)], [hex(10)]]);
+  const from = (inventories, candidates) => suggestImprovements({ intent: changeIntent(), items: flat([b]), inventories, candidates, clients: [], releaseOrder });
+  for (const [inventories, candidates] of [[[], [a, b]], [[], [b, a]], [[a], [a, b]]]) {
+    const got = byItem(await from(inventories, candidates), 'mattpocock.tdd');
+    assert.equal(changeTrigger(got)?.key, 'change:revised@1.1.0'); assert.equal(got.change.releaseSha256, hex(10));
+  }
+  // The exact saved release is found by digest, in neither place it is not compared, and a candidate that is not it is not a baseline.
+  assert.equal(changeTrigger(byItem(await from([], [b]), 'mattpocock.tdd')), undefined);
+  assert.equal(changeTrigger(byItem(await from([], [releaseOf(8, '0.9.0', before), b]), 'mattpocock.tdd')), undefined);
+});
+
+test('the check says so when no baseline for the saved policy could be found, and compares through the update source when it can', async () => {
+  const s = await changeScenario(), releaseOrder = declareReleaseOrder([[s.notes.release.sha256], [s.next.release.sha256]]);
+  // The policy also pins the maintained Catalog it depends on; the saved note release is supplied only by the update source.
+  const [maintained] = s.inventories, supplied = { inventories: [maintained] };
+  const viaSource = await check(s, s.envelopeBytes, { ...supplied, candidateInventories: [s.notes, s.next], releaseOrder });
+  assert.ok(shownItem(viaSource, PLAN_ID)); assert.equal(viaSource.coverage[0].state, 'checked');
+  const lost = await check(s, s.envelopeBytes, { ...supplied, candidateInventories: [s.next], releaseOrder }), plan = shownItem(lost, PLAN_ID);
+  assert.deepEqual(lost.coverage[0], { trigger: 'content-change', state: 'unknown', reason: 'saved-release-not-supplied', text: NO_BASELINE });
+  assert.equal(plan, undefined);
+  // One saved release missing is enough to say so, while what can be compared still is.
+  const partly = await check(s, s.envelopeBytes, { inventories: [], candidateInventories: [s.notes, s.next], releaseOrder });
+  assert.deepEqual(partly.coverage[0], { trigger: 'content-change', state: 'unknown', reason: 'saved-release-not-supplied', text: NO_BASELINE });
+  assert.ok(shownItem(partly, PLAN_ID));
+  // A policy with nothing saved from a release has nothing to compare, which is not a missing baseline.
+  const empty = valueOf(await composeAuthoring({ intent: freshAuthoring(), inventories: s.inventories })), open = valueOf(await openDraft({ bytes: empty.policyBytes, inventories: s.inventories }));
+  assert.equal((await check(s, open.envelopeBytes, { candidateInventories: [s.next] })).coverage[0].state, 'checked');
 });
 
 test('host route: improvements-check reads the configured update source and recording does not', async () => {
@@ -877,7 +1025,7 @@ test('checking, dismissing and building the prompt never touch the network or a 
 });
 
 test('the improvement modules import only the allowed seams and contain no network, process or random calls', async () => {
-  const allowed = [/^\.\/intake\.mjs$/, /^\.\/journey\.mjs$/, /^\.\/headless\.mjs$/, /^\.\/intent-shape\.mjs$/, /^\.\/maintenance-record\.mjs$/, /^\.\/improvement-[a-z]+\.mjs$/, /^\.\/client-identity\.mjs$/, /^\.\/trial-record\.mjs$/, /^\.\/friction\.mjs$/, /^\.\/claims\.mjs$/, /^@aihq\/catalog\/reader$/, /^@aihq\/core\/report$/];
+  const allowed = [/^\.\/intake\.mjs$/, /^\.\/journey\.mjs$/, /^\.\/headless\.mjs$/, /^\.\/intent-shape\.mjs$/, /^\.\/maintenance-record\.mjs$/, /^\.\/improvement-[a-z]+\.mjs$/, /^\.\/client-identity\.mjs$/, /^\.\/trial-record\.mjs$/, /^\.\/release-order\.mjs$/, /^\.\/friction\.mjs$/, /^\.\/claims\.mjs$/, /^@aihq\/catalog\/reader$/, /^@aihq\/core\/report$/];
   for (const name of ['improvement-record.mjs', 'improvement-rules.mjs', 'improvements.mjs', 'friction.mjs']) {
     const source = await readFile(new URL(`./${name}`, import.meta.url), 'utf8');
     const specifiers = [...source.matchAll(/^(?:import|export)\b[^;]*?\bfrom\s+'([^']+)'/gm)].map(match => match[1]);
@@ -888,7 +1036,7 @@ test('the improvement modules import only the allowed seams and contain no netwo
       assert.doesNotMatch(source, forbidden, `${name} ${forbidden}`);
   }
   const rules = await readFile(new URL('./improvement-rules.mjs', import.meta.url), 'utf8');
-  assert.deepEqual([...rules.matchAll(/^import\b[^;]*?\bfrom\s+'([^']+)'/gm)].map(m => m[1]), ['./improvement-record.mjs', './client-identity.mjs']);
+  assert.deepEqual([...rules.matchAll(/^import\b[^;]*?\bfrom\s+'([^']+)'/gm)].map(m => m[1]), ['./improvement-record.mjs', './release-order.mjs', './client-identity.mjs']);
 });
 
 // ---- The copy-only prompt ------------------------------------------------------------------------------------------
@@ -899,7 +1047,7 @@ test('the prompt is attributed, tells the AI to change nothing, and carries no p
   for (const suggestion of [checked.leading, ...checked.alternatives]) {
     const prompt = suggestion.prompt;
     assert.equal(prompt, improvementPrompt(suggestion));
-    assert.ok(prompt.includes('Suggested by the AIH Workbench improvement rules 1.4.0 (fixed rules; no AI model was used).'));
+    assert.ok(prompt.includes('Suggested by the AIH Workbench improvement rules 1.5.0 (fixed rules; no AI model was used).'));
     assert.match(prompt, /Do not install, change or run anything/); assert.match(prompt, /do not ask me to upload/);
     assert.ok(prompt.includes('Start your reply with “AI advice:”.'));
     assert.ok(prompt.includes(suggestion.label)); assert.ok(prompt.includes(suggestion.change.itemId));
@@ -1080,7 +1228,7 @@ test('a recurrence names the condition, the evidence and the scope, and records 
     text: `Recurring failure: the managed file state check for “${label}” failed (${DAYS[0]}), recovered (${DAYS[1]}) and failed again (${DAYS[2]}); 1 recurrence in 3 stored Core results.` }]);
   assert.match(suggestion.triggers[0].key, /^[a-z][a-z0-9-]{0,31}:[\w.@-]{1,180}$/);
   assert.equal(suggestion.goal, 'ship it'); assert.deepEqual(suggestion.references, [{ kind: 'saved-reason', ref: 'mattpocock.implement' }, { kind: 'catalog-item', ref: DIAGNOSING }]);
-  assert.equal(value.rulesVersion, '1.4.0'); assert.equal(suggestion.rulesVersion, '1.4.0'); assert.equal(suggestion.triggers[0].text.includes(FIXTURE_NOTE), false);
+  assert.equal(value.rulesVersion, '1.5.0'); assert.equal(suggestion.rulesVersion, '1.5.0'); assert.equal(suggestion.triggers[0].text.includes(FIXTURE_NOTE), false);
   assert.deepEqual(value.coverage[1], { trigger: 'recurring-friction', state: 'checked', text: FRICTION_COVERAGE.checked });
   assert.deepEqual(value.reads, ['envelope', 'supplied-inventories', 'core-evidence', 'declared-clients']);
   assert.deepEqual(suggestion.unknowns, [...UNKNOWNS, UNCONFIGURED]); assert.equal(suggestion.prompt, improvementPrompt(suggestion)); assert.match(suggestion.prompt, /Recurring failure: the managed file state check/);
@@ -1261,13 +1409,19 @@ test('recurring conditions beyond the record\'s trigger limit are disclosed, not
 
 // ---- Content-change coverage when a release's order is not known -----------------------------------------------------
 const ORDER = 'Content changes were only partly checked';
-test('releaseOrder is semantic-version precedence; an unversioned, non-semver or equal-version release has no order and a host-declared order is not yet read', () => {
-  const entry = version => ({ release: { sha256: hex(1), package: { name: PACKAGE, ...(version ? { version } : {}) }, items: [] } });
-  assert.ok(releaseOrder(entry('1.0.0'), entry('1.1.0')) > 0); assert.ok(releaseOrder(entry('1.1.0'), entry('1.0.0')) < 0); assert.ok(releaseOrder(entry('1.0.0-rc.1'), entry('1.0.0')) > 0);
-  for (const [saved, candidate] of [['1.0.0', '1.0.0'], ['1.0.0+a', '1.0.0+b'], ['1.0.0', undefined], [undefined, '1.0.0'], ['1.0.0', 'latest'], ['v1', 'v2']]) assert.equal(releaseOrder(entry(saved), entry(candidate)), undefined, `${saved} ${candidate}`);
-  // The host-declared order is the seam: today it changes nothing, whatever it says.
-  for (const declared of [undefined, 'later', 'earlier', { order: 1 }]) assert.equal(releaseOrder(entry('1.0.0'), entry('1.0.0'), declared), undefined);
-  assert.equal(releaseOrder(entry('1.0.0'), entry('1.1.0'), 'earlier') > 0, true);
+test('releaseRelation consults the host-declared order first, then semantic-version precedence; a pair neither orders has no relation', () => {
+  const saved = version => releaseOf(9, version, []), candidate = version => releaseOf(10, version, []);
+  assert.equal(releaseRelation(saved('1.0.0'), candidate('1.1.0')), 'newer'); assert.equal(releaseRelation(saved('1.1.0'), candidate('1.0.0')), 'older'); assert.equal(releaseRelation(saved('1.0.0-rc.1'), candidate('1.0.0')), 'newer');
+  for (const [before, after] of [['1.0.0', '1.0.0'], ['1.0.0+a', '1.0.0+b'], ['1.0.0', undefined], [undefined, '1.0.0'], ['1.0.0', 'latest'], ['v1', 'v2']]) assert.equal(releaseRelation(saved(before), candidate(after)), undefined, `${before} ${after}`);
+  // A declared order that orders the pair decides it, even for releases that share a version, have none, or whose versions say the opposite.
+  const newer = declareReleaseOrder([[hex(9)], [hex(10)]]), older = declareReleaseOrder([[hex(10)], [hex(9)]]);
+  for (const [before, after] of [['1.0.0', '1.0.0'], [undefined, undefined], ['1.0.0', 'latest']]) { assert.equal(releaseRelation(saved(before), candidate(after), newer), 'newer', `${before} ${after}`); assert.equal(releaseRelation(saved(before), candidate(after), older), 'older', `${before} ${after}`); }
+  assert.equal(releaseRelation(saved('1.0.0'), candidate('1.1.0'), older), 'older'); assert.equal(releaseRelation(saved('1.1.0'), candidate('1.0.0'), newer), 'newer');
+  // A declared order that does not order the pair (a release it lacks, an ambiguous position or an unreadable value) leaves semver, or nothing, to decide.
+  for (const unknown of [undefined, declareReleaseOrder([[hex(9)]]), declareReleaseOrder([[hex(9)], [hex(10)], [hex(9)]])]) {
+    assert.equal(releaseRelation(saved('1.0.0'), candidate('1.1.0'), unknown), 'newer'); assert.equal(releaseRelation(saved('1.1.0'), candidate('1.0.0'), unknown), 'older');
+    assert.equal(releaseRelation(saved('1.0.0'), candidate('1.0.0'), unknown), undefined);
+  }
 });
 
 async function sameSourceCandidate(mutate) {
@@ -1307,6 +1461,35 @@ test('unorderedSources names a package whose candidate release is unversioned, n
   assert.deepEqual(names([]), []);
   // A saved release the intent does not name is not asked.
   assert.deepEqual(unorderedSources(intent, [releaseOf(8, '1.0.0', [])], [releaseOf(10, undefined, [])]), []);
+});
+
+test('releases the host orders are not version-order-unknown even when they share a version, and the newer one suggests labelled host-declared; without a host order they are', async () => {
+  const s = await changeScenario('0.1.0'), candidateInventories = [s.next], [saved, next] = [s.notes.release.sha256, s.next.release.sha256];
+  assert.equal(s.notes.release.package.version, s.next.release.package.version);
+  const declared = await check(s, s.envelopeBytes, { candidateInventories, releaseOrder: declareReleaseOrder([[saved], [next]]) }), plan = shownItem(declared, PLAN_ID);
+  assert.deepEqual(declared.coverage[0], { trigger: 'content-change', state: 'checked', text: "Content changes since this policy was saved were checked against the configured update source using the release order declared by this host's update source." });
+  assert.ok(plan); assert.ok(changeTrigger(plan).text.includes(`newer by the ${RELEASE_ORDER_TEXT}`));
+  // The declared order says the other release is older: ordered, so checked, and nothing newer to suggest.
+  const older = await check(s, s.envelopeBytes, { candidateInventories, releaseOrder: declareReleaseOrder([[next], [saved]]) });
+  assert.equal(older.coverage[0].state, 'checked'); assert.equal(shownItem(older, PLAN_ID), undefined);
+  // No order, or one that does not order this pair (a missing or ambiguous release), leaves equal versions unordered.
+  for (const releaseOrder of [undefined, declareReleaseOrder([[saved]]), declareReleaseOrder([[saved], [next], [saved]])]) {
+    const got = await check(s, s.envelopeBytes, { candidateInventories, releaseOrder });
+    assert.equal(got.coverage[0].state, 'unknown'); assert.equal(got.coverage[0].reason, 'version-order-unknown'); assert.ok(got.coverage[0].text.startsWith(ORDER));
+    assert.equal(shownItem(got, PLAN_ID), undefined);
+  }
+  // The reasons about the source itself come first: a partly read source stays sources-partly-unavailable whatever the order of its releases.
+  const partly = await check(s, s.envelopeBytes, { candidateInventories, candidateCoverage: 'partial' });
+  assert.equal(partly.coverage[0].reason, 'sources-partly-unavailable');
+});
+
+test('unorderedSources asks the host-declared order first, then semver', () => {
+  const intent = changeIntent(), saved = [releaseOf(9, '1.0.0', [])], candidate = releaseOf(10, '1.0.0', []), names = releaseOrder => unorderedSources(intent, saved, [candidate], releaseOrder);
+  assert.deepEqual(names(undefined), [PACKAGE]);
+  assert.deepEqual(names(declareReleaseOrder([[hex(9)], [hex(10)]])), []); assert.deepEqual(names(declareReleaseOrder([[hex(10)], [hex(9)]])), []);
+  assert.deepEqual(names(declareReleaseOrder([[hex(9)]])), [PACKAGE]); assert.deepEqual(names(declareReleaseOrder([[hex(9)], [hex(10)], [hex(9)]])), [PACKAGE]);
+  // Semver orders what the declared order does not.
+  assert.deepEqual(unorderedSources(intent, saved, [releaseOf(10, '1.1.0', [])], declareReleaseOrder([[hex(9)]])), []);
 });
 
 test('an older release of the saved package is ordered, and a dismissal is unaffected by the unknown order', async () => {

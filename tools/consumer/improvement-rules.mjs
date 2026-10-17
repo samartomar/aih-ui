@@ -3,12 +3,14 @@
 // from and newer candidate revisions of them, the person's declared AI clients with their published labels and an optional request goal. It calls no model, reads no network or file and keeps no clock; the same
 // inputs always give the same suggestions. Rule text is not part of a suggestion's identity (see improvement-record.mjs).
 import { suggestionId, suggestionRevision, sameContent, MAX_TRIGGERS } from './improvement-record.mjs';
+import { orderRelation, RELEASE_ORDER_TEXT } from './release-order.mjs';
 import { adapterFor, describeClientIdentity } from './client-identity.mjs';
 // 1.1.0: the client rule names a client by its published label when one is supplied (wording only; identity is unchanged).
 // 1.2.0: a goal-relevant item new or revised in a newer revision of a saved source is suggested from that revision; recurring friction is named as unchecked.
 // 1.3.0: the client rule matches adapters by Catalog clientId; an adapter without one is not suggested.
-// 1.4.0: a failure that came back after it was fixed, as Core's recurrence method reports it for a selected item, is suggested the diagnosis practice; a release whose order is not known is never called newer.
-export const IMPROVEMENT_RULES_VERSION = '1.4.0';
+// 1.4.0: content-change rules use the host-declared release order when known.
+// 1.5.0: recurring friction from stored Core results via Core's recurrence method; a different release of a saved package whose order is unknown is reported as version-order-unknown.
+export const IMPROVEMENT_RULES_VERSION = '1.5.0';
 export const MAX_GOAL = 300, MAX_ALTERNATIVES = 3, MAX_TRACKED_NEEDS = 256;
 // Independent of the guided-setup rules on purpose: each rule set is versioned alone, so changing one never changes
 // the saved reasons the other wrote.
@@ -107,12 +109,14 @@ function facts(item, scope, offered, selected) {
     result.push({ kind: 'dependency', text: `Conflicts with ${conflict}, which this policy already selects.` });
   return result;
 }
-// Which of two releases of one package is later: positive when the candidate is, negative when the saved one is, undefined when neither is known to be
-// (an unversioned or non-semver release, or the same version with other content). The order is semantic-version precedence. `hostDeclaredOrder` is the seam
-// for an order a host's update source declares; no host supplies one, so it is not read. An order taken from it must be shown labelled host-declared.
-export function releaseOrder(saved, candidate, hostDeclaredOrder) {
+// How a candidate release stands against a saved one of the same package: 'newer' or 'older', or undefined when neither is known. The order the host's
+// update source declares is used first (orderRelation; it can order releases that share a version, or have none); else semantic-version precedence.
+// Where this reports 'newer' by the declared order the suggestion says so (see changedItems).
+export function releaseRelation(saved, candidate, releaseOrder) {
+  const declared = orderRelation(releaseOrder, candidate.release.sha256, saved.release.sha256)?.relation;
+  if (declared === 'newer' || declared === 'older') return declared;
   const order = precedence(candidate.release.package?.version, saved.release.package?.version);
-  return order === 0 ? undefined : order;
+  return order > 0 ? 'newer' : order < 0 ? 'older' : undefined;
 }
 // A candidate is a different release of a saved one's package from the same input. The saved policy's own record of the input wins over the supplied
 // one; no input on either side is the same source.
@@ -122,15 +126,14 @@ function sameSource(intent, saved, candidate) {
   const input = intent.inputs.find(i => i.releaseSha256 === saved.release.sha256) ?? saved.input;
   return input ? candidate.input?.kind === input.kind && sameContent(candidate.input?.locator, input.locator) : !candidate.input;
 }
-// It revises the saved release when its version is strictly later: an older, equal or unversioned release is never called newer, so its novelty stays unknown.
-const revises = (intent, saved, candidate) => sameSource(intent, saved, candidate) && releaseOrder(saved, candidate) > 0;
-// The inventories the policy was saved from, one per saved release the intent names.
-const savedReleases = (intent, inventories) => [...new Set([...intent.roots, ...intent.pins, ...intent.provenance].map(entry => entry.releaseSha256))].sort(compare)
-  .flatMap(sha => inventories.filter(entry => entry.release.sha256 === sha).slice(0, 1));
-// Packages for which a candidate is a different release of a saved one whose order is not known, so the check cannot say whether it is newer.
-export function unorderedSources(intent, inventories, candidates) {
+// It revises the saved release when the host declares it newer or, if the host's order does not say, its version is strictly later: an older, equal or
+// unversioned release is never called newer, so its novelty stays unknown.
+const revises = (intent, saved, candidate, releaseOrder) => sameSource(intent, saved, candidate) && releaseRelation(saved, candidate, releaseOrder) === 'newer';
+// Packages for which a candidate is a different release of a saved one that neither the host's order nor semver orders, so the check cannot say whether it is newer.
+export function unorderedSources(intent, inventories, candidates, releaseOrder) {
   const names = new Set();
-  for (const saved of savedReleases(intent, inventories)) for (const candidate of candidates) if (sameSource(intent, saved, candidate) && releaseOrder(saved, candidate) === undefined) names.add(saved.release.package.name);
+  for (const saved of savedBaselines(intent, inventories, candidates).resolved) for (const candidate of candidates)
+    if (sameSource(intent, saved, candidate) && releaseRelation(saved, candidate, releaseOrder) === undefined) names.add(saved.release.package.name);
   return [...names].sort(compare);
 }
 // Labels, descriptions and item digests alone are not material: the recipe and the sorted material digests are, the item's own
@@ -140,16 +143,27 @@ function difference(before, beforeKnown, item, known) {
   if (!sameContent(digestsOf(before), digestsOf(item))) return 'own';
   return sameContent(closureOf(before, beforeKnown), closureOf(item, known)) ? undefined : 'needed';
 }
+// The releases this policy was saved from, found by exact digest among the supplied inventories and then the update source's
+// checked candidates (which may be the only place an older pack is offered). `saved` counts the digests the policy names; a digest found
+// in neither is not compared.
+export function savedBaselines(intent, inventories, candidates = []) {
+  const shas = [...new Set([...intent.roots, ...intent.pins, ...intent.provenance].map(entry => entry.releaseSha256))].sort(compare);
+  return { saved: shas.length, resolved: shas.flatMap(sha => [...inventories, ...candidates].filter(entry => entry.release.sha256 === sha).slice(0, 1)) };
+}
 // Items that candidate releases add or change against the saved releases they revise, by item id, newest candidate first. An item is new
 // when none of those saved releases has it and revised when each one that has it differs; a candidate that revises none says nothing.
 // `known` is what the item's requirements resolve against: its own release first, then the supplied items.
-function changedItems(intent, inventories, candidates, offered) {
-  const saved = savedReleases(intent, inventories), changed = new Map();
-  // Only versioned candidates can revise a saved source; dropping the rest first keeps the order total.
-  const newest = candidates.filter(entry => SEMVER.test(entry.release.package?.version ?? ''))
-    .sort((a, b) => precedence(b.release.package.version, a.release.package.version) || compare(a.release.sha256, b.release.sha256));
+function changedItems(intent, inventories, candidates, offered, releaseOrder) {
+  const { resolved: saved } = savedBaselines(intent, inventories, candidates);
+  const changed = new Map();
+  const rank = entry => releaseOrder?.ranks[entry.release.sha256]?.[1] ?? 0;
+  const versioned = entry => SEMVER.test(entry.release.package?.version ?? '');
+  // Known positions sort first; semver and digest break ties, including unversioned releases with a declared position.
+  const newest = candidates.filter(entry => rank(entry) || versioned(entry))
+    .sort((a, b) => rank(b) - rank(a) || Number(versioned(b)) - Number(versioned(a))
+      || precedence(b.release.package?.version, a.release.package?.version) || compare(a.release.sha256, b.release.sha256));
   for (const candidate of newest) {
-    const { release } = candidate, sources = saved.filter(entry => revises(intent, entry, candidate));
+    const { release } = candidate, sources = saved.filter(entry => revises(intent, entry, candidate, releaseOrder));
     if (!sources.length) continue;
     const own = release.items.map(item => ({ ...item, root: { releaseSha256: release.sha256 } })), known = new Map([...offered, ...own.map(item => [item.id, item])]);
     for (const item of own) {
@@ -157,7 +171,7 @@ function changedItems(intent, inventories, candidates, offered) {
       const prior = sources.flatMap(entry => entry.release.items.filter(i => i.id === item.id).slice(0, 1).map(before =>
         difference(before, new Map([...offered, ...entry.release.items.map(i => [i.id, i])]), item, known)));
       const kind = !prior.length ? 'new' : prior.every(Boolean) ? 'revised' : undefined;
-      if (kind) changed.set(item.id, { kind, item, release, known, needed: prior.length > 0 && prior.every(part => part === 'needed') });
+      if (kind) changed.set(item.id, { kind, item, release, known, hostOrdered: sources.some(entry => orderRelation(releaseOrder, release.sha256, entry.release.sha256)?.relation === 'newer'), needed: prior.length > 0 && prior.every(part => part === 'needed') });
     }
   }
   return changed;
@@ -169,8 +183,9 @@ function changedItems(intent, inventories, candidates, offered) {
 // from them is ever suggested except such an item. `labels` maps a client id to the label Harness publishes for it; a client
 // without one is named by its id. `coreClients` (optional) is Core's nativeClientIds; it only fills the `client` facts of an adapter
 // suggestion (target, Core support, installed) and never decides whether one is made. `friction` (optional) is the recurrence results
-// frictionRecurrence returns for the subjects the draft ties; only an available result with a recurrence suggests anything.
-export async function suggestImprovements({ intent, items = [], inventories = [], candidates: revisions = [], clients = [], labels = {}, goal, coreClients, friction = [] } = {}) {
+// frictionRecurrence returns for the subjects the draft ties; only an available result with a recurrence suggests anything. `releaseOrder` (optional) is the
+// order the host's update source declares for its releases (release-order.mjs).
+export async function suggestImprovements({ intent, items = [], inventories = [], candidates: revisions = [], clients = [], labels = {}, goal, coreClients, friction = [], releaseOrder } = {}) {
   const selected = new Set([...intent.roots, ...intent.pins].map(entry => entry.itemId)), excluded = new Set(intent.exclusions.map(entry => entry.itemId));
   const offered = new Map();
   for (const item of items) if (!offered.has(item.id)) offered.set(item.id, item);
@@ -199,17 +214,17 @@ export async function suggestImprovements({ intent, items = [], inventories = []
     if (matches.length) goals.push({ root, saved: inline(saved[1]), matches });
   }
   // Novelty alone never promotes: a saved goal's rule must name the changed item, or one of the rule's phrases must be in its label or description.
-  for (const [itemId, change] of changedItems(intent, inventories, revisions, offered)) {
+  for (const [itemId, change] of changedItems(intent, inventories, revisions, offered, releaseOrder)) {
     const found = goals.flatMap(({ root, saved, matches }) => matches.flatMap(({ rule, phrase }) => {
       if (rule.itemId === itemId) return [{ root, saved, phrase }];
       const topic = ['label', 'description'].flatMap(field => { const hit = firstPhrase(String(change.item[field] ?? '').toLowerCase(), rule.phrases); return hit === undefined ? [] : [{ field, hit }]; })[0];
       return topic ? [{ root, saved, phrase, topic }] : [];
     }))[0];
     if (!found) continue;
-    const { release } = change, where = `${release.package.name} ${release.package.version}`, name = `“${inline(change.item.label ?? itemId)}”`;
+    const { release } = change, where = `${release.package.name}${release.package.version ? ` ${release.package.version}` : ''}${change.hostOrdered ? ` (release ${release.sha256.slice(0, 12)}…), newer by the ${RELEASE_ORDER_TEXT}` : ''}`, name = `“${inline(change.item.label ?? itemId)}”`;
     const why = `; your saved goal “${found.saved}” mentions “${found.phrase}”${found.topic ? `, and its ${found.topic.field} mentions “${found.topic.hit}”` : ''}.`;
     // The key carries the candidate's version, so a dismissal remembers how new the content it saw was (see classifyImprovement).
-    const version = release.package.version.replace(/\+.*$/, ''), key = `change:${change.kind}${version.length <= 160 ? `@${version}` : ''}`;
+    const version = (release.package.version ?? '').replace(/\+.*$/, ''), key = `change:${change.kind}${version && version.length <= 160 ? `@${version}` : ''}`;
     add(itemId, key, `change.${change.kind}`, clip(change.kind === 'new' ? `${name} is new in ${where}, a newer revision of a source this policy was saved from${why}`
       : `${name} changed in ${where} (${change.needed ? 'an item it needs differs' : 'its recipe or files differ'} from the revision this policy was saved from)${why}`), { kind: 'saved-reason', ref: found.root.itemId }, found.saved, change);
   }

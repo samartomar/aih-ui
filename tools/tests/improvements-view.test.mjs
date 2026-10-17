@@ -323,3 +323,82 @@ test('an adapter suggestion shows its target, Core support and installed state a
   for (const line of [client.target.text, client.core.text, client.installed.text]) assert.ok(shown.includes(line), line);
   assert.deepEqual(dismissOperation(withClient), { type: 'dismiss', suggestion: record });
 });
+
+test('each suggestion cites the exact release and item digests it describes, in full', async () => {
+  const release = 'c'.repeat(64), item = 'd'.repeat(64), cited = { ...suggestion, change: { ...suggestion.change, releaseSha256: release, itemSha256: item } };
+  const stored = { ...record, change: cited.change };
+  const client = { draft, revision: 1, checkImprovements: async () => ok({ ...checked, leading: cited, alternatives: [{ ...cited, id: 'two' }], dismissed: [{ ...cited, id: 'three' }], preserved: [{ suggestion: stored, dismissal: { reason: 'Later' }, state: 'not-current' }] }) };
+  const built = view(client); await built.open();
+  const lines = elements(built.node).filter(node => node.textContent === `Content: release ${release} · item ${item}`);
+  assert.equal(lines.length, 4, 'every card cites its content');
+  for (const line of lines) assert.match(line.className, /font-mono/);
+  // A record without digests (an earlier shape) shows no citation rather than a blank one.
+  const bare = view({ draft, revision: 1, checkImprovements: async () => ok(checked) }); await bare.open();
+  assert.doesNotMatch(textOf(bare.node), /Content: release/);
+});
+
+test('a content change suggested by a complete check stays, as of that check, while a later check cannot read every source', async () => {
+  const change = { ...suggestion, id: 'suggestion-change', promotion: undefined, label: 'Revised plan', triggers: [{ ruleId: 'change.revised', key: 'change:revised@0.1.0', text: 'Revised plan changed.' }] };
+  const content = (state, reason) => [{ trigger: 'content-change', state, ...(reason ? { reason } : {}), text: `content ${state}` }];
+  const results = [ok({ ...checked, leading: change, coverage: content('checked') }),
+    ok({ ...checked, checkedAt: '2026-10-16T13:00:00Z', leading: suggestion, coverage: content('unknown', 'sources-partly-unavailable') }),
+    ok({ ...checked, checkedAt: '2026-10-16T14:00:00Z', leading: suggestion, coverage: content('unknown', 'sources-partly-unavailable') }),
+    ok({ ...checked, checkedAt: '2026-10-16T15:00:00Z', leading: suggestion, coverage: content('checked') })];
+  const client = { draft, revision: 1, checkImprovements: async () => results.shift() };
+  const built = view(client), cards = () => elements(built.node).filter(node => node.dataset.suggestionId).map(node => node.dataset.suggestionId);
+  await built.open();
+  assert.deepEqual(cards(), ['suggestion-change']);
+  await find(built, 'Suggest').listeners.click();
+  // The earlier change is still shown, labelled with the check that found it and without actions.
+  assert.deepEqual(cards(), ['suggestion-one', 'suggestion-change']);
+  assert.ok(textOf(built.node).includes('Earlier suggestions (as of 2026-10-16T12:00:00Z)'));
+  assert.ok(textOf(built.node).includes('Content changes as of 2026-10-16T12:00:00Z.'));
+  const earlier = elements(built.node).find(node => node.dataset.suggestionId === 'suggestion-change');
+  assert.equal(elements(earlier).filter(node => node.tag === 'button').length, 0);
+  // Still partial: kept with the same time. Complete again: only what that check found.
+  await find(built, 'Suggest').listeners.click();
+  assert.deepEqual(cards(), ['suggestion-one', 'suggestion-change']);
+  assert.ok(textOf(built.node).includes('as of 2026-10-16T12:00:00Z'));
+  await find(built, 'Suggest').listeners.click();
+  assert.deepEqual(cards(), ['suggestion-one']);
+  assert.ok(!textOf(built.node).includes('Earlier suggestions'));
+});
+
+test('the last complete check is kept through partial checks that still show its changes, and only for unreadable sources', async () => {
+  const change = { ...suggestion, id: 'suggestion-change', promotion: undefined, label: 'Revised plan', triggers: [{ ruleId: 'change.revised', key: 'change:revised@0.1.0', text: 'Revised plan changed.' }] };
+  const content = (state, reason) => [{ trigger: 'content-change', state, ...(reason ? { reason } : {}), text: `content ${state}` }];
+  const at = (hour, leading, state, reason) => ok({ ...checked, checkedAt: `2026-10-16T${hour}:00:00Z`, leading, coverage: content(state, reason) });
+  const cards = built => elements(built.node).filter(node => node.dataset.suggestionId).map(node => node.dataset.suggestionId);
+  // Complete with the change, partial still with it, partial without it: the change is kept as of the complete check.
+  let results = [at(10, change, 'checked'), at(11, change, 'unknown', 'sources-partly-unavailable'), at(12, suggestion, 'unknown', 'sources-partly-unavailable')];
+  let client = { draft, revision: 1, checkImprovements: async () => results.shift() }, built = view(client);
+  await built.open(); await find(built, 'Suggest').listeners.click(); await find(built, 'Suggest').listeners.click();
+  assert.deepEqual(cards(built), ['suggestion-one', 'suggestion-change']);
+  assert.ok(textOf(built.node).includes('Earlier suggestions (as of 2026-10-16T10:00:00Z)'));
+  // An unknown that is not an unreadable source (here a missing saved release) keeps nothing earlier.
+  results = [at(10, change, 'checked'), at(11, suggestion, 'unknown', 'saved-release-not-supplied')];
+  client = { draft, revision: 1, checkImprovements: async () => results.shift() }; built = view(client);
+  await built.open(); await find(built, 'Suggest').listeners.click();
+  assert.deepEqual(cards(built), ['suggestion-one']);
+  // A changed policy forgets the earlier result, even one a recorded choice had retired.
+  results = [at(10, change, 'checked'), at(11, suggestion, 'unknown', 'sources-partly-unavailable')];
+  client = { draft, revision: 1, checkImprovements: async () => results.shift() }; built = view(client);
+  await built.open();
+  client.revision = 2; built.render();
+  await find(built, 'Suggest').listeners.click();
+  assert.deepEqual(cards(built), ['suggestion-one']);
+});
+
+test('a recorded choice keeps the complete check for the partial check that follows it', async () => {
+  const change = { ...suggestion, id: 'suggestion-change', promotion: undefined, label: 'Revised plan', triggers: [{ ruleId: 'change.revised', key: 'change:revised@0.1.0', text: 'Revised plan changed.' }] };
+  const coverage = (state, reason) => [{ trigger: 'content-change', state, ...(reason ? { reason } : {}), text: `content ${state}` }];
+  const results = [ok({ ...checked, leading: suggestion, alternatives: [change], coverage: coverage('checked') }),
+    ok({ ...checked, checkedAt: '2026-10-16T13:00:00Z', leading: null, dismissed: [suggestion], coverage: coverage('unknown', 'sources-partly-unavailable') })];
+  // Recording changes the open artifact's revision, as the real client does.
+  const client = { draft, revision: 1, checkImprovements: async () => results.shift(), recordImprovement: async () => { client.revision += 1; return ok({}); } };
+  const built = view(client); await built.open();
+  await find(built, 'Dismiss').listeners.click();
+  const cards = elements(built.node).filter(node => node.dataset.suggestionId).map(node => node.dataset.suggestionId);
+  assert.deepEqual(cards, ['suggestion-one', 'suggestion-change']);
+  assert.ok(textOf(built.node).includes('Earlier suggestions (as of 2026-10-16T12:00:00Z)'));
+});

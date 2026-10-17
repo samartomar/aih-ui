@@ -8,6 +8,8 @@ import { MANIFEST_SCHEMA } from './layout.mjs';
 
 const SHA256 = /^[0-9a-f]{64}$/, COMMIT = /^[0-9a-f]{7,40}$/;
 const REQUIRED = ['core', 'catalog', 'scan'];
+// The most update-source Catalogs one candidate can name (the Workbench host's own limit).
+const MAX_UPDATE_SOURCE_CATALOGS = 8;
 // The order the candidate is printed and checked in.
 const IDENTITY_ORDER = ['core', 'scan', 'catalog'];
 const refusal = (code, message) => Object.assign(new Error(message), { code });
@@ -31,7 +33,7 @@ export function readManifest(path) {
   catch (error) { throw invalid(error.code === 'ENOENT' ? `The manifest ${file} does not exist.` : `The manifest ${file} could not be read as JSON: ${error.message}`); }
   if (!plain(manifest)) throw invalid('The manifest must be a JSON object.');
   if (manifest.schema !== MANIFEST_SCHEMA) throw invalid(`The manifest schema must be ${MANIFEST_SCHEMA} (found ${JSON.stringify(manifest.schema)}).`);
-  const unknown = Object.keys(manifest).filter(key => !['schema', 'candidate', 'packages', 'previousCatalog'].includes(key));
+  const unknown = Object.keys(manifest).filter(key => !['schema', 'candidate', 'packages', 'previousCatalog', 'updateSourceCatalogs'].includes(key));
   if (unknown.length) throw invalid(`The manifest has unknown ${unknown.length === 1 ? 'key' : 'keys'}: ${unknown.join(', ')}.`);
   if (manifest.candidate !== undefined && typeof manifest.candidate !== 'string') throw invalid('candidate must be a text label.');
   if (!plain(manifest.packages)) throw invalid('The manifest must name packages core, catalog and scan.');
@@ -43,6 +45,14 @@ export function readManifest(path) {
     packages[name] = readEntry(`packages.${name}`, manifest.packages[name], directory);
   }
   if (manifest.previousCatalog !== undefined) packages.previousCatalog = readEntry('previousCatalog', manifest.previousCatalog, directory);
+  // `updateSourceCatalogs` is the order this host's update source declares, oldest first: later entries are newer because the
+  // manifest author lists them so, not because of any version or Catalog fact. Listing the installed pack among them places it.
+  if (manifest.updateSourceCatalogs !== undefined) {
+    const list = manifest.updateSourceCatalogs;
+    if (!Array.isArray(list)) throw invalid(`updateSourceCatalogs must be a list of 1 to ${MAX_UPDATE_SOURCE_CATALOGS} entries, each with tarball, sha256 and commit.`);
+    if (list.length < 1 || list.length > MAX_UPDATE_SOURCE_CATALOGS) throw invalid(`updateSourceCatalogs must list 1 to ${MAX_UPDATE_SOURCE_CATALOGS} entries (found ${list.length}).`);
+    packages.updateSourceCatalogs = list.map((entry, index) => readEntry(`updateSourceCatalogs[${index}]`, entry, directory));
+  }
   return { manifest, packages };
 }
 
@@ -50,7 +60,8 @@ const digestOf = bytes => createHash('sha256').update(bytes).digest('hex');
 
 // Every tarball is hashed before anything is installed or written: a candidate is the bytes named, or it is refused.
 export async function verifyManifest({ packages }) {
-  for (const [name, entry] of Object.entries(packages)) {
+  const { updateSourceCatalogs = [], ...named } = packages;
+  for (const [name, entry] of [...Object.entries(named), ...updateSourceCatalogs.map((entry, index) => [`updateSourceCatalogs[${index}]`, entry])]) {
     let bytes;
     try { bytes = await readFile(entry.tarball); }
     catch (error) { throw refusal('CANDIDATE_TARBALL_MISSING', `The ${name} tarball ${entry.tarball} could not be read: ${error.code ?? error.message}`); }
@@ -61,7 +72,9 @@ export async function verifyManifest({ packages }) {
 
 export function candidateIdentity({ manifest, packages }) {
   return { candidate: manifest.candidate ?? null,
-    packages: IDENTITY_ORDER.map(name => ({ name: `@aihq/${name}`, sha256: packages[name].sha256, commit: packages[name].commit, tarball: basename(packages[name].tarball) })) };
+    packages: IDENTITY_ORDER.map(name => ({ name: `@aihq/${name}`, sha256: packages[name].sha256, commit: packages[name].commit, tarball: basename(packages[name].tarball) })),
+    // Only when configured, so the printed identity says exactly which packs the update source uses, by position.
+    ...(packages.updateSourceCatalogs ? { updateSource: packages.updateSourceCatalogs.map((entry, index) => ({ position: index + 1, sha256: entry.sha256, commit: entry.commit, tarball: basename(entry.tarball) })) } : {}) };
 }
 
 // The manifest as the candidate keeps it: the same document with every tarball path made absolute.
@@ -69,5 +82,6 @@ export function absoluteManifest({ manifest, packages }) {
   const named = { ...manifest.packages }, out = { ...manifest, packages: named };
   for (const name of REQUIRED) named[name] = { ...manifest.packages[name], tarball: packages[name].tarball };
   if (packages.previousCatalog) out.previousCatalog = { ...manifest.previousCatalog, tarball: packages.previousCatalog.tarball };
+  if (packages.updateSourceCatalogs) out.updateSourceCatalogs = manifest.updateSourceCatalogs.map((entry, index) => ({ ...entry, tarball: packages.updateSourceCatalogs[index].tarball }));
   return out;
 }

@@ -91,7 +91,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     [head.textContent, [...head.parentElement.children].slice(1).map(entry => entry.innerText)])));
   const groupRows = async (page, label) => (await groupsOf(page))[label] ?? [];
   const section = (page, label) => page.locator('#policy-updates h4').filter({ hasText: new RegExp(`^${label}$`) }).locator('..');
-  const categoryLines = page => page.locator('#policy-updates > div').nth(1).locator('p').allInnerTexts();
+  const categoryLines = page => page.locator('#policy-updates-categories p').allInnerTexts();
   const waitSettled = (page, previous) => page.waitForFunction(before => {
     const text = document.getElementById('policy-updates-checked')?.textContent ?? '';
     return text !== before && text !== '' && !text.startsWith('Checking') && !/unknown until checked/.test(text);

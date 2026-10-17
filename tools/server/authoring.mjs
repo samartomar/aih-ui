@@ -1,8 +1,9 @@
 // Reuse the installed application's authoring host; it owns validation and grants.
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readFile, stat } from 'node:fs/promises';
 
+// Demonstration/test source only: it is labelled a test fixture and is never a real update source.
 // Demo/test host input: a small JSON file { "revisions": ["updated"] } naming note-fixture variants to publish
 // as newer revisions of the same `notes` input. Read at each check; anything unreadable is offline (null).
 // `newer` is the `updated` content one version later: a second revision of the same package and item. `additional`
@@ -62,6 +63,7 @@ export async function createAuthoringAdapter(consumerDir) {
     reviewTrust: await selectedJson('AIH_REVIEW_TRUST'),
     previousCatalogRoot: process.env.AIH_CONSUMER_PREVIOUS_CATALOG,
     ...(process.env.AIH_FRICTION_EVIDENCE ? { frictionEvidence: await fileFrictionEvidence(consumerDir, process.env.AIH_FRICTION_EVIDENCE) } : {}),
+    ...(process.env.AIH_UPDATE_SOURCE_CATALOG_ROOTS ? { updateSourceCatalogRoots: process.env.AIH_UPDATE_SOURCE_CATALOG_ROOTS.split(delimiter) } : {}),
     ...(process.env.AIH_MAINTENANCE_SOURCE ? { maintenanceSource: await fileMaintenanceSource(consumerDir, process.env.AIH_MAINTENANCE_SOURCE) } : {}) });
   return {
     catalog: async () => (await fetch(host.origin + '/api/authoring-catalog')).json(),
