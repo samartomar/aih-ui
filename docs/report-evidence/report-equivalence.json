@@ -1,0 +1,165 @@
+{
+  "coreVersion": "1.0.0-dev.37",
+  "templateSourceSha256": "f579f499b68c414baeeaa508f7199e33b5ba182a832b3e4f83ad6b395253bdca",
+  "compared": true,
+  "cases": [
+    {
+      "snapshot": "workflow",
+      "mode": "report",
+      "title": null,
+      "sha256": "d87c85cd732f8802ffaa945585d8a82bdb8a79efef2573de32786382d487d9e0",
+      "bytes": 109407,
+      "identical": true
+    },
+    {
+      "snapshot": "workflow",
+      "mode": "report",
+      "title": "Workstation <check> & \"quotes\"",
+      "sha256": "962fc2ca4f3a4c58e4a4845db1495ed7aaf089a2f45e7aa3a503eaac7b0d38db",
+      "bytes": 109487,
+      "identical": true
+    },
+    {
+      "snapshot": "workflow",
+      "mode": "demo",
+      "title": null,
+      "sha256": "b2e65033d3cce824d37ac8c12ace93d2db8f88ce63c85dc30dfa3387d0299d88",
+      "bytes": 101972,
+      "identical": true
+    },
+    {
+      "snapshot": "workflow",
+      "mode": "demo",
+      "title": "Workstation <check> & \"quotes\"",
+      "sha256": "adf572d4941a5fa228bcd6973fb840515d6f46c070b36bcec13c1af73f5ae0ae",
+      "bytes": 102052,
+      "identical": true
+    },
+    {
+      "snapshot": "findings",
+      "mode": "report",
+      "title": null,
+      "sha256": "a4613f1d380fef1e7b2f8e7de9a9cb472434bbc0f037c73c928a6792ee14199a",
+      "bytes": 124747,
+      "identical": true
+    },
+    {
+      "snapshot": "findings",
+      "mode": "report",
+      "title": "Workstation <check> & \"quotes\"",
+      "sha256": "b5995df119dd42c45b57b22a26ba4c77c21a69b641cd42f594699d3424967cf1",
+      "bytes": 124827,
+      "identical": true
+    },
+    {
+      "snapshot": "findings",
+      "mode": "demo",
+      "title": null,
+      "sha256": "b2e65033d3cce824d37ac8c12ace93d2db8f88ce63c85dc30dfa3387d0299d88",
+      "bytes": 101972,
+      "identical": true
+    },
+    {
+      "snapshot": "findings",
+      "mode": "demo",
+      "title": "Workstation <check> & \"quotes\"",
+      "sha256": "adf572d4941a5fa228bcd6973fb840515d6f46c070b36bcec13c1af73f5ae0ae",
+      "bytes": 102052,
+      "identical": true
+    },
+    {
+      "snapshot": "cancelled",
+      "mode": "report",
+      "title": null,
+      "sha256": "766cc0a3609db74fa4c991ce0ab2eeccf43443da7ccd10c231eea011f99a5d28",
+      "bytes": 124859,
+      "identical": true
+    },
+    {
+      "snapshot": "cancelled",
+      "mode": "report",
+      "title": "Workstation <check> & \"quotes\"",
+      "sha256": "b881e5f5dbf2046e6b9957f847dc5ef729b87d8935e27dd546bc5d78b145c739",
+      "bytes": 124939,
+      "identical": true
+    },
+    {
+      "snapshot": "cancelled",
+      "mode": "demo",
+      "title": null,
+      "sha256": "b2e65033d3cce824d37ac8c12ace93d2db8f88ce63c85dc30dfa3387d0299d88",
+      "bytes": 101972,
+      "identical": true
+    },
+    {
+      "snapshot": "cancelled",
+      "mode": "demo",
+      "title": "Workstation <check> & \"quotes\"",
+      "sha256": "adf572d4941a5fa228bcd6973fb840515d6f46c070b36bcec13c1af73f5ae0ae",
+      "bytes": 102052,
+      "identical": true
+    },
+    {
+      "snapshot": "no-checks",
+      "mode": "report",
+      "title": null,
+      "sha256": "727edcaabb8b3c53a7a97c36081abde3a8d7f6a5afe175a1806e4ab2d9dd22fa",
+      "bytes": 101663,
+      "identical": true
+    },
+    {
+      "snapshot": "no-checks",
+      "mode": "report",
+      "title": "Workstation <check> & \"quotes\"",
+      "sha256": "bc57721895c1bc122a56603cf18cd088c93e7b144aab36f46903739f1a5656ff",
+      "bytes": 101743,
+      "identical": true
+    },
+    {
+      "snapshot": "no-checks",
+      "mode": "demo",
+      "title": null,
+      "sha256": "b2e65033d3cce824d37ac8c12ace93d2db8f88ce63c85dc30dfa3387d0299d88",
+      "bytes": 101972,
+      "identical": true
+    },
+    {
+      "snapshot": "no-checks",
+      "mode": "demo",
+      "title": "Workstation <check> & \"quotes\"",
+      "sha256": "adf572d4941a5fa228bcd6973fb840515d6f46c070b36bcec13c1af73f5ae0ae",
+      "bytes": 102052,
+      "identical": true
+    },
+    {
+      "refusal": "empty object",
+      "outcome": "ReportInputError:INPUT_INVALID",
+      "identical": true
+    },
+    {
+      "refusal": "unsupported schema",
+      "outcome": "ReportInputError:INPUT_INVALID",
+      "identical": true
+    },
+    {
+      "refusal": "unknown mode",
+      "outcome": "TypeError:",
+      "identical": true
+    },
+    {
+      "refusal": "empty title",
+      "outcome": "TypeError:",
+      "identical": true
+    },
+    {
+      "refusal": "null options",
+      "outcome": "TypeError:",
+      "identical": true
+    },
+    {
+      "refusal": "invalid snapshot in demo mode",
+      "outcome": "ReportInputError:INPUT_INVALID",
+      "identical": true
+    }
+  ]
+}
