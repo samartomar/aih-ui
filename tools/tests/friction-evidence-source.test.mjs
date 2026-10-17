@@ -34,6 +34,7 @@ test('a malformed or missing evidence file is unreadable, never an exception, an
   await withConsumer(8, async (dir, write) => {
     for (const body of ['{', '{"entries":"x"}', '{"entries":[null]}', '{"entries":[[]]}', '{"entries":[1]}']) assert.equal(await (await fileFrictionEvidence(dir, await write('bad.json', body)))(), null, body);
     assert.equal(await (await fileFrictionEvidence(dir, join(dir, 'missing.json')))(), null);
+    assert.equal(await (await fileFrictionEvidence(dir, await write('none.json', '{"entries":null}')))(), undefined, 'A host with no history yet holds none.');
     const [forced] = await (await fileFrictionEvidence(dir, await write('claims.json', [{ id: 'a', fixture: false }])))();
     assert.equal(forced.fixture, true);
   });

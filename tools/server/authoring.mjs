@@ -45,6 +45,8 @@ export async function fileFrictionEvidence(consumerDir, path) {
       const bytes = await readFile(path);
       if (bytes.length > FRICTION_EVIDENCE_BYTES) return null;
       const { entries } = JSON.parse(bytes.toString('utf8'));
+      // `entries: null` is a host that keeps no history yet (undefined), not one whose store failed (null).
+      if (entries === null) return undefined;
       if (!Array.isArray(entries) || entries.length > MAX_EVIDENCE || entries.some(entry => !entry || typeof entry !== 'object' || Array.isArray(entry))) return null;
       return entries.map(entry => ({ ...entry, fixture: true }));
     } catch { return null; }
