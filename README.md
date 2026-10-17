@@ -588,7 +588,7 @@ history and an untied subject suggest nothing. Fixture evidence says so in the r
 
 Coverage for `recurring-friction` is `checked` (some tied condition has a verified recovery, so Core could say whether it recurred), or `unknown` with a
 reason: `history-unavailable` (the host passed no stored results) or `no-recurrence-evidence` (it passed some, but none settles a tied condition; Core never
-turns missing history into zero). `no-published-interface` is gone. The same unknowns are written on each suggestion's unknowns, and the check reports
+turns missing history into zero). The same unknowns are written on each suggestion's unknowns, and the check reports
 `core-evidence` among what it read when stored results were passed.
 
 Content-change coverage gains `version-order-unknown`: a configured source offers a different release of a package this policy was saved from, from the same
