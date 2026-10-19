@@ -40,6 +40,7 @@ test('same-source refresh retains history and malformed acquisition keeps last-k
     await writeFile(path,'malformed');
     const failed=await host.check(input); assert.equal(failed.selectedScanId,second.selectedScanId); assert.equal(failed.freshness,'last-known'); assert.equal(failed.assessments.length,2);
     assert.equal(failed.checks.find(value=>value.sourceId==='configured').status,'failed');
+    assert.ok(failed.checks.find(value=>value.sourceId==='configured').diagnostics.some(value=>value.code==='invalid-artifact'));
   } finally { await rm(root,{recursive:true}); }
 });
 
@@ -58,6 +59,7 @@ test('malformed supplied evidence and expected identity refusal retain actual ch
     const failed=await host.check({...input,supplied:[new TextEncoder().encode('malformed')]});
     assert.equal(failed.selectedScanId,initial.selectedScanId);assert.equal(failed.assessments.length,2);assert.equal(failed.freshness,'last-known');
     assert.equal(failed.checks.find(value=>value.sourceId==='fixed').status,'failed');assert.equal(failed.checks.find(value=>value.sourceId==='supplied-1').status,'failed');
+    assert.equal(failed.checks.find(value=>value.sourceId==='fixed').diagnostics[0].code,'expected-scan-id-mismatch');
   } finally {await rm(root,{recursive:true});}
 });
 
@@ -84,6 +86,7 @@ test('same report in larger canonical envelopes is accounted and acquisition-bou
   const refused=await host.check({...input,supplied:[beyond.bytes]});
   assert.equal(refused.status,'selected');assert.equal(refused.acquisitionCost.retainedAcquisitions,maxAssessments);
   assert.equal(refused.checks.find(value=>value.sourceId==='supplied-1').status,'failed');assert.equal(refused.freshness,'last-known');
+  assert.equal(refused.checks.find(value=>value.sourceId==='supplied-1').diagnostics[0].code,'acquisition-limit');
   assert.equal(refused.assessments[0].acquisitions.length,maxAssessments);
 });
 
@@ -104,5 +107,16 @@ test('an authentic inventory-only all-provider-failed baseline qualifies without
     assert.equal(evaluated.baseline.evidence.comparisonCoverage.status,'matched');assert.equal(evaluated.baseline.evidence.coverage.status,'mismatched');
     assert.ok(evaluated.baseline.evidence.summary.providers.every(provider=>provider.outcome==='failed'));
     assert.equal(evaluated.baseline.evidence.summary.findings.records,0);
+  } finally {await rm(root,{recursive:true});}
+});
+
+test('unsupported report schema remains explicit in source diagnostics without a private path', async () => {
+  const { createScanEvidenceHost }=await import('./scan-evidence-host.mjs');const { mkdtemp,writeFile,rm }=await import('node:fs/promises');const { tmpdir }=await import('node:os');const { join }=await import('node:path');
+  const root=await mkdtemp(join(tmpdir(),'ui88-unsupported-'));
+  try {
+    const path=join(root,'report.json');await writeFile(path,JSON.stringify({schema:'urn:aihq:scan:report:9.0.0'}));
+    const host=createScanEvidenceHost({sources:[{id:'configured',path,format:'report'}]});
+    const result=await host.check(await scanFixture());assert.equal(result.status,'selected');
+    const diagnostic=result.checks.find(value=>value.sourceId==='configured').diagnostics[0];assert.equal(diagnostic.code,'unsupported-report');assert.match(diagnostic.detail,/9\.0\.0/);assert.ok(!diagnostic.detail.includes(root));
   } finally {await rm(root,{recursive:true});}
 });

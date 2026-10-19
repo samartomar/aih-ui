@@ -8,12 +8,18 @@ import { acquireBaselineArtifact } from '@aihq/catalog/node';
 import { readSummary, maxAssessmentBytes, maxAssessments } from '@aihq/scan/read';
 import { selectContentEvidence } from './scan-evidence.mjs';
 
+class AcquisitionError extends Error {
+  constructor(diagnostics) { super('Evidence acquisition refused.'); this.diagnostics = diagnostics; }
+}
+const acquisitionFailure = diagnostics => new AcquisitionError(diagnostics);
+const boundFailure = () => acquisitionFailure([{ code: 'acquisition-limit', detail: 'Acquisition exceeds 32 retained documents or 128 MiB aggregate bytes; earlier readable evidence retained.' }]);
+
 async function boundedFile(path) {
   const file = await open(path, 'r');
   try {
-    if ((await file.stat()).size > maxAssessmentBytes) throw new Error('Evidence exceeds aggregate byte bound.');
+    if ((await file.stat()).size > maxAssessmentBytes) throw boundFailure();
     const bytes = await file.readFile();
-    if (bytes.length > maxAssessmentBytes) throw new Error('Evidence exceeds aggregate byte bound.');
+    if (bytes.length > maxAssessmentBytes) throw boundFailure();
     return new Uint8Array(bytes);
   } finally { await file.close(); }
 }
@@ -36,18 +42,19 @@ export function createScanEvidenceHost({ sources = [], packageRoot, trust, detec
           const bytes = await load();
           attemptedBytes += bytes.length;
           const read = await readSummary({ format, bytes });
-          if (read.status !== 'read') throw new Error(`Evidence ${read.status}: ${JSON.stringify(read.diagnostics ?? [])}`);
-          if (expectedScanId !== undefined && expectedScanId !== read.summary.scanId) throw new Error('Expected Scan identity mismatch.');
+          if (read.status !== 'read') throw acquisitionFailure(read.diagnostics?.length ? read.diagnostics : [{ code: 'unsupported-report', detail: `Evidence reader returned ${read.status}; report schema ${read.reportSchema ?? 'unknown'}.` }]);
+          if (expectedScanId !== undefined && expectedScanId !== read.summary.scanId) throw acquisitionFailure([{ code: 'expected-scan-id-mismatch', detail: `Expected ${expectedScanId}; checked bytes identify ${read.summary.scanId}. Earlier evidence retained.` }]);
           const key = `${id}/${read.summary.scanId}/${createHash('sha256').update(bytes).digest('hex')}`;
           const previousBytes = retained.get(key)?.bytes.length ?? 0;
-          if (retainedBytes - previousBytes + bytes.length > maxAssessmentBytes || !retained.has(key) && retained.size >= maxAssessments) throw new Error('Evidence acquisition bound exceeded; history retained.');
+          if (retainedBytes - previousBytes + bytes.length > maxAssessmentBytes || !retained.has(key) && retained.size >= maxAssessments) throw boundFailure();
           const authentication = format === 'artifact' ? await authenticateEvidence({ bytes, expectedScanId: expectedScanId ?? read.summary.scanId, trust: trust ?? { keys: [], publishers: [] } }) : undefined;
           const candidate = { sourceId: id, location, format, bytes, ...(expectedScanId ? { expectedScanId } : {}), ...(authentication ? { authentication } : {}) };
           retainedBytes += bytes.length - previousBytes;
           retained.set(key, candidate); successful.set(id, evaluationTime);
           checks.push({ sourceId: id, status: 'succeeded', attemptedAt: evaluationTime, lastSuccessfulAt: evaluationTime, diagnostics: [] });
         } catch (error) {
-          checks.push({ sourceId: id, status: 'failed', attemptedAt: evaluationTime, ...(successful.has(id) ? { lastSuccessfulAt: successful.get(id) } : {}), diagnostics: [{ code: 'acquisition-failed', detail: 'Configured evidence unavailable, malformed or beyond supported bounds; earlier readable evidence retained.' }] });
+          checks.push({ sourceId: id, status: 'failed', attemptedAt: evaluationTime, ...(successful.has(id) ? { lastSuccessfulAt: successful.get(id) } : {}),
+            diagnostics: error instanceof AcquisitionError ? error.diagnostics : [{ code: 'source-unavailable', detail: `Configured evidence could not be read${typeof error.code === 'string' && /^[A-Z0-9_]{1,40}$/.test(error.code) ? ` (${error.code})` : ''}; earlier readable evidence retained.` }] });
         }
         for (const held of retained.values()) if (held.sourceId === id) assessments.push(held);
       };

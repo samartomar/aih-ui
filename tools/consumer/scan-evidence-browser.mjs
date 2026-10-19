@@ -25,7 +25,8 @@ export async function runScanEvidenceBrowser({origin,output,fixtureRoot,sourcePa
   const detectorIds=['fixture-failed','fixture-success','fixture-not-requested'];
   const sources=Object.entries(sourcePaths).map(([id,path])=>({id,path,format:'artifact',label:`Synthetic fixture source ${id}`}));
   const headless=createScanEvidenceHost({sources,packageRoot,trust,detectorIds});
-  const headlessCheck=()=>headless.check({inventory,itemId:'alpha',evaluationTime:new Date().toISOString()});
+  let headlessSupplied=[];
+  const headlessCheck=()=>headless.check({inventory,itemId:'alpha',evaluationTime:new Date().toISOString(),supplied:headlessSupplied});
   const {chromium}=await import(playwrightModule);const browser=await chromium.launch({headless:true});
   const context=await browser.newContext({acceptDownloads:true,viewport:{width:1440,height:1100}});const page=await context.newPage();page.setDefaultTimeout(30_000);
   const errors=[],steps=[],selections=[];let evidenceBytes=0,latestResponse,preparedRaw,cardReadCost;
@@ -40,7 +41,7 @@ export async function runScanEvidenceBrowser({origin,output,fixtureRoot,sourcePa
     const displayed = await panel.getByLabel('Scan history',{exact:true}).inputValue();
     await panel.getByRole('status').filter({hasText:displayed || fixture.variants[expected].scanId}).waitFor();
     const same=await headlessCheck();assert.equal(same.selectedScanId,body.selectedScanId);assert.equal(same.freshness,body.freshness);
-    selections.push({expected,scanId:body.selectedScanId,freshness:body.freshness,checks:body.checks,assessments:body.assessments});return body;
+    selections.push({expected,scanId:body.selectedScanId,freshness:body.freshness,checks:body.checks,assessments:body.assessments,acquisitionCost:body.acquisitionCost});return body;
   }
   try {
     await page.goto(origin+'/');await page.locator('#browse-family option[value="Catalog"]').waitFor({state:'attached'});
@@ -56,6 +57,7 @@ export async function runScanEvidenceBrowser({origin,output,fixtureRoot,sourcePa
     const cardStarted=performance.now();
     const cardsEvent=page.waitForResponse(value=>value.url().endsWith('/api/authoring-evidence-states'));
     await page.getByLabel('Review evidence files',{exact:true}).setInputFiles(join(fixtureRoot,'s1.json'));
+    headlessSupplied=[new Uint8Array(await readFile(join(fixtureRoot,'s1.json')))];
     const cardsResponse=await cardsEvent,cardBytes=await cardsResponse.body(),cardResult=JSON.parse(cardBytes);
     assert.equal(cardResult.status,'ok');assert.ok(cardResult.value.length>=1000);
     cardReadCost={subjects:cardResult.value.length,elapsedMs:performance.now()-cardStarted,requestBytes:cardsResponse.request().postDataBuffer().length,responseBytes:cardBytes.length};
@@ -113,8 +115,10 @@ export async function runScanEvidenceBrowser({origin,output,fixtureRoot,sourcePa
     await copyFile(join(fixtureRoot,'untrusted.json'),sourcePaths.untrusted);const untrusted=await check('untrusted');assert.ok(untrusted.assessments.find(value=>value.summary.scanId===fixture.variants.untrusted.scanId).acquisitions.every(value=>value.authentication.status!=='authenticated'));steps.push('untrusted-latest-does-not-change-trust');
     // Actual later malformed supplied bytes preserve earlier supplied history too.
     await panel.getByLabel('Evidence for latest view',{exact:true}).setInputFiles(join(fixtureRoot,'s2.json'));
+    headlessSupplied=[new Uint8Array(await readFile(join(fixtureRoot,'s2.json')))];await headlessCheck();
     await panel.getByRole('status').filter({hasText:fixture.variants.untrusted.scanId}).waitFor();
     const malformed=join(output,'malformed-supplied.json');await writeFile(malformed,'malformed');
+    headlessSupplied=[new TextEncoder().encode('malformed')];
     const suppliedEvent=page.waitForResponse(value=>value.url().endsWith('/api/authoring-scan-evidence'));await panel.getByLabel('Evidence for latest view',{exact:true}).setInputFiles(malformed);
     const suppliedResult=await(await suppliedEvent).json();assert.equal(suppliedResult.selectedScanId,fixture.variants.untrusted.scanId);assert.ok(suppliedResult.assessments.some(value=>value.summary.scanId===fixture.variants.s2.scanId));steps.push('malformed-supplied-retains-readable-history');
     const after=await download('after.policy.download.json',()=>page.locator('#policy-save').click());assert.deepEqual(after,before);
@@ -166,6 +170,6 @@ export async function runScanEvidenceBrowser({origin,output,fixtureRoot,sourcePa
     assert.deepEqual(errors,[]);
     await writeFile(join(output,'selections.json'),JSON.stringify(selections,null,2));
     await writeFile(join(output,'actual-prepared-identity.json'),JSON.stringify({sessionId:preparation.sessionId,reviewDigest:preparation.review.reviewDigest,policySha256:hash(before),reviewSha256:hash(Buffer.from(beforeReview)),preparedHttpSha256:hash(preparedRaw),preparedDisplaySha256:hash(Buffer.from(preparedDisplay)),applied},null,2));
-    return {steps,selections:selections.map(({expected,scanId,freshness})=>({expected,scanId,freshness})),browserMs:performance.now()-start,cardReadCost,payload:{evidenceResponseBytes:evidenceBytes,policyBytes:before.length,preparedBytes:preparedRaw.length},policySha256:hash(before),reviewSha256:hash(Buffer.from(beforeReview)),errors};
+    return {steps,selections:selections.map(({expected,scanId,freshness,acquisitionCost})=>({expected,scanId,freshness,acquisitionCost})),browserMs:performance.now()-start,cardReadCost,payload:{evidenceResponseBytes:evidenceBytes,policyBytes:before.length,preparedBytes:preparedRaw.length},policySha256:hash(before),reviewSha256:hash(Buffer.from(beforeReview)),errors};
   } catch(error) {await page.screenshot({path:join(output,'FAILURE.png'),fullPage:true}).catch(()=>{});throw error;} finally {await browser.close();}
 }
