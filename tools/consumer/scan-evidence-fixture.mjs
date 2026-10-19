@@ -64,9 +64,3 @@ export async function buildScanEvidenceFixture(output) {
   await writeFile(join(output,'identities.json'),JSON.stringify({fixture:true,meaning:'Synthetic data only; no provider execution, production signing or trust update',packageRoot,baseline:binding,variants:Object.fromEntries(Object.entries(variants).map(([name,value])=>[name,{scanId:value.scanId,sha256:hash(value.bytes),bytes:value.bytes.length}]))},null,2));
   return {packageRoot,trust,variants,binding};
 }
-
-
-
-
-
-

@@ -71,4 +71,3 @@ export function createScanEvidenceHost({ sources = [], packageRoot, trust, detec
     }
   };
 }
-
