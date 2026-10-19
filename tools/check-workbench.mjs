@@ -44,7 +44,7 @@ process.on('exit', () => {
 // Each group keeps the same limit: suites that would bring a group near it go in a new group instead.
 const testGroups = [
   ['ordinary-families', 'authoring-page', 'authoring-v3', 'reviews', 'personal-folder', 'journey', 'readiness', 'readiness-host', 'claims', 'friction', 'authority-source', 'organization-author', 'guided-setup', 'core-targets', 'workspace'],
-  ['release-order', 'update-source', 'maintenance', 'improvements', 'trials'],
+  ['scan-evidence', 'release-order', 'update-source', 'maintenance', 'improvements', 'trials'],
   ['batch'],
   ['intent-http', 'intent-page', 'organization', 'saved-intent', 'setup']
 ];

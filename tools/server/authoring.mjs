@@ -79,6 +79,8 @@ export async function createAuthoringAdapter(consumerDir, { frictionEvidence } =
     controls: await selectedJson('AIH_CONSUMER_CONTROLS'),
     organizationSource: await selectedJson('AIH_ORGANIZATION_SOURCE'),
     reviewTrust: await selectedJson('AIH_REVIEW_TRUST'),
+    evidenceSources: await selectedJson('AIH_SCAN_EVIDENCE_SOURCES'),
+    evidenceDetectorIds: await selectedJson('AIH_SCAN_EVIDENCE_PROVIDERS'),
     previousCatalogRoot: process.env.AIH_CONSUMER_PREVIOUS_CATALOG,
     ...(evidence ? { frictionEvidence: evidence } : {}),
     ...(process.env.AIH_UPDATE_SOURCE_CATALOG_ROOTS ? { updateSourceCatalogRoots: process.env.AIH_UPDATE_SOURCE_CATALOG_ROOTS.split(delimiter) } : {}),

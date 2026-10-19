@@ -2,7 +2,7 @@
 // coverage read decides association and which observations cover the exact
 // subject; these projections only name its fields. They neither mint Scan
 // digests nor grant custody.
-import { readContentCoverage, maxContentDescriptors } from '@aihq/scan/read';
+import { readContentCoverage, maxContentDescriptors, selectAssessments } from '@aihq/scan/read';
 import { readScanBytes, presentReport } from './report-view.mjs';
 import { isCheckedRelease, listItems } from '@aihq/catalog/reader';
 import { stable, ok, refuse } from './primitives.mjs';
@@ -89,28 +89,53 @@ async function coverageStates(read, entries) {
   await flush();
   return states;
 }
-const STATE_RANK = ['not-supplied', 'invalid', 'unsupported', 'unavailable', 'mismatched', 'matched'];
-export async function describeEvidenceStates({ reviewEvidence = [], inventories, subjects }) {
+export async function describeEvidenceStates({ reviewEvidence = [], inventories, subjects, evaluationTime }) {
   if (!Array.isArray(reviewEvidence) || reviewEvidence.length > 32 || reviewEvidence.some(bytes => !(bytes instanceof Uint8Array))
     || !Array.isArray(inventories) || inventories.length > 32 || inventories.some(entry => !isCheckedRelease(entry?.release))
     || !Array.isArray(subjects) || subjects.length > MAX_EVIDENCE_SUBJECTS
-    || subjects.some(value => !value || typeof value.itemId !== 'string' || !/^[a-f0-9]{64}$/.test(value.releaseSha256 ?? ''))) return bindingFailure(`Supply at most 32 evidence byte arrays, checked inventories and at most ${MAX_EVIDENCE_SUBJECTS} exact subjects.`);
+    || subjects.some(value => !value || typeof value.itemId !== 'string' || !/^[a-f0-9]{64}$/.test(value.releaseSha256 ?? ''))) return bindingFailure('Supply bounded evidence, checked inventories and exact subjects.');
   const reads = await Promise.all(reviewEvidence.map(bytes => readScanBytes(bytes)));
-  const items = new Map(inventories.flatMap(entry => listItems(entry.release).map(item => [`${entry.release.sha256}/${item.id}`, item])));
-  const keys = subjects.map(({ releaseSha256, itemId }) => `${releaseSha256}/${itemId}`);
-  const found = [...new Set(keys)].filter(key => items.has(key)).map(key => ({ key, descriptors: descriptorsOf(items.get(key)) }));
-  const perDocument = [];
-  for (const read of reads) perDocument.push(read.status === 'read' ? await coverageStates(read, found)
-    : new Map(found.map(({ key }) => [key, read.status === 'unsupported-report' ? 'unsupported' : 'invalid'])));
-  const states = subjects.map(({ releaseSha256, itemId }, index) => {
-    let state = !reads.length ? 'not-supplied' : items.has(keys[index]) ? 'invalid' : 'unavailable', scanId;
-    perDocument.forEach((map, document) => {
-      const next = map.get(keys[index]);
-      if (next && STATE_RANK.indexOf(next) >= STATE_RANK.indexOf(state)) [state, scanId] = [next, reads[document].scanId];
-    });
-    return { releaseSha256, itemId, state, ...(scanId ? { scanId } : {}), documents: reads.length };
+  const scopes = [...new Map(reads.filter(read => read.status === 'read').map(read => [stable(read.report.selection), read.report.selection])).values()];
+  const assessments = reviewEvidence.map((bytes, index) => ({ sourceId: 'supplied', location: `Supplied document ${index + 1}`, bytes,
+    format: reads[index].annexBytes === 'checked' ? 'artifact' : 'report' }));
+  const found = subjects.flatMap(subject => {
+    const inventory = inventories.find(entry => entry.release.sha256 === subject.releaseSha256);
+    const item = inventory && listItems(inventory.release).find(item => item.id === subject.itemId);
+    return item ? [{ key: `${subject.releaseSha256}/${subject.itemId}`, descriptors: descriptorsOf(item) }] : [];
   });
-  return ok(states);
+  const perDocument = await Promise.all(reads.map(read => read.status === 'read' ? coverageStates(read, found) : new Map()));
+  const releaseSelections = new Map(), values = [];
+  for (const subject of subjects) {
+    const inventory = inventories.find(entry => entry.release.sha256 === subject.releaseSha256);
+    const item = inventory && listItems(inventory.release).find(item => item.id === subject.itemId);
+    let state = !reads.length ? 'not-supplied' : !item ? 'unavailable' : reads.some(read => read.status === 'unsupported-report') ? 'unsupported' : 'invalid', scanId;
+    const baseline = inventory?.release.baseline;
+    // Without an explicit release request, several supplied scopes require a choice in Scan Review.
+    if (item && scopes.length && (baseline || scopes.length === 1)) {
+      const selection = baseline ? { paths: baseline.scope.paths, excludedPaths: baseline.scope.excludedPaths } : scopes[0];
+      const key = `${subject.releaseSha256}/${subject.itemId}`;
+      const itemStates = perDocument.map(map => map.get(key));
+      if (!baseline && !itemStates.includes('matched')) {
+        values.push({ ...subject, state: itemStates.includes('mismatched') ? 'mismatched' : 'unavailable', documents: reads.length });
+        continue;
+      }
+      let selected = baseline ? releaseSelections.get(subject.releaseSha256) : undefined;
+      if (!selected) {
+        selected = await selectAssessments({ assessments, context: { sourceIds: ['supplied'], descriptors: baseline ? [baseline.inventory] : descriptorsOf(item), selection },
+          evaluationTime, checks: [{ sourceId: 'supplied', status: 'succeeded', attemptedAt: evaluationTime, lastSuccessfulAt: evaluationTime, diagnostics: [] }] });
+        if (baseline) releaseSelections.set(subject.releaseSha256, selected);
+      }
+      if (selected.status === 'selected') {
+        const entry = selected.assessments.find(entry => entry.summary.scanId === selected.selectedScanId);
+        // Mismatched remains inspectable; only Scan's eligible selection receives a selected identity.
+        const document = entry ? reads.findIndex(read => read.status === 'read' && read.scanId === entry.summary.scanId) : -1;
+        state = entry ? perDocument[document]?.get(key) ?? 'unavailable' : 'unavailable';
+        scanId = entry?.summary.scanId;
+      } else state = 'unavailable';
+    } else if (scopes.length > 1) state = 'unavailable';
+    values.push({ ...subject, state, ...(scanId ? { scanId } : {}), documents: reads.length });
+  }
+  return ok(values);
 }
 
 export async function compareReviewBindings({ intent, inventories, reviewEvidence = [], comparisons = [] }) {
