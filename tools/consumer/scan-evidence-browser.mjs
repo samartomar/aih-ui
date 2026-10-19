@@ -28,7 +28,7 @@ export async function runScanEvidenceBrowser({origin,output,fixtureRoot,sourcePa
   let headlessSupplied=[];
   const headlessCheck=()=>headless.check({inventory,itemId:'alpha',evaluationTime:new Date().toISOString(),supplied:headlessSupplied});
   const {chromium}=await import(playwrightModule);const browser=await chromium.launch({headless:true});
-  const context=await browser.newContext({acceptDownloads:true,viewport:{width:1440,height:1100}});const page=await context.newPage();page.setDefaultTimeout(30_000);
+  const context=await browser.newContext({acceptDownloads:true,viewport:{width:1280,height:720}});const page=await context.newPage();page.setDefaultTimeout(30_000);
   const errors=[],steps=[],selections=[];let evidenceBytes=0,latestResponse,preparedRaw,cardReadCost;
   page.on('pageerror',error=>errors.push(error.message));
   page.on('response',async response=>{if(response.url().endsWith('/api/authoring-scan-evidence')) {const bytes=await response.body();evidenceBytes+=bytes.length;latestResponse=JSON.parse(bytes);}});
@@ -94,6 +94,12 @@ export async function runScanEvidenceBrowser({origin,output,fixtureRoot,sourcePa
       checks:['s1','s2'].map(sourceId=>({sourceId,status:'succeeded',attemptedAt:evaluationTime,lastSuccessfulAt:evaluationTime,diagnostics:[]}))});
     assert.equal(publicSelection.selectedScanId,newer.selectedScanId);await writeFile(join(output,'public-headless-selection.json'),JSON.stringify(publicSelection,null,2));
     assert.equal(newer.baseline.scanId,fixture.variants.s1.scanId);assert.ok(newer.assessments.find(value=>value.summary.scanId===fixture.variants.s2.scanId).acquisitions.some(value=>value.authentication.producerIdentity==='synthetic-later-producer'));
+    const panelBounds=await panel.boundingBox();
+    for(const control of await panel.locator('select,input,button').all()) {
+      const bounds=await control.boundingBox();
+      assert.ok(bounds.x>=panelBounds.x && bounds.x+bounds.width<=panelBounds.x+panelBounds.width, 'Evidence control stays within its panel at 1280px');
+    }
+    assert.ok((await panel.getByLabel('Scan requested scope',{exact:true}).locator('option').first().textContent()).startsWith('Scope 1 ·'));
     await page.screenshot({path:join(output,'02-latest-partial.png'),fullPage:true});steps.push('different-producer-partial-latest');
     await panel.getByLabel('Scan history',{exact:true}).selectOption(fixture.variants.s1.scanId);assert.match(await panel.getByRole('status').textContent(),/Historical selection/);
     await copyFile(join(fixtureRoot,'older.json'),sourcePaths.older);await check('s2');assert.equal(await panel.getByLabel('Scan history',{exact:true}).inputValue(),fixture.variants.s1.scanId);

@@ -2,15 +2,15 @@ import { el } from './dom.js';
 import { evidenceView } from './evidence-view.js';
 
 export function createScanEvidence(client) {
-  const panel = el('section', 'space-y-2 border border-wb-border rounded p-3');
+  const panel = el('section', 'min-w-0 max-w-full space-y-2 border border-wb-border rounded p-3');
   panel.setAttribute('aria-label', 'Latest Scan evidence');
   panel.append(el('h3', 'font-medium', 'Latest, baseline and history'));
   panel.append(el('p', 'text-on-surface-variant', 'Evidence informs your choice. Authentication, content capture and detector coverage are separate facts. Viewing evidence keeps saved policies, reviews and prepared actions pinned.'));
-  const target = el('select', 'bg-wb-input border border-wb-border rounded p-1'); target.setAttribute('aria-label', 'Scan content');
-  const history = el('select', 'bg-wb-input border border-wb-border rounded p-1'); history.setAttribute('aria-label', 'Scan history');
-  const scope = el('select', 'bg-wb-input border border-wb-border rounded p-1'); scope.setAttribute('aria-label', 'Scan requested scope');
-  const supplied = el('input'); supplied.type = 'file'; supplied.multiple = true; supplied.setAttribute('aria-label', 'Evidence for latest view');
-  const status = el('p'); status.setAttribute('role', 'status');
+  const target = el('select', 'w-full min-w-0 max-w-full bg-wb-input border border-wb-border rounded p-1'); target.setAttribute('aria-label', 'Scan content');
+  const history = el('select', 'flex-1 min-w-0 max-w-full bg-wb-input border border-wb-border rounded p-1'); history.setAttribute('aria-label', 'Scan history');
+  const scope = el('select', 'w-full min-w-0 max-w-full bg-wb-input border border-wb-border rounded p-1'); scope.setAttribute('aria-label', 'Scan requested scope');
+  const supplied = el('input', 'min-w-0 max-w-full'); supplied.type = 'file'; supplied.multiple = true; supplied.setAttribute('aria-label', 'Evidence for latest view');
+  const status = el('p', 'break-all'); status.setAttribute('role', 'status');
   const facts = el('div', 'space-y-2');
   let result, historicalId, attempt = 0, suppliedBytes = [], requestedScope;
   const button = (label, callback) => { const node = el('button', 'px-3 py-1 rounded border border-wb-border', label); node.type = 'button'; node.addEventListener('click', async () => { try { await callback(); } catch (error) { status.textContent = error.message; } }); return node; };
@@ -20,11 +20,24 @@ export function createScanEvidence(client) {
     if (result.status !== 'selected') { status.textContent = `Selection refused: ${JSON.stringify(result.diagnostics)}`; return; }
     const view = evidenceView(result, historicalId);
     const scopes = [result.context.selection, ...result.assessments.map(entry => entry.summary.selection)];
-    scope.replaceChildren(...[...new Set(scopes.map(value => JSON.stringify(value)))].map(value => new Option(value, value)));
+    scope.replaceChildren(...[...new Set(scopes.map(value => JSON.stringify(value)))].map((value, index) => {
+      const selection = JSON.parse(value);
+      const option = new Option(`Scope ${index + 1} · ${selection.paths.length} requested paths · ${selection.excludedPaths.length} excluded`, value);
+      option.title = value;
+      return option;
+    }));
     scope.value = JSON.stringify(result.context.selection);
-    for (const entry of result.assessments) history.append(new Option(`${entry.summary.createdAt} · ${entry.summary.scanId} · ${entry.eligibility}`, entry.summary.scanId));
-    if (historicalId && !result.assessments.some(entry => entry.summary.scanId === historicalId)) history.append(new Option(`${historicalId} · unavailable`, historicalId));
+    scope.title = scope.value;
+    for (const entry of result.assessments) {
+      const option = new Option(`${entry.summary.createdAt} · ${entry.summary.completion} · ${entry.eligibility} · ${entry.summary.scanId.slice(-12)}`, entry.summary.scanId);
+      option.title = entry.summary.scanId;
+      history.append(option);
+    }
+    if (historicalId && !result.assessments.some(entry => entry.summary.scanId === historicalId)) {
+      const option = new Option(`Unavailable · ${historicalId.slice(-12)}`, historicalId); option.title = historicalId; history.append(option);
+    }
     history.value = historicalId ?? '';
+    history.title = historicalId ?? result.selectedScanId ?? 'No matching evidence';
     status.textContent = `${view.mode === 'history' ? 'Historical selection' : 'Latest matching'}: ${view.scanId ?? 'No matching evidence'}. ${result.freshness === 'last-known' ? 'Last known: sources are incomplete or unavailable' : 'Configured sources checked'}. Evaluated ${result.evaluationTime}. ${view.newer ? 'Another latest result is available; choose Latest to return.' : ''} ${view.unavailable ? 'Historical artifact unavailable; its identity is retained.' : ''}`;
     const detail = (label, value) => { const node = el('details'); node.append(el('summary', 'cursor-pointer', label), el('pre', 'whitespace-pre-wrap break-all text-[10px]', JSON.stringify(value, null, 2))); facts.append(node); };
     const row = (label, value) => facts.append(el('p', 'text-on-surface-variant break-all', `${label}: ${value}`));
@@ -89,7 +102,11 @@ export function createScanEvidence(client) {
       await check();
     } catch (error) { status.textContent = `Evidence not adopted: ${error.message}`; }
   });
-  panel.append(target, supplied, button('Check Scan evidence', check), scope, history, button('Latest', () => { historicalId = undefined; render(); }), status, facts);
+  const acquisitionControls = el('div', 'flex flex-wrap items-center gap-2');
+  acquisitionControls.append(supplied, button('Check Scan evidence', check));
+  const historyControls = el('div', 'flex min-w-0 max-w-full flex-wrap items-center gap-2');
+  historyControls.append(history, button('Latest', () => { historicalId = undefined; render(); }));
+  panel.append(target, acquisitionControls, scope, historyControls, status, facts);
   let catalog;
   client.subscribe(() => {
     if (catalog === client.catalog) return; catalog = client.catalog;
