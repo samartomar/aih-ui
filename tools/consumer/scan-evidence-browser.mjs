@@ -28,7 +28,7 @@ export async function runScanEvidenceBrowser({origin,output,fixtureRoot,sourcePa
   const headlessCheck=()=>headless.check({inventory,itemId:'alpha',evaluationTime:new Date().toISOString()});
   const {chromium}=await import(playwrightModule);const browser=await chromium.launch({headless:true});
   const context=await browser.newContext({acceptDownloads:true,viewport:{width:1440,height:1100}});const page=await context.newPage();page.setDefaultTimeout(30_000);
-  const errors=[],steps=[],selections=[];let evidenceBytes=0,latestResponse,preparedRaw;
+  const errors=[],steps=[],selections=[];let evidenceBytes=0,latestResponse,preparedRaw,cardReadCost;
   page.on('pageerror',error=>errors.push(error.message));
   page.on('response',async response=>{if(response.url().endsWith('/api/authoring-scan-evidence')) {const bytes=await response.body();evidenceBytes+=bytes.length;latestResponse=JSON.parse(bytes);}});
   const download=async(name,action)=>{const event=page.waitForEvent('download');await action();const path=join(output,name);await(await event).saveAs(path);return new Uint8Array(await readFile(path));};
@@ -53,7 +53,12 @@ export async function runScanEvidenceBrowser({origin,output,fixtureRoot,sourcePa
     assert.ok(initial.baseline.evidence.acquisitions.some(value=>value.authentication.status==='authenticated'));
     assert.ok(initial.assessments[0].summary.providers.some(value=>value.outcome==='not-requested'));
     // Record a real checked finding through the ordinary application's public review flow.
+    const cardStarted=performance.now();
+    const cardsEvent=page.waitForResponse(value=>value.url().endsWith('/api/authoring-evidence-states'));
     await page.getByLabel('Review evidence files',{exact:true}).setInputFiles(join(fixtureRoot,'s1.json'));
+    const cardsResponse=await cardsEvent,cardBytes=await cardsResponse.body(),cardResult=JSON.parse(cardBytes);
+    assert.equal(cardResult.status,'ok');assert.ok(cardResult.value.length>=1000);
+    cardReadCost={subjects:cardResult.value.length,elapsedMs:performance.now()-cardStarted,requestBytes:cardsResponse.request().postDataBuffer().length,responseBytes:cardBytes.length};
     await page.getByText('Original evidence bytes loaded.',{exact:false}).waitFor();
     await page.getByLabel('Evidence review subject',{exact:true}).selectOption({label:'alpha'});
     await page.getByRole('button',{name:'Inspect evidence',exact:true}).click();await page.getByText(/2 findings bound to the checked subject/).waitFor();
@@ -92,6 +97,14 @@ export async function runScanEvidenceBrowser({origin,output,fixtureRoot,sourcePa
     await copyFile(join(fixtureRoot,'older.json'),sourcePaths.older);await check('s2');assert.equal(await panel.getByLabel('Scan history',{exact:true}).inputValue(),fixture.variants.s1.scanId);
     await copyFile(join(fixtureRoot,'narrow.json'),sourcePaths.narrow);await copyFile(join(fixtureRoot,'future.json'),sourcePaths.future);const scoped=await check('s2');
     assert.equal(scoped.assessments.find(value=>value.summary.scanId===fixture.variants.narrow.scanId).eligibility,'scope-mismatch');assert.equal(scoped.assessments.find(value=>value.summary.scanId===fixture.variants.future.scanId).eligibility,'future-dated');
+    const narrowScope=JSON.stringify(scoped.assessments.find(value=>value.summary.scanId===fixture.variants.narrow.scanId).summary.selection);
+    const scopeEvent=page.waitForResponse(value=>value.url().endsWith('/api/authoring-scan-evidence'));
+    await panel.getByLabel('Scan requested scope',{exact:true}).selectOption(narrowScope);await scopeEvent;
+    assert.equal(await panel.getByLabel('Scan history',{exact:true}).inputValue(),fixture.variants.s1.scanId,'Changing requested scope preserves explicit history');
+    await panel.getByRole('button',{name:'Latest',exact:true}).click();
+    await panel.getByRole('status').filter({hasText:fixture.variants.narrow.scanId}).waitFor();
+    const returnScope=page.waitForResponse(value=>value.url().endsWith('/api/authoring-scan-evidence'));
+    await panel.getByLabel('Scan requested scope',{exact:true}).selectOption(JSON.stringify(scoped.context.selection));await returnScope;
     await page.screenshot({path:join(output,'03-pinned-history-scopes.png'),fullPage:true});steps.push('history-pin-older-arrival-narrow-scope-future');
     await panel.getByRole('button',{name:'Latest',exact:true}).click();
     await writeFile(sourcePaths.later,'malformed');const failed=await check('s2');assert.equal(failed.freshness,'last-known');assert.equal(failed.checks.find(value=>value.sourceId==='later').status,'failed');steps.push('malformed-source-retains-last-known');
@@ -128,19 +141,31 @@ export async function runScanEvidenceBrowser({origin,output,fixtureRoot,sourcePa
       await page.locator('#policy-open').setInputFiles(enterprisePath);await page.getByRole('button',{name:'Validate and reopen',exact:true}).click();await page.locator('#policy-status').filter({hasText:'Saved choices recovered'}).waitFor();
       const admittedEvent=page.waitForResponse(value=>value.url().endsWith('/api/authoring-prepare'));await page.getByRole('button',{name:'Prepare exact effects',exact:true}).click();
       const browserAdmitted=await(await admittedEvent).json();assert.equal(browserAdmitted.status,'ready',JSON.stringify(browserAdmitted));
+      const enterpriseBefore=await download('enterprise.before.policy.json',()=>page.locator('#policy-save').click());
+      const enterprisePreparedDisplay=await hostFacts.textContent();
+      await check('untrusted');
+      assert.equal(await hostFacts.textContent(),enterprisePreparedDisplay);
+      assert.equal(await page.getByRole('button',{name:'Approve and Apply reviewed effects',exact:true}).isEnabled(),true);
+      const enterpriseAfter=await download('enterprise.after.policy.json',()=>page.locator('#policy-save').click());assert.deepEqual(enterpriseAfter,enterpriseBefore);
       transport.publish({...organization,selections:[]});const denied=await host.prepareSession({policyText:new TextDecoder().decode(enterprise.value.policyBytes)});assert.notEqual(denied.status,'ready');
       const deniedEvent=page.waitForResponse(value=>value.url().endsWith('/api/authoring-prepare'));await page.getByRole('button',{name:'Prepare exact effects',exact:true}).click();
       const browserDenied=await(await deniedEvent).json();assert.notEqual(browserDenied.status,'ready');
-      await writeFile(join(output,'organization-boundary.json'),JSON.stringify({fixture:true,admitted,denied,browserAdmitted,browserDenied,requests:transport.requests},null,2));
+      await writeFile(join(output,'organization-boundary.json'),JSON.stringify({fixture:true,admitted,denied,browserAdmitted,browserDenied,enterpriseViewPreserved:true,enterprisePolicySha256:hash(enterpriseBefore),enterprisePreparedDisplaySha256:hash(Buffer.from(enterprisePreparedDisplay)),requests:transport.requests},null,2));
     } finally {transport.restore();}
     steps.push('public-core-organization-admits-and-refuses-independently');
     // An independent item has no matching evidence and remains selectable.
     const catalog=await(await page.request.get(origin+'/api/authoring-catalog')).json();const note=catalog.items.find(value=>value.id==='consumer-proof.review-note');
-    await panel.getByLabel('Scan content',{exact:true}).selectOption(`${note.root.releaseSha256}/${note.id}`);await panel.getByRole('status').filter({hasText:'No matching evidence'}).waitFor();steps.push('no-evidence-content-optional');
+    await page.getByRole('button',{name:'New project policy',exact:true}).click();
+    await page.locator('#nav-sources').click();await page.locator('#browse-support').selectOption('all');await page.locator('#browse-family').selectOption('Independent');
+    await page.getByRole('button',{name:`Choose ${note.id}`,exact:true}).click();await page.locator('#policy-accept:not([disabled])').waitFor();await page.locator('#policy-accept').click();
+    const noEvidencePolicy=await download('no-evidence.policy.json',()=>page.locator('#policy-save').click());
+    const noEvidenceDocument=JSON.parse(new TextDecoder().decode(noEvidencePolicy));assert.equal(noEvidenceDocument.mode,'vibe');assert.ok(noEvidenceDocument.metadata['aih.workbench'].roots.some(root=>root.itemId===note.id));assert.ok(!noEvidenceDocument.evidence?.length);
+    await page.locator('#nav-scan-review').click();
+    await panel.getByLabel('Scan content',{exact:true}).selectOption(`${note.root.releaseSha256}/${note.id}`);await panel.getByRole('status').filter({hasText:'No matching evidence'}).waitFor();steps.push('ordinary-no-evidence-content-selected-and-saved');
     await page.screenshot({path:join(output,'05-no-evidence.png'),fullPage:true});
     assert.deepEqual(errors,[]);
     await writeFile(join(output,'selections.json'),JSON.stringify(selections,null,2));
     await writeFile(join(output,'actual-prepared-identity.json'),JSON.stringify({sessionId:preparation.sessionId,reviewDigest:preparation.review.reviewDigest,policySha256:hash(before),reviewSha256:hash(Buffer.from(beforeReview)),preparedHttpSha256:hash(preparedRaw),preparedDisplaySha256:hash(Buffer.from(preparedDisplay)),applied},null,2));
-    return {steps,selections:selections.map(({expected,scanId,freshness})=>({expected,scanId,freshness})),browserMs:performance.now()-start,payload:{evidenceResponseBytes:evidenceBytes,policyBytes:before.length,preparedBytes:preparedRaw.length},policySha256:hash(before),reviewSha256:hash(Buffer.from(beforeReview)),errors};
+    return {steps,selections:selections.map(({expected,scanId,freshness})=>({expected,scanId,freshness})),browserMs:performance.now()-start,cardReadCost,payload:{evidenceResponseBytes:evidenceBytes,policyBytes:before.length,preparedBytes:preparedRaw.length},policySha256:hash(before),reviewSha256:hash(Buffer.from(beforeReview)),errors};
   } catch(error) {await page.screenshot({path:join(output,'FAILURE.png'),fullPage:true}).catch(()=>{});throw error;} finally {await browser.close();}
 }

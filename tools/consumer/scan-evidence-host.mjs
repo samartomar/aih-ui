@@ -18,7 +18,7 @@ async function boundedFile(path) {
   } finally { await file.close(); }
 }
 export function createScanEvidenceHost({ sources = [], packageRoot, trust, detectorIds } = {}) {
-  if (!Array.isArray(sources) || sources.length > 16 || sources.some(source => !source || typeof source.id !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(source.id) || typeof source.path !== 'string' || !isAbsolute(source.path) || !['artifact', 'report'].includes(source.format)) || new Set(sources.map(source => source.id)).size !== sources.length || sources.some(source => ['release-baseline', 'supplied'].includes(source.id))) throw new Error('Configure up to 16 unique local evidence sources with absolute paths.');
+  if (!Array.isArray(sources) || sources.length > 16 || sources.some(source => !source || typeof source.id !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(source.id) || typeof source.path !== 'string' || !isAbsolute(source.path) || !['artifact', 'report'].includes(source.format)) || new Set(sources.map(source => source.id)).size !== sources.length || sources.some(source => source.id === 'release-baseline' || /^supplied(?:-|$)/.test(source.id))) throw new Error('Configure up to 16 unique local evidence sources with absolute paths.');
   const retained = new Map(), successful = new Map();
   return {
     detail(scanId) {

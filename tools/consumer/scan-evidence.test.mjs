@@ -86,3 +86,23 @@ test('same report in larger canonical envelopes is accounted and acquisition-bou
   assert.equal(refused.checks.find(value=>value.sourceId==='supplied-1').status,'failed');assert.equal(refused.freshness,'last-known');
   assert.equal(refused.assessments[0].acquisitions.length,maxAssessments);
 });
+
+test('configured evidence sources cannot claim the generated supplied acquisition namespace', async () => {
+  const { createScanEvidenceHost } = await import('./scan-evidence-host.mjs');
+  const { resolve } = await import('node:path');
+  for (const id of ['supplied','supplied-1','supplied-later','release-baseline']) assert.throws(()=>createScanEvidenceHost({sources:[{id,path:resolve('synthetic.json'),format:'artifact'}]}),/unique local evidence sources/);
+});
+
+test('an authentic inventory-only all-provider-failed baseline qualifies without demonstrating item coverage', async () => {
+  const { buildScanEvidenceFixture }=await import('./scan-evidence-fixture.mjs');
+  const { mkdtemp, rm }=await import('node:fs/promises');const { tmpdir }=await import('node:os');const { join }=await import('node:path');
+  const root=await mkdtemp(join(tmpdir(),'ui88-inventory-only-'));
+  try {
+    const fixture=await buildScanEvidenceFixture(root);
+    const evaluated=await selectContentEvidence({inventory:{release:fixture.inventoryOnly.release},itemId:'alpha',assessments:[{sourceId:'baseline',location:'Synthetic inventory-only baseline',format:'artifact',bytes:fixture.inventoryOnly.artifactBytes,authentication:fixture.inventoryOnly.authentication}],sourceIds:['baseline'],checks:[{sourceId:'baseline',status:'succeeded',attemptedAt:'2026-10-20T01:00:00.000Z',lastSuccessfulAt:'2026-10-20T01:00:00.000Z',diagnostics:[]}],evaluationTime:'2026-10-20T01:00:00.000Z'});
+    assert.equal(evaluated.status,'selected');assert.equal(fixture.inventoryOnly.authentication.status,'authenticated');
+    assert.equal(evaluated.baseline.evidence.comparisonCoverage.status,'matched');assert.equal(evaluated.baseline.evidence.coverage.status,'mismatched');
+    assert.ok(evaluated.baseline.evidence.summary.providers.every(provider=>provider.outcome==='failed'));
+    assert.equal(evaluated.baseline.evidence.summary.findings.records,0);
+  } finally {await rm(root,{recursive:true});}
+});

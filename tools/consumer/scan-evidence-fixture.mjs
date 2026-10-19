@@ -45,7 +45,8 @@ export async function buildScanEvidenceFixture(output) {
   report.results[0].coverage.uncoveredPaths=[...report.selection.paths];
   const keys=[];
   const signer=identity=>{const pair=generateKeyPairSync('ed25519'); const publicBytes=pair.publicKey.export({format:'der',type:'spki'}), keyId=`ed25519:${hash(publicBytes)}`;keys.push({identity,keyId,publicKeySpkiBase64:publicBytes.toString('base64')});return {keyId,privateKey:pair.privateKey};};
-  const s1=await signArtifact({report,annexes:[],signer:signer('synthetic-baseline-producer')});
+  const baselineSigner=signer('synthetic-baseline-producer');
+  const s1=await signArtifact({report,annexes:[],signer:baselineSigner});
   const later=structuredClone(report); later.createdAt='2026-10-19T01:00:00.000Z'; later.producer.version='0.5.0-synthetic-later'; later.results[1].observations[0].origin='reused';later.results[1].observations[0].fromScanId=s1.scanId;
   const s2=await signArtifact({report:later,annexes:[],signer:signer('synthetic-later-producer')});
   const trust={keys:[...keys],publishers:[]};
@@ -58,9 +59,21 @@ export async function buildScanEvidenceFixture(output) {
   const binding={schema:'urn:aihq:catalog:scan-baseline:1.0.0',inventory:descriptors[0],scanId:s1.scanId,artifact:{sha256:hash(s1.bytes),byteLength:s1.bytes.length,location:{kind:'package',path:'release/baseline.json'}},scope:{namespace:'package-relative',...report.selection}};
   const prepared=await prepareReleaseBaseline({contentBytes,expectedSha256:hash(contentBytes),baseline:binding,trust},{acquireArtifact:async()=>s1.bytes,readArtifact,readContentCoverage,authenticateEvidence});
   assert.equal(prepared.valid,true,JSON.stringify(prepared.diagnostics));
+  const inventoryOnlyReport=structuredClone(report);
+  inventoryOnlyReport.selection={paths:[descriptors[0].path],excludedPaths:[]};
+  inventoryOnlyReport.source.capture.entries=report.source.capture.entries.filter(entry=>entry.path==='release'||entry.path===descriptors[0].path);
+  inventoryOnlyReport.source.capture.captureSha256=hash(encode({domain:'aih.scan.capture.v1',profile:report.source.capture.profile,entries:inventoryOnlyReport.source.capture.entries}));
+  for(const result of inventoryOnlyReport.results){result.outcome='failed';result.observations=[];result.coverage={coveredPaths:[],excludedPaths:[],uncoveredPaths:[descriptors[0].path],complete:false};result.diagnostics=[{code:'fixture-unavailable',detail:'Synthetic inventory-only provider failure'}];}
+  variants.inventoryOnly=await signArtifact({report:inventoryOnlyReport,annexes:[],signer:baselineSigner});
+  const onlyBinding={...binding,scanId:variants.inventoryOnly.scanId,artifact:{sha256:hash(variants.inventoryOnly.bytes),byteLength:variants.inventoryOnly.bytes.length,location:{kind:'package',path:'release/inventory-only.json'}},scope:{namespace:'package-relative',...inventoryOnlyReport.selection}};
+  const inventoryOnly=await prepareReleaseBaseline({contentBytes,expectedSha256:hash(contentBytes),baseline:onlyBinding,trust},{acquireArtifact:async()=>variants.inventoryOnly.bytes,readArtifact,readContentCoverage,authenticateEvidence});
+  assert.equal(inventoryOnly.valid,true,JSON.stringify(inventoryOnly.diagnostics));
+  assert.ok(inventoryOnly.itemCoverage.every(item=>item.members.every(member=>member.observationIds.length===0)));
+  await writeFile(join(output,'inventory-only.release.json'),inventoryOnly.releaseBytes);
+  await writeFile(join(packageRoot,'release/inventory-only.json'),variants.inventoryOnly.bytes);
   await writeFile(join(packageRoot,'release/release.json'),prepared.releaseBytes);await writeFile(join(packageRoot,binding.inventory.path),inventory.bytes);await writeFile(join(packageRoot,'release/baseline.json'),s1.bytes);
   for(const [name,value] of Object.entries(variants)) {assert.equal((await readArtifact(value.bytes)).status,'read',name);await writeFile(join(output,`${name}.json`),value.bytes);}
   await writeFile(join(output,'public-test-trust.json'),JSON.stringify(trust));
   await writeFile(join(output,'identities.json'),JSON.stringify({fixture:true,meaning:'Synthetic data only; no provider execution, production signing or trust update',packageRoot,baseline:binding,variants:Object.fromEntries(Object.entries(variants).map(([name,value])=>[name,{scanId:value.scanId,sha256:hash(value.bytes),bytes:value.bytes.length}]))},null,2));
-  return {packageRoot,trust,variants,binding};
+  return {packageRoot,trust,variants,binding,inventoryOnly};
 }

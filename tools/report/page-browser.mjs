@@ -41,6 +41,9 @@ export async function runReportPageBrowser({ origin, consumerDir, output, playwr
       await page.selectOption('#snapshot-mode', mode);
       await page.click('#snapshot-render');
       await page.waitForFunction(() => !document.getElementById('snapshot-frame').hidden);
+      // The previous mode's frame can still be visible while the new request is pending.
+      await page.waitForFunction(prefix => document.getElementById('snapshot-status').textContent.startsWith(prefix),
+        mode === 'demo' ? 'The design sample is shown.' : 'Saved snapshot display,');
       const shown = await page.locator('#snapshot-frame').evaluate(frame => ({ srcdoc: frame.srcdoc, sandbox: frame.getAttribute('sandbox') }));
       assert.equal(shown.srcdoc, renderer.renderReport(snapshot, { mode }), `${mode}: the page shows the shared renderer's bytes`);
       assert.equal(shown.sandbox, 'allow-scripts', `${mode}: the document runs in an opaque-origin sandbox`);
