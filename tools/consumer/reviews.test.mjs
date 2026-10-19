@@ -496,7 +496,7 @@ test('per-item evidence states: not supplied, matched, mismatched, invalid and u
     const subject = { releaseSha256: f.inventory.release.sha256, itemId: f.item.id };
     const other = f.inventories[0].release.items[0], otherSubject = { releaseSha256: f.inventories[0].release.sha256, itemId: other.id };
     const states = async reviewEvidence => {
-      const result = await describeEvidenceStates({ reviewEvidence, inventories: f.inventories, subjects: [subject, otherSubject] });
+      const result = await describeEvidenceStates({ reviewEvidence, inventories: f.inventories, subjects: [subject, otherSubject], evaluationTime: new Date().toISOString() });
       assert.equal(result.status, 'ok', JSON.stringify(result.diagnostics)); return result.value.map(value => value.state);
     };
     assert.deepEqual(await states([]), ['not-supplied', 'not-supplied']);
@@ -509,7 +509,7 @@ test('per-item evidence states: not supplied, matched, mismatched, invalid and u
     assert.deepEqual(await states([encode({})]), ['invalid', 'invalid']);
     // A report schema version this Scan reader does not support.
     assert.deepEqual(await states([encode({ schema: 'urn:aihq:scan:report:9.0.0', scanId: valid.scanId })]), ['unsupported', 'unsupported']);
-    // The most specific state of several documents is kept: one matching report outranks an invalid and a mismatched one.
+    // The newest matching assessment is selected by Scan; malformed and content-mismatched reports remain inspectable.
     assert.deepEqual(await states([encode({}), changed.bytes, valid.bytes]), ['matched', 'mismatched']);
     assert.equal((await describeEvidenceStates({ reviewEvidence: [], inventories: f.inventories, subjects: Array.from({ length: 2049 }, () => subject) })).status, 'refused');
   } finally { await f.cleanup(); }

@@ -2,7 +2,7 @@
 // coverage read decides association and which observations cover the exact
 // subject; these projections only name its fields. They neither mint Scan
 // digests nor grant custody.
-import { readContentCoverage, maxContentDescriptors } from '@aihq/scan/read';
+import { readContentCoverage, selectAssessments } from '@aihq/scan/read';
 import { readScanBytes, presentReport } from './report-view.mjs';
 import { isCheckedRelease, listItems } from '@aihq/catalog/reader';
 import { stable, ok, refuse } from './primitives.mjs';
@@ -54,63 +54,36 @@ export async function inspectReviewEvidence({ evidenceBytes, inventory, itemId }
 // public read and coverage operations. Absence of evidence is `not-supplied`, never a publication claim; a
 // matched state is Scan's unchecked coverage of exact bytes, not producer authentication or authority.
 export const MAX_EVIDENCE_SUBJECTS = 2048;
-// One coverage read per batch of items that agree on every shared path. A matched batch matches every item in it;
-// a mismatched one matches exactly the items none of whose paths Scan lists as unmatched. Descriptors Scan refuses
-// (an item's own `invalid` coverage) make that item not assessable; they say nothing about the evidence.
-const withinBounds = descriptors => descriptors.length > 0 && descriptors.length <= maxContentDescriptors
-  && descriptors.every(({ path, sha256, byteLength }) => typeof path === 'string' && path.length > 0 && /^[a-f0-9]{64}$/.test(sha256 ?? '') && Number.isSafeInteger(byteLength) && byteLength >= 0)
-  && new Set(descriptors.map(descriptor => descriptor.path)).size === descriptors.length;
-async function coverageStates(read, entries) {
-  const states = new Map();
-  let batch = [], byPath = new Map();
-  const flush = async () => {
-    if (!batch.length) return;
-    const items = batch, descriptors = [...byPath.values()];
-    batch = []; byPath = new Map();
-    const coverage = await readContentCoverage({ read, descriptors });
-    // A refused set is read again one item at a time, so one item cannot decide another's state.
-    if (coverage.status === 'invalid' && items.length > 1) {
-      for (const entry of items) for (const [key, state] of await coverageStates(read, [entry])) states.set(key, state);
-      return;
-    }
-    const unmatched = coverage.status === 'mismatched' ? new Set(coverage.unmatchedPaths) : undefined;
-    const other = coverage.status === 'invalid' ? 'unavailable' : coverage.reason === 'unsupported-report' ? 'unsupported' : 'invalid';
-    for (const { key, descriptors: own } of items) states.set(key, coverage.status === 'matched' ? 'matched'
-      : unmatched ? (own.some(descriptor => unmatched.has(descriptor.path)) ? 'mismatched' : 'matched') : other);
-  };
-  for (const entry of entries) {
-    // Bounds are checked before batching: an item outside them is not assessable and never joins a batch.
-    if (!withinBounds(entry.descriptors)) { states.set(entry.key, 'unavailable'); continue; }
-    const conflicts = entry.descriptors.some(descriptor => byPath.has(descriptor.path) && stable(byPath.get(descriptor.path)) !== stable(descriptor));
-    if (conflicts || byPath.size + entry.descriptors.length > maxContentDescriptors) await flush();
-    for (const descriptor of entry.descriptors) byPath.set(descriptor.path, descriptor);
-    batch.push(entry);
-  }
-  await flush();
-  return states;
-}
-const STATE_RANK = ['not-supplied', 'invalid', 'unsupported', 'unavailable', 'mismatched', 'matched'];
-export async function describeEvidenceStates({ reviewEvidence = [], inventories, subjects }) {
+export async function describeEvidenceStates({ reviewEvidence = [], inventories, subjects, evaluationTime }) {
   if (!Array.isArray(reviewEvidence) || reviewEvidence.length > 32 || reviewEvidence.some(bytes => !(bytes instanceof Uint8Array))
     || !Array.isArray(inventories) || inventories.length > 32 || inventories.some(entry => !isCheckedRelease(entry?.release))
     || !Array.isArray(subjects) || subjects.length > MAX_EVIDENCE_SUBJECTS
-    || subjects.some(value => !value || typeof value.itemId !== 'string' || !/^[a-f0-9]{64}$/.test(value.releaseSha256 ?? ''))) return bindingFailure(`Supply at most 32 evidence byte arrays, checked inventories and at most ${MAX_EVIDENCE_SUBJECTS} exact subjects.`);
+    || subjects.some(value => !value || typeof value.itemId !== 'string' || !/^[a-f0-9]{64}$/.test(value.releaseSha256 ?? ''))) return bindingFailure('Supply bounded evidence, checked inventories and exact subjects.');
   const reads = await Promise.all(reviewEvidence.map(bytes => readScanBytes(bytes)));
-  const items = new Map(inventories.flatMap(entry => listItems(entry.release).map(item => [`${entry.release.sha256}/${item.id}`, item])));
-  const keys = subjects.map(({ releaseSha256, itemId }) => `${releaseSha256}/${itemId}`);
-  const found = [...new Set(keys)].filter(key => items.has(key)).map(key => ({ key, descriptors: descriptorsOf(items.get(key)) }));
-  const perDocument = [];
-  for (const read of reads) perDocument.push(read.status === 'read' ? await coverageStates(read, found)
-    : new Map(found.map(({ key }) => [key, read.status === 'unsupported-report' ? 'unsupported' : 'invalid'])));
-  const states = subjects.map(({ releaseSha256, itemId }, index) => {
-    let state = !reads.length ? 'not-supplied' : items.has(keys[index]) ? 'invalid' : 'unavailable', scanId;
-    perDocument.forEach((map, document) => {
-      const next = map.get(keys[index]);
-      if (next && STATE_RANK.indexOf(next) >= STATE_RANK.indexOf(state)) [state, scanId] = [next, reads[document].scanId];
-    });
-    return { releaseSha256, itemId, state, ...(scanId ? { scanId } : {}), documents: reads.length };
-  });
-  return ok(states);
+  const scopes = [...new Map(reads.filter(read => read.status === 'read').map(read => [stable(read.report.selection), read.report.selection])).values()];
+  const assessments = reviewEvidence.map((bytes, index) => ({ sourceId: 'supplied', location: `Supplied document ${index + 1}`, bytes,
+    format: reads[index].annexBytes === 'checked' ? 'artifact' : 'report' }));
+  const values = [];
+  for (const subject of subjects) {
+    const inventory = inventories.find(entry => entry.release.sha256 === subject.releaseSha256);
+    const item = inventory && listItems(inventory.release).find(item => item.id === subject.itemId);
+    let state = !reads.length ? 'not-supplied' : !item ? 'unavailable' : reads.some(read => read.status === 'unsupported-report') ? 'unsupported' : 'invalid', scanId;
+    const baseline = inventory?.release.baseline;
+    // Without an explicit release request, several supplied scopes require a choice in Scan Review.
+    if (item && scopes.length && (baseline || scopes.length === 1)) {
+      const selection = baseline ? { paths: baseline.scope.paths, excludedPaths: baseline.scope.excludedPaths } : scopes[0];
+      const selected = await selectAssessments({ assessments, context: { sourceIds: ['supplied'], descriptors: descriptorsOf(item), selection },
+        evaluationTime, checks: [{ sourceId: 'supplied', status: 'succeeded', attemptedAt: evaluationTime, lastSuccessfulAt: evaluationTime, diagnostics: [] }] });
+      if (selected.status === 'selected') {
+        const entry = selected.assessments.find(entry => entry.summary.scanId === selected.selectedScanId);
+        // Mismatched remains inspectable; only Scan's eligible selection receives a selected identity.
+        state = entry ? 'matched' : selected.assessments.length ? 'mismatched' : state;
+        scanId = entry?.summary.scanId;
+      } else state = 'unavailable';
+    } else if (scopes.length > 1) state = 'unavailable';
+    values.push({ ...subject, state, ...(scanId ? { scanId } : {}), documents: reads.length });
+  }
+  return ok(values);
 }
 
 export async function compareReviewBindings({ intent, inventories, reviewEvidence = [], comparisons = [] }) {

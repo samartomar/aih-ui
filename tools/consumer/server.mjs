@@ -18,8 +18,9 @@ import { inspectAuthenticatedReviewEvidence } from './review-host.mjs';
 import { intakePersonalFolder } from './personal-folder.mjs';
 import { observeCheckout } from './workspace-host.mjs';
 import { createCatalogUpdateSource } from './update-source.mjs';
+import { createScanEvidenceHost } from './scan-evidence-host.mjs';
 
-export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, updateSourceCatalogRoots, port = 0 } = {}) {
+export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, updateSourceCatalogRoots, evidenceSources, evidenceDetectorIds, port = 0 } = {}) {
   // The fixture is a test source; a host names one update source, so both together would be ambiguous.
   if (updateSourceCatalogRoots !== undefined && maintenanceSource) throw new Error('Configure one update source: Catalog package roots or the test fixture, not both.');
   const installed = await readInstalledRelease({
@@ -64,9 +65,10 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   // Client tokens exist only in the live page. No cookie, saved intent or imported
   // snapshot restores a client's inventory, material grants or prepared handles.
   const clients = new Map(), clientStages = new Set();
+  const scanEvidence = createScanEvidenceHost({ sources: evidenceSources, packageRoot: catalogRoot, trust: reviewTrust, detectorIds: evidenceDetectorIds });
   async function clientFor(request) {
     const id = request.headers['x-aih-client'];
-    if (id === undefined) return { mixed: mixedService, host };
+    if (id === undefined) return { mixed: mixedService, host, scanEvidence };
     if (typeof id !== 'string' || !/^[A-Za-z0-9-]{8,80}$/.test(id)) throw new Error('Invalid authoring client token.');
     const now = Date.now();
     for (const [key, value] of clients) if (now - value.usedAt > 3_600_000) {
@@ -75,7 +77,8 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
     }
     if (!clients.has(id)) {
       if (clients.size >= 64) throw new Error('Too many active authoring clients; reopen after idle sessions expire.');
-      const client = { usedAt: now, stages: [], grants: new Map(), roots: { ...authoringRoots } };
+      const client = { usedAt: now, stages: [], grants: new Map(), roots: { ...authoringRoots },
+        scanEvidence: createScanEvidenceHost({ sources: evidenceSources, packageRoot: catalogRoot, trust: reviewTrust, detectorIds: evidenceDetectorIds }) };
       clients.set(id, client);
       client.ready = (async () => {
         client.mixed = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, maintenanceSource, frictionEvidence, observeCheckout });
@@ -137,6 +140,13 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
       if (pathname.startsWith('/api/authoring-')) {
         const client = await clientFor(request), mixedService = client.mixed, host = client.host;
         const operation = pathname.slice('/api/authoring-'.length);
+        if (operation === 'scan-evidence-detail') return send(response, 200, client.scanEvidence.detail(body.scanId));
+        if (operation === 'scan-evidence') {
+          const [releaseSha256, itemId] = String(body.target ?? '').split('/');
+          const inventory = mixedService.inventories.find(entry => entry.release.sha256 === releaseSha256);
+          if (!inventory) return send(response, 200, { status: 'invalid', diagnostics: [{ code: 'ITEM_UNAVAILABLE', detail: 'Exact content unavailable.' }] });
+          return send(response, 200, await client.scanEvidence.check({ inventory, itemId, supplied: (body.reviewEvidence ?? []).map(bytes => Uint8Array.from(bytes)), evaluationTime: body.evaluationTime, selection: body.selection }));
+        }
         if (['intake', 'folder'].includes(operation) && !client.grants) return send(response, 400, { status: 'refused', diagnostics: [{ code: 'CLIENT_REQUIRED', message: 'Open a fresh authoring client before supplying content.' }] });
         if (operation === 'folder') {
           if (client.grants.size >= 16) return send(response, 409, { status: 'refused', diagnostics: [{ code: 'LOCAL_GRANT_LIMIT', message: 'Up to 16 personal folders per page session; reopen a fresh page to start again.' }] });

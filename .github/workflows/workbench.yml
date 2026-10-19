@@ -19,19 +19,19 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: samartomar/aih-core
-          ref: bc13f80bef06331f0434f5a60618501d2934d289
+          ref: b61c88a6b0a4536d7da71aa0a3306a74ddb7d950
           path: .ci/core
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: samartomar/aih-catalog
-          ref: b99c1c8cd446215e1e32fc30fe9caaf144e41c15
+          ref: dff65782321ed4a4fa91686b0aa03614adea03b6
           path: .ci/catalog
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: samartomar/aih-scan
-          ref: d0f554ac2539144a03ed67aed16184c9049a606d
+          ref: 8e81d91ac47b4de47cc6b0f722d2ec8d09ba3808
           path: .ci/scan
           persist-credentials: false
       - name: Build reviewed package checkpoints
