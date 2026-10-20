@@ -163,6 +163,7 @@ export function createDetails({ elements, authoring }) {
           const facts = source.facts;
           row(elements.detailsSource, 'Source profile', `${facts.profile} · ${facts.status}`);
           codeRow(elements.detailsSource, 'Source identifier', facts.identifier);
+          codeRow(elements.detailsSource, 'Source path', facts.provenance?.path);
           for (const key of ['name', 'description']) row(elements.detailsSource, `Source ${key}`, `${facts[key].state} · ${facts[key].locator}${facts[key].state === 'authored' ? '' : ` · ${facts[key].required ? 'required' : 'optional'}`}`);
           codeRow(elements.detailsSource, 'Source revision', facts.provenance?.revision);
           codeRow(elements.detailsSource, 'Source sha256', facts.provenance?.sha256);

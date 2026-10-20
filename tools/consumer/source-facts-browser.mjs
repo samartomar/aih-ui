@@ -5,7 +5,11 @@ import { join, dirname } from 'node:path';
 import { sourceExamples, sourceExample } from './source-facts-fixture.mjs';
 import { intakePersonalFolder } from './personal-folder.mjs';
 import { installedFamilies } from './installed-families.mjs';
+import { performance } from 'node:perf_hooks';
+import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 export async function runSourceFactsBrowser({ origin, output, playwrightModule }) {
+  const began = performance.now();
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true });
@@ -95,6 +99,10 @@ export async function runSourceFactsBrowser({ origin, output, playwrightModule }
     const path = join(output, 'policy.downloaded.json'); await (await download).saveAs(path);
     assert.deepEqual(JSON.parse(await readFile(path, 'utf8')), JSON.parse(before));
     assert.deepEqual(errors, []);
-    await writeFile(join(output, 'source-facts-evidence.json'), JSON.stringify({ fixture: true, limits: 'Controlled profile/evidence failure fixtures; no detector execution or native-use claim.', observed, personal: personal.value.release.items[0].metadata.sourceFacts, failed, errors }, null, 2));
+    const resolution = Object.fromEntries(await Promise.all(['@aihq/core', '@aihq/catalog/source', '@aihq/catalog/reader', '@aihq/scan/read'].map(async name => {
+      const path = fileURLToPath(import.meta.resolve(name));
+      return [name, { path, sha256: createHash('sha256').update(await readFile(path)).digest('hex') }];
+    })));
+    await writeFile(join(output, 'source-facts-evidence.json'), JSON.stringify({ fixture: true, limits: 'Controlled profile/evidence failure fixtures; no detector execution or native-use claim.', elapsedMs: performance.now() - began, resolution, observed, personal: personal.value.release.items[0].metadata.sourceFacts, failed, errors }, null, 2));
   } finally { await browser.close(); }
 }

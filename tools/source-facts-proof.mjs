@@ -20,7 +20,12 @@ for (const [assets, destination] of [[pageAssets(repo), runDir], [serviceAssets(
   for (const asset of assets) { const path = join(destination, asset.to); await mkdir(dirname(path), { recursive: true }); await copyFile(join(repo, asset.from), path); }
 }
 const packages = JSON.parse(await readFile(join(consumerDir, '..', 'reviewed-packages.json'), 'utf8'));
-const summary = { packages, coreTargets: coreTargetsSummary(callService(consumerDir, { op: 'coreTargets' })) };
+const installed = await Promise.all(packages.map(async pkg => {
+  const packageName = pkg.name === 'ui' ? 'aih-ui' : `@aihq/${pkg.name}`;
+  const manifest = JSON.parse(await readFile(join(consumerDir, '..', 'node_modules', packageName, 'package.json'), 'utf8'));
+  return { ...pkg, packageName, version: manifest.version };
+}));
+const summary = { packages: installed.filter(pkg => pkg.name !== 'ui'), coreTargets: coreTargetsSummary(callService(consumerDir, { op: 'coreTargets' })) };
 const started = await createWorkbench({ consumerDir, runDir, summary, settingsPath: join(consumerDir, 'settings.json') });
 summary.entryCount = started.catalog.items.length; await writeFile(join(runDir, 'summary.json'), JSON.stringify(summary));
 const address = await listen(started.server, Number(process.env.AIH_SOURCE_PROOF_PORT ?? 0));
