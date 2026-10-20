@@ -87,6 +87,17 @@ export async function createMixedService(maintained, { suppliedInventories, fami
         sources: entry.release.sources.filter(source => item.sourceIds.includes(source.id)) }))),
       templates: notes.templates.map(t => ({ ...t, releaseSha256: notes.release.sha256 })) }; },
     async run(operation, body) {
+      if (operation === 'source-material') {
+        const [releaseSha256, itemId] = String(body.target ?? '').split('/');
+        const inventory = all.find(entry => entry.release.sha256 === releaseSha256);
+        const item = inventory?.release.items.find(item => item.id === itemId);
+        const digest = item?.metadata?.sourceFacts?.provenance?.sha256;
+        const descriptor = item?.materials.find(material => material.sha256 === digest);
+        const material = descriptor && inventory.materials?.find(material => material.path === descriptor.path && material.sha256 === digest);
+        if (!material || material.bytes.length > 250_000 || await digestBytes(material.bytes) !== digest) return { status: 'unavailable' };
+        try { return { status: 'read', sha256: digest, text: new TextDecoder('utf-8', { fatal: true }).decode(material.bytes) }; }
+        catch { return { status: 'unavailable' }; }
+      }
       if (typeof operation === 'string' && operation.startsWith('organization-')) return runOrganizationAuthor(operation, body, { inventories: all });
       const policyBytes = body.policyBytes ? Uint8Array.from(body.policyBytes) : undefined;
       const reviewEvidence = (body.reviewEvidence ?? []).map(bytes => Uint8Array.from(bytes)), comparisons = body.comparisons ?? [];

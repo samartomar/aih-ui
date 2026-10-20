@@ -20,6 +20,7 @@
  */
 
 import { el } from "../app/dom.js";
+import { sourcePresentation } from './source-facts.js';
 import { NOT_PUBLISHED, NOT_SUPPLIED } from "../app/absence.js";
 import { KIND_ICON, KIND_TONE, identity } from "./entry.js";
 
@@ -39,8 +40,9 @@ const NO_FAMILY = { text: NOT_PUBLISHED, value: false, title: "Content family: n
 
 function card(entry, selectedId, onSelect, model) {
   const id = identity(entry);
-  const title = entry.authoringItem?.label ?? null;
-  const description = entry.authoringItem?.description ?? null;
+  const source = entry.authoringItem ? sourcePresentation(entry.authoringItem) : null;
+  const title = source?.name ?? null;
+  const description = source?.description ?? null;
   const badge = entry.authoringItem ? { text: entry.authoringItem.family, value: true, title: 'Installed content family; upstream origins are shown in the inspector.', source: 'Content family' } : NO_FAMILY;
   const isSelected = selectedId === id.entryId;
 

@@ -1,4 +1,5 @@
 // Browser-granted bytes only. No path acquisition, scripts, Git or network.
+import { extractSourceFacts } from '@aihq/catalog/source';
 import { intakeDeclaration } from './intake.mjs';
 import { checkInput } from './intent-shape.mjs';
 import { digestBytes, only, refuse, stable } from './primitives.mjs';
@@ -8,28 +9,6 @@ const safePath = path => typeof path === 'string' && path.length <= 240
   && path.split('/').every(part => /^[A-Za-z0-9_. -]+$/.test(part) && !['', '.', '..', '.git'].includes(part.toLowerCase())
     && !/[. ]$/.test(part) && !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part));
 const decode = bytes => new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-function frontmatter(bytes, path) {
-  const text = decode(bytes).replaceAll('\r\n', '\n');
-  const match = /^---\n([\s\S]*?)\n---\n/.exec(text);
-  if (!match) throw new Error(`${path}: add YAML front matter with name, description and license.`);
-  const fields = {};
-  for (const line of match[1].split('\n')) {
-    if (!line.trim()) continue;
-    const entry = /^(name|description|license):\s+(.+)$/.exec(line);
-    if (!entry || Object.hasOwn(fields, entry[1])) throw new Error(`${path}: supported front matter has unique name, description and license scalar fields only; advanced declarations support other formats.`);
-    let value = entry[2].trim();
-    if (value.startsWith('"')) { try { value = JSON.parse(value); } catch { throw new Error(`${path}: invalid quoted scalar.`); } }
-    else if (value.startsWith("'")) { if (!value.endsWith("'")) throw new Error(`${path}: invalid quoted scalar.`); value = value.slice(1, -1).replaceAll("''", "'"); }
-    else if (/^[>|[\]{}&*!#]/.test(value) || /\s#/.test(value)) throw new Error(`${path}: use single-line plain or quoted scalars.`);
-    if (typeof value !== 'string' || !value.trim() || /[\x00-\x1f]/.test(value)) throw new Error(`${path}: fields must be nonempty single-line strings.`);
-    fields[entry[1]] = value;
-  }
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(fields.name ?? '') || fields.name.length > 64
-    || !fields.description || fields.description.length > 4096 || !/^[A-Za-z0-9.+-]{1,100}$/.test(fields.license ?? '')) {
-    throw new Error(`${path}: supply a lowercase kebab-case name (up to 64 characters), description and license identifier such as MIT.`);
-  }
-  return fields;
-}
 export async function intakePersonalFolder({ files: supplied, rebind } = {}) {
   const fail = message => refuse('LOCAL_FOLDER_INVALID', '/files', message);
   if (!Array.isArray(supplied) || !supplied.length || supplied.length > FOLDER_LIMITS.files) return fail('Choose a folder with 1–256 regular files, up to 250 KB per file and 1 MB total.');
@@ -56,13 +35,19 @@ export async function intakePersonalFolder({ files: supplied, rebind } = {}) {
     if (!decode(files[licensePath]).trim()) throw new Error('The root license must contain UTF-8 text.');
     const names = new Set();
     items = paths.map(path => {
-      const fields = frontmatter(files[path], path), directory = path.slice(0, -'SKILL.md'.length);
+      const facts = extractSourceFacts({ profile: 'agent-skills', path, revision, bytes: files[path] });
+      if (facts.status !== 'valid') {
+        const error = new Error(`${path}: ${facts.status} — ${facts.diagnostics.map(value => `${value.field}: ${value.message}`).join('; ')}. Check Agent Skills front matter.`);
+        error.sourceFacts = facts;
+        throw error;
+      }
+      const fields = { name: facts.name.value, description: facts.description.value, license: facts.native.license ?? 'LicenseRef-Personal' }, directory = path.slice(0, -'SKILL.md'.length);
       if (directory && directory !== `skills/${fields.name}/`) throw new Error(`${path}: directory must match the declared name ${fields.name}.`);
       if (names.has(fields.name)) throw new Error(`${path}: duplicate skill name.`);
       names.add(fields.name);
       license ??= fields.license;
       if (license !== fields.license) throw new Error('All skills must declare the same root license identifier. Use advanced declarations for multiple licenses.');
-      return { id: `personal.skill.${fields.name}`, source: 'personal', skillPath: path,
+      return { id: `personal.skill.${fields.name}`, source: 'personal', skillPath: path, sourceDiscovery: { profile: 'agent-skills', path },
         supportPaths: Object.keys(files).filter(member => member.startsWith(directory) && member !== path && member !== licensePath).map(member => member.slice(directory.length)).sort(),
         label: fields.name, description: fields.description, kind: 'skill', requires: [], optional: [], conflicts: [],
         clientCapabilities: [
@@ -72,7 +57,8 @@ export async function intakePersonalFolder({ files: supplied, rebind } = {}) {
         ], activation: [], configuration: { agentDirectory: { type: 'string', required: true, default: '.claude', minLength: 1, maxLength: 64,
           description: 'Project directory that receives skills/<name>/ (Claude Code reads .claude).' } } };
     });
-  } catch (error) { return fail(error.message); }
+  } catch (error) { return refuse('LOCAL_FOLDER_INVALID', '/files', error.message, undefined,
+    error.sourceFacts ? { owner: 'catalog', sourceFacts: error.sourceFacts } : undefined); }
   const declarationBytes = encode(stable({ schema: 'urn:aihq:catalog:producer-declaration:3.1.0', format: 'aihq-catalog-producer-declaration', version: 3,
     package: { name: 'personal-skills', version: '0.0.0' }, sources: [{ id: 'personal', origin: { kind: 'local' }, licensePath, license }], items }));
   const result = await intakeDeclaration({ declarationBytes, sourceFiles: [{ source: 'personal', revision, files }],

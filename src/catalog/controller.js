@@ -71,7 +71,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     onSort: (sort) => changeView({ sort }),
   });
   const cards = createCards({ elements: elements.cards, onSelect: (entryId) => select(entryId) });
-  const details = createDetails({ elements: elements.details });
+  const details = createDetails({ elements: elements.details, authoring });
   const family = document.getElementById('browse-family');
   const target = document.getElementById('browse-target');
   const support = document.getElementById('browse-support');

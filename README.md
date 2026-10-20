@@ -54,6 +54,20 @@ Run `node node_modules/aih-ui/tools/scan-evidence-proof.mjs <new-output-director
 
 ## Testing against unpublished packages
 
+Cards and Details consume compiled `metadata.sourceFacts` from Catalog's public
+reader. Source identity, purpose, profile diagnostics, exact revision/digest and
+native declarations stay separate from installation inputs, target capabilities
+and Scan outcomes. Optional absence uses the source identifier and an explicit
+absence message. Known sensitive native fields read **Withheld** with their
+redaction reason. Original material is available only through a separate explicit
+text disclosure; it may contain sensitive values and is never evaluated as HTML
+or instructions. Personal skill folders use the same public Catalog extractor.
+
+With no configured, baseline or supplied evidence, Scan Review reports **No
+assessment available** while browsing, selection and saving remain usable.
+Configured acquisition failures, unreadable/unsupported reports and mismatched
+content or scope retain their public diagnostics and available history.
+
 The ordinary prototype-derived application at `/` integrates mixed-source v3
 authoring into its existing catalog cards, inspector and Policy workspace.
 Start it with `node tools/preview.mjs --port 4173` and the three reviewed archive

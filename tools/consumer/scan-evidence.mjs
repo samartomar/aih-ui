@@ -11,6 +11,12 @@ export async function selectContentEvidence({ inventory, itemId, assessments, so
   // The inventory compares release declarations; item capture/coverage is a separate read below.
   const context = { sourceIds, descriptors: baseline ? [baseline.inventory] : descriptors,
     selection: selection ?? (baseline ? { paths: baseline.scope.paths, excludedPaths: baseline.scope.excludedPaths } : { paths: descriptors.map(value => value.path).sort(), excludedPaths: [] }) };
+  // Optional evidence has no comparison context until an acquisition is configured.
+  // Do not weaken Scan's requirement for a real, nonempty source set.
+  if (Array.isArray(sourceIds) && sourceIds.length === 0 && assessments?.length === 0 && checks?.length === 0 && !baseline) {
+    return { status: 'unconfigured', selectedScanId: null, assessments: [], checks: [], context, evaluationTime,
+      baseline: null, diagnostics: [{ code: 'no-evidence-source', detail: 'No assessment available: no evidence source configured or supplied. Browsing, selection and saving remain available.' }] };
+  }
   const result = await selectAssessments({ assessments, context, checks, evaluationTime, ...(detectorIds ? { detectorIds } : {}) });
   if (result.status !== 'selected') return result;
   const reads = await Promise.all(assessments.map(candidate => candidate.format === 'artifact' ? readArtifact(candidate.bytes) : readReport(candidate.bytes)));

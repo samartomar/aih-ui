@@ -23,6 +23,7 @@
 
 import { el, text } from "../app/dom.js";
 import { capabilityFacts } from './authoring-model.js';
+import { sourcePresentation } from './source-facts.js';
 import { describeClientIdentity } from '../app/client-identity.js';
 import {
   EVIDENCE_SUMMARY_ABSENT,
@@ -84,7 +85,7 @@ function declared(list) {
 }
 
 /** @param elements the inspector header and the two panes' containers */
-export function createDetails({ elements }) {
+export function createDetails({ elements, authoring }) {
   // Two Scanner Telemetry slots the design source fills from a scan result.
   // Neither depends on the selection, so each states its reason once, here.
   elements.detectorRunState.title = DETECTOR_RUN_STATE_ABSENT;
@@ -153,10 +154,44 @@ export function createDetails({ elements }) {
       }
       if (entry.authoringItem) {
         const item = entry.authoringItem;
-        elements.inspectorName.textContent = item.label;
+        const source = sourcePresentation(item);
+        elements.inspectorName.textContent = source.name;
         elements.inspectorKind.setAttribute('aria-label', `Kind: ${item.kind}`);
         elements.inspectorIcon.textContent = KIND_ICON[item.kind] ?? 'extension';
-        elements.detailsDesc.textContent = item.description ?? NOT_PUBLISHED;
+        elements.detailsDesc.textContent = source.description;
+        if (source.facts) {
+          const facts = source.facts;
+          row(elements.detailsSource, 'Source profile', `${facts.profile} · ${facts.status}`);
+          codeRow(elements.detailsSource, 'Source identifier', facts.identifier);
+          for (const key of ['name', 'description']) row(elements.detailsSource, `Source ${key}`, `${facts[key].state} · ${facts[key].locator}${facts[key].state === 'authored' ? '' : ` · ${facts[key].required ? 'required' : 'optional'}`}`);
+          codeRow(elements.detailsSource, 'Source revision', facts.provenance?.revision);
+          codeRow(elements.detailsSource, 'Source sha256', facts.provenance?.sha256);
+          for (const diagnostic of facts.diagnostics ?? []) row(elements.detailsSource, diagnostic.field, diagnostic.message);
+          const native = el('details');
+          native.append(el('summary', 'cursor-pointer', 'Source declarations — separate from installation requirements'));
+          if (facts.profile === 'claude-hooks') native.append(el('p', '', 'Hook events, matchers and handlers are declared operational facts. Reading them does not run them.'));
+          if (facts.profile === 'claude-mcp-registration') native.append(el('p', '', 'MCP client registration only. Individual tool metadata and running server behavior are not established.'));
+          if (facts.native?.environmentNames?.length || facts.native?.headerNames?.length) native.append(el('p', 'text-on-surface-variant', 'Environment and header values withheld from this view; declared names are retained.'));
+          for (const redaction of facts.redactions ?? []) native.append(el('p', 'text-on-surface-variant', `Withheld: ${redaction.path} — ${redaction.reason}`));
+          native.append(el('pre', 'whitespace-pre-wrap break-all text-[10px]', JSON.stringify(facts.native, null, 2)));
+          elements.detailsSource.append(native);
+          if (authoring) {
+            const original = el('details');
+            original.append(el('summary', 'cursor-pointer', 'Original source material (may contain sensitive values)'));
+            const content = el('pre', 'whitespace-pre-wrap break-all text-[10px]');
+            const load = el('button', 'px-2 py-1 border border-wb-border rounded', 'Read original source as text');
+            load.type = 'button';
+            load.addEventListener('click', async () => {
+              load.disabled = true;
+              try {
+                const result = await authoring.request('source-material', { target: `${item.root.releaseSha256}/${item.id}`, policyBytes: undefined });
+                content.textContent = result.status === 'read' ? result.text : 'Original source material unavailable in this page session.';
+              } catch { content.textContent = 'Original source material could not be read.'; }
+              finally { load.disabled = false; }
+            });
+            original.append(load, content); elements.detailsSource.append(original);
+          }
+        }
         row(elements.detailsSource, 'Content family', item.family);
         row(elements.detailsSource, 'Package', `${item.package.name}@${item.package.version}`);
         row(elements.detailsSource, 'Provenance', item.family === 'Personal' ? 'Local folder explicitly selected in this page session; no GitHub provenance inferred.' : 'Published installed release; upstream origins retained below.');
@@ -171,7 +206,7 @@ export function createDetails({ elements }) {
         codeRow(elements.detailsIdentity, 'Release sha256', item.root.releaseSha256);
         codeRow(elements.detailsIdentity, 'Item sha256', item.root.itemSha256);
         const disclosure = el('pre', 'whitespace-pre-wrap break-all text-[10px]');
-        disclosure.textContent = JSON.stringify({ origins: item.sources, dependencies: item.dependencies, recipe: item.recipe, materials: item.materials, targets: item.targets }, null, 2);
+        disclosure.textContent = JSON.stringify({ origins: item.sources, inputs: item.inputs, dependencies: item.dependencies, recipe: item.recipe, materials: item.materials, targets: item.targets }, null, 2);
         elements.detailsArtifacts.append(disclosure);
         elements.detectorRunState.textContent = 'No verified per-item detector evidence supplied. Review evidence in the policy workspace; declared capabilities are not scan results.';
         elements.detectorFindingDetail.textContent = 'Native execution and automatic guardrails are not established by supported material formats.';
