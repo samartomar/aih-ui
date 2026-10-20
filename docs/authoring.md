@@ -223,14 +223,15 @@ canonical relative paths, never an absolute root or a permission imported from
 JSON. Selection does not execute any supplied code, initialize Git, contact a
 remote or publish content. **Advanced: bring a declaration** remains available.
 
-The recognized subset is `skills/<name>/SKILL.md`, with
-unique, single-line `name`, `description` and `license` YAML scalar fields.
-Names are lowercase kebab-case, up to 64 characters; descriptions are at most
-4,096 characters. Plain strings, JSON double-quoted strings and YAML single-quoted
-strings are supported. Additional fields, block scalars and other formats receive
-an actionable refusal; use a prepared declaration for them. Directory names must
-match each skill's declared name. All skills share one declared license identifier
-and a nonempty UTF-8 root `LICENSE`, `LICENSE.txt` or `LICENSE.md`. License text is
+The recognized layout is `skills/<name>/SKILL.md`. Catalog's public
+`extractSourceFacts` interprets the `agent-skills` profile, including multiline
+YAML scalars and supported extensions, exactly as for Catalog compilation.
+Profile errors and malformed input return Catalog-attributed source diagnostics;
+no body text substitutes for missing required purpose. Directory names must
+match each skill's declared name. All skills share one license identifier
+and a nonempty UTF-8 root `LICENSE`, `LICENSE.txt` or `LICENSE.md`. When the optional
+native license identifier is absent, the delivery declaration uses
+`LicenseRef-Personal` for those root terms; it is not an authored source field. License text is
 retained exactly; recognition does not independently verify the license claim.
 Each skill's directory files form its support closure. These are delivery bytes,
 including scripts; recognition does not establish native use or execution admission.
