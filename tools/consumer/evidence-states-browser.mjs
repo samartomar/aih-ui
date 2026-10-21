@@ -111,8 +111,9 @@ export async function runEvidenceStatesBrowser({ origin, output, playwrightModul
     assert.match(await supply(files.valid, 'matched'), /Evidence matched[\s\S]*[1-9]\d* findings bound[\s\S]*Producer authentication is separate/);
     assert.equal(await noteCard.innerText(), 'Matched');
     assert.match(await noteCard.getAttribute('title'), /unchecked; this is not an approval or execution authority/);
-    assert.equal(await otherCard.getAttribute('data-evidence-state'), 'mismatched');
-    scenarios.push('valid-matched', 'unrelated-item-mismatched');
+    const otherState = await otherCard.getAttribute('data-evidence-state');
+    assert.ok(['mismatched', 'unavailable'].includes(otherState), 'A note-only report cannot qualify unrelated content or its release baseline');
+    scenarios.push('valid-matched', `unrelated-item-${otherState}`);
     // e. A report of changed files: mismatched, and nothing can be reviewed from it.
     assert.match(await supply(files.mismatched, 'mismatched'), /Evidence mismatched[\s\S]*0 findings bound/);
     assert.equal(await noteCard.innerText(), 'Mismatched');

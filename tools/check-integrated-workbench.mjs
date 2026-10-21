@@ -46,6 +46,8 @@ try {
   assert.equal(foreign.status, 403, 'The ordinary authoring adapter refuses a foreign origin.');
   const { runIntegratedBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/integrated-browser.mjs')));
   await runIntegratedBrowser({ origin, output: join(consumerDir, 'prototype-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
+  const { runSourceFactsBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/source-facts-browser.mjs')));
+  await runSourceFactsBrowser({ origin, output: join(consumerDir, 'source-facts-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
   const { runUnresolvedDraftBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/unresolved-draft-browser.mjs')));
   await runUnresolvedDraftBrowser({ origin, output: join(consumerDir, 'unresolved-draft-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
   const { runMaintenanceBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/maintenance-browser.mjs')));

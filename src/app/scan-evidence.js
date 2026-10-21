@@ -1,7 +1,7 @@
 import { el } from './dom.js';
 import { evidenceView } from './evidence-view.js';
 
-export function createScanEvidence(client) {
+export function createScanEvidence(client, { onReview } = {}) {
   const panel = el('section', 'min-w-0 max-w-full space-y-2 border border-wb-border rounded p-3');
   panel.setAttribute('aria-label', 'Latest Scan evidence');
   panel.append(el('h3', 'font-medium', 'Latest, baseline and history'));
@@ -17,6 +17,11 @@ export function createScanEvidence(client) {
   function render() {
     facts.replaceChildren(); history.replaceChildren(new Option('Latest matching', ''));
     if (!result) { status.textContent = 'Check configured sources or supply evidence in this review.'; return; }
+    if (result.status === 'unconfigured') {
+      scope.replaceChildren(new Option('No assessment scope available', ''));
+      status.textContent = 'No assessment available: no evidence source configured or supplied. Browsing, selection and saving remain available.';
+      return;
+    }
     if (result.status !== 'selected') { status.textContent = `Selection refused: ${JSON.stringify(result.diagnostics)}`; return; }
     const view = evidenceView(result, historicalId);
     const scopes = [result.context.selection, ...result.assessments.map(entry => entry.summary.selection)];
@@ -39,6 +44,9 @@ export function createScanEvidence(client) {
     history.value = historicalId ?? '';
     history.title = historicalId ?? result.selectedScanId ?? 'No matching evidence';
     status.textContent = `${view.mode === 'history' ? 'Historical selection' : 'Latest matching'}: ${view.scanId ?? 'No matching evidence'}. ${result.freshness === 'last-known' ? 'Last known: sources are incomplete or unavailable' : 'Configured sources checked'}. Evaluated ${result.evaluationTime}. ${view.newer ? 'Another latest result is available; choose Latest to return.' : ''} ${view.unavailable ? 'Historical artifact unavailable; its identity is retained.' : ''}`;
+    const failed = result.checks.filter(check => check.status === 'failed');
+    if (failed.length) status.textContent += ` Acquisition failed or evidence unreadable: ${failed.map(check => `${check.sourceId} (${check.diagnostics.map(value => value.code).join(', ')})`).join('; ')}.`;
+    if (!view.scanId && result.assessments.length) status.textContent += ` Available assessments do not match: ${[...new Set(result.assessments.map(entry => entry.eligibility))].join(', ')}.`;
     const detail = (label, value) => { const node = el('details'); node.append(el('summary', 'cursor-pointer', label), el('pre', 'whitespace-pre-wrap break-all text-[10px]', JSON.stringify(value, null, 2))); facts.append(node); };
     const row = (label, value) => facts.append(el('p', 'text-on-surface-variant break-all', `${label}: ${value}`));
     const authentication = acquisitions => acquisitions.map(value => `${value.sourceId} (${value.location}) — ${value.authentication.status}${value.authentication.reason ? ` (${value.authentication.reason})` : ''}${value.authentication.producerIdentity ? ` · ${value.authentication.producerIdentity}` : ''}`).join('; ');
@@ -57,7 +65,7 @@ export function createScanEvidence(client) {
       facts.append(el('p', 'font-medium', `${summary.createdAt} · ${summary.completion} · ${summary.findings.records} finding records · ${summary.findings.occurrences} occurrences`));
       row('Producer software', `${summary.producer.name} ${summary.producer.version}`);
       row('Configured source and authentication', authentication(acquisitions));
-      row('Requested scope', JSON.stringify(summary.selection));
+      row('Requested scope', `${summary.selection.paths.length} requested paths · ${summary.selection.excludedPaths.length} excluded paths. Exact paths are in the content and scope details.`);
       row('Current item capture and coverage', captureText(coverage));
       row('Reported severities', summary.findings.bySeverity.map(value => `${value.severity.state === 'present' ? `${value.severity.value.level}${value.severity.value.vendorSeverity ? ` (${value.severity.value.vendorSeverity})` : ''}` : `Unknown (${value.severity.reason})`}: ${value.records} records, ${value.occurrences} occurrences`).join('; ') || 'No finding records; this does not establish safety');
       detail('Content, requested scope and producer software', { scanId: summary.scanId, producer: summary.producer, source: summary.source, selection: summary.selection, context: result.context });
@@ -69,6 +77,7 @@ export function createScanEvidence(client) {
         detail(`${provider.detectorId}: provider detail`, provider);
       }
       detail('Report diagnostics and full detail references', { diagnostics: summary.diagnostics, annexes: summary.annexes, annexBytes: summary.annexBytes });
+      if (onReview) facts.append(button('Use this exact assessment for a human review', () => onReview(summary.scanId)));
       facts.append(button('Download original Scan evidence', async () => {
         const detail = await client.request('scan-evidence-detail', { scanId: view.scanId, policyBytes: undefined });
         if (detail.status !== 'read') { status.textContent = `Original artifact unavailable: ${view.scanId}`; return; }
@@ -82,7 +91,7 @@ export function createScanEvidence(client) {
   }
   async function check() {
     const current = ++attempt;
-    try { const next = await client.request('scan-evidence', { target: target.value, evaluationTime: new Date().toISOString(), policyBytes: undefined,
+    try { const next = await client.request('scan-evidence', { target: target.value, evaluationTime: new Date().toISOString(), policyBytes: undefined, reviewEvidenceIds: undefined,
       ...(suppliedBytes.length ? { reviewEvidence: suppliedBytes.map(bytes => [...bytes]) } : {}), ...(requestedScope ? { selection: requestedScope } : {}) }); if (current !== attempt) return;
       if (next.status !== 'selected' && result?.status === 'selected') { status.textContent = `Check refused; last known view retained. ${JSON.stringify(next.diagnostics)}`; return; }
       result = next; render(); }
@@ -90,7 +99,7 @@ export function createScanEvidence(client) {
   }
   history.addEventListener('change', () => { historicalId = history.value || undefined; render(); });
   scope.addEventListener('change', () => { requestedScope = JSON.parse(scope.value); check(); });
-  target.addEventListener('change', () => { requestedScope = undefined; check(); });
+  target.addEventListener('change', () => { requestedScope = undefined; historicalId = undefined; result = undefined; render(); check(); });
   supplied.addEventListener('change', async () => {
     const loading = ++attempt;
     try {
@@ -107,6 +116,11 @@ export function createScanEvidence(client) {
   const historyControls = el('div', 'flex min-w-0 max-w-full flex-wrap items-center gap-2');
   historyControls.append(history, button('Latest', () => { historicalId = undefined; render(); }));
   panel.append(target, acquisitionControls, scope, historyControls, status, facts);
+  document.addEventListener('aih:scan-content', event => {
+    if (![...target.options].some(option => option.value === event.detail?.target)) return;
+    target.value = event.detail.target;
+    target.dispatchEvent(new Event('change'));
+  });
   let catalog;
   client.subscribe(() => {
     if (catalog === client.catalog) return; catalog = client.catalog;

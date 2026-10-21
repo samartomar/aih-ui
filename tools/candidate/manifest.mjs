@@ -33,13 +33,22 @@ export function readManifest(path) {
   catch (error) { throw invalid(error.code === 'ENOENT' ? `The manifest ${file} does not exist.` : `The manifest ${file} could not be read as JSON: ${error.message}`); }
   if (!plain(manifest)) throw invalid('The manifest must be a JSON object.');
   if (manifest.schema !== MANIFEST_SCHEMA) throw invalid(`The manifest schema must be ${MANIFEST_SCHEMA} (found ${JSON.stringify(manifest.schema)}).`);
-  const unknown = Object.keys(manifest).filter(key => !['schema', 'candidate', 'packages', 'previousCatalog', 'updateSourceCatalogs'].includes(key));
+  const unknown = Object.keys(manifest).filter(key => !['schema', 'candidate', 'packages', 'ui', 'hostInputs', 'previousCatalog', 'updateSourceCatalogs'].includes(key));
   if (unknown.length) throw invalid(`The manifest has unknown ${unknown.length === 1 ? 'key' : 'keys'}: ${unknown.join(', ')}.`);
   if (manifest.candidate !== undefined && typeof manifest.candidate !== 'string') throw invalid('candidate must be a text label.');
   if (!plain(manifest.packages)) throw invalid('The manifest must name packages core, catalog and scan.');
   const extra = Object.keys(manifest.packages).filter(key => !REQUIRED.includes(key));
   if (extra.length) throw invalid(`packages has unknown ${extra.length === 1 ? 'key' : 'keys'}: ${extra.join(', ')}.`);
   const directory = dirname(file), packages = {};
+  const hostInputs = {};
+  if (manifest.hostInputs !== undefined) {
+    if (!plain(manifest.hostInputs) || Object.keys(manifest.hostInputs).some(key => !['evidenceSources', 'reviewTrust'].includes(key))) throw invalid('hostInputs may name only evidenceSources and reviewTrust.');
+    for (const [key, entry] of Object.entries(manifest.hostInputs)) {
+      if (!plain(entry) || Object.keys(entry).some(key => !['path', 'sha256'].includes(key)) || typeof entry.path !== 'string' || !entry.path || !SHA256.test(entry.sha256)) throw invalid(`hostInputs.${key} needs path and lowercase sha256.`);
+      hostInputs[key] = { path: resolve(directory, entry.path), sha256: entry.sha256 };
+    }
+  }
+  if (manifest.ui !== undefined) packages.ui = readEntry('ui', manifest.ui, directory);
   for (const name of REQUIRED) {
     if (manifest.packages[name] === undefined) throw invalid(`The manifest names no ${name} package.`);
     packages[name] = readEntry(`packages.${name}`, manifest.packages[name], directory);
@@ -53,15 +62,15 @@ export function readManifest(path) {
     if (list.length < 1 || list.length > MAX_UPDATE_SOURCE_CATALOGS) throw invalid(`updateSourceCatalogs must list 1 to ${MAX_UPDATE_SOURCE_CATALOGS} entries (found ${list.length}).`);
     packages.updateSourceCatalogs = list.map((entry, index) => readEntry(`updateSourceCatalogs[${index}]`, entry, directory));
   }
-  return { manifest, packages };
+  return { manifest, packages, hostInputs };
 }
 
 const digestOf = bytes => createHash('sha256').update(bytes).digest('hex');
 
 // Every tarball is hashed before anything is installed or written: a candidate is the bytes named, or it is refused.
-export async function verifyManifest({ packages }) {
+export async function verifyManifest({ packages, hostInputs = {} }) {
   const { updateSourceCatalogs = [], ...named } = packages;
-  for (const [name, entry] of [...Object.entries(named), ...updateSourceCatalogs.map((entry, index) => [`updateSourceCatalogs[${index}]`, entry])]) {
+  for (const [name, entry] of [...Object.entries(named), ...updateSourceCatalogs.map((entry, index) => [`updateSourceCatalogs[${index}]`, entry]), ...Object.entries(hostInputs).map(([name, entry]) => [name, { ...entry, tarball: entry.path }])]) {
     let bytes;
     try { bytes = await readFile(entry.tarball); }
     catch (error) { throw refusal('CANDIDATE_TARBALL_MISSING', `The ${name} tarball ${entry.tarball} could not be read: ${error.code ?? error.message}`); }
@@ -70,16 +79,20 @@ export async function verifyManifest({ packages }) {
   }
 }
 
-export function candidateIdentity({ manifest, packages }) {
+export function candidateIdentity({ manifest, packages, hostInputs = {} }) {
   return { candidate: manifest.candidate ?? null,
+    ...(Object.keys(hostInputs).length ? { hostInputs } : {}),
+    ...(packages.ui ? { ui: { ...packages.ui, tarball: basename(packages.ui.tarball) } } : {}),
     packages: IDENTITY_ORDER.map(name => ({ name: `@aihq/${name}`, sha256: packages[name].sha256, commit: packages[name].commit, tarball: basename(packages[name].tarball) })),
     // Only when configured, so the printed identity says exactly which packs the update source uses, by position.
     ...(packages.updateSourceCatalogs ? { updateSource: packages.updateSourceCatalogs.map((entry, index) => ({ position: index + 1, sha256: entry.sha256, commit: entry.commit, tarball: basename(entry.tarball) })) } : {}) };
 }
 
 // The manifest as the candidate keeps it: the same document with every tarball path made absolute.
-export function absoluteManifest({ manifest, packages }) {
+export function absoluteManifest({ manifest, packages, hostInputs = {} }) {
   const named = { ...manifest.packages }, out = { ...manifest, packages: named };
+  if (manifest.hostInputs) out.hostInputs = hostInputs;
+  if (packages.ui) out.ui = { ...manifest.ui, tarball: packages.ui.tarball };
   for (const name of REQUIRED) named[name] = { ...manifest.packages[name], tarball: packages[name].tarball };
   if (packages.previousCatalog) out.previousCatalog = { ...manifest.previousCatalog, tarball: packages.previousCatalog.tarball };
   if (packages.updateSourceCatalogs) out.updateSourceCatalogs = manifest.updateSourceCatalogs.map((entry, index) => ({ ...entry, tarball: packages.updateSourceCatalogs[index].tarball }));

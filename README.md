@@ -54,6 +54,20 @@ Run `node node_modules/aih-ui/tools/scan-evidence-proof.mjs <new-output-director
 
 ## Testing against unpublished packages
 
+Cards and Details consume compiled `metadata.sourceFacts` from Catalog's public
+reader. Source identity, purpose, profile diagnostics, exact revision/digest and
+native declarations stay separate from installation inputs, target capabilities
+and Scan outcomes. Optional absence uses the source identifier and an explicit
+absence message. Known sensitive native fields read **Withheld** with their
+redaction reason. Original material is available only through a separate explicit
+text disclosure; it may contain sensitive values and is never evaluated as HTML
+or instructions. Personal skill folders use the same public Catalog extractor.
+
+With no configured, baseline or supplied evidence, Scan Review reports **No
+assessment available** while browsing, selection and saving remain usable.
+Configured acquisition failures, unreadable/unsupported reports and mismatched
+content or scope retain their public diagnostics and available history.
+
 The ordinary prototype-derived application at `/` integrates mixed-source v3
 authoring into its existing catalog cards, inspector and Policy workspace.
 Start it with `node tools/preview.mjs --port 4173` and the three reviewed archive
@@ -176,10 +190,92 @@ with `samples/update-source/SAMPLE.md`. Open it in **Policy** (Open file,
 Validate and reopen) and a later pack that offers that adapter shows it as a
 newer revision with both exact digests, which you can keep, skip or defer.
 
+When `previousCatalog` is configured, its default and four family releases also
+resolve exact saved authoring pins. They are historical inputs, not additions
+to the current browse list. Their original logical source identity stays intact.
+Preparation of historical selections requires an explicitly reviewed source
+update first; historical paths cannot execute against current package bytes.
+Personal page grants remain separate. Discovery/checking does
+not change those pins; the ordinary source-change review proposes an explicit
+update. A historical inspection package without a baseline keeps that absence.
+
 Start refuses a tarball whose digest differs from the manifest before it writes
 anything.
 
 ### Start, stop, reset, report
+
+For an installed local release, pin the UI archive too with a top-level `ui`
+entry containing `tarball`, `sha256` and `commit`, like each dependency. Use a
+data directory **outside source Git workspaces** and run preflight first:
+
+```powershell
+node tools/candidate.mjs preflight --manifest C:\path\to\candidate.json --data C:\local\workbench --port 4894
+node tools/candidate.mjs upgrade --manifest C:\path\to\candidate.json --data C:\local\workbench --port 4894
+```
+
+`preflight` reads all pinned archives, checks package identities, Node/npm/tar,
+the destination and port, and verifies any existing recorded process identity.
+It writes no candidate state and stops nothing. `upgrade` repeats preflight,
+installs the UI, its pinned frontend dependencies and the three public packages
+with lifecycle scripts disabled, then compares every installed package file to
+its archive. Installation and dependency resolution finish before a running
+candidate is stopped. The new server runs the installed UI's existing candidate
+launcher, including its ordinary browser/package-identity smoke check.
+
+Each exact manifest has a release directory under `releases/` and a
+`checkpoint.json` recording phases, elapsed times, installed tree digests,
+the previous manifest, and hashes of retained account/configuration/sample
+files. Existing retained files must survive unchanged. Rerun the same command
+after resolving a failure; a reusable install is checked against its archive
+again before use. An installation failure leaves the previous server running.
+A start/browser failure leaves its logs and installed release for inspection;
+the checkpoint gives the resume command's inputs. To return to the previous
+release, pass the checkpoint's previous manifest to `upgrade`. Do not reset the
+data directory to recover an upgrade. Save downloads outside `run/`, which is
+rebuilt on every start; in-memory prepared handles require a fresh preparation
+after a restart.
+
+Optional `hostInputs` pins explicitly selected host configuration JSON files,
+with `{ "path": "...", "sha256": "..." }` entries named `evidenceSources`
+and `reviewTrust`. Relative paths resolve beside the manifest. The former is
+the existing local-file evidence-source list; the latter is independently
+configured Core/Scan trust. Both are checked before installation/start. Their
+identities appear in the candidate identity. Evidence files listed by those
+sources can become available or go offline during a session; Check Scan
+evidence uses the ordinary acquisition/history path. Never derive trust from
+an assessment. No scan, signing or publication occurs during upgrade.
+
+An item's **Security Scan** inspector links directly to that item's baseline,
+latest and history. **Use this exact assessment for a human review** explicitly
+selects its acquired original bytes for the existing review flow, without a
+large browser upload. References belong to that page session and must be
+reacquired after reopening. Discovery alone never adopts a different review
+document. Broad-capture consumer review identities use SHA-256 of the full
+canonical checked value when its existing text representation exceeds the saved
+field bound; short existing identities are unchanged. Full reports, findings,
+coverage and original observation dates remain inspectable.
+
+`tools/check-complete-candidate.mjs <plan.json> <new-output-directory>` runs the
+genuine evidence acceptance against a running installed candidate. The plan
+names `data`, `origin`, `family`, `itemId`, an explicitly owned `discoveryPath`
+and configured `sourceId`, and `baseline`, `later`, `trust` objects containing
+`path` and `sha256` (`baseline` and `later` also contain `scanId`). It verifies
+the original bytes, walks the ordinary inspector/review/preparation flow,
+compares public headless evidence, advances latest while history stays pinned,
+tests last-known recovery using only the owned discovery copy, and retains
+downloads/screenshots/timing. Its review is labelled a demonstration, and it
+holds preparation without applying. It expects an already completed local setup.
+
+`tools/check-source-transition.mjs <plan.json> <new-output-directory>` compares
+the configured previous full Catalog with the current one through public
+readers and the ordinary policy/update UI. Its plan names `data`, `origin`,
+`family`, `itemId`, `unchangedFamily`, `unchangedItemId`, pinned `trust` and
+optional `refreshReceipts` paths. It retains the public material/dependency
+diff, unchanged saved pins after discovery, an explicitly accepted update with
+an unrelated root preserved, and genuine current baseline authentication and
+coverage. Current evidence must mismatch the old item and match the new one.
+Packaged Catalog refresh receipts remain staged-content evidence; they are
+never relabelled as qualified releases by this proof.
 
 PowerShell, from the repository root:
 

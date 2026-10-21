@@ -96,6 +96,28 @@ test('configured evidence sources cannot claim the generated supplied acquisitio
   for (const id of ['supplied','supplied-1','supplied-later','release-baseline']) assert.throws(()=>createScanEvidenceHost({sources:[{id,path:resolve('synthetic.json'),format:'artifact'}]}),/unique local evidence sources/);
 });
 
+test('a page explicitly reuses acquired original evidence for review without uploading its bytes', async () => {
+  const { startConsumer } = await import('./server.mjs');
+  const input = await scanFixture();
+  const { fileURLToPath } = await import('node:url');
+  const started = await startConsumer({ suppliedInventories: [input.inventory], evidenceSources: [{ id: 'retained', path: fileURLToPath(new URL('./fixtures/scan-evidence/s1.json', import.meta.url)), format: 'artifact' }] });
+  const headers = { origin: started.origin, 'content-type': 'application/json', 'x-aih-client': 'configured-review-proof' };
+  const call = async (operation, body) => (await fetch(`${started.origin}/api/authoring-${operation}`, { method: 'POST', headers, body: JSON.stringify(body) })).json();
+  try {
+    const target = `${input.inventory.release.sha256}/alpha`;
+    await call('scan-evidence', { target, evaluationTime: input.evaluationTime });
+    const selected = await call('evidence-states', { reviewEvidenceIds: [input.inventory.release.baseline.scanId], subjects: [{ releaseSha256: input.inventory.release.sha256, itemId: 'alpha' }] });
+    assert.equal(selected.status, 'ok');
+    assert.equal(selected.value[0].state, 'mismatched'); // Fixture captures its inventory, not alpha's material.
+    assert.equal(selected.value[0].scanId, input.inventory.release.baseline.scanId);
+    const otherPage = await (await fetch(`${started.origin}/api/authoring-evidence-states`, { method: 'POST', headers: { ...headers, 'x-aih-client': 'another-page' }, body: JSON.stringify({ reviewEvidenceIds: [input.inventory.release.baseline.scanId], subjects: [] }) })).json();
+    assert.equal(otherPage.status, 'refused', 'Acquired evidence references belong to their page session');
+    const unknown = await call('evidence-states', { reviewEvidenceIds: ['scan:sha256:' + '0'.repeat(64)], subjects: [] });
+    assert.equal(unknown.status, 'refused');
+    assert.equal(unknown.diagnostics[0].code, 'EVIDENCE_UNAVAILABLE');
+  } finally { await new Promise(resolve => started.server.close(resolve)); }
+});
+
 test('an authentic inventory-only all-provider-failed baseline qualifies without demonstrating item coverage', async () => {
   const { buildScanEvidenceFixture }=await import('./scan-evidence-fixture.mjs');
   const { mkdtemp, rm }=await import('node:fs/promises');const { tmpdir }=await import('node:os');const { join }=await import('node:path');

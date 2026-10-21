@@ -104,9 +104,21 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     return operations.slice(seen);
   };
   const openSaved = async (page, path, heading) => {
+    const original = JSON.parse(await readFile(path, 'utf8'));
+    const checked = page.waitForResponse(response => {
+      if (!response.url().endsWith('/api/authoring-maintenance-check')) return false;
+      try {
+        const body = JSON.parse(response.request().postData()), bytes = body.envelopeBytes ?? body.bytes;
+        const input = JSON.parse(decode(Uint8Array.from(bytes)));
+        const policyOf = value => value.savedIntent?.base64 ? JSON.parse(Buffer.from(value.savedIntent.base64, 'base64').toString('utf8')) : value;
+        return JSON.stringify(policyOf(input).metadata?.['aih.workbench']?.roots) === JSON.stringify(policyOf(original).metadata?.['aih.workbench']?.roots);
+      } catch { return false; }
+    });
     await page.locator('#nav-policy').click(); await page.locator('#policy-open').setInputFiles(path);
     await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await page.locator('#policy-draft-status').filter({ hasText: heading }).waitFor();
+    await checked;
+    await page.locator('#policy-updates-check:not([disabled])').waitFor();
     await waitSettled(page, null);
   };
   const recordedNote = envelope => envelope.records.find(record => record.schema === MAINTENANCE_CHECK_SCHEMA);

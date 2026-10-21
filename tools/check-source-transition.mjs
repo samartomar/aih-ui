@@ -1,0 +1,12 @@
+import { readFile, copyFile } from 'node:fs/promises';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+const [planPath, outputPath] = process.argv.slice(2);
+if (!planPath || !outputPath) throw new Error('usage: node tools/check-source-transition.mjs <plan.json> <new-output-directory>');
+const plan = JSON.parse(await readFile(resolve(planPath), 'utf8')), record = JSON.parse(await readFile(join(plan.data, 'state/server.json'), 'utf8'));
+if (record.state !== 'ready' || record.url.replace(/\/$/, '') !== plan.origin) throw new Error('Plan must identify the running candidate.');
+const consumer = record.consumerDir ?? join(plan.data, 'run/consumer');
+await copyFile(join(dirname(fileURLToPath(import.meta.url)), 'consumer/source-transition-browser.mjs'), join(consumer, 'consumer/source-transition-browser.mjs'));
+const { runSourceTransitionBrowser } = await import(pathToFileURL(join(consumer, 'consumer/source-transition-browser.mjs')));
+const receipt = await runSourceTransitionBrowser({ plan, output: resolve(outputPath), playwrightModule: import.meta.resolve('playwright'), authoringModule: import.meta.resolve('aih-ui/authoring') });
+console.log(JSON.stringify({ status: receipt.status, elapsedMs: receipt.elapsedMs, output: resolve(outputPath) }));

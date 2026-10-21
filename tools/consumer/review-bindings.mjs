@@ -5,12 +5,18 @@
 import { readContentCoverage, maxContentDescriptors, selectAssessments } from '@aihq/scan/read';
 import { readScanBytes, presentReport } from './report-view.mjs';
 import { isCheckedRelease, listItems } from '@aihq/catalog/reader';
-import { stable, ok, refuse } from './primitives.mjs';
+import { stable, ok, refuse, digestJson } from './primitives.mjs';
 import { deriveRecipeIdentity } from '@aihq/core/contracts';
 import { checkIntentShape } from './intent-shape.mjs';
 
 const bindingFailure = message => refuse('REVIEW_BINDING_UNAVAILABLE', '/reviews/records', message);
 const exact = (tag, value) => `${tag}:${stable(value)}`;
+// Consumer review identities bind the complete checked value. Keep the existing
+// representation when it fits; broad captures use a digest without truncating it.
+const boundedExact = async (tag, value) => {
+  const identity = exact(tag, value);
+  return identity.length <= 1000 ? identity : `${tag}:sha256:${await digestJson(value)}`;
+};
 const absent = (field, value) => `absent:${field}:${value.reason}`;
 const descriptorsOf = item => [item.recipe, ...item.materials].map(({ path, sha256, byteLength }) => ({ path, sha256, byteLength }));
 // Scan's coverage status is the association: matched, mismatched, or unavailable when Scan cannot assess it.
@@ -30,17 +36,16 @@ export async function inspectReviewEvidence({ evidenceBytes, inventory, itemId }
   for (const observation of coverage.status === 'matched' ? coverage.observations : []) {
     const { detector, input } = observation;
     const evidence = {
-      observationIdentity: exact('observation', { id: observation.observationId, annexes: observation.annexes }),
-      detectorIdentity: exact('detector', { id: detector.detectorId, version: detector.detectorVersion, adapterSha256: detector.adapterSha256, platform: detector.platform }),
+      observationIdentity: await boundedExact('observation', { id: observation.observationId, annexes: observation.annexes }),
+      detectorIdentity: await boundedExact('detector', { id: detector.detectorId, version: detector.detectorVersion, adapterSha256: detector.adapterSha256, platform: detector.platform }),
       rulesIdentity: `sha256:${input.rulesSha256}`,
       configurationIdentity: `sha256:${input.configurationSha256}`,
-      profileIdentity: exact('profile', { id: input.profileId, sha256: input.profileSha256 }),
+      profileIdentity: await boundedExact('profile', { id: input.profileId, sha256: input.profileSha256 }),
       scopeIdentity: `${observation.observationId}#input`,
-      coverageIdentity: exact(`${observation.observationId}#coverage`, observation.detectorCoverage)
+      coverageIdentity: await boundedExact(`${observation.observationId}#coverage`, observation.detectorCoverage)
     };
     // Observation ID binds the full body including scope, coverage and gaps.
     // Aggregate detector coverage is an exact checked projection, not a new hash.
-    if (Object.values(evidence).some(value => value.length > 1000)) continue;
     for (const finding of observation.findings) bindings.push({
       finding: { detectorId: detector.detectorId, ruleId: finding.rule.state === 'present' ? finding.rule.value.nativeRuleId : absent('rule', finding.rule), findingId: finding.rawOccurrenceFingerprint },
       evidence, findingDisplay: finding,

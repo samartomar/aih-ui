@@ -29,6 +29,26 @@ function area(t) {
 }
 const refused = (code, pattern) => error => { assert.equal(error.code, code); if (pattern) assert.match(error.message, pattern); return true; };
 
+test('an installed UI archive is pinned and verified alongside its public dependencies', async t => {
+  const { root, entry, manifest } = area(t);
+  const read = readManifest(manifest(value => ({ ...value, ui: entry('ui') })));
+  await verifyManifest(read);
+  assert.equal(absoluteManifest(read).ui.tarball, read.packages.ui.tarball);
+  assert.equal(candidateIdentity(read).ui.sha256, read.packages.ui.sha256);
+  writeFileSync(join(root, 'tarballs', 'aihq-ui-1.0.0.tgz'), 'altered UI');
+  await assert.rejects(verifyManifest(read), refused('CANDIDATE_DIGEST_MISMATCH', /ui/));
+});
+
+test('host evidence configuration and independent trust are explicit pinned inputs', async t => {
+  const { root, manifest } = area(t), path = join(root, 'sources.json');
+  writeFileSync(path, '[]');
+  const read = readManifest(manifest(value => ({ ...value, hostInputs: { evidenceSources: { path, sha256: sha('[]') } } })));
+  await verifyManifest(read);
+  assert.equal(absoluteManifest(read).hostInputs.evidenceSources.path, path);
+  writeFileSync(path, '[{}]');
+  await assert.rejects(verifyManifest(read), refused('CANDIDATE_DIGEST_MISMATCH', /evidenceSources/));
+});
+
 test('a good manifest reads, verifies and has a stable identity in core, scan, catalog order', async t => {
   const { manifest } = area(t);
   const read = readManifest(manifest());

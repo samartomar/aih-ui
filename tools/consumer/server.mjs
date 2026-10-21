@@ -13,7 +13,7 @@ import { editSetup, reopenSetup, reviewSetupUpdate } from './setup.mjs';
 import { presentReport, readScanBytes } from './report-view.mjs';
 import { createIntentService } from './intent-service.mjs';
 import { createMixedService } from './mixed-service.mjs';
-import { installedFamilies } from './installed-families.mjs';
+import { installedFamilies, installedReleaseInventory } from './installed-families.mjs';
 import { inspectAuthenticatedReviewEvidence } from './review-host.mjs';
 import { intakePersonalFolder } from './personal-folder.mjs';
 import { observeCheckout } from './workspace-host.mjs';
@@ -41,14 +41,20 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
     return { ...descriptor, bytes: new Uint8Array(await readFile(path)) };
   }));
   const familyInventories = await installedFamilies();
+  // Explicit previous-package history participates in exact saved-pin reads,
+  // never in the current browse inventory. Preserve the logical input saved
+  // before upgrade; historical execution is guarded separately below.
+  const historicalInventories = previousCatalogRoot ? [await installedReleaseInventory({ root: previousCatalogRoot }), ...await installedFamilies({ root: previousCatalogRoot })] : [];
+  const currentReleases = new Set([release.sha256, ...familyInventories.map(value => value.release.sha256)]);
+  const historicalOnly = new Set(historicalInventories.map(value => value.release.sha256).filter(sha => !currentReleases.has(sha)));
   // One source object per host, so the last time each root was read lives as long as the server.
   const updateSource = updateSourceCatalogRoots !== undefined ? createCatalogUpdateSource({ roots: updateSourceCatalogRoots, installedPackage: release.package }) : null;
   if (updateSource) maintenanceSource = () => updateSource.read();
-  const mixedService = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, maintenanceSource, frictionEvidence, observeCheckout });
+  const mixedService = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, historicalInventories, maintenanceSource, frictionEvidence, observeCheckout });
   const authoringRoots = { maintained: catalogRoot };
   if (projectRoot) {
     const staging = await mkdtemp(join(tmpdir(), 'aih-authoring-materials-'));
-    for (const inventory of mixedService.inventories.filter(entry => entry.materialSource.input !== 'maintained')) {
+    for (const inventory of mixedService.inventories.filter(entry => !Object.hasOwn(authoringRoots, entry.materialSource.input))) {
       const input = inventory.materialSource.input;
       // Only host-selected startup inventories acquire execution bindings.
       const directory = join(staging, `source-${Object.keys(authoringRoots).length}`);
@@ -81,7 +87,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
         scanEvidence: createScanEvidenceHost({ sources: evidenceSources, packageRoot: catalogRoot, trust: reviewTrust, detectorIds: evidenceDetectorIds }) };
       clients.set(id, client);
       client.ready = (async () => {
-        client.mixed = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, maintenanceSource, frictionEvidence, observeCheckout });
+        client.mixed = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, historicalInventories, maintenanceSource, frictionEvidence, observeCheckout });
         client.recipeMaterials = client.mixed.inventories.flatMap(i => i.materials ?? []);
         client.host = projectRoot ? createHost({ projectRoot, materialRoots: client.roots, organizationSource, recipeMaterials: client.recipeMaterials, controls }) : null;
       })();
@@ -141,6 +147,14 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
         const client = await clientFor(request), mixedService = client.mixed, host = client.host;
         const operation = pathname.slice('/api/authoring-'.length);
         if (operation === 'scan-evidence-detail') return send(response, 200, client.scanEvidence.detail(body.scanId));
+        if (body.reviewEvidenceIds !== undefined) {
+          const ids = body.reviewEvidenceIds;
+          if (!Array.isArray(ids) || ids.length > 32 || new Set(ids).size !== ids.length || ids.some(id => typeof id !== 'string' || !/^scan:sha256:[a-f0-9]{64}$/.test(id))) return send(response, 200, { status: 'refused', diagnostics: [{ code: 'EVIDENCE_UNAVAILABLE', message: 'Supply up to 32 unique acquired Scan identities.' }] });
+          const retained = ids.map(id => client.scanEvidence.detail(id));
+          if (retained.some(value => value.status !== 'read')) return send(response, 200, { status: 'refused', diagnostics: [{ code: 'EVIDENCE_UNAVAILABLE', message: 'Original evidence is unavailable in this page session; check its source again. Saved review identities remain unchanged.' }] });
+          if ((body.reviewEvidence?.length ?? 0) + ids.length > 32) return send(response, 200, { status: 'refused', diagnostics: [{ code: 'EVIDENCE_UNAVAILABLE', message: 'Use up to 32 original evidence documents.' }] });
+          body.reviewEvidence = [...(body.reviewEvidence ?? []), ...retained.map(value => value.bytes)];
+        }
         if (operation === 'scan-evidence') {
           const [releaseSha256, itemId] = String(body.target ?? '').split('/');
           const inventory = mixedService.inventories.find(entry => entry.release.sha256 === releaseSha256);
@@ -176,6 +190,12 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
         if (['authority', 'prepare', 'apply', 'managed', 'remove'].includes(operation)) {
           if (!host) return send(response, 409, { status: 'unavailable', diagnostics: [{ code: 'HOST_UNAVAILABLE', message: 'No execution target configured by host.' }] });
           const policyText = new TextDecoder().decode(Uint8Array.from(body.policyBytes ?? []));
+          if (operation === 'prepare' && historicalOnly.size) {
+            const checked = await mixedService.run('read', { policyBytes: body.policyBytes });
+            if (checked.status === 'ok' && checked.value.editing === 'available' && checked.value.intent.pins.some(pin => historicalOnly.has(pin.releaseSha256))) {
+              return send(response, 200, { status: 'refused', diagnostics: [{ code: 'HISTORICAL_SOURCE_UPDATE_REQUIRED', message: 'This policy includes historical Catalog content. Review and explicitly accept its source update before preparing against the current installed package. Your saved policy is unchanged.' }] });
+            }
+          }
           const result = operation === 'authority' ? await host.inspectAuthority({ policyText })
             : operation === 'prepare' ? await host.prepareSession({ policyText, resolutions: body.resolutions })
             : operation === 'apply' ? await host.applyApproved({ sessionId: body.sessionId, reviewDigest: body.reviewDigest })
