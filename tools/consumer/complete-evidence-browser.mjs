@@ -91,6 +91,7 @@ export async function runCompleteEvidenceBrowser({ plan, output, playwrightModul
     assert.ok(first.baseline.evidence.acquisitions.some(value => value.authentication.status === 'authenticated'));
     assert.equal(first.baseline.evidence.coverage.status, 'matched');
     await panel.getByRole('button', { name: 'Use this exact assessment for a human review', exact: true }).click();
+    await page.getByRole('status').filter({ hasText: 'Exact acquired assessment selected for review.' }).waitFor();
     await page.getByLabel('Evidence review subject', { exact: true }).selectOption(`${inventory.release.sha256}/${item.id}`);
     await page.getByRole('button', { name: 'Inspect evidence', exact: true }).click();
     await page.getByRole('button', { name: 'Propose human review', exact: true }).click({ trial: true });
