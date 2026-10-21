@@ -91,7 +91,7 @@ export function createScanEvidence(client, { onReview } = {}) {
   }
   async function check() {
     const current = ++attempt;
-    try { const next = await client.request('scan-evidence', { target: target.value, evaluationTime: new Date().toISOString(), policyBytes: undefined,
+    try { const next = await client.request('scan-evidence', { target: target.value, evaluationTime: new Date().toISOString(), policyBytes: undefined, reviewEvidenceIds: undefined,
       ...(suppliedBytes.length ? { reviewEvidence: suppliedBytes.map(bytes => [...bytes]) } : {}), ...(requestedScope ? { selection: requestedScope } : {}) }); if (current !== attempt) return;
       if (next.status !== 'selected' && result?.status === 'selected') { status.textContent = `Check refused; last known view retained. ${JSON.stringify(next.diagnostics)}`; return; }
       result = next; render(); }
