@@ -2,9 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { installedFamilies } from './installed-families.mjs';
 import { createScanEvidenceHost } from './scan-evidence-host.mjs';
-test('ordinary content without configured evidence reports absence without invalid comparison context', async () => {
-  const inventory = (await installedFamilies()).find(value => !value.release.baseline);
-  assert.ok(inventory);
+test('personal content without configured evidence reports absence without invalid comparison context', async () => {
+  const personal = await intakePersonalFolder({ files: [
+    { path: 'LICENSE', bytes: [...new TextEncoder().encode('Personal license terms.')] },
+    { path: 'skills/no-evidence/SKILL.md', bytes: [...new TextEncoder().encode('---\nname: no-evidence\ndescription: Personal content without an assessment.\n---\nInstructions.\n')] }
+  ] });
+  assert.equal(personal.status, 'ok');
+  const inventory = personal.value;
+  assert.equal(inventory.release.baseline, undefined);
   const result = await createScanEvidenceHost().check({ inventory, itemId: inventory.release.items[0].id, evaluationTime: '2026-10-20T12:00:00.000Z' });
   assert.equal(result.status, 'unconfigured', JSON.stringify(result));
   assert.deepEqual(result.assessments, []);

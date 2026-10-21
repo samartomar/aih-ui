@@ -8,6 +8,9 @@
  *   node tools/candidate.mjs reset  [--data <dir>]
  *   node tools/candidate.mjs report [--data <dir>]
  *   node tools/candidate.mjs status [--data <dir>]
+ *   node tools/candidate.mjs preflight --manifest <file> --data <outside-source-dir> [--port <n>]
+ *   node tools/candidate.mjs upgrade --manifest <file> --data <outside-source-dir> [--port <n>]
+ *   Repeat the same upgrade to resume verified checkpoints; use its original previous manifest to roll back.
  *   node tools/candidate.mjs tls-interception <on|off|status|rotate> [--data <dir>]   a staged sample condition (tools/candidate/tls-interception.mjs)
  *
  * The data directory (default .aih-ui/candidate, git-ignored) holds everything the candidate writes. See tools/candidate/layout.mjs.
@@ -15,7 +18,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { assertCandidateDir, claimDataDir, ensureLayout, resetDataDir } from './candidate/data-dir.mjs';
 import { checkRealHome, recordRealHome } from './candidate/guard.mjs';
 import { DEFAULT_PORT, candidateLayout } from './candidate/layout.mjs';
@@ -26,7 +29,7 @@ import { isAlive, readServerRecord, runSeedOnly, serverEnvironment, spawnServer,
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const READY_TIMEOUT_MS = 5 * 60_000, SEED_TIMEOUT_MS = 10 * 60_000;
-const USAGE = 'usage: node tools/candidate.mjs <start|stop|reset|report|status> [--manifest <file>] [--data <dir>] [--port <n>] [--no-smoke]\n       node tools/candidate.mjs tls-interception <on|off|status|rotate> [--data <dir>]';
+const USAGE = 'usage: node tools/candidate.mjs preflight --manifest <file> --data <outside-source-dir> [--port <n>]\n       node tools/candidate.mjs upgrade --manifest <file> --data <outside-source-dir> [--port <n>]\n       Repeat upgrade with the same inputs to resume verified checkpoints. Inspect its checkpoint before recovery; use its original previous manifest for rollback.\n       node tools/candidate.mjs <start|stop|reset|report|status> [--manifest <file>] [--data <dir>] [--port <n>] [--no-smoke]\n       node tools/candidate.mjs tls-interception <on|off|status|rotate> [--data <dir>]';
 const refusal = (code, message) => Object.assign(new Error(message), { code });
 const out = line => process.stdout.write(`${line}\n`);
 
@@ -196,6 +199,7 @@ function tlsInterception({ data, mode }) {
 }
 
 async function main() {
+  if (process.argv[2] === '--help' || process.argv[2] === 'help') { out(USAGE); return; }
   const { command, options } = parseArguments(process.argv.slice(2));
   const data = resolve(options.data ?? join(REPO_ROOT, '.aih-ui', 'candidate'));
   const port = options.port === undefined ? DEFAULT_PORT : Number(options.port);

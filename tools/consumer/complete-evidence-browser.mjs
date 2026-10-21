@@ -8,6 +8,7 @@ import { performance } from 'node:perf_hooks';
 import { installedFamilies } from './installed-families.mjs';
 import { createScanEvidenceHost } from './scan-evidence-host.mjs';
 import { authenticateEvidence } from '@aihq/core';
+import { readInstalledRelease } from '@aihq/catalog/node';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 export async function runCompleteEvidenceBrowser({ plan, output, playwrightModule, authoringModule }) {
@@ -30,6 +31,9 @@ export async function runCompleteEvidenceBrowser({ plan, output, playwrightModul
   await mkdir(dirname(plan.discoveryPath), { recursive: true });
   await writeFile(plan.discoveryPath, 'No later assessment adopted yet.');
   const packageRoot = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
+  const main = await readInstalledRelease({ root: packageRoot, sourceInput: 'maintained' });
+  assert.equal(main.valid, true);
+  const allInventories = [{ family: 'Catalog', release: main.release, materialSource: main.source }, ...families];
   const headless = createScanEvidenceHost({ sources: [{ id: plan.sourceId, path: plan.discoveryPath, format: 'artifact' }], packageRoot, trust });
   const { chromium } = await import(playwrightModule), browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 1000 } });
@@ -62,14 +66,16 @@ export async function runCompleteEvidenceBrowser({ plan, output, playwrightModul
     await page.locator('#browse-family option[value="ECC"]').waitFor({ state: 'attached' });
     assert.equal(await page.locator('#setup-dialog').isVisible(), false, 'Existing actual local setup must survive upgrade');
     await page.locator('#browse-support').selectOption('all');
-    for (const family of families) {
+    for (const family of allInventories) {
       await page.locator('#browse-family').selectOption(family.family);
       const card = page.locator('#cards-grid [data-card-id]').first(); await card.click();
       const key = await card.getAttribute('data-card-id'), selected = family.release.items.find(value => `${family.release.sha256}/${value.id}` === key);
       assert.ok(selected);
-      assert.ok((await page.locator('#details-source').textContent()).includes(selected.metadata.sourceFacts.provenance.sha256));
-      if (selected.metadata.sourceFacts.description.state === 'present') assert.equal(await page.locator('#details-desc').textContent(), selected.metadata.sourceFacts.description.value);
-      facts.push({ family: family.family, key, sourceFacts: selected.metadata.sourceFacts, releaseSha256: family.release.sha256 });
+      if (selected.metadata?.sourceFacts) {
+        assert.ok((await page.locator('#details-source').textContent()).includes(selected.metadata.sourceFacts.provenance.sha256));
+        if (selected.metadata.sourceFacts.description.state === 'present') assert.equal(await page.locator('#details-desc').textContent(), selected.metadata.sourceFacts.description.value);
+      }
+      facts.push({ family: family.family, key, sourceFacts: selected.metadata?.sourceFacts ?? null, releaseSha256: family.release.sha256 });
     }
     await page.locator('#browse-family').selectOption(plan.family);
     await page.locator(`[data-card-id="${inventory.release.sha256}/${item.id}"]`).click();
