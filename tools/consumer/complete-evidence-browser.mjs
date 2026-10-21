@@ -73,10 +73,11 @@ export async function runCompleteEvidenceBrowser({ plan, output, playwrightModul
       assert.ok(selected);
       if (selected.metadata?.sourceFacts) {
         assert.ok((await page.locator('#details-source').textContent()).includes(selected.metadata.sourceFacts.provenance.sha256));
-        if (selected.metadata.sourceFacts.description.state === 'present') assert.equal(await page.locator('#details-desc').textContent(), selected.metadata.sourceFacts.description.value);
+        if (selected.metadata.sourceFacts.description.state === 'authored') assert.equal(await page.locator('#details-desc').textContent(), selected.metadata.sourceFacts.description.value);
       }
       facts.push({ family: family.family, key, sourceFacts: selected.metadata?.sourceFacts ?? null, releaseSha256: family.release.sha256 });
     }
+    assert.ok(facts.some(value => value.sourceFacts?.description.state === 'authored'), 'The ordinary full-candidate proof must compare an authored purpose');
     await page.locator('#browse-family').selectOption(plan.family);
     await page.locator(`[data-card-id="${inventory.release.sha256}/${item.id}"]`).click();
     await page.getByRole('button', { name: `Choose ${item.id}`, exact: true }).click();

@@ -293,13 +293,14 @@ the test plan note is suggested and the unrelated style note is not.
 `));
   })) {
     // The fixture is a test source and is never combined with a configured update source.
-    if (updateSourceRoots.length) {
+    if (updateSourceRoots.length && seeded.includes('maintenance')) {
       const file = join(layout.samples, 'maintenance', 'SAMPLE.md');
       try {
         const text = readFileSync(file, 'utf8');
         if (!text.includes(UPDATE_SOURCE_NOTE)) writeFileSync(file, `${text.trimEnd()}\n\n${UPDATE_SOURCE_NOTE}\n`);
       } catch { /* the note is documentation; an owner who removed the file keeps it removed */ }
-    } else env.AIH_MAINTENANCE_SOURCE = layout.maintenanceSource;
+    }
+    if (!updateSourceRoots.length) env.AIH_MAINTENANCE_SOURCE = layout.maintenanceSource;
   }
   // The saved draft that selects that review note is its own sample, so the update source stays configured if the draft cannot be built.
   await sample('maintenance-draft', [layout.maintenanceDraft], async () => {
