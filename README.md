@@ -195,6 +195,47 @@ anything.
 
 ### Start, stop, reset, report
 
+For an installed local release, pin the UI archive too with a top-level `ui`
+entry containing `tarball`, `sha256` and `commit`, like each dependency. Use a
+data directory **outside source Git workspaces** and run preflight first:
+
+```powershell
+node tools/candidate.mjs preflight --manifest C:\path\to\candidate.json --data C:\local\workbench --port 4894
+node tools/candidate.mjs upgrade --manifest C:\path\to\candidate.json --data C:\local\workbench --port 4894
+```
+
+`preflight` reads all pinned archives, checks package identities, Node/npm/tar,
+the destination and port, and verifies any existing recorded process identity.
+It writes no candidate state and stops nothing. `upgrade` repeats preflight,
+installs the UI, its pinned frontend dependencies and the three public packages
+with lifecycle scripts disabled, then compares every installed package file to
+its archive. Installation and dependency resolution finish before a running
+candidate is stopped. The new server runs the installed UI's existing candidate
+launcher, including its ordinary browser/package-identity smoke check.
+
+Each exact manifest has a release directory under `releases/` and a
+`checkpoint.json` recording phases, elapsed times, installed tree digests,
+the previous manifest, and hashes of retained account/configuration/sample
+files. Existing retained files must survive unchanged. Rerun the same command
+after resolving a failure; a reusable install is checked against its archive
+again before use. An installation failure leaves the previous server running.
+A start/browser failure leaves its logs and installed release for inspection;
+the checkpoint gives the resume command's inputs. To return to the previous
+release, pass the checkpoint's previous manifest to `upgrade`. Do not reset the
+data directory to recover an upgrade. Save downloads outside `run/`, which is
+rebuilt on every start; in-memory prepared handles require a fresh preparation
+after a restart.
+
+Optional `hostInputs` pins explicitly selected host configuration JSON files,
+with `{ "path": "...", "sha256": "..." }` entries named `evidenceSources`
+and `reviewTrust`. Relative paths resolve beside the manifest. The former is
+the existing local-file evidence-source list; the latter is independently
+configured Core/Scan trust. Both are checked before installation/start. Their
+identities appear in the candidate identity. Evidence files listed by those
+sources can become available or go offline during a session; Check Scan
+evidence uses the ordinary acquisition/history path. Never derive trust from
+an assessment. No scan, signing or publication occurs during upgrade.
+
 PowerShell, from the repository root:
 
 ```powershell

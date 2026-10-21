@@ -44,7 +44,7 @@ function parseArguments(argv) {
       options[flag.slice(2)] = rest[at];
     } else throw refusal('CANDIDATE_USAGE', `Unknown argument ${flag}.\n${USAGE}`);
   }
-  if (!['start', 'stop', 'reset', 'report', 'status', 'tls-interception'].includes(command)) throw refusal('CANDIDATE_USAGE', USAGE);
+  if (!['start', 'stop', 'reset', 'report', 'status', 'preflight', 'upgrade', 'tls-interception'].includes(command)) throw refusal('CANDIDATE_USAGE', USAGE);
   if (command === 'tls-interception' && !['on', 'off', 'status', 'rotate'].includes(options.mode)) throw refusal('CANDIDATE_USAGE', `tls-interception needs on, off, status or rotate.\n${USAGE}`);
   return { command, options };
 }
@@ -99,7 +99,7 @@ async function start({ manifest, data, port, smoke }) {
   const smokeCandidate = await lazy('smoke', 'smokeCandidate');
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const result = await smokeCandidate({ origin: record.url.replace(/\/$/, ''), identity: candidateIdentity(read), output: join(layout.checks, `start-${stamp}`),
-    playwrightModule: pathToFileURL(join(REPO_ROOT, 'node_modules', 'playwright', 'index.mjs')).href });
+    playwrightModule: import.meta.resolve('playwright') });
   if (!result.ok) {
     out('page check FAILED:');
     for (const mismatch of result.mismatches) out(`  - ${mismatch}`);
@@ -199,6 +199,12 @@ async function main() {
   const { command, options } = parseArguments(process.argv.slice(2));
   const data = resolve(options.data ?? join(REPO_ROOT, '.aih-ui', 'candidate'));
   const port = options.port === undefined ? DEFAULT_PORT : Number(options.port);
+  if (command === 'preflight' || command === 'upgrade') {
+    const { preflightCandidate, upgradeCandidate } = await import('./candidate/upgrade.mjs');
+    const result = await (command === 'preflight' ? preflightCandidate : upgradeCandidate)({ manifest: options.manifest, data, port });
+    out(JSON.stringify(command === 'preflight' ? { checkedAt: result.checkedAt, identity: result.identity, packages: result.packages, node: process.version } : result, null, 2));
+    return;
+  }
   await { start: () => start({ ...options, data, port }), stop: () => stop({ data }), reset: () => reset({ data }), report: () => report({ data }), status: () => status({ data }),
     'tls-interception': () => tlsInterception({ data, mode: options.mode }) }[command]();
 }

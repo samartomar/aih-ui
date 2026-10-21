@@ -108,6 +108,9 @@ async function main() {
         if (seedOnly) throw new SeedOnlyDone();
         authority = installLocalAuthority({ repository: layout.authority, log: layout.authorityLog });
         Object.assign(process.env, seeded.env);
+        // Operator configuration, verified independently of report bytes; never infer trust from an artifact.
+        if (read.hostInputs.evidenceSources) process.env.AIH_SCAN_EVIDENCE_SOURCES = read.hostInputs.evidenceSources.path;
+        if (read.hostInputs.reviewTrust) process.env.AIH_REVIEW_TRUST = read.hostInputs.reviewTrust.path;
         if (updateSourceRoots.length) delete process.env.AIH_MAINTENANCE_SOURCE;
         // A staged condition (tls-interception.mjs) starts only now, after every install: npm's own installs and this process never see it,
         // and only the processes started from here on (the readiness check and what Core runs from it) inherit its environment.
