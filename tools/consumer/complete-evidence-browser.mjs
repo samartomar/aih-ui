@@ -68,7 +68,8 @@ export async function runCompleteEvidenceBrowser({ plan, output, playwrightModul
     await page.locator('#browse-support').selectOption('all');
     for (const family of allInventories) {
       await page.locator('#browse-family').selectOption(family.family);
-      const card = page.locator('#cards-grid [data-card-id]').first(); await card.click();
+      const authored = family.release.items.find(value => value.metadata?.sourceFacts?.description.state === 'authored');
+      const card = authored ? page.locator(`[data-card-id="${family.release.sha256}/${authored.id}"]`) : page.locator('#cards-grid [data-card-id]').first(); await card.click();
       const key = await card.getAttribute('data-card-id'), selected = family.release.items.find(value => `${family.release.sha256}/${value.id}` === key);
       assert.ok(selected);
       if (selected.metadata?.sourceFacts) {
@@ -77,7 +78,7 @@ export async function runCompleteEvidenceBrowser({ plan, output, playwrightModul
       }
       facts.push({ family: family.family, key, sourceFacts: selected.metadata?.sourceFacts ?? null, releaseSha256: family.release.sha256 });
     }
-    assert.ok(facts.some(value => value.sourceFacts?.description.state === 'authored'), 'The ordinary full-candidate proof must compare an authored purpose');
+    for (const family of families) assert.equal(facts.find(value => value.family === family.family)?.sourceFacts?.description.state, 'authored', `${family.family} compares its authored purpose`);
     await page.locator('#browse-family').selectOption(plan.family);
     await page.locator(`[data-card-id="${inventory.release.sha256}/${item.id}"]`).click();
     await page.getByRole('button', { name: `Choose ${item.id}`, exact: true }).click();

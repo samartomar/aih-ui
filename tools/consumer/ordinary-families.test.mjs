@@ -8,6 +8,7 @@ import { startConsumer } from './server.mjs';
 import { readAuthoring } from './headless.mjs';
 import { installedFamilies } from './installed-families.mjs';
 import { isolatedConsumer } from './isolated-consumer.mjs';
+import { homeEnvironment } from './home-environment.mjs';
 
 test('a configured previous full package resolves exact historical family pins without adding them to current browsing', async () => {
   const { mkdtemp, mkdir, rm } = await import('node:fs/promises');
@@ -18,6 +19,9 @@ test('a configured previous full package resolves exact historical family pins w
   const { composeAuthoring, freshAuthoring } = await import('./headless.mjs');
   const { readInstalledRelease } = await import('@aihq/catalog/node');
   const folder = await mkdtemp(join(tmpdir(), 'historical-catalog-'));
+  const isolatedHome = homeEnvironment(join(folder, 'account-home'));
+  const priorEnvironment = Object.fromEntries(Object.keys(isolatedHome).map(key => [key, process.env[key]]));
+  Object.assign(process.env, isolatedHome);
   let started;
   try {
     const snapshot = await noteFixture('updated'), declaration = JSON.parse(new TextDecoder().decode(snapshot.declarationBytes));
@@ -53,7 +57,11 @@ test('a configured previous full package resolves exact historical family pins w
     const prepared = await call('prepare', { policyBytes: selected.value.policyBytes });
     assert.ok(!prepared.diagnostics?.some(value => value.code === 'HISTORICAL_SOURCE_UPDATE_REQUIRED'));
     assert.ok(prepared.status);
-  } finally { if (started) await new Promise(resolve => started.server.close(resolve)); await rm(folder, { recursive: true, force: true }); }
+  } finally {
+    if (started) await new Promise(resolve => started.server.close(resolve));
+    for (const [key, value] of Object.entries(priorEnvironment)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+    await rm(folder, { recursive: true, force: true });
+  }
 });
 
 // Tests may rewrite only a disposable copy; the shared installed Catalog stays byte-identical.
