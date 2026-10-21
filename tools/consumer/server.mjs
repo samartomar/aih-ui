@@ -141,6 +141,14 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
         const client = await clientFor(request), mixedService = client.mixed, host = client.host;
         const operation = pathname.slice('/api/authoring-'.length);
         if (operation === 'scan-evidence-detail') return send(response, 200, client.scanEvidence.detail(body.scanId));
+        if (body.reviewEvidenceIds !== undefined) {
+          const ids = body.reviewEvidenceIds;
+          if (!Array.isArray(ids) || ids.length > 32 || new Set(ids).size !== ids.length || ids.some(id => typeof id !== 'string' || !/^scan:sha256:[a-f0-9]{64}$/.test(id))) return send(response, 200, { status: 'refused', diagnostics: [{ code: 'EVIDENCE_UNAVAILABLE', message: 'Supply up to 32 unique acquired Scan identities.' }] });
+          const retained = ids.map(id => client.scanEvidence.detail(id));
+          if (retained.some(value => value.status !== 'read')) return send(response, 200, { status: 'refused', diagnostics: [{ code: 'EVIDENCE_UNAVAILABLE', message: 'Original evidence is unavailable in this page session; check its source again. Saved review identities remain unchanged.' }] });
+          if ((body.reviewEvidence?.length ?? 0) + ids.length > 32) return send(response, 200, { status: 'refused', diagnostics: [{ code: 'EVIDENCE_UNAVAILABLE', message: 'Use up to 32 original evidence documents.' }] });
+          body.reviewEvidence = [...(body.reviewEvidence ?? []), ...retained.map(value => value.bytes)];
+        }
         if (operation === 'scan-evidence') {
           const [releaseSha256, itemId] = String(body.target ?? '').split('/');
           const inventory = mixedService.inventories.find(entry => entry.release.sha256 === releaseSha256);
