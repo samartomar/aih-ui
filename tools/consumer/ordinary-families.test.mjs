@@ -30,16 +30,29 @@ test('a configured previous full package resolves exact historical family pins w
     await writeFile(join(folder, 'package.json'), JSON.stringify({ name: '@aihq/catalog', version: '0.1.0', exports }));
     await writeFile(join(folder, 'release.json'), historical.value.releaseBytes);
     for (const material of historical.value.materials) { const path = join(folder, material.path); await mkdir(dirname(path), { recursive: true }); await writeFile(path, material.bytes); }
-    const checked = await readInstalledRelease({ root: folder, release: './release-ecc.json', sourceInput: 'previous-maintained' }); assert.equal(checked.valid, true);
+    // Save with the ordinary pre-upgrade logical input, before this package is history.
+    const checked = await readInstalledRelease({ root: folder, release: './release-ecc.json', sourceInput: 'maintained' }); assert.equal(checked.valid, true);
     const item = checked.release.items[0], intent = freshAuthoring();
     intent.roots = [{ releaseSha256: checked.release.sha256, itemId: item.id, itemSha256: item.itemSha256, scope: 'project', configuration: {}, originIds: ['direct'] }];
     const saved = await composeAuthoring({ intent, inventories: [{ release: checked.release, materialSource: checked.source, materials: historical.value.materials }] }); assert.equal(saved.status, 'ok', JSON.stringify(saved.diagnostics));
-    started = await startConsumer({ previousCatalogRoot: folder });
+    started = await startConsumer({ previousCatalogRoot: folder, projectRoot: folder });
     const catalog = await (await fetch(started.origin + '/api/authoring-catalog')).json();
     assert.ok(catalog.items.every(value => value.root.releaseSha256 !== checked.release.sha256));
     const read = await (await fetch(started.origin + '/api/authoring-read', { method: 'POST', headers: { origin: started.origin, 'content-type': 'application/json' }, body: JSON.stringify({ policyBytes: [...saved.value.policyBytes] }) })).json();
     assert.equal(read.status, 'ok'); assert.equal(read.value.editing, 'available');
     assert.deepEqual(read.value.intent.pins, saved.value.intent.pins);
+    assert.deepEqual(read.value.originalBytes, [...saved.value.policyBytes]);
+    const call = async (operation, body) => (await fetch(started.origin + '/api/authoring-' + operation, { method: 'POST', headers: { origin: started.origin, 'content-type': 'application/json' }, body: JSON.stringify(body) })).json();
+    const refused = await call('prepare', { policyBytes: [...saved.value.policyBytes] });
+    assert.equal(refused.status, 'refused');
+    assert.equal(refused.diagnostics[0].code, 'HISTORICAL_SOURCE_UPDATE_REQUIRED');
+    // Current selections still reach Core's ordinary preparation boundary.
+    const fresh = await call('new', {}), current = catalog.items.find(value => value.id === 'extensions.matt.tdd');
+    const selected = await call('edit', { policyBytes: fresh.value.policyBytes, operation: { type: 'select', root: current.root } });
+    assert.equal(selected.status, 'ok');
+    const prepared = await call('prepare', { policyBytes: selected.value.policyBytes });
+    assert.ok(!prepared.diagnostics?.some(value => value.code === 'HISTORICAL_SOURCE_UPDATE_REQUIRED'));
+    assert.ok(prepared.status);
   } finally { if (started) await new Promise(resolve => started.server.close(resolve)); await rm(folder, { recursive: true, force: true }); }
 });
 

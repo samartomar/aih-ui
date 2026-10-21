@@ -42,13 +42,16 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   }));
   const familyInventories = await installedFamilies();
   // Explicit previous-package history participates in exact saved-pin reads,
-  // never in the current browse inventory. Its execution input stays separate.
-  const historicalInventories = previousCatalogRoot ? [await installedReleaseInventory({ root: previousCatalogRoot, sourceInput: 'previous-maintained' }), ...await installedFamilies({ root: previousCatalogRoot, sourceInput: 'previous-maintained' })] : [];
+  // never in the current browse inventory. Preserve the logical input saved
+  // before upgrade; historical execution is guarded separately below.
+  const historicalInventories = previousCatalogRoot ? [await installedReleaseInventory({ root: previousCatalogRoot }), ...await installedFamilies({ root: previousCatalogRoot })] : [];
+  const currentReleases = new Set([release.sha256, ...familyInventories.map(value => value.release.sha256)]);
+  const historicalOnly = new Set(historicalInventories.map(value => value.release.sha256).filter(sha => !currentReleases.has(sha)));
   // One source object per host, so the last time each root was read lives as long as the server.
   const updateSource = updateSourceCatalogRoots !== undefined ? createCatalogUpdateSource({ roots: updateSourceCatalogRoots, installedPackage: release.package }) : null;
   if (updateSource) maintenanceSource = () => updateSource.read();
   const mixedService = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, historicalInventories, maintenanceSource, frictionEvidence, observeCheckout });
-  const authoringRoots = { maintained: catalogRoot, ...(previousCatalogRoot ? { 'previous-maintained': previousCatalogRoot } : {}) };
+  const authoringRoots = { maintained: catalogRoot };
   if (projectRoot) {
     const staging = await mkdtemp(join(tmpdir(), 'aih-authoring-materials-'));
     for (const inventory of mixedService.inventories.filter(entry => !Object.hasOwn(authoringRoots, entry.materialSource.input))) {
@@ -187,6 +190,12 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
         if (['authority', 'prepare', 'apply', 'managed', 'remove'].includes(operation)) {
           if (!host) return send(response, 409, { status: 'unavailable', diagnostics: [{ code: 'HOST_UNAVAILABLE', message: 'No execution target configured by host.' }] });
           const policyText = new TextDecoder().decode(Uint8Array.from(body.policyBytes ?? []));
+          if (operation === 'prepare' && historicalOnly.size) {
+            const checked = await mixedService.run('read', { policyBytes: body.policyBytes });
+            if (checked.status === 'ok' && checked.value.editing === 'available' && checked.value.intent.pins.some(pin => historicalOnly.has(pin.releaseSha256))) {
+              return send(response, 200, { status: 'refused', diagnostics: [{ code: 'HISTORICAL_SOURCE_UPDATE_REQUIRED', message: 'This policy includes historical Catalog content. Review and explicitly accept its source update before preparing against the current installed package. Your saved policy is unchanged.' }] });
+            }
+          }
           const result = operation === 'authority' ? await host.inspectAuthority({ policyText })
             : operation === 'prepare' ? await host.prepareSession({ policyText, resolutions: body.resolutions })
             : operation === 'apply' ? await host.applyApproved({ sessionId: body.sessionId, reviewDigest: body.reviewDigest })

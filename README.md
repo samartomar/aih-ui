@@ -192,8 +192,10 @@ newer revision with both exact digests, which you can keep, skip or defer.
 
 When `previousCatalog` is configured, its default and four family releases also
 resolve exact saved authoring pins. They are historical inputs, not additions
-to the current browse list. Their host-selected material root stays separate
-from the current package and from personal page grants. Discovery/checking does
+to the current browse list. Their original logical source identity stays intact.
+Preparation of historical selections requires an explicitly reviewed source
+update first; historical paths cannot execute against current package bytes.
+Personal page grants remain separate. Discovery/checking does
 not change those pins; the ordinary source-change review proposes an explicit
 update. A historical inspection package without a baseline keeps that absence.
 
