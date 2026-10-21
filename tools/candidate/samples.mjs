@@ -293,18 +293,19 @@ the test plan note is suggested and the unrelated style note is not.
 `));
   })) {
     // The fixture is a test source and is never combined with a configured update source.
-    if (updateSourceRoots.length) {
+    if (updateSourceRoots.length && seeded.includes('maintenance')) {
       const file = join(layout.samples, 'maintenance', 'SAMPLE.md');
       try {
         const text = readFileSync(file, 'utf8');
         if (!text.includes(UPDATE_SOURCE_NOTE)) writeFileSync(file, `${text.trimEnd()}\n\n${UPDATE_SOURCE_NOTE}\n`);
       } catch { /* the note is documentation; an owner who removed the file keeps it removed */ }
-    } else env.AIH_MAINTENANCE_SOURCE = layout.maintenanceSource;
+    }
+    if (!updateSourceRoots.length) env.AIH_MAINTENANCE_SOURCE = layout.maintenanceSource;
   }
   // The saved draft that selects that review note is its own sample, so the update source stays configured if the draft cannot be built.
   await sample('maintenance-draft', [layout.maintenanceDraft], async () => {
     // The same input the update source publishes revisions of (id `notes`), taken at its `current` revision as the page's service holds it.
-    const [{ maintained, rootOf, draft }, { noteFixture }, { intakeDeclaration, digestBytes }] = await Promise.all([base(), load('note-fixture.mjs'), load('intake.mjs')]);
+    const [{ maintained, rootOf, draft }, { noteFixture }, { intakeDeclaration }, { digestBytes }] = await Promise.all([base(), load('note-fixture.mjs'), load('intake.mjs'), load('primitives.mjs')]);
     const snapshot = await noteFixture();
     const input = { id: 'notes', kind: 'local', locator: { input: 'notes' }, resolvedIdentity: { sha256: await digestBytes(snapshot.declarationBytes) } };
     const notes = await intakeDeclaration({ input, ...snapshot, materialSource: { kind: 'local', input: 'notes' } });

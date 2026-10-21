@@ -22,7 +22,8 @@ import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { delimiter, dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { homeEnvironment } from '../consumer/home-environment.mjs';
 import { startPreview } from '../preview.mjs';
 import { candidateLayout } from './layout.mjs';
@@ -31,6 +32,7 @@ import { readServerRecord } from './process.mjs';
 import { installLocalAuthority } from './local-authority.mjs';
 import { seedSamples } from './samples.mjs';
 import { activateStagedCondition } from './tls-interception.mjs';
+import { verifyInstalledArchive } from './upgrade.mjs';
 
 const say = message => process.stdout.write(`${new Date().toISOString()} ${message}\n`);
 const option = name => { const at = process.argv.indexOf(name); return at >= 0 ? process.argv[at + 1] : undefined; };
@@ -57,6 +59,10 @@ async function main() {
   const read = readManifest(process.env.AIH_CANDIDATE_MANIFEST ?? layout.manifest);
   await verifyManifest(read);
   const identity = candidateIdentity(read), { packages } = read;
+  const uiRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+  const installedConsumerDir = packages.ui ? resolve(uiRoot, '../..') : undefined;
+  const installed = installedConsumerDir ? Object.fromEntries(['ui', 'core', 'catalog', 'scan'].map(name => [name,
+    verifyInstalledArchive(packages[name], join(installedConsumerDir, 'node_modules', name === 'ui' ? 'aih-ui' : `@aihq/${name}`))])) : undefined;
   say(`candidate: ${identity.candidate ?? '(unnamed)'}`);
   rmSync(layout.run, { recursive: true, force: true });
   mkdirSync(layout.run, { recursive: true });
@@ -89,7 +95,7 @@ async function main() {
     preview = await startPreview({
       supplied: Object.fromEntries(['core', 'scan', 'catalog'].map(key => [key, pick(key).supplied])),
       expected: Object.fromEntries(['core', 'scan', 'catalog'].map(key => [key, pick(key).expected])),
-      port: seedOnly ? 1 : port, runDir: layout.run, settingsPath: layout.settings, log: say,
+      port: seedOnly ? 1 : port, runDir: layout.run, installedConsumerDir, settingsPath: layout.settings, log: say,
       // Host configuration is read when the Workbench is created, so the samples and the environment exist before that.
       async beforeServe({ consumerDir }) {
         if (packages.previousCatalog) process.env.AIH_CONSUMER_PREVIOUS_CATALOG = extractPackage(packages.previousCatalog.tarball, join(layout.run, 'previous-catalog'));
@@ -108,6 +114,9 @@ async function main() {
         if (seedOnly) throw new SeedOnlyDone();
         authority = installLocalAuthority({ repository: layout.authority, log: layout.authorityLog });
         Object.assign(process.env, seeded.env);
+        // Operator configuration, verified independently of report bytes; never infer trust from an artifact.
+        if (read.hostInputs.evidenceSources) process.env.AIH_SCAN_EVIDENCE_SOURCES = read.hostInputs.evidenceSources.path;
+        if (read.hostInputs.reviewTrust) process.env.AIH_REVIEW_TRUST = read.hostInputs.reviewTrust.path;
         if (updateSourceRoots.length) delete process.env.AIH_MAINTENANCE_SOURCE;
         // A staged condition (tls-interception.mjs) starts only now, after every install: npm's own installs and this process never see it,
         // and only the processes started from here on (the readiness check and what Core runs from it) inherit its environment.
@@ -125,7 +134,7 @@ async function main() {
   const starting = readServerRecord(layout);
   writeFileSync(layout.server, `${JSON.stringify({ pid: process.pid, state: 'ready', port, url: preview.url,
     startedAt: starting?.pid === process.pid ? starting.startedAt : new Date().toISOString(), instance: randomUUID(),
-    identity, packages: preview.summary.packages, dataDir: layout.root }, null, 2)}\n`);
+    identity, installed, consumerDir: preview.consumerDir, packages: preview.summary.packages, dataDir: layout.root }, null, 2)}\n`);
   say(`serving ${preview.url}`);
 }
 

@@ -41,7 +41,8 @@ process.on('exit', () => {
   if (!realCoreChange.unchanged) { console.error(describeCoreHomeChange(realCoreChange)); process.exitCode = 1; }
 });
 // The reviewed-batch suite alone takes about as long as all the others together, so it runs as its own group.
-// Each group keeps the same limit: suites that would bring a group near it go in a new group instead.
+// The real-Core batch group has its own bounded budget: its serial Windows
+// filesystem work measured 115s before the final concurrent-consent regression.
 const testGroups = [
   ['ordinary-families', 'authoring-page', 'authoring-v3', 'reviews', 'personal-folder', 'journey', 'readiness', 'readiness-host', 'claims', 'friction', 'authority-source', 'organization-author', 'guided-setup', 'core-targets', 'workspace'],
   ['source-facts', 'scan-evidence', 'release-order', 'update-source', 'maintenance', 'improvements', 'trials'],
@@ -51,7 +52,7 @@ const testGroups = [
 let checksLog = '';
 for (const tests of testGroups) {
   const result = spawnSync(process.execPath, ['--test', ...tests.map(name => join(output, `consumer/${name}.test.mjs`))], {
-    cwd: output, encoding: 'utf8', windowsHide: true, maxBuffer: 20_000_000, timeout: 120_000,
+    cwd: output, encoding: 'utf8', windowsHide: true, maxBuffer: 20_000_000, timeout: tests.includes('batch') ? 180_000 : 120_000,
     env: { ...isolated, AIH_REPO: repo }
   });
   checksLog += `${result.stdout ?? ''}${result.stderr ?? ''}`;

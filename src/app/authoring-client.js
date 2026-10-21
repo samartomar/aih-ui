@@ -27,6 +27,7 @@ export function createAuthoringClient() {
   const listeners = new Set();
   let catalog, bytes = new Uint8Array(), intent, candidate, draftValue, compiled, revision = 0, catalogRevision = 0, hostRevision = 0, reviewEvidence = [], evidenceRevision = 0, recipient, judgments = [], judgmentSummary;
   const notify = () => { for (const listener of listeners) listener(); };
+  let reviewEvidenceIds = [];
   // Saved judgments are a derived display of the latest read, publish or accept; they never gate editing.
   const keepJudgments = value => { judgments = value?.reviewJudgments ?? []; judgmentSummary = value?.reviewSummary; };
   // Choices are recorded strictly one after another, each from the envelope the previous one produced.
@@ -37,7 +38,7 @@ export function createAuthoringClient() {
   async function request(operation, body = {}) {
     const response = await fetch(`/api/authoring-${operation}`, {
       method: 'POST', headers: { ...headers, 'content-type': 'application/json' },
-      body: JSON.stringify({ policyBytes: [...bytes], reviewEvidence: reviewEvidence.map(value => [...value]), ...(recipient ? { recipient } : {}), ...body }),
+      body: JSON.stringify({ policyBytes: [...bytes], reviewEvidence: reviewEvidence.map(value => [...value]), ...(reviewEvidenceIds.length ? { reviewEvidenceIds } : {}), ...(recipient ? { recipient } : {}), ...body }),
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error ?? JSON.stringify(result));
@@ -100,8 +101,9 @@ export function createAuthoringClient() {
       const result = await request(operation, body);
       return attempt === hostRevision && draft === revision ? result : { status: 'superseded' };
     },
-    setReviewEvidence(values) { revision++; evidenceRevision++; candidate = undefined; reviewEvidence = values.map(value => value.slice()); notify(); },
-    get reviewEvidenceCount() { return reviewEvidence.length; }, get evidenceRevision() { return evidenceRevision; },
+    setReviewEvidence(values) { revision++; evidenceRevision++; candidate = undefined; reviewEvidenceIds = []; reviewEvidence = values.map(value => value.slice()); notify(); },
+    setConfiguredReviewEvidence(scanId) { revision++; evidenceRevision++; candidate = undefined; reviewEvidence = []; reviewEvidenceIds = [scanId]; notify(); },
+    get reviewEvidenceCount() { return reviewEvidence.length + reviewEvidenceIds.length; }, get evidenceRevision() { return evidenceRevision; },
     // Each exact item's state against the supplied evidence, read by the host through Scan; it changes nothing.
     evidenceStates(subjects) { return request('evidence-states', { subjects, policyBytes: undefined }); },
     // Only labels saved judgments as yours or imported; it never changes what is recorded.

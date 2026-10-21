@@ -494,7 +494,12 @@ test('per-item evidence states: not supplied, matched, mismatched, invalid and u
   const f = await reviewFixture();
   try {
     const subject = { releaseSha256: f.inventory.release.sha256, itemId: f.item.id };
-    const other = f.inventories[0].release.items[0], otherSubject = { releaseSha256: f.inventories[0].release.sha256, itemId: other.id };
+    // A distinct unbound content revision tests descriptor mismatch. A maintained
+    // release may now require its own inventory baseline, which this note report
+    // never assessed; that is unavailable release evidence instead.
+    const otherInventory = await newNoteRelease(f, 'updated');
+    f.inventories.push(otherInventory);
+    const other = otherInventory.release.items[0], otherSubject = { releaseSha256: otherInventory.release.sha256, itemId: other.id };
     const states = async reviewEvidence => {
       const result = await describeEvidenceStates({ reviewEvidence, inventories: f.inventories, subjects: [subject, otherSubject], evaluationTime: new Date().toISOString() });
       assert.equal(result.status, 'ok', JSON.stringify(result.diagnostics)); return result.value.map(value => value.state);
@@ -512,5 +517,22 @@ test('per-item evidence states: not supplied, matched, mismatched, invalid and u
     // The newest matching assessment is selected by Scan; malformed and content-mismatched reports remain inspectable.
     assert.deepEqual(await states([encode({}), changed.bytes, valid.bytes]), ['matched', 'mismatched']);
     assert.equal((await describeEvidenceStates({ reviewEvidence: [], inventories: f.inventories, subjects: Array.from({ length: 2049 }, () => subject) })).status, 'refused');
+  } finally { await f.cleanup(); }
+});
+
+test('a finding from a broad exact capture can be recorded and reopened within saved identity bounds', async () => {
+  const f = await reviewFixture();
+  try {
+    const extra = Array.from({ length: 30 }, (_, index) => `additional-content-${index}.md`);
+    for (const path of extra) await writeFile(join(f.root, path), '# Additional captured content\n');
+    const evidence = await f.scan({ selection: { paths: [...f.inventory.materials.map(value => value.path), ...extra].sort(), excludedPaths: [] } });
+    const inspected = await authoring.inspectReviewEvidence({ evidenceBytes: evidence.bytes, inventory: f.inventory, itemId: f.item.id });
+    assert.equal(inspected.value.sourceAssociation, 'matched');
+    assert.ok(inspected.value.bindings.length > 0, 'Broad coverage must not silently discard checked findings');
+    assert.match(inspected.value.bindings[0].evidence.coverageIdentity, /#coverage:sha256:[a-f0-9]{64}$/);
+    const saved = await recorded(f, evidence);
+    const reopened = await authoring.readAuthoring({ policyBytes: saved.value.policyBytes, inventories: f.inventories, reviewEvidence: [evidence.bytes] });
+    assert.equal(reopened.value.reviewJudgments[0].applicability, 'applies');
+    assert.ok(Object.values(reopened.value.intent.reviews.records[0].evidence).every(value => value.length <= 1000));
   } finally { await f.cleanup(); }
 });

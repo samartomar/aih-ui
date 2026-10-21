@@ -36,7 +36,12 @@ export function createEvidenceReview(client, onProposal) {
   panel.append(el('summary', 'cursor-pointer font-medium', 'Evidence review and reconsideration'));
   panel.append(el('p', 'text-on-surface-variant', 'Optional: supply exact evidence bytes, inspect their subject binding, and record a portable human review. A checked binding does not authenticate a producer or authorize execution.'));
   panel.append(el('p', 'text-on-surface-variant', 'Recording a new judgment is optional; changed evidence never blocks editing.'));
-  panel.append(createScanEvidence(client));
+  panel.append(createScanEvidence(client, { onReview: async scanId => {
+    invalidate();
+    client.setConfiguredReviewEvidence(scanId);
+    evidence.replaceChildren(new Option(`Acquired original · ${scanId}`, '0'));
+    if (await refresh()) status.textContent = 'Exact acquired assessment selected for review. Saved judgments remain bound until you explicitly propose a change.';
+  } }));
   const form = el('div', 'space-y-2'), status = el('p', 'text-on-surface-variant'); status.setAttribute('role', 'status');
   const file = el('input'); file.type = 'file'; file.multiple = true; file.setAttribute('aria-label', 'Review evidence files');
   const evidence = el('select', 'bg-wb-input border border-wb-border rounded p-1'); evidence.setAttribute('aria-label', 'Evidence document');

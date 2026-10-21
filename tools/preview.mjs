@@ -104,7 +104,7 @@ function readInstalledPackages(consumerDir, packages) {
  * @returns { url, server, runDir, consumerDir, summary, close } - close() stops serving and removes the run directory
  *          only when this call made it
  */
-export async function startPreview({ supplied = {}, expected = {}, port, runDir, settingsPath, beforeServe, log, quiet = false }) {
+export async function startPreview({ supplied = {}, expected = {}, port, runDir, installedConsumerDir, settingsPath, beforeServe, log, quiet = false }) {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new PreviewError(`port must be an integer between 1 and 65535 (received ${port})`);
   }
@@ -138,7 +138,7 @@ export async function startPreview({ supplied = {}, expected = {}, port, runDir,
 
   const ownsRunDir = runDir === undefined;
   runDir = ownsRunDir ? mkdtempSync(join(tmpdir(), "aih-ui-preview-")) : resolve(runDir);
-  const consumerDir = join(runDir, "consumer");
+  const consumerDir = installedConsumerDir ? resolve(installedConsumerDir) : join(runDir, "consumer");
   mkdirSync(consumerDir, { recursive: true });
   log(`run: ${ownsRunDir ? "new temp folder" : "run directory"} -> ${runDir}`);
   const removeRunDir = () => {
@@ -176,7 +176,16 @@ export async function startPreview({ supplied = {}, expected = {}, port, runDir,
 
     // --- 2. one throwaway consumer with all three installed -------------------
     try {
-      installConsumer({
+      if (installedConsumerDir) {
+        // Candidate upgrades verified these package trees before stopping the old
+        // server. Copy only this UI's host modules; never run another install here.
+        for (const asset of service) {
+          const destination = join(consumerDir, asset.to);
+          mkdirSync(dirname(destination), { recursive: true });
+          await copyFile(join(REPO_ROOT, asset.from), destination);
+        }
+        log(`consumer: reusing verified installed packages in ${consumerDir}`);
+      } else installConsumer({
         consumerDir,
         packages,
         extraFiles: Object.fromEntries(service.map((asset) => [asset.to, join(REPO_ROOT, asset.from)])),
