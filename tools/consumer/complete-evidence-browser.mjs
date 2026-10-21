@@ -90,6 +90,7 @@ export async function runCompleteEvidenceBrowser({ plan, output, playwrightModul
     const first = await check(plan.baseline.scanId);
     assert.ok(first.baseline.evidence.acquisitions.some(value => value.authentication.status === 'authenticated'));
     assert.equal(first.baseline.evidence.coverage.status, 'matched');
+    assert.ok((await panel.locator('p').filter({ hasText: /^Requested scope:/ }).textContent()).length < 200, 'Large scope stays compact in the ordinary summary');
     await panel.getByRole('button', { name: 'Use this exact assessment for a human review', exact: true }).click();
     await page.getByRole('status').filter({ hasText: 'Exact acquired assessment selected for review.' }).waitFor();
     await page.getByLabel('Evidence review subject', { exact: true }).selectOption(`${inventory.release.sha256}/${item.id}`);

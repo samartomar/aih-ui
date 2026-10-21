@@ -36,7 +36,7 @@ import { scopeCountOf } from "./selectors.js";
 
 /* These Catalog inspector slots have no verified per-entry scan input. */
 const DETECTOR_RUN_STATE_ABSENT =
-  `${NOT_PUBLISHED}: Scan publishes one detector per record and no per-detector run state.`;
+  'No verified Scan artifact is connected to this legacy statement mirror. Inspect acquired assessments through Scan Review.';
 
 function row(parent, label, value, title, code = false) {
   const present = text(value) !== null;
@@ -148,11 +148,17 @@ export function createDetails({ elements, authoring }) {
      */
     render({ entry, counts, target, coreClients }) {
       reset();
+      elements.detectorRunState.title = DETECTOR_RUN_STATE_ABSENT;
+      elements.detectorFindingDetail.title = `${NOT_PUBLISHED}: ${FINDING_DETAIL_ABSENT}`;
+      const statementSection = elements.statementCount.parentElement?.parentElement;
+      if (statementSection) statementSection.hidden = Boolean(entry?.authoringItem);
       if (!entry) {
         renderEmpty();
         return;
       }
       if (entry.authoringItem) {
+        elements.detectorRunState.removeAttribute('title');
+        elements.detectorFindingDetail.removeAttribute('title');
         const item = entry.authoringItem;
         const source = sourcePresentation(item);
         elements.inspectorName.textContent = source.name;

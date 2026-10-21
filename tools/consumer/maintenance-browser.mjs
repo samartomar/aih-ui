@@ -110,8 +110,8 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
       try {
         const body = JSON.parse(response.request().postData()), bytes = body.envelopeBytes ?? body.bytes;
         const input = JSON.parse(decode(Uint8Array.from(bytes)));
-        return original.revision ? input.revision?.sha256 === original.revision.sha256
-          : JSON.stringify(input.metadata?.['aih.workbench']?.roots) === JSON.stringify(original.metadata?.['aih.workbench']?.roots);
+        const policyOf = value => value.savedIntent?.base64 ? JSON.parse(Buffer.from(value.savedIntent.base64, 'base64').toString('utf8')) : value;
+        return JSON.stringify(policyOf(input).metadata?.['aih.workbench']?.roots) === JSON.stringify(policyOf(original).metadata?.['aih.workbench']?.roots);
       } catch { return false; }
     });
     await page.locator('#nav-policy').click(); await page.locator('#policy-open').setInputFiles(path);

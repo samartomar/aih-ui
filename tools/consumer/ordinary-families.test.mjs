@@ -9,6 +9,40 @@ import { readAuthoring } from './headless.mjs';
 import { installedFamilies } from './installed-families.mjs';
 import { isolatedConsumer } from './isolated-consumer.mjs';
 
+test('a configured previous full package resolves exact historical family pins without adding them to current browsing', async () => {
+  const { mkdtemp, mkdir, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { dirname } = await import('node:path');
+  const { noteFixture } = await import('./note-fixture.mjs');
+  const { compileProducerDeclaration } = await import('@aihq/catalog/producer');
+  const { composeAuthoring, freshAuthoring } = await import('./headless.mjs');
+  const { readInstalledRelease } = await import('@aihq/catalog/node');
+  const folder = await mkdtemp(join(tmpdir(), 'historical-catalog-'));
+  let started;
+  try {
+    const snapshot = await noteFixture('updated'), declaration = JSON.parse(new TextDecoder().decode(snapshot.declarationBytes));
+    declaration.package = { name: '@aihq/catalog', version: '0.1.0' };
+    for (const item of declaration.items) item.requires = [];
+    snapshot.declarationBytes = new TextEncoder().encode(JSON.stringify(declaration));
+    const historical = compileProducerDeclaration({ declaration, sourceFiles: snapshot.sourceFiles });
+    assert.equal(historical.status, 'ok', JSON.stringify(historical.diagnostics));
+    const exports = Object.fromEntries(['./release.json', './release-extensions.json', './release-ecc.json', './release-superpowers.json', './release-anthropic.json'].map(name => [name, './release.json']));
+    await writeFile(join(folder, 'package.json'), JSON.stringify({ name: '@aihq/catalog', version: '0.1.0', exports }));
+    await writeFile(join(folder, 'release.json'), historical.value.releaseBytes);
+    for (const material of historical.value.materials) { const path = join(folder, material.path); await mkdir(dirname(path), { recursive: true }); await writeFile(path, material.bytes); }
+    const checked = await readInstalledRelease({ root: folder, release: './release-ecc.json', sourceInput: 'previous-maintained' }); assert.equal(checked.valid, true);
+    const item = checked.release.items[0], intent = freshAuthoring();
+    intent.roots = [{ releaseSha256: checked.release.sha256, itemId: item.id, itemSha256: item.itemSha256, scope: 'project', configuration: {}, originIds: ['direct'] }];
+    const saved = await composeAuthoring({ intent, inventories: [{ release: checked.release, materialSource: checked.source, materials: historical.value.materials }] }); assert.equal(saved.status, 'ok', JSON.stringify(saved.diagnostics));
+    started = await startConsumer({ previousCatalogRoot: folder });
+    const catalog = await (await fetch(started.origin + '/api/authoring-catalog')).json();
+    assert.ok(catalog.items.every(value => value.root.releaseSha256 !== checked.release.sha256));
+    const read = await (await fetch(started.origin + '/api/authoring-read', { method: 'POST', headers: { origin: started.origin, 'content-type': 'application/json' }, body: JSON.stringify({ policyBytes: [...saved.value.policyBytes] }) })).json();
+    assert.equal(read.status, 'ok'); assert.equal(read.value.editing, 'available');
+    assert.deepEqual(read.value.intent.pins, saved.value.intent.pins);
+  } finally { if (started) await new Promise(resolve => started.server.close(resolve)); await rm(folder, { recursive: true, force: true }); }
+});
+
 // Tests may rewrite only a disposable copy; the shared installed Catalog stays byte-identical.
 const sharedManifest = fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'));
 const digest = async () => createHash('sha256').update(await readFile(sharedManifest)).digest('hex');

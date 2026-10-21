@@ -14,7 +14,7 @@ const encode = value => new TextEncoder().encode(value);
 const bytesOf = value => Array.isArray(value) ? Uint8Array.from(value) : undefined;
 const WORKSPACE_OPERATIONS = ['workspace-read', 'workspace-edit', 'workspace-plan', 'workspace-bind', 'workspace-unbind', 'workspace-verify', 'workspace-export'];
 // `observeCheckout(root)` is the host's read of one local checkout (see ./workspace-host.mjs); a service made without one cannot inspect folders.
-export async function createMixedService(maintained, { suppliedInventories, familyInventories = [], maintenanceSource, frictionEvidence, observeCheckout } = {}) {
+export async function createMixedService(maintained, { suppliedInventories, familyInventories = [], historicalInventories = [], maintenanceSource, frictionEvidence, observeCheckout } = {}) {
   async function supplied(snapshot, id = 'notes') {
     const input = { id, kind: 'local', locator: { input: id }, resolvedIdentity: { sha256: await digestBytes(snapshot.declarationBytes) } };
     const result = await intakeDeclaration({ input, ...snapshot, materialSource: { kind: 'local', input: id } });
@@ -33,6 +33,7 @@ export async function createMixedService(maintained, { suppliedInventories, fami
   changed.templates = [await template(changed)];
   const maintainedInventories = [maintained, ...familyInventories];
   const current = [...maintainedInventories, notes], all = [...current, changed];
+  for (const entry of historicalInventories) if (!all.some(value => value.release.sha256 === entry.release.sha256)) all.push(entry);
   const candidates = mode => mode === 'missing' ? maintainedInventories : mode === 'updated' ? [...maintainedInventories, changed] : current;
   // The host's source is a fixture list of inventories or an update source's read; one that cannot be read at all is null.
   const readSource = async () => {

@@ -13,7 +13,7 @@ import { editSetup, reopenSetup, reviewSetupUpdate } from './setup.mjs';
 import { presentReport, readScanBytes } from './report-view.mjs';
 import { createIntentService } from './intent-service.mjs';
 import { createMixedService } from './mixed-service.mjs';
-import { installedFamilies } from './installed-families.mjs';
+import { installedFamilies, installedReleaseInventory } from './installed-families.mjs';
 import { inspectAuthenticatedReviewEvidence } from './review-host.mjs';
 import { intakePersonalFolder } from './personal-folder.mjs';
 import { observeCheckout } from './workspace-host.mjs';
@@ -41,14 +41,17 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
     return { ...descriptor, bytes: new Uint8Array(await readFile(path)) };
   }));
   const familyInventories = await installedFamilies();
+  // Explicit previous-package history participates in exact saved-pin reads,
+  // never in the current browse inventory. Its execution input stays separate.
+  const historicalInventories = previousCatalogRoot ? [await installedReleaseInventory({ root: previousCatalogRoot, sourceInput: 'previous-maintained' }), ...await installedFamilies({ root: previousCatalogRoot, sourceInput: 'previous-maintained' })] : [];
   // One source object per host, so the last time each root was read lives as long as the server.
   const updateSource = updateSourceCatalogRoots !== undefined ? createCatalogUpdateSource({ roots: updateSourceCatalogRoots, installedPackage: release.package }) : null;
   if (updateSource) maintenanceSource = () => updateSource.read();
-  const mixedService = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, maintenanceSource, frictionEvidence, observeCheckout });
-  const authoringRoots = { maintained: catalogRoot };
+  const mixedService = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, historicalInventories, maintenanceSource, frictionEvidence, observeCheckout });
+  const authoringRoots = { maintained: catalogRoot, ...(previousCatalogRoot ? { 'previous-maintained': previousCatalogRoot } : {}) };
   if (projectRoot) {
     const staging = await mkdtemp(join(tmpdir(), 'aih-authoring-materials-'));
-    for (const inventory of mixedService.inventories.filter(entry => entry.materialSource.input !== 'maintained')) {
+    for (const inventory of mixedService.inventories.filter(entry => !Object.hasOwn(authoringRoots, entry.materialSource.input))) {
       const input = inventory.materialSource.input;
       // Only host-selected startup inventories acquire execution bindings.
       const directory = join(staging, `source-${Object.keys(authoringRoots).length}`);
@@ -81,7 +84,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
         scanEvidence: createScanEvidenceHost({ sources: evidenceSources, packageRoot: catalogRoot, trust: reviewTrust, detectorIds: evidenceDetectorIds }) };
       clients.set(id, client);
       client.ready = (async () => {
-        client.mixed = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, maintenanceSource, frictionEvidence, observeCheckout });
+        client.mixed = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, historicalInventories, maintenanceSource, frictionEvidence, observeCheckout });
         client.recipeMaterials = client.mixed.inventories.flatMap(i => i.materials ?? []);
         client.host = projectRoot ? createHost({ projectRoot, materialRoots: client.roots, organizationSource, recipeMaterials: client.recipeMaterials, controls }) : null;
       })();

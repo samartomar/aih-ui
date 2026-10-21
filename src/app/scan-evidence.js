@@ -65,7 +65,7 @@ export function createScanEvidence(client, { onReview } = {}) {
       facts.append(el('p', 'font-medium', `${summary.createdAt} · ${summary.completion} · ${summary.findings.records} finding records · ${summary.findings.occurrences} occurrences`));
       row('Producer software', `${summary.producer.name} ${summary.producer.version}`);
       row('Configured source and authentication', authentication(acquisitions));
-      row('Requested scope', JSON.stringify(summary.selection));
+      row('Requested scope', `${summary.selection.paths.length} requested paths · ${summary.selection.excludedPaths.length} excluded paths. Exact paths are in the content and scope details.`);
       row('Current item capture and coverage', captureText(coverage));
       row('Reported severities', summary.findings.bySeverity.map(value => `${value.severity.state === 'present' ? `${value.severity.value.level}${value.severity.value.vendorSeverity ? ` (${value.severity.value.vendorSeverity})` : ''}` : `Unknown (${value.severity.reason})`}: ${value.records} records, ${value.occurrences} occurrences`).join('; ') || 'No finding records; this does not establish safety');
       detail('Content, requested scope and producer software', { scanId: summary.scanId, producer: summary.producer, source: summary.source, selection: summary.selection, context: result.context });

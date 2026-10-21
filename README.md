@@ -190,6 +190,13 @@ with `samples/update-source/SAMPLE.md`. Open it in **Policy** (Open file,
 Validate and reopen) and a later pack that offers that adapter shows it as a
 newer revision with both exact digests, which you can keep, skip or defer.
 
+When `previousCatalog` is configured, its default and four family releases also
+resolve exact saved authoring pins. They are historical inputs, not additions
+to the current browse list. Their host-selected material root stays separate
+from the current package and from personal page grants. Discovery/checking does
+not change those pins; the ordinary source-change review proposes an explicit
+update. A historical inspection package without a baseline keeps that absence.
+
 Start refuses a tarball whose digest differs from the manifest before it writes
 anything.
 
@@ -256,6 +263,17 @@ compares public headless evidence, advances latest while history stays pinned,
 tests last-known recovery using only the owned discovery copy, and retains
 downloads/screenshots/timing. Its review is labelled a demonstration, and it
 holds preparation without applying. It expects an already completed local setup.
+
+`tools/check-source-transition.mjs <plan.json> <new-output-directory>` compares
+the configured previous full Catalog with the current one through public
+readers and the ordinary policy/update UI. Its plan names `data`, `origin`,
+`family`, `itemId`, `unchangedFamily`, `unchangedItemId`, pinned `trust` and
+optional `refreshReceipts` paths. It retains the public material/dependency
+diff, unchanged saved pins after discovery, an explicitly accepted update with
+an unrelated root preserved, and genuine current baseline authentication and
+coverage. Current evidence must mismatch the old item and match the new one.
+Packaged Catalog refresh receipts remain staged-content evidence; they are
+never relabelled as qualified releases by this proof.
 
 PowerShell, from the repository root:
 
