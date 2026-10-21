@@ -7,7 +7,7 @@ if (!planPath || !outputPath) throw new Error('usage: node tools/check-complete-
 const plan = JSON.parse(await readFile(resolve(planPath), 'utf8')), output = resolve(outputPath);
 const record = JSON.parse(await readFile(join(plan.data, 'state/server.json'), 'utf8'));
 if (record.state !== 'ready' || record.url.replace(/\/$/, '') !== plan.origin) throw new Error('Plan must name the running candidate origin/data.');
-const consumer = join(plan.data, 'run/consumer');
+const consumer = record.consumerDir ?? join(plan.data, 'run/consumer');
 const source = join(dirname(fileURLToPath(import.meta.url)), 'consumer/complete-evidence-browser.mjs');
 await copyFile(source, join(consumer, 'consumer/complete-evidence-browser.mjs'));
 const { runCompleteEvidenceBrowser } = await import(pathToFileURL(join(consumer, 'consumer/complete-evidence-browser.mjs')));

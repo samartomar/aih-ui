@@ -46,6 +46,8 @@ function retainedFiles(layout) {
   return files;
 }
 export async function preflightCandidate({ manifest, data, port }) {
+  const [major, minor] = process.versions.node.split('.').map(Number);
+  if (major !== 24 || minor < 15) throw new Error('Workbench requires Node >=24.15 and <25.');
   if (!manifest) throw new Error('preflight and upgrade require --manifest with a pinned ui archive.');
   const read = readManifest(resolve(manifest));
   await verifyManifest(read);
@@ -101,16 +103,22 @@ export async function upgradeCandidate(options) {
   claimDataDir(layout.root); ensureLayout(layout);
   const release = join(layout.root, 'releases', hash(JSON.stringify(absoluteManifest(read)))), checkpoint = join(release, 'checkpoint.json');
   mkdirSync(release, { recursive: true });
-  const receipt = { schema: 'urn:aih-ui:candidate-upgrade:1.0.0', identity: preflight.identity, checkedAt: preflight.checkedAt, phases: [], previous: existsSync(layout.manifest) ? json(layout.manifest) : null };
+  const receipt = existsSync(checkpoint) ? json(checkpoint) : { schema: 'urn:aih-ui:candidate-upgrade:1.0.0', identity: preflight.identity, checkedAt: preflight.checkedAt, phases: [], previous: existsSync(layout.manifest) ? json(layout.manifest) : null };
+  if (JSON.stringify(receipt.identity) !== JSON.stringify(preflight.identity)) throw new Error('Checkpoint identity differs from this exact manifest; it was left unchanged.');
+  const attempt = (receipt.attempts ?? 0) + 1;
+  receipt.attempts = attempt;
   const save = (phase, detail = {}) => {
-    receipt.phases.push({ phase, at: new Date().toISOString(), elapsedMs: Date.now() - began, ...detail });
+    receipt.phases.push({ phase, attempt, at: new Date().toISOString(), elapsedMs: Date.now() - began, ...detail });
     writeFileSync(checkpoint, JSON.stringify(receipt, null, 2) + '\n');
   };
   save('preflight-verified');
   const installedUi = join(release, 'node_modules', 'aih-ui');
   let reused = false;
   if (existsSync(installedUi)) {
-    try { verifyInstalledArchive(read.packages.ui, installedUi); reused = true; } catch { /* Repair only this release's npm install. */ }
+    // A corrupted retained install is never trusted or overwritten underneath a
+    // running server. Preserve it and the previous server for explicit recovery.
+    for (const name of ['ui', 'core', 'catalog', 'scan']) verifyInstalledArchive(read.packages[name], join(release, 'node_modules', name === 'ui' ? 'aih-ui' : `@aihq/${name}`));
+    reused = true;
   }
   if (!reused) {
     writeFileSync(join(release, 'package.json'), JSON.stringify({ name: 'aih-ui-installed-candidate', private: true, type: 'module' }));
@@ -124,7 +132,10 @@ export async function upgradeCandidate(options) {
   const manifestPath = join(release, 'manifest.json');
   writeFileSync(manifestPath, JSON.stringify(absoluteManifest(read), null, 2) + '\n');
   const cli = join(installedUi, 'tools', 'candidate.mjs');
-  receipt.retainedBefore = retainedFiles(layout);
+  receipt.retainedBefore ??= retainedFiles(layout);
+  const prior = retainedFiles(layout);
+  const alreadyChanged = Object.keys(receipt.retainedBefore).filter(key => prior[key] !== receipt.retainedBefore[key]);
+  if (alreadyChanged.length) throw new Error(`Original upgrade checkpoint state differs; resolve before resuming: ${alreadyChanged.join(', ')}`);
   // No stop takes place until installation and exact-byte readback have succeeded.
   try {
     await stopServer(layout);

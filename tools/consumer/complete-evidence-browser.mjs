@@ -86,7 +86,7 @@ export async function runCompleteEvidenceBrowser({ plan, output, playwrightModul
     await panel.getByRole('button', { name: 'Use this exact assessment for a human review', exact: true }).click();
     await page.getByLabel('Evidence review subject', { exact: true }).selectOption(`${inventory.release.sha256}/${item.id}`);
     await page.getByRole('button', { name: 'Inspect evidence', exact: true }).click();
-    await page.getByRole('button', { name: 'Propose human review', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Propose human review', exact: true }).click({ trial: true });
     assert.equal(await page.getByRole('button', { name: 'Propose human review', exact: true }).isEnabled(), true);
     await page.getByLabel('Review decision ID', { exact: true }).fill('local-delivery-demonstration');
     await page.getByLabel('Review owner kind', { exact: true }).selectOption('individual');
