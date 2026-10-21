@@ -236,6 +236,27 @@ sources can become available or go offline during a session; Check Scan
 evidence uses the ordinary acquisition/history path. Never derive trust from
 an assessment. No scan, signing or publication occurs during upgrade.
 
+An item's **Security Scan** inspector links directly to that item's baseline,
+latest and history. **Use this exact assessment for a human review** explicitly
+selects its acquired original bytes for the existing review flow, without a
+large browser upload. References belong to that page session and must be
+reacquired after reopening. Discovery alone never adopts a different review
+document. Broad-capture consumer review identities use SHA-256 of the full
+canonical checked value when its existing text representation exceeds the saved
+field bound; short existing identities are unchanged. Full reports, findings,
+coverage and original observation dates remain inspectable.
+
+`tools/check-complete-candidate.mjs <plan.json> <new-output-directory>` runs the
+genuine evidence acceptance against a running installed candidate. The plan
+names `data`, `origin`, `family`, `itemId`, an explicitly owned `discoveryPath`
+and configured `sourceId`, and `baseline`, `later`, `trust` objects containing
+`path` and `sha256` (`baseline` and `later` also contain `scanId`). It verifies
+the original bytes, walks the ordinary inspector/review/preparation flow,
+compares public headless evidence, advances latest while history stays pinned,
+tests last-known recovery using only the owned discovery copy, and retains
+downloads/screenshots/timing. Its review is labelled a demonstration, and it
+holds preparation without applying. It expects an already completed local setup.
+
 PowerShell, from the repository root:
 
 ```powershell

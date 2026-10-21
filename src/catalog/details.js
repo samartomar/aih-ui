@@ -209,7 +209,14 @@ export function createDetails({ elements, authoring }) {
         const disclosure = el('pre', 'whitespace-pre-wrap break-all text-[10px]');
         disclosure.textContent = JSON.stringify({ origins: item.sources, inputs: item.inputs, dependencies: item.dependencies, recipe: item.recipe, materials: item.materials, targets: item.targets }, null, 2);
         elements.detailsArtifacts.append(disclosure);
-        elements.detectorRunState.textContent = 'No verified per-item detector evidence supplied. Review evidence in the policy workspace; declared capabilities are not scan results.';
+        elements.detectorRunState.textContent = 'Inspect exact release baseline, latest matching evidence and retained history. Declared capabilities are not scan results.';
+        const inspectEvidence = el('button', 'px-3 py-1.5 rounded border border-wb-border', 'Review baseline, latest and history');
+        inspectEvidence.type = 'button';
+        inspectEvidence.addEventListener('click', () => {
+          document.getElementById('nav-scan-review').click();
+          document.dispatchEvent(new CustomEvent('aih:scan-content', { detail: { target: `${item.root.releaseSha256}/${item.id}` } }));
+        });
+        elements.detectorRunState.append(inspectEvidence);
         elements.detectorFindingDetail.textContent = 'Native execution and automatic guardrails are not established by supported material formats.';
         return;
       }

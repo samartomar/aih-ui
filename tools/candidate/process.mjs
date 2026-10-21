@@ -27,7 +27,7 @@ export function logTail(layout, lines = 40) {
 // Exactly the environment the server process gets: this process's, minus every AIH_* host setting, with the candidate's
 // disposable account home, its own temporary directory and the manifest it is built from.
 export function serverEnvironment(layout, base = process.env) {
-  const set = { ...homeEnvironment(layout.home), TEMP: layout.tmp, TMP: layout.tmp, TMPDIR: layout.tmp, AIH_CANDIDATE_MANIFEST: layout.manifest };
+  const set = { ...homeEnvironment(layout.home), TEMP: layout.tmp, TMP: layout.tmp, TMPDIR: layout.tmp, npm_config_cache: join(layout.tmp, 'npm-cache'), AIH_CANDIDATE_MANIFEST: layout.manifest };
   const fold = name => (process.platform === 'win32' ? name.toUpperCase() : name), replaced = new Set(Object.keys(set).map(fold));
   const inherited = Object.entries(base).filter(([name]) => !name.toUpperCase().startsWith('AIH_') && !replaced.has(fold(name)));
   return { ...Object.fromEntries(inherited), ...set };

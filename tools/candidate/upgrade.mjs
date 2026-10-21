@@ -34,6 +34,9 @@ function retainedFiles(layout) {
     if (!existsSync(path)) return;
     for (const name of readdirSync(path).sort()) {
       const file = join(path, name), key = `${label}/${name}`, stat = lstatSync(file);
+      // Runtime caches and the sample seeding ledger are regenerated, not saved
+      // choices. All account-owned AIH records and sample/configuration files remain checked.
+      if (key === 'samples/.seeded.json') continue;
       if (stat.isSymbolicLink()) throw new Error(`Retained state contains a symbolic link: ${key}`);
       if (stat.isDirectory()) walk(file, key);
       else if (stat.isFile()) files[key] = hash(readFileSync(file));
