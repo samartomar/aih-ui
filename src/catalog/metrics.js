@@ -42,7 +42,7 @@ function tile(kind, model, onToggleKind) {
   name.appendChild(el("span", `material-symbols-outlined text-[14px] ${kind.iconTone}`, kind.icon));
   name.appendChild(el("span", `text-[10px] uppercase font-medium tracking-[0.08em] truncate ${active ? "text-wb-title" : "text-outline"}`, kind.label));
   head.appendChild(name);
-  button.setAttribute("aria-label", `${kind.label}: ${count ?? UNKNOWN}.${kind.caption ? ` ${kind.caption}.` : ''} Filter items in this view.`);
+  button.setAttribute("aria-label", kind.key === null ? `${kind.label}: ${UNKNOWN}. No defined producer supplies token values.` : `${kind.label}: ${count}.${kind.caption ? ` ${kind.caption}.` : ''} Filter items in this view.`);
   button.appendChild(head);
 
   const metrics = el("div", "wb-metric-values flex flex-wrap items-baseline justify-between gap-2 min-w-0");
@@ -79,6 +79,7 @@ export function createMetrics({ container, onToggleKind }) {
     render(model) {
       const kinds = [...model.kindCounts.keys()];
       const ledger = kinds.map(key => LEDGER.find(value => value.key === key) ?? { key, label: `${key[0].toUpperCase()}${key.slice(1)}s`, icon: KIND_ICON[key] ?? 'extension', iconTone: 'text-metadata-emphasis', barTone: 'bg-primary' });
+      ledger.push(LEDGER.find(value => value.key === null));
       container.replaceChildren(...ledger.map(kind => tile(kind, model, onToggleKind)));
     },
   };

@@ -69,10 +69,10 @@ export async function runEvidenceStatesBrowser({ origin, output, playwrightModul
       await tile(kind).click();
     }
     assert.match(await tile('hook').innerText(), /HOOK ITEMS[\s\S]*items, not events/i);
-    // Tokens are not measured, so no tile claims a token count (the metrics unit check owns the same rule).
-    assert.equal(await tile('tokens').count(), 0, 'No token tile is shown while tokens are unmeasured.');
+    assert.equal(await tile('tokens').isDisabled(), true);
+    assert.match(await tile('tokens').innerText(), /Unknown/);
     assert.equal(/Not published/.test(await page.locator('#framework-matrix-tabs').innerText()), false, 'No tile claims a kind is unpublished.');
-    scenarios.push('metrics-match-list', 'hook-items-not-events', 'tokens-unmeasured-no-tile');
+    scenarios.push('metrics-match-list', 'hook-items-not-events', 'tokens-unknown');
 
     // b. With nothing supplied, every card says not supplied.
     const noteCard = page.locator(`[data-card-id$="/${NOTE}"] [data-evidence-state]`);
