@@ -1,11 +1,12 @@
 // Explicit local-file acquisition. Paths and trust come only from host configuration.
 import { open } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
-import { createHash } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { authenticateEvidence } from '@aihq/core';
 import { acquireBaselineArtifact } from '@aihq/catalog/node';
+import { isCheckedRelease } from '@aihq/catalog/reader';
 import { readSummary, maxAssessmentBytes, maxAssessments } from '@aihq/scan/read';
+import { createEvidenceCache, evidenceDigest, evidenceKey } from './evidence-cache.mjs';
 import { selectContentEvidence } from './scan-evidence.mjs';
 
 class AcquisitionError extends Error {
@@ -26,12 +27,18 @@ async function boundedFile(path) {
 export function createScanEvidenceHost({ sources = [], packageRoot, trust, detectorIds } = {}) {
   if (!Array.isArray(sources) || sources.length > 16 || sources.some(source => !source || typeof source.id !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(source.id) || typeof source.path !== 'string' || !isAbsolute(source.path) || !['artifact', 'report'].includes(source.format)) || new Set(sources.map(source => source.id)).size !== sources.length || sources.some(source => source.id === 'release-baseline' || /^supplied(?:-|$)/.test(source.id))) throw new Error('Configure up to 16 unique local evidence sources with absolute paths.');
   const retained = new Map(), successful = new Map();
+  const cache = createEvidenceCache();
+  // Snapshot host inputs so later caller mutation cannot invalidate cached authority.
+  trust = structuredClone(trust ?? { keys: [], publishers: [] });
+  sources = structuredClone(sources);
+  detectorIds = detectorIds?.slice();
   return {
     detail(scanId) {
       const entry = [...retained.entries()].find(([key]) => key.includes(`/${scanId}/`))?.[1];
       return entry ? { status: 'read', scanId, format: entry.format, bytes: [...entry.bytes] } : { status: 'unavailable', scanId };
     },
     async check({ inventory, itemId, supplied = [], evaluationTime, selection }) {
+      if (!isCheckedRelease(inventory?.release)) return { status: 'invalid', diagnostics: [{ code: 'CHECKED_RELEASE_REQUIRED', detail: 'Supply a checked Catalog release.' }] };
       if (typeof evaluationTime !== 'string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(evaluationTime) || !Number.isFinite(Date.parse(evaluationTime)) || new Date(evaluationTime).toISOString() !== evaluationTime) return { status: 'invalid', diagnostics: [{ code: 'invalid-time', detail: 'Supply an explicit valid UTC evaluation time with milliseconds.' }] };
       const assessments = [], checks = [], sourceIds = [];
       const started = performance.now(); let attemptedBytes = 0;
@@ -41,13 +48,14 @@ export function createScanEvidenceHost({ sources = [], packageRoot, trust, detec
         try {
           const bytes = await load();
           attemptedBytes += bytes.length;
-          const read = await readSummary({ format, bytes });
+          const digest = evidenceDigest(bytes);
+          const read = await cache.read(`summary/${format}/${digest}`, () => readSummary({ format, bytes }));
           if (read.status !== 'read') throw acquisitionFailure(read.diagnostics?.length ? read.diagnostics : [{ code: 'unsupported-report', detail: `Evidence reader returned ${read.status}; report schema ${read.reportSchema ?? 'unknown'}.` }]);
           if (expectedScanId !== undefined && expectedScanId !== read.summary.scanId) throw acquisitionFailure([{ code: 'expected-scan-id-mismatch', detail: `Expected ${expectedScanId}; checked bytes identify ${read.summary.scanId}. Earlier evidence retained.` }]);
-          const key = `${id}/${read.summary.scanId}/${createHash('sha256').update(bytes).digest('hex')}`;
+          const key = `${id}/${read.summary.scanId}/${digest}`;
           const previousBytes = retained.get(key)?.bytes.length ?? 0;
           if (retainedBytes - previousBytes + bytes.length > maxAssessmentBytes || !retained.has(key) && retained.size >= maxAssessments) throw boundFailure();
-          const authentication = format === 'artifact' ? await authenticateEvidence({ bytes, expectedScanId: expectedScanId ?? read.summary.scanId, trust: trust ?? { keys: [], publishers: [] } }) : undefined;
+          const authentication = format === 'artifact' ? await cache.read(`auth/${evaluationTime}/${digest}/${expectedScanId ?? read.summary.scanId}`, () => authenticateEvidence({ bytes, expectedScanId: expectedScanId ?? read.summary.scanId, trust })) : undefined;
           const candidate = { sourceId: id, location, format, bytes, ...(expectedScanId ? { expectedScanId } : {}), ...(authentication ? { authentication } : {}) };
           retainedBytes += bytes.length - previousBytes;
           retained.set(key, candidate); successful.set(id, evaluationTime);
@@ -72,8 +80,12 @@ export function createScanEvidenceHost({ sources = [], packageRoot, trust, detec
         checks.push({ sourceId: held.sourceId, status: 'offline', attemptedAt: evaluationTime, lastSuccessfulAt: successful.get(held.sourceId), diagnostics: [] });
       }
       const acquired = performance.now();
-      const result = await selectContentEvidence({ inventory, itemId, assessments, sourceIds, checks, evaluationTime, selection, detectorIds });
-      return { ...result, acquisitionCost: { attemptedBytes, retainedBytes, retainedAcquisitions: retained.size,
+      const identities = assessments.map(value => ({ sourceId: value.sourceId, location: value.location, format: value.format,
+        sha256: evidenceDigest(value.bytes), expectedScanId: value.expectedScanId, authentication: value.authentication }));
+      const key = 'answer/' + evidenceKey({ release: inventory?.release?.sha256, itemId, identities, sourceIds, checks, evaluationTime, selection, detectorIds });
+      const reused = cache.has(key);
+      const result = await cache.read(key, () => selectContentEvidence({ inventory, itemId, assessments, sourceIds, checks, evaluationTime, selection, detectorIds, cache, identities }));
+      return { ...result, acquisitionCost: { reused, attemptedBytes, retainedBytes, retainedAcquisitions: retained.size,
         acquisitionMs: acquired - started, selectionMs: performance.now() - acquired } };
     }
   };
