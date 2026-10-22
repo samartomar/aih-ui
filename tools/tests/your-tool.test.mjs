@@ -27,7 +27,10 @@ test('a chosen tool is the value, is checked, and the page says what is shown an
   assert.match(model.status, /claude-code/);
   assert.match(model.status, /7 with no declared tool are hidden/);
   assert.match(model.undeclaredLabel, /Show 7 with no declared tool/);
-  assert.match(yourToolModel({ ...base, tool: 'claude-code', showUndeclared: true }).status, /7 with no declared tool are shown/);
+  assert.match(model.status, /supported for claude-code according to the Catalog/);
+  assert.match(yourToolModel({ ...base, tool: 'claude-code', notSupported: 117 }).status, /117 not marked supported for claude-code are hidden; Advanced shows them\./);
+  assert.match(yourToolModel({ ...base, tool: 'claude-code', notSupported: 117, showUnsupported: true }).status, /117 not marked supported for claude-code are shown\./);
+  assert.match(yourToolModel({ ...base, tool: 'claude-code', showUndeclared: true }).status, /7 with no declared tool are shown\./);
 });
 
 test('the Core tool label shows only when the person chose Core tools in Settings, never derived from the Catalog name', () => {

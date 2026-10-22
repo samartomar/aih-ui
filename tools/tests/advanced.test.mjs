@@ -69,7 +69,7 @@ test('the default catalog keeps the search, the kind pills, Your tool and the ca
 });
 
 test('the tool line is under Advanced and the Core tools chip is in Settings, with their ids (owner decision 3)', () => {
-  for (const id of ['catalog-tools-bar', 'browse-target', 'catalog-tools-toggle', 'catalog-tools-undeclared', 'catalog-tools-unmatched'])
+  for (const id of ['catalog-tools-bar', 'browse-target', 'catalog-tools-toggle', 'catalog-tools-undeclared', 'catalog-tools-unsupported', 'catalog-tools-unmatched'])
     assert.ok(inside(id, 'catalog-advanced'), `${id} is inside the catalog Advanced section`);
   for (const id of ['ai-tools-trigger', 'ai-tools-count', 'ai-tools-pop', 'ai-tools-list', 'ai-tools-note'])
     assert.ok(inside(id, 'workspace-actions'), `${id} is in the Settings menu`);

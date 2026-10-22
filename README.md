@@ -720,9 +720,11 @@ list from the installed `@aihq/core/harness` on the host; a list in a request is
 
 The catalog's tool filter uses the Catalog's own tool names (`metadata.discovery.clientCapabilities[].client`:
 `claude-code`, `kiro-ide`, …), chosen with the header's one **Your tool** control (`generic`, which the Catalog uses for
-any tool, is not offered). It shows items that declare that name, whatever their support value; items that declare no
-specific tool sit behind a counted switch, and Show all (in the tool line under Advanced, which writes the same choice)
-lifts the filter. The choice is the person's own, kept in this browser; with none saved the control reads *Choose your
+any tool, is not offered). It shows the items whose declared support for that name is `supported`, and says so as
+*supported for <tool> according to the Catalog*; the left panel's framework counts and the kind tabs count by the same
+rule. Items that declare the name only as `unsupported` or `unknown` sit behind a counted switch under Advanced (*Show
+content not marked supported for <tool> (N)*), items that declare no specific tool behind another, and Show all (in the
+tool line under Advanced, which writes the same choice) lifts the filter. The choice is the person's own, kept in this browser; with none saved the control reads *Choose your
 tool* and the page says the content is not filtered. The Core tools chosen in Settings show beside it only when chosen.
 It is never derived from those Core ids, and the page does not
 translate between the two vocabularies (#95). An item that declares nothing for the chosen name reads *Not declared for

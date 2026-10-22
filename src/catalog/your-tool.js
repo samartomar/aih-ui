@@ -20,9 +20,10 @@ const ANY_TOOL = "generic";
  * @param mode          'mine' (filter by the tool) or 'all' (Show all, from Advanced)
  * @param coreIds / coreLabels / coreSelected  Core's published clients, their labels and the person's Settings choice
  * @param undeclared / showUndeclared          the items that declare no specific tool, and whether they are shown
+ * @param notSupported / showUnsupported      the items that declare the tool but are not marked supported for it, and whether shown
  * @param coreHidden    what the Core tools chosen in Settings also hide, in words, or ''
  */
-export function yourToolModel({ declared = [], tool = "", mode = "mine", coreIds = [], coreLabels = {}, coreSelected = [], undeclared = 0, showUndeclared = false, coreHidden = "" }) {
+export function yourToolModel({ declared = [], tool = "", mode = "mine", coreIds = [], coreLabels = {}, coreSelected = [], undeclared = 0, showUndeclared = false, notSupported = 0, showUnsupported = false, coreHidden = "" }) {
   const options = declared.filter((name) => name !== ANY_TOOL).map((name) => ({ value: name, label: name, checked: name === tool }));
   const core = coreSelected.filter((id) => coreIds.includes(id)).map((id) => clientLabel(coreLabels, id) ?? id);
   const noDeclared = `${undeclared} with no declared tool`;
@@ -30,7 +31,9 @@ export function yourToolModel({ declared = [], tool = "", mode = "mine", coreIds
     ? "No tool chosen, so content is not filtered by tool. Choose your tool in the header."
     : mode !== "mine"
       ? `Showing content for every tool (Show all, under Advanced). Your tool: ${tool}.`
-      : `Showing content the Catalog lists for ${tool}. ${noDeclared} ${showUndeclared ? "are shown" : "are hidden"}.`;
+      : [`Showing content supported for ${tool} according to the Catalog.`,
+        notSupported ? `${notSupported} not marked supported for ${tool} ${showUnsupported ? "are shown." : "are hidden; Advanced shows them."}` : "",
+        `${noDeclared} ${showUndeclared ? "are shown" : "are hidden"}.`].filter(Boolean).join(" ");
   return {
     value: tool || "Choose your tool",
     status: [status, mode === "mine" ? coreHidden : ""].filter(Boolean).join(" "),
@@ -83,7 +86,7 @@ export function createYourTool({ elements, onChoose, onToggleUndeclared }) {
       elements.core.hidden = !model.core;
       elements.trigger.title = `Your tool, in the Catalog's own name: ${model.value}.${model.core ? ` ${model.core}, chosen in Settings.` : ""} The two are separate choices; neither is derived from the other.`;
       elements.list.replaceChildren(
-        ...model.options.map((option) => choice(option.value, option.label, option.checked, `Show content the Catalog lists for ${option.value}.`)),
+        ...model.options.map((option) => choice(option.value, option.label, option.checked, `Show content supported for ${option.value} according to the Catalog.`)),
         choice("", "No tool: show all content", !model.options.some((option) => option.checked), "Content is not filtered by tool."),
       );
       elements.undeclared.textContent = model.undeclaredLabel;
