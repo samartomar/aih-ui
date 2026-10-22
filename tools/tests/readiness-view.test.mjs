@@ -1,7 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { READINESS_STATES, projectInspection, projectRepairPreparation, projectRepairOutcome, readinessGuidance } from '../consumer/readiness.mjs';
-import { stagedNotice, stateLabel, stateTone, overallLine, notRecheckedLine, rowsFor, summaryCounts } from '../../src/app/readiness-view.js';
+import { repairRelevance, stagedNotice, stateLabel, stateTone, overallLine, notRecheckedLine, rowsFor, summaryCounts } from '../../src/app/readiness-view.js';
+
+test('repair relevance retires a pre-repair failure until a fresh machine check', () => {
+  const repair = { targets: ['npm'] };
+  const projection = { kind: 'machine-check', items: [{ id: 'npm/tls', label: 'npm TLS', target: 'npm', state: 'failed' }] };
+  assert.match(repairRelevance(repair, projection), /Matches failed checks: npm TLS/);
+  assert.match(repairRelevance(repair, projection, true), /before the repair.*Check this machine again/);
+  assert.doesNotMatch(repairRelevance(repair, { ...projection, beforeRepair: true }), /Matches failed checks/);
+  assert.match(repairRelevance(repair, { ...projection, items: [] }), /No failed check/);
+});
 
 // Core-shaped records, in the style of tools/consumer/readiness.test.mjs.
 const options = { targets: { value: ['npm', 'jq'], origin: 'explicit' }, network: { value: 'declared', origin: 'default' } };
@@ -80,7 +89,9 @@ test('repair preparation rows show effects and the condition is never ready', ()
   assert.deepEqual(rows.map(row => [row.id, row.state]), prepared.operations.map(item => [item.id, item.state]));
   assert.equal(rows[0].effects, 'create-file');
   assert.equal(rows[0].purpose, 'Purpose of trust/op0');
-  assert.equal(rows[0].stateLabel, 'Failed');
+  assert.equal(rows[0].stateLabel, 'Planned');
+  assert.equal(rows[0].state, 'failed', 'the underlying Core condition stays intact');
+  assert.equal(rows[0].tone, 'neutral', 'a proposed change is not an application failure');
   assert.match(overallLine(prepared), /^Not ready\b.*changes/i);
   const blocked = projectRepairPreparation(preparation('blocked'), repair);
   assert.match(overallLine(blocked), /^Not ready\b/);

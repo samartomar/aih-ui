@@ -849,6 +849,16 @@ Nothing is borrowed into an empty slot. The Catalog's own evidence statements ar
 the inspector's Security tab, labelled as statements; the source identity is in
 Upstream Provenance; exact ids and digests are behind one disclosure.
 
+For current Catalog items, Security loads a compact Scan evidence summary only
+while the inspector and Security tab are visible. Rapid selections keep one read
+in flight and replace queued selections; an older answer never paints over a
+newer item. Answers are snapshots at the displayed evaluation time. **Re-check
+sources** renews that time and clears the browser cache. Item capture, release
+baseline matching, producer authentication and source-wide findings remain
+separate. Full details and retained history stay available in Scan Review.
+The UI-owned host reuses package reads with exact input keys and bounded caches;
+it re-reads source bytes and records failed checks before reusing an answer.
+
 The card is titled with the item's published name, `subject.id`, as the design
 source titles it. With every source shown at once, the same name can appear more
 than once -- the same agent ships in several aih releases -- and the full entry id
@@ -871,7 +881,7 @@ cards matching the active filters. The other two keep their purpose but are unav
 
 The technical filters that ARE available -- kind, source type and sort -- are in the
 grid header, where the Workbench design puts its sort control.
-Kind counts include the current source, category and search filters before the
+Kind counts include the current family, source, search and target-support filters before the
 kind selection itself. Kinds with no matches stay visible and can be cleared.
 
 ### Four words for four kinds of absence
@@ -894,9 +904,9 @@ readable but those details do not select or approve a policy. Vibe does not requ
 enterprise details. No repository is read or verified by setup.
 
 Optional assistance requests (code review, codebase memory, workspace help,
-Headroom, Serena and context/token optimization) start selected in new setups.
-Each can be deselected, and **Skip all assistance** clears the six selections.
-This is a UI default for these six choices, not a package recommendation. Saved
+Headroom, Serena and context/token optimization) are deferred from first-run setup
+and start unselected. They can be edited from the workspace's **Optional assistance**
+section. **Keep current choices** advances without clearing selections. Saved
 choices, including an intentionally empty list, are restored exactly on edit.
 Each explains its proposed benefit and the consequence of skipping. All are
 recorded preferences only: integrations are not installed or connected, no code
@@ -919,8 +929,17 @@ with the full, copyable settings path returned by the server. **Update my Workbe
 information** opens a draft of the saved Admin organization details (when applicable),
 assistance choices and AI clients. Cancel (or Escape) discards the draft; **Save changes** validates
 and atomically replaces the same local file. Experience and enterprise role are
-fixed in both the edit UI and its server endpoint. To change either, delete the
-settings file at the displayed path and restart the Workbench. AI client choices
+fixed in that editor and its server endpoint. The separate **Mode** popup switches
+between Vibe coder, Enterprise Admin and Enterprise Developer. Its required fields
+change with the selection: Admin requires organization name, short ID, policy
+repository and contact emails; Vibe and Developer require no organization details.
+**Save mode** validates and atomically saves just those mode fields into the latest
+setup, preserving AI clients, assistance choices and reviewer identity. Cancel or
+Escape leaves the saved setup unchanged. Switching away from Admin clears its
+organization details from active setup. The browser remembers a valid Admin profile
+locally for a later switch; required details are validated again before saving.
+Mode changes update presentation only and grant no organization authority.
+AI client choices
 can also be updated from the AI tools control.
 
 The installed public packages do not expose an assistance-card contract for

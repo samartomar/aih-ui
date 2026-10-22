@@ -1,4 +1,5 @@
 import { el } from './app/dom.js';
+import { createGapIndicator } from './app/gap-indicator.js';
 import { scopeRows, actionRows, canApply, outcomeRows, outcomeCounts, outcomeTone, conflictText, diagnosticsText, rerunChoice, isStaleChoice, ATOMIC_NOTE, RERUN_NOTE, STALE_CHOICE_NOTE, UNSUPPORTED_NOTE } from './app/batch-view.js';
 
 const node = id => document.getElementById(`batch-${id}`);
@@ -75,6 +76,8 @@ function renderReview(review, batchId) {
   node('review-section').hidden = false;
   node('review-summary').textContent = review.conflicts?.length ? `${review.conflicts.length} conflict(s). Apply is blocked.`
     : review.ready ? 'No conflicts reported. Ready for your approval.' : 'Review is not ready. Apply is blocked.';
+  if (!review.ready && !review.conflicts?.length) node('review-summary').replaceChildren(
+    createGapIndicator({ reason: 'Review is not ready. Apply is blocked.' }), el('span', 'ml-2', 'Apply is blocked. Review the scope preparations below.'));
   node('conflicts').replaceChildren(...(review.conflicts ?? []).map(conflict => el('li', 'break-all', conflictText(conflict))));
   node('reviewed-scopes').replaceChildren(...(review.scopes ?? []).map(scope => {
     const row = el('li', 'border border-wb-border rounded p-2');
