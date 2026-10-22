@@ -14,9 +14,9 @@ const realOrSame = async path => { try { return await realpath(path); } catch { 
 export async function checkProjectFolder(path, { env = process.env, home = homedir() } = {}) {
   if (typeof path !== 'string' || !path.trim()) return refused('Type the full path of a folder.');
   if (!isAbsolute(path)) return refused('Use the full path of the folder, starting from the drive or /.');
-  let project;
-  try { project = await realpath(path); } catch { return refused('That folder does not exist.'); }
-  if (!(await stat(project)).isDirectory()) return refused('That path is a file, not a folder.');
+  let project, folder;
+  try { project = await realpath(path); folder = (await stat(project)).isDirectory(); } catch { return refused('That folder does not exist.'); }
+  if (!folder) return refused('That path is a file, not a folder.');
   if (parse(project).root === project) return refused('A drive or filesystem root cannot be the project folder. Choose a folder inside it.');
   const target = comparable(project);
   for (const value of new Set([home, env.HOME, env.USERPROFILE].filter(value => typeof value === 'string' && value))) {
