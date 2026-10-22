@@ -138,7 +138,14 @@ test('an open Advanced section is a panel beside the cards on a wide screen, wit
   assert.match(wide, /#catalog-workspace:has\(#catalog-advanced\[open\]\) \{ padding-left/, 'the cards make room rather than being covered');
 });
 
-test('the catalog filters and personal content are under Advanced, so the cards come straight after the search (#122)', () => {
-  for (const id of ['catalog-filter-disclosure', 'browse-support', 'personal-folder', 'personal-binding', 'catalog-reset-filters', 'support-counts', 'personal-result'])
+test('the catalog filters are under Advanced, so the cards come straight after the search (#122)', () => {
+  for (const id of ['catalog-filter-disclosure', 'browse-support', 'catalog-reset-filters', 'support-counts'])
     assert.ok(inside(id, 'catalog-advanced'), `${id} is inside the catalog Advanced section`);
+});
+
+test('the folder picker moved from Advanced to Your sources with its ids (owner decision 5, #124)', () => {
+  for (const id of ['personal-folder', 'personal-binding', 'personal-result']) {
+    assert.ok(inside(id, 'your-sources'), `${id} is under Your sources`);
+    assert.ok(!inside(id, 'catalog-advanced'), `${id} is no longer under Advanced`);
+  }
 });

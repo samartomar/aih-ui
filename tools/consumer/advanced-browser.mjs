@@ -56,8 +56,8 @@ export async function chooseSupport(page, value) {
   await page.locator('#browse-support').selectOption(value);
 }
 
-/** A personal folder, chosen under the catalog's Advanced section (#122). */
+/** A folder on this machine, chosen from Add a source under Your sources in the left panel (#124). */
 export async function choosePersonalFolder(page, files) {
-  await openCatalogAdvanced(page);
+  if (await page.locator('#your-sources').isHidden()) await page.locator('#nav-your-sources-add').click();
   await page.locator('#personal-folder').setInputFiles(files);
 }

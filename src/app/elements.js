@@ -12,6 +12,7 @@ export function shellElements() {
     "nav-sources", "nav-policy", "nav-scan-review", "catalog-scopes-section", "framework-matrix-tabs",
     "catalog-workspace", "policy-workspace", "policy-workspace-title", "catalog-kinds-disclosure",
     "project-basics", "nav-project-basics", "project-basics-title",
+    "your-sources", "your-sources-nav", "your-sources-title",
   ];
   const found = collectIds(ids);
   found.tabButtons = [...document.querySelectorAll(".inspector-tab-btn")];

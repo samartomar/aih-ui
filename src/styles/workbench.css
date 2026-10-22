@@ -355,7 +355,6 @@ body:has(#added-notice:not([hidden])) #cards-grid { padding-bottom: 10rem; }
 #authoring-browse { align-items: end; }
 #authoring-browse > label { display: flex; flex-direction: column; gap: 4px; font-family: var(--font-mono, monospace); font-size: 10.5px; color: var(--color-muted); }
 #authoring-browse select { min-height: 28px; max-width: 100%; }
-#authoring-browse > label:has(#personal-folder) { border-style: dashed; padding: 6px 8px; }
 #support-counts, #personal-result { font-size: 10.5px; color: var(--color-muted); }
 @media (max-width: 760px) {
   #publish-project-policy:disabled { display: none; }

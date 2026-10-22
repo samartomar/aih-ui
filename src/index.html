@@ -142,6 +142,15 @@
 <div class="px-2 py-0.5 text-[10px] font-mono tracking-wider text-outline uppercase font-medium" id="framework-list-title" title="Names supplied by the Workbench; the Catalog does not publish framework names yet.">Frameworks</div>
 <nav class="space-y-0.5 text-[11px]" id="framework-list" aria-labelledby="framework-list-title"></nav>
 </section>
+<!-- YOUR SOURCES (owner decision 5 of the second gate A run): what the person brings, after the frameworks and never one
+     of them. One entry per added folder, named by the folder; Add a source opens the kinds that can be added. -->
+<section class="space-y-1 pt-1 border-t border-wb-border text-[11px]" aria-labelledby="your-sources-nav">
+<a class="flex items-center justify-between px-2 py-1 rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface" href="#your-sources" id="your-sources-nav" title="Content you bring yourself, such as a folder on this machine. It is never listed in a framework.">
+<span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[14px]" aria-hidden="true">folder_open</span><span>Your sources</span></span>
+</a>
+<div class="space-y-0.5" id="your-sources-rail" role="list" aria-label="Your sources"></div>
+<button type="button" class="w-full flex items-center gap-1.5 px-2 py-1 rounded text-left text-primary hover:bg-surface-container" id="nav-your-sources-add" aria-controls="your-sources-add"><span class="material-symbols-outlined text-[14px]" aria-hidden="true">add</span><span>Add a source</span></button>
+</section>
 <!-- PROJECT BASICS (owner decision 4 of the second gate A run): what applies to any framework, in its own place below
      the frameworks and never one of them. -->
 <nav class="pt-1 border-t border-wb-border text-[11px]" aria-label="Project basics">
@@ -231,13 +240,12 @@
 <button type="button" id="catalog-tools-undeclared" class="px-2 py-1 rounded border border-wb-border bg-surface-container text-on-surface hover:bg-surface-container-high" aria-pressed="false" hidden></button>
 <p id="catalog-tools-unmatched" class="w-full text-on-surface-variant text-[11px]" hidden></p>
 </div>
-<!-- The catalog filters and personal content (moved here from above the cards by #122; same ids and behaviour). -->
-<details id="catalog-filter-disclosure" open><summary>Catalog filters and personal content</summary><div class="flex flex-wrap gap-2 mb-3 text-[11px]" id="authoring-browse">
+<!-- The catalog filters (moved here from above the cards by #122; same ids and behaviour). The folder picker that sat
+     here is under Your sources (owner decision 5), with the same ids. -->
+<details id="catalog-filter-disclosure" open><summary>Catalog filters</summary><div class="flex flex-wrap gap-2 mb-3 text-[11px]" id="authoring-browse">
 <label>Support <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-support" aria-label="Target support"><option value="supported">With supported facts</option><option value="all">Full inventory</option><option value="unsupported">With unsupported facts</option><option value="unknown">With unknown facts</option><option value="not-declared">Not declared for this tool</option></select></label>
-<label class="cursor-pointer rounded border border-wb-border p-1">Choose personal folder <input id="personal-folder" type="file" webkitdirectory multiple aria-label="Choose personal folder"></label>
-<label>Folder binding <select class="bg-wb-input border border-wb-border rounded p-1" id="personal-binding" aria-label="Personal folder binding"><option value="">Add new personal content</option></select></label>
 <button type="button" id="catalog-reset-filters" class="border border-wb-border rounded px-3 py-1">Reset filters</button><p class="w-full text-outline" id="support-counts" role="status"></p>
-<p class="w-full text-on-surface-variant" id="personal-result" role="status">Personal content stays local to this page session. Choose skills/&lt;name&gt;/SKILL.md with Agent Skills name and description, plus root license material.</p>
+<p class="w-full text-on-surface-variant">A folder on this machine is added under Your sources, in the left panel.</p>
 </div>
 </details>
 <!-- Every content family, including the Catalog's other content (its default release) and personal content. -->
@@ -317,6 +325,51 @@
 <h2 class="font-semibold text-on-surface" id="project-basics-workspace-title">Workspace</h2>
 <p class="text-on-surface-variant">A workspace declares the repositories that work together with this project and binds your local checkouts of them. It lives in Your setup under Advanced; this opens it there.</p>
 <p><button type="button" class="px-3 py-1.5 rounded border border-wb-border text-on-surface hover:bg-surface-container" id="project-basics-open-workspace">Open the workspace</button></p>
+</section>
+</div>
+</section>
+<!-- YOUR SOURCES: what the person brought, one section per added folder, and Add a source. Opened from its own entry in
+     the left panel. The folder picker keeps the ids it had under Advanced (personal-folder, personal-binding,
+     personal-result); its code stays in app/authoring-workspace.js. -->
+<section class="flex-1 overflow-y-auto bg-wb-center" id="your-sources" aria-labelledby="your-sources-title" hidden>
+<div class="max-w-5xl p-5 space-y-4">
+<div>
+<h1 class="text-wb-heading font-semibold text-wb-title tracking-tight" id="your-sources-title" tabindex="-1">Your sources</h1>
+<p class="text-on-surface-variant mt-1">Content you bring yourself. It is never listed in a framework, and nothing here has been scanned.</p>
+</div>
+<div class="space-y-4" id="your-sources-list"></div>
+<section class="p-4 rounded border border-wb-border bg-surface-container-low space-y-3" id="your-sources-add" aria-labelledby="your-sources-add-title">
+<h2 class="font-semibold text-on-surface" id="your-sources-add-title" tabindex="-1">Add a source</h2>
+<ul class="space-y-3" role="list">
+<li class="p-3 rounded border border-wb-border bg-surface-container-lowest space-y-2" id="your-sources-folder">
+<h3 class="font-medium text-on-surface">A folder on this machine</h3>
+<p class="text-on-surface-variant">Choose a folder laid out like this. Each skill's SKILL.md starts with its name and description (the Agent Skills format); the license at the top travels with every skill.</p>
+<pre class="font-mono text-[11px] text-on-surface-variant p-2 rounded border border-wb-border bg-wb-input" aria-label="Expected folder layout">my-folder/
+  LICENSE
+  skills/&lt;name&gt;/SKILL.md</pre>
+<p class="flex flex-wrap items-center gap-2"><label class="cursor-pointer px-3 py-1.5 rounded border border-wb-border text-primary hover:bg-surface-container focus-within:ring-2 focus-within:ring-primary">Choose a folder <input class="sr-only" id="personal-folder" type="file" webkitdirectory multiple aria-label="Choose personal folder"></label>
+<label class="text-on-surface-variant">For a saved setup <select class="bg-wb-input border border-wb-border rounded p-1" id="personal-binding" aria-label="Personal folder binding"><option value="">Add new personal content</option></select></label></p>
+<p class="text-on-surface-variant">The browser lets this page read the folder only until the page is reloaded or closed. After that, choose the folder again. Nothing in it is run.</p>
+<p class="text-on-surface-variant" id="personal-result" role="status">Up to 32 skills, 256 files and 1 MB.</p>
+</li>
+<li class="p-3 rounded border border-wb-border bg-surface-container-lowest space-y-2" id="your-sources-paste">
+<h3 class="font-medium text-on-surface">Paste a link or install command</h3>
+<p class="text-on-surface-variant" id="your-sources-paste-reason">Can't be added yet: the Catalog doesn't publish a parser for pasted links (samartomar/aih-catalog#120).</p>
+<label class="block text-on-surface-variant">What you found <textarea class="block w-full mt-1 p-2 rounded bg-wb-input border border-wb-border text-on-surface font-mono text-[11px]" id="your-sources-paste-text" rows="2" spellcheck="false" placeholder="Kept here as an unverified note only"></textarea></label>
+<p class="text-on-surface-variant" id="your-sources-paste-status" role="status" hidden></p>
+<p><button type="button" class="px-3 py-1.5 rounded border border-wb-border text-on-surface-variant opacity-50 cursor-not-allowed" disabled aria-disabled="true" aria-describedby="your-sources-paste-reason your-sources-paste-status">Add</button></p>
+</li>
+<li class="p-3 rounded border border-wb-border bg-surface-container-lowest space-y-2" id="your-sources-npm">
+<h3 class="font-medium text-on-surface">npm package</h3>
+<p class="text-on-surface-variant" id="your-sources-npm-reason">Can't be added yet: the Catalog can't read an ordinary npm package as a source (samartomar/aih-catalog#123), and Scan can't scan one (samartomar/aih-scan#120).</p>
+<p><button type="button" class="px-3 py-1.5 rounded border border-wb-border text-on-surface-variant opacity-50 cursor-not-allowed" disabled aria-disabled="true" aria-describedby="your-sources-npm-reason">Add an npm package</button></p>
+</li>
+<li class="p-3 rounded border border-wb-border bg-surface-container-lowest space-y-2" id="your-sources-github">
+<h3 class="font-medium text-on-surface">GitHub repository</h3>
+<p class="text-on-surface-variant" id="your-sources-github-reason">Coming next: a GitHub repository at an exact commit (samartomar/aih-ui#125).</p>
+<p><button type="button" class="px-3 py-1.5 rounded border border-wb-border text-on-surface-variant opacity-50 cursor-not-allowed" disabled aria-disabled="true" aria-describedby="your-sources-github-reason">Add a GitHub repository</button></p>
+</li>
+</ul>
 </section>
 </div>
 </section>

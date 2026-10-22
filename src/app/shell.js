@@ -40,8 +40,8 @@ export function createShell(elements) {
   new ResizeObserver(measureHeader).observe(subheader);
   measureHeader();
   const securityListeners = new Set();
-  // Project basics shows in place of the cards; its project files open in the same inspector.
-  const browsing = () => currentView === "catalog" || currentView === "basics";
+  // Project basics and Your sources show in place of the cards; their cards open in the same inspector.
+  const browsing = () => ["catalog", "basics", "your-sources"].includes(currentView);
   const securityVisible = () => browsing() && currentTab === "security" && hasInspectorSelection && !elements.inspectorRail.classList.contains("w-0");
   const notifySecurity = () => { for (const listener of securityListeners) listener(securityVisible()); };
   const panes = {
@@ -131,27 +131,29 @@ export function createShell(elements) {
     else node.removeAttribute("aria-current");
   }
 
-  /** The view the address names: policy, review or Project basics, otherwise the catalog. */
+  /** The view the address names: policy, review, Project basics or Your sources, otherwise the catalog. */
   function viewFromHash() {
     const named = location.hash.slice(1);
-    return ['policy', 'review', 'basics'].includes(named) ? named : 'catalog';
+    return ['policy', 'review', 'basics', 'your-sources'].includes(named) ? named : 'catalog';
   }
 
   function setView(view, updateHash = true) {
     if (updateHash && location.hash !== `#${view}`) location.hash = view;
     const policy = view === "policy" || view === "review";
-    const basics = view === "basics";
-    currentView = policy || basics ? view : "catalog";
-    elements.catalogWorkspace.hidden = policy || basics;
+    const basics = view === "basics", sources = view === "your-sources";
+    currentView = policy || basics || sources ? view : "catalog";
+    elements.catalogWorkspace.hidden = policy || basics || sources;
     if (elements.projectBasics) elements.projectBasics.hidden = !basics;
+    if (elements.yourSources) elements.yourSources.hidden = !sources;
     elements.policyWorkspace.hidden = !policy;
     elements.frameworkMatrixTabs.hidden = policy;
     elements.catalogKindsDisclosure.hidden = policy;
     elements.catalogScopesSection.hidden = policy;
     elements.inspectorRail.hidden = policy;
     elements.toggleInspectorBtn.hidden = policy;
-    activeNavigation(elements.navSources, !policy && !basics);
+    activeNavigation(elements.navSources, !policy && !basics && !sources);
     if (elements.navProjectBasics) activeNavigation(elements.navProjectBasics, basics);
+    if (elements.yourSourcesNav) activeNavigation(elements.yourSourcesNav, sources);
     activeNavigation(elements.navPolicy, view === "policy");
     activeNavigation(elements.navScanReview, view === "review");
     if (policy) {
@@ -166,6 +168,7 @@ export function createShell(elements) {
     notifySecurity();
     if (policy) elements.policyWorkspaceTitle.focus();
     else if (basics) elements.projectBasicsTitle?.focus();
+    else if (sources) elements.yourSourcesTitle?.focus();
     else elements.catalogWorkspace.querySelector("h1")?.focus();
     document.dispatchEvent(new CustomEvent('aih:view-changed', { detail: { view: currentView } }));
   }
@@ -197,6 +200,7 @@ export function createShell(elements) {
   elements.navPolicy.addEventListener("click", () => setView("policy"));
   elements.navScanReview.addEventListener("click", () => setView("review"));
   elements.navProjectBasics?.addEventListener("click", event => { event.preventDefault(); setView("basics"); });
+  elements.yourSourcesNav?.addEventListener("click", event => { event.preventDefault(); setView("your-sources"); });
   document.addEventListener('aih:policy-review-open', () => setInspectorOpen(false));
   // A view this page already switched to (a click updates the address too) is not switched again.
   window.addEventListener('hashchange', () => {
@@ -257,6 +261,8 @@ export function createShell(elements) {
     showCatalog() { if (!browsing()) setView("catalog"); },
     /** A framework was chosen: its cards show, in place of Project basics or another view. */
     showCards() { if (currentView !== "catalog") setView("catalog"); },
+    /** Your sources shows (Add a source, or one of its folders); on it already, nothing moves. */
+    showYourSources() { if (currentView !== "your-sources") setView("your-sources"); },
     subscribeSecurity(listener) { securityListeners.add(listener); listener(securityVisible()); return () => securityListeners.delete(listener); },
     /** Selection availability comes from Catalog; an empty rail cannot open. */
     setInspectorSelection(selected) {

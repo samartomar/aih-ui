@@ -48,10 +48,11 @@ export const drawer = page => page.locator('#policy-review-panel');
 
 // One-click Add: a card's Add proposes the item and, when nothing needs deciding, accepts it at once and confirms it
 // in a notice; a proposal with something to decide opens the review instead, where the person accepts it. Either way
-// the item is in the setup afterwards, and the notice is dismissed so it covers nothing.
-export async function addFromCatalog(page, id) {
+// the item is in the setup afterwards, and the notice is dismissed so it covers nothing. A folder's skills are added
+// the same way from Your sources (grid '#your-sources-list').
+export async function addFromCatalog(page, id, grid = '#cards-grid') {
   await closePolicyDrawer(page);
-  await page.locator('#cards-grid').getByRole('button', { name: `Add ${id}`, exact: true }).click();
+  await page.locator(grid).getByRole('button', { name: `Add ${id}`, exact: true }).click();
   const added = page.locator('#added-notice-message').filter({ hasText: /^Added / }), review = page.locator('#policy-accept:not([disabled])');
   await added.or(review).first().waitFor();
   if (await review.isVisible()) await review.click();

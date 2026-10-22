@@ -24,6 +24,7 @@ import { catalogToolView, filterByTools, toolsNotice } from "./tool-match.js";
 import { defaultCatalogTool, saveCatalogTool, savedCatalogTool } from "./catalog-tool.js";
 import { createYourTool, yourToolModel } from "./your-tool.js";
 import { createProjectBasics, frameworkShows, projectFileEntries } from "./project-basics.js";
+import { createYourSources } from "./your-sources.js";
 
 /**
  * @param onSelectEntry    called with the entry when the selection changes
@@ -32,8 +33,9 @@ import { createProjectBasics, frameworkShows, projectFileEntries } from "./proje
  * @param onAdd            called with the catalog item when its card's Add is used; resolves when the Add has settled
  * @param onFramework      called when a framework is chosen, so its cards show (in place of Project basics)
  * @param onOpenWorkspace  called when Project basics opens the workspace
+ * @param onYourSources    called to show Your sources (Add a source, or one of the person's folders)
  */
-export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () => {}, onSummary, subscribeSecurity, onAdd = async () => {}, onFramework = () => {}, onOpenWorkspace = () => {} }) {
+export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () => {}, onSummary, subscribeSecurity, onAdd = async () => {}, onFramework = () => {}, onOpenWorkspace = () => {}, onYourSources = () => {} }) {
   const elements = catalogElements();
   const state = {
     entries: [],
@@ -107,9 +109,12 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   // Project basics (#123) shows in place of the cards; while it shows, no framework is the selected one.
   const projectBasics = createProjectBasics({ elements: elements.projectBasics, onSelect: (entryId) => select(entryId), onOpenWorkspace });
   const basicsOpen = () => !elements.projectBasics.section.hidden;
+  // Your sources (#124) shows in place of the cards too: one section per folder the person added.
+  const yourSources = createYourSources({ onSelect: (entryId) => select(entryId), onOpen: onYourSources, onChange: () => render() });
+  const sourcesOpen = () => !document.getElementById('your-sources').hidden;
   document.addEventListener('aih:view-changed', () => { if (restoredView) renderFrameworks(); });
-  const renderFrameworks = () => frameworkRail.render({ rows: frameworkRows(authoring.catalog?.items ?? []), selected: basicsOpen() ? null : state.view.family });
-  const focusCard = (entryId) => basicsOpen() ? projectBasics.focus(entryId) : cards.focus(entryId);
+  const renderFrameworks = () => frameworkRail.render({ rows: frameworkRows(authoring.catalog?.items ?? []), selected: basicsOpen() || sourcesOpen() ? null : state.view.family });
+  const focusCard = (entryId) => basicsOpen() ? projectBasics.focus(entryId) : sourcesOpen() ? yourSources.focus(entryId) : cards.focus(entryId);
   // The Catalog tool name is the person's own choice; it is remembered for the next visit and shared with the page.
   target.addEventListener('change', () => { saveCatalogTool(target.value); changeView({ target: target.value }); });
   support.addEventListener('change', () => changeView({ support: support.value }));
@@ -249,6 +254,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     // Project files are offered whatever the filters and the tool: they apply to every tool.
     const files = projectFileEntries(state.entries);
     projectBasics.render({ ...cardsView, entries: files, total: files.length, noun: 'project files' });
+    // A folder's skills are offered whatever the filters and the tool, like a framework's are once it is open.
+    yourSources.render({ ...cardsView, entries: state.entries });
     details.render(detailsModel(selectedEntry()));
   }
 
@@ -290,6 +297,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     // so the card the operator activated keeps keyboard focus.
     cards.setSelected(previous, entryId);
     projectBasics.setSelected(previous, entryId);
+    yourSources.setSelected(previous, entryId);
     details.render(detailsModel(entry));
     onSelectEntry(entry);
   }
@@ -348,7 +356,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
 
     /** Back to the catalog: focus the card just chosen (or the selected one) if shown, otherwise the search box. */
     focusCatalog() {
-      if (!focusCard(state.chosenId ?? state.selectedId)) (basicsOpen() ? document.getElementById('project-basics-title') : elements.toolbar.search).focus();
+      if (!focusCard(state.chosenId ?? state.selectedId)) (basicsOpen() ? document.getElementById('project-basics-title') : sourcesOpen() ? document.getElementById('your-sources-title') : elements.toolbar.search).focus();
     },
 
     /** The organization name the user saved, or null. Re-renders the rail. */
