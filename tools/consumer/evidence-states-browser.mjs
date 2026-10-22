@@ -8,6 +8,7 @@ import { runScan, prepareArtifact } from '@aihq/scan/host';
 import { digestBytes } from './primitives.mjs';
 import { intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
+import { openCatalogAdvanced, openScanReview } from './advanced-browser.mjs';
 
 const NOTE = 'consumer-proof.review-note';
 
@@ -70,6 +71,7 @@ export async function runEvidenceStatesBrowser({ origin, output, playwrightModul
     assert.match(await tile('hook').innerText(), /HOOK ITEMS[\s\S]*items, not events/i);
     assert.equal(await tile('tokens').isDisabled(), true);
     assert.match(await tile('tokens').innerText(), /Unknown/);
+    await openCatalogAdvanced(page);
     assert.equal(/Not published/.test(await page.locator('#framework-matrix-tabs').innerText()), false, 'No tile claims a kind is unpublished.');
     scenarios.push('metrics-match-list', 'hook-items-not-events', 'tokens-unknown');
 
@@ -86,14 +88,14 @@ export async function runEvidenceStatesBrowser({ origin, output, playwrightModul
     // c. Choose the note so the review panel can inspect it, then open Scan Review from the navigation.
     await page.getByRole('button', { name: `Choose ${NOTE}`, exact: true }).click();
     await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click();
-    await page.locator('#nav-scan-review').click();
+    await openScanReview(page);
     await page.locator('#policy-workspace').waitFor({ state: 'visible' });
     assert.equal(await page.locator('#evidence-review').evaluate(node => node.open), true, 'Scan Review opens the supplied-evidence review.');
     assert.equal(await page.getByLabel('Review evidence files', { exact: true }).evaluate(node => node === document.activeElement), true);
     scenarios.push('scan-review-opens-evidence-review');
 
     const supply = async (path, state) => {
-      await page.locator('#nav-scan-review').click();
+      await openScanReview(page);
       await page.getByLabel('Review evidence files', { exact: true }).setInputFiles(path);
       await page.getByText('Original evidence bytes loaded').waitFor();
       await page.getByLabel('Evidence review subject', { exact: true }).selectOption({ label: NOTE });
@@ -124,7 +126,7 @@ export async function runEvidenceStatesBrowser({ origin, output, playwrightModul
     assert.equal(await page.locator('#cards-grid [data-evidence-state]:not([data-evidence-state="invalid"])').count(), 0);
     scenarios.push('invalid');
     // g. Forgetting the evidence returns every card to not supplied.
-    await page.locator('#nav-scan-review').click();
+    await openScanReview(page);
     await page.getByRole('button', { name: 'Forget supplied evidence', exact: true }).click();
     await page.getByText('Supplied evidence forgotten').waitFor();
     await page.locator('#nav-sources').click();

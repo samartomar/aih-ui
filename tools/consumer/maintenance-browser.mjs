@@ -12,6 +12,7 @@ import { openDraft } from './headless.mjs';
 import { intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { installedFamilies } from './installed-families.mjs';
+import { openPolicyWorkspace, openSetupAdvanced, openFileActions } from './advanced-browser.mjs';
 
 const NOTE = 'consumer-proof.review-note', PERSONAL = 'personal.skill.example', OPENED = 'Unresolved draft opened', REVIEW = 'maintenance-review';
 const encode = value => new TextEncoder().encode(value), decode = bytes => new TextDecoder().decode(bytes);
@@ -115,8 +116,8 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
         return JSON.stringify(policyOf(input).metadata?.['aih.workbench']?.roots) === JSON.stringify(policyOf(original).metadata?.['aih.workbench']?.roots);
       } catch { return false; }
     });
-    await page.locator('#nav-policy').click(); await page.locator('#policy-open').setInputFiles(path);
-    await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+    await openPolicyWorkspace(page); await page.locator('#policy-open').setInputFiles(path);
+    await openFileActions(page); await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await page.locator('#policy-draft-status').filter({ hasText: heading }).waitFor();
     await checked;
     await page.locator('#policy-updates-check:not([disabled])').waitFor();
@@ -138,8 +139,8 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
   };
   // The evidence panel is the existing review flow's own: open it, then supply the original evidence bytes.
   const supplyEvidence = async page => {
-    await page.locator('#nav-policy').click();
-    await page.locator('summary').filter({ hasText: 'Evidence review and reconsideration' }).click();
+    await openPolicyWorkspace(page);
+    await openSetupAdvanced(page); await page.locator('summary').filter({ hasText: 'Evidence review and reconsideration' }).click();
     await page.getByLabel('Review evidence files', { exact: true }).setInputFiles(evidencePath);
     await page.getByText('Original evidence bytes loaded').waitFor();
   };
@@ -160,7 +161,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     await choose(authoring, 'Personal', PERSONAL);
     await choose(authoring, 'Independent', NOTE);
     const policyPath = join(output, 'policy.downloaded.json');
-    const policyBytes = await download(authoring, () => authoring.locator('#policy-save').click(), policyPath);
+    const policyBytes = await download(authoring, () => openSetupAdvanced(authoring).then(() => authoring.locator('#policy-save').click()), policyPath);
     assert.deepEqual(JSON.parse(decode(policyBytes)).metadata['aih.workbench'].roots.map(root => root.itemId).sort(), [NOTE, PERSONAL].sort());
     scenarios.push('save-independent-choice');
 
@@ -376,7 +377,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     await resolvedAuthoring.getByRole('button', { name: 'Propose human review', exact: true }).click();
     await resolvedAuthoring.locator('#policy-accept:not([disabled])').waitFor(); await resolvedAuthoring.locator('#policy-accept').click();
     const resolvedPath = join(output, 'policy.resolved.downloaded.json');
-    const resolvedBytes = await download(resolvedAuthoring, () => resolvedAuthoring.locator('#policy-save').click(), resolvedPath);
+    const resolvedBytes = await download(resolvedAuthoring, () => openSetupAdvanced(resolvedAuthoring).then(() => resolvedAuthoring.locator('#policy-save').click()), resolvedPath);
     const resolvedIntent = JSON.parse(decode(resolvedBytes)).metadata['aih.workbench'];
     assert.deepEqual(resolvedIntent.roots.map(root => root.itemId), [NOTE]);
     assert.deepEqual(resolvedIntent.reviews.records.map(record => [record.id, record.state]), [[REVIEW, 'current']]);
@@ -394,7 +395,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     operations = []; categoriesSent = []; checkInputs = [];
     await supplyEvidence(resolvedPage);
     await resolvedPage.locator('#policy-open').setInputFiles(resolvedPath);
-    await resolvedPage.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+    await openFileActions(resolvedPage); await resolvedPage.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await resolvedPage.locator('#policy-status').filter({ hasText: 'Saved choices recovered' }).waitFor();
     await waitSettled(resolvedPage, null);
     assert.equal(await resolvedPage.locator('#policy-draft').isHidden(), true, 'A resolved policy reopens as an ordinary policy, not a draft.');

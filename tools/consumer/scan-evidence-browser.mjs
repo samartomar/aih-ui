@@ -12,6 +12,7 @@ import { createScanEvidenceHost } from './scan-evidence-host.mjs';
 import { createGitHubFixture } from './github-fixture.mjs';
 import { createHost } from './host.mjs';
 import { authenticateEvidence } from '@aihq/core';
+import { openScanReview, openSetupAdvanced, openFileActions } from './advanced-browser.mjs';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 export async function runScanEvidenceBrowser({origin,output,fixtureRoot,sourcePaths,playwrightModule}) {
   const start=performance.now();await mkdir(output,{recursive:true});
@@ -48,7 +49,7 @@ export async function runScanEvidenceBrowser({origin,output,fixtureRoot,sourcePa
     if(await page.locator('#setup-dialog').isVisible()){await page.getByRole('radio',{name:/Vibe coder/}).check();for(let i=0;i<4;i++)await page.locator('#setup-next').click();await page.locator('#setup-dialog').waitFor({state:'hidden'});}
     await page.locator('#browse-support').selectOption('all');await page.locator('#browse-family').selectOption('Catalog');
     await page.getByRole('button',{name:'Choose alpha',exact:true}).click();await page.locator('#policy-accept:not([disabled])').waitFor();await page.locator('#policy-accept').click();
-    await page.locator('#nav-scan-review').click();await panel.waitFor();
+    await openScanReview(page);await panel.waitFor();
     await panel.getByLabel('Scan content',{exact:true}).selectOption(`${installed.release.sha256}/alpha`);
     const initial=await check('s1');assert.equal(initial.baseline.scanId,fixture.variants.s1.scanId);assert.equal(initial.baseline.evidence.coverage.status,'matched');
     assert.ok(initial.baseline.evidence.acquisitions.some(value=>value.authentication.status==='authenticated'));
@@ -68,17 +69,17 @@ export async function runScanEvidenceBrowser({origin,output,fixtureRoot,sourcePa
     await page.getByLabel('Review owner kind',{exact:true}).selectOption('individual');await page.getByLabel('Review owner',{exact:true}).fill('fixture-person');
     await page.getByLabel('Reviewer',{exact:true}).fill('fixture-reviewer');await page.getByLabel('Review reason',{exact:true}).fill('Synthetic fixture finding inspected against exact alpha bytes.');
     await page.getByRole('button',{name:'Propose human review',exact:true}).click();await page.locator('#policy-accept:not([disabled])').waitFor();await page.locator('#policy-accept').click();
-    const reviewed=await download('reviewed-policy.download.json',()=>page.locator('#policy-save').click());
+    const reviewed=await download('reviewed-policy.download.json',()=>openSetupAdvanced(page).then(() => page.locator('#policy-save').click()));
     const policy=JSON.parse(new TextDecoder().decode(reviewed));assert.equal(policy.metadata['aih.workbench'].reviews.records.length,1);
     // Explicit fixture authoring through Core's public validator, then actual ordinary reopen/download.
     policy.evidence=[{schema:'urn:aihq:scan:evidence-association:1.0.0',scanId:fixture.variants.s1.scanId,location:{kind:'file',path:join(fixtureRoot,'s1.json')}}];
     assert.equal(parsePolicy(JSON.stringify(policy)).valid,true);
     const pinnedPath=join(output,'explicit-pinned-policy.json');await writeFile(pinnedPath,JSON.stringify(policy,null,2)+'\n');
-    await page.locator('#policy-open').setInputFiles(pinnedPath);await page.getByRole('button',{name:'Validate and reopen',exact:true}).click();await page.locator('#policy-status').filter({hasText:'Saved choices recovered'}).waitFor();
-    const before=await download('before.policy.download.json',()=>page.locator('#policy-save').click());
+    await page.locator('#policy-open').setInputFiles(pinnedPath);await openFileActions(page); await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();await page.locator('#policy-status').filter({hasText:'Saved choices recovered'}).waitFor();
+    const before=await download('before.policy.download.json',()=>openSetupAdvanced(page).then(() => page.locator('#policy-save').click()));
     const beforeReview=JSON.stringify(JSON.parse(new TextDecoder().decode(before)).metadata['aih.workbench'].reviews);
     const preparationEvent=page.waitForResponse(value=>value.url().endsWith('/api/authoring-prepare'));
-    await page.getByRole('button',{name:'Prepare exact effects',exact:true}).click();preparedRaw=new Uint8Array(await(await preparationEvent).body());
+    await openSetupAdvanced(page, 'Sources and execution').then(() => page.getByRole('button',{name:'Prepare exact effects',exact:true}).click());preparedRaw=new Uint8Array(await(await preparationEvent).body());
     const preparation=JSON.parse(new TextDecoder().decode(preparedRaw));assert.equal(preparation.status,'ready',JSON.stringify(preparation));assert.ok(preparation.sessionId);assert.ok(preparation.review.reviewDigest);
     const hostFacts=page.locator('details').filter({has:page.getByText('Exact host review and effects',{exact:true})}).locator('pre');
     await page.getByRole('button',{name:'Approve and Apply reviewed effects',exact:true}).waitFor({state:'visible'});assert.equal(await page.getByRole('button',{name:'Approve and Apply reviewed effects',exact:true}).isEnabled(),true);
@@ -127,14 +128,14 @@ export async function runScanEvidenceBrowser({origin,output,fixtureRoot,sourcePa
     headlessSupplied=[new TextEncoder().encode('malformed')];
     const suppliedEvent=page.waitForResponse(value=>value.url().endsWith('/api/authoring-scan-evidence'));await panel.getByLabel('Evidence for latest view',{exact:true}).setInputFiles(malformed);
     const suppliedResult=await(await suppliedEvent).json();assert.equal(suppliedResult.selectedScanId,fixture.variants.untrusted.scanId);assert.ok(suppliedResult.assessments.some(value=>value.summary.scanId===fixture.variants.s2.scanId));steps.push('malformed-supplied-retains-readable-history');
-    const after=await download('after.policy.download.json',()=>page.locator('#policy-save').click());assert.deepEqual(after,before);
+    const after=await download('after.policy.download.json',()=>openSetupAdvanced(page).then(() => page.locator('#policy-save').click()));assert.deepEqual(after,before);
     const afterReview=JSON.stringify(JSON.parse(new TextDecoder().decode(after)).metadata['aih.workbench'].reviews);assert.equal(afterReview,beforeReview);await writeFile(join(output,'after.review.json'),afterReview);
     assert.equal(await hostFacts.textContent(),preparedDisplay);await writeFile(join(output,'after.prepared.display.json'),await hostFacts.textContent());
     assert.equal(await page.getByRole('button',{name:'Approve and Apply reviewed effects',exact:true}).isEnabled(),true);steps.push('actual-policy-review-and-prepared-bytes-preserved');
     const downloaded=await download('original-untrusted.evidence.json',()=>panel.getByRole('button',{name:'Download original Scan evidence',exact:true}).click());assert.equal(hash(downloaded),fixture.variants.untrusted.sha256);
     await page.screenshot({path:join(output,'04-authentication-gaps.png'),fullPage:true});
     // The original held preparation remains executable; view changes did not replace it.
-    const applyEvent=page.waitForResponse(value=>value.url().endsWith('/api/authoring-apply'));await page.getByRole('button',{name:'Approve and Apply reviewed effects',exact:true}).click();
+    const applyEvent=page.waitForResponse(value=>value.url().endsWith('/api/authoring-apply'));await openSetupAdvanced(page, 'Sources and execution').then(() => page.getByRole('button',{name:'Approve and Apply reviewed effects',exact:true}).click());
     const applied=await(await applyEvent).json();assert.equal(applied.completion,'complete',JSON.stringify(applied));assert.equal(hash(await readFile(join(dirname(output),'project/alpha.txt'))),item.materials[0].sha256);steps.push('original-prepared-handle-applies-after-view-changes');
     const headlessPolicy=await readAuthoring({policyBytes:after,inventories:[inventory],reviewEvidence:[new Uint8Array(await readFile(join(fixtureRoot,'s1.json')))]});assert.equal(headlessPolicy.status,'ok');assert.equal(headlessPolicy.value.reviewJudgments[0].applicability,'applies');
     // Same selected bytes under Core's organization boundary, through the real host/public admission.
@@ -148,29 +149,29 @@ export async function runScanEvidenceBrowser({origin,output,fixtureRoot,sourcePa
       const host=createHost({projectRoot:target,materialRoots:{maintained:packageRoot},organizationSource:transport.source,recipeMaterials:materials,controls:{logging:'off'}});
       const admitted=await host.prepareSession({policyText:new TextDecoder().decode(enterprise.value.policyBytes)});assert.equal(admitted.status,'ready',JSON.stringify(admitted));
       const enterprisePath=join(output,'enterprise.policy.json');await writeFile(enterprisePath,enterprise.value.policyBytes);
-      await page.locator('#policy-open').setInputFiles(enterprisePath);await page.getByRole('button',{name:'Validate and reopen',exact:true}).click();await page.locator('#policy-status').filter({hasText:'Saved choices recovered'}).waitFor();
-      const admittedEvent=page.waitForResponse(value=>value.url().endsWith('/api/authoring-prepare'));await page.getByRole('button',{name:'Prepare exact effects',exact:true}).click();
+      await page.locator('#policy-open').setInputFiles(enterprisePath);await openFileActions(page); await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();await page.locator('#policy-status').filter({hasText:'Saved choices recovered'}).waitFor();
+      const admittedEvent=page.waitForResponse(value=>value.url().endsWith('/api/authoring-prepare'));await openSetupAdvanced(page, 'Sources and execution').then(() => page.getByRole('button',{name:'Prepare exact effects',exact:true}).click());
       const browserAdmitted=await(await admittedEvent).json();assert.equal(browserAdmitted.status,'ready',JSON.stringify(browserAdmitted));
-      const enterpriseBefore=await download('enterprise.before.policy.json',()=>page.locator('#policy-save').click());
+      const enterpriseBefore=await download('enterprise.before.policy.json',()=>openSetupAdvanced(page).then(() => page.locator('#policy-save').click()));
       const enterprisePreparedDisplay=await hostFacts.textContent();
       await check('untrusted');
       assert.equal(await hostFacts.textContent(),enterprisePreparedDisplay);
       assert.equal(await page.getByRole('button',{name:'Approve and Apply reviewed effects',exact:true}).isEnabled(),true);
-      const enterpriseAfter=await download('enterprise.after.policy.json',()=>page.locator('#policy-save').click());assert.deepEqual(enterpriseAfter,enterpriseBefore);
+      const enterpriseAfter=await download('enterprise.after.policy.json',()=>openSetupAdvanced(page).then(() => page.locator('#policy-save').click()));assert.deepEqual(enterpriseAfter,enterpriseBefore);
       transport.publish({...organization,selections:[]});const denied=await host.prepareSession({policyText:new TextDecoder().decode(enterprise.value.policyBytes)});assert.notEqual(denied.status,'ready');
-      const deniedEvent=page.waitForResponse(value=>value.url().endsWith('/api/authoring-prepare'));await page.getByRole('button',{name:'Prepare exact effects',exact:true}).click();
+      const deniedEvent=page.waitForResponse(value=>value.url().endsWith('/api/authoring-prepare'));await openSetupAdvanced(page, 'Sources and execution').then(() => page.getByRole('button',{name:'Prepare exact effects',exact:true}).click());
       const browserDenied=await(await deniedEvent).json();assert.notEqual(browserDenied.status,'ready');
       await writeFile(join(output,'organization-boundary.json'),JSON.stringify({fixture:true,admitted,denied,browserAdmitted,browserDenied,enterpriseViewPreserved:true,enterprisePolicySha256:hash(enterpriseBefore),enterprisePreparedDisplaySha256:hash(Buffer.from(enterprisePreparedDisplay)),requests:transport.requests},null,2));
     } finally {transport.restore();}
     steps.push('public-core-organization-admits-and-refuses-independently');
     // An independent item has no matching evidence and remains selectable.
     const catalog=await(await page.request.get(origin+'/api/authoring-catalog')).json();const note=catalog.items.find(value=>value.id==='consumer-proof.review-note');
-    await page.getByRole('button',{name:'New project policy',exact:true}).click();
+    await openFileActions(page); await page.getByRole('button', { name: 'New project policy', exact: true }).click();
     await page.locator('#nav-sources').click();await page.locator('#browse-support').selectOption('all');await page.locator('#browse-family').selectOption('Independent');
     await page.getByRole('button',{name:`Choose ${note.id}`,exact:true}).click();await page.locator('#policy-accept:not([disabled])').waitFor();await page.locator('#policy-accept').click();
-    const noEvidencePolicy=await download('no-evidence.policy.json',()=>page.locator('#policy-save').click());
+    const noEvidencePolicy=await download('no-evidence.policy.json',()=>openSetupAdvanced(page).then(() => page.locator('#policy-save').click()));
     const noEvidenceDocument=JSON.parse(new TextDecoder().decode(noEvidencePolicy));assert.equal(noEvidenceDocument.mode,'vibe');assert.ok(noEvidenceDocument.metadata['aih.workbench'].roots.some(root=>root.itemId===note.id));assert.ok(!noEvidenceDocument.evidence?.length);
-    await page.locator('#nav-scan-review').click();
+    await openScanReview(page);
     await panel.getByLabel('Scan content',{exact:true}).selectOption(`${note.root.releaseSha256}/${note.id}`);await panel.getByRole('status').filter({hasText:'No matching evidence'}).waitFor();steps.push('ordinary-no-evidence-content-selected-and-saved');
     await page.screenshot({path:join(output,'05-no-evidence.png'),fullPage:true});
     assert.deepEqual(errors,[]);

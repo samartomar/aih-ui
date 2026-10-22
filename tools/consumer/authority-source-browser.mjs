@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
+import { openPolicyWorkspace, openSetupAdvanced } from './advanced-browser.mjs';
 export async function openAuthorityPage({ browser, origin }) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1100 } });
   // The demo has no browser network dependency outside its loopback Workbench.
@@ -13,7 +14,9 @@ export async function openAuthorityPage({ browser, origin }) {
     for (let step = 0; step < 3; step++) await page.locator('#setup-next').click();
     await page.locator('#setup-dialog').waitFor({ state: 'hidden' });
   }
-  await page.locator('#nav-policy').click();
+  await openPolicyWorkspace(page);
+  // The Organization authority source sits in Your setup's Advanced section, under Sources and execution.
+  await openSetupAdvanced(page, 'Sources and execution');
   assert.equal(await page.locator('#authority-source input, #authority-source select, #authority-source textarea, #authority-source [contenteditable="true"]').count(), 0);
   return { page, context };
 }
