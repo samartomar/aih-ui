@@ -71,11 +71,25 @@ export function createSettingsStore({ coreTargets, settingsPath = SETTINGS_PATH 
       const errors = settingsErrors(settings);
       if (Object.keys(errors).length) return { ok: false, error: Object.values(errors).join(" "), errors };
       if (settings.experience !== current.settings.experience || settings.role !== current.settings.role) {
-        return { ok: false, status: 409, error: "Experience and enterprise role stay fixed. To change them, delete the local setup file and restart the Workbench." };
+        return { ok: false, status: 409, error: "Use the Mode control to change experience or enterprise role." };
       }
       // Preserve saved clients omitted by a newer Core list; validate additions.
       const error = clientError(settings.clients.filter((client) => !current.settings.clients.includes(client)));
       return error ? { ok: false, error } : write(settings);
+    },
+    switchMode(body) {
+      if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length !== 3 ||
+          !["experience", "role", "organization"].every(key => Object.hasOwn(body, key))) {
+        return { ok: false, error: "Supply only mode, role and organization details." };
+      }
+      const current = read();
+      if (current.state !== "saved") return { ok: false, status: 409, error: "Complete local setup before switching modes." };
+      if (body.role !== "admin" && body.organization !== null) return { ok: false, error: "Only Enterprise Admin mode requires organization details." };
+      const next = { ...current.settings, ...body };
+      const errors = settingsErrors(next);
+      if (Object.keys(errors).length) return { ok: false, error: Object.values(errors).join(" "), errors };
+      // Merge only mode fields into the latest setup; clients and preferences stay intact.
+      return write(next);
     },
     updateClients(body) {
       if (!body || Object.keys(body).length !== 1 || !Object.hasOwn(body, "clients")) return { ok: false, error: "Supply only the AI client selection." };

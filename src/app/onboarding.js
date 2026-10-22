@@ -5,12 +5,13 @@ import { reviewerText, setupSummary } from "./setup-summary.js";
 import { loadSetup, saveSetup, updateSetup } from "./settings-client.js";
 
 const STEP_TITLES = { experience: "How will you use the Workbench?", role: "What is your enterprise role?", organization: "Your organization", capabilities: "Choose optional AIH assistance", clients: "Which AI clients do you use?", review: "Review your local setup" };
-const STEP_LABELS = { experience: "Experience", role: "Role", organization: "Organization", capabilities: "Assistance", clients: "AI clients", review: "Review" };
+const STEP_LABELS = { experience: "Mode", role: "Role", organization: "Organization", capabilities: "Assistance", clients: "AI clients", review: "Review" };
 
 export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
   const elements = collectIds(["setup-dialog", "setup-title", "setup-description", "setup-fixed-experience", "setup-progress", "setup-content", "setup-error", "setup-back", "setup-next", "setup-skip", "setup-cancel", "setup-form"]);
   let draft = newSetupSettings();
   let editing = false;
+  let editSection = null;
   let location = null;
   let step = 0;
   let targets = null;
@@ -23,10 +24,10 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
   let loadSequence = 0;
   let reviewerKind = "individual";
   const fields = new Map();
-  const steps = () => [
+  const steps = () => editSection ? [...(editSection === "review" ? [] : [editSection]), "review"] : [
     ...(!editing ? ["experience", ...(draft.experience === "enterprise" ? ["role"] : [])] : []),
     ...(draft.experience === "enterprise" && draft.role === "admin" ? ["organization"] : []),
-    "capabilities", "clients", "review",
+    ...(editing ? ["capabilities"] : []), "clients", "review",
   ];
   const current = () => steps()[step];
   function error(message) {
@@ -70,29 +71,35 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
     input.addEventListener("input", () => {
       draft.organization[key] = key === "emails" ? input.value.split(/[,;\n]+/).map((value) => value.trim()).filter(Boolean) : input.value.trim();
       input.removeAttribute("aria-invalid");
+      const message = document.getElementById(`${id}-error`);
+      if (message) { message.textContent = ""; message.hidden = true; }
       error(null);
     });
     fields.set(key, input);
     const help = el("p", "text-outline text-[11px] leading-relaxed", hint);
     help.id = `${id}-hint`;
-    wrapper.append(caption, input, help);
+    const message = el("p", "text-error setup-field-error");
+    message.id = `${id}-error`;
+    message.hidden = true;
+    input.setAttribute("aria-describedby", `${id}-hint ${id}-error`);
+    wrapper.append(caption, input, help, message);
     return wrapper;
   }
   function renderOrganization() {
     elements.setupDescription.textContent = "Record your organization's details for this local Workbench. Choosing Admin does not grant permissions or create authoritative policy.";
     const group = el("div", "space-y-4");
     group.append(
-      field("name", "Organization name", "Shown in the Workbench header.", { maxLength: 120, autocomplete: "organization" }),
-      field("shortId", "Organization short ID", "A local label using lowercase letters, digits and hyphens.", { maxLength: 40 }),
-      field("policyRepo", "Policy repository", "A repository reference only. This version does not read, sync or verify the repository.", { placeholder: "github.com/your-org/ai-policies" }),
-      field("emails", "Organization contact emails", "Separate addresses with commas or new lines. Contacts are recorded locally, not invited or notified.", { multiline: true, maxLength: 5100 }),
+      field("name", "Organization name", "Required to name this organization in your workspace header.", { maxLength: 120, autocomplete: "organization" }),
+      field("shortId", "Organization short ID", "Required local organization label. Use lowercase letters, digits and single hyphens; for example your-org.", { maxLength: 40 }),
+      field("policyRepo", "Policy repository", "Required reference for your organization policy: host/owner/repository or an HTTPS URL. No credentials or query parameters. This setup does not connect the repository.", { placeholder: "github.com/your-org/ai-policies" }),
+      field("emails", "Organization contact emails", "At least one contact is required for Admin setup. Enter up to 20 distinct emails separated by commas or new lines; they are stored locally.", { multiline: true, maxLength: 5100 }),
     );
     elements.setupContent.append(group);
   }
   function renderCapabilities() {
     elements.setupDescription.textContent = editing
-      ? "Your saved choices are selected exactly as saved. Change any choice or skip all assistance. These requests are separate from your AI coding clients."
-      : "All six current assistance requests start selected for new setups. Deselect any, keep just one, or skip all. This is a Workbench preference default, not a package recommendation.";
+      ? "Optional future assistance preferences. Changes save with your setup; integrations are not connected yet."
+      : "Choose any future assistance you are interested in. These integrations are not connected yet.";
     const group = el("fieldset", "setup-capabilities");
     group.append(el("legend", "sr-only", "Optional AIH capabilities"));
     for (const capability of CAPABILITIES) {
@@ -114,7 +121,7 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
   function renderClients() {
     elements.setupDescription.textContent = "Select the AI coding clients you use. The list comes from the installed Core package's public nativeClientIds; its order is not a ranking. Selecting one does not install it or verify a connection.";
     if (targets === null) {
-      elements.setupContent.append(el("p", "setup-notice", `${targetReason} Existing selections stay saved; use Skip clients to clear them. You can continue without adding clients.`));
+      elements.setupContent.append(el("p", "setup-notice", `${targetReason} Existing selections stay saved. You can continue without adding clients.`));
       return;
     }
     const group = el("fieldset", "setup-clients");
@@ -128,9 +135,9 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
       label.append(box, ...clientNodes(labels, target));
       group.append(label);
     }
-    elements.setupContent.append(group, el("p", "text-outline mt-4 text-[11px]", "Your explicit choices carry into the Workbench's AI tools control. You can change clients there later; your experience stays fixed."));
+    elements.setupContent.append(group, el("p", "text-outline mt-4 text-[11px]", "Your explicit choices carry into the Workbench's AI tools control. You can change clients there later, or use Mode to change your experience."));
     const unlisted = draft.clients.filter((client) => !targets.includes(client));
-    if (unlisted.length) elements.setupContent.append(el("p", "setup-notice mt-4", `Saved clients no longer listed by this Core stay selected: ${unlisted.join(", ")}. Skip clients clears all selections.`));
+    if (unlisted.length) elements.setupContent.append(el("p", "setup-notice mt-4", `Saved clients no longer listed by this Core stay selected: ${unlisted.join(", ")}.`));
   }
   function renderReviewer() {
     const wrapper = el("div", "space-y-1.5 mb-6");
@@ -194,10 +201,10 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
     elements.setupCancel.hidden = !editing;
     elements.setupCancel.disabled = saving;
     elements.setupFixedExperience.hidden = !editing || loading || retryLoad;
-    elements.setupFixedExperience.textContent = editing ? `${experienceLabel(draft)} · Experience and role stay fixed. To change them, delete the settings file and restart. The review step shows its full path.` : "";
+    elements.setupFixedExperience.textContent = editing ? `${experienceLabel(draft)} · Change mode using the Mode control in the header.` : "";
     elements.setupSkip.hidden = loading || retryLoad || !["capabilities", "clients"].includes(current());
     elements.setupSkip.disabled = saving;
-    elements.setupSkip.textContent = current() === "clients" ? "Skip clients" : "Skip all assistance";
+    elements.setupSkip.textContent = editing ? "Keep current choices" : current() === "clients" ? "Choose tools later" : "Skip assistance";
     renderProgress();
     if (loading || retryLoad) {
       elements.setupTitle.textContent = editing ? "Loading your saved information" : "Opening your Workbench";
@@ -212,7 +219,7 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
       elements.setupDescription.textContent = "Choose a starting experience. This setup is saved locally and reopened next time.";
       elements.setupContent.append(radioCards("experience", [
         { value: "vibe", title: "Vibe coder", description: "A personal starting point for exploring the catalog and choosing optional assistance. No enterprise organization is required." },
-        { value: "enterprise", title: "Enterprise", description: "Choose Admin or Developer. Admins record organization details; Developers open the admin-supplied policy in the Workbench." },
+        { value: "enterprise", title: "Enterprise", description: "Choose Admin or Developer. Admins maintain organization details; Developers prepare project policies for their configured organization host." },
       ], draft.experience, (value) => {
         draft.experience = value;
         draft.role = null;
@@ -222,7 +229,7 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
       elements.setupDescription.textContent = "Your choice determines the setup questions and the saved experience. A self-declared role is not verified enterprise access.";
       elements.setupContent.append(radioCards("role", [
         { value: "admin", title: "Admin", description: "Record organization details, its policy repository and contact people for this local setup." },
-        { value: "developer", title: "Developer", description: "Open the policy supplied by your admin after setup, then prepare a separate project policy." },
+        { value: "developer", title: "Developer", description: "Prepare a project policy. Your configured execution host reads your administrator's organization policy." },
       ], draft.role, (value) => {
         draft.role = value;
         draft.organization = value === "admin" ? { name: "", shortId: "", policyRepo: "", emails: [] } : null;
@@ -236,14 +243,14 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
         : draft.role === "developer"
           ? "Your role and assistance preferences persist. The organization policy your admin publishes is read by the configured execution host; it is not chosen or approved by this profile."
           : "Your organization details and preferences persist. Policy authority and connected assistance are follow-on work.";
-      elements.setupContent.append(renderReviewer(), setupSummary(draft, location));
+      elements.setupContent.append(renderReviewer(), setupSummary(draft, location, labels));
     }
     elements.setupTitle.focus();
     elements.setupContent.scrollTop = 0;
   }
   async function advance() {
     if (loading || saving) return;
-    if (retryLoad) return start(editing);
+    if (retryLoad) return start(editing, editSection);
     let errors = {};
     if (current() === "experience" && !draft.experience) errors.experience = "Choose Vibe coder or Enterprise to continue.";
     if (current() === "role" && !draft.role) errors.role = "Choose Admin or Developer to continue.";
@@ -251,7 +258,12 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
     if (current() === "review") errors = settingsErrors(draft);
     if (Object.keys(errors).length) {
       error(Object.values(errors).join(" "));
-      for (const key of Object.keys(errors)) fields.get(key)?.setAttribute("aria-invalid", "true");
+      for (const key of Object.keys(errors)) {
+        const input = fields.get(key);
+        input?.setAttribute("aria-invalid", "true");
+        const message = input && document.getElementById(`${input.id}-error`);
+        if (message) { message.textContent = errors[key]; message.hidden = false; }
+      }
       fields.get(Object.keys(errors)[0])?.focus();
       return;
     }
@@ -273,9 +285,10 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
       elements.setupCancel.disabled = false;
     }
   }
-  async function start(editMode = false) {
+  async function start(editMode = false, section = null) {
     const sequence = ++loadSequence;
     editing = editMode;
+    editSection = editMode && ["organization", "capabilities", "clients", "review"].includes(section) ? section : null;
     loading = true;
     retryLoad = false;
     savedProblem = null;
@@ -324,10 +337,10 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
   elements.setupCancel.addEventListener("click", cancelEdit);
   elements.setupForm.addEventListener("submit", (event) => { event.preventDefault(); void advance(); });
   elements.setupBack.addEventListener("click", () => { if (step > 0 && !saving) { step -= 1; render(); } });
-  elements.setupSkip.addEventListener("click", () => { if (!saving && !loading) { draft[current()] = []; step += 1; render(); } });
+  elements.setupSkip.addEventListener("click", () => { if (!saving && !loading) { step += 1; render(); } });
   return {
     start,
-    edit: () => start(true),
+    edit: section => start(true, section),
     setTargets(coreTargets) {
       const published = publishedClients(coreTargets);
       targets = published ? published.ids : null;

@@ -112,12 +112,11 @@ test("oversized or unexpected values are rejected", () => {
   assert.ok(settingsErrors({ ...enterprise(), organization: { ...enterprise().organization, secret: "not a settings field" } }).organization);
 });
 
-test("all current assistance choices default on only in new drafts", () => {
+test("new setup does not request unconnected assistance without a choice", () => {
   const first = newSetupSettings();
-  assert.equal(first.capabilities.length, 6);
-  assert.deepEqual(first.capabilities, CAPABILITIES.map(({ id }) => id));
-  first.capabilities.pop();
-  assert.equal(newSetupSettings().capabilities.length, 6);
+  assert.deepEqual(first.capabilities, []);
+  first.capabilities.push(CAPABILITIES[0].id);
+  assert.deepEqual(newSetupSettings().capabilities, []);
   assert.deepEqual(emptySettings().capabilities, []);
 });
 
@@ -208,6 +207,70 @@ test("settings update HTTP route enforces JSON, same origin and fixed persona", 
 });
 
 const withReviewer = (settings, reviewer = { kind: "individual", id: "alice" }) => ({ ...settings, reviewer });
+
+test("mode switching saves all three modes and preserves the latest unrelated preferences", (t) => {
+  const { store, settingsPath } = fixture(t);
+  store.create(withReviewer({ ...vibe(), capabilities: ["headroom"], clients: ["fixture-client-a"] }));
+  // A client change made while a mode popup is open must survive its save.
+  store.updateClients({ clients: ["fixture-client-b"] });
+  const modes = [
+    { experience: "enterprise", role: "admin", organization: enterprise().organization },
+    { experience: "enterprise", role: "developer", organization: null },
+    { experience: "vibe", role: null, organization: null },
+  ];
+  for (const mode of modes) {
+    const result = store.switchMode(mode);
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.settings, withReviewer({ ...vibe(), ...mode, capabilities: ["headroom"], clients: ["fixture-client-b"] }));
+    assert.deepEqual(createSettingsStore({ coreTargets, settingsPath }).read().settings, result.settings);
+  }
+  assert.deepEqual(readdirSync(join(settingsPath, "..")), ["settings.v1.json"]);
+});
+
+test("invalid mode changes leave saved setup bytes unchanged", (t) => {
+  const { store, settingsPath } = fixture(t);
+  store.create(vibe());
+  const before = readFileSync(settingsPath, "utf8");
+  for (const body of [null, [], {},
+    { experience: "enterprise", role: "admin", organization: null },
+    { experience: "enterprise", role: "admin", organization: { ...enterprise().organization, emails: [] } },
+    { experience: "enterprise", role: "owner", organization: null },
+    { experience: "vibe", role: "admin", organization: null },
+    { experience: "enterprise", role: "developer", organization: enterprise().organization },
+    { experience: "vibe", role: null, organization: null, clients: [] },
+  ]) {
+    assert.equal(store.switchMode(body).ok, false);
+    assert.equal(readFileSync(settingsPath, "utf8"), before);
+  }
+});
+
+test("mode changes require saved setup and preserve clients no longer published by Core", (t) => {
+  const { store, settingsPath } = fixture(t);
+  const mode = { experience: "enterprise", role: "developer", organization: null };
+  assert.equal(store.switchMode(mode).status, 409);
+  store.create({ ...vibe(), clients: ["fixture-client-a"] });
+  const offline = createSettingsStore({ coreTargets: null, settingsPath });
+  assert.deepEqual(offline.switchMode(mode).settings.clients, ["fixture-client-a"]);
+});
+
+test("mode HTTP route enforces origin and JSON and validates required Admin details", async (t) => {
+  const { store, settingsPath, directory } = fixture(t);
+  store.create(vibe());
+  const server = createStaticServer(directory, createApi({ summary: { coreTargets }, settingsPath }));
+  const address = await listen(server, 0);
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+  const base = `http://127.0.0.1:${address.port}`;
+  const mode = { experience: "enterprise", role: "admin", organization: enterprise().organization };
+  const post = (body, headers = {}) => fetch(`${base}/api/workbench-settings/mode`, {
+    method: "POST", headers: { origin: base, "content-type": "application/json", ...headers }, body: JSON.stringify(body),
+  });
+  assert.equal((await post(mode, { origin: "https://example.com" })).status, 403);
+  assert.equal((await post(mode, { "content-type": "text/plain" })).status, 415);
+  assert.equal((await post({ ...mode, organization: null })).status, 422);
+  assert.deepEqual(store.read().settings, vibe());
+  assert.equal((await post(mode)).status, 200);
+  assert.deepEqual((await fetch(`${base}/api/workbench-settings`).then(r => r.json())).settings, { ...vibe(), ...mode });
+});
 
 test("an optional reviewing identity saves, reopens in a new store and clears on update", (t) => {
   const { store, settingsPath } = fixture(t);
