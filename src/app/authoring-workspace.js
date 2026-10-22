@@ -126,7 +126,8 @@ export function createAuthoringWorkspace(client) {
   const installedPanel = createInstalledPanel({ client, el, button, onRemoved: () => installPanel.recheck(), onInventory: view => installPanel.setManaged(view?.setupInstalled) });
   // Changing the folder discards what this page prepared for the old one, then checks the new one.
   const folderRow = createProjectFolderRow({ el, button, busy: () => installPanel.busy || installedPanel.busy, onChanged: async () => {
-    client.discardHostWork(); await client.loadCatalog(); installPanel.recheck(); await installedPanel.reset();
+    client.discardHostWork(); installedPanel.clear(); installPanel.recheck();
+    try { await client.loadCatalog(); } finally { installPanel.recheck(); await installedPanel.refresh(); }
   } });
   void folderRow.refresh();
   document.addEventListener('aih:policy-review-open', () => { void folderRow.refresh(); void installedPanel.refresh(); });

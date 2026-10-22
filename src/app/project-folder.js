@@ -75,7 +75,7 @@ export function createProjectFolderRow({ el, button, busy = () => false, onChang
       const result = await response.json();
       if (result.status !== 'ok') { message.textContent = `Can't use this folder: ${result.reason ?? result.error ?? 'the Workbench did not say why.'}`; return; }
       show({ project: result.project, source: result.source }); form.hidden = true; input.value = '';
-      message.textContent = `Now using ${projectName(result.project)}. Anything prepared for the previous folder was discarded.`;
+      message.textContent = `Now using ${projectName(result.project)}. What this page had checked for the previous folder was discarded.`;
       await onChanged(state);
     } catch (error) { message.textContent = `Can't use this folder: ${error.message}`; }
     finally { choosing = false; use.disabled = false; use.removeAttribute('aria-busy'); }

@@ -68,7 +68,7 @@ function refusal(result) {
 
 export function createInstallPanel({ client, el, button, onInstalled = () => {} }) {
   const node = el('section', 'p-4 rounded border-2 border-primary space-y-3'); node.id = 'install-panel'; node.hidden = true;
-  const title = el('h3', 'text-base font-semibold text-on-surface', 'Install these items into your project');
+  const title = el('h3', 'text-base font-semibold text-on-surface', 'Install your setup into your project');
   const where = el('p', 'font-mono text-[11px] text-outline break-all');
   const items = el('ul', 'list-disc pl-5 space-y-0.5');
   const filesHeading = el('p', 'font-medium', 'Files that will be added');
@@ -84,7 +84,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
 
   function show(review) {
     const rows = installFiles(review), project = review?.target?.project;
-    title.textContent = `Install these items into ${projectName(project)}`;
+    title.textContent = `Install your setup into ${projectName(project)}`;
     where.textContent = project ?? '';
     filesHeading.textContent = installSummary(rows, { managed }).heading;
     files.replaceChildren(...rows.map(row => el('li', '', `${row.action}  ${row.path}`)));
@@ -138,8 +138,8 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
     // No project folder: there is nothing to preview until one is chosen above.
     if (!client.catalog.executionAvailable) {
       shownFor = undefined; preview = undefined; install.disabled = true; delete message.dataset.outcome;
-      title.textContent = 'Install these items into your project'; where.textContent = ''; filesHeading.textContent = 'Files that will be added'; files.replaceChildren();
-      message.textContent = 'Choose a project folder above to install these items.'; return;
+      title.textContent = 'Install your setup into your project'; where.textContent = ''; filesHeading.textContent = 'Files that will be added'; files.replaceChildren();
+      message.textContent = 'Choose a project folder above to install your setup.'; return;
     }
     const key = client.bytes.join(',');
     if (key === shownFor) return;
@@ -149,7 +149,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
   // folder, so they are dropped and it is checked again (once the preview already out has come back).
   function recheck() {
     message.textContent = ''; delete message.dataset.outcome; shownFor = undefined; preview = undefined; install.disabled = true;
-    files.replaceChildren(); where.textContent = ''; title.textContent = 'Install these items into your project';
+    files.replaceChildren(); where.textContent = ''; title.textContent = 'Install your setup into your project';
     if (previewing) { again = true; return; }
     render();
   }

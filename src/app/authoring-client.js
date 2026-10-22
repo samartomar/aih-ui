@@ -26,7 +26,7 @@ const asDraft = ({ originalBytes: _kept, ...value }) => ({ ...value,
 export function createAuthoringClient({ sessionRecovery = true } = {}) {
   const headers = { 'x-aih-client': crypto.randomUUID() };
   const listeners = new Set();
-  let catalog, bytes = new Uint8Array(), intent, candidate, draftValue, compiled, revision = 0, catalogRevision = 0, hostRevision = 0, reviewEvidence = [], evidenceRevision = 0, recipient, judgments = [], judgmentSummary;
+  let catalog, bytes = new Uint8Array(), intent, candidate, draftValue, compiled, revision = 0, catalogRevision = 0, hostRevision = 0, folderRevision = 0, reviewEvidence = [], evidenceRevision = 0, recipient, judgments = [], judgmentSummary;
   let dirty = false, checkpoint, recoveryAvailable, startupSource;
   const artifactBytes = () => draftValue?.envelopeBytes ?? bytes;
   const notify = () => {
@@ -107,12 +107,17 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
     invalidate() { revision++; candidate = undefined; notify(); return revision; },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     request,
-    // Host results still out (an Install preview, say) were for the previous project folder; they come back superseded.
-    discardHostWork() { hostRevision++; },
+    // Host results still out (an Install preview, an installed list) were for the previous project folder; they come back superseded.
+    discardHostWork() { hostRevision++; folderRevision++; },
     async requestHost(operation, body = {}) {
-      const attempt = ++hostRevision, draft = revision;
+      const attempt = ++hostRevision, draft = revision, folder = folderRevision;
       const result = await request(operation, body);
-      return attempt === hostRevision && draft === revision ? result : { status: 'superseded' };
+      return attempt === hostRevision && draft === revision && folder === folderRevision ? result : { status: 'superseded' };
+    },
+    // A read of the current project folder (the installed list): superseded only by a folder change, so it never supersedes Install.
+    async requestCurrent(operation, body = {}) {
+      const folder = folderRevision, result = await request(operation, body);
+      return folder === folderRevision ? result : { status: 'superseded' };
     },
     setReviewEvidence(values) { revision++; evidenceRevision++; candidate = undefined; reviewEvidenceIds = []; reviewEvidence = values.map(value => value.slice()); notify(); },
     setConfiguredReviewEvidence(scanId) { revision++; evidenceRevision++; candidate = undefined; reviewEvidence = []; reviewEvidenceIds = [scanId]; notify(); },

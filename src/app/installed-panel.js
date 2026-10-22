@@ -101,7 +101,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
     }
   }
 
-  /** Reads the inventory again. A plain request: listing reads nothing from the draft and must not supersede Install. */
+  /** Reads the inventory again. It reads nothing from the draft and must not supersede Install; a folder change supersedes it. */
   async function refresh({ keepMessage = false } = {}) {
     node.hidden = !available();
     if (node.hidden || removing) return;
@@ -110,13 +110,13 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
     if (!client.catalog.executionAvailable) { list.replaceChildren(); note.textContent = 'Choose a project folder above to see what is installed there.'; onInventory(undefined); return; }
     note.textContent = 'Checking what is installed…';
     try {
-      const inventory = await client.request('managed');
-      if (read !== inventoryRead) return;
+      const inventory = await client.requestCurrent('managed');
+      if (read !== inventoryRead || inventory?.status === 'superseded') return;
       const view = groupInstalled({ inventory, policy: policyDocument(), intent: client.intent, label });
       show(view); onInventory(view);
     } catch (error) { if (read === inventoryRead) { list.replaceChildren(); note.textContent = `Cannot show what is installed: ${error.message}`; onInventory(undefined); } }
   }
   // A different project folder: the list and any removal still being previewed belong to the old one.
-  function reset() { inventoryRead++; list.replaceChildren(); message.textContent = ''; delete message.dataset.outcome; return refresh(); }
-  return { node, refresh, reset, get busy() { return removing; } };
+  function clear() { inventoryRead++; list.replaceChildren(); message.textContent = ''; delete message.dataset.outcome; note.textContent = 'Checking what is installed…'; }
+  return { node, refresh, clear, get busy() { return removing; } };
 }
