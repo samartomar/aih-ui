@@ -82,6 +82,8 @@ export async function createAuthoringAdapter(consumerDir, { frictionEvidence } =
     evidenceSources: await selectedJson('AIH_SCAN_EVIDENCE_SOURCES'),
     evidenceDetectorIds: await selectedJson('AIH_SCAN_EVIDENCE_PROVIDERS'),
     previousCatalogRoot: process.env.AIH_CONSUMER_PREVIOUS_CATALOG,
+    // Test and proof hosts only: browse the review-note test fixture. The candidate clears every AIH_* setting it does not set.
+    reviewNoteFixture: process.env.AIH_REVIEW_NOTE_FIXTURE === '1',
     ...(evidence ? { frictionEvidence: evidence } : {}),
     ...(process.env.AIH_UPDATE_SOURCE_CATALOG_ROOTS ? { updateSourceCatalogRoots: process.env.AIH_UPDATE_SOURCE_CATALOG_ROOTS.split(delimiter) } : {}),
     ...(process.env.AIH_MAINTENANCE_SOURCE ? { maintenanceSource: await fileMaintenanceSource(consumerDir, process.env.AIH_MAINTENANCE_SOURCE) } : {}) });

@@ -22,7 +22,8 @@ import { createCatalogUpdateSource } from './update-source.mjs';
 import { inspectorSummary } from './scan-evidence.mjs';
 import { createScanEvidenceHost } from './scan-evidence-host.mjs';
 
-export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, updateSourceCatalogRoots, evidenceSources, evidenceDetectorIds, port = 0, createExecutionHost = createHost } = {}) {
+export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, updateSourceCatalogRoots, evidenceSources, evidenceDetectorIds, reviewNoteFixture = false, port = 0, createExecutionHost = createHost } = {}) {
+  // `reviewNoteFixture` browses the review-note test fixture; only test and proof hosts set it.
   // `createExecutionHost` is createHost; tests pass one that holds Install work while they act.
   // The fixture is a test source; a host names one update source, so both together would be ambiguous.
   if (updateSourceCatalogRoots !== undefined && maintenanceSource) throw new Error('Configure one update source: Catalog package roots or the test fixture, not both.');
@@ -53,7 +54,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   // One source object per host, so the last time each root was read lives as long as the server.
   const updateSource = updateSourceCatalogRoots !== undefined ? createCatalogUpdateSource({ roots: updateSourceCatalogRoots, installedPackage: release.package }) : null;
   if (updateSource) maintenanceSource = () => updateSource.read();
-  const mixedService = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, historicalInventories, maintenanceSource, frictionEvidence, observeCheckout });
+  const mixedService = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, historicalInventories, maintenanceSource, frictionEvidence, observeCheckout, reviewNoteFixture });
   const authoringRoots = { maintained: catalogRoot };
   // Startup inventories are staged once, when the first project folder is known. Concurrent callers share the one run,
   // and the roots are published only once every file is written; a failed run is retried by the next caller.
@@ -116,7 +117,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
         scanEvidence: createScanEvidenceHost({ sources: evidenceSources, packageRoot: catalogRoot, trust: reviewTrust, detectorIds: evidenceDetectorIds }) };
       clients.set(id, client);
       client.ready = (async () => {
-        client.mixed = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, historicalInventories, maintenanceSource, frictionEvidence, observeCheckout });
+        client.mixed = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, historicalInventories, maintenanceSource, frictionEvidence, observeCheckout, reviewNoteFixture });
         client.recipeMaterials = client.mixed.inventories.flatMap(i => i.materials ?? []);
         client.host = clientHost(client);
       })();
@@ -294,7 +295,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const result = await startConsumer({ projectRoot: process.env.AIH_CONSUMER_PROJECT, controls,
     organizationSource: process.env.AIH_ORGANIZATION_SOURCE ? JSON.parse(await readFile(process.env.AIH_ORGANIZATION_SOURCE, 'utf8')) : undefined,
     reviewTrust: process.env.AIH_REVIEW_TRUST ? JSON.parse(await readFile(process.env.AIH_REVIEW_TRUST, 'utf8')) : undefined,
-    previousCatalogRoot: process.env.AIH_CONSUMER_PREVIOUS_CATALOG,
+    previousCatalogRoot: process.env.AIH_CONSUMER_PREVIOUS_CATALOG, reviewNoteFixture: process.env.AIH_REVIEW_NOTE_FIXTURE === '1',
     ...(process.env.AIH_UPDATE_SOURCE_CATALOG_ROOTS ? { updateSourceCatalogRoots: process.env.AIH_UPDATE_SOURCE_CATALOG_ROOTS.split(delimiter) } : {}),
     port: Number(process.env.AIH_CONSUMER_PORT ?? 4817) });
   console.log(`Policy Workbench: ${result.origin}`);

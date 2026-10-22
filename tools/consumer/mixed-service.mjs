@@ -14,7 +14,7 @@ const encode = value => new TextEncoder().encode(value);
 const bytesOf = value => Array.isArray(value) ? Uint8Array.from(value) : undefined;
 const WORKSPACE_OPERATIONS = ['workspace-read', 'workspace-edit', 'workspace-plan', 'workspace-bind', 'workspace-unbind', 'workspace-verify', 'workspace-export'];
 // `observeCheckout(root)` is the host's read of one local checkout (see ./workspace-host.mjs); a service made without one cannot inspect folders.
-export async function createMixedService(maintained, { suppliedInventories, familyInventories = [], historicalInventories = [], maintenanceSource, frictionEvidence, observeCheckout } = {}) {
+export async function createMixedService(maintained, { suppliedInventories, familyInventories = [], historicalInventories = [], maintenanceSource, frictionEvidence, observeCheckout, reviewNoteFixture = false } = {}) {
   async function supplied(snapshot, id = 'notes') {
     const input = { id, kind: 'local', locator: { input: id }, resolvedIdentity: { sha256: await digestBytes(snapshot.declarationBytes) } };
     const result = await intakeDeclaration({ input, ...snapshot, materialSource: { kind: 'local', input: id } });
@@ -34,6 +34,10 @@ export async function createMixedService(maintained, { suppliedInventories, fami
   const maintainedInventories = [maintained, ...familyInventories];
   const current = [...maintainedInventories, notes], all = [...current, changed];
   for (const entry of historicalInventories) if (!all.some(value => value.release.sha256 === entry.release.sha256)) all.push(entry);
+  // The review-note fixture is test material. It stays resolvable for exact saved reads, maintenance and reconciliation,
+  // but only a host that asks for it (a test or proof host, or one that supplies its own inventories) browses it.
+  const browsesNotes = reviewNoteFixture || suppliedInventories?.[0] !== undefined;
+  const browsed = () => browsesNotes ? current : current.filter(entry => entry !== notes);
   const candidates = mode => mode === 'missing' ? maintainedInventories : mode === 'updated' ? [...maintainedInventories, changed] : current;
   // The host's source is a fixture list of inventories or an update source's read; one that cannot be read at all is null.
   const readSource = async () => {
@@ -82,11 +86,11 @@ export async function createMixedService(maintained, { suppliedInventories, fami
       if (!all.some(entry => entry.release.sha256 === inventory.release.sha256)) all.push(inventory);
       if (!current.some(entry => entry.release.sha256 === inventory.release.sha256)) current.push(inventory);
     },
-    catalog() { return { executionAvailable: false, description: 'Installed Catalog families and independently authored review-note. Template is an authored demonstration. Family grouping preserves upstream origins and exact identities.',
-      items: current.flatMap(entry => entry.release.items.map(item => ({ ...item, root: root(entry, item), package: entry.release.package,
+    catalog() { return { executionAvailable: false, description: browsesNotes ? 'Installed Catalog families and independently authored review-note. Template is an authored demonstration. Family grouping preserves upstream origins and exact identities.' : 'Installed Catalog families. Family grouping preserves upstream origins and exact identities.',
+      items: browsed().flatMap(entry => entry.release.items.map(item => ({ ...item, root: root(entry, item), package: entry.release.package,
         family: entry.family ?? (entry === maintained ? 'Catalog' : 'Independent'),
         sources: entry.release.sources.filter(source => item.sourceIds.includes(source.id)) }))),
-      templates: notes.templates.map(t => ({ ...t, releaseSha256: notes.release.sha256 })) }; },
+      templates: browsesNotes ? notes.templates.map(t => ({ ...t, releaseSha256: notes.release.sha256 })) : [] }; },
     async run(operation, body) {
       if (operation === 'source-material') {
         const [releaseSha256, itemId] = String(body.target ?? '').split('/');

@@ -13,7 +13,7 @@ import { intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { installedFamilies } from './installed-families.mjs';
 import { addFromCatalog, closePolicyDrawer, drawer, openPolicyDrawer, openPolicyFileActions, openPolicySection } from './policy-drawer.mjs';
-import { openPolicyWorkspace, openSetupAdvanced } from './advanced-browser.mjs';
+import { openPolicyWorkspace, openSetupAdvanced, chooseFamily } from './advanced-browser.mjs';
 
 const NOTE = 'consumer-proof.review-note', PERSONAL = 'personal.skill.example', OPENED = 'Unresolved draft opened', REVIEW = 'maintenance-review';
 const encode = value => new TextEncoder().encode(value), decode = bytes => new TextDecoder().decode(bytes);
@@ -134,7 +134,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
   const shownChoices = async page => (await page.locator('#policy-draft-roots > div').evaluateAll(rows => rows.map(row => [row.dataset.itemId, row.dataset.status]))).sort();
   const draftRevision = async page => Number(/Draft revision (\d+)/.exec(await page.locator('#policy-draft-note').textContent())?.[1]);
   const choose = async (page, family, id) => {
-    await page.locator('#nav-sources').click(); await page.locator('#browse-support').selectOption('all'); await page.locator('#browse-family').selectOption(family);
+    await page.locator('#nav-sources').click(); await page.locator('#browse-support').selectOption('all'); await chooseFamily(page, family);
     await addFromCatalog(page, id);
   };
   // The evidence panel is the existing review flow's own: open it, then supply the original evidence bytes.

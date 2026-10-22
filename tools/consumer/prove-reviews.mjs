@@ -15,7 +15,7 @@ const output = process.argv[2]; await mkdir(output, { recursive: true });
 const catalogRoot = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
 const installed = await readInstalledRelease({ root: catalogRoot, sourceInput: 'maintained' });
 assert.equal(installed.valid, true);
-const mixed = await createMixedService({ release: installed.release, materialSource: installed.source });
+const mixed = await createMixedService({ release: installed.release, materialSource: installed.source }, { reviewNoteFixture: true });
 const inventory = mixed.inventories.find(entry => entry.input?.id === 'notes');
 const source = await mkdtemp(join(tmpdir(), 'ui5-browser-source-'));
 const catalogSource = await mkdtemp(join(tmpdir(), 'ui5-browser-catalog-'));
@@ -34,7 +34,8 @@ try {
   const catalogArtifact = await prepareArtifact({ report: catalogScan.report, annexes: catalogScan.annexes.map(a => ({ id: a.id, bytes: Buffer.from(a.bytesBase64, 'base64') })) });
   const catalogArtifactPath = join(output, 'catalog-review-evidence.unsigned.json'); await writeFile(catalogArtifactPath, catalogArtifact.bytes);
   const { chromium } = await import(process.env.PLAYWRIGHT_MODULE);
-  started = await startConsumer(); browser = await chromium.launch({ headless: true });
+  started = await startConsumer({ reviewNoteFixture: true }); // a proof host: it browses the review-note fixture
+  browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ acceptDownloads: true }); page.setDefaultTimeout(15_000); page.on('pageerror', e => errors.push(e.message));
   await page.goto(`${started.origin}/authoring`);
   await page.locator('#summary').filter({ hasText: '"roots"' }).waitFor();

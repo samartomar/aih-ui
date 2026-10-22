@@ -86,6 +86,23 @@ test('ordinary authoring exposes all four packaged families with empty initial c
   } finally { await new Promise(resolve => started.server.close(resolve)); }
 });
 
+test('an ordinary host does not browse the review-note test fixture; a test host enables it explicitly', async () => {
+  const ordinary = await startConsumer(), testHost = await startConsumer({ reviewNoteFixture: true });
+  try {
+    const read = async host => (await fetch(`${host.origin}/api/authoring-catalog`)).json();
+    const plain = await read(ordinary), fixture = await read(testHost);
+    assert.equal(plain.items.some(item => item.id === 'consumer-proof.review-note'), false);
+    assert.equal(plain.items.some(item => item.family === 'Independent'), false);
+    assert.deepEqual(plain.templates, []);
+    assert.ok(fixture.items.some(item => item.id === 'consumer-proof.review-note' && item.family === 'Independent'));
+    assert.equal(fixture.templates.length, 1);
+    // Nothing else changes: the default release and every family are browsed on both.
+    assert.equal(plain.items.length, fixture.items.length - 1);
+  } finally {
+    await new Promise(resolve => ordinary.server.close(resolve)); await new Promise(resolve => testHost.server.close(resolve));
+  }
+});
+
 test('ordinary launch refuses a package that omits a required family export', async () => {
   const copy = await isolatedConsumer();
   try {

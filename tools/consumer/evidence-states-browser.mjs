@@ -9,7 +9,7 @@ import { digestBytes } from './primitives.mjs';
 import { intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { addFromCatalog, closePolicyDrawer, drawer } from './policy-drawer.mjs';
-import { openCatalogAdvanced, openScanReview } from './advanced-browser.mjs';
+import { openCatalogAdvanced, openScanReview, chooseFamily } from './advanced-browser.mjs';
 
 const NOTE = 'consumer-proof.review-note';
 
@@ -57,7 +57,7 @@ export async function runEvidenceStatesBrowser({ origin, output, playwrightModul
     await page.locator('#browse-family option[value="Catalog"]').waitFor({ state: 'attached' });
     assert.equal(await page.locator('#setup-dialog').isVisible(), false, 'This journey runs against a Workbench whose setup already exists.');
     await page.locator('#browse-support').selectOption('all');
-    await page.locator('#browse-family').selectOption('');
+    await chooseFamily(page, '');
 
     // a. Kind tiles count what the list shows in the same scope; tokens stay unknown.
     // The tiles sit in the catalog's Advanced section; the kind pills are the default kind control.

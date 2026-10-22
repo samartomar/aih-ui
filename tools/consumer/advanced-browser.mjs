@@ -8,6 +8,18 @@ export async function openCatalogAdvanced(page) {
   if (!await advanced.evaluate(node => node.open)) await advanced.locator(':scope > summary').click();
 }
 
+/** A framework, from the left panel. Choosing the framework already chosen leaves it chosen. */
+export async function chooseFramework(page, family) {
+  const button = page.locator(`#framework-list button[data-family="${family}"]`);
+  if (await button.getAttribute('aria-pressed') !== 'true') await button.click();
+}
+
+/** Any content family (the Catalog's other content, personal content, an independent inventory), from the Family list under Advanced. */
+export async function chooseFamily(page, family) {
+  await openCatalogAdvanced(page);
+  await page.locator('#browse-family').selectOption(family);
+}
+
 /** The Policy workspace screen, through the catalog's Advanced section. */
 export async function openPolicyWorkspace(page) {
   await openCatalogAdvanced(page);

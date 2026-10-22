@@ -10,6 +10,7 @@
 import { text } from "../app/dom.js";
 import { NOT_PUBLISHED } from "../app/absence.js";
 import { identity, searchText, sourceIdentity, sourceLabelOf } from "./entry.js";
+import { familyLabel } from "./frameworks.js";
 
 /* Nested source row that filters by source identity without naming one, used when a source
    type publishes its entries under a single identity (the npm package, for example). */
@@ -211,7 +212,8 @@ export function describeScope(row) {
     };
   }
   return {
-    name: row.identityKey,
+    // A family release is named by the Workbench's family label (frameworks.js), so the default release never reads as "Catalog".
+    name: row.type === "family" ? familyLabel(row.identityKey) : row.identityKey,
     badge: null,
     badgeTitle: null,
     revision: null,

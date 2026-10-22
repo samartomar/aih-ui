@@ -24,6 +24,8 @@ const summary = { packages: await Promise.all(packages.map(async item => ({ ...i
 const maintenanceSource = join(consumerDir, 'maintenance-source.json');
 await writeFile(maintenanceSource, JSON.stringify({ revisions: ['current'] }));
 process.env.AIH_MAINTENANCE_SOURCE = maintenanceSource;
+// A test host: its journeys browse the review-note fixture.
+process.env.AIH_REVIEW_NOTE_FIXTURE = '1';
 const frictionPath = join(consumerDir, 'friction-evidence.json');
 await writeFile(frictionPath, JSON.stringify({ entries: null }));
 process.env.AIH_FRICTION_EVIDENCE = frictionPath;
@@ -69,7 +71,7 @@ try {
     conflictFile: batch.conflictFile, procMarker: batch.procMarker, procCount: batch.procCount, userFiles: batch.userFiles });
   const { runReportPageBrowser } = await import(pathToFileURL(join(repo, 'tools/report/page-browser.mjs')));
   starting('runReportPageBrowser'); await runReportPageBrowser({ origin, consumerDir, output: join(consumerDir, 'report-page-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
-} finally { delete process.env.AIH_FRICTION_EVIDENCE; delete process.env.AIH_BATCH_FIXTURE; delete process.env.AIH_MAINTENANCE_SOURCE; await new Promise(resolve => started.server.close(resolve)); }
+} finally { delete process.env.AIH_FRICTION_EVIDENCE; delete process.env.AIH_BATCH_FIXTURE; delete process.env.AIH_MAINTENANCE_SOURCE; delete process.env.AIH_REVIEW_NOTE_FIXTURE; await new Promise(resolve => started.server.close(resolve)); }
 
 // The normal application's startup must refuse an absent required family,
 // before it can serve a deceptively incomplete inventory. Only this isolated

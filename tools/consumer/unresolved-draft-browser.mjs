@@ -8,7 +8,7 @@ import { readInstalledRelease } from '@aihq/catalog/node';
 import { readAuthoring, openDraft } from './headless.mjs';
 import { installedFamilies } from './installed-families.mjs';
 import { addFromCatalog, closePolicyDrawer, drawer, openPolicyAdvanced, openPolicyDrawer, openPolicyFileActions } from './policy-drawer.mjs';
-import { openPolicyWorkspace, openSetupAdvanced } from './advanced-browser.mjs';
+import { openPolicyWorkspace, openSetupAdvanced, chooseFamily } from './advanced-browser.mjs';
 
 const PERSONAL = 'personal.skill.example', MAINTAINED = ['mattpocock.grill-with-docs', 'mattpocock.code-review'];
 
@@ -41,7 +41,7 @@ export async function runUnresolvedDraftBrowser({ origin, output, playwrightModu
     return page;
   };
   const choose = async (page, family, id) => {
-    await page.locator('#nav-sources').click(); await page.locator('#browse-support').selectOption('all'); await page.locator('#browse-family').selectOption(family);
+    await page.locator('#nav-sources').click(); await page.locator('#browse-support').selectOption('all'); await chooseFamily(page, family);
     await addFromCatalog(page, id);
   };
   const download = async (page, trigger, path) => { const event = page.waitForEvent('download'); await trigger(); await (await event).saveAs(path); return new Uint8Array(await readFile(path)); };

@@ -9,7 +9,7 @@ import { performance } from 'node:perf_hooks';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { addFromCatalog, closePolicyDrawer, drawer, openPolicyDrawer, openSourceDetails } from './policy-drawer.mjs';
-import { openPolicyWorkspace, openScanReview, openSetupAdvanced } from './advanced-browser.mjs';
+import { openPolicyWorkspace, openScanReview, openSetupAdvanced, chooseFamily } from './advanced-browser.mjs';
 export async function runSourceFactsBrowser({ origin, output, playwrightModule }) {
   const began = performance.now();
   const { chromium } = await import(playwrightModule);
@@ -28,7 +28,7 @@ export async function runSourceFactsBrowser({ origin, output, playwrightModule }
       await page.locator('#setup-dialog').waitFor({ state: 'hidden' });
     }
     await page.locator('#browse-support').selectOption('all');
-    await page.locator('#browse-family').selectOption('ECC');
+    await chooseFamily(page, 'ECC');
     const first = page.locator('#cards-grid [data-card-id]').first();
     await first.click();
     const key = await first.getAttribute('data-card-id');
@@ -48,7 +48,7 @@ export async function runSourceFactsBrowser({ origin, output, playwrightModule }
       assert.equal((await (await response).json()).status, 'ok');
       await page.locator('#browse-family option[value="Independent"]').waitFor({ state: 'attached' });
       await page.locator('#nav-sources').click();
-      await page.locator('#browse-family').selectOption('Independent');
+      await chooseFamily(page, 'Independent');
       const item = result.value.release.items[0], facts = item.metadata.sourceFacts;
       const card = page.locator(`[data-card-id="${result.value.release.sha256}/${item.id}"]`);
       await card.click();
@@ -72,7 +72,7 @@ export async function runSourceFactsBrowser({ origin, output, playwrightModule }
     const personal = await intakePersonalFolder({ files }); assert.equal(personal.status, 'ok');
     await page.locator('#personal-folder').setInputFiles(folder);
     await page.locator('#personal-result').filter({ hasText: 'Folder validated' }).waitFor();
-    await page.locator('#browse-family').selectOption('Personal');
+    await chooseFamily(page, 'Personal');
     await page.locator('#cards-grid [data-card-id]').click();
     assert.equal(await page.locator('#details-desc').textContent(), personal.value.release.items[0].metadata.sourceFacts.description.value);
     await openSourceDetails(page); await page.getByText('Original source material (may contain sensitive values)', { exact: true }).click();
