@@ -11,4 +11,5 @@ async function request(path, body) {
 export const loadSetup = () => request("/api/workbench-settings");
 export const saveSetup = (settings) => request("/api/workbench-settings", settings);
 export const updateSetup = (settings) => request("/api/workbench-settings/update", settings);
+export const switchMode = (mode) => request("/api/workbench-settings/mode", mode);
 export const saveClients = (clients) => request("/api/workbench-settings/clients", { clients });

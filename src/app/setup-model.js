@@ -23,7 +23,7 @@ export function emptySettings() {
 
 /** UI defaults apply only to a new draft, never to saved settings. */
 export function newSetupSettings() {
-  return { ...emptySettings(), capabilities: CAPABILITIES.map(({ id }) => id) };
+  return emptySettings();
 }
 
 const plain = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
