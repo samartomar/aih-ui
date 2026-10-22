@@ -1,6 +1,7 @@
 import { el } from './dom.js';
 import { createReviewIdentity } from './review-identity.js';
 import { createScanEvidence } from './scan-evidence.js';
+import { fillBoundedOptions } from './bounded-options.js';
 
 const reasonText = {
   'subject-not-selected': 'the reviewed item is no longer selected',
@@ -22,9 +23,9 @@ const inspectedState = value => value.reportSupport === 'invalid' ? 'invalid' : 
 const stateText = {
   invalid: 'Evidence invalid: this is not a valid Scan report or artifact.',
   unsupported: 'Evidence unsupported: this Scan reader does not support the report version.',
-  unavailable: 'Evidence not assessable for this subject.',
-  mismatched: "Evidence mismatched: the report did not capture this subject's exact files.",
-  matched: "Evidence matched: the report captured this subject's exact files.",
+  unavailable: 'Evidence not assessable for this subject. Supply a supported report for the selected exact item.',
+  mismatched: "Evidence mismatched: the report did not capture this subject's exact files. Select a matching item or supply matching evidence.",
+  matched: "Evidence matched: the report captured this subject's exact files. Choose a finding, enter your reviewer and reason, then propose a review.",
 };
 const originText = judgment => judgment.origin === 'recipient' ? 'Your decision'
   : `Imported — recorded by ${judgment.owner.kind} ${judgment.owner.id}; not counted as your decision`;
@@ -40,24 +41,30 @@ export function createEvidenceReview(client, onProposal) {
     invalidate();
     client.setConfiguredReviewEvidence(scanId);
     evidence.replaceChildren(new Option(`Acquired original · ${scanId}`, '0'));
+    fillSubjects();
     if (await refresh()) status.textContent = 'Exact acquired assessment selected for review. Saved judgments remain bound until you explicitly propose a change.';
   } }));
   const form = el('div', 'space-y-2'), status = el('p', 'text-on-surface-variant'); status.setAttribute('role', 'status');
   const file = el('input'); file.type = 'file'; file.multiple = true; file.setAttribute('aria-label', 'Review evidence files');
   const evidence = el('select', 'bg-wb-input border border-wb-border rounded p-1'); evidence.setAttribute('aria-label', 'Evidence document');
   const target = el('select', 'bg-wb-input border border-wb-border rounded p-1'); target.setAttribute('aria-label', 'Evidence review subject');
+  const subjectSearch = el('input', 'bg-wb-input border border-wb-border rounded p-2'); subjectSearch.type = 'search'; subjectSearch.placeholder = 'Search selected policy subjects'; subjectSearch.setAttribute('aria-label', 'Search selected policy subjects');
+  const subjectMatches = el('p', 'text-on-surface-variant');
   const finding = el('select', 'bg-wb-input border border-wb-border rounded p-1'); finding.setAttribute('aria-label', 'Checked finding');
-  const controls = el('div', 'flex flex-wrap gap-2'); form.append(file, evidence, target, controls, status, finding);
+  const findingSearch = el('input', 'bg-wb-input border border-wb-border rounded p-2'); findingSearch.type = 'search'; findingSearch.placeholder = 'Search findings'; findingSearch.setAttribute('aria-label', 'Search checked findings');
+  const findingMatches = el('p', 'text-on-surface-variant');
+  const controls = el('div', 'flex flex-wrap gap-2'); form.append(file, evidence, subjectSearch, subjectMatches, target, controls, status, findingSearch, findingMatches, finding);
   let inspected, revision = 0;
   const action = (label, callback) => {
     const node = el('button', 'px-3 py-1.5 rounded bg-surface-container border border-wb-border', label); node.type = 'button';
-    node.addEventListener('click', async () => { try { await callback(); } catch (error) { status.textContent = error.message; } }); return node;
+    node.addEventListener('click', async () => { if (node.dataset.busy) return; node.dataset.busy = 'true'; node.setAttribute('aria-busy', 'true'); node.disabled = true; const label = node.textContent; node.textContent = 'Working…'; try { await callback(); } catch (error) { status.textContent = `${error.message} Try again after checking the selected evidence and subject.`; } finally { delete node.dataset.busy; node.removeAttribute('aria-busy'); node.textContent = label; node.disabled = false; if (node === record) syncRecord(); if (node === inspect) node.disabled = !target.value || !evidence.options.length; } }); return node;
   };
   const invalidate = () => { revision++; inspected = undefined; delete status.dataset.evidenceState; record.disabled = true; finding.replaceChildren(); };
   const subject = () => { const [releaseSha256, itemId] = target.value.split('/'); return { releaseSha256, itemId }; };
   const details = el('details'); details.append(el('summary', 'cursor-pointer text-outline', 'Checked evidence diagnostics'));
   const diagnostic = el('pre', 'whitespace-pre-wrap break-all text-[10px]'); details.append(diagnostic);
-  controls.append(action('Inspect evidence', async () => {
+  const inspect = action('Inspect evidence', async () => {
+    if (!target.value || !evidence.options.length) return;
     invalidate(); const attempt = revision;
     const result = await client.request('inspect-review', { evidenceIndex: Number(evidence.value), target: subject() });
     if (attempt !== revision) return;
@@ -66,9 +73,14 @@ export function createEvidenceReview(client, onProposal) {
     inspected = { ...result.value, target: subject() };
     const state = inspectedState(inspected); status.dataset.evidenceState = state;
     status.textContent = `${stateText[state]} ${inspected.bindings.length} findings bound to the checked subject. Producer authentication is separate; inspect diagnostics for authentication and report support.`;
-    for (const [index, binding] of inspected.bindings.entries()) finding.append(new Option(`${binding.finding.detectorId} · ${binding.finding.ruleId} · ${binding.finding.findingId}`, index));
-    record.disabled = !inspected.bindings.length;
-  }), action('Forget supplied evidence', async () => { invalidate(); file.value = ''; evidence.replaceChildren(); client.setReviewEvidence([]); if (await refresh()) status.textContent = 'Supplied evidence forgotten. Saved review history remains in the original artifact.'; }),
+    fillFindings();
+    syncRecord();
+  });
+  const fillSubjects = () => { fillBoundedOptions({ select: target, entries: client.intent?.pins ?? [], query: subjectSearch.value,
+    label: pin => pin.itemId, key: pin => `${pin.releaseSha256}/${pin.itemId}`, message: subjectMatches, placeholder: 'Choose a policy subject' }); inspect.disabled = !target.value || !evidence.options.length; };
+  subjectSearch.addEventListener('input', fillSubjects);
+  target.addEventListener('change', () => { inspect.disabled = !target.value || !evidence.options.length; });
+  controls.append(inspect, action('Forget supplied evidence', async () => { invalidate(); file.value = ''; evidence.replaceChildren(); client.setReviewEvidence([]); if (await refresh()) status.textContent = 'Supplied evidence forgotten. Saved review history remains in the original artifact.'; }),
   action('Reconsider saved reviews (optional)', async () => onProposal(await client.proposeRequest('reconsider-reviews'))));
   // Applicability is derived from the supplied evidence and identity, so either change re-reads the saved judgments.
   const refresh = async () => {
@@ -90,6 +102,11 @@ export function createEvidenceReview(client, onProposal) {
     const decision = { id: inputs.id.value, owner: { kind: ownerKind.value, id: inputs.owner.value }, actor: inputs.actor.value, recordedAt: new Date().toISOString(), disposition: disposition.value, reason: inputs.reason.value };
     onProposal(await client.proposeRequest('record-review', { evidenceIndex: Number(evidence.value), target: inspected.target, finding: binding.finding, decision }));
   }); record.disabled = true;
+  const syncRecord = () => { record.disabled = !inspected?.bindings?.length || finding.value === '' || Object.values(inputs).some(field => !field.value.trim()); };
+  const fillFindings = () => { fillBoundedOptions({ select: finding, entries: (inspected?.bindings ?? []).map((binding, index) => ({ ...binding, index })), query: findingSearch.value,
+    label: binding => `${binding.finding.detectorId} · ${binding.finding.ruleId} · ${binding.finding.findingId}`, key: binding => String(binding.index), message: findingMatches, placeholder: 'Choose a checked finding' }); syncRecord(); };
+  findingSearch.addEventListener('input', fillFindings); finding.addEventListener('change', syncRecord);
+  for (const field of Object.values(inputs)) field.addEventListener('input', syncRecord);
   form.append(ownerKind, disposition, record, details); panel.append(form);
   const as = el('div', 'flex flex-wrap gap-2 items-center'), asKind = el('select', 'bg-wb-input border border-wb-border rounded p-1'), asId = el('input', 'bg-wb-input border border-wb-border rounded p-1');
   asKind.setAttribute('aria-label', 'Your reviewer kind'); asId.setAttribute('aria-label', 'Your reviewer identity'); asId.placeholder = 'Reviewing as (identity)';
@@ -110,18 +127,16 @@ export function createEvidenceReview(client, onProposal) {
     invalidate(); const attempt = revision;
     try {
       const files = [...file.files];
-      if (files.length > 32 || files.reduce((total, file) => total + file.size, 0) > 750_000) throw new Error('Choose up to 32 evidence documents with 750 KB total bytes. Use the headless reader for larger bounded artifacts.');
+      if (files.length > 32 || files.reduce((total, file) => total + file.size, 0) > 750_000) throw new Error('Choose up to 32 evidence documents with 750 KB total bytes. Choose fewer or smaller evidence documents, then try again.');
       const loaded = await Promise.all(files.map(async file => new Uint8Array(await file.arrayBuffer())));
       if (attempt !== revision) return;
-      client.setReviewEvidence(loaded); evidence.replaceChildren(...files.map((file, index) => new Option(file.name, index)));
+      client.setReviewEvidence(loaded); evidence.replaceChildren(...files.map((file, index) => new Option(file.name, index))); fillSubjects();
       if (await refresh()) status.textContent = 'Original evidence bytes loaded. Saved judgments show their applicability to it; inspect for the selected policy subject to record a new one.';
     } catch (error) { status.textContent = error.message; }
   });
   for (const node of [evidence, target]) node.addEventListener('change', invalidate);
   client.subscribe(() => {
-    invalidate(); const selected = target.value; target.replaceChildren();
-    for (const pin of client.intent?.pins ?? []) target.append(new Option(pin.itemId, `${pin.releaseSha256}/${pin.itemId}`));
-    if ([...target.options].some(option => option.value === selected)) target.value = selected;
+    invalidate(); fillSubjects();
     history.replaceChildren();
     const judgments = client.reviewJudgments;
     for (const judgment of judgments) {
@@ -135,12 +150,15 @@ export function createEvidenceReview(client, onProposal) {
     summary.textContent = judgments.length && counts ? `${counts.recipientDecisions} of your decisions; ${counts.importedDecisions} imported (not counted as yours)` : '';
     if (!judgments.length) history.append(el('li', '', 'No human review decisions recorded. Supply evidence to review a pinned selection.'));
   });
-  document.querySelector('#policy-workspace > .p-4').append(panel);
+  fillSubjects();
+  (document.getElementById('policy-review-panel') ?? document.querySelector('#policy-workspace > .p-4')).append(panel);
   // Scan Review is this supplied-evidence review: it opens the panel, and nothing is scanned or fetched.
-  document.getElementById('nav-scan-review').addEventListener('click', () => {
-    document.getElementById('nav-policy').click();
+  const activate = () => {
+    if (document.getElementById('policy-review-panel')?.hidden) document.getElementById('review-project-changes').click();
     panel.open = true; panel.scrollIntoView({ block: 'start' }); file.focus({ preventScroll: true });
-  });
+  };
+  document.addEventListener('aih:view-changed', event => { if (event.detail?.view === 'review') activate(); });
+  if (location.hash === '#review') activate();
   return {
     // The saved setup identity is only a default: a choice made with "Use identity" this session wins.
     async setDefaultRecipient(reviewer) {

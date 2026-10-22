@@ -4,7 +4,49 @@ import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { readRelease } from '@aihq/catalog/reader';
 import { selectContentEvidence } from './scan-evidence.mjs';
+import { inspectorSummary } from './scan-evidence.mjs';
 const fixture = name => readFile(new URL(`./fixtures/scan-evidence/${name}`, import.meta.url));
+
+test('inspector reuse preserves exact evidence inputs, refreshes files and projects only summary facts', async () => {
+  const { createScanEvidenceHost } = await import('./scan-evidence-host.mjs');
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os'); const { join } = await import('node:path');
+  const root = await mkdtemp(join(tmpdir(), 'ui-inspector-'));
+  try {
+    const path = join(root, 'source.json'), input = await scanFixture();
+    const host = createScanEvidenceHost({ sources: [{ id: 'configured', path, format: 'artifact' }], packageRoot: root });
+    await writeFile(path, await fixture('s1.json'));
+    const first = await host.check(input), repeated = await host.check(input);
+    assert.equal(first.acquisitionCost.reused, false);
+    assert.equal(repeated.acquisitionCost.reused, true);
+    const unchecked = await host.check({ ...input, inventory: { release: { sha256: input.inventory.release.sha256 } } });
+    assert.equal(unchecked.status, 'invalid', 'cache cannot bypass checked-release validation');
+    assert.deepEqual(first.assessments, repeated.assessments);
+    const compact = inspectorSummary(first);
+    const selected = first.assessments.find(entry => entry.summary.scanId === first.selectedScanId);
+    assert.deepEqual(compact.assessment.summary.findings, selected.summary.findings);
+    assert.equal(compact.assessment.coverage.status, selected.coverage.status);
+    assert.equal(compact.assessment.coverage.unmatchedPathCount, selected.coverage.unmatchedPaths.length);
+    assert.equal(compact.baseline.scanId, first.baseline.scanId);
+    assert.equal(compact.baseline.evidence?.eligibility, first.baseline.evidence?.eligibility);
+    assert.ok(JSON.stringify(compact).length < JSON.stringify(first).length);
+    assert.ok(!JSON.stringify(compact).includes('targetPaths'));
+    const otherItem = await host.check({ ...input, itemId: 'beta' });
+    assert.equal(otherItem.acquisitionCost.reused, false); assert.equal(otherItem.item.itemId, 'beta');
+    const later = await host.check({ ...input, evaluationTime: '2026-10-20T02:00:00.000Z' });
+    assert.equal(later.acquisitionCost.reused, false);
+    const otherScope = await host.check({ ...input, selection: { paths: ['release/recipes/alpha.json'], excludedPaths: [] } });
+    assert.equal(otherScope.acquisitionCost.reused, false);
+    await writeFile(path, await fixture('s2.json'));
+    const changed = await host.check(input);
+    assert.equal(changed.acquisitionCost.reused, false); assert.notEqual(changed.selectedScanId, first.selectedScanId);
+    await rm(path);
+    const offline = await host.check(input);
+    assert.equal(offline.acquisitionCost.reused, false);
+    assert.equal(offline.freshness, 'last-known');
+    assert.equal(inspectorSummary(offline).checks.find(check => check.sourceId === 'configured').status, 'failed');
+  } finally { await rm(root, { recursive: true }); }
+});
 export async function scanFixture() {
   const bytes = await fixture('release.json');
   const checked = readRelease(bytes, { expectedSha256: createHash('sha256').update(bytes).digest('hex') });
