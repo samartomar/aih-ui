@@ -22,6 +22,7 @@ import { emptyView, restoreView, saveView } from "./view-state.js";
 import { text } from "../app/dom.js";
 import { catalogToolView, filterByTools, toolsNotice } from "./tool-match.js";
 import { defaultCatalogTool, saveCatalogTool, savedCatalogTool } from "./catalog-tool.js";
+import { createYourTool, yourToolModel } from "./your-tool.js";
 
 /**
  * @param onSelectEntry    called with the entry when the selection changes
@@ -44,7 +45,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     // The organization's own name, when the user has saved one. It labels the
     // organization's additions row; nothing here reads or invents it.
     organizationName: null,
-    // The header's chosen AI tools (Core ids) and whether the grid shows only content for them.
+    // The AI tools chosen in Settings (Core ids) and whether the grid shows only content for them.
     selectedTools: [],
     toolsMode: 'mine',
     // Whether items that declare no specific tool are shown beside those the Catalog lists for the chosen tool.
@@ -106,13 +107,20 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   document.getElementById('catalog-reset-filters').addEventListener('click', resetFilters);
   const filterDisclosure = document.getElementById('catalog-filter-disclosure');
   if (window.innerWidth <= 760) filterDisclosure.open = false;
-  // Above the filters, always visible: the Catalog tool the grid shows content for, Show all, and the undeclared switch.
+  // The tool line under Advanced: the Catalog tool the grid shows content for, Show all, and the undeclared switch.
   const toolsShowing = document.getElementById('catalog-tools-showing');
   const toolsToggle = document.getElementById('catalog-tools-toggle');
   const toolsUndeclared = document.getElementById('catalog-tools-undeclared');
   const toolsUnmatched = document.getElementById('catalog-tools-unmatched');
   toolsToggle.addEventListener('click', () => { state.toolsMode = state.toolsMode === 'mine' ? 'all' : 'mine'; render(); });
   toolsUndeclared.addEventListener('click', () => { state.showUndeclared = !state.showUndeclared; render(); });
+  // The header's Your tool: the same Catalog tool choice as the tool line under Advanced, in one click. Choosing a tool
+  // there filters by it again, even after Show all.
+  const yourTool = createYourTool({
+    elements: elements.yourTool,
+    onChoose: (tool) => { saveCatalogTool(tool); state.toolsMode = 'mine'; changeView({ target: tool }); },
+    onToggleUndeclared: () => { state.showUndeclared = !state.showUndeclared; render(); },
+  });
   const coreTools = () => publishedClients(state.summary?.coreTargets) ?? { ids: [], labels: {} };
   const toolOptions = () => ({ mode: state.toolsMode, coreIds: coreTools().ids, selected: state.selectedTools, labels: coreTools().labels });
 
@@ -141,6 +149,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     toolsUndeclared.title = 'Items that declare no tool, or only a generic one. The Catalog does not list them for any specific tool.';
     const notice = state.toolsMode === 'mine' ? hiddenByCore : '';
     toolsUnmatched.textContent = notice; toolsUnmatched.hidden = !notice;
+    yourTool.render(yourToolModel({ declared: declared(), tool, mode: state.toolsMode, coreIds: options.coreIds, coreLabels: options.labels,
+      coreSelected: state.selectedTools, undeclared: view.undeclared, showUndeclared: state.showUndeclared, coreHidden: hiddenByCore }));
   }
 
   function selectedEntry() {
@@ -284,7 +294,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
         }
         family.value = [...family.options].some(option => option.value === selectedFamily) ? selectedFamily : '';
         declaredNames = declaredTargets(authoring.catalog.items);
-        // The Catalog's own tool names. The default is the person's saved choice, else none: never a guess from the header's Core ids.
+        // The Catalog's own tool names. The default is the person's saved choice, else none: never a guess from the Core ids chosen in Settings.
         target.replaceChildren(new Option('choose…', ''), ...declared().map(value => new Option(value, value)));
         target.value = defaultCatalogTool(declared(), restoredView ? selectedTarget : savedCatalogTool());
         state.view.family = family.value;
@@ -307,7 +317,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       refresh();
     },
 
-    /** The header's chosen AI tools (Core ids). The grid defaults to showing content for them. */
+    /** The AI tools chosen in Settings (Core ids). The grid defaults to showing content for them. */
     setSelectedTools(clients) {
       state.selectedTools = [...(clients ?? [])];
       if (restoredView) render();

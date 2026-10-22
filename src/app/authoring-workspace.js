@@ -125,8 +125,8 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   // "Your setup" lands on Install, or on the installed list when there is nothing to install.
   const setupHeading = () => [installPanel, installedPanel].find(panel => !panel.node.hidden)?.heading ?? null;
   const reviewPanel = createPolicyReview({ client, accept, proposed, status, setupHeading, onBack: onBackToCatalog });
-  // The header's chosen tools and Core's supported list, for the Install panel's tool check.
-  // The Catalog tool name chosen above the cards is what the Install check compares with; the header's Core ids are kept for display only.
+  // The Core tools chosen in Settings and Core's supported list, for the Install panel's tool check.
+  // The Catalog tool name chosen as Your tool in the header is what the Install check compares with; the header's Core ids are kept for display only.
   const chosenTools = { selected: [], coreIds: [], labels: {}, catalogTool: savedCatalogTool() };
   document.addEventListener(CATALOG_TOOL_EVENT, event => { chosenTools.catalogTool = event.detail?.tool ?? ''; installPanel.render(); });
   const installPanel = createInstallPanel({ client, el, button, tools: () => chosenTools, onInstalled: () => void installedPanel.refresh() });

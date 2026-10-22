@@ -31,20 +31,22 @@
 <span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-medium" id="workbench-role">Local</span>
 </div>
 <div class="h-3.5 w-px bg-surface-container-high mx-0.5"></div>
-<!-- AI Tools: the AI clients @aihq/core supports as targets, and the user's
-     selection as a draft. Supported, selected and connected are kept apart:
-     nothing here checks that a tool is installed or connected. -->
+<!-- Your tool (owner decision 3): the one tool control on the default path. It holds the Catalog tool name, which
+     filters the content; the Core tools chosen in Settings show beside it only when chosen. Neither is derived from
+     the other (#95). catalog/your-tool.js renders it. -->
 <div class="relative">
-<button class="wb-header-control" type="button" id="ai-tools-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="ai-tools-pop">
+<button class="wb-header-control" type="button" id="your-tool-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="your-tool-pop">
 <span class="material-symbols-outlined text-[14px]" aria-hidden="true">bolt</span>
-<span class="font-mono" id="ai-tools-count">Loading…</span>
-<span>Tools</span>
+<span class="wb-header-muted">Your tool</span>
+<span class="font-mono font-medium" id="your-tool-value">Choose your tool</span>
+<span class="font-mono wb-header-muted" id="your-tool-core" hidden></span>
 <span class="wb-header-chevron" aria-hidden="true">▾</span>
 </button>
-<div class="hidden absolute left-0 top-7 w-64 p-2 rounded bg-surface-container-lowest border border-wb-border shadow-panel space-y-1 text-[11.5px] z-50" id="ai-tools-pop" role="group" aria-label="AI tools">
-<div class="px-1 pb-1 text-[10px] font-mono uppercase tracking-wider text-outline font-medium">Set up for</div>
-<div class="space-y-0.5 max-h-[360px] overflow-y-auto" id="ai-tools-list"></div>
-<div class="px-1 pt-1 space-y-0.5 text-[10px] text-outline leading-snug border-t border-wb-border" id="ai-tools-note"></div>
+<div class="absolute left-0 top-7 w-72 p-2 rounded bg-surface-container-lowest border border-wb-border shadow-panel space-y-1 text-[11.5px] z-50" id="your-tool-pop" hidden>
+<div class="px-1 pb-1 text-[10px] font-mono uppercase tracking-wider text-outline font-medium" id="your-tool-heading">Your tool, as the Catalog names it</div>
+<div class="space-y-0.5 max-h-[360px] overflow-y-auto" id="your-tool-list" role="menu" aria-labelledby="your-tool-heading"></div>
+<button type="button" id="your-tool-undeclared" class="w-full text-left px-1.5 py-1 rounded border border-wb-border bg-surface-container text-on-surface hover:bg-surface-container-high" aria-pressed="false" hidden></button>
+<div class="px-1 pt-1 space-y-0.5 text-[10px] text-outline leading-snug border-t border-wb-border" id="your-tool-note"></div>
 </div>
 </div>
 </div>
@@ -65,6 +67,22 @@
 <div id="workspace-actions" class="workspace-actions" hidden aria-label="Settings">
 <p class="workspace-menu-status"><span id="org-trigger-label">Loading setup…</span><br><span class="wb-header-muted">Mode:</span> <span id="workbench-experience">Local setup</span></p>
 <button class="workspace-action" type="button" id="workbench-mode-trigger" aria-haspopup="dialog" aria-controls="workbench-mode-dialog" title="Change Workbench mode">Change mode…</button>
+<!-- Core tools (moved here from the header by owner decision 3; same ids and saving): the AI clients @aihq/core
+     supports as targets, and the user's selection. Supported, selected and connected are kept apart:
+     nothing here checks that a tool is installed or connected. -->
+<div class="relative workspace-core-tools" data-menu-keep>
+<button class="workspace-action" type="button" id="ai-tools-trigger" data-menu-keep aria-haspopup="true" aria-expanded="false" aria-controls="ai-tools-pop">
+<span class="material-symbols-outlined text-[14px]" aria-hidden="true">bolt</span>
+<span class="font-mono" id="ai-tools-count">Loading…</span>
+<span>Core tools</span>
+<span class="wb-header-chevron" aria-hidden="true">▾</span>
+</button>
+<div class="hidden w-full p-2 rounded bg-surface-container-lowest border border-wb-border shadow-panel space-y-1 text-[11.5px] z-50" id="ai-tools-pop" role="group" aria-label="AI tools">
+<div class="px-1 pb-1 text-[10px] font-mono uppercase tracking-wider text-outline font-medium">Set up for</div>
+<div class="space-y-0.5 max-h-[360px] overflow-y-auto" id="ai-tools-list"></div>
+<div class="px-1 pt-1 space-y-0.5 text-[10px] text-outline leading-snug border-t border-wb-border" id="ai-tools-note"></div>
+</div>
+</div>
 <a class="workspace-action" href="readiness.html" id="nav-readiness">Check this machine</a>
 <a class="workspace-action" href="guided.html" id="nav-guided">Get started</a>
 </div>
@@ -157,6 +175,7 @@
 <div>
 <h1 class="wb-source-heading text-wb-heading font-semibold text-wb-title tracking-tight" tabindex="-1">Choose content for your AI tool</h1>
 <p class="text-on-surface-variant">Add what you want, then install it from Your setup.</p>
+<p class="text-on-surface-variant" id="your-tool-status" role="status">Loading the Catalog's tool names…</p>
 </div>
 <details class="source-policy-details"><summary>Organization source rules</summary><div class="flex items-center gap-2">
 <div class="flex items-center bg-surface-container-lowest p-0.5 rounded border border-wb-border text-[11px]" title="Needs operator input: connect current organization authority before resolving source-wide allow/hold decisions. Project choices remain available below.">
@@ -195,6 +214,14 @@
 <summary class="px-3 text-on-surface-variant cursor-pointer" id="catalog-kinds-summary">Kinds and item counts</summary>
 <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 divide-x divide-wb-border border-b border-wb-border bg-wb-matrix shrink-0 select-none w-full" id="framework-matrix-tabs"></div>
 </details>
+<!-- The tool line (moved here from above the cards by owner decision 3; same ids and behaviour): the same Catalog tool
+     choice as Your tool in the header, with Show all and the no-declared-tool switch. -->
+<div id="catalog-tools-bar" class="flex flex-wrap items-center gap-x-3 gap-y-1 p-2 rounded border border-wb-border bg-surface-container-low">
+<label class="flex flex-wrap items-center gap-2 text-on-surface"><span id="catalog-tools-showing" role="status">Choose the tool name the Catalog uses for your AI tool</span> <select class="bg-wb-input border border-wb-border rounded p-1 font-medium" id="browse-target" aria-label="Catalog tool name"></select></label>
+<button type="button" id="catalog-tools-toggle" class="px-2 py-1 rounded border border-wb-border bg-surface-container text-on-surface hover:bg-surface-container-high" hidden>Show all</button>
+<button type="button" id="catalog-tools-undeclared" class="px-2 py-1 rounded border border-wb-border bg-surface-container text-on-surface hover:bg-surface-container-high" aria-pressed="false" hidden></button>
+<p id="catalog-tools-unmatched" class="w-full text-on-surface-variant text-[11px]" hidden></p>
+</div>
 <!-- Every content family, including the Catalog's other content (its default release) and personal content. -->
 <label class="flex flex-wrap items-center gap-2 text-on-surface-variant">Family <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-family" aria-label="Content family"></select></label>
 <!-- CATALOG SCOPES: one row per published source identity -->
@@ -245,12 +272,6 @@
 <div class="catalog-cards-region flex-1 flex overflow-hidden">
 <div class="flex-1 overflow-y-auto p-4 bg-wb-cards flex flex-col gap-3">
 <div id="category-context" aria-live="polite"></div>
-<div id="catalog-tools-bar" class="flex flex-wrap items-center gap-x-3 gap-y-1 p-2 rounded border border-wb-border bg-surface-container-low">
-<label class="flex flex-wrap items-center gap-2 text-on-surface"><span id="catalog-tools-showing" role="status">Choose the tool name the Catalog uses for your AI tool</span> <select class="bg-wb-input border border-wb-border rounded p-1 font-medium" id="browse-target" aria-label="Catalog tool name"></select></label>
-<button type="button" id="catalog-tools-toggle" class="px-2 py-1 rounded border border-wb-border bg-surface-container text-on-surface hover:bg-surface-container-high" hidden>Show all</button>
-<button type="button" id="catalog-tools-undeclared" class="px-2 py-1 rounded border border-wb-border bg-surface-container text-on-surface hover:bg-surface-container-high" aria-pressed="false" hidden></button>
-<p id="catalog-tools-unmatched" class="w-full text-on-surface-variant text-[11px]" hidden></p>
-</div>
 <details id="catalog-filter-disclosure" open><summary>Catalog filters and personal content</summary><div class="flex flex-wrap gap-2 mb-3 text-[11px]" id="authoring-browse">
 <label>Support <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-support" aria-label="Target support"><option value="supported">With supported facts</option><option value="all">Full inventory</option><option value="unsupported">With unsupported facts</option><option value="unknown">With unknown facts</option><option value="not-declared">Not declared for this tool</option></select></label>
 <label class="cursor-pointer rounded border border-wb-border p-1">Choose personal folder <input id="personal-folder" type="file" webkitdirectory multiple aria-label="Choose personal folder"></label>

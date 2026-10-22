@@ -1,9 +1,9 @@
 /*
- * Which AI tool a Catalog item is for, and how that relates to the tools chosen in the header and to the
- * Catalog tool name chosen above the cards.
+ * Which AI tool a Catalog item is for, and how that relates to the Core tools chosen in Settings and to the
+ * Catalog tool name chosen as Your tool in the header.
  *
  * The item's tool comes only from the Catalog's own declaration (metadata.discovery.clientCapabilities
- * `client` and `surface`). The header's tools are Core's nativeClientIds. The two are compared by exact
+ * `client` and `surface`). The Core tools chosen in Settings are Core's nativeClientIds. The two are compared by exact
  * name only: Catalog writes `claude-code` where Core writes `claude`, and no published contract links
  * them, so this file does not translate. An item whose tool name Core does not list is "unmatched": it
  * stays visible and says which tool it is for, rather than being hidden or guessed. The catalog's real tool
@@ -58,7 +58,7 @@ export function toolsNotice(entries, { mode, coreIds, selected }) {
   if (!hidden) return '';
   const names = [...new Set(entries.filter(entry => toolRelation(entry.authoringItem, { coreIds, selected }) === 'other')
     .flatMap(entry => declaredTools(entry.authoringItem).map(tool => tool.client)))].sort().join(', ');
-  return `${hidden} ${hidden === 1 ? 'item' : 'items'} the Catalog lists only for Core tools you did not choose in the header (${names}) ${hidden === 1 ? 'is' : 'are'} also hidden.`;
+  return `${hidden} ${hidden === 1 ? 'item' : 'items'} the Catalog lists only for Core tools you did not choose in Settings (${names}) ${hidden === 1 ? 'is' : 'are'} also hidden.`;
 }
 
 const declaresSpecificTool = item => declaredTools(item).some(tool => tool.client !== ANY_TOOL);

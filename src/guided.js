@@ -43,7 +43,7 @@ const ensureClient = () => clientPromise ??= (async () => {
 const goal = () => $('goal').value.trim();
 const selectedClients = () => [...clients].filter(([, state]) => state.checked).map(([id]) => id).sort();
 const messagesOf = result => (result?.diagnostics ?? []).map(item => item.message).filter(Boolean);
-// The tool name the Catalog uses for the person's AI tool, as chosen here or above the catalog's cards; never derived from the clients.
+// The tool name the Catalog uses for the person's AI tool, as chosen here or as Your tool in the catalog's header; never derived from the clients.
 const catalogTool = () => $('catalog-tool').value;
 const inputsNow = () => ({ goal: goal(), detections, clients: selectedClients(), projectInspected: folderChosen, observations: observed, catalogTool: catalogTool() });
 const sameInputs = (a, b) => JSON.stringify(a) === JSON.stringify(b);

@@ -1,5 +1,5 @@
 /*
- * The header's AI tools control: which AI clients to set up for.
+ * The Core tools control in the Settings menu (in the header until owner decision 3 on #96): which AI clients to set up for.
  *
  * Three different facts, kept apart:
  *

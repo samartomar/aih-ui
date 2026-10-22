@@ -63,9 +63,16 @@ test('the catalog Advanced section holds the kind tiles, the catalog scopes, the
     assert.ok(inside(id, 'catalog-advanced'), `${id} is inside the catalog Advanced section`);
 });
 
-test('the default catalog keeps the search, the kind pills, the tool line and the cards outside Advanced', () => {
-  for (const id of ['catalog-search', 'kind-filters', 'catalog-tools-bar', 'browse-target', 'cards-grid', 'review-filters', 'your-setup', 'ai-tools-trigger', 'theme-toggle-btn', 'nav-sources'])
+test('the default catalog keeps the search, the kind pills, Your tool and the cards outside Advanced', () => {
+  for (const id of ['catalog-search', 'kind-filters', 'your-tool-trigger', 'your-tool-status', 'cards-grid', 'review-filters', 'your-setup', 'theme-toggle-btn', 'nav-sources'])
     assert.equal(inside(id, 'catalog-advanced'), false, `${id} stays on the default screen`);
+});
+
+test('the tool line is under Advanced and the Core tools chip is in Settings, with their ids (owner decision 3)', () => {
+  for (const id of ['catalog-tools-bar', 'browse-target', 'catalog-tools-toggle', 'catalog-tools-undeclared', 'catalog-tools-unmatched'])
+    assert.ok(inside(id, 'catalog-advanced'), `${id} is inside the catalog Advanced section`);
+  for (const id of ['ai-tools-trigger', 'ai-tools-count', 'ai-tools-pop', 'ai-tools-list', 'ai-tools-note'])
+    assert.ok(inside(id, 'workspace-actions'), `${id} is in the Settings menu`);
 });
 
 test('one Settings menu holds the workspace actions, the mode, Check this machine and Get started', () => {

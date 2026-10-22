@@ -54,9 +54,9 @@ export function installOutcome(run, files, project) {
 }
 
 /**
- * A warning naming each chosen item that does not declare the Catalog tool name the person chose above the cards, or ''.
+ * A warning naming each chosen item that does not declare the Catalog tool name the person chose as Your tool in the header, or ''.
  * `items` are Catalog items; names are compared exactly, in the Catalog's own names (see tool-match.js). With no
- * Catalog tool chosen there is nothing to compare, and the header's Core ids are never compared with Catalog names.
+ * Catalog tool chosen there is nothing to compare, and the Core ids chosen in Settings are never compared with Catalog names.
  */
 export function toolWarning(items, { catalogTool } = {}) {
   if (!catalogTool) return '';

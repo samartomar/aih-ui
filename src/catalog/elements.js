@@ -17,6 +17,8 @@ export function catalogElements() {
     "details-identity", "details-source", "details-desc", "details-capabilities",
     "details-artifacts", "detector-run-state", "detector-finding-detail",
     "statement-count", "security-statements",
+    "your-tool-trigger", "your-tool-value", "your-tool-core", "your-tool-pop", "your-tool-list",
+    "your-tool-undeclared", "your-tool-note", "your-tool-status",
   ];
   const found = collectIds(ids);
   return {
@@ -43,6 +45,16 @@ export function catalogElements() {
       visibleCount: found.visibleCount,
       visibleCaption: found.visibleCaption,
       categoryContext: found.categoryContext,
+    },
+    yourTool: {
+      trigger: found.yourToolTrigger,
+      value: found.yourToolValue,
+      core: found.yourToolCore,
+      pop: found.yourToolPop,
+      list: found.yourToolList,
+      undeclared: found.yourToolUndeclared,
+      note: found.yourToolNote,
+      status: found.yourToolStatus,
     },
     details: {
       inspectorName: found.inspectorName,

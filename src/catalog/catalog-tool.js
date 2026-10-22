@@ -1,8 +1,8 @@
 /*
- * The Catalog tool name the person chose above the cards (claude-code, kiro-ide, ...), in the Catalog's own names.
+ * The Catalog tool name the person chose as Your tool in the header (claude-code, kiro-ide, ...), in the Catalog's own names.
  *
  * It is the person's own choice, kept in this browser so the catalog, the Install panel, Get started and the
- * improvement check use the same name. It is never derived from the header's Core ids: no published contract
+ * improvement check use the same name. It is never derived from the Core ids chosen in Settings: no published contract
  * relates the two vocabularies (samartomar/aih-ui#95). Storage can be blocked; then nothing is remembered.
  */
 

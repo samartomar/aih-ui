@@ -26,7 +26,7 @@ export function organizationElements() {
   return collectIds(ids);
 }
 
-/** The header's AI tools control and its popup. */
+/** The Core tools control in the Settings menu and its panel. */
 export function aiToolsElements() {
   return collectIds(["ai-tools-trigger", "ai-tools-count", "ai-tools-pop", "ai-tools-list", "ai-tools-note"]);
 }
