@@ -22,7 +22,7 @@ function closure(id, byId, seen = new Set()) {
 }
 
 /**
- * {readable, reason?, partial, groups, others, notInstalled}
+ * {readable, reason?, partial, groups, others, notInstalled, setupInstalled}
  * groups: one per installed chosen item: {name, itemId, managementId, scope, needed, removes, kept}
  * removes: what its Remove takes, in removal order; kept: needed items another installed chosen item still needs,
  * each with `neededBy`, the names of those chosen items.
@@ -30,7 +30,7 @@ function closure(id, byId, seen = new Set()) {
 export function groupInstalled({ inventory, policy, intent, label = () => undefined }) {
   if (!inventory || !['complete', 'incomplete'].includes(inventory.status)) {
     const reason = (inventory?.diagnostics ?? []).map(diagnostic => diagnostic.message ?? diagnostic.code).filter(Boolean).join(' ');
-    return { readable: false, reason: reason || 'Core did not return the installed list.', partial: true, groups: [], others: [], notInstalled: [] };
+    return { readable: false, reason: reason || 'Core did not return the installed list.', partial: true, groups: [], others: [], notInstalled: [], setupInstalled: false };
   }
   const installed = new Map(inventory.selections.map(entry => [entry.managementId, entry]));
   const itemByRecipe = new Map((intent?.pins ?? []).map(entry => [entry.recipe?.sha256, entry.itemId]));
@@ -60,5 +60,7 @@ export function groupInstalled({ inventory, policy, intent, label = () => undefi
     const item = known.get(entry.managementId);
     return { managementId: entry.managementId, scope: entry.scope, name: item?.name ?? entry.managementId, inSetup: Boolean(item) };
   });
-  return { readable: true, partial: inventory.status !== 'complete', groups, others, notInstalled: chosen.filter(item => !isInstalled(item)) };
+  // Core lists every selection of the current setup as installed (matching bytes alone do not show this).
+  const setupInstalled = byId.size > 0 && [...byId.values()].every(entry => installed.has(entry.managementId));
+  return { readable: true, partial: inventory.status !== 'complete', groups, others, notInstalled: chosen.filter(item => !isInstalled(item)), setupInstalled };
 }
