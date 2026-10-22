@@ -25,7 +25,9 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {} 
       if (removing) return;
       removing = true; remove.disabled = true; remove.setAttribute('aria-busy', 'true'); message.textContent = 'Checking which files would be removed…';
       try {
-        const mode = decode()?.mode ?? 'vibe';
+        // The policy's own mode, as the advanced Review removal sends it; never assumed.
+        const mode = decode()?.mode;
+        if (!['vibe', 'enterprise'].includes(mode)) { message.textContent = 'Remove did not start: this page cannot read the policy mode. Nothing was removed.'; return; }
         const preview = await previewRemoval({ entries: entries.map(entry => ({ ...entry, memberCount: members.get(entry.managementId)?.memberCount })), host, mode });
         area.replaceChildren(...preview.steps.map(step => {
           const row = el('div', 'space-y-0.5');
