@@ -81,7 +81,7 @@
 <!-- WORKBENCH SUB-HEADER (Provenance & Panel Sliders) -->
 <div class="h-8 bg-surface-container-lowest/90 border-b border-wb-border px-3 flex items-center justify-between text-[11px] shrink-0">
 <div class="flex items-center gap-2 min-w-0">
-<details id="policy-context-disclosure" open><summary id="policy-context-summary">Current policy</summary><p id="policy-current-context" role="status">Loading policy context…</p></details>
+<details id="policy-context-disclosure" open><summary id="policy-context-summary">Your setup</summary><p id="policy-current-context" role="status">Loading your setup…</p></details>
 <div class="flex items-center gap-2 font-mono text-[11px] text-on-surface-variant min-w-0" id="provenance-strip">
 <span class="material-symbols-outlined text-[14px] text-primary shrink-0" aria-hidden="true">inventory_2</span>
 <span class="text-on-surface font-medium">Connecting to the installed @aihq/catalog package...</span>
@@ -322,7 +322,7 @@
 <details class="group/ids pt-1" id="details-disclosure">
 <summary class="cursor-pointer list-none flex items-center gap-1 text-[10px] font-mono uppercase tracking-wider text-outline hover:text-on-surface select-none">
 <span class="material-symbols-outlined text-[13px] transition-transform group-open/ids:rotate-90" aria-hidden="true">chevron_right</span>
-<span>Identity and artifact references</span>
+<span>Identity and file references</span>
 </summary>
 <div class="space-y-2 pt-1.5">
 <div class="p-2 rounded bg-surface-container-low border border-wb-border font-mono text-[10px] space-y-1 text-on-surface-variant" id="details-identity"></div>
@@ -352,8 +352,8 @@
 <div class="space-y-1 text-[11px]" id="security-statements"></div>
 </div>
 <div class="space-y-1.5 pt-1">
-<span class="text-[10px] font-mono uppercase tracking-wider text-outline font-medium">Policy Determination</span>
-<p class="text-on-surface-variant">Item evidence does not establish approval or execution authority. Open Scan Review to inspect exact assessments and record a supported human evidence-review decision.</p>
+<span class="text-[10px] font-mono uppercase tracking-wider text-outline font-medium">Approval</span>
+<p class="text-on-surface-variant">Item evidence does not establish approval or execution authority. Open Scan Review (under Advanced) to inspect exact assessments and record a supported human evidence-review decision.</p>
 <div class="p-2 rounded bg-surface-container-low border border-wb-border text-[10.5px] text-outline">Not published: needs a Core determination contract. This page reads evidence and never records a decision.</div>
 <div class="space-y-1 text-[11px] opacity-50">
 <label class="flex items-start gap-2 p-2 rounded bg-surface-container-low border border-wb-border cursor-not-allowed">
@@ -388,7 +388,7 @@
 <button class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-container text-outline cursor-not-allowed" id="download-json-btn" type="button" disabled aria-disabled="true">Download</button>
 </div>
 </div>
-<p id="policy-json-description" class="text-on-surface-variant">The full current policy is shown below. Pending choices appear in Review Changes.</p>
+<p id="policy-json-description" class="text-on-surface-variant">The full current policy is shown below. A change waiting to be added appears in Your setup.</p>
 <div class="p-2.5 rounded bg-surface-container-lowest border border-wb-border font-mono text-[10.5px] leading-snug space-y-0.5 text-outline overflow-x-auto" id="live-json-viewer">Loading the current policy. This view shows the complete saved policy, before any pending proposal is accepted.</div>
 <div class="p-2 bg-surface-container-lowest border-t border-wb-border flex items-center justify-between gap-2 shrink-0">
 <button class="px-2.5 py-1.5 rounded text-on-surface-variant text-[11px] opacity-50 cursor-not-allowed" id="reset-item-btn" type="button" disabled aria-disabled="true" title="Not published: needs a Core template contract">Reset Item</button><span data-gap-label="Not published" data-gap-reason="Reset Item requires a published Core template contract."></span>

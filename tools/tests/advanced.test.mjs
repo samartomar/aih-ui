@@ -88,3 +88,27 @@ test('the review Signals disclosure stays on the default screen beside the revie
   assert.equal(inside('review-signals', 'catalog-advanced'), false);
   assert.ok(inside('review-summary', 'review-signals'), 'the review summary is inside Signals');
 });
+
+// Words a person meets on the default screen, per GLOSSARY.md: engine words may stay inside Advanced, the hidden views
+// and the dialogs, never on the screen a person first sees. "aih Policy" is the product's name.
+const ENGINE_WORDS = /\b(polic(y|ies)|pins?|pinned|artifacts?|explicit choices?|accepted choices?|prepare[ds]?|digests?|recipes?|envelopes?|admission)\b/i;
+const NOT_DEFAULT = ['catalog-advanced', 'pane-json', 'tab-json', 'pane-security', 'policy-workspace', 'workbench-mode-dialog', 'setup-dialog', 'org-modal-overlay', 'details-disclosure'];
+function defaultText(html) {
+  const words = [], stack = [];
+  const body = html.slice(html.indexOf('<body')).replace(/<!--[\s\S]*?-->/g, '').replace(/<script[\s\S]*?<\/script>/g, '');
+  for (const match of body.matchAll(/<(\/?)([a-zA-Z][\w-]*)([^>]*?)(\/?)>|([^<]+)/g)) {
+    const [, closing, tag, attrs, selfClosing, text] = match;
+    if (text !== undefined) { if (text.trim() && !stack.some(entry => NOT_DEFAULT.includes(entry.id) || entry.hidden)) words.push(text.trim()); continue; }
+    const name = tag.toLowerCase();
+    if (closing) { const at = stack.map(entry => entry.tag).lastIndexOf(name); if (at >= 0) stack.length = at; continue; }
+    if (!VOID.has(name) && !selfClosing) stack.push({ tag: name, id: /\sid="([^"]+)"/.exec(attrs)?.[1] ?? null, hidden: /\shidden(\s|=|$)/.test(attrs) });
+  }
+  // The restored labels keep their own words until a later ticket rewords them with the maintainer's OK.
+  return words.join(' | ').replace(/aih Policy/g, 'aih').replace(/Organization source policy|Organization Source Policy:/g, 'Organization source');
+}
+
+test('the default catalog screen uses plain words: no policy, pins, artifacts, digests, recipes or Prepare', () => {
+  const text = defaultText(readFileSync(new URL('../../src/index.html', import.meta.url), 'utf8'));
+  assert.doesNotMatch(text, ENGINE_WORDS);
+  assert.match(text, /Choose content for your AI tool/);
+});
