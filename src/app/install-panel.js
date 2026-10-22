@@ -41,13 +41,16 @@ export function skillHints(files) {
 
 /** The outcome of an Apply, in words. Only a complete run with every operation applied and verified is a success. */
 export function installOutcome(run, files, project) {
-  if (!run || run.status === 'superseded') return { ok: false, message: 'Install was interrupted by a newer change. Nothing is reported as installed; check the files below and try again.' };
+  if (!run) return { ok: false, message: 'Install did not return a result. Check the files below before trying again.' };
+  // The page moved on after sending Apply; the host may already have written files.
+  if (run.status === 'superseded') return { ok: false, message: 'The page changed while Install was running, so it cannot tell whether any files were written. Check what is installed in this project before installing again.' };
   const operations = run.operations ?? [];
   const applied = operations.filter(operation => operation.application === 'applied').length;
   // Core found these files already holding the expected bytes; they are verified like any other.
   const inPlace = operations.filter(operation => operation.application === 'already-satisfied').length;
   const verified = operations.filter(operation => operation.verification?.status === 'passed').length;
-  const total = operations.length;
+  // Every reviewed file must be accounted for, not just the operations the run happened to report.
+  const total = Math.max(operations.length, files.length);
   if (run.completion === 'complete' && total && applied + inPlace === total && verified === total) {
     const skills = skillHints(files);
     const tryLine = skills.length ? ` Open Claude Code in this folder and type ${skills.map(name => `/${name}`).join(' or ')}.` : ' Open your AI tool in this folder to use them.';
