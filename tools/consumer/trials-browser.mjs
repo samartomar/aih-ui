@@ -15,7 +15,8 @@ import { DRAFT_RECORD_SCHEMA } from './journey.mjs';
 import { IMPROVEMENT_SUGGESTION_SCHEMA, IMPROVEMENT_DISMISSAL_SCHEMA } from './improvements.mjs';
 import { TRIAL_SCHEMA, DIMENSION_LABELS } from './trials.mjs';
 import { RESTORATION_STATUSES } from './trial-record.mjs';
-import { openPolicyWorkspace, openFileActions } from './advanced-browser.mjs';
+import { drawer, openPolicyDrawer, openPolicyFileActions, openPolicySection } from './policy-drawer.mjs';
+import { openPolicyWorkspace } from './advanced-browser.mjs';
 
 const decode = bytes => new TextDecoder().decode(bytes);
 const ROOT = 'mattpocock.implement', UNRELATED = 'aihq.project-context', SKIPPED = 'mattpocock.wait-what', SUGGESTED = 'mattpocock.tdd', CLIENTS = ['claude', 'codex'];
@@ -72,8 +73,7 @@ export async function runTrialsBrowser({ origin, output, playwrightModule, setti
     await page.locator('#browse-family option[value="Catalog"]').waitFor({ state: 'attached' });
     if (await page.locator('#setup-dialog').isVisible()) {
       await page.getByRole('radio', { name: /Vibe coder/ }).check();
-      // First-run Vibe setup: experience, AI clients, review.
-      for (let step = 0; step < 3; step++) await page.locator('#setup-next').click();
+      for (let step = 0; step < 4; step++) await page.locator('#setup-next').click();
       await page.locator('#setup-dialog').waitFor({ state: 'hidden' });
     }
     return page;
@@ -89,9 +89,13 @@ export async function runTrialsBrowser({ origin, output, playwrightModule, setti
   const suggestionsSettled = async page => suggestions(page).locator('p[role="status"]').filter({ hasText: /^Checked / }).waitFor();
   const openSaved = async (page, path) => {
     operations = [];
-    await openPolicyWorkspace(page); await page.locator('#policy-open').setInputFiles(path);
-    await openFileActions(page); await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+    await openPolicyWorkspace(page); await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(path);
+    await drawer(page).getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await page.locator('#policy-draft-status').filter({ hasText: OPENED }).waitFor();
+    // Reopening used to run every check; a person now opens each section, so the update check whose note the save records runs too.
+    await openPolicySection(page, 'Available updates');
+    await openPolicySection(page, 'Improvement suggestions');
+    await openPolicySection(page, 'Improvement trials');
     await suggestionsSettled(page); await idle(page);
     return [...operations];
   };
@@ -279,7 +283,7 @@ export async function runTrialsBrowser({ origin, output, playwrightModule, setti
 
     // The saved draft gained exactly the one chosen root; everything else in the intent is as it was imported.
     const savedPath = join(output, 'trials.draft.json');
-    const savedBytes = await download(first, () => first.locator('#policy-draft-save').click(), savedPath);
+    const savedBytes = await download(first, async () => { await openPolicyDrawer(first); await first.locator('#policy-draft-save').click(); }, savedPath);
     const after = draftOf(savedBytes);
     const added = after.roots.filter(root => !before.roots.some(old => old.itemId === root.itemId && old.releaseSha256 === root.releaseSha256 && old.scope === root.scope));
     assert.equal(added.length, 1, 'Exactly one root was added.');

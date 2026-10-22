@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmdirSyn
 import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createSettingsStore } from "../server/settings.mjs";
-import { CAPABILITIES, emptySettings, newSetupSettings, reviewerErrors, settingsErrors } from "../../src/app/setup-model.js";
+import { CAPABILITIES, emptySettings, newSetupSettings, reviewerErrors, settingsErrors, setupSteps } from "../../src/app/setup-model.js";
 import { createApi } from "../server/api.mjs";
 import { createStaticServer, listen } from "../server/static.mjs";
 
@@ -348,4 +348,14 @@ test("the settings HTTP route saves and clears the reviewing identity", async (t
   assert.deepEqual((await fetch(`${base}/api/workbench-settings`).then((result) => result.json())).settings.reviewer, { kind: "individual", id: "alice" });
   assert.equal((await update(enterprise())).status, 200);
   assert.equal(Object.hasOwn((await fetch(`${base}/api/workbench-settings`).then((result) => result.json())).settings, "reviewer"), false);
+});
+
+test("first-run setup offers the optional assistance step for every experience", () => {
+  const draft = (experience, role = null) => ({ ...newSetupSettings(), experience, role });
+  assert.deepEqual(setupSteps({ draft: newSetupSettings() }), ["experience", "capabilities", "clients", "review"]);
+  assert.deepEqual(setupSteps({ draft: draft("vibe") }), ["experience", "capabilities", "clients", "review"]);
+  assert.deepEqual(setupSteps({ draft: draft("enterprise", "developer") }), ["experience", "role", "capabilities", "clients", "review"]);
+  assert.deepEqual(setupSteps({ draft: draft("enterprise", "admin") }), ["experience", "role", "organization", "capabilities", "clients", "review"]);
+  assert.deepEqual(setupSteps({ draft: draft("vibe"), editing: true }), ["capabilities", "clients", "review"]);
+  assert.deepEqual(setupSteps({ draft: draft("vibe"), editing: true, editSection: "clients" }), ["clients", "review"]);
 });

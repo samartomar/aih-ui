@@ -7,7 +7,8 @@ import { readInstalledRelease } from '@aihq/catalog/node';
 import { intakePersonalFolder } from './personal-folder.mjs';
 import { readAuthoring } from './headless.mjs';
 import { installedFamilies } from './installed-families.mjs';
-import { openCatalogAdvanced, openPolicyWorkspace, openSetupAdvanced, openFileActions } from './advanced-browser.mjs';
+import { addFromCatalog, closePolicyDrawer, drawer, openPolicyDrawer, openPolicyFileActions } from './policy-drawer.mjs';
+import { openCatalogAdvanced, openPolicyWorkspace, openSetupAdvanced } from './advanced-browser.mjs';
 
 export async function runIntegratedBrowser({ origin, output, playwrightModule }) {
   const { chromium } = await import(playwrightModule);
@@ -31,8 +32,7 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     await page.locator('#browse-family option[value="Extensions"]').waitFor({ state: 'attached' });
     if (await page.locator('#setup-dialog').isVisible()) {
       await page.getByRole('radio', { name: /Vibe coder/ }).check();
-      // First-run Vibe setup: experience, AI clients, review.
-      for (let step = 0; step < 3; step++) await page.locator('#setup-next').click();
+      for (let step = 0; step < 4; step++) await page.locator('#setup-next').click();
       await page.locator('#setup-dialog').waitFor({ state: 'hidden' });
     }
     return page;
@@ -44,11 +44,11 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     for (const family of ['Extensions', 'ECC', 'Superpowers', 'Anthropic']) assert.equal(await page.locator(`#browse-family option[value="${family}"]`).count(), 1);
     assert.equal(await page.locator('iframe').count(), 0); assert.equal(new URL(page.url()).pathname, '/');
     await page.locator('#browse-family').selectOption('Extensions'); await page.locator('#catalog-search').fill('matt');
-    assert.ok(await page.getByRole('button', { name: 'Choose extensions.matt.ask-matt', exact: true }).isVisible());
+    assert.ok(await page.getByRole('button', { name: 'Add extensions.matt.ask-matt', exact: true }).isVisible());
     await page.locator('#catalog-search').fill('');
     await openCatalogAdvanced(page); await page.locator('#rail-scope-list button').filter({ hasText: 'Extensions' }).first().click();
     await page.locator('#browse-family').selectOption('ECC');
-    assert.ok(await page.getByRole('button', { name: 'Choose ecc.skill.accessibility', exact: true }).isVisible(), 'Changing families clears the alternate rail filter.');
+    assert.ok(await page.getByRole('button', { name: 'Add ecc.skill.accessibility', exact: true }).isVisible(), 'Changing families clears the alternate rail filter.');
     await page.locator('#browse-family').selectOption('Extensions');
     const before = await page.locator('#policy-bytes').textContent();
     await page.locator('#browse-support').selectOption('unknown'); assert.match(await page.locator('#support-counts').textContent(), /with unknown facts/);
@@ -67,20 +67,20 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     const selections = [['Personal', 'personal.skill.example'], ['Extensions', 'extensions.matt.ask-matt'], ['ECC', 'ecc.skill.accessibility'], ['Superpowers', 'superpowers.skill.brainstorming'], ['Anthropic', 'anthropic.skill.academy-guide']];
     for (const [family, id] of selections) {
       await page.locator('#nav-sources').click(); await page.locator('#browse-family').selectOption(family);
-      await page.getByRole('button', { name: `Choose ${id}`, exact: true }).click();
-      await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click();
+      await addFromCatalog(page, id);
+      await closePolicyDrawer(page);
     }
     const saved = await policy(page); assert.equal(saved.metadata['aih.workbench'].roots.length, 5);
     assert.doesNotMatch(JSON.stringify(saved), /grantId|x-aih-client|hostPath/);
-    await openSetupAdvanced(page); await page.locator('#check-project-policy').click(); await page.locator('#policy-status').filter({ hasText: 'Policy and exact sources validated' }).waitFor();
-    const download = page.waitForEvent('download'); await openSetupAdvanced(page).then(() => page.locator('#policy-save').click());
+    await openSetupAdvanced(page).then(() => page.locator('#check-project-policy').click()); await page.locator('#policy-status').filter({ hasText: 'Policy and exact sources validated' }).waitFor();
+    const download = page.waitForEvent('download'); await openPolicyDrawer(page); await openSetupAdvanced(page).then(() => page.locator('#policy-save').click());
     const savedPath = join(output, 'policy.downloaded.json'); await (await download).saveAs(savedPath);
     const policyBytes = new Uint8Array(await readFile(savedPath));
     await page.screenshot({ path: join(output, 'policy-saved.png'), fullPage: true });
     const fresh = await pageSetup(await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 1000 } }));
     assert.equal(await fresh.locator('#browse-family option[value="Personal"]').count(), 0);
-    await openPolicyWorkspace(fresh); await fresh.locator('#policy-open').setInputFiles(savedPath);
-    await openFileActions(fresh); await fresh.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+    await openPolicyWorkspace(fresh); await openPolicyFileActions(fresh); await fresh.locator('#policy-open').setInputFiles(savedPath);
+    await drawer(fresh).getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await fresh.locator('#policy-status').filter({ hasText: 'SOURCE_REVISION_UNAVAILABLE' }).waitFor();
     assert.equal(await fresh.locator('#policy-save').isDisabled(), true);
     await fresh.locator('#nav-sources').click(); assert.equal(await fresh.locator('#personal-binding option').count(), 2);
@@ -94,7 +94,7 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     await fresh.locator('#personal-folder').setInputFiles(folder); await observedGate;
     assert.doesNotMatch(await fresh.locator('#personal-result').textContent(), /Exact folder rebound/);
     releaseCatalog(); await fresh.locator('#personal-result').filter({ hasText: 'Exact folder rebound' }).waitFor(); await fresh.unroute('**/api/authoring-catalog');
-    await openPolicyWorkspace(fresh); await openFileActions(fresh); await fresh.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+    await openPolicyWorkspace(fresh); await openPolicyFileActions(fresh); await drawer(fresh).getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await fresh.locator('#policy-status').filter({ hasText: 'Saved choices recovered' }).waitFor();
     assert.deepEqual((await policy(fresh)).metadata['aih.workbench'].roots, saved.metadata['aih.workbench'].roots);
     assert.deepEqual((await policy(fresh)).selections, saved.selections);

@@ -9,7 +9,7 @@ import { createWorkbench } from './server/workbench.mjs';
 import { listen } from './server/static.mjs';
 import { callService } from './server/service-client.mjs';
 import { coreTargetsSummary } from './server/core-targets-summary.mjs';
-import { openSetupAdvanced, openFileActions } from './consumer/advanced-browser.mjs';
+import { drawer, openPolicyFileActions } from './consumer/policy-drawer.mjs';
 const [consumerInput, evidenceInput, ...args] = process.argv.slice(2);
 if (!consumerInput || !evidenceInput || (args.length && (args.length !== 2 || args[0] !== '--port'))) throw Error('Usage: node tools/check-authority-source.mjs <consumerDir> <evidenceDir> [--port N]');
 const port = Number(args[1] ?? 0);
@@ -41,7 +41,7 @@ async function start(phase) {
   started = await createWorkbench({ consumerDir, runDir, summary, settingsPath: join(output, `${phase}-settings.json`) });
   summary.entryCount = started.catalog.items.length; await writeFile(join(runDir, 'summary.json'), JSON.stringify(summary));
   const address = await listen(started.server, port);
-  ({ page, context } = await openAuthorityPage({ browser, origin: `http://127.0.0.1:${address.port}` }));
+  ({ page, context } = await openAuthorityPage({ browser, origin: `http://127.0.0.1:${address.port}`, role: phase === 'organization-author' ? 'admin' : undefined }));
 }
 try {
   for (const key of envKeys) delete process.env[key];
@@ -67,11 +67,11 @@ try {
   await page.locator('#authority-source-change[data-change="unchanged"]').waitFor();
   revisions.push(current.authority); states.push('configured', 'unchanged');
   await captureAuthority(page, output, 'configured');
-  await page.locator('#policy-open').setInputFiles(policyPath);
-  await openFileActions(page); await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+  await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(policyPath);
+  await drawer(page).getByRole('button', { name: 'Validate and reopen', exact: true }).click();
   await page.locator('#policy-status').filter({ hasText: 'Saved choices recovered' }).waitFor();
-  await openSetupAdvanced(page, 'Sources and execution').then(() => page.getByRole('button', { name: 'Prepare exact effects', exact: true }).click());
-  const apply = page.getByRole('button', { name: 'Approve and Apply reviewed effects', exact: true });
+  await drawer(page).getByRole('button', { name: 'Prepare exact effects', exact: true }).click();
+  const apply = drawer(page).getByRole('button', { name: 'Approve and Apply reviewed effects', exact: true });
   await apply.and(page.locator(':not([disabled])')).waitFor();
   await page.locator('#authority-source-review[data-review="current"]').waitFor(); states.push('current');
   fixture.publish({ ...enterprise.document, metadata: { fixture: 'changed revision' } });

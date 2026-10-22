@@ -7,7 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { readAuthoring, openDraft } from './headless.mjs';
 import { installedFamilies } from './installed-families.mjs';
-import { openPolicyWorkspace, openSetupAdvanced, openFileActions } from './advanced-browser.mjs';
+import { addFromCatalog, closePolicyDrawer, drawer, openPolicyAdvanced, openPolicyDrawer, openPolicyFileActions } from './policy-drawer.mjs';
+import { openPolicyWorkspace, openSetupAdvanced } from './advanced-browser.mjs';
 
 const PERSONAL = 'personal.skill.example', MAINTAINED = ['mattpocock.grill-with-docs', 'mattpocock.code-review'];
 
@@ -34,16 +35,14 @@ export async function runUnresolvedDraftBrowser({ origin, output, playwrightModu
     await page.locator('#browse-family option[value="Catalog"]').waitFor({ state: 'attached' });
     if (await page.locator('#setup-dialog').isVisible()) {
       await page.getByRole('radio', { name: /Vibe coder/ }).check();
-      // First-run Vibe setup: experience, AI clients, review.
-      for (let step = 0; step < 3; step++) await page.locator('#setup-next').click();
+      for (let step = 0; step < 4; step++) await page.locator('#setup-next').click();
       await page.locator('#setup-dialog').waitFor({ state: 'hidden' });
     }
     return page;
   };
   const choose = async (page, family, id) => {
     await page.locator('#nav-sources').click(); await page.locator('#browse-support').selectOption('all'); await page.locator('#browse-family').selectOption(family);
-    await page.getByRole('button', { name: `Choose ${id}`, exact: true }).click();
-    await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click();
+    await addFromCatalog(page, id);
   };
   const download = async (page, trigger, path) => { const event = page.waitForEvent('download'); await trigger(); await (await event).saveAs(path); return new Uint8Array(await readFile(path)); };
   const shownChoices = page => page.locator('#policy-draft-roots > div').evaluateAll(rows => rows.map(row => [row.dataset.itemId, row.dataset.status]));
@@ -56,37 +55,38 @@ export async function runUnresolvedDraftBrowser({ origin, output, playwrightModu
     await choose(authoring, 'Personal', PERSONAL);
     await choose(authoring, 'Catalog', MAINTAINED[0]);
     const savedPath = join(output, 'policy.downloaded.json');
-    const policyBytes = await download(authoring, () => openSetupAdvanced(authoring).then(() => authoring.locator('#policy-save').click()), savedPath);
+    const policyBytes = await download(authoring, async () => { await openPolicyDrawer(authoring); await openSetupAdvanced(authoring).then(() => authoring.locator('#policy-save').click()); }, savedPath);
     const saved = JSON.parse(new TextDecoder().decode(policyBytes));
     assert.deepEqual(saved.metadata['aih.workbench'].roots.map(root => root.itemId).sort(), [PERSONAL, MAINTAINED[0]].sort());
 
     // Context B: the personal source is not rebound, so its choice reopens as unresolved with nothing dropped.
     const fresh = await openPage();
     assert.equal(await fresh.locator('#browse-family option[value="Personal"]').count(), 0);
-    await openPolicyWorkspace(fresh); await fresh.locator('#policy-open').setInputFiles(savedPath);
-    await openFileActions(fresh); await fresh.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+    await openPolicyWorkspace(fresh); await openPolicyFileActions(fresh); await fresh.locator('#policy-open').setInputFiles(savedPath);
+    await drawer(fresh).getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await fresh.locator('#policy-draft-status').filter({ hasText: 'Unresolved draft opened' }).waitFor();
     assert.deepEqual((await shownChoices(fresh)).sort(), [[MAINTAINED[0], 'resolved'], [PERSONAL, 'unresolved']].sort());
     const personalRow = fresh.locator(`#policy-draft-roots > div[data-item-id="${PERSONAL}"]`);
     assert.match(await personalRow.textContent(), /Unresolved — source unavailable/);
     assert.match(await fresh.locator('#policy-draft-note').textContent(), /not an executable policy/);
-    assert.equal(await fresh.getByRole('button', { name: 'Prepare exact effects', exact: true }).isDisabled(), true);
+    await openPolicyAdvanced(fresh); assert.equal(await drawer(fresh).getByRole('button', { name: 'Prepare exact effects', exact: true }).isDisabled(), true);
     assert.match(await fresh.locator('#policy-host-status').textContent(), /not an executable policy/);
     assert.equal(await fresh.locator('#policy-save').isDisabled(), true);
-    const original = await download(fresh, () => openFileActions(fresh).then(() => fresh.getByRole('button', { name: 'Download original artifact', exact: true }).click()), join(output, 'policy.original.downloaded.json'));
+    const original = await download(fresh, () => drawer(fresh).getByRole('button', { name: 'Download original artifact', exact: true }).click(), join(output, 'policy.original.downloaded.json'));
     assert.ok(sameBytes(original, policyBytes), 'The original artifact stays byte-identical.');
     await fresh.screenshot({ path: join(output, '01-unresolved-open.png'), fullPage: true });
 
     // A safe edit keeps the unresolved choice and adds a maintained item through the draft operations.
     await choose(fresh, 'Catalog', MAINTAINED[1]);
-    await fresh.locator('#policy-draft-status').filter({ hasText: 'Draft change accepted' }).waitFor();
+    // One-click Add confirms a clean draft edit as added to the draft; an edit that needed review is accepted there.
+    await openPolicyDrawer(fresh); await fresh.locator('#policy-draft-status').filter({ hasText: /Draft change accepted|to your draft\. Save the draft to keep it\./ }).waitFor();
     const edited = await shownChoices(fresh);
     assert.deepEqual(edited.map(([id]) => id).sort(), [PERSONAL, ...MAINTAINED].sort());
     assert.equal(edited.find(([id]) => id === PERSONAL)[1], 'unresolved');
     await fresh.screenshot({ path: join(output, '02-edited.png'), fullPage: true });
     assert.match(await fresh.locator('#policy-draft-save-note').textContent(), /not executable/);
     const envelopePath = join(output, 'policy.draft.journey.json');
-    const envelopeBytes = await download(fresh, () => fresh.locator('#policy-draft-save').click(), envelopePath);
+    const envelopeBytes = await download(fresh, async () => { await openPolicyDrawer(fresh); await fresh.locator('#policy-draft-save').click(); }, envelopePath);
     const envelope = JSON.parse(new TextDecoder().decode(envelopeBytes));
     assert.equal(envelope.schema, 'urn:aihq:workbench:journey-envelope:1.0.0');
     assert.equal(envelope.executable, false);
@@ -96,7 +96,7 @@ export async function runUnresolvedDraftBrowser({ origin, output, playwrightModu
 
     // Context C: a fresh page opens the envelope with the same meaning.
     const reopened = await openPage();
-    await openPolicyWorkspace(reopened); await reopened.locator('#policy-open').setInputFiles(envelopePath);
+    await openPolicyWorkspace(reopened); await openPolicyFileActions(reopened); await reopened.locator('#policy-open').setInputFiles(envelopePath);
     await reopened.locator('#policy-draft-status').filter({ hasText: 'Unresolved draft opened' }).waitFor();
     assert.deepEqual(await shownChoices(reopened), edited);
     const headless = await openDraft({ bytes: envelopeBytes, inventories: [maintainedInventory, ...await installedFamilies()] });
@@ -105,15 +105,16 @@ export async function runUnresolvedDraftBrowser({ origin, output, playwrightModu
     assert.deepEqual(headless.value.roots.map(root => [root.itemId, root.status]), edited);
     assert.deepEqual(headless.value.intent, envelope.records[0].intent);
     assert.ok(sameBytes(headless.value.savedIntentBytes, policyBytes));
-    const again = await download(reopened, () => openFileActions(reopened).then(() => reopened.getByRole('button', { name: 'Download original artifact', exact: true }).click()), join(output, 'policy.original.reopened.json'));
+    const again = await download(reopened, () => drawer(reopened).getByRole('button', { name: 'Download original artifact', exact: true }).click(), join(output, 'policy.original.reopened.json'));
     assert.ok(sameBytes(again, policyBytes), 'The envelope reopens to the original policy bytes.');
     await reopened.screenshot({ path: join(output, '03-saved-reopened.png'), fullPage: true });
 
-    // Whole-draft compile is refused with the blocking reference; resolved choices compile on their own.
-    await reopened.locator('#policy-draft-compile-all').click();
-    await reopened.locator('#policy-draft-status').filter({ hasText: 'SCOPE_UNRESOLVED' }).waitFor();
-    assert.match(await reopened.locator('#policy-draft-status').textContent(), /Compile refused/);
-    assert.match(await reopened.locator('#policy-draft-status').textContent(), new RegExp(PERSONAL));
+    // Whole-draft compile is refused up front with the blocking reference; resolved choices compile on their own.
+    assert.equal(await reopened.locator('#policy-draft-compile-all').isDisabled(), true, 'Whole-draft compile is unavailable while a choice is unresolved.');
+    const compileNote = await reopened.locator('#policy-draft-compile-note').textContent();
+    assert.match(compileNote, /whole draft cannot be compiled yet/);
+    assert.match(compileNote, /SCOPE_UNRESOLVED/);
+    assert.match(compileNote, new RegExp(PERSONAL));
     assert.equal(await reopened.locator('#policy-save').isDisabled(), true);
     await reopened.screenshot({ path: join(output, '04-compile-refused.png'), fullPage: true });
     await reopened.locator('#policy-draft-compile-resolved').click();
@@ -124,7 +125,7 @@ export async function runUnresolvedDraftBrowser({ origin, output, playwrightModu
     assert.equal(compiled.value.editing, 'available', JSON.stringify(compiled.value.diagnostics));
     assert.deepEqual(compiled.value.intent.roots.map(root => root.itemId).sort(), [...MAINTAINED].sort());
     assert.match(await reopened.locator('#policy-host-status').textContent(), /Execution is not connected/);
-    assert.equal(await reopened.getByRole('button', { name: 'Prepare exact effects', exact: true }).isDisabled(), true);
+    await openPolicyAdvanced(reopened); assert.equal(await drawer(reopened).getByRole('button', { name: 'Prepare exact effects', exact: true }).isDisabled(), true);
     assert.equal(await reopened.locator('#policy-draft-save').isEnabled(), true);
     await reopened.screenshot({ path: join(output, '05-compile-allowed.png'), fullPage: true });
     // Replacing a choice is a safe draft edit too; changing the draft withdraws the compiled policy.
