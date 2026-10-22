@@ -16,16 +16,17 @@ import { createProvenance } from "./provenance.js";
 import { createToolbar } from "./toolbar.js";
 import { projectItems, capabilityFacts, declaredTargets, supportedEntries } from "./authoring-model.js";
 import { publishedClients } from "../app/core-targets.js";
-import { inventoryCounts, scopeTotal, selectedScope, visibleEntries } from "./selectors.js";
+import { inventoryCounts, scopeTotal, selectedScope, visibleEntries, sourceScopes } from "./selectors.js";
 import { emptyView, restoreView, saveView } from "./view-state.js";
-import { text } from "../app/dom.js";
+import { el, text } from "../app/dom.js";
+import { filterByTools, toolsNotice } from "./tool-match.js";
 
 /**
  * @param onSelectEntry    called with the entry when the selection changes
  * @param onReselectEntry  called when the selected card is activated again
  * @param onSummary        called with the preview summary once it has loaded
  */
-export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () => {}, onSummary, onProposal = () => {} }) {
+export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () => {}, onSummary, subscribeSecurity, onProposal = () => {} }) {
   const elements = catalogElements();
   const state = {
     entries: [],
@@ -38,7 +39,11 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     // The organization's own name, when the user has saved one. It labels the
     // organization's additions row; nothing here reads or invents it.
     organizationName: null,
+    // The header's chosen AI tools (Core ids) and whether the grid shows only content for them.
+    selectedTools: [],
+    toolsMode: 'mine',
   };
+  let restoredView = false;
 
   const changeView = (patch) => {
     Object.assign(state.view, patch);
@@ -54,8 +59,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   const navigation = createNavigation({
     elements: elements.navigation,
     onSelectSource: (source) => {
-      family.value = '';
-      changeView({ source, sourceType: null });
+      const row = sourceScopes(state.counts).find(row => row.filterValue === source);
+      changeView({ source, sourceType: null, family: row?.source.release ?? '' });
     },
   });
   const toolbar = createToolbar({
@@ -66,22 +71,45 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       const scope = selectedScope(state.counts, state.view);
       // A compatible source-type choice narrows within the source; another type leaves the source.
       const keepsScope = sourceType === null || scope?.type === sourceType;
-      changeView({ sourceType, ...(keepsScope ? {} : { source: null }) });
+      changeView({ sourceType, ...(keepsScope ? {} : { source: null, family: "" }) });
     },
     onSort: (sort) => changeView({ sort }),
   });
   const cards = createCards({ elements: elements.cards, onSelect: (entryId) => select(entryId) });
-  const details = createDetails({ elements: elements.details, authoring });
+  const details = createDetails({ elements: elements.details, authoring, subscribeSecurity });
   const family = document.getElementById('browse-family');
   const target = document.getElementById('browse-target');
   const support = document.getElementById('browse-support');
   const counts = document.getElementById('support-counts');
-  family.addEventListener('change', () => changeView({ source: null, sourceType: null }));
-  for (const control of [target, support]) control.addEventListener('change', () => render());
+  family.addEventListener('change', () => {
+    const row = sourceScopes(state.counts).find(row => row.source.release === family.value);
+    changeView({ family: family.value, source: row?.filterValue ?? null, sourceType: null });
+  });
+  target.addEventListener('change', () => changeView({ target: target.value }));
+  support.addEventListener('change', () => changeView({ support: support.value }));
+  const resetFilters = () => { Object.assign(state.view, emptyView()); toolbar.setQuery(''); changeView({ target: target.options[0]?.value ?? '' }); };
+  document.getElementById('catalog-reset-filters').addEventListener('click', resetFilters);
+  const filterDisclosure = document.getElementById('catalog-filter-disclosure');
+  if (window.innerWidth <= 760) filterDisclosure.open = false;
+  // Above the filters, always visible: which tools the grid is showing content for, and the switch.
+  const toolsBar = el('div', 'flex flex-wrap items-center gap-x-3 gap-y-1 p-2 rounded border border-wb-border bg-surface-container-low'); toolsBar.id = 'catalog-tools-bar';
+  const toolsShowing = el('p', 'text-on-surface'); toolsShowing.id = 'catalog-tools-showing'; toolsShowing.setAttribute('role', 'status');
+  const toolsToggle = el('button', 'px-2 py-1 rounded border border-wb-border bg-surface-container text-on-surface hover:bg-surface-container-high'); toolsToggle.type = 'button'; toolsToggle.id = 'catalog-tools-toggle';
+  const toolsUnmatched = el('p', 'w-full text-on-surface-variant text-[11px]'); toolsUnmatched.id = 'catalog-tools-unmatched';
+  toolsToggle.addEventListener('click', () => { state.toolsMode = state.toolsMode === 'mine' ? 'all' : 'mine'; render(); });
+  toolsBar.append(toolsShowing, toolsToggle, toolsUnmatched); filterDisclosure.before(toolsBar);
+  const coreTools = () => publishedClients(state.summary?.coreTargets) ?? { ids: [], labels: {} };
+  const toolOptions = () => ({ mode: state.toolsMode, coreIds: coreTools().ids, selected: state.selectedTools, labels: coreTools().labels });
 
   function browseEntries(view = state.view) {
-    return visibleEntries(state.entries, view)
-      .filter(entry => !family.value || entry.authoringItem.family === family.value);
+    return filterByTools(visibleEntries(state.entries, view)
+      .filter(entry => !view.family || entry.authoringItem.family === view.family), toolOptions());
+  }
+  function renderToolsBar() {
+    const options = toolOptions(), notice = toolsNotice(browseEntries(), options);
+    toolsShowing.textContent = notice.showing; toolsUnmatched.textContent = notice.unmatched; toolsUnmatched.hidden = !notice.unmatched;
+    toolsToggle.hidden = !options.coreIds.length || !options.selected.length;
+    toolsToggle.textContent = state.toolsMode === 'mine' ? 'Show all tools' : 'Show only my tools';
   }
 
   function selectedEntry() {
@@ -96,7 +124,10 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       noun: scope === null ? "catalog entries" : "entries from this source",
       selectedId: state.selectedId,
       intent: authoring.intent,
+      acceptedRoots: authoring.draft?.roots ?? authoring.intent?.roots ?? [],
+      acceptedLabel: authoring.draft ? "In draft" : "In policy",
       evidence: state.evidence,
+      onReset: resetFilters,
       onChoose: async item => {
         try { onProposal(await authoring.propose({ type: 'select', root: item.root })); }
         catch (error) { onProposal({ status: 'refused', diagnostics: [{ message: error.message }] }); }
@@ -121,15 +152,21 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   }
 
   function render() {
+    // Filters can change while the installed catalog is still loading. Keep
+    // the loading presentation until refresh has projected the real inventory.
+    if (!restoredView) return;
     state.counts = inventoryCounts(state.entries);
+    family.value = state.view.family;
+    target.value = state.view.target;
+    support.value = state.view.support;
     const total = state.entries.length;
     const scope = selectedScope(state.counts, state.view);
     const inScope = scopeTotal(state.entries, state.view);
     const cardsView = cardsModel();
     const scoped = browseEntries();
     const count = status => scoped.filter(entry => capabilityFacts(entry.authoringItem, target.value).some(fact => fact.support === status)).length;
-    counts.textContent = `${target.value || 'No declared target'} · ${scoped.length} items in family/search/source scope: ${count('supported')} with supported facts · ${count('unsupported')} with unsupported facts · ${count('unknown')} with unknown facts. Mixed items can count in more than one group.`;
-    const availableKinds = visibleEntries(state.entries, { ...state.view, kind: null });
+    counts.textContent = `${publishedClients(state.summary?.coreTargets)?.ids.length ?? 'Unknown'} Core clients are listed in setup; this catalog declares ${target.options.length} target clients. Target declarations do not establish installation. ${target.value || 'No declared target'} · ${scoped.length} items in family/search/source scope: ${count('supported')} with supported facts · ${count('unsupported')} with unsupported facts · ${count('unknown')} with unknown facts. Mixed items can count in more than one group.`;
+    const availableKinds = supportedEntries(browseEntries({ ...state.view, kind: null }), target.value, support.value);
     const filteredCounts = inventoryCounts(availableKinds);
     provenance.render({
       summary: state.summary,
@@ -139,8 +176,9 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       counts: state.counts,
     });
     // The tiles count the list's own scope, before the kind selection so a selected tile can be cleared.
-    const metricScope = supportedEntries(browseEntries({ ...state.view, kind: null }), target.value, support.value);
-    metrics.render({ kindCounts: inventoryCounts(metricScope).kindCounts, total: metricScope.length, activeKind: state.view.kind });
+    const metricScope = availableKinds;
+    document.getElementById('catalog-kinds-summary').textContent = `Kinds · ${state.view.kind ?? 'All kinds'} · ${metricScope.length} items`;
+    metrics.render({ kindCounts: new Map([...state.counts.kindCounts.keys()].map(kind => [kind, filteredCounts.kindCounts.get(kind) ?? 0])), total: metricScope.length, activeKind: state.view.kind });
     navigation.render(navigationModel());
     toolbar.render({
       // Keep zero-result kinds visible so an active kind can still be cleared.
@@ -150,6 +188,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       visibleTotal: cardsView.entries.length,
       view: state.view,
     });
+    elements.cards.cardsGrid.setAttribute('aria-busy', 'false');
+    renderToolsBar();
     cards.render(cardsView);
     details.render(detailsModel(selectedEntry()));
   }
@@ -202,7 +242,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
         if (!authoring.catalog) return;
         state.entries = projectItems(authoring.catalog.items);
         if (state.selectedId && !selectedEntry()) { state.selectedId = null; onSelectEntry(null); }
-        const selectedFamily = family.value, selectedTarget = target.value;
+        const selectedFamily = state.view.family, selectedTarget = state.view.target;
         family.replaceChildren(new Option('All families', ''));
         for (const value of [...new Set(authoring.catalog.items.map(item => item.family))]) {
           family.append(new Option(`${value} (${authoring.catalog.items.filter(item => item.family === value).length})`, value));
@@ -211,16 +251,30 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
         target.replaceChildren(...declaredTargets(authoring.catalog.items).map(value => new Option(value, value)));
         target.value = [...target.options].some(option => option.value === selectedTarget) ? selectedTarget
           : [...target.options].some(option => option.value === 'claude-code') ? 'claude-code' : target.options[0]?.value ?? '';
+        state.view.family = family.value;
+        state.view.target = target.value;
+        // Startup loads the catalog and shell concurrently. Restore only after
+        // the real inventory exists, so saved kinds and sources are validated
+        // against its counts rather than the initial empty placeholder.
+        if (!restoredView) {
+          state.counts = inventoryCounts(state.entries);
+          restoreView(state.view, state.counts);
+          restoredView = true;
+        }
+        if (![...family.options].some(option => option.value === state.view.family)) state.view.family = '';
+        if (![...target.options].some(option => option.value === state.view.target)) state.view.target = target.options[0]?.value ?? '';
+        toolbar.setQuery(state.view.query);
         render();
         refreshEvidence();
       };
       authoring.subscribe(refresh);
-      refresh();      // Counts first: restoreView validates every saved filter against them, so
-      // restoring before they exist silently discards the saved kind and source.
-      state.counts = inventoryCounts(state.entries);
-      restoreView(state.view, state.counts);
-      toolbar.setQuery(state.view.query);
-      render();
+      refresh();
+    },
+
+    /** The header's chosen AI tools (Core ids). The grid defaults to showing content for them. */
+    setSelectedTools(clients) {
+      state.selectedTools = [...(clients ?? [])];
+      if (restoredView) render();
     },
 
     /** The organization name the user saved, or null. Re-renders the rail. */

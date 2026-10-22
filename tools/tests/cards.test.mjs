@@ -13,9 +13,13 @@ function element(tag) {
     setAttribute(name, value) { this.attributes[name] = value; },
     removeAttribute(name) { delete this.attributes[name]; },
     addEventListener(name, callback) { this.listeners[name] = callback; },
+    querySelectorAll(selector) {
+      assert.equal(selector, '.material-symbols-outlined');
+      return this.children.flatMap(descendants).filter(node => node.className.split(' ').includes('material-symbols-outlined'));
+    },
   };
 }
-function renderCard(t, description, evidence) {
+function renderCard(t, description, evidence, model = {}) {
   const previous = Object.getOwnPropertyDescriptor(globalThis, "document");
   globalThis.document = { createElement: element };
   t.after(() => {
@@ -26,7 +30,7 @@ function renderCard(t, description, evidence) {
     ...(description === null ? {} : { authoringItem: { id: "fixture", label: "Fixture", family: "fixture-family", description, root: { releaseSha256: "a".repeat(64), itemId: "fixture" } } }) };
   const elements = Object.fromEntries(["cardsGrid", "visibleCount", "visibleCaption", "categoryContext"].map(key => [key, element("div")]));
   const selections = [];
-  createCards({ elements, onSelect: id => selections.push(id) }).render({ entries: [entry], total: 1, selectedId: null, ...(evidence ? { evidence: new Map([["fixture.skill", evidence]]) } : {}) });
+  createCards({ elements, onSelect: id => selections.push(id) }).render({ entries: [entry], total: 1, selectedId: null, ...model, ...(evidence ? { evidence: new Map([["fixture.skill", evidence]]) } : {}) });
   return { node: elements.cardsGrid.children[0], selections };
 }
 function descendants(node) { return [node, ...node.children.flatMap(descendants)]; }
@@ -43,7 +47,7 @@ test("skill cards share the puzzle icon and preserve full description text for c
   assert.equal(description.textContent, text);
   assert.match(description.className, /text-wb-card-description/);
   assert.match(description.className, /line-clamp-3/);
-  node.listeners.keydown({ key: "Enter", preventDefault() {} });
+  node.listeners.keydown({ key: "Enter", target: node, preventDefault() {} });
   assert.deepEqual(selections, ["fixture.skill"]);
 });
 
@@ -59,14 +63,19 @@ test("unmapped local preferences remain unavailable without claiming an off stat
 });
 
 const pill = node => descendants(node).find(e => e.dataset.evidenceState);
-test("missing evidence reads not supplied, never not published, and tokens stay unknown", (t) => {
+test("missing evidence keeps its exact accessible reason and omits unmeasured tokens", (t) => {
   const { node } = renderCard(t, "Described");
   const status = pill(node);
   assert.equal(status.dataset.evidenceState, "not-supplied");
-  assert.equal(status.children[1].textContent, "Not supplied");
+  const gap = descendants(status).find(node => node.attributes['aria-label'] === 'Not supplied');
+  assert.ok(gap);
+  const tooltip = descendants(status).find(node => node.attributes.role === 'tooltip');
+  assert.equal(gap.attributes['aria-describedby'], tooltip.id);
+  assert.equal(tooltip.textContent, `Not supplied: ${EVIDENCE_STATE['not-supplied'].title()}`);
   const text = descendants(node).map(e => e.textContent).join("|");
   assert.equal(text.includes("Not published"), false);
-  assert.match(text, /\|Unknown\|/);
+  assert.equal(text.includes('Unknown'), false);
+  assert.equal(descendants(node).some(node => node.textContent === 'toll'), false);
 });
 
 test("each supplied evidence state renders its own text, and matched is not authentication", (t) => {
@@ -77,4 +86,23 @@ test("each supplied evidence state renders its own text, and matched is not auth
     assert.equal(EVIDENCE_STATE[state].text, text);
   }
   assert.match(pill(renderCard(t, "Described", { state: "matched", scanId: "scan-1" }).node).title, /scan-1.*unchecked; this is not an approval or execution authority/);
+});
+
+test("keyboard activation on Choose does not inspect its parent card", t => {
+  const { node, selections } = renderCard(t, 'Described');
+  const choose = descendants(node).find(node => node.textContent === 'Choose');
+  assert.ok(choose);
+  for (const key of ['Enter', ' ']) node.listeners.keydown({ key, target: choose, preventDefault() { assert.fail('Parent must not cancel child keyboard input'); } });
+  assert.deepEqual(selections, []);
+});
+
+test("accepted draft roots stay chosen even without executable intent roots", t => {
+  const { node } = renderCard(t, 'Described', undefined, {
+    intent: { roots: [] }, acceptedRoots: [{ itemId: 'fixture', releaseSha256: 'a'.repeat(64) }], acceptedLabel: 'In draft',
+  });
+  const choice = descendants(node).find(node => node.textContent === 'In draft');
+  assert.ok(choice);
+  assert.equal(choice.disabled, true);
+  assert.equal(choice.attributes['aria-label'], 'In draft fixture');
+  assert.equal(descendants(node).some(node => node.textContent === 'Choose'), false);
 });

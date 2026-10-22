@@ -21,6 +21,8 @@
  * evidence statements, exactly as Catalog's public reader returns them.
  */
 
+import { createGapIndicator } from '../app/gap-indicator.js';
+import { createInspectorEvidence } from '../app/inspector-evidence.js';
 import { el, text } from "../app/dom.js";
 import { capabilityFacts } from './authoring-model.js';
 import { sourcePresentation } from './source-facts.js';
@@ -45,7 +47,7 @@ function row(parent, label, value, title, code = false) {
   const shown = text(value) ?? NOT_PUBLISHED;
   const valueNode = el(code && present ? "code" : "span", code && present ? "inspector-code-value" : shown === NOT_PUBLISHED ? "text-outline" : "text-on-surface", shown);
   if (title) valueNode.title = title;
-  line.appendChild(valueNode);
+  line.appendChild(present ? valueNode : createGapIndicator({ label: NOT_PUBLISHED, reason: title ?? `${label} is not published for this entry.` }));
   parent.appendChild(line);
   return line;
 }
@@ -75,7 +77,7 @@ function capability(container, label, icon, tone, value, title) {
   const known = value !== NOT_PUBLISHED && value !== NOT_DECLARED;
   const valueNode = el("span", `font-mono text-[10px] text-right ${known ? toneClass : "text-outline"}`, value);
   if (title) valueNode.title = title;
-  line.appendChild(valueNode);
+  line.appendChild(known ? valueNode : createGapIndicator({ label: value, reason: title ?? `${label} is ${value.toLowerCase()} for this entry.` }));
   container.appendChild(line);
 }
 
@@ -85,7 +87,9 @@ function declared(list) {
 }
 
 /** @param elements the inspector header and the two panes' containers */
-export function createDetails({ elements, authoring }) {
+export function createDetails({ elements, authoring, subscribeSecurity }) {
+  const evidence = createInspectorEvidence({ authoring, subscribeSecurity });
+  elements.detectorRunState.after(evidence.panel);
   // Two Scanner Telemetry slots the design source fills from a scan result.
   // Neither depends on the selection, so each states its reason once, here.
   elements.detectorRunState.title = DETECTOR_RUN_STATE_ABSENT;
@@ -148,6 +152,7 @@ export function createDetails({ elements, authoring }) {
      */
     render({ entry, counts, target, coreClients }) {
       reset();
+      evidence.show(entry?.authoringItem);
       elements.detectorRunState.title = DETECTOR_RUN_STATE_ABSENT;
       elements.detectorFindingDetail.title = `${NOT_PUBLISHED}: ${FINDING_DETAIL_ABSENT}`;
       const statementSection = elements.statementCount.parentElement?.parentElement;
@@ -163,8 +168,15 @@ export function createDetails({ elements, authoring }) {
         const source = sourcePresentation(item);
         elements.inspectorName.textContent = source.name;
         elements.inspectorKind.setAttribute('aria-label', `Kind: ${item.kind}`);
+        elements.inspectorKind.dataset.label = `Kind: ${item.kind}`;
         elements.inspectorIcon.textContent = KIND_ICON[item.kind] ?? 'extension';
-        elements.detailsDesc.textContent = source.description;
+        elements.detailsDesc.replaceChildren();
+        if (source.description.length > 320) {
+          elements.detailsDesc.append(el('span', '', `${source.description.slice(0, 300).trimEnd()}…`));
+          const full = el('details', 'inspector-description-more');
+          full.append(el('summary', '', 'Read full source description'), el('span', 'inspector-prose block', source.description));
+          elements.detailsDesc.append(full);
+        } else elements.detailsDesc.textContent = source.description;
         if (source.facts) {
           const facts = source.facts;
           row(elements.detailsSource, 'Source profile', `${facts.profile} · ${facts.status}`);
@@ -215,7 +227,8 @@ export function createDetails({ elements, authoring }) {
         const disclosure = el('pre', 'whitespace-pre-wrap break-all text-[10px]');
         disclosure.textContent = JSON.stringify({ origins: item.sources, inputs: item.inputs, dependencies: item.dependencies, recipe: item.recipe, materials: item.materials, targets: item.targets }, null, 2);
         elements.detailsArtifacts.append(disclosure);
-        elements.detectorRunState.textContent = 'Inspect exact release baseline, latest matching evidence and retained history. Declared capabilities are not scan results.';
+        elements.detectorRunState.className = 'p-2 rounded bg-surface-container-low border border-wb-border flex flex-col items-start gap-2 text-[11px]';
+        elements.detectorRunState.textContent = 'View item coverage here, or inspect full assessments in Scan Review.';
         const inspectEvidence = el('button', 'px-3 py-1.5 rounded border border-wb-border', 'Review baseline, latest and history');
         inspectEvidence.type = 'button';
         inspectEvidence.addEventListener('click', () => {
@@ -223,7 +236,7 @@ export function createDetails({ elements, authoring }) {
           document.dispatchEvent(new CustomEvent('aih:scan-content', { detail: { target: `${item.root.releaseSha256}/${item.id}` } }));
         });
         elements.detectorRunState.append(inspectEvidence);
-        elements.detectorFindingDetail.textContent = 'Native execution and automatic guardrails are not established by supported material formats.';
+        elements.detectorFindingDetail.replaceChildren(el('span', '', 'Execution and guardrails'), createGapIndicator({ label: 'Not established', reason: 'Supported material formats do not establish native execution or automatic guardrails. Review evidence and use the policy execution workflow for supported checks.' }));
         return;
       }
 
