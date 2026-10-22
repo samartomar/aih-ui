@@ -1,11 +1,13 @@
 /*
- * Which AI tool a Catalog item is for, and how that relates to the tools chosen in the header.
+ * Which AI tool a Catalog item is for, and how that relates to the tools chosen in the header and to the
+ * Catalog tool name chosen above the cards.
  *
  * The item's tool comes only from the Catalog's own declaration (metadata.discovery.clientCapabilities
  * `client` and `surface`). The header's tools are Core's nativeClientIds. The two are compared by exact
  * name only: Catalog writes `claude-code` where Core writes `claude`, and no published contract links
  * them, so this file does not translate. An item whose tool name Core does not list is "unmatched": it
- * stays visible and says which tool it is for, rather than being hidden or guessed.
+ * stays visible and says which tool it is for, rather than being hidden or guessed. The catalog's real tool
+ * filter is the Catalog tool name the person chooses (catalogToolView), compared with Catalog names only.
  */
 
 const ANY_TOOL = 'generic';
@@ -50,16 +52,25 @@ export function filterByTools(entries, { mode, coreIds, selected }) {
   return entries.filter(entry => toolRelation(entry.authoringItem, { coreIds, selected }) !== 'other');
 }
 
-/** What the filter bar says, so nothing it cannot decide looks decided. */
-export function toolsNotice(entries, { mode, coreIds, selected, labels = {} }) {
-  const names = (selected ?? []).map(id => labels[id] ? `${labels[id]} (${id})` : id).join(', ');
-  if (!coreIds?.length) return { showing: 'Showing all tools: the installed Core does not list its supported tools, so content cannot be matched to them.', unmatched: '' };
-  if (!selected?.length) return { showing: 'Showing all tools. Choose your tools in the header to see only content for them.', unmatched: '' };
-  if (mode !== 'mine') return { showing: `Showing content for all tools. Your tools: ${names}.`, unmatched: '' };
-  const unmatched = entries.filter(entry => toolRelation(entry.authoringItem, { coreIds, selected }) === 'unmatched');
-  const names2 = [...new Set(unmatched.flatMap(entry => declaredTools(entry.authoringItem).map(tool => tool.client)).filter(client => !coreIds.includes(client) && client !== ANY_TOOL))].sort();
-  return {
-    showing: `Showing content for your tools: ${names}. Content for your other supported tools is hidden.`,
-    unmatched: unmatched.length ? `${unmatched.length} items name a tool the Catalog calls ${names2.join(', ')}, which does not match Core's tool names, so they stay visible. Each card says which tool it is for.` : '',
-  };
+/** What the header tools hid, in words, or '' when they hid nothing (so nothing reads as hidden that is not). */
+export function toolsNotice(entries, { mode, coreIds, selected }) {
+  const hidden = entries.length - filterByTools(entries, { mode, coreIds, selected }).length;
+  if (!hidden) return '';
+  const names = [...new Set(entries.filter(entry => toolRelation(entry.authoringItem, { coreIds, selected }) === 'other')
+    .flatMap(entry => declaredTools(entry.authoringItem).map(tool => tool.client)))].sort().join(', ');
+  return `${hidden} ${hidden === 1 ? 'item' : 'items'} the Catalog lists only for Core tools you did not choose in the header (${names}) ${hidden === 1 ? 'is' : 'are'} also hidden.`;
+}
+
+const declaresSpecificTool = item => declaredTools(item).some(tool => tool.client !== ANY_TOOL);
+
+/**
+ * The grid filtered by the Catalog tool name the person chose (`tool`, in the Catalog's own names): items that declare
+ * it, with any support value. Items that declare no specific tool (none, or only `generic`) are shown only with
+ * `showUndeclared`, and `undeclared` counts them either way. With no tool, or `mode` 'all', nothing is hidden.
+ */
+export function catalogToolView(entries, { tool, mode = 'mine', showUndeclared = false } = {}) {
+  const undeclared = entries.filter(entry => !declaresSpecificTool(entry.authoringItem)).length;
+  if (!tool || mode !== 'mine') return { entries, undeclared, filtered: false };
+  return { undeclared, filtered: true, entries: entries.filter(entry => declaredTools(entry.authoringItem).some(declared => declared.client === tool)
+    || (showUndeclared && !declaresSpecificTool(entry.authoringItem))) };
 }

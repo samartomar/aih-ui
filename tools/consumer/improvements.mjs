@@ -84,7 +84,8 @@ export function projectDismissals(envelope) {
 // `releaseOrder` (optional) is the host's declared source order; where it orders two releases of a package it decides which is newer, else Catalog's version order (compareReleases) does,
 // and a pair neither orders is `version-order-unknown`, never "nothing changed".
 // `coreClients` (optional) is the host's own reading of Core's nativeClientIds, never a request field; it only fills the `client` facts of an adapter suggestion, a display field a recorded suggestion never carries.
-export async function checkImprovements({ envelopeBytes, inventories, candidateInventories, candidateSource = candidateInventories === undefined ? 'unconfigured' : 'configured', candidateCoverage = 'complete', clients = [], labels = {}, coreClients, goal, evidence, now, releaseOrder } = {}) {
+// `catalogTool` (optional) is the Catalog tool name the person chose above the cards (claude-code, ...); a rule then suggests the copy that declares it, when one exists.
+export async function checkImprovements({ envelopeBytes, inventories, candidateInventories, candidateSource = candidateInventories === undefined ? 'unconfigured' : 'configured', candidateCoverage = 'complete', clients = [], labels = {}, coreClients, goal, evidence, now, releaseOrder, catalogTool } = {}) {
   const loaded = await load(envelopeBytes);
   if (loaded.status !== 'ok') return loaded;
   const { read, draft } = loaded.value;
@@ -101,10 +102,13 @@ export async function checkImprovements({ envelopeBytes, inventories, candidateI
   if (!labels || typeof labels !== 'object' || Array.isArray(labels) || Object.keys(labels).length > 32
     || Object.entries(labels).some(([id, label]) => !/^[a-z0-9][a-z0-9-]{0,63}$/.test(id) || typeof label !== 'string' || label.length < 1 || label.length > 128 || /[\u0000-\u001f\u007f]/.test(label))) return fail('/labels', 'Supply at most 32 client labels of 1 to 128 characters, without control characters.');
   if (goal !== undefined && (typeof goal !== 'string' || goal.length > MAX_GOAL)) return fail('/goal', `Supply a goal of at most ${MAX_GOAL} characters.`);
+  if (catalogTool !== undefined && (typeof catalogTool !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(catalogTool))) return fail('/catalogTool', 'Supply a Catalog tool name of at most 64 lower-case letters, digits and hyphens.');
   const baselines = unread === undefined ? savedBaselines(draft.intent, inventories, candidateInventories) : undefined;
   const reason = unread ?? (candidateCoverage === 'partial' ? 'sources-partly-unavailable' : baselines.resolved.length < baselines.saved ? 'saved-release-not-supplied' : undefined);
   const requested = goal !== undefined && goal.trim() !== '';
-  const items = inventories.flatMap(entry => entry.release.items.map(item => ({ ...item, root: { releaseSha256: entry.release.sha256 } })));
+  // Each item keeps the origins it names, so the rules can tell which items come from the same declared source file.
+  const items = inventories.flatMap(entry => entry.release.items.map(item => ({ ...item, root: { releaseSha256: entry.release.sha256 },
+    sources: (entry.release.sources ?? []).filter(source => (item.sourceIds ?? []).includes(source.id)) })));
   const stored = evidence !== undefined && evidence !== null;
   let friction;
   if (stored) {
@@ -128,7 +132,7 @@ export async function checkImprovements({ envelopeBytes, inventories, candidateI
   const releases = {};
   for (const entry of [...inventories, ...(unread === undefined ? candidateInventories : [])]) if (!Object.hasOwn(releases, entry.release.sha256)) releases[entry.release.sha256] = entry.release;
   const suggested = await suggestImprovements({ intent: draft.intent, items, inventories, candidates: unread === undefined ? candidateInventories : [], clients, labels, goal, coreClients, friction: friction?.results, releaseOrder,
-    closures: catalogClosures(releases, draft.intent.roots), compare });
+    closures: catalogClosures(releases, draft.intent.roots), compare, ...(catalogTool ? { catalogTool } : {}) });
   const unchecked = coverage.filter(entry => entry.state === 'unknown').map(entry => entry.text);
   const current = suggested.map(suggestion => ({ ...suggestion, unknowns: [...suggestion.unknowns, ...unchecked] }));
   const savedBy = new Map(read.records.filter(isSuggestion).map(record => [record.id, record]));

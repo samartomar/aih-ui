@@ -292,7 +292,7 @@ test('describePolicy: an included dependency pinned to another release falls bac
 test('choiceReason gives exactly the reason the consumer test round-trips', () => {
   const detections = detectStack(JS).detections;
   assert.equal(choiceReason({ goal: 'add tests to my react app', detections, choice: { ruleId: 'goal.test' }, rulesVersion: GUIDED_RULES_VERSION }),
-    'guided-setup rules 1.1.0: goal.test. Goal: add tests to my react app. Project: JavaScript, TypeScript, React, Vitest.');
+    'guided-setup rules 1.2.0: goal.test. Goal: add tests to my react app. Project: JavaScript, TypeScript, React, Vitest.');
 });
 
 // ---- Which adapter serves a client: Catalog's clientId, never the item id --------------------------------------------
@@ -381,4 +381,20 @@ test('a manual tick and a saved setup choice survive a re-check that finds nothi
 test('a suggestion made after a re-check carries the new installed fact, not the old one', () => {
   const run = presence => clientChoice(CATALOG, ['claude'], { coreClients: ['claude'], observations: observationsFrom([{ id: 'claude', presence }]) }).client.installed.state;
   assert.deepEqual([run('runnable'), run('absent')], ['found', 'not-found']);
+});
+
+test('with a chosen Catalog tool, a rule recommends the copy from the same source file that declares it', () => {
+  const origin = { kind: 'git', repository: 'https://github.com/mattpocock/skills', revision: 'd81f' };
+  const path = 'skills/productivity/grill-me/SKILL.md';
+  const withSource = (base, client, metadata) => ({ ...base, sources: [{ id: client ?? 'upstream', origin }], metadata: { ...metadata,
+    ...(client ? { discovery: { clientCapabilities: [{ client, surface: `.${client}/skills`, capability: 'skill-material-format', support: 'supported' }] } } : {}) } });
+  const facts = { sourceFacts: { identifier: path, provenance: { path, revision: 'd81f' } } };
+  const catalog = CATALOG.map(found => found.id === 'mattpocock.grill-me' ? withSource(found, null, { upstream: { path } }) : found);
+  catalog.push(withSource(item('extensions.kiro.matt.grill-me', 'skill'), 'kiro-ide', facts), withSource(item('extensions.matt.grill-me', 'skill'), 'claude-code', facts));
+  const planned = extra => pairs(run(JS, 'help me plan a new idea', [], catalog, extra));
+  assert.deepEqual(planned({ catalogTool: 'claude-code' })[0], ['extensions.matt.grill-me', 'goal.plan']);
+  assert.deepEqual(planned({ catalogTool: 'kiro-ide' })[0], ['extensions.kiro.matt.grill-me', 'goal.plan']);
+  assert.deepEqual(planned({ catalogTool: 'codex' })[0], ['mattpocock.grill-me', 'goal.plan'], 'no copy declares it: unchanged');
+  assert.deepEqual(planned({})[0], ['mattpocock.grill-me', 'goal.plan'], 'no Catalog tool chosen: unchanged');
+  assert.equal(GUIDED_RULES_VERSION, '1.2.0');
 });

@@ -45,8 +45,8 @@ export function restoreView(view, counts) {
     if (sourceScopes(counts).some((scope) => scope.filterValue === saved.source)) view.source = saved.source;
   }
   if (typeof saved.family === 'string') view.family = saved.family;
-  if (typeof saved.target === 'string') view.target = saved.target;
-  if (['all', 'supported', 'unsupported', 'unknown'].includes(saved.support)) view.support = saved.support;
+  // The Catalog tool is the person's own saved choice (catalog-tool.js), not part of the session view.
+  if (['all', 'supported', 'unsupported', 'unknown', 'not-declared'].includes(saved.support)) view.support = saved.support;
   if (SORT_KEYS.includes(saved.sort)) view.sort = saved.sort;
   return view;
 }

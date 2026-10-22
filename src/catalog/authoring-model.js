@@ -18,7 +18,8 @@ export function capabilityFacts(item, target) {
   if (declared !== undefined && (!Array.isArray(declared) || declared.some(fact => !usable(fact)))) {
     facts.push({ support: 'unknown', capability: 'Unusable declaration', surface: 'Not established', reason: 'Unusable producer declarations establish no target support.' });
   }
-  return facts.length ? facts : [{ support: 'unknown', capability: 'Target support', surface: 'Not declared', reason: `No capability facts declared for ${target || 'this target'}.` }];
+  // Nothing declared for the tool is a fact of its own, not an unknown support value the producer never stated.
+  return facts.length ? facts : [{ support: 'not-declared', capability: 'Target support', surface: 'Not declared', reason: target ? `Not declared for ${target}.` : 'No tool declared.' }];
 }
 export function declaredTargets(items) {
   return [...new Set(items.flatMap(item => capabilityFacts(item).map(fact => fact.client).filter(Boolean)))].sort();

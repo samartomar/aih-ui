@@ -7,6 +7,7 @@
 import { suggestionId, suggestionRevision, sameContent, MAX_TRIGGERS } from './improvement-record.mjs';
 import { orderRelation, RELEASE_ORDER_TEXT } from './release-order.mjs';
 import { adapterFor, describeClientIdentity } from './client-identity.mjs';
+import { preferredCopy } from './source-copies.mjs';
 // 1.1.0: the client rule names a client by its published label when one is supplied (wording only; identity is unchanged).
 // 1.2.0: a goal-relevant item new or revised in a newer revision of a saved source is suggested from that revision; recurring friction is named as unchecked.
 // 1.3.0: the client rule matches adapters by Catalog clientId; an adapter without one is not suggested.
@@ -15,7 +16,9 @@ import { adapterFor, describeClientIdentity } from './client-identity.mjs';
 // 1.6.0: recurring friction also reads the readiness journal (a check made with this host's trust and with the persisted configuration are two timelines) and the Core targets a selected item's executables run on; wording only otherwise.
 // 1.7.0: dependency and update facts are Catalog's (resolveSelections, compareReleases); an unresolved closure is stated as a lower bound; executables tie the
 // targets Core publishes them under. Suggestion ids, revisions and dismissals are unchanged; only newly written suggestion records carry this version.
-export const IMPROVEMENT_RULES_VERSION = '1.7.0';
+// 1.8.0: with a chosen Catalog tool name (`catalogTool`), a rule's item is replaced by the copy from the same declared source file that declares that
+// tool, when one exists (source-copies.mjs). The copy is a different item, so it is a different suggestion; identity and dismissal rules are unchanged.
+export const IMPROVEMENT_RULES_VERSION = '1.8.0';
 export const MAX_GOAL = 300, MAX_ALTERNATIVES = 3, MAX_TRACKED_NEEDS = 256;
 // Independent of the guided-setup rules on purpose: each rule set is versioned alone, so changing one never changes
 // the saved reasons the other wrote.
@@ -208,7 +211,8 @@ function changedItems(intent, inventories, candidates, releaseOrder, closures, c
 // at a scope: `{ required }` (its required closure as plain items), or `{ unavailable }` (the item ids Catalog could not resolve), each with `conflicts`
 // (ids of the policy's choices Catalog reports in conflict), or undefined when Catalog was not asked. `compare` (optional) is Catalog's comparison of
 // two checked releases (see releaseRelation); without it no candidate is called a revision of a saved release.
-export async function suggestImprovements({ intent, items = [], inventories = [], candidates: revisions = [], clients = [], labels = {}, goal, coreClients, friction = [], releaseOrder, closures, compare: compareReleases } = {}) {
+// `catalogTool` (optional) is the Catalog tool name the person chose (claude-code, ...); it is never derived from `clients`.
+export async function suggestImprovements({ intent, items = [], inventories = [], candidates: revisions = [], clients = [], labels = {}, goal, coreClients, friction = [], releaseOrder, closures, compare: compareReleases, catalogTool } = {}) {
   const selected = new Set([...intent.roots, ...intent.pins].map(entry => entry.itemId)), excluded = new Set(intent.exclusions.map(entry => entry.itemId));
   const offered = new Map();
   for (const item of items) if (!offered.has(item.id)) offered.set(item.id, item);
@@ -216,8 +220,9 @@ export async function suggestImprovements({ intent, items = [], inventories = []
   // `from` is a changed candidate item; the suggestion then describes that item, the content its reason talks about. `hint` is the narrowest
   // scope the reason itself points at; the suggestion takes it when the item offers it, else project, else the item's first scope. A suggestion is
   // one item at one scope, so reasons that resolve to different scopes are different suggestions.
-  const add = (itemId, key, ruleId, textOf, reference, goalText, from, hint) => {
-    const item = from?.item ?? offered.get(itemId);
+  const add = (ruleItemId, key, ruleId, textOf, reference, goalText, from, hint) => {
+    // A rule names one item; with a chosen Catalog tool its copy declaring that tool is suggested instead, when there is one.
+    const item = from?.item ?? preferredCopy(offered.get(ruleItemId), [...offered.values()], catalogTool), itemId = from ? ruleItemId : item?.id;
     if (!item || selected.has(itemId) || excluded.has(itemId) || !item.scopes?.length) return;
     const scope = scopeFor(item, hint), slot = `${itemId}\u0000${scope}`;
     const candidate = candidates.get(slot) ?? { item, scope, triggers: new Map(), references: [] };

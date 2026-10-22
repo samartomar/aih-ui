@@ -44,7 +44,7 @@ const byItem = (suggestions, itemId) => suggestions.find(s => s.change.itemId ==
 const shownItem = (checked, itemId) => byItem([checked.leading, ...checked.alternatives, ...checked.dismissed].filter(Boolean), itemId);
 
 test('the rules version and goal table are fixed and every rule names a distinct, well-formed reason', () => {
-  assert.equal(IMPROVEMENT_RULES_VERSION, '1.7.0');
+  assert.equal(IMPROVEMENT_RULES_VERSION, '1.8.0');
   assert.deepEqual(GOAL_RULES.map(rule => [rule.id, rule.itemId]), [['goal.fix', 'mattpocock.diagnosing-bugs'], ['goal.test', 'mattpocock.tdd'], ['goal.regressions', 'mattpocock.tdd'],
     ['goal.review', 'mattpocock.code-review'], ['goal.refactor', 'mattpocock.improve-codebase-architecture'], ['goal.plan', 'mattpocock.grill-me'], ['goal.context', 'aihq.project-context']]);
   for (const rule of GOAL_RULES) assert.match(rule.id, /^[a-z][a-z0-9.-]{0,63}$/);
@@ -140,7 +140,7 @@ test('the client rule names a client by its published label, and the label never
   const [plain] = await suggest({ clients: ['claude'] }), [named] = await suggest({ clients: ['claude'], labels: { claude: 'Claude Code', codex: 'Codex' } });
   assert.deepEqual(named.triggers, [{ ruleId: 'client.instructions', key: 'client:claude', text: 'You use Claude Code (Workbench setup), but this policy does not give it the shared project instructions.' }]);
   assert.equal(named.goal, 'Give Claude Code the same shared project instructions as your other AI clients.');
-  assert.equal(named.rulesVersion, '1.7.0');
+  assert.equal(named.rulesVersion, '1.8.0');
   // A label is wording: the same id and revision, so a dismissal made before a rename still applies.
   assert.deepEqual([named.id, named.revision], [plain.id, plain.revision]);
   assert.deepEqual(classifyImprovement(named, plain), { dismissed: true, reasons: [] });
@@ -391,7 +391,7 @@ test('a goal-relevant item that is new or revised in a newer revision of a saved
   assert.equal(changeTrigger(tdd).text, '“Label mattpocock.tdd” changed in review-notes-catalog 1.1.0 (its recipe or files differ from the revision this policy was saved from); your saved goal “add tests to my app” mentions “tests”.');
   assert.deepEqual(tdd.triggers.map(t => t.key), ['change:revised@1.1.0', 'goal:goal.test']);
   assert.deepEqual(tdd.references, [{ kind: 'saved-reason', ref: 'x.root' }, { kind: 'catalog-item', ref: 'mattpocock.tdd' }]);
-  assert.equal(tdd.goal, GOAL); assert.equal(tdd.rulesVersion, '1.7.0');
+  assert.equal(tdd.goal, GOAL); assert.equal(tdd.rulesVersion, '1.8.0');
   // The change describes the candidate item, the content the reason talks about.
   assert.deepEqual([tdd.change.releaseSha256, tdd.change.itemSha256, tdd.change.content.recipeSha256], [hex(10), hex(121), hex(21)]);
   const plan = byItem(got, 'notes.plan');
@@ -563,14 +563,14 @@ test('the rule table points at items the installed maintained Catalog really off
   const before = s.envelopeBytes.slice();
   const value = await check(s, s.envelopeBytes, { clients: ['claude', 'not-a-client'], goal: 'fewer regressions' });
   assert.deepEqual(s.envelopeBytes, before);
-  assert.equal(value.rulesVersion, '1.7.0'); assert.equal(value.checkedAt, NOW); assert.deepEqual(value.mutations, []);
+  assert.equal(value.rulesVersion, '1.8.0'); assert.equal(value.checkedAt, NOW); assert.deepEqual(value.mutations, []);
   assert.deepEqual(value.reads, ['envelope', 'supplied-inventories', 'declared-clients', 'request-goal']);
   // implement is the root; tdd arises from the saved goal and the request (two reasons), the client wiring from setup.
   assert.equal(value.leading.change.itemId, 'mattpocock.tdd');
   assert.deepEqual(value.leading.triggers.map(t => t.key), ['goal:goal.regressions', 'goal:goal.test']);
   assert.equal(value.leading.label, s.maintained.release.items.find(i => i.id === 'mattpocock.tdd').label);
   assert.equal(value.leading.scope, 'project'); assert.equal(value.leading.dismissal, null); assert.equal(value.leading.promotion, undefined);
-  assert.equal(value.leading.rulesVersion, '1.7.0'); assert.equal(value.leading.change.releaseSha256, s.maintained.release.sha256);
+  assert.equal(value.leading.rulesVersion, '1.8.0'); assert.equal(value.leading.change.releaseSha256, s.maintained.release.sha256);
   assert.match(value.leading.facts[0].text, /^Adds \d+ files, \d+ bytes in total, and needs 0 other items\.$/);
   assert.deepEqual(value.alternatives.map(a => a.change.itemId), ['aihq.client.claude']);
   assert.match(value.alternatives[0].facts[0].text, /^Adds \d+ files, \d+ bytes in total, and needs [1-9]\d* other items?: /);
@@ -1118,7 +1118,7 @@ test('checking, dismissing and building the prompt never touch the network or a 
 });
 
 test('the improvement modules import only the allowed seams and contain no network, process or random calls', async () => {
-  const allowed = [/^\.\/primitives\.mjs$/, /^\.\/journey\.mjs$/, /^\.\/headless\.mjs$/, /^\.\/intent-shape\.mjs$/, /^\.\/maintenance-record\.mjs$/, /^\.\/improvement-[a-z]+\.mjs$/, /^\.\/client-identity\.mjs$/, /^\.\/trial-record\.mjs$/, /^\.\/release-order\.mjs$/, /^\.\/friction\.mjs$/, /^\.\/executable-ties\.mjs$/, /^\.\/claims\.mjs$/, /^@aihq\/catalog\/reader$/, /^@aihq\/core\/report$/, /^@aihq\/core\/contracts$/];
+  const allowed = [/^\.\/primitives\.mjs$/, /^\.\/journey\.mjs$/, /^\.\/headless\.mjs$/, /^\.\/intent-shape\.mjs$/, /^\.\/maintenance-record\.mjs$/, /^\.\/improvement-[a-z]+\.mjs$/, /^\.\/client-identity\.mjs$/, /^\.\/source-copies\.mjs$/, /^\.\/trial-record\.mjs$/, /^\.\/release-order\.mjs$/, /^\.\/friction\.mjs$/, /^\.\/executable-ties\.mjs$/, /^\.\/claims\.mjs$/, /^@aihq\/catalog\/reader$/, /^@aihq\/core\/report$/, /^@aihq\/core\/contracts$/];
   for (const name of ['improvement-record.mjs', 'improvement-rules.mjs', 'improvement-closures.mjs', 'improvements.mjs', 'friction.mjs']) {
     const source = await readFile(new URL(`./${name}`, import.meta.url), 'utf8');
     const specifiers = [...source.matchAll(/^(?:import|export)\b[^;]*?\bfrom\s+'([^']+)'/gm)].map(match => match[1]);
@@ -1129,7 +1129,7 @@ test('the improvement modules import only the allowed seams and contain no netwo
       assert.doesNotMatch(source, forbidden, `${name} ${forbidden}`);
   }
   const rules = await readFile(new URL('./improvement-rules.mjs', import.meta.url), 'utf8');
-  assert.deepEqual([...rules.matchAll(/^import\b[^;]*?\bfrom\s+'([^']+)'/gm)].map(m => m[1]), ['./improvement-record.mjs', './release-order.mjs', './client-identity.mjs']);
+  assert.deepEqual([...rules.matchAll(/^import\b[^;]*?\bfrom\s+'([^']+)'/gm)].map(m => m[1]), ['./improvement-record.mjs', './release-order.mjs', './client-identity.mjs', './source-copies.mjs']);
   // The tie table reads only Core's published target ids.
   const ties = await readFile(new URL('./executable-ties.mjs', import.meta.url), 'utf8');
   assert.deepEqual([...ties.matchAll(/^import\b[^;]*?\bfrom\s+'([^']+)'/gm)].map(m => m[1]), ['@aihq/core/harness']);
@@ -1144,7 +1144,7 @@ test('the prompt is attributed, tells the AI to change nothing, and carries no p
   for (const suggestion of [checked.leading, ...checked.alternatives]) {
     const prompt = suggestion.prompt;
     assert.equal(prompt, improvementPrompt(suggestion));
-    assert.ok(prompt.includes('Suggested by the AIH Workbench improvement rules 1.7.0 (fixed rules; no AI model was used).'));
+    assert.ok(prompt.includes('Suggested by the AIH Workbench improvement rules 1.8.0 (fixed rules; no AI model was used).'));
     assert.match(prompt, /Do not install, change or run anything/); assert.match(prompt, /do not ask me to upload/);
     assert.ok(prompt.includes('Start your reply with “AI advice:”.'));
     assert.ok(prompt.includes(suggestion.label)); assert.ok(prompt.includes(suggestion.change.itemId));
@@ -1325,7 +1325,7 @@ test('a recurrence names the condition, the evidence and the scope, and records 
     text: `Recurring failure: the managed file state check for “${label}” failed (${DAYS[0]}), recovered (${DAYS[1]}) and failed again (${DAYS[2]}); 1 recurrence in 3 stored Core results.` }]);
   assert.match(suggestion.triggers[0].key, /^[a-z][a-z0-9-]{0,31}:[\w.@-]{1,180}$/);
   assert.equal(suggestion.goal, 'ship it'); assert.deepEqual(suggestion.references, [{ kind: 'saved-reason', ref: 'mattpocock.implement' }, { kind: 'catalog-item', ref: DIAGNOSING }]);
-  assert.equal(value.rulesVersion, '1.7.0'); assert.equal(suggestion.rulesVersion, '1.7.0'); assert.equal(suggestion.triggers[0].text.includes(FIXTURE_NOTE), false);
+  assert.equal(value.rulesVersion, '1.8.0'); assert.equal(suggestion.rulesVersion, '1.8.0'); assert.equal(suggestion.triggers[0].text.includes(FIXTURE_NOTE), false);
   assert.deepEqual(value.coverage[1], { trigger: 'recurring-friction', state: 'checked', text: FRICTION_COVERAGE.checked });
   assert.deepEqual(value.reads, ['envelope', 'supplied-inventories', 'core-evidence', 'declared-clients']);
   assert.deepEqual(suggestion.unknowns, [...UNKNOWNS, UNCONFIGURED]); assert.equal(suggestion.prompt, improvementPrompt(suggestion)); assert.match(suggestion.prompt, /Recurring failure: the managed file state check/);
@@ -1725,4 +1725,19 @@ test('an older release of the saved package is ordered, and a dismissal is unaff
   const recorded = await record(s.envelopeBytes, dismissOperation(first.leading));
   const second = await check(s, recorded.envelopeBytes, { goal: 'tests', candidateInventories: [equal] });
   assert.deepEqual(second.dismissed.map(d => d.id), [first.leading.id]); assert.equal(second.dismissed[0].promotion, undefined);
+});
+
+test('with a chosen Catalog tool, a goal rule suggests the copy from the same source file that declares it', async () => {
+  const origin = { kind: 'git', repository: 'https://github.com/mattpocock/skills', revision: 'd81f' }, path = 'skills/productivity/grill-me/SKILL.md';
+  const declared = client => ({ sourceFacts: { identifier: path, provenance: { path, revision: 'd81f' } }, discovery: { clientCapabilities: [{ client, surface: `.${client}/skills`, capability: 'skill-material-format', support: 'supported' }] } });
+  const items = [...catalog().map(found => found.id === 'mattpocock.grill-me' ? { ...found, sources: [{ id: 'upstream', origin }], metadata: { upstream: { path } } } : found),
+    item('extensions.kiro.matt.grill-me', { sources: [{ id: 'matt', origin }], metadata: declared('kiro-ide') }),
+    item('extensions.matt.grill-me', { sources: [{ id: 'matt', origin }], metadata: declared('claude-code') })];
+  const planned = async options => (await suggest({ items, goal: 'help me plan this', ...options })).map(s => s.change.itemId).filter(id => id.endsWith('grill-me'));
+  assert.deepEqual(await planned({ catalogTool: 'claude-code' }), ['extensions.matt.grill-me']);
+  assert.deepEqual(await planned({ catalogTool: 'kiro-ide' }), ['extensions.kiro.matt.grill-me']);
+  assert.deepEqual(await planned({ catalogTool: 'codex' }), ['mattpocock.grill-me'], 'no copy declares it: unchanged');
+  assert.deepEqual(await planned({}), ['mattpocock.grill-me'], 'no Catalog tool chosen: unchanged');
+  // The copy for the tool is already selected, so nothing is suggested for the rule.
+  assert.deepEqual(await planned({ catalogTool: 'claude-code', intent: intentOf({ roots: [rootOf('extensions.matt.grill-me')] }) }), []);
 });

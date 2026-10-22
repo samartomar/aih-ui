@@ -117,7 +117,7 @@ export async function runGuidedSetupBrowser({ origin, output, playwrightModule }
     assert.equal(envelope.executable, false);
     assert.deepEqual(envelope.records.map(record => record.schema), ['urn:aihq:workbench:journey-record:unresolved-draft:1.0.0']);
     const reasons = envelope.records[0].intent.roots.map(root => root.reason);
-    assert.ok(reasons.length === count && reasons.every(reason => reason.includes('guided-setup rules 1.1.0') && reason.includes(GOAL)), 'Every saved choice keeps its rule version and goal.');
+    assert.ok(reasons.length === count && reasons.every(reason => reason.includes('guided-setup rules 1.2.0') && reason.includes(GOAL)), 'Every saved choice keeps its rule version and goal.');
     await shot(page, '06-saved');
 
     // Reopen the downloaded setup in a fresh page.

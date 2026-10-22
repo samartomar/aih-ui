@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { declaredTools, filterByTools, toolLine, toolRelation, toolsNotice } from '../../src/catalog/tool-match.js';
+import { catalogToolView, declaredTools, filterByTools, toolLine, toolRelation, toolsNotice } from '../../src/catalog/tool-match.js';
 import { toolWarning } from '../../src/app/install-panel.js';
 
 const fact = (client, surface) => ({ capability: 'skill-material-format', client, surface, support: 'supported' });
@@ -30,22 +30,47 @@ test('names are compared exactly: claude-code is not translated to claude', () =
   assert.equal(toolRelation(undeclared, core), 'any');
 });
 
-test('"your tools" hides only content clearly for an unselected tool, and says what it cannot decide', () => {
+test('the header tools hide only content clearly for an unselected Core tool, and the notice says so only when it hides something', () => {
   const shown = filterByTools(entries, { mode: 'mine', ...core }).map(entry => entry.authoringItem.id);
   assert.deepEqual(shown, ['extensions.matt.grill-me', 'extensions.kiro.matt.grill-me', 'extensions.notices', 'mattpocock.grill-me']);
   assert.equal(filterByTools(entries, { mode: 'all', ...core }).length, 5);
   assert.equal(filterByTools(entries, { mode: 'mine', ...core, selected: [] }).length, 5, 'no tools chosen: nothing hidden');
   assert.equal(filterByTools(entries, { mode: 'mine', ...core, coreIds: [] }).length, 5, 'no Core list: nothing hidden');
-  const notice = toolsNotice(filterByTools(entries, { mode: 'mine', ...core }), { mode: 'mine', ...core });
-  assert.match(notice.showing, /Showing content for your tools: Claude Code \(claude\)/);
-  assert.match(notice.unmatched, /2 items name a tool the Catalog calls claude-code, kiro-ide, which does not match Core's tool names/);
-  assert.match(toolsNotice(entries, { mode: 'all', ...core }).showing, /all tools/);
+  assert.match(toolsNotice(entries, { mode: 'mine', ...core }), /^1 item the Catalog lists only for Core tools you did not choose in the header \(codex\) is also hidden\.$/);
+  const noCodex = entries.filter(entry => entry.authoringItem !== codexCopy);
+  assert.equal(toolsNotice(noCodex, { mode: 'mine', ...core }), '', 'hides nothing, so says nothing');
+  assert.equal(toolsNotice(entries, { mode: 'all', ...core }), '');
 });
 
-test('Install warns when an item is for another tool, and when a name cannot be confirmed', () => {
-  assert.equal(toolWarning([codexCopy], { ...core, selected: ['codex'] }), '');
-  assert.match(toolWarning([codexCopy], core), /Not for your tools: grill-me is for codex\. Your tools: Claude Code \(claude\)\./);
-  assert.match(toolWarning([kiroCopy], core), /Check the tool: grill-me is for kiro-ide\. .*cannot confirm they match/);
-  assert.equal(toolWarning([anyTool, undeclared], core), '');
-  assert.equal(toolWarning([kiroCopy], { ...core, selected: [] }), '', 'no tools chosen: nothing to compare');
+test('the chosen Catalog tool is the real filter, whatever its support value, with undeclared items behind a counted switch', () => {
+  const ids = view => view.entries.map(entry => entry.authoringItem.id);
+  const unsupported = item('extensions.kiro.agent', { ...fact('kiro-ide', 'agents'), support: 'unsupported' });
+  const all = [...entries, { authoringItem: unsupported }];
+  const claudeView = catalogToolView(all, { tool: 'claude-code', mode: 'mine' });
+  assert.deepEqual(ids(claudeView), ['extensions.matt.grill-me']);
+  assert.equal(claudeView.undeclared, 2, 'no tool, or only generic');
+  assert.equal(claudeView.filtered, true);
+  assert.deepEqual(ids(catalogToolView(all, { tool: 'claude-code', mode: 'mine', showUndeclared: true })), ['extensions.matt.grill-me', 'extensions.notices', 'mattpocock.grill-me']);
+  assert.deepEqual(ids(catalogToolView(all, { tool: 'kiro-ide', mode: 'mine' })), ['extensions.kiro.matt.grill-me', 'extensions.kiro.agent']);
+  assert.equal(catalogToolView(all, { tool: 'claude-code', mode: 'all' }).entries.length, 6, 'Show all');
+  const none = catalogToolView(all, { tool: '', mode: 'mine' });
+  assert.equal(none.entries.length, 6, 'no tool chosen: nothing hidden');
+  assert.equal(none.filtered, false);
+  assert.equal(none.undeclared, 2);
+});
+
+test('Install warns only about a chosen item that does not declare the chosen Catalog tool', () => {
+  assert.equal(toolWarning([claudeCopy], { catalogTool: 'claude-code' }), '', 'the correct copy gets no warning');
+  assert.equal(toolWarning([kiroCopy], { catalogTool: 'claude-code' }), 'Not listed for claude-code: grill-me (kiro-ide).');
+  assert.equal(toolWarning([claudeCopy, undeclared, anyTool], { catalogTool: 'claude-code' }), 'Not listed for claude-code: grill-me (no declared tool), grill-me (any AI tool).');
+  assert.equal(toolWarning([kiroCopy], {}), '', 'no Catalog tool chosen: nothing to compare');
+  assert.equal(toolWarning([kiroCopy], { ...core }), '', 'the header Core ids are never compared with Catalog names');
+});
+
+test('the Catalog tool defaults to the person\'s saved choice while the Catalog declares it, otherwise to none', async () => {
+  const { defaultCatalogTool } = await import('../../src/catalog/catalog-tool.js');
+  const declared = ['claude-code', 'codex', 'kiro-ide'];
+  assert.equal(defaultCatalogTool(declared, 'kiro-ide'), 'kiro-ide');
+  assert.equal(defaultCatalogTool(declared, 'retired-tool'), '');
+  assert.equal(defaultCatalogTool(declared, ''), '', 'no saved choice: no filter, and no guess from the header tools');
 });

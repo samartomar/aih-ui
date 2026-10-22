@@ -131,7 +131,7 @@ export async function createMixedService(maintained, { suppliedInventories, fami
           return checkImprovements({ envelopeBytes, inventories: all, candidateInventories: source?.inventories ?? null, ...(source?.releaseOrder ? { releaseOrder: source.releaseOrder } : {}),
             candidateSource: maintenanceSource ? 'configured' : 'unconfigured', candidateCoverage: coverageOf(source),
             evidence: frictionEvidence ? await Promise.resolve().then(frictionEvidence).catch(() => null) : undefined,
-            clients: body.clients ?? [], labels: body.labels ?? {}, coreClients: [...nativeClientIds], goal: body.goal, now });
+            clients: body.clients ?? [], labels: body.labels ?? {}, coreClients: [...nativeClientIds], goal: body.goal, catalogTool: body.catalogTool, now });
         }
         // Reading trials writes nothing. This host can enforce no bound, so it has no mechanisms and every bound is advisory.
         if (operation === 'trials-read') return readTrials({ envelopeBytes, mechanisms: TRIAL_MECHANISMS_NONE });

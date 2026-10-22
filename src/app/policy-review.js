@@ -1,6 +1,7 @@
 import { el } from './dom.js';
 import { artifactDiff, readArtifact } from './proposal-diff.js';
 import { setupEntry } from './setup-entry.js';
+import { sameSourceWarning } from './source-copies.js';
 
 /**
  * One review surface shared by every catalog page, independent of the policy screen. The header's Review Changes
@@ -16,13 +17,15 @@ export function createPolicyReview({ client, accept, proposed, status, setupHead
   const title = el('h2', 'font-semibold', 'Review policy changes'); title.id = 'policy-review-panel-title'; title.tabIndex = -1;
   const context = el('p', 'text-on-surface-variant');
   const changes = el('div', 'space-y-2');
+  // Two chosen items made from one declared source file: provenance only, so it never says they are the same content.
+  const sameSource = el('p', 'p-2 rounded border border-wb-border bg-tertiary-container text-on-surface'); sameSource.id = 'setup-same-source'; sameSource.hidden = true;
   const close = el('button', 'policy-review-close', 'Close'); close.type = 'button';
   const back = el('button', 'policy-review-back px-3 py-1.5 rounded border border-wb-border text-on-surface hover:bg-surface-container', 'Back to catalog'); back.type = 'button'; back.id = 'policy-back-to-catalog';
   back.title = 'Close this panel and return to the catalog to choose more content.';
   const discard = el('button', 'px-3 py-1.5 rounded border border-wb-border', 'Discard proposed changes'); discard.type = 'button'; discard.id = 'policy-discard';
   const actions = el('div', 'flex flex-wrap gap-2'); actions.append(accept, discard);
   actions.id = 'policy-proposal-actions';
-  node.append(title, close, back, context, status, changes, proposed, actions);
+  node.append(title, close, back, context, status, sameSource, changes, proposed, actions);
   document.body.append(node);
   const triggers = [trigger, entry].filter(Boolean);
   for (const control of triggers) { control.setAttribute('aria-controls', node.id); control.setAttribute('aria-expanded', 'false'); }
@@ -86,6 +89,10 @@ export function createPolicyReview({ client, accept, proposed, status, setupHead
     const current = client.draft?.roots ?? client.intent?.roots ?? [];
     const next = client.candidate?.roots ?? client.candidate?.intent?.roots;
     context.textContent = `${client.draft ? 'Working draft' : 'Project policy'} · ${current.length} accepted choices${client.dirty ? ' · Changes not downloaded' : ''}${client.startupSource === 'recovery' ? ' · Recovered from this browser session' : ''}${client.recoveryAvailable === false ? ' · Session recovery unavailable: download before leaving.' : ''}`;
+    // The setup as it would be: the proposal's choices when one is pending, else the accepted ones.
+    const catalogItems = client.catalog?.items ?? [];
+    const itemOf = root => catalogItems.find(item => item.id === root.itemId && item.root?.releaseSha256 === root.releaseSha256);
+    sameSource.textContent = sameSourceWarning((next ?? current).map(itemOf).filter(Boolean)); sameSource.hidden = !sameSource.textContent;
     changes.replaceChildren(); actions.hidden = !client.candidate; discard.disabled = !client.candidate; accept.disabled = !client.candidate;
     if (!next) { changes.append(el('p', '', 'No proposed changes. Choose a catalog item to review its exact selection and dependencies.')); return; }
     const key = root => JSON.stringify([root.releaseSha256, root.itemId, root.scope]);

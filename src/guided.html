@@ -57,6 +57,8 @@
 <p class="text-on-surface-variant">Tick the AI clients you use. Each one says where it came from.</p>
 <p class="text-on-surface-variant">Your selection determines which client adapters can be suggested. No client is selected as a default here. With several clients, each matching adapter is considered; the short starter list may not include every client. Review each adapter's target, Core support and installation facts separately.</p>
 <ul class="space-y-1" id="clients"></ul>
+<p><label class="flex flex-wrap items-center gap-2">Tool name the Catalog uses for your AI tool <select class="bg-wb-input border border-wb-border rounded p-1" id="catalog-tool" aria-label="Catalog tool name"><option value="">choose…</option></select></label></p>
+<p class="text-xs text-on-surface-variant">With a tool name chosen, a starter choice is the Catalog copy made for it, when the Catalog has one from the same source file. The Catalog names tools differently from the list above, so this is your choice, not a match the page makes.</p>
 <div class="flex flex-wrap items-center gap-3">
 <button class="px-3 py-1.5 rounded border border-wb-control-border hover:bg-surface-container disabled:opacity-50" id="detect-clients" type="button">Detect AI clients on this machine</button>
 <span class="text-xs text-on-surface-variant" id="clients-status" role="status" aria-live="polite"></span>

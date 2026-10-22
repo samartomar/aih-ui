@@ -18,8 +18,9 @@ import { projectItems, capabilityFacts, declaredTargets, supportedEntries } from
 import { publishedClients } from "../app/core-targets.js";
 import { inventoryCounts, scopeTotal, selectedScope, visibleEntries, sourceScopes } from "./selectors.js";
 import { emptyView, restoreView, saveView } from "./view-state.js";
-import { el, text } from "../app/dom.js";
-import { filterByTools, toolsNotice } from "./tool-match.js";
+import { text } from "../app/dom.js";
+import { catalogToolView, filterByTools, toolsNotice } from "./tool-match.js";
+import { defaultCatalogTool, saveCatalogTool, savedCatalogTool } from "./catalog-tool.js";
 
 /**
  * @param onSelectEntry    called with the entry when the selection changes
@@ -44,8 +45,13 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     // The header's chosen AI tools (Core ids) and whether the grid shows only content for them.
     selectedTools: [],
     toolsMode: 'mine',
+    // Whether items that declare no specific tool are shown beside those the Catalog lists for the chosen tool.
+    showUndeclared: false,
   };
   let restoredView = false;
+  // The tool names the installed Catalog declares, read once per catalog.
+  let declaredNames = [];
+  const declared = () => declaredNames;
 
   const changeView = (patch) => {
     Object.assign(state.view, patch);
@@ -87,31 +93,49 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     const row = sourceScopes(state.counts).find(row => row.source.release === family.value);
     changeView({ family: family.value, source: row?.filterValue ?? null, sourceType: null });
   });
-  target.addEventListener('change', () => changeView({ target: target.value }));
+  // The Catalog tool name is the person's own choice; it is remembered for the next visit and shared with the page.
+  target.addEventListener('change', () => { saveCatalogTool(target.value); changeView({ target: target.value }); });
   support.addEventListener('change', () => changeView({ support: support.value }));
-  const resetFilters = () => { Object.assign(state.view, emptyView()); toolbar.setQuery(''); changeView({ target: target.options[0]?.value ?? '' }); };
+  // Reset clears the filters, not the person's tool choice.
+  const resetFilters = () => { const tool = state.view.target; Object.assign(state.view, emptyView()); toolbar.setQuery(''); changeView({ target: tool }); };
   document.getElementById('catalog-reset-filters').addEventListener('click', resetFilters);
   const filterDisclosure = document.getElementById('catalog-filter-disclosure');
   if (window.innerWidth <= 760) filterDisclosure.open = false;
-  // Above the filters, always visible: which tools the grid is showing content for, and the switch.
-  const toolsBar = el('div', 'flex flex-wrap items-center gap-x-3 gap-y-1 p-2 rounded border border-wb-border bg-surface-container-low'); toolsBar.id = 'catalog-tools-bar';
-  const toolsShowing = el('p', 'text-on-surface'); toolsShowing.id = 'catalog-tools-showing'; toolsShowing.setAttribute('role', 'status');
-  const toolsToggle = el('button', 'px-2 py-1 rounded border border-wb-border bg-surface-container text-on-surface hover:bg-surface-container-high'); toolsToggle.type = 'button'; toolsToggle.id = 'catalog-tools-toggle';
-  const toolsUnmatched = el('p', 'w-full text-on-surface-variant text-[11px]'); toolsUnmatched.id = 'catalog-tools-unmatched';
+  // Above the filters, always visible: the Catalog tool the grid shows content for, Show all, and the undeclared switch.
+  const toolsShowing = document.getElementById('catalog-tools-showing');
+  const toolsToggle = document.getElementById('catalog-tools-toggle');
+  const toolsUndeclared = document.getElementById('catalog-tools-undeclared');
+  const toolsUnmatched = document.getElementById('catalog-tools-unmatched');
   toolsToggle.addEventListener('click', () => { state.toolsMode = state.toolsMode === 'mine' ? 'all' : 'mine'; render(); });
-  toolsBar.append(toolsShowing, toolsToggle, toolsUnmatched); filterDisclosure.before(toolsBar);
+  toolsUndeclared.addEventListener('click', () => { state.showUndeclared = !state.showUndeclared; render(); });
   const coreTools = () => publishedClients(state.summary?.coreTargets) ?? { ids: [], labels: {} };
   const toolOptions = () => ({ mode: state.toolsMode, coreIds: coreTools().ids, selected: state.selectedTools, labels: coreTools().labels });
 
+  // Search, kind, source and family, before any tool filter.
+  function scopeEntries(view = state.view) {
+    return visibleEntries(state.entries, view).filter(entry => !view.family || entry.authoringItem.family === view.family);
+  }
+  function catalogTool(view = state.view) {
+    return catalogToolView(scopeEntries(view), { tool: view.target, mode: state.toolsMode, showUndeclared: state.showUndeclared });
+  }
+  // The Catalog tool filter first (Catalog names), then the header tools (Core names); neither is translated into the other.
   function browseEntries(view = state.view) {
-    return filterByTools(visibleEntries(state.entries, view)
-      .filter(entry => !view.family || entry.authoringItem.family === view.family), toolOptions());
+    return filterByTools(catalogTool(view).entries, toolOptions());
   }
   function renderToolsBar() {
-    const options = toolOptions(), notice = toolsNotice(browseEntries(), options);
-    toolsShowing.textContent = notice.showing; toolsUnmatched.textContent = notice.unmatched; toolsUnmatched.hidden = !notice.unmatched;
-    toolsToggle.hidden = !options.coreIds.length || !options.selected.length;
-    toolsToggle.textContent = state.toolsMode === 'mine' ? 'Show all tools' : 'Show only my tools';
+    const tool = state.view.target, view = catalogTool(), options = toolOptions();
+    toolsShowing.textContent = !tool ? 'Choose the tool name the Catalog uses for your AI tool'
+      : state.toolsMode === 'mine' ? 'Content the Catalog lists for' : 'Showing content for every tool. Your Catalog tool:';
+    // What the header tools would hide; without a Catalog tool the switch shows only when that is something.
+    const hiddenByCore = toolsNotice(view.entries, { ...options, mode: 'mine' });
+    toolsToggle.hidden = !tool && !hiddenByCore;
+    toolsToggle.textContent = state.toolsMode === 'mine' ? 'Show all' : tool ? `Show only ${tool}` : 'Show only my tools';
+    toolsUndeclared.hidden = !view.filtered;
+    toolsUndeclared.textContent = `${state.showUndeclared ? 'Hide' : 'Show'} ${view.undeclared} with no declared tool`;
+    toolsUndeclared.setAttribute('aria-pressed', String(state.showUndeclared));
+    toolsUndeclared.title = 'Items that declare no tool, or only a generic one. The Catalog does not list them for any specific tool.';
+    const notice = state.toolsMode === 'mine' ? hiddenByCore : '';
+    toolsUnmatched.textContent = notice; toolsUnmatched.hidden = !notice;
   }
 
   function selectedEntry() {
@@ -168,7 +192,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     const cardsView = cardsModel();
     const scoped = browseEntries();
     const count = status => scoped.filter(entry => capabilityFacts(entry.authoringItem, target.value).some(fact => fact.support === status)).length;
-    counts.textContent = `${publishedClients(state.summary?.coreTargets)?.ids.length ?? 'Unknown'} Core clients are listed in setup; this catalog declares ${target.options.length} target clients. Target declarations do not establish installation. ${target.value || 'No declared target'} · ${scoped.length} items in family/search/source scope: ${count('supported')} with supported facts · ${count('unsupported')} with unsupported facts · ${count('unknown')} with unknown facts. Mixed items can count in more than one group.`;
+    counts.textContent = `${publishedClients(state.summary?.coreTargets)?.ids.length ?? 'Unknown'} Core clients are listed in setup; this catalog declares ${declared().length} tool names. Tool declarations do not establish installation. ${target.value || 'No Catalog tool chosen'} · ${scoped.length} items in family/search/source scope: ${count('supported')} with supported facts · ${count('unsupported')} with unsupported facts · ${count('unknown')} with unknown facts${target.value ? ` · ${count('not-declared')} not declared for ${target.value}` : ''}. Mixed items can count in more than one group.`;
     const availableKinds = supportedEntries(browseEntries({ ...state.view, kind: null }), target.value, support.value);
     const filteredCounts = inventoryCounts(availableKinds);
     provenance.render({
@@ -252,9 +276,10 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
           family.append(new Option(`${value} (${authoring.catalog.items.filter(item => item.family === value).length})`, value));
         }
         family.value = [...family.options].some(option => option.value === selectedFamily) ? selectedFamily : '';
-        target.replaceChildren(...declaredTargets(authoring.catalog.items).map(value => new Option(value, value)));
-        target.value = [...target.options].some(option => option.value === selectedTarget) ? selectedTarget
-          : [...target.options].some(option => option.value === 'claude-code') ? 'claude-code' : target.options[0]?.value ?? '';
+        declaredNames = declaredTargets(authoring.catalog.items);
+        // The Catalog's own tool names. The default is the person's saved choice, else none: never a guess from the header's Core ids.
+        target.replaceChildren(new Option('choose…', ''), ...declared().map(value => new Option(value, value)));
+        target.value = defaultCatalogTool(declared(), restoredView ? selectedTarget : savedCatalogTool());
         state.view.family = family.value;
         state.view.target = target.value;
         // Startup loads the catalog and shell concurrently. Restore only after
@@ -266,7 +291,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
           restoredView = true;
         }
         if (![...family.options].some(option => option.value === state.view.family)) state.view.family = '';
-        if (![...target.options].some(option => option.value === state.view.target)) state.view.target = target.options[0]?.value ?? '';
+        if (![...target.options].some(option => option.value === state.view.target)) state.view.target = target.value;
         toolbar.setQuery(state.view.query);
         render();
         refreshEvidence();
