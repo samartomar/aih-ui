@@ -11,6 +11,8 @@ import { authorityFromResult, changeSummary, compareRevision, reviewFreshness, r
 import { isJourneyEnvelope, importLimitError } from './authoring-client.js';
 import { dependencyRows } from './dependency-set.js';
 import { createInstallPanel } from './install-panel.js';
+import { addItem, addedMessage, undoAdd } from './one-click-add.js';
+import { createAddedNotice } from './added-notice.js';
 import { createInstalledPanel } from './installed-panel.js';
 import { createProjectFolderRow } from './project-folder.js';
 
@@ -85,9 +87,9 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   copy.addEventListener('click', safe(async () => { if (!client.bytes.length || checking) return; await navigator.clipboard.writeText(new TextDecoder().decode(client.bytes)); copy.textContent = 'Copied'; }));
   jsonDownload.addEventListener('click', () => { if (!client.bytes.length || checking) return; download(client.bytes, client.draft && !client.compiled ? 'policy.original.json' : 'policy.json'); client.markDownloaded(); });
   const stage = document.getElementById('apply-staging-btn');
-  stage.textContent = 'Choose'; stage.title = 'Review this item and its dependencies before accepting it.';
-  // With a draft open the client routes this through the draft edit, not the policy proposal.
-  stage.addEventListener('click', safe(async () => { if (!selectedItem || stage.dataset.busy) return; stage.dataset.busy = 'true'; stage.setAttribute('aria-busy', 'true'); stage.textContent = 'Reviewing choice…'; stage.disabled = true; try { present(await client.propose({ type: 'select', root: selectedItem.root })); goToPolicy(); } finally { delete stage.dataset.busy; stage.removeAttribute('aria-busy'); stage.textContent = 'Choose'; render(); } }));
+  stage.textContent = 'Add'; stage.title = 'Add this item and the items it needs to your setup.';
+  // The inspector's Add is the card's Add. With a draft open the client routes it through the draft edit.
+  stage.addEventListener('click', safe(async () => { if (!selectedItem || stage.dataset.busy) return; stage.dataset.busy = 'true'; stage.setAttribute('aria-busy', 'true'); stage.textContent = 'Adding…'; stage.disabled = true; try { await add(selectedItem); } finally { delete stage.dataset.busy; stage.removeAttribute('aria-busy'); render(); } }));
   const reset = document.getElementById('reset-item-btn'); reset.textContent = 'Remove project choice'; reset.title = 'Review removing this explicit project root; shared required dependencies remain owned by the composition validator.';
   reset.addEventListener('click', safe(async () => {
     const root = (client.draft?.roots ?? client.intent?.roots)?.find(root => root.itemId === selectedItem?.id && root.releaseSha256 === selectedItem?.root.releaseSha256);
@@ -401,6 +403,34 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     }
     proposed.append(el('p', 'text-on-surface-variant', 'Accepting approves each item together with its displayed required dependencies in one step. No separate dependency approval is needed. This does not authorize host execution.'));
   }
+  // One-click Add (owner decision 6): a clean proposal is accepted at once and confirmed with Undo, and the person keeps
+  // browsing. A refusal, or a proposal the host returned with diagnostics, opens the review with its reasons instead.
+  const notice = createAddedNotice({ el, button });
+  const setupWord = () => client.draft ? 'draft' : 'setup';
+  const thrown = error => ({ status: 'refused', result: { status: 'refused', diagnostics: [{ message: error.message }] } });
+  function openReview(outcome, refusedText, reviewText) {
+    notice.hide(); present(outcome.result);
+    if (outcome.status === 'refused') { showStatus(`${refusedText} ${failure(outcome.result)}`); reviewPanel.open(); }
+    else showStatus(`${reviewText} ${failure(outcome.result)}`);
+  }
+  async function add(item) {
+    const name = item.label ?? item.id;
+    const outcome = await addItem(client, item).catch(thrown);
+    if (outcome.status === 'superseded') return;
+    diagnostics.textContent = JSON.stringify(outcome.result, null, 2);
+    if (outcome.status !== 'added') return openReview(outcome, `Nothing was added: ${name} was refused.`, `${name} is not added yet. Read what the check reported, then accept to add it or discard.`);
+    const text = addedMessage({ name, needed: outcome.needed, draft: outcome.draft });
+    showStatus(text);
+    notice.show({ text, onUndo: () => undo(name, outcome.root) });
+  }
+  async function undo(name, root) {
+    const outcome = await undoAdd(client, root).catch(thrown);
+    if (outcome.status === 'superseded') return;
+    diagnostics.textContent = JSON.stringify(outcome.result, null, 2);
+    if (outcome.status !== 'removed') return openReview(outcome, `Undo did not change your ${setupWord()}.`, `Undo for ${name} is not done yet. Read what the check reported, then accept or discard.`);
+    const text = `Undone: ${name} is no longer in your ${setupWord()}.`;
+    showStatus(text); notice.show({ text });
+  }
   function present(result) {
     diagnostics.textContent = JSON.stringify(result, null, 2);
     if (result.status !== 'ok') { showStatus(failure(result)); return; }
@@ -437,7 +467,9 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     for (const action of [copy, jsonDownload]) { action.disabled = checking || !client.bytes.length; action.setAttribute('aria-disabled', String(action.disabled)); action.classList.toggle('cursor-not-allowed', action.disabled); }
     copy.title = `Copy ${jsonKind.toLowerCase()}`; jsonDownload.title = `Download ${jsonKind.toLowerCase()}`;
     jsonDownload.textContent = draft && !client.compiled ? 'Download original policy' : 'Download policy';
-    stage.disabled = !selectedItem || (!intent && !draft); reset.disabled = !current.some(root => root.itemId === selectedItem?.id && root.releaseSha256 === selectedItem?.root.releaseSha256);
+    const selectedChosen = current.some(root => root.itemId === selectedItem?.id && root.releaseSha256 === selectedItem?.root.releaseSha256);
+    if (!stage.dataset.busy) stage.textContent = selectedChosen ? (draft ? 'In draft' : 'Added') : 'Add';
+    stage.disabled = Boolean(stage.dataset.busy) || !selectedItem || (!intent && !draft) || selectedChosen; reset.disabled = !selectedChosen;
     for (const action of [stage, reset]) { action.setAttribute('aria-disabled', String(action.disabled)); action.classList.toggle('opacity-50', action.disabled); action.classList.toggle('cursor-not-allowed', action.disabled); }
     const persistentContext = document.getElementById('policy-current-context');
     const contextSummary = document.getElementById('policy-context-summary');
@@ -539,5 +571,5 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   function setTargets(coreTargets) {
     improvements.setTargets(coreTargets); organizationAuthor.setTargets(coreTargets);
   }
-  return { present, setSettings: setRole, select(entry) { selectedItem = entry?.authoringItem; render(); }, setTargets };
+  return { present, add, setSettings: setRole, select(entry) { selectedItem = entry?.authoringItem; render(); }, setTargets };
 }

@@ -24,8 +24,9 @@ import { el, text } from "../app/dom.js";
  * @param onSelectEntry    called with the entry when the selection changes
  * @param onReselectEntry  called when the selected card is activated again
  * @param onSummary        called with the preview summary once it has loaded
+ * @param onAdd            called with the catalog item when its card's Add is used; resolves when the Add has settled
  */
-export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () => {}, onSummary, subscribeSecurity, onProposal = () => {} }) {
+export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () => {}, onSummary, subscribeSecurity, onAdd = async () => {} }) {
   const elements = catalogElements();
   const state = {
     entries: [],
@@ -33,7 +34,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     counts: inventoryCounts([]),
     view: emptyView(),
     selectedId: null,
-    // The card whose own Choose button was used last; Back to catalog returns to it (else to the selected card).
+    // The card whose own Add button was used last; Back to catalog returns to it (else to the selected card).
     chosenId: null,
     // entryId -> { state, scanId } from the host's read of the supplied Scan evidence; empty means not supplied.
     evidence: new Map(),
@@ -108,13 +109,14 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       selectedId: state.selectedId,
       intent: authoring.intent,
       acceptedRoots: authoring.draft?.roots ?? authoring.intent?.roots ?? [],
-      acceptedLabel: authoring.draft ? "In draft" : "In policy",
+      acceptedLabel: authoring.draft ? "In draft" : "Added",
       evidence: state.evidence,
       onReset: resetFilters,
       onChoose: async (item, entryId) => {
         state.chosenId = entryId ?? null;
-        try { onProposal(await authoring.propose({ type: 'select', root: item.root })); }
-        catch (error) { onProposal({ status: 'refused', diagnostics: [{ message: error.message }] }); }
+        await onAdd(item);
+        // A clean Add rebuilds the grid without opening the review; keyboard focus returns to the card.
+        if (document.activeElement === document.body || !document.activeElement?.isConnected) cards.focus(state.chosenId);
       },
     };
   }
