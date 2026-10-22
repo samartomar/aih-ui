@@ -15,6 +15,7 @@ import { addItem, addedMessage, undoAdd } from './one-click-add.js';
 import { createAddedNotice } from './added-notice.js';
 import { createInstalledPanel } from './installed-panel.js';
 import { createProjectFolderRow } from './project-folder.js';
+import { rememberOpen } from './advanced.js';
 
 const buttonClass = 'px-3 py-1.5 rounded bg-surface-container text-on-surface border border-wb-border hover:bg-surface-container-high';
 function button(label, action, primary = false) {
@@ -48,10 +49,10 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   const status = el('p', 'text-on-surface-variant'); status.id = 'policy-status'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite'); controls.after(status);
   const file = el('input'); file.type = 'file'; file.accept = 'application/json,.json'; file.id = 'policy-open'; file.setAttribute('aria-label', 'Open saved project policy');
   const accepted = el('div', 'space-y-2'); accepted.id = 'policy-roots'; roots.append(accepted);
-  const accept = button('Accept choices with dependencies', () => {
+  const accept = button('Add to setup', () => {
     client.accept();
     showStatus(client.draft ? 'Draft change accepted. Save the draft to keep it; compile a resolved scope to produce an executable policy.'
-      : client.catalog?.executionAvailable ? 'Changes accepted. Install them into your project below.' : 'Changes accepted. Review your policy and save the exact artifact.');
+      : client.catalog?.executionAvailable ? 'Your setup is updated. Install it into your project folder below.' : 'Your setup is updated. Download it from Advanced to keep it.');
     if (!installPanel.node.hidden) installPanel.node.scrollIntoView({ block: 'nearest' });
   }, true);
   accept.id = 'policy-accept'; accept.disabled = true;
@@ -64,13 +65,9 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   const originalDownload = button('Download original artifact', () => original && download(original, 'policy.original.json'));
   originalDownload.disabled = true;
   const goToPolicy = () => reviewPanel.open();
-  for (const id of ['review-project-changes', 'check-project-policy']) {
-    const action = document.getElementById(id); action.classList.remove('opacity-50', 'cursor-not-allowed');
-  }
-  document.getElementById('review-project-changes').replaceChildren(document.createTextNode('Review Changes'));
-
-  const check = document.getElementById('check-project-policy');
+  // Check Policy moved from the header into the drawer's Advanced section; it keeps its id and behaviour.
   let checking = false;
+  const check = button('Check Policy', () => {}); check.id = 'check-project-policy'; check.title = 'Validate the current project policy and its exact sources';
   check.addEventListener('click', safe(async () => {
     if (checking) return;
     if (client.candidate && !window.confirm('Discard the current proposal and validate the accepted choices again?')) return;
@@ -90,7 +87,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   stage.textContent = 'Add'; stage.title = 'Add this item and the items it needs to your setup.';
   // The inspector's Add is the card's Add. With a draft open the client routes it through the draft edit.
   stage.addEventListener('click', safe(async () => { if (!selectedItem || stage.dataset.busy) return; stage.dataset.busy = 'true'; stage.setAttribute('aria-busy', 'true'); stage.textContent = 'Adding…'; stage.disabled = true; try { await add(selectedItem); } finally { delete stage.dataset.busy; stage.removeAttribute('aria-busy'); render(); } }));
-  const reset = document.getElementById('reset-item-btn'); reset.textContent = 'Remove project choice'; reset.title = 'Review removing this explicit project root; shared required dependencies remain owned by the composition validator.';
+  const reset = document.getElementById('reset-item-btn'); reset.textContent = 'Take out of setup'; reset.title = 'Review removing this explicit project root; shared required dependencies remain owned by the composition validator.';
   reset.addEventListener('click', safe(async () => {
     const root = (client.draft?.roots ?? client.intent?.roots)?.find(root => root.itemId === selectedItem?.id && root.releaseSha256 === selectedItem?.root.releaseSha256);
     if (root) { present(await client.propose({ type: 'remove-root', root: client.draft ? refOf(root) : root, keep: [] })); goToPolicy(); }
@@ -487,7 +484,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
       row.append(el('p', 'font-medium', item?.label ?? root.itemId), el('p', 'font-mono text-[10px] text-outline', `${item?.family ?? 'Saved source'} · ${root.scope} · ${root.itemId}`));
       row.append(createConfigurationEditor({ configuration: root.configuration, inputs: item?.inputs, label: root.itemId, button,
         review: async value => { try { present(await client.propose({ type: 'select', root: { ...root, configuration: value } })); } catch (error) { showStatus(error.message); } } }));
-      row.append(button(`Remove ${root.itemId}`, safe(async () => present(await client.propose({ type: 'remove-root', root, keep: [] })))));
+      row.append(button(`Take ${root.itemId} out of setup`, safe(async () => present(await client.propose({ type: 'remove-root', root, keep: [] })))));
       accepted.append(row);
     }
     for (const suggestion of draft ? [] : optional) {
@@ -554,13 +551,20 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     finally { snapshot.disabled = false; snapshot.value = ''; }
   });
   intake.append(snapshot, intakeStatus);
-  const tools = el('details', 'policy-advanced rounded border border-wb-border p-3'); tools.append(el('summary', 'cursor-pointer font-medium', 'Advanced: sources and execution'), exact, reconcile, host, source, execution, intake);
+  const tools = el('details', 'policy-advanced rounded border border-wb-border p-3'); tools.append(el('summary', 'cursor-pointer font-medium', 'Sources and execution'), exact, reconcile, host, source, execution, intake);
   tools.addEventListener('toggle', () => { if (tools.open) syncSource(); });
-  const currentChoices = el('section', 'space-y-2'); currentChoices.append(el('h3', 'font-medium', 'Accepted choices'), roots, draftSection);
+  const currentChoices = el('section', 'space-y-2'); currentChoices.append(el('h3', 'font-medium', 'Chosen items'), roots, draftSection);
   const fileActions = el('details', 'policy-advanced rounded border border-wb-border p-3'); fileActions.id = 'policy-file-actions'; fileActions.append(el('summary', 'cursor-pointer font-medium', 'File actions: new, open and validate'), controls);
-  reviewPanel.node.append(folderRow.node, installPanel.node, installedPanel.node, currentChoices, save, fileActions);
-  for (const view of [updates, improvements, trials, workspace]) reviewPanel.node.append(view.node.parentElement);
-  reviewPanel.node.append(organizationAuthor.node, tools);
+  // One Advanced section at the bottom of the drawer (owner decision 4). Placement only: every control keeps its id,
+  // code, routes and saved formats. Evidence review joins it from evidence-review.js.
+  const advanced = el('details', 'setup-advanced rounded border border-wb-border p-3 space-y-3'); advanced.id = 'setup-advanced';
+  advanced.append(el('summary', 'cursor-pointer font-medium', 'Advanced'));
+  const policyActions = el('div', 'flex flex-wrap gap-2'); policyActions.append(check, save);
+  advanced.append(policyActions, fileActions);
+  for (const view of [updates, improvements, trials, workspace]) advanced.append(view.node.parentElement);
+  advanced.append(tools);
+  rememberOpen(advanced, 'setup');
+  reviewPanel.node.append(folderRow.node, installPanel.node, installedPanel.node, currentChoices, organizationAuthor.node, advanced);
   organizationAuthor.node.hidden = true;
   const setRole = settings => {
     organizationAuthor.node.hidden = settings?.role !== 'admin';

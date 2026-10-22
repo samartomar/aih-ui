@@ -28,22 +28,8 @@
 <span class="material-symbols-outlined text-on-primary text-[14px]" aria-hidden="true">shield_with_house</span>
 </div>
 <span class="font-medium text-[11px] tracking-tight text-on-surface">aih Policy</span>
-<span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-medium" id="workbench-role">Local</span>
 </div>
 <div class="h-3.5 w-px bg-surface-container-high mx-0.5"></div>
-<!-- Scope Switcher: the organization is an input supplied by organizations, never a catalog value -->
-<div class="relative workspace-menu-container">
-<button class="wb-header-control" type="button" id="org-modal-trigger" aria-expanded="false" aria-controls="workspace-actions" title="Workspace settings and actions">
-<span class="" id="org-trigger-label">Loading setup…</span>
-<span class="wb-header-chevron" aria-hidden="true">▾</span>
-</button>
-<div id="workspace-actions" class="workspace-actions" hidden aria-label="Workspace actions"></div>
-</div>
-<button class="wb-header-control" type="button" id="workbench-mode-trigger" aria-haspopup="dialog" aria-controls="workbench-mode-dialog" title="Change Workbench mode">
-<span class="wb-header-muted wb-mode-label">Mode:</span>
-<span id="workbench-experience">Local setup</span>
-<span class="wb-header-chevron" aria-hidden="true">▾</span>
-</button>
 <!-- AI Tools: the AI clients @aihq/core supports as targets, and the user's
      selection as a draft. Supported, selected and connected are kept apart:
      nothing here checks that a tool is installed or connected. -->
@@ -63,16 +49,25 @@
 </div>
 <!-- Header Action CTAs -->
 <div class="flex items-center gap-2 shrink-0">
-<!-- Your setup: the chosen items of the current setup; opens the review panel at Install / Installed. -->
+<!-- Your setup: the one header entry to the drawer. It opens at a pending addition when there is one, otherwise at
+     Install / Installed. Review Changes is merged into it; its id stays on a hidden alias that opens the drawer at the top. -->
 <button class="flex items-center gap-1.5 px-2 py-1 rounded border border-primary text-primary text-[12px] font-medium hover:bg-surface-container" id="your-setup" type="button" title="Open the Project folder, Install and installed items for your setup.">Your setup</button>
-<button class="flex items-center gap-1.5 px-2 py-1 rounded bg-surface-container-low text-on-surface-variant text-[12px] opacity-50 cursor-not-allowed" id="review-project-changes" type="button" title="Review proposed project policy changes">
-<span class="">Review Changes</span>
-
-</button>
-<button class="px-2.5 py-1 rounded bg-surface-container text-on-surface-variant text-[12px] font-medium opacity-50 cursor-not-allowed" id="check-project-policy" type="button" title="Validate the current project policy and its exact sources">
-        Check Policy
-      </button>
+<button id="review-project-changes" type="button" hidden aria-hidden="true" tabindex="-1">Your setup</button>
 <span id="publish-project-policy" data-gap-reason="Git publishing is not connected. Save the project policy in Policy workspace, then review and publish through your Git workflow." data-gap-label="Publish not connected"></span>
+<!-- Settings: the workspace menu and the mode in one menu, with Check this machine and Get started. -->
+<div class="relative workspace-menu-container">
+<button class="wb-header-control" type="button" id="org-modal-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="workspace-actions" title="Settings: workspace, mode, this machine and getting started">
+<span class="material-symbols-outlined text-[14px]" aria-hidden="true">settings</span>
+<span>Settings</span>
+<span class="wb-header-chevron" aria-hidden="true">▾</span>
+</button>
+<div id="workspace-actions" class="workspace-actions" hidden aria-label="Settings">
+<p class="workspace-menu-status"><span id="org-trigger-label">Loading setup…</span> · <span class="font-mono uppercase" id="workbench-role">Local</span><br><span class="wb-header-muted">Mode:</span> <span id="workbench-experience">Local setup</span></p>
+<button class="workspace-action" type="button" id="workbench-mode-trigger" aria-haspopup="dialog" aria-controls="workbench-mode-dialog" title="Change Workbench mode">Change mode…</button>
+<a class="workspace-action" href="readiness.html" id="nav-readiness">Check this machine</a>
+<a class="workspace-action" href="guided.html" id="nav-guided">Get started</a>
+</div>
+</div>
 <div class="h-3.5 w-px bg-surface-container-high mx-0.5"></div>
 <!-- Theme Toggle Button: ONE icon naming the destination theme. mode.js owns
      the theme state and sets this icon's text and the button's label; the
@@ -120,28 +115,7 @@
 </span>
 <span class="font-mono text-[10px] px-1 rounded bg-surface-container-highest text-on-surface-variant font-medium" id="nav-sources-count">-</span>
 </a>
-<button class="flex w-full items-center justify-between px-2 py-1 rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface" id="nav-scan-review" type="button" aria-controls="evidence-review" title="Review Scan evidence you supply. No organization scan queue is connected and no scanner runs from this page.">
-<span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[14px] text-outline" aria-hidden="true">security_update_good</span><span>Scan Review</span></span>
-<span class="font-mono text-[10px] text-outline">Supplied evidence</span>
-</button>
-<button class="flex w-full items-center justify-between px-2 py-1 rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface" id="nav-policy" type="button" aria-controls="policy-workspace">
-<span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[14px] text-outline" aria-hidden="true">policy</span><span>Policy workspace</span></span>
-</button>
-<a class="flex w-full items-center justify-between px-2 py-1 rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface" href="readiness.html" id="nav-readiness">
-<span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[14px] text-outline" aria-hidden="true">health_and_safety</span><span>Check this machine</span></span>
-</a>
-<a class="flex w-full items-center justify-between px-2 py-1 rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface" href="guided.html" id="nav-guided">
-<span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[14px] text-outline" aria-hidden="true">explore</span><span>Get started</span></span>
-</a>
 </nav>
-</div>
-<!-- CATALOG SCOPES: one row per published source identity -->
-<div class="space-y-1 pt-1 border-t border-wb-border" id="catalog-scopes-section">
-<div class="px-2 py-0.5 text-[10px] font-mono tracking-wider text-outline uppercase font-medium flex items-center justify-between">
-<span class="">CATALOG SCOPES</span>
-<span class="material-symbols-outlined text-[12px] text-outline" aria-hidden="true">account_tree</span>
-</div>
-<div class="space-y-0.5 text-[11px]" id="rail-scope-list"></div>
 </div>
 <div class="space-y-1 pt-1 border-t border-wb-border">
 <div class="px-2 py-0.5 text-[10px] font-mono tracking-wider text-outline uppercase font-medium">
@@ -173,10 +147,6 @@
 </aside>
 <!-- CENTER WORKSPACE: Six-kind ledger + Control Strip + Fluid Grid -->
 <div class="flex-1 flex flex-col min-w-0 overflow-hidden" id="workbench-body-wrapper">
-<details id="catalog-kinds-disclosure" class="shrink-0 bg-wb-matrix" open>
-<summary class="px-3 text-on-surface-variant cursor-pointer" id="catalog-kinds-summary">Kinds and item counts</summary>
-<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 divide-x divide-wb-border border-b border-wb-border bg-wb-matrix shrink-0 select-none w-full" id="framework-matrix-tabs"></div>
-</details>
 <div class="flex-1 flex w-full overflow-hidden relative" id="workspace-split-row">
 <main class="flex-1 flex flex-col min-w-0 bg-background overflow-hidden" id="main-content">
 <div class="flex-1 flex flex-col overflow-y-auto min-w-0 bg-wb-center" id="catalog-workspace">
@@ -184,12 +154,8 @@
 <div class="flex items-center justify-between flex-wrap gap-2">
 <div>
 <div class="text-[10px] font-mono tracking-wider uppercase text-outline font-medium mb-0.5">CATALOG INDEX · READ-ONLY MIRROR</div>
-<h1 class="wb-source-heading text-wb-heading font-semibold text-wb-title tracking-tight" tabindex="-1">Build your project policy</h1>
-<p class="text-on-surface-variant">Choose catalog items, review proposed changes, then save your policy.</p>
-<div class="flex flex-wrap items-center gap-2 mt-2">
-<a class="wb-btn" href="#policy">Open policy workspace</a>
-<span class="text-outline">Start a policy or continue your current draft.</span>
-</div>
+<h1 class="wb-source-heading text-wb-heading font-semibold text-wb-title tracking-tight" tabindex="-1">Choose content for your AI tool</h1>
+<p class="text-on-surface-variant">Add what you want, then install it from Your setup.</p>
 </div>
 <details class="source-policy-details"><summary>Organization source policy</summary><div class="flex items-center gap-2">
 <span class="text-[10.5px] font-mono text-outline uppercase tracking-wider hidden sm:inline-block">Organization Source Policy:</span>
@@ -200,7 +166,7 @@
 </div>
 </div></details>
 </div>
-<p class="text-on-surface-variant">Browse the catalog below. Inspect an item for details, then choose it to review a proposed change.</p>
+<p class="text-on-surface-variant">Select a card for its details. Add puts it in Your setup with the items it needs.</p>
 <p class="flex flex-wrap items-baseline gap-2 text-on-surface-variant" aria-label="Current catalog source">
 <span class="text-outline">Catalog source:</span>
 <span class="min-w-0 break-words" id="masthead-name">Loading sources…</span>
@@ -208,6 +174,37 @@
 <span class="text-outline" id="masthead-version"></span>
 </p>
 <div class="flex flex-wrap items-center gap-2 text-[11px] font-mono text-outline pt-0.5" id="masthead-status"></div>
+<!-- Advanced (owner decision 4): the kind tiles, the catalog scopes, the Policy workspace links and Scan Review.
+     Placement only: each keeps its id, code and behaviour. Closed for a new viewer; app/advanced.js remembers it. -->
+<details id="catalog-advanced" class="catalog-advanced"><summary class="cursor-pointer text-on-surface-variant hover:text-on-surface font-medium">Advanced</summary>
+<div class="catalog-advanced-body space-y-3 pt-2">
+<nav class="flex flex-wrap items-center gap-2" aria-label="Advanced views">
+<button class="inline-flex items-center gap-2 px-2 py-1 rounded border border-wb-border text-on-surface-variant hover:bg-surface-container hover:text-on-surface" id="nav-policy" type="button" aria-controls="policy-workspace">
+<span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[14px] text-outline" aria-hidden="true">policy</span><span>Policy workspace</span></span>
+</button>
+<button class="inline-flex items-center gap-2 px-2 py-1 rounded border border-wb-border text-on-surface-variant hover:bg-surface-container hover:text-on-surface" id="nav-scan-review" type="button" aria-controls="evidence-review" title="Review Scan evidence you supply. No organization scan queue is connected and no scanner runs from this page.">
+<span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[14px] text-outline" aria-hidden="true">security_update_good</span><span>Scan Review</span></span>
+<span class="font-mono text-[10px] text-outline">Supplied evidence</span>
+</button>
+</nav>
+<div class="flex flex-wrap items-center gap-2">
+<a class="wb-btn" href="#policy" id="catalog-open-policy-workspace">Open policy workspace</a>
+<span class="text-outline">Start a policy or continue your current draft.</span>
+</div>
+<details id="catalog-kinds-disclosure" class="shrink-0 bg-wb-matrix rounded border border-wb-border" open>
+<summary class="px-3 text-on-surface-variant cursor-pointer" id="catalog-kinds-summary">Kinds and item counts</summary>
+<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 divide-x divide-wb-border border-b border-wb-border bg-wb-matrix shrink-0 select-none w-full" id="framework-matrix-tabs"></div>
+</details>
+<!-- CATALOG SCOPES: one row per published source identity -->
+<div class="space-y-1 w-60 max-w-full" id="catalog-scopes-section">
+<div class="px-2 py-0.5 text-[10px] font-mono tracking-wider text-outline uppercase font-medium flex items-center justify-between">
+<span class="">CATALOG SCOPES</span>
+<span class="material-symbols-outlined text-[12px] text-outline" aria-hidden="true">account_tree</span>
+</div>
+<div class="space-y-0.5 text-[11px]" id="rail-scope-list"></div>
+</div>
+</div>
+</details>
 </div>
 <div class="border-b border-wb-border bg-wb-subhead shrink-0" id="workbench-toolbar">
 <div class="toolbar-search-row flex flex-wrap items-center gap-3">
