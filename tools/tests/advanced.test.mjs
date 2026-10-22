@@ -87,3 +87,26 @@ test('the header has one button for your setup: Review Changes and Check Policy 
 test('Signals are part of the review filters, not a separate disclosure', () => {
   assert.equal(page.has('review-signals'), false);
 });
+
+// Words a person meets on the default screen, per GLOSSARY.md: engine words may stay inside Advanced, the hidden views
+// and the dialogs, never on the screen a person first sees. "aih Policy" is the product's name.
+const ENGINE_WORDS = /(polic(y|ies)|pins?|pinned|artifacts?|explicit choices?|accepted choices?|prepare[ds]?|digests?|recipes?|envelopes?|admission)/i;
+const NOT_DEFAULT = ['catalog-advanced', 'pane-json', 'tab-json', 'pane-security', 'policy-workspace', 'workbench-mode-dialog', 'setup-dialog', 'org-modal-overlay', 'details-disclosure'];
+function defaultText(html) {
+  const words = [], stack = [];
+  const body = html.slice(html.indexOf('<body')).replace(/<!--[\s\S]*?-->/g, '').replace(/<script[\s\S]*?<\/script>/g, '');
+  for (const match of body.matchAll(/<(\/?)([a-zA-Z][\w-]*)([^>]*?)(\/?)>|([^<]+)/g)) {
+    const [, closing, tag, attrs, selfClosing, text] = match;
+    if (text !== undefined) { if (text.trim() && !stack.some(entry => NOT_DEFAULT.includes(entry.id) || entry.hidden)) words.push(text.trim()); continue; }
+    const name = tag.toLowerCase();
+    if (closing) { const at = stack.map(entry => entry.tag).lastIndexOf(name); if (at >= 0) stack.length = at; continue; }
+    if (!VOID.has(name) && !selfClosing) stack.push({ tag: name, id: /\sid="([^"]+)"/.exec(attrs)?.[1] ?? null, hidden: /\shidden(\s|=|$)/.test(attrs) });
+  }
+  return words.join(' | ').replace(/aih Policy/g, 'aih');
+}
+
+test('the default catalog screen uses plain words: no policy, pins, artifacts, digests, recipes or Prepare', () => {
+  const text = defaultText(readFileSync(new URL('../../src/index.html', import.meta.url), 'utf8'));
+  assert.doesNotMatch(text, ENGINE_WORDS);
+  assert.match(text, /Choose content for your AI tool/);
+});
