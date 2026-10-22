@@ -423,6 +423,10 @@ body:has(#main-content) [hidden] { display: none !important; }
 .workspace-action:hover { background: var(--color-hover); }
 /* The Core tools chip inside Settings: its panel opens in the menu, below the chip. */
 #ai-tools-trigger.workspace-action { display: flex; align-items: center; gap: 6px; }
+/* Settings' Advanced part (#136): the Core tools list for setting up this machine, apart from Your tool. */
+.workspace-advanced { margin-top: 4px; border-top: 1px solid var(--color-border); padding-top: 4px; }
+.workspace-advanced > summary { cursor: pointer; color: var(--color-on-surface-variant); }
+.workspace-advanced-note { margin: 0; padding: 2px 12px 6px; color: var(--color-on-surface-variant); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
 /* Your tool's choices: the chosen one is marked by weight and the primary role, not by colour alone. */
 .your-tool-option { display: block; width: 100%; padding: 4px 6px; text-align: left; border-radius: var(--r); color: var(--color-text); font-family: var(--mono); }
 .your-tool-option:hover { background: var(--color-hover); }

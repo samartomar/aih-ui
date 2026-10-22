@@ -64,7 +64,33 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     await page.locator('#starting-sets-note').filter({ hasText: /^This framework has 6 starting sets\. Choose your tool/ }).waitFor();
     const idle = await page.locator('#policy-current-context').textContent();
     assert.match(idle, /No changes waiting to download/);
+    // #136: with nothing saved for this address, the page says the choice is remembered in this browser for it.
+    assert.ok((await page.locator('#your-tool-status').textContent()).includes(`it is remembered in this browser for this address (${new URL(origin).host}).`));
     await openCatalogAdvanced(page); await page.locator('#browse-target').selectOption('claude-code');
+    // The choice comes back on the next visit in the same browser, and the header shows one tool list.
+    const again = await page.context().newPage(); again.setDefaultTimeout(30_000);
+    again.on('pageerror', error => errors.push(error.message));
+    await again.goto(origin + '/');
+    await again.locator('#your-tool-value').filter({ hasText: /^claude-code$/ }).waitFor();
+    assert.equal(await again.locator('#browse-target').inputValue(), 'claude-code');
+    assert.equal(await again.locator('header #your-tool-trigger #your-tool-core').count(), 0, 'no Core suffix beside Your tool');
+    assert.equal(await again.locator('#ai-tools-trigger').isVisible(), false, 'the Core tools list is not on the default screen');
+    // The Core tools list works from its new place: Settings, Advanced, Tools to set up on this machine. It saves, and
+    // the saved choice is read back on the next visit; it is restored as found.
+    await again.locator('#org-modal-trigger').click();
+    await again.locator('#settings-advanced > summary').click();
+    await again.locator('#ai-tools-trigger').filter({ hasText: 'Tools to set up on this machine' }).click();
+    const box = again.locator('#ai-tools-list input[type="checkbox"]').first(), was = await box.isChecked();
+    await box.setChecked(!was); await again.locator('#ai-tools-note').filter({ hasText: 'Selection saved locally.' }).waitFor();
+    await again.reload();
+    await again.locator('#org-modal-trigger').click();
+    if (!await again.locator('#settings-advanced').evaluate(node => node.open)) await again.locator('#settings-advanced > summary').click();
+    await again.locator('#ai-tools-trigger').click();
+    await again.locator('#ai-tools-list input[type="checkbox"]').first().waitFor();
+    assert.equal(await again.locator('#ai-tools-list input[type="checkbox"]').first().isChecked(), !was, 'the Core tools choice was saved');
+    await again.locator('#ai-tools-list input[type="checkbox"]').first().setChecked(was);
+    await again.locator('#ai-tools-note').filter({ hasText: 'Selection saved locally.' }).waitFor();
+    await again.close();
     await page.locator('#starting-sets-note').filter({ hasText: /^4 more starting sets in this framework need items the Catalog does not mark supported for claude-code\./ }).waitFor();
     const whole = page.locator('#starting-sets-list .wb-starting-set').filter({ hasText: 'claude-code whole workflow convenience template' });
     assert.equal(await page.locator('#starting-sets-list .wb-starting-set').count(), 2, 'only the claude-code sets');

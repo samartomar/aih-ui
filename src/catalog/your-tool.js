@@ -2,10 +2,10 @@
  * The header's one "Your tool" control (owner decision 3 on samartomar/aih-ui#96).
  *
  * It holds the Catalog tool name the person chose (claude-code, kiro-ide, ...), in the Catalog's own names: that is
- * what filters the content. Beside it, the Core tools the person chose in Settings are shown by their Harness labels,
- * only when they chose some. Neither is derived from the other: no published contract relates the two vocabularies
- * (samartomar/aih-ui#95). The tool line it replaces on the default path is kept under Advanced with the same
- * controls, and both write the same choice.
+ * what filters the content. It is the only tool list where people work (samartomar/aih-ui#136): the Core tools the
+ * person chose are under Settings, Advanced, as "Tools to set up on this machine", and their labels show there. Neither
+ * is derived from the other: no published contract relates the two vocabularies (samartomar/aih-ui#95). The tool line
+ * it replaces on the default path is kept under Advanced with the same controls, and both write the same choice.
  */
 
 import { el } from "../app/dom.js";
@@ -22,13 +22,18 @@ const ANY_TOOL = "generic";
  * @param undeclared / showUndeclared          the items that declare no specific tool, and whether they are shown
  * @param notSupported / showUnsupported      the items that declare the tool but are not marked supported for it, and whether shown
  * @param coreHidden    what the Core tools chosen in Settings also hide, in words, or ''
+ * @param place         this page's address (host and port): a choice is remembered per browser and address
+ * @param forgotten     a saved tool the Catalog no longer declares, cleared on this load, or ''
  */
-export function yourToolModel({ declared = [], tool = "", mode = "mine", coreIds = [], coreLabels = {}, coreSelected = [], undeclared = 0, showUndeclared = false, notSupported = 0, showUnsupported = false, coreHidden = "" }) {
+export function yourToolModel({ declared = [], tool = "", mode = "mine", coreIds = [], coreLabels = {}, coreSelected = [], undeclared = 0, showUndeclared = false, notSupported = 0, showUnsupported = false, coreHidden = "", place = "", forgotten = "" }) {
   const options = declared.filter((name) => name !== ANY_TOOL).map((name) => ({ value: name, label: name, checked: name === tool }));
   const core = coreSelected.filter((id) => coreIds.includes(id)).map((id) => clientLabel(coreLabels, id) ?? id);
   const noDeclared = `${undeclared} with no declared tool`;
+  const here = place ? `this browser for this address (${place})` : "this browser";
   const status = !tool
-    ? "No tool chosen, so content is not filtered by tool. Choose your tool in the header."
+    ? forgotten
+      ? `Your saved tool ${forgotten} is no longer in the Catalog, so it was cleared. Choose your tool in the header.`
+      : `No tool chosen, so content is not filtered by tool. Choose your tool in the header; it is remembered in ${here}.`
     : mode !== "mine"
       ? `Showing content for every tool (Show all, under Advanced). Your tool: ${tool}.`
       : [`Showing content supported for ${tool} according to the Catalog.`,
@@ -41,6 +46,7 @@ export function yourToolModel({ declared = [], tool = "", mode = "mine", coreIds
     options,
     undeclaredLabel: `${showUndeclared ? "Hide" : "Show"} ${noDeclared}`,
     undeclaredShown: showUndeclared,
+    rememberNote: `Your choice is remembered in ${here} only.`,
     genericNote: declared.includes(ANY_TOOL)
       ? "generic is not offered: the Catalog uses it for items meant for any AI tool, not one tool. They count as items with no declared tool."
       : "",
@@ -84,7 +90,7 @@ export function createYourTool({ elements, onChoose, onToggleUndeclared }) {
       elements.value.textContent = model.value;
       elements.core.textContent = model.core;
       elements.core.hidden = !model.core;
-      elements.trigger.title = `Your tool, in the Catalog's own name: ${model.value}.${model.core ? ` ${model.core}, chosen in Settings.` : ""} The two are separate choices; neither is derived from the other.`;
+      elements.trigger.title = `Your tool, in the Catalog's own name: ${model.value}. It chooses the content you see.`;
       elements.list.replaceChildren(
         ...model.options.map((option) => choice(option.value, option.label, option.checked, `Show content supported for ${option.value} according to the Catalog.`)),
         choice("", "No tool: show all content", !model.options.some((option) => option.checked), "Content is not filtered by tool."),
@@ -92,7 +98,7 @@ export function createYourTool({ elements, onChoose, onToggleUndeclared }) {
       elements.undeclared.textContent = model.undeclaredLabel;
       elements.undeclared.setAttribute("aria-pressed", String(model.undeclaredShown));
       elements.undeclared.hidden = !model.options.some((option) => option.checked);
-      elements.note.replaceChildren(...[model.genericNote, "The Core tools you set up for are chosen in Settings."].filter(Boolean).map((line) => el("p", "", line)));
+      elements.note.replaceChildren(...[model.genericNote, model.rememberNote, "Tools to set up on this machine are a separate list, under Settings, Advanced."].filter(Boolean).map((line) => el("p", "", line)));
       elements.status.textContent = model.status;
     },
   };

@@ -46,15 +46,39 @@ test('showing every tool (from Advanced) is said in the header and the page', ()
   assert.match(model.status, /every tool/i);
 });
 
-test('the header holds one tool control; the Core Tools chip and the tool line are under Settings and Advanced', () => {
+test('the header holds one tool list; the Core tools are under Settings, Advanced, as "Tools to set up on this machine"', () => {
   const html = readFileSync(new URL('../../src/index.html', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
-  const header = /<header[\s\S]*?<\/header>/.exec(html)[0];
+  const header = /<header[\s\S]*?<\/header>/.exec(html)[0].replace(/<!--[\s\S]*?-->/g, '');
   assert.match(header, /id="your-tool-trigger"/);
-  const settings = /<div id="workspace-actions"[\s\S]*?<\/div>\n<\/div>/.exec(html)[0];
-  assert.match(settings, /id="ai-tools-trigger"/, 'the Core Tools chip is in the Settings menu');
+  const trigger = /<button[^>]*id="your-tool-trigger"[\s\S]*?<\/button>/.exec(header)[0];
+  assert.doesNotMatch(trigger, /your-tool-core|Core/, 'no Core suffix beside Your tool');
+  const settings = /<div id="workspace-actions"[\s\S]*?<\/details>/.exec(header)[0];
+  const advanced = /<details id="settings-advanced"[\s\S]*?<\/details>/.exec(settings)?.[0];
+  assert.ok(advanced, 'Settings has an Advanced part');
+  assert.match(advanced, /<summary[^>]*>Advanced<\/summary>/);
+  for (const id of ['ai-tools-trigger', 'ai-tools-count', 'ai-tools-pop', 'ai-tools-list', 'ai-tools-note', 'your-tool-core'])
+    assert.match(advanced, new RegExp(`id="${id}"`), `${id} is in Settings, Advanced`);
+  assert.match(advanced, /Tools to set up on this machine/);
+  assert.match(advanced, /Check this machine/);
+  assert.match(advanced, /Get started/);
+  const outside = settings.replace(advanced, '');
+  assert.doesNotMatch(outside, /ai-tools-trigger|Core tools/, 'the Core tools list is not outside Advanced');
   const cards = /<div class="catalog-cards-region[\s\S]*?id="cards-grid"/.exec(html)[0];
   assert.doesNotMatch(cards, /catalog-tools-bar|browse-target/, 'the cards area has no separate tool line');
-  const advanced = /<details id="catalog-advanced"[\s\S]*?<\/details>\n<\/div>/.exec(html)[0];
-  assert.match(advanced, /id="catalog-tools-bar"/);
-  assert.match(advanced, /id="browse-target"/);
+  const catalogAdvanced = /<details id="catalog-advanced"[\s\S]*?<\/details>\n<\/div>/.exec(html)[0];
+  assert.match(catalogAdvanced, /id="catalog-tools-bar"/);
+  assert.match(catalogAdvanced, /id="browse-target"/);
+});
+
+test('with nothing saved in this browser for this address, the page says the choice is remembered here', () => {
+  const model = yourToolModel({ ...base, place: '127.0.0.1:4895' });
+  assert.equal(model.value, 'Choose your tool');
+  assert.match(model.status, /remembered in this browser for this address \(127\.0\.0\.1:4895\)/);
+  assert.doesNotMatch(yourToolModel({ ...base, tool: 'claude-code', place: '127.0.0.1:4895' }).status, /remembered/);
+});
+
+test('a saved tool the Catalog no longer declares is said plainly when it is cleared', () => {
+  const model = yourToolModel({ ...base, forgotten: 'old-tool', place: 'localhost:4895' });
+  assert.equal(model.value, 'Choose your tool');
+  assert.match(model.status, /Your saved tool old-tool is no longer in the Catalog, so it was cleared\./);
 });
