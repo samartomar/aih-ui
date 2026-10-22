@@ -26,6 +26,16 @@ export function newSetupSettings() {
   return emptySettings();
 }
 
+/** Setup steps in order. First-run setup always offers the optional assistance step; a section edit shows that section and review. */
+export function setupSteps({ draft, editing = false, editSection = null }) {
+  if (editSection) return [...(editSection === "review" ? [] : [editSection]), "review"];
+  return [
+    ...(!editing ? ["experience", ...(draft.experience === "enterprise" ? ["role"] : [])] : []),
+    ...(draft.experience === "enterprise" && draft.role === "admin" ? ["organization"] : []),
+    "capabilities", "clients", "review",
+  ];
+}
+
 const plain = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const exactKeys = (value, keys) => plain(value) && Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
 const boundedText = (value, max) => typeof value === "string" && value.length <= max && !/[\u0000-\u001f\u007f]/.test(value);
