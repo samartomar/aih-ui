@@ -5,7 +5,7 @@ const COMMIT = 'd81f3a183412e71a5b1e84ca21bc1a35eea03a60';
 // whose comment is the commit, then every entry under one "<repo>-<commit>/" folder.
 export function tarHeader(name, { type = '0', size = 0, linkname = '' } = {}) {
   const block = Buffer.alloc(512);
-  block.write(name, 0, 100, 'utf8');
+  if (typeof name === 'string') block.write(name, 0, 100, 'utf8'); else name.copy(block, 0, 0, 100);
   block.write('0000644\0', 100); block.write('0000000\0', 108); block.write('0000000\0', 116);
   block.write(size.toString(8).padStart(11, '0') + '\0', 124);
   block.write('00000000000\0', 136);
@@ -24,12 +24,12 @@ const paxRecord = (key, value) => {
   while (String(length).length + body.length !== length) length = String(length).length + body.length;
   return `${length}${body}`;
 };
-export function tarball(entries, { commit = COMMIT, root = `skills-${COMMIT}/`, gzip = true } = {}) {
+export function tarball(entries, { commit = COMMIT, root = `skills-${commit ?? COMMIT}/`, gzip = true } = {}) {
   const pax = Buffer.from(paxRecord('comment', commit));
   const parts = commit === null ? [] : [tarHeader('pax_global_header', { type: 'g', size: pax.length }), pad(pax)];
   for (const entry of entries) {
     const bytes = Buffer.from(entry.text ?? '');
-    const name = entry.raw ? entry.path : root + entry.path;
+    const name = entry.nameBytes ? Buffer.concat([Buffer.from(root), entry.nameBytes]) : entry.raw ? entry.path : root + entry.path;
     if (entry.longPath) {
       const record = Buffer.from(paxRecord('path', name));
       parts.push(tarHeader('PaxHeader', { type: 'x', size: record.length }), pad(record));

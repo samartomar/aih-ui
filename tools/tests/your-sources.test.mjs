@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { folderSources, forgetFolder, forgetGitHub, githubName, isYourSource, PASTE_NOT_YET, rememberFolder, rememberedFolders, rememberedGitHub, rememberGitHub } from '../../src/catalog/your-sources.js';
-import { projectItems } from '../../src/catalog/authoring-model.js';
+import { GITHUB_PROVENANCE, projectItems } from '../../src/catalog/authoring-model.js';
 import { familyLabel } from '../../src/catalog/frameworks.js';
 import { frameworkRows } from '../../src/catalog/frameworks.js';
 
@@ -164,4 +164,12 @@ test('a GitHub repository is added by exact owner/repo, commit and folder; the b
   assert.match(kind, /Nothing is run/);
   assert.match(kind, /can't be installed yet[\s\S]*samartomar\/aih-catalog#124/);
   assert.doesNotMatch(kind, /href=/);
+});
+
+test("a GitHub commit is described as served for the repository's network, never as the owner's published code", () => {
+  assert.match(GITHUB_PROVENANCE, /as served by GitHub for this repository's network/);
+  assert.match(GITHUB_PROVENANCE, /forks/);
+  assert.match(GITHUB_PROVENANCE, /not verified to be on its branches/);
+  const readme = readFileSync(new URL('../../README.md', import.meta.url), 'utf8');
+  assert.match(readme, /as served by GitHub for this repository's network[^.]*not verified to be on its branches/);
 });

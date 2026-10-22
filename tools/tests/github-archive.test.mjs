@@ -93,6 +93,26 @@ test('a symlink or hardlink inside the requested folder, or any device, fifo or 
   }
 });
 
+test("the archive's one top folder must be <repo>-<commit>/ (GitHub may change the case of the name)", () => {
+  const value = checkGitHubSource(spec).value;
+  const wrong = extractCommitArchive(tarball(ordinary, { root: `other-${COMMIT}/` }), value);
+  assert.equal(wrong.diagnostics[0].code, 'GITHUB_ARCHIVE_UNSAFE');
+  assert.equal(extractCommitArchive(tarball(ordinary, { root: `skills-${'e'.repeat(40)}/` }), value).diagnostics[0].code, 'GITHUB_ARCHIVE_UNSAFE');
+  assert.equal(extractCommitArchive(tarball(ordinary, { root: `Skills-${COMMIT}/` }), value).status, 'ok');
+});
+
+test('two kept files whose names differ only in case are refused', () => {
+  const result = extractCommitArchive(tarball([...ordinary, { path: 'skills/productivity/teach/Notes.md', text: 'a' }, { path: 'skills/productivity/teach/notes.md', text: 'b' }]), checkGitHubSource(spec).value);
+  assert.equal(result.diagnostics[0].code, 'GITHUB_ARCHIVE_UNSAFE');
+  assert.match(result.diagnostics[0].message, /differ only in case/);
+});
+
+test('a file name that is not valid UTF-8 is refused and said so', () => {
+  const result = extractCommitArchive(tarball([...ordinary, { nameBytes: Buffer.from([0x73, 0xff, 0xfe, 0x2e, 0x6d, 0x64]), text: 'x' }]), checkGitHubSource(spec).value);
+  assert.equal(result.diagnostics[0].code, 'GITHUB_ARCHIVE_UNREADABLE');
+  assert.match(result.diagnostics[0].message, /file name in the repository isn't valid UTF-8/);
+});
+
 test('a requested folder that does not exist in that commit is said plainly', () => {
   const result = extractCommitArchive(tarball(ordinary), checkGitHubSource({ ...spec, path: 'skills/missing' }).value);
   assert.equal(result.status, 'refused');

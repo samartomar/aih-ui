@@ -18,6 +18,7 @@
 
 import { el } from "../app/dom.js";
 import { createCards } from "./cards.js";
+import { GITHUB_PROVENANCE } from "./authoring-model.js";
 
 /** The host family a granted folder's items carry (tools/consumer/personal-folder.mjs). */
 const FOLDER_FAMILY = "Personal";
@@ -282,6 +283,7 @@ export function createYourSources({ onSelect, onOpen, onChange, authoring }) {
     actions.append(forget);
     node.append(actions);
     if (again) return node;
+    node.append(el("p", "text-on-surface-variant", GITHUB_PROVENANCE));
     const grid = el("div", "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3");
     grid.dataset.yourSourceGrid = source.key;
     const cards = createCards({ elements: { cardsGrid: grid, categoryContext: el("p"), visibleCount: el("span"), visibleCaption: el("span") }, onSelect });

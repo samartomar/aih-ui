@@ -91,6 +91,13 @@ export async function createMixedService(maintained, { suppliedInventories, fami
       const index = current.findIndex(entry => entry.release.sha256 === releaseSha256 && !maintainedInventories.includes(entry));
       if (index !== -1) current.splice(index, 1);
     },
+    // Dropped entirely (a GitHub source forgotten long ago): saved choices from it read as unresolved, like an absent folder.
+    evictInventory(releaseSha256) {
+      for (const list of [all, current]) {
+        const index = list.findIndex(entry => entry.release.sha256 === releaseSha256 && !maintainedInventories.includes(entry) && entry !== notes && entry !== changed);
+        if (index !== -1) list.splice(index, 1);
+      }
+    },
     catalog() { return { executionAvailable: false, description: browsesNotes ? 'Installed Catalog families and independently authored review-note. Template is an authored demonstration. Family grouping preserves upstream origins and exact identities.' : 'Installed Catalog families. Family grouping preserves upstream origins and exact identities.',
       items: browsed().flatMap(entry => entry.release.items.map(item => ({ ...item, root: root(entry, item), package: entry.release.package,
         family: entry.family ?? (entry === maintained ? 'Catalog' : 'Independent'),

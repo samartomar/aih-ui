@@ -117,7 +117,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
     }
     if (!clients.has(id)) {
       if (clients.size >= 64) throw new Error('Too many active authoring clients; reopen after idle sessions expire.');
-      const client = { usedAt: now, stages: [], grants: new Map(), github: new Map(), roots: { ...authoringRoots },
+      const client = { usedAt: now, stages: [], grants: new Map(), github: new Map(), githubForgotten: [], githubAttempts: 0, roots: { ...authoringRoots },
         scanEvidence: createScanEvidenceHost({ sources: evidenceSources, packageRoot: catalogRoot, trust: reviewTrust, detectorIds: evidenceDetectorIds }) };
       clients.set(id, client);
       client.ready = (async () => {
@@ -235,6 +235,10 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
           if (operation === 'github-forget') {
             if (!client.github.has(body.releaseSha256)) return send(response, 200, { status: 'refused', diagnostics: [{ code: 'GITHUB_SOURCE_UNKNOWN', message: 'This page has no such GitHub source.' }] });
             client.github.delete(body.releaseSha256); mixedService.removeInventory(body.releaseSha256);
+            // A forgotten source stays readable for saved choices, but only the 4 most recent: older ones are dropped, so
+            // a page session holds at most 8 listed and 4 forgotten GitHub inventories (each within the 1 MB kept bound).
+            client.githubForgotten.push(body.releaseSha256);
+            while (client.githubForgotten.length > 4) mixedService.evictInventory(client.githubForgotten.shift());
             return send(response, 200, { status: 'ok', diagnostics: [], value: { releaseSha256: body.releaseSha256 } });
           }
           if (client.github.size >= 8) return send(response, 200, { status: 'refused', diagnostics: [{ code: 'GITHUB_SOURCE_LIMIT', message: 'Up to 8 GitHub sources per page session; reopen a fresh page to start again.' }] });
@@ -243,6 +247,9 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
           if (checked.status !== 'ok') { console.log(`[github-source] refused before any fetch: ${checked.diagnostics[0].code}`); return send(response, 200, checked); }
           // One download at a time for the whole host, so at most one archive's bounds are held in memory.
           if (githubBusy) return send(response, 200, { status: 'refused', diagnostics: [{ code: 'GITHUB_BUSY', message: 'Another GitHub repository is being added. Try again when it has finished.' }] });
+          // Every download started counts, whatever its outcome: at most 16 per page session.
+          if (client.githubAttempts >= 16) return send(response, 200, { status: 'refused', diagnostics: [{ code: 'GITHUB_FETCH_LIMIT', message: 'This page has already started 16 GitHub downloads; reopen a fresh page to start again. Nothing was fetched.' }] });
+          client.githubAttempts++;
           console.log(`[github-source] fetching ${archiveUrl(checked.value)} (folder ${checked.value.path})`);
           githubBusy = true;
           let result;
@@ -273,9 +280,10 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
               }
             }
             // Content from a GitHub source has no material source Core can install from yet (samartomar/aih-catalog#124).
-            if (operation === 'prepare' && client.github?.size) {
-              const inputs = new Set([...client.github.values()].map(value => value.input)), parsed = parsePolicy(policyText);
-              if (parsed.valid && parsed.document.selections.some(selection => inputs.has(selection.recipe?.reference?.source?.input))) {
+            // Any selection whose material input is a GitHub one is refused, whether or not this page still lists that source.
+            if (operation === 'prepare') {
+              const parsed = parsePolicy(policyText);
+              if (parsed.valid && parsed.document.selections.some(selection => String(selection.recipe?.reference?.source?.input ?? '').startsWith('github-'))) {
                 return { status: 'refused', diagnostics: [{ code: 'GITHUB_NOT_INSTALLABLE', reason: 'not-installable', message: NOT_INSTALLABLE }] };
               }
             }

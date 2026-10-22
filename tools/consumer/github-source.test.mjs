@@ -132,6 +132,53 @@ test('one GitHub download at a time: a second add while one is downloading is re
   } finally { await new Promise(resolve => started.server.close(resolve)); }
 });
 
+test('a saved choice from a forgotten GitHub source is still refused by Install', async () => {
+  const project = await mkdtemp(join(tmpdir(), 'aih-github-forgotten-'));
+  const started = await startConsumer({ projectRoot: project, githubDownload: async () => ({ status: 'ok', diagnostics: [], value: tarball(repository) }) });
+  const call = async (operation, body = {}) => (await fetch(`${started.origin}/api/authoring-${operation}`, {
+    method: 'POST', headers: { origin: started.origin, 'content-type': 'application/json', 'x-aih-client': 'client-forgotten' }, body: JSON.stringify(body) })).json();
+  try {
+    const added = await call('github', exact);
+    const item = (await (await fetch(`${started.origin}/api/authoring-catalog`, { headers: { 'x-aih-client': 'client-forgotten' } })).json()).items.find(value => value.root.releaseSha256 === added.value.releaseSha256);
+    const selected = await call('edit', { policyBytes: (await call('new')).value.policyBytes, operation: { type: 'select', root: item.root } });
+    assert.equal((await call('github-forget', { releaseSha256: added.value.releaseSha256 })).status, 'ok');
+    const prepared = await call('prepare', { policyBytes: selected.value.policyBytes });
+    assert.equal(prepared.status, 'refused', JSON.stringify(prepared));
+    assert.equal(prepared.diagnostics[0].code, 'GITHUB_NOT_INSTALLABLE');
+    assert.deepEqual(await readdir(project), []);
+  } finally { await new Promise(resolve => started.server.close(resolve)); }
+});
+
+test('each page session may start at most 16 GitHub downloads, whatever their outcome', async () => {
+  const { asked, call, close } = await host(tarball(repository, { commit: 'f'.repeat(40) }));
+  try {
+    for (let attempt = 0; attempt < 16; attempt++) assert.equal((await call('github', exact)).diagnostics[0].code, 'GITHUB_ARCHIVE_COMMIT_MISMATCH');
+    const refused = await call('github', exact);
+    assert.equal(refused.diagnostics[0].code, 'GITHUB_FETCH_LIMIT');
+    assert.equal(asked.length, 16, 'the 17th is refused before it is fetched');
+    assert.equal((await call('github', exact, 'another-page')).diagnostics[0].code, 'GITHUB_ARCHIVE_COMMIT_MISMATCH', 'the count is per page session');
+  } finally { await close(); }
+});
+
+test('saved choices from the 4 most recently forgotten GitHub sources still read; older forgotten sources are dropped', async () => {
+  const commits = ['1', '2', '3', '4', '5'].map(digit => digit.repeat(40));
+  const started = await startConsumer({ githubDownload: async url => ({ status: 'ok', diagnostics: [], value: tarball(repository, { commit: url.slice(-40) }) }) });
+  const call = async (operation, body = {}) => (await fetch(`${started.origin}/api/authoring-${operation}`, {
+    method: 'POST', headers: { origin: started.origin, 'content-type': 'application/json', 'x-aih-client': 'client-evict' }, body: JSON.stringify(body) })).json();
+  try {
+    const saved = [];
+    for (const commit of commits) {
+      const added = await call('github', { ...exact, commit });
+      assert.equal(added.status, 'ok', JSON.stringify(added));
+      const item = (await (await fetch(`${started.origin}/api/authoring-catalog`, { headers: { 'x-aih-client': 'client-evict' } })).json()).items.find(value => value.root.releaseSha256 === added.value.releaseSha256);
+      saved.push({ release: added.value.releaseSha256, policyBytes: (await call('edit', { policyBytes: (await call('new')).value.policyBytes, operation: { type: 'select', root: item.root } })).value.policyBytes });
+    }
+    for (const { release } of saved) assert.equal((await call('github-forget', { releaseSha256: release })).status, 'ok');
+    assert.equal((await call('read', { policyBytes: saved[0].policyBytes })).value.editing, 'unresolved', 'the oldest forgotten source is dropped');
+    for (const { policyBytes } of saved.slice(1)) assert.equal((await call('read', { policyBytes })).value.editing, 'available');
+  } finally { await new Promise(resolve => started.server.close(resolve)); }
+});
+
 // Opt-in only (AIH_GITHUB_LIVE=1): the real download from GitHub. CI never sets it, so CI needs no network.
 test('live: the exact commit downloads from codeload.github.com within the bounds', { skip: process.env.AIH_GITHUB_LIVE !== '1' }, async () => {
   const fetched = await downloadArchive(archiveUrl({ owner: 'mattpocock', repo: 'skills', commit: COMMIT }));

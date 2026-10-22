@@ -48,7 +48,7 @@ export const archiveUrl = ({ owner, repo, commit }) => `https://${ARCHIVE_HOST}/
 /**
  * Downloads one URL within the size bound and the timeout. `request` is node:https's; tests pass node:http's for a local
  * server. A fresh agent (never the global one) means no proxy from the environment and no kept connections; only a
- * user agent and an accept header are sent, and TLS verification is on whatever the environment says.
+ * user agent and an accept header are sent, and TLS verification is forced on, even when NODE_TLS_REJECT_UNAUTHORIZED=0.
  */
 export function downloadArchive(url, { request = httpsRequest, timeoutMs = GITHUB_LIMITS.timeoutMs, maxBytes = GITHUB_LIMITS.downloadBytes } = {}) {
   return new Promise(resolve => {
@@ -79,7 +79,11 @@ export function downloadArchive(url, { request = httpsRequest, timeoutMs = GITHU
 }
 
 const decoder = new TextDecoder('utf-8', { fatal: true });
-const field = (block, start, length) => { const bytes = block.subarray(start, start + length), end = bytes.indexOf(0); return decoder.decode(end === -1 ? bytes : bytes.subarray(0, end)); };
+class NameNotUtf8 extends Error {}
+const field = (block, start, length) => {
+  const bytes = block.subarray(start, start + length), end = bytes.indexOf(0);
+  try { return decoder.decode(end === -1 ? bytes : bytes.subarray(0, end)); } catch { throw new NameNotUtf8(); }
+};
 const octal = (block, start, length) => {
   if (block[start] & 0x80) return NaN; // base-256 sizes are never needed for this archive
   const text = field(block, start, length).trim();
@@ -105,11 +109,13 @@ const safeName = name => !!name && !/[\0\\]/.test(name) && !name.startsWith('/')
  * entry under one top folder and contain only safe names; a link, device or unknown entry under the folder refuses it.
  * Returns the kept files keyed by repository path, and which license was kept.
  */
-export function extractCommitArchive(archive, { commit, path }) {
+export function extractCommitArchive(archive, { repo, commit, path }) {
   let tar;
   try { tar = gunzipSync(archive, { maxOutputLength: GITHUB_LIMITS.unpackedBytes }); }
   catch (error) { return error?.code === 'ERR_BUFFER_TOO_LARGE' || error instanceof RangeError ? bound(`The unpacked archive is larger than ${GITHUB_LIMITS.unpackedBytes / 1_000_000} MB.`) : unreadable(); }
-  const prefix = `${path}/`, files = Object.create(null), licenses = Object.create(null);
+  const prefix = `${path}/`, files = Object.create(null), licenses = Object.create(null), folded = new Set();
+  // GitHub names the one top folder <repo>-<commit>/, with the repository name in its own case.
+  const expectedRoot = `${repo}-${commit}/`.toLowerCase();
   let offset = 0, entries = 0, root, archiveCommit, pending = {}, found = false, kept = 0, total = 0;
   try {
     while (offset + 512 <= tar.length) {
@@ -128,10 +134,12 @@ export function extractCommitArchive(archive, { commit, path }) {
       const magic = field(block, 257, 6), ustarPrefix = magic.startsWith('ustar') ? field(block, 345, 155) : '';
       const name = pending.path ?? (ustarPrefix ? `${ustarPrefix}/${field(block, 0, 100)}` : field(block, 0, 100));
       pending = {};
+      if (archiveCommit !== commit) return refuse('GITHUB_ARCHIVE_COMMIT_MISMATCH', '/archive', 'GitHub sent an archive that does not say it is this exact commit. Nothing was kept.');
       if (!safeName(name)) return unsafe(`The archive names a path outside its folder (${JSON.stringify(name.slice(0, 120))}).`);
       const top = name.split('/')[0] + '/';
       root ??= top;
       if (top !== root) return unsafe('The archive holds more than one top folder.');
+      if (root.toLowerCase() !== expectedRoot) return unsafe(`The archive's folder is not named for ${repo} at this commit.`);
       const relative = name.slice(root.length).replace(/\/$/, ''), inside = relative === path || relative.startsWith(prefix);
       if (inside) found = true;
       if (type === '5') continue;
@@ -143,11 +151,16 @@ export function extractCommitArchive(archive, { commit, path }) {
       if (size > GITHUB_LIMITS.fileBytes) return bound(`${relative} is larger than ${GITHUB_LIMITS.fileBytes / 1000} KB.`);
       const bytes = new Uint8Array(tar.subarray(start, end));
       if (license && !inside) { licenses[relative] = bytes; continue; }
+      // Kept names must stay distinct on a file system that ignores case.
+      if (folded.has(relative.toLowerCase())) return unsafe(`The folder holds two files whose names differ only in case (${relative}).`);
+      folded.add(relative.toLowerCase());
       if (++kept > GITHUB_LIMITS.files) return bound(`The folder has more than ${GITHUB_LIMITS.files} files.`);
       if ((total += size) > GITHUB_LIMITS.totalBytes) return bound(`The folder is larger than ${GITHUB_LIMITS.totalBytes / 1_000_000} MB.`);
       files[relative] = bytes;
     }
-  } catch { return unreadable(); }
+  } catch (error) {
+    return error instanceof NameNotUtf8 ? refuse('GITHUB_ARCHIVE_UNREADABLE', '/archive', "A file name in the repository isn't valid UTF-8, so the archive can't be read safely. Nothing was kept.") : unreadable();
+  }
   if (archiveCommit !== commit) return refuse('GITHUB_ARCHIVE_COMMIT_MISMATCH', '/archive', 'GitHub sent an archive that does not say it is this exact commit. Nothing was kept.');
   if (!found) return refuse('GITHUB_PATH_MISSING', '/path', `${path} is not a folder in that commit. Nothing was kept.`);
   // The folder's own license, if it has one, else the repository's; it travels with every skill.

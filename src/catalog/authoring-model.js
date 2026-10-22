@@ -5,6 +5,9 @@ export function projectItems(items) {
     subject: { id: item.id, kind: item.kind, source: subjectSource(item) },
   }));
 }
+// GitHub serves any commit of a repository's fork network under that repository's name, and nothing here checks that the
+// commit is on the repository's branches: it is never presented as the owner's published code.
+export const GITHUB_PROVENANCE = "Commit as served by GitHub for this repository's network (its forks included); not verified to be on its branches. Downloaded read-only by this Workbench for this page session. Not scanned.";
 // A GitHub source's items (#125) carry the exact repository, commit and the folder of their SKILL.md, as Catalog compiled them.
 export function subjectSource(item) {
   const origin = item.sources?.[0]?.origin;

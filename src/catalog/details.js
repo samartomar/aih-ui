@@ -24,7 +24,7 @@
 import { createGapIndicator } from '../app/gap-indicator.js';
 import { createInspectorEvidence } from '../app/inspector-evidence.js';
 import { el, text } from "../app/dom.js";
-import { capabilityFacts, subjectSource } from './authoring-model.js';
+import { capabilityFacts, GITHUB_PROVENANCE, subjectSource } from './authoring-model.js';
 import { sourcePresentation } from './source-facts.js';
 import { describeClientIdentity } from '../app/client-identity.js';
 import {
@@ -217,7 +217,7 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
         const brought = subjectSource(item);
         if (brought.type === 'github') {
           // A GitHub source (#125): the exact repository, commit and folder Catalog compiled it from.
-          row(elements.detailsSource, 'Provenance', 'GitHub repository at an exact commit, downloaded read-only by this Workbench for this page session. Not scanned.');
+          row(elements.detailsSource, 'Provenance', GITHUB_PROVENANCE);
           codeRow(elements.detailsSource, 'Repository', brought.repository);
           codeRow(elements.detailsSource, 'Commit', brought.commit);
           codeRow(elements.detailsSource, 'Folder', brought.path);
