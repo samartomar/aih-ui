@@ -1,7 +1,7 @@
 /*
  * Two-row toolbar: search and review state, then counts, kinds and selectors.
  *
- *   Search                         All   Needs Review   Egress Out   Signals
+ *   Search                         All   need review ⓘ   send data out ⓘ
  *
  * "All" is the unfiltered review state. "Needs Review" and
  * "Egress Out" keep their purpose and their place but are unavailable, with no
@@ -10,8 +10,8 @@
  * a measurement, so it cannot be counted as "does not send data out". A count
  * would be invented; a disabled control with its reason is not.
  *
- * The unavailable signal chips remain in the toolbar's Signals disclosure,
- * so their explicit absence wording stays available without repeating a row.
+ * The unavailable signal chips ("need review", "send data out") are these
+ * filters' unavailable states, so they sit inside the filter group once.
  *
  * The second row contains the live entry count, kind chips, source type and sort.
  *
@@ -77,7 +77,7 @@ function kindPill(label, count, active, onClick, key = label) {
 }
 
 /**
- * @param elements  { reviewFilters, reviewSummary, kindFilters, search, sourceFilter, sortSelect }
+ * @param elements  { reviewFilters, kindFilters, search, sourceFilter, sortSelect }
  * @param onQuery / onToggleKind / onSourceType / onSort  the toolbar's callbacks
  */
 export function createToolbar({ elements, onQuery, onToggleKind, onSourceType, onSort }) {
@@ -104,12 +104,9 @@ export function createToolbar({ elements, onQuery, onToggleKind, onSourceType, o
       // --- primary: review state -----------------------------------------
       // "All" is the only review state that can be derived, so it is the
       // selected one; selecting it again changes nothing.
+      // The Signals are these filters' own unavailable states, so they sit in the same group once.
       elements.reviewFilters.replaceChildren(
         reviewPill("All", null, true, () => {}),
-        createGapIndicator({ label: "Needs Review not published", reason: UNAVAILABLE["Needs Review"] }),
-        createGapIndicator({ label: "Egress Out not published", reason: UNAVAILABLE["Egress Out"] }),
-      );
-      elements.reviewSummary.replaceChildren(
         summaryChip("pending_actions", "need review", UNAVAILABLE["Needs Review"]),
         summaryChip("arrow_outward", "send data out", UNAVAILABLE["Egress Out"]),
       );

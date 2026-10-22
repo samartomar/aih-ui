@@ -419,9 +419,14 @@ body:has(#main-content) [hidden] { display: none !important; }
 #provenance-strip details > div { top: calc(100% + 8px); }
 
 /* Workspace actions and persistent policy context stay usable as chrome wraps. */
-.workspace-actions { position: absolute; z-index: 70; top: calc(100% + 6px); left: 0; width: 240px; max-width: calc(100vw - 24px); padding: 6px; border: 1px solid var(--color-border); border-radius: var(--r); background: var(--color-panel); box-shadow: var(--panel-shadow); }
+.workspace-actions { position: absolute; z-index: 70; top: calc(100% + 6px); right: 0; width: 240px; max-width: calc(100vw - 24px); padding: 6px; border: 1px solid var(--color-border); border-radius: var(--r); background: var(--color-panel); box-shadow: var(--panel-shadow); }
 .workspace-action { display: block; width: 100%; padding: 8px 12px; text-align: left; border-radius: var(--r); color: var(--color-text); }
 .workspace-action:hover { background: var(--color-hover); }
+.workspace-menu-status { margin: 0 0 4px; padding: 6px 12px 8px; border-bottom: 1px solid var(--color-border); color: var(--color-on-surface-variant); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.catalog-advanced > summary { width: max-content; }
+/* An open Advanced section scrolls inside itself, and the cards keep room below it rather than collapsing to nothing. */
+.catalog-advanced-body { max-height: min(26rem, 45vh); overflow-y: auto; }
+.catalog-cards-region { min-height: min(32rem, 70vh); }
 #policy-current-context { margin: 0; overflow-wrap: anywhere; color: var(--color-text); }
 body:has(#main-content) > header + div { height: auto; min-height: 40px; flex-wrap: wrap; gap: 6px; padding-block: 5px; }
 body:has(#main-content) > header + div > div:first-child { flex-wrap: wrap; }
@@ -430,11 +435,10 @@ body:has(#main-content) :where(.setup-choice, #ai-tools-list > label) { min-heig
 #ai-tools-list { max-height: min(360px, 50vh); overflow-y: auto; }
 #ai-tools-pop { max-height: calc(100dvh - var(--workbench-top, 100px) - 12px); overflow-y: auto; }
 .inspector-description-more > summary { cursor: pointer; color: var(--color-primary); }
-#catalog-workspace #kind-filters { display: none; }
 #catalog-kinds-disclosure > summary, #policy-context-disclosure > summary { display: none; }
 #policy-context-disclosure { min-width: 0; }
 @media (max-width: 760px) {
-  .workspace-actions { position: fixed; top: var(--workbench-top, 100px); left: 8px; }
+  .workspace-actions { position: fixed; top: var(--workbench-top, 100px); right: 8px; }
   #ai-tools-pop { top: var(--workbench-top, 100px); }
   #provenance-strip > span { display: none; }
   #catalog-kinds-disclosure > summary, #policy-context-disclosure > summary { display: flex; align-items: center; min-height: 44px; cursor: pointer; }

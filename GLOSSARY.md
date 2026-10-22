@@ -8,6 +8,10 @@ The words the Workbench uses with a person choosing, installing and removing AI 
 An AI client the person uses, such as Claude Code or Codex, chosen in the header from the clients Core lists.
 _Avoid_: client (on default screens), harness, native client
 
+**Catalog tool name**:
+The tool name the Catalog declares for content, such as claude-code; the catalog shows content by this name.
+_Avoid_: target, client id
+
 **Content**:
 A Catalog item a person can choose, such as a skill or a command.
 _Avoid_: recipe, selection, item (on default screens)

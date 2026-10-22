@@ -116,8 +116,14 @@ export async function smokeCandidate({ origin, identity, output, playwrightModul
     await capture('03-guided.png', () => go('/guided.html'));
     async function policy() {
       await go('/'); await dismissSetup();
+      // Policy workspace and the authority, workspace, improvement and trial sections sit in Advanced sections (#115).
+      await page.evaluate(() => { const advanced = document.getElementById('catalog-advanced'); if (advanced) advanced.open = true; });
       const nav = await find('#nav-policy');
       if (nav) await nav.click({ timeout: remaining() });
+      await page.evaluate(() => {
+        if (document.getElementById('policy-review-panel')?.hidden) document.getElementById('your-setup')?.click();
+        for (const section of document.querySelectorAll('#setup-advanced, #setup-advanced details')) section.open = true;
+      });
     }
     async function scroll(selector, open = false) {
       const node = await find(selector);

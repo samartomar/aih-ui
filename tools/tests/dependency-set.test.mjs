@@ -62,12 +62,17 @@ test('proposal renders dependency hooks and one acceptance publishes the whole c
   const client = createAuthoringClient(); client.publish({ intent: initial, policyBytes: [...new TextEncoder().encode('{}')] });
   const workspace = createAuthoringWorkspace(client);
   workspace.present(await client.propose({ type: 'select', root }));
+  // Plain words on the default drawer (GLOSSARY.md); the engine words stay inside Advanced and the draft view.
+  const ancestors = node => { const ids = []; for (let at = node.parentElement; at; at = at.parentElement) ids.push(at.id); return ids; };
+  const plainWords = () => { const shown = created.filter(node => { const ids = ancestors(node); return ids.includes('policy-review-panel') && !ids.includes('setup-advanced') && !ids.includes('policy-draft') && node.id !== 'policy-draft'; });
+  for (const node of shown) assert.doesNotMatch(node.textContent ?? '', /(polic(y|ies)|pins?|pinned|artifacts?|explicit choices?|accepted choices?|prepare[ds]?|digests?|recipes?|envelopes?)/i, `default drawer text: ${node.textContent}`); };
+  plainWords();
   const dependencyNode = created.find(node => node.dataset.dependencyOf === root.itemId);
-  assert.match(dependencyNode.textContent, /Required dependency: dependency/);
-  assert.ok(created.some(node => /No separate dependency approval/.test(node.textContent)));
+  assert.match(dependencyNode.textContent, /Needed item: dependency/);
+  assert.ok(created.some(node => /Nothing else needs approving/.test(node.textContent)));
   assert.equal(client.intent.roots.length, 0);
   const accept = created.find(node => node.id === 'policy-accept');
-  assert.equal(accept.textContent, 'Accept choices with dependencies');
+  assert.equal(accept.textContent, 'Add to setup');
   const reviewPanel = created.find(node => node.id === 'policy-review-panel');
   assert.equal(reviewPanel.hidden, false, 'choosing opens review without navigation');
   const discard = created.find(node => node.id === 'policy-discard'); discard.listeners.click();
@@ -83,7 +88,20 @@ test('proposal renders dependency hooks and one acceptance publishes the whole c
   const reviewTrigger = document.getElementById('review-project-changes');
   reviewTrigger.listeners.click(); assert.equal(reviewPanel.hidden, true);
   client.reopen = async () => ({ status: 'refused', diagnostics: [{ message: 'Exact source unavailable' }] });
-  await document.getElementById('check-project-policy').listeners.click();
+  const check = created.find(node => node.id === 'check-project-policy');
+  assert.equal(check.closest('details')?.id, 'setup-advanced', "Check Policy sits in Your setup's Advanced section");
+  // Your setup's Advanced section holds the policy file, update, improvement, trial, workspace and authority controls.
+  const within = (id, container) => { for (let at = created.find(node => node.id === id)?.parentElement; at; at = at.parentElement) if (at.id === container) return true; return false; };
+  for (const id of ['policy-save', 'policy-file-actions', 'authority-source', 'policy-open'])
+    assert.ok(within(id, 'setup-advanced'), `${id} is inside Advanced`);
+  const advanced = created.find(node => node.id === 'setup-advanced');
+  const sections = advanced.children.filter(node => node.tagName === 'details').map(node => node.children[0]?.textContent);
+  for (const label of ['File actions: new, open and validate', 'Available updates', 'Improvement suggestions', 'Improvement trials', 'Workspace repositories', 'Sources and execution'])
+    assert.ok(sections.includes(label), `${label} is inside Advanced`);
+  assert.equal(reviewPanel.children.at(-1), advanced, 'Advanced is the last part of the drawer');
+  for (const id of ['policy-accept', 'policy-roots']) assert.equal(within(id, 'setup-advanced'), false, `${id} stays on the default drawer`);
+  plainWords();
+  await check.listeners.click();
   assert.equal(reviewPanel.hidden, false, 'Check Policy opens visible results');
   assert.match(created.find(node => node.id === 'policy-status').textContent, /Exact source unavailable/);
   media.matches = true; media.change();

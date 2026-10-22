@@ -9,6 +9,7 @@ import { performance } from 'node:perf_hooks';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { addFromCatalog, closePolicyDrawer, drawer, openPolicyDrawer, openSourceDetails } from './policy-drawer.mjs';
+import { openPolicyWorkspace, openScanReview, openSetupAdvanced } from './advanced-browser.mjs';
 export async function runSourceFactsBrowser({ origin, output, playwrightModule }) {
   const began = performance.now();
   const { chromium } = await import(playwrightModule);
@@ -41,7 +42,7 @@ export async function runSourceFactsBrowser({ origin, output, playwrightModule }
       const { snapshot, result } = await sourceExample(example);
       assert.equal(result.status, 'ok', JSON.stringify(result));
       const transport = JSON.stringify(snapshot, (_key, value) => value instanceof Uint8Array ? [...value] : value);
-      await page.locator('#nav-policy').click();
+      await openPolicyWorkspace(page);
       const response = page.waitForResponse(value => value.url().endsWith('/api/authoring-intake'));
       await drawer(page).getByLabel('Portable declaration snapshot').setInputFiles({ name: `${example.id}.json`, mimeType: 'application/json', buffer: Buffer.from(transport) });
       assert.equal((await (await response).json()).status, 'ok');
@@ -80,7 +81,7 @@ export async function runSourceFactsBrowser({ origin, output, playwrightModule }
     assert.equal(await page.locator('#details-source script').count(), 0);
     await addFromCatalog(page, 'personal.skill.example');
     const before = await page.locator('#policy-bytes').textContent();
-    await page.locator('#nav-scan-review').click();
+    await openScanReview(page);
     const panel = drawer(page).getByRole('region', { name: 'Latest Scan evidence' });
     // The subject list is bounded; a person searches for the item before choosing it.
     await panel.getByLabel('Search evidence subjects', { exact: true }).fill('personal.skill.example');
@@ -96,8 +97,8 @@ export async function runSourceFactsBrowser({ origin, output, playwrightModule }
     await panel.getByRole('status').filter({ hasText: 'unsupported-report' }).waitFor();
     await page.screenshot({ path: join(output, 'unsupported-evidence.png'), fullPage: true });
     assert.equal(await page.locator('#policy-bytes').textContent(), before);
-    await page.locator('#nav-policy').click(); await openPolicyDrawer(page);
-    const download = page.waitForEvent('download'); await openPolicyDrawer(page); await page.locator('#policy-save').click();
+    await openPolicyWorkspace(page); await openPolicyDrawer(page);
+    const download = page.waitForEvent('download'); await openPolicyDrawer(page); await openSetupAdvanced(page).then(() => page.locator('#policy-save').click());
     const path = join(output, 'policy.downloaded.json'); await (await download).saveAs(path);
     assert.deepEqual(JSON.parse(await readFile(path, 'utf8')), JSON.parse(before));
     assert.deepEqual(errors, []);

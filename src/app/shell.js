@@ -1,4 +1,5 @@
 import { createGapIndicator } from "./gap-indicator.js";
+import { rememberOpen } from "./advanced.js";
 /*
  * The application shell: the collapsible rails, the inspector tabs and the
  * error banner.
@@ -169,6 +170,18 @@ export function createShell(elements) {
   for (const glyph of document.querySelectorAll('.material-symbols-outlined')) glyph.setAttribute('aria-hidden', 'true');
   setInspectorOpen(false);
 
+  // The catalog's Advanced section (owner decision 4) holds the kind tiles, the scopes, the Policy workspace links and
+  // Scan Review. The inspector's Policy JSON tab belongs to it too: the tab shows only while Advanced is open.
+  const advanced = document.getElementById("catalog-advanced");
+  const jsonTab = elements.tabButtons.find(button => button.dataset.tab === "json");
+  function syncJsonTab() {
+    if (!jsonTab) return;
+    jsonTab.hidden = !advanced?.open;
+    if (jsonTab.hidden && currentTab === "json") switchTab("details");
+  }
+  if (advanced) { rememberOpen(advanced, "catalog"); advanced.addEventListener("toggle", syncJsonTab); }
+  syncJsonTab();
+
   elements.toggleNavBtn.addEventListener("click", toggleNav);
   elements.toggleInspectorBtn.addEventListener("click", toggleInspector);
   elements.closeInspectorBtn.addEventListener("click", toggleInspector);
@@ -212,7 +225,7 @@ export function createShell(elements) {
       const step = { ArrowRight: 1, ArrowLeft: -1, Home: -Infinity, End: Infinity }[event.key];
       if (step === undefined) return;
       event.preventDefault();
-      const tabs = elements.tabButtons;
+      const tabs = elements.tabButtons.filter(tab => !tab.hidden);
       const here = tabs.indexOf(button);
       const there = step === -Infinity ? 0 : step === Infinity ? tabs.length - 1 : (here + step + tabs.length) % tabs.length;
       switchTab(tabs[there].dataset.tab);
