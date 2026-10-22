@@ -7,12 +7,16 @@
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&amp;family=Geist+Mono:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/styles/tailwind.css">
 <link rel="stylesheet" href="/styles/tokens.css">
+<link rel="stylesheet" href="/styles/subpage.css">
+<link rel="stylesheet" href="/styles/status.css">
 <script src="/app/mode.js"></script>
 </head>
-<body class="bg-background font-body text-on-surface text-sm leading-normal antialiased">
-<header class="bg-wb-chrome border-b border-wb-border px-4 py-3 flex items-center justify-between">
-<h1 class="text-base font-semibold">Check this machine</h1>
+<body class="bg-background font-body text-on-surface wb-subpage leading-normal antialiased">
+<header class="wb-subpage-header">
+<a href="/" class="wb-subpage-brand" aria-label="aih Policy Workbench home">aih<span>Policy Workbench</span></a>
+<h1>Check this machine</h1>
 <a class="text-primary hover:underline" href="/" id="back-link">Back to the Workbench</a>
+<button type="button" data-mode-toggle class="wb-subpage-theme" aria-label="Switch to light mode">◐</button>
 </header>
 <main class="max-w-4xl mx-auto p-4 space-y-4">
 <div id="staged-condition" role="note" class="border border-wb-border rounded p-3 bg-surface-container-low text-tertiary space-y-1" hidden></div>
@@ -22,9 +26,12 @@
 <section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="check-heading">
 <h2 class="font-semibold" id="check-heading">Check</h2>
 <div class="space-y-1">
-<label class="block text-on-surface-variant" for="targets">Targets (optional; leave empty for Core's default selection)</label>
+<p class="text-on-surface-variant">Choose AI clients to check, or leave all unchecked to use Core's default tool selection.</p>
+<div class="flex flex-wrap items-center gap-1" id="target-choices" role="group" aria-label="AI clients to check"></div>
+<details><summary class="text-primary">Other tools and advanced target IDs</summary>
+<label class="block text-on-surface-variant" for="targets">Additional target IDs (optional)</label>
 <input class="w-full max-w-md bg-wb-input border border-wb-control-border rounded px-2 py-1 font-mono" id="targets" type="text" autocomplete="off" spellcheck="false" placeholder="for example: node, npm">
-<div class="flex flex-wrap items-center gap-1" id="target-choices"></div>
+</details>
 <p class="text-xs text-outline" id="target-help"></p>
 </div>
 <label class="flex items-center gap-2"><input id="offline" type="checkbox"><span>Offline (do not use the network; network-dependent conditions stay unknown)</span></label>

@@ -7,6 +7,7 @@ import { clientNodes, offersClient, publishedClients } from './app/core-targets.
 import { adapterClientIds } from './app/client-identity.js';
 import { createAuthoringClient, importLimitError } from './app/authoring-client.js';
 import { loadSetup } from './app/settings-client.js';
+import { saveDraftHandoff } from './app/draft-session.js';
 import { ADDED_BY_YOU, KNOWN_STACK, MANIFEST_BYTE_LIMIT, addDetection, choiceReason, clientPrompt, describePolicy, detectStack, observationsFrom, provenanceText, reconcileClient, suggestStarters, wantsContent }
   from './app/guided-rules.js';
 
@@ -26,13 +27,13 @@ let listSource = 'supported by Core';
 let coreList = null, observed = {};
 let detections = [], folderChosen = false, published = [], publishedLabels = {}, suggestion = null, busy = false, suggesting = false, started = false;
 // The inputs the current suggestion was made from, and a counter that changes whenever that suggestion stops applying.
-let snapshot = null, generation = 0, savedShown = false;
+let snapshot = null, generation = 0, savedShown = false, preparedBytes = null;
 const clients = new Map(); // id -> { setup, detected, added, checked, unlisted }
 const picked = new Map();  // itemId -> checked
 
 let clientPromise;
 const ensureClient = () => clientPromise ??= (async () => {
-  const client = createAuthoringClient();
+  const client = createAuthoringClient({ sessionRecovery: false });
   await client.start();
   return client;
 })().catch(error => { clientPromise = undefined; throw error; });
@@ -53,7 +54,7 @@ function invalidate() {
   $('suggestion').hidden = true;
   $('choices').replaceChildren(); $('prompt').value = '';
   // A draft already saved stays true to what was saved; only new choices need a new suggestion.
-  if (savedShown) $('save-status').textContent = 'Saved to a draft from your earlier inputs. Suggest again to save new choices.';
+  if (savedShown) $('save-status').textContent = 'The prepared draft uses your earlier inputs. Suggest again to prepare new choices.';
   else { $('save-section').hidden = true; $('download').hidden = true; $('saved').hidden = true; $('save-status').textContent = ''; }
   $('suggest-status').textContent = STALE_MESSAGE;
   syncButtons();
@@ -66,6 +67,9 @@ function checkStale() {
 function syncButtons() {
   $('suggest').disabled = busy || suggesting;
   $('save').disabled = busy || !suggestion || !suggestion.choices.some(choice => picked.get(choice.itemId));
+  $('continue-workbench').hidden = !preparedBytes;
+  $('continue-workbench').disabled = busy;
+  $('download').disabled = busy;
   for (const id of ['goal', 'folder', 'add-stack', 'add-stack-button', 'reopen-file']) $(id).disabled = busy;
   $('detect-clients').disabled = busy || published.length === 0;
   for (const control of [...$('detections').querySelectorAll('button'), ...$('clients').querySelectorAll('input'), ...$('choices').querySelectorAll('input')]) control.disabled = busy;
@@ -209,7 +213,13 @@ function choiceCard(choice) {
   const item = el('li', 'border border-wb-border rounded p-3 space-y-2');
   const head = el('label', 'flex items-center gap-2 font-medium');
   const box = el('input'); box.type = 'checkbox'; box.checked = picked.get(choice.itemId) !== false;
-  box.addEventListener('change', () => { picked.set(choice.itemId, box.checked); refreshPrompt(); });
+  box.addEventListener('change', () => {
+    picked.set(choice.itemId, box.checked);
+    preparedBytes = null; savedShown = false;
+    $('download').hidden = true; $('saved').hidden = true;
+    $('save-status').textContent = 'Your choices changed. Create a new draft to download or continue.';
+    refreshPrompt();
+  });
   head.append(box, el('span', '', choice.label), el('span', 'text-xs font-normal text-on-surface-variant', choice.scope === 'user' ? 'for your user account' : 'in this project'));
   item.append(head);
   const section = (title, lines) => {
@@ -217,8 +227,11 @@ function choiceCard(choice) {
     block.append(el('p', 'text-xs font-medium text-on-surface-variant', title));
     if (!lines.length) block.append(el('p', 'text-xs text-on-surface-variant', 'Nothing else.'));
     for (const line of lines) block.append(el('p', '', line));
-    item.append(block);
+    details.append(block);
   };
+  const details = el('details', 'space-y-2');
+  details.append(el('summary', 'text-primary font-medium', 'Why this choice and what it changes'));
+  item.append(el('p', '', choice.helpsWith), details);
   section('What it helps with', [choice.helpsWith]);
   section('What the catalog says', [choice.catalogDescription || 'The catalog gives no description for this item.']);
   section('What it needs', choice.needs);
@@ -248,7 +261,7 @@ async function suggest() {
     $('browse-link').hidden = suggestion.status === 'confident';
     $('prompt-block').hidden = false;
     $('save-section').hidden = suggestion.status !== 'confident';
-    $('download').hidden = true; $('saved').hidden = true; $('save-status').textContent = ''; savedShown = false;
+    $('download').hidden = true; $('saved').hidden = true; $('save-status').textContent = ''; savedShown = false; preparedBytes = null;
     $('copy-status').textContent = 'Copying only puts this text on your clipboard. It executes nothing and changes nothing.';
     refreshPrompt();
     $('suggest-status').textContent = suggestion.status === 'confident' ? 'Suggestions are ready below.' : 'No confident suggestion.';
@@ -280,8 +293,8 @@ async function save() {
   const mine = generation, inputs = snapshot, rulesVersion = suggestion.rulesVersion;
   // A result belongs to the suggestion it started from; if that no longer applies the page already says so.
   const outdated = () => mine !== generation;
-  busy = true; savedShown = false; syncButtons(); $('download').hidden = true; $('saved').hidden = true;
-  $('save-status').textContent = 'Saving choices to a draft…';
+  busy = true; savedShown = false; preparedBytes = null; syncButtons(); $('download').hidden = true; $('saved').hidden = true;
+  $('save-status').textContent = 'Preparing choices as a draft…';
   try {
     const client = await ensureClient();
     if (outdated()) return;
@@ -305,7 +318,8 @@ async function save() {
     if (opened.status !== 'ok' || !client.draft) { showRefusal($('save-status'), 'Nothing was saved. The draft could not be opened:', messagesOf(opened)); return; }
     showLines($('saved-lines'), describePolicy({ roots: client.draft.roots, pins: client.draft.intent?.pins ?? [], catalogItems: client.catalog.items }));
     $('saved').hidden = false; $('download').hidden = false; savedShown = true;
-    $('save-status').textContent = 'Saved to a draft. Download the setup file to keep it; nothing was installed.';
+    preparedBytes = Uint8Array.from(client.draft.envelopeBytes);
+    $('save-status').textContent = 'Draft prepared in this page. Download it to keep a file, or continue in Workbench to review these exact choices. Nothing was installed.';
   } catch (error) {
     if (!outdated()) $('save-status').textContent = `Nothing was saved: ${error.message}`;
   } finally { busy = false; refreshPrompt(); syncButtons(); checkStale(); }
@@ -315,6 +329,7 @@ async function reopen(file) {
   $('reopened').hidden = true;
   // Reopening replaces the saved draft, so the earlier save result and download no longer apply.
   $('saved').hidden = true; $('download').hidden = true; savedShown = false;
+  preparedBytes = null; syncButtons();
   if (!file) { $('reopen-status').textContent = ''; return; }
   const tooLarge = importLimitError(file.size);
   if (tooLarge) { $('reopen-status').textContent = tooLarge; return; }
@@ -336,6 +351,9 @@ async function reopen(file) {
     const pins = client.draft?.intent?.pins ?? client.intent?.pins ?? [];
     showLines($('reopen-lines'), describePolicy({ roots, pins, catalogItems: client.catalog.items }));
     $('reopened').hidden = false;
+    preparedBytes = Uint8Array.from(client.draft?.envelopeBytes ?? bytes);
+    $('save-section').hidden = false;
+    syncButtons();
     $('reopen-status').textContent = 'Reopened. Your choices are shown exactly as saved.';
   } catch (error) {
     $('reopen-status').textContent = `This setup could not be reopened: ${error.message}`;
@@ -361,6 +379,18 @@ $('detect-clients').addEventListener('click', detectClients);
 $('suggest').addEventListener('click', suggest);
 $('copy-prompt').addEventListener('click', copyPrompt);
 $('save').addEventListener('click', save);
-$('download').addEventListener('click', async () => { const client = await ensureClient(); if (client.draft) download(client.draft.envelopeBytes); });
+$('download').addEventListener('click', () => {
+  if (!preparedBytes) return;
+  download(preparedBytes);
+  $('save-status').textContent = 'Download requested. Keep the downloaded setup file to reopen these choices; nothing was installed.';
+});
+$('continue-workbench').addEventListener('click', () => {
+  if (!preparedBytes) return;
+  try {
+    if (!saveDraftHandoff(preparedBytes)) throw new Error('Browser session storage is full or unavailable.');
+    window.location.assign('/');
+  }
+  catch (error) { $('save-status').textContent = `The draft could not be handed to Workbench: ${error.message} Download the setup file and open it in Workbench instead.`; }
+});
 $('reopen-file').addEventListener('change', () => reopen($('reopen-file').files[0]));
 

@@ -1,13 +1,13 @@
 // Report: the Workbench's normalized claims, rendered from reportPanels(). The host builds the
 // claim set from its readiness journal and Core projects it; this page prints the strings the
 // view module produced and computes no meaning of its own. Text goes in with textContent only.
-import { reportPanels, reportText } from './app/claims-view.js';
+import { guidanceDestination, reportPanels, reportText } from './app/claims-view.js';
 import { stagedNotice } from './app/readiness-view.js';
 
 const $ = id => document.getElementById(id);
 const TEXT_TONE = { error: 'text-error', warning: 'text-tertiary', success: 'text-secondary', neutral: 'text-on-surface' };
 const EDGE_TONE = { error: 'border-error', warning: 'border-tertiary', success: 'border-secondary', neutral: 'border-wb-border' };
-const SECTIONS = ['score', 'repairs', 'actions', 'claims', 'context', 'observations'];
+const SECTIONS = ['actions', 'score', 'repairs', 'claims', 'context', 'observations'];
 const el = (tag, className, value) => {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -51,11 +51,32 @@ function renderPanel(panel, { heading = 'h2', headingId, depth = 0 } = {}) {
   fragment.append(el('p', 'text-on-surface-variant', panel.summary));
   if (panel.items.length) {
     const list = el('ul', 'space-y-2');
+    const groups = new Map();
     for (const entry of panel.items) {
       const item = el('li', `border-l-4 pl-2 space-y-0.5 ${EDGE_TONE[entry.tone] ?? EDGE_TONE.neutral}`);
       item.append(el('p', 'font-medium', entry.text));
-      for (const detail of entry.details) item.append(el('p', 'text-xs text-on-surface-variant break-words', detail));
-      list.append(item);
+      const details = el('details');
+      details.append(el('summary', 'text-primary', 'Evidence and technical details'));
+      for (const detail of entry.details) details.append(el('p', 'text-xs text-on-surface-variant break-words', detail));
+      if (entry.details.length) item.append(details);
+      if (entry.route) {
+        const destination = guidanceDestination(entry.route);
+        if (destination) {
+          const link = el('a', 'inline-flex px-3 py-1 rounded border border-wb-control-border text-primary', 'Open machine check and guidance');
+          link.textContent = `Check ${destination.target} and open guidance`;
+          link.href = destination.href; item.append(link);
+        } else item.append(el('p', 'text-on-surface-variant', 'No direct action is connected for this route. Review the evidence and guidance above.'));
+      }
+      if (entry.group) {
+        if (!groups.has(entry.group)) groups.set(entry.group, []);
+        groups.get(entry.group).push(item);
+      } else list.append(item);
+    }
+    for (const [label, records] of groups) {
+      const group = el('li', 'space-y-2');
+      const details = el('details');
+      details.append(el('summary', 'font-medium', `${label} (${records.length} record${records.length === 1 ? '' : 's'})`));
+      const recordsList = el('ul', 'space-y-2 mt-2'); recordsList.append(...records); details.append(recordsList); group.append(details); list.append(group);
     }
     fragment.append(list);
   }

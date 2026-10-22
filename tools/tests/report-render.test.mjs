@@ -49,6 +49,8 @@ test('report mode draws five LIVE sections from the re-projected snapshot and ni
   assert.deepEqual(Object.keys(states).sort(), [...SECTION_IDS].sort());
   assert.deepEqual(Object.keys(states).filter(id => states[id] === 'live').sort(), ['sec-actions', 'sec-adoption', 'sec-hero', 'sec-ready', 'sec-support']);
   assert.match(html, /Saved snapshot display — Supplied snapshot — not re-collected/);
+  assert.doesNotMatch(html, /<span class="ver">V9<\/span>/);
+  assert.match(html, /saved snapshot · offline report/);
   assert.match(html, /FAILED CHECKS/);
   assert.match(html, /<body>/);
   assert.equal(renderReport(marked), html, 'identical input gives identical bytes');
