@@ -99,7 +99,12 @@ test('proposal renders dependency hooks and one acceptance publishes the whole c
   for (const label of ['File actions: new, open and validate', 'Available updates', 'Improvement suggestions', 'Improvement trials', 'Workspace repositories', 'Sources and execution'])
     assert.ok(sections.includes(label), `${label} is inside Advanced`);
   assert.equal(reviewPanel.children.at(-1), advanced, 'Advanced is the last part of the drawer');
-  for (const id of ['policy-accept', 'policy-roots']) assert.equal(within(id, 'setup-advanced'), false, `${id} stays on the default drawer`);
+  // #137: the default drawer is Project folder, Your choices, Install and Installed; Chosen items (configuration, skips,
+  // an open draft) and the Organization baseline moved into Advanced with their ids. A waiting proposal's Add to setup stays.
+  for (const id of ['policy-accept', 'setup-choices', 'install-panel', 'installed-panel', 'project-folder']) assert.equal(within(id, 'setup-advanced'), false, `${id} stays on the default drawer`);
+  for (const id of ['policy-roots', 'policy-draft', 'organization-author']) assert.ok(within(id, 'setup-advanced'), `${id} is inside Advanced`);
+  assert.deepEqual(reviewPanel.children.filter(node => ['project-folder', 'setup-choices', 'install-panel', 'installed-panel', 'setup-advanced'].includes(node.id)).map(node => node.id),
+    ['project-folder', 'setup-choices', 'install-panel', 'installed-panel', 'setup-advanced'], 'the default drawer is in this order');
   plainWords();
   await check.listeners.click();
   assert.equal(reviewPanel.hidden, false, 'Check Policy opens visible results');

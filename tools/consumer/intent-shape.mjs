@@ -28,8 +28,8 @@ const utc = value => typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d
 const unique = (values, key) => new Set(values.map(key)).size === values.length;
 export const rootKey = value => `${value.releaseSha256}/${value.itemId}/${value.scope}`;
 export const pinKey = value => `${value.releaseSha256}/${value.itemId}`;
-// The id ordinary Enterprise composition gives an item at a scope; also names an organization entry that is never composed.
-export const managementIdOf = ({ scope, packageName, itemId }) => `${scope}--${packageName.replace(/^@/, '').replaceAll('/', '.')}--${itemId}`;
+// The id ordinary Enterprise composition gives an item at a scope (management-id.mjs; the page builds the same one).
+export { managementIdOf } from './management-id.mjs';
 export function checkReview(review) {
   if (!only(review, ['schema', 'records', 'history']) || review.schema !== REVIEW_SCHEMA || !Array.isArray(review.records) || !Array.isArray(review.history)) return false;
   const all = [...review.records, ...review.history];

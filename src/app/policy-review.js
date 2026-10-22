@@ -17,7 +17,7 @@ export function createPolicyReview({ client, accept, proposed, status, setupHead
   const node = el('aside', 'policy-review-panel'); node.id = 'policy-review-panel'; node.hidden = true;
   node.setAttribute('aria-labelledby', 'policy-review-panel-title');
   const title = el('h2', 'font-semibold', 'Your setup'); title.id = 'policy-review-panel-title'; title.tabIndex = -1;
-  const context = el('p', 'text-on-surface-variant');
+  const context = el('p', 'text-on-surface-variant policy-review-context');
   const changes = el('div', 'space-y-2');
   // Two chosen items made from one declared source file: provenance only, so it never says they are the same content.
   const sameSource = el('p', 'p-2 rounded border border-wb-border bg-tertiary-container text-on-surface'); sameSource.id = 'setup-same-source'; sameSource.hidden = true;
@@ -26,7 +26,10 @@ export function createPolicyReview({ client, accept, proposed, status, setupHead
   const discard = el('button', 'px-3 py-1.5 rounded border border-wb-border', 'Cancel'); discard.type = 'button'; discard.id = 'policy-discard';
   const actions = el('div', 'flex flex-wrap gap-2'); actions.append(accept, discard);
   actions.id = 'policy-proposal-actions';
-  node.append(title, back, context, status, sameSource, changes, proposed, actions);
+  // Title and Back to catalog share one sticky row (#137).
+  const head = el('div', 'policy-review-head flex items-start justify-between gap-2'), heading = el('div', 'min-w-0');
+  heading.append(title, context); head.append(heading, back);
+  node.append(head, status, sameSource, changes, proposed, actions);
   document.body.append(node);
   const triggers = [trigger, entry].filter(Boolean);
   for (const control of triggers) { control.setAttribute('aria-controls', node.id); control.setAttribute('aria-expanded', 'false'); }
@@ -95,6 +98,8 @@ export function createPolicyReview({ client, accept, proposed, status, setupHead
     const itemOf = root => catalogItems.find(item => item.id === root.itemId && item.root?.releaseSha256 === root.releaseSha256);
     sameSource.textContent = sameSourceWarning((next ?? current).map(itemOf).filter(Boolean)); sameSource.hidden = !sameSource.textContent;
     changes.replaceChildren(); actions.hidden = !client.candidate; discard.disabled = !client.candidate; accept.disabled = !client.candidate;
+    // Only a change waiting to be added shows here; with none, Your choices below says what is in the setup (#137).
+    changes.hidden = !next;
     if (!next) { accept.textContent = 'Add to setup'; changes.append(el('p', '', 'Nothing is waiting to be added. Add content from the catalog.')); return; }
     const key = root => JSON.stringify([root.releaseSha256, root.itemId, root.scope]);
     const prior = new Map(current.map(root => [key(root), root])), after = new Map(next.map(root => [key(root), root]));

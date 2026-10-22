@@ -125,8 +125,19 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     await page.locator('#added-notice-message').filter({ hasText: /^Added Claude Code: git-guard hook group/ }).waitFor();
     assert.equal(await gitGuard.getByRole('button', { name: 'Added: Claude Code: git-guard hook group' }).isDisabled(), true);
     const installHook = page.locator('#install-hooks .wb-install-hook');
-    assert.equal(await installHook.textContent(), 'Claude Code: git-guard hook group runs this command' + 'node "$CLAUDE_PROJECT_DIR/.aih-extensions/source/hooks/git-guard.mjs"'
+    assert.equal(await installHook.textContent(), 'Claude Code: git-guard hook group runs this command: ' + 'node "$CLAUDE_PROJECT_DIR/.aih-extensions/source/hooks/git-guard.mjs"'
       + "claude-code will run this command each time the hook's event happens. The Catalog does not say which event that is.");
+    // Your setup's default panel (#137): one line per chosen item with the items it needs folded and the command a hook
+    // runs, Remove from setup, and Advanced closed with Chosen items under it.
+    await openPolicyDrawer(page);
+    const choiceRows = drawer(page).locator('#setup-choices-list > li');
+    assert.deepEqual(await choiceRows.evaluateAll(rows => rows.map(row => row.dataset.choiceItem)), ['extensions.claude.hook.git-guard']);
+    assert.match(await choiceRows.first().textContent(), /runs node "\$CLAUDE_PROJECT_DIR\/\.aih-extensions\/source\/hooks\/git-guard\.mjs"/);
+    assert.match(await choiceRows.first().locator('summary').textContent(), /^\+ \d+ it needs$/);
+    assert.equal(await drawer(page).getByRole('button', { name: 'Remove Claude Code: git-guard hook group from setup', exact: true }).isEnabled(), true);
+    assert.equal(await drawer(page).locator('#setup-advanced').evaluate(node => node.open), false, 'Advanced is closed by default');
+    assert.equal(await drawer(page).locator('#policy-roots').isVisible(), false, 'Chosen items is under Advanced');
+    await closePolicyDrawer(page);
     await page.locator('#added-notice-undo').click();
     await page.locator('#added-notice-message').filter({ hasText: /^Undone: Claude Code: git-guard hook group is no longer in your setup\.$/ }).waitFor();
     assert.equal(await page.locator('#install-hooks .wb-install-hook').count(), 0);

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { installOutcome, projectName, relativeTarget, skillHints } from '../../src/app/install-panel.js';
+import { installItems, installOutcome, installSummary, projectName, relativeTarget, skillHints } from '../../src/app/install-panel.js';
 import { effectsFingerprint, installFiles } from '../../src/app/host-review.js';
 
 const project = 'C:\\Temp\\proof\\sample-js-app';
@@ -79,14 +79,14 @@ test('files in place are not called installed unless Core lists the whole setup 
   const unknown = installSummary(rows);
   assert.equal(unknown.heading, 'All 3 files are already in place');
   assert.match(unknown.message, /^All 3 files are already in place\./);
-  assert.doesNotMatch(`${unknown.heading} ${unknown.message}`, /installed|will be changed|Nothing has been installed yet/i);
+  assert.doesNotMatch(`${unknown.heading} ${unknown.message}`, /installed|will change|Nothing has been installed yet/i);
   assert.doesNotMatch(installSummary(rows, { managed: false }).message, /installed/i);
   assert.match(installSummary(rows, { managed: true }).message, /^Already installed: all 3 files are in place\./);
   const some = installSummary([placed('a'), { action: 'Add', path: 'b' }, { action: 'Add', path: 'c' }], { managed: true });
-  assert.equal(some.heading, '2 files will be changed (1 already in place)');
+  assert.equal(some.heading, '2 files will change (1 already in place)');
   assert.match(some.message, /Not fully installed: 1 of 3 files are already in place\./);
   const none = installSummary([{ action: 'Add', path: 'a' }]);
-  assert.equal(none.heading, '1 file will be changed');
+  assert.equal(none.heading, '1 file will change');
   assert.equal(none.message, 'Nothing has been installed yet.');
   assert.equal(installSummary([]).heading, 'Nothing to change');
 });
@@ -106,4 +106,27 @@ test('an applied change with no check is named as not checked, not as an unfinis
   // A failed or unavailable check is still an unfinished install.
   const failed = structuredClone(noCheck); failed.operations[0].verification = { status: 'failed' };
   assert.match(installOutcome(failed, files, project).message, /Install did not finish: 2 of 2 applied, 0 verified/);
+});
+
+// What Install will bring, inside its expandable list (#137): the tool line is for chosen content only. Supporting files
+// (a hook's script files, notices) and other needed items are named for what they are, never "Not marked supported".
+test('only chosen content carries a tool line; supporting files and needed items are never flagged for your tool', () => {
+  const REL = 'r'.repeat(64);
+  const cap = (client, support) => ({ discovery: { clientCapabilities: [{ client, surface: '.claude/skills', capability: 'skill-material-format', support }] } });
+  const item = (id, label, metadata = {}) => ({ id, label, root: { releaseSha256: REL }, metadata });
+  const items = [item('grill-me', 'grill-me', cap('claude-code', 'supported')), item('grilling', 'grilling', cap('claude-code', 'supported')),
+    item('hook-source.git-guard', 'hooks/hooks.json', cap('claude-code', 'unsupported')), item('ecc.notices', 'LICENSE', cap('kiro-ide', 'supported'))];
+  const ref = itemId => ({ releaseSha256: REL, itemId, scope: 'project' });
+  const supporting = new Set([`${REL}/hook-source.git-guard`, `${REL}/ecc.notices`]);
+  const rows = installItems({ roots: [ref('grill-me')], pins: ['grill-me', 'grilling', 'hook-source.git-guard', 'ecc.notices'].map(ref), items, supporting, tool: 'claude-code' });
+  assert.deepEqual(rows, [
+    { name: 'grill-me', line: 'For claude-code · .claude/skills · supported' },
+    { name: 'grilling', line: 'needed by a chosen item' },
+    { name: 'hooks/hooks.json', line: 'supporting file' },
+    { name: 'LICENSE', line: 'supporting file' }]);
+  assert.doesNotMatch(JSON.stringify(rows), /Not marked supported|Not declared/);
+});
+
+test('the Install line counts the files that will change', () => {
+  assert.equal(installSummary([{ action: 'Add', path: 'a' }, { action: 'Add', path: 'b' }]).heading, '2 files will change');
 });
