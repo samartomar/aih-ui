@@ -16,7 +16,7 @@ import { composeAuthoring, freshAuthoring, openDraft } from './headless.mjs';
 import { stable, digestBytes } from './primitives.mjs';
 import { installedFamilies } from './installed-families.mjs';
 import { WORKSPACE_DECLARATION_RECORD_SCHEMA, LOCAL_BINDING_RECORD_SCHEMA } from './workspace-record.mjs';
-import { openPolicyFileActions, openPolicySection } from './policy-drawer.mjs';
+import { drawer, openPolicyFileActions, openPolicySection } from './policy-drawer.mjs';
 
 const decode = bytes => new TextDecoder().decode(bytes), encode = value => new TextEncoder().encode(value);
 const ROOT = 'mattpocock.implement';
@@ -139,7 +139,7 @@ export async function runWorkspaceBrowser({ origin, output, playwrightModule }) 
   const openSaved = async (page, path) => {
     operations = [];
     await page.locator('#nav-policy').click(); await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(path);
-    await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+    await drawer(page).getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await page.locator('#policy-draft-status').filter({ hasText: OPENED }).waitFor();
     await openPolicySection(page, 'Workspace repositories');
     await page.waitForFunction(() => /Declare workspace|Workspace choice|revision|WORKSPACE_VERSION_UNSUPPORTED/.test(document.querySelector('#policy-repositories')?.textContent ?? ''));

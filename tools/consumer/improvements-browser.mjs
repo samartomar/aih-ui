@@ -18,7 +18,7 @@ import { noteFixture } from './note-fixture.mjs';
 import { frictionFixture } from './friction-fixture.mjs';
 import { IMPROVEMENT_SUGGESTION_SCHEMA, IMPROVEMENT_DISMISSAL_SCHEMA } from './improvements.mjs';
 import { UNKNOWNS, FRICTION_COVERAGE, IMPROVEMENT_RULES_VERSION } from './improvement-rules.mjs';
-import { openPolicyFileActions, openPolicySection } from './policy-drawer.mjs';
+import { drawer, openPolicyFileActions, openPolicySection } from './policy-drawer.mjs';
 
 const decode = bytes => new TextDecoder().decode(bytes);
 const ROOT = 'mattpocock.implement', CLIENTS = ['claude', 'codex'];
@@ -100,7 +100,7 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
   const openSaved = async (page, path) => {
     const seen = checkResponses; operations = [];
     await page.locator('#nav-policy').click(); await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(path);
-    await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+    await drawer(page).getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await page.locator('#policy-draft-status').filter({ hasText: OPENED }).waitFor();
     await openPolicySection(page, 'Improvement suggestions');
     await settled(page, seen);

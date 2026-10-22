@@ -2,7 +2,7 @@
 // open, validate and reopen). Journeys reach them the way a person would: open the drawer, then expand the section.
 export async function openPolicyDrawer(page) {
   const panel = page.locator('#policy-review-panel');
-  if (await panel.isHidden()) await page.getByRole('button', { name: 'Open policy choices and review', exact: true }).click();
+  if (await panel.isHidden()) await page.locator('section:has(> #policy-review-description)').getByRole('button', { name: 'Open policy choices and review', exact: true }).click();
   await panel.waitFor();
 }
 
@@ -39,3 +39,7 @@ export async function openPolicySection(page, label) {
   const summary = page.locator('#policy-review-panel details.policy-advanced > summary').filter({ hasText: new RegExp(`^${label}$`) });
   if (!await summary.evaluate(node => node.parentElement.open)) await summary.click();
 }
+
+// Controls inside the review drawer. A role or label query scoped here avoids walking the whole catalog grid, which
+// holds most of the page's nodes; the query still matches by accessible name exactly as a page-wide one would.
+export const drawer = page => page.locator('#policy-review-panel');
