@@ -73,6 +73,7 @@ async function main() {
       // Choosing a framework shows its cards, in place of Project basics; Project basics opens the one workspace view.
       onFramework: () => shell.showCards(),
       onOpenWorkspace: () => authoringWorkspace.openWorkspace(),
+      onYourSources: () => shell.showYourSources(),
       onSelectEntry: (entry) => {
         authoringWorkspace.select(entry);
         shell.setInspectorSelection(entry !== null);

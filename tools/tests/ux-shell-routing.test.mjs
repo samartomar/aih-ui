@@ -14,7 +14,7 @@ function node() {
 function shell(t, hash = '', width = 1200) {
   const windowListeners = {}, events = [], header = node(), subheader = node(), context = node();
   header.nextElementSibling = subheader;
-  const keys = ['catalogWorkspace', 'navRail', 'frameworkMatrixTabs', 'catalogKindsDisclosure', 'inspectorRail', 'toggleInspectorBtn', 'toggleNavBtn', 'closeInspectorBtn', 'policyWorkspace', 'catalogScopesSection', 'navSources', 'navPolicy', 'navScanReview', 'policyWorkspaceTitle', 'paneDetails', 'paneSecurity', 'paneJson', 'projectBasics', 'navProjectBasics', 'projectBasicsTitle'];
+  const keys = ['catalogWorkspace', 'navRail', 'frameworkMatrixTabs', 'catalogKindsDisclosure', 'inspectorRail', 'toggleInspectorBtn', 'toggleNavBtn', 'closeInspectorBtn', 'policyWorkspace', 'catalogScopesSection', 'navSources', 'navPolicy', 'navScanReview', 'policyWorkspaceTitle', 'paneDetails', 'paneSecurity', 'paneJson', 'projectBasics', 'navProjectBasics', 'projectBasicsTitle', 'yourSources', 'yourSourcesNav', 'yourSourcesTitle'];
   const elements = Object.fromEntries(keys.map(key => [key, node()])); elements.tabButtons = [];
   for (const [key, value] of Object.entries({
     window: { innerWidth: width, matchMedia: query => ({ matches: width <= (query.includes('1100') ? 1100 : 760), addEventListener() {} }), addEventListener: (name, handler) => { windowListeners[name] = handler; } },
@@ -84,4 +84,29 @@ test('the inspector opens for a selection while Project basics shows', t => {
   const h = shell(t, '#basics', 1200);
   h.instance.setInspectorSelection(true);
   assert.equal(h.elements.inspectorRail.attributes['aria-hidden'], 'false');
+});
+
+test('Your sources is its own view: it shows in place of the cards and keeps the inspector for its skills', t => {
+  const h = shell(t, '#your-sources');
+  assert.equal(h.events.at(-1).detail.view, 'your-sources');
+  assert.equal(h.elements.yourSources.hidden, false);
+  assert.equal(h.elements.catalogWorkspace.hidden, true, 'the cards give way to Your sources');
+  assert.equal(h.elements.projectBasics.hidden, true);
+  assert.equal(h.elements.inspectorRail.hidden, false, "a skill's details still open in the inspector");
+  assert.equal(h.elements.yourSourcesNav.attributes['aria-current'], 'page');
+  assert.equal(h.elements.navSources.attributes['aria-current'], undefined);
+  assert.equal(h.elements.yourSourcesTitle.focused, true);
+  h.instance.setInspectorSelection(true);
+  assert.equal(h.elements.inspectorRail.attributes['aria-hidden'], 'false');
+  const changes = h.events.length;
+  h.instance.showCatalog();
+  assert.equal(h.events.length, changes, 'Back to catalog keeps Your sources');
+  h.instance.showCards();
+  assert.equal(h.elements.yourSources.hidden, true);
+  assert.equal(h.elements.yourSourcesNav.attributes['aria-current'], undefined);
+  h.route('#basics');
+  assert.equal(h.elements.yourSources.hidden, true);
+  h.route('#your-sources');
+  h.route('#policy');
+  assert.equal(h.elements.yourSources.hidden, true);
 });

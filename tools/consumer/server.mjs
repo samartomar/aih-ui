@@ -220,7 +220,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
             client.host = clientHost(client);
           }
           mixedService.addInventory(inventory); client.grants.set(inventory.release.sha256, grantId);
-          return send(response, 200, { status: 'ok', diagnostics: [], value: { input: inventory.input, grantId, itemIds: inventory.release.items.map(item => item.id),
+          return send(response, 200, { status: 'ok', diagnostics: [], value: { input: inventory.input, grantId, releaseSha256: inventory.release.sha256, itemIds: inventory.release.items.map(item => item.id),
             message: body.rebind ? 'Exact folder rebound for this page session. Validate and reopen the saved policy.' : 'Folder validated for this page session. Choose its Personal items alongside maintained content.' } });
         }
         // Host-configured source and controls only; the request body is ignored and needs no project root.

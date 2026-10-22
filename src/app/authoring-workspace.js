@@ -536,7 +536,10 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
       if (attempt !== client.revision) return;
       if (result.status === 'ok') { folderResult.textContent = 'Loading validated personal inventory…'; await client.loadCatalog({ expectedRevision: attempt }); }
       if (attempt !== client.revision) { folderResult.textContent = 'Folder operation superseded by a draft change. Explicitly select the folder again for the current artifact.'; return; }
-      folderResult.textContent = result.status === 'ok' ? result.value.message : failure(result);
+      folderResult.textContent = result.status !== 'ok' ? failure(result) : savedBinding ? result.value.message
+        : `Folder validated for this page session: ${root}, ${result.value.itemIds.length === 1 ? '1 skill' : `${result.value.itemIds.length} skills`}, listed under Your sources.`;
+      // Your sources lists the granted folder under its name (#124); the name stays in this page and this browser only.
+      if (result.status === 'ok') document.dispatchEvent(new CustomEvent('aih:folder-granted', { detail: { name: root, releaseSha256: result.value.releaseSha256 } }));
     } catch (error) { folderResult.textContent = error.message; }
     finally { folder.value = ''; folder.disabled = false; }
   });

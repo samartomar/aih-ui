@@ -59,17 +59,24 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     await page.locator('#personal-result').filter({ hasText: 'LOCAL_FOLDER_INVALID' }).waitFor();
     await choosePersonalFolder(page, folder);
     await page.locator('#personal-result').filter({ hasText: 'Folder validated' }).waitFor();
+    // The folder is one of Your sources, named by the folder, with its skill as a card (#124).
+    await page.locator('#your-sources-list section h2').filter({ hasText: /^personal$/ }).waitFor();
+    assert.deepEqual(await page.locator('#your-sources-rail button span.truncate').allInnerTexts(), ['personal']);
+    assert.equal(await page.locator('#your-sources-list [data-card-id]').count(), 1);
+    assert.equal(await page.locator('#framework-list button[data-family="Personal"]').count(), 0, 'a folder is never a framework');
+    // Its Advanced home, the Family list, still lists the same content.
     await chooseFamily(page, 'Personal');
     assert.equal(await page.locator('#cards-grid [data-card-id]').count(), 1);
-    await page.locator('#cards-grid [data-card-id]').click();
+    await page.locator('#your-sources-nav').click();
+    await page.locator('#your-sources-list [data-card-id]').click();
     assert.match(await page.locator('#details-source').textContent(), /Local folder explicitly selected/);
     assert.match(await page.locator('#details-capabilities').textContent(), /native-execution/);
     assert.match(await page.locator('#details-capabilities').textContent(), /automatic-guardrails/);
     await page.screenshot({ path: join(output, 'personal-inspector.png'), fullPage: true });
     const selections = [['Personal', 'personal.skill.example'], ['Extensions', 'extensions.matt.ask-matt'], ['ECC', 'ecc.skill.accessibility'], ['Superpowers', 'superpowers.skill.brainstorming'], ['Anthropic', 'anthropic.skill.academy-guide']];
     for (const [family, id] of selections) {
-      await page.locator('#nav-sources').click(); await (family === 'Personal' ? chooseFamily(page, family) : chooseFramework(page, family));
-      await addFromCatalog(page, id);
+      if (family === 'Personal') { await page.locator('#your-sources-rail button').filter({ hasText: 'personal' }).click(); await addFromCatalog(page, id, '#your-sources-list'); }
+      else { await page.locator('#nav-sources').click(); await chooseFramework(page, family); await addFromCatalog(page, id); }
       await closePolicyDrawer(page);
     }
     const saved = await policy(page); assert.equal(saved.metadata['aih.workbench'].roots.length, 5);
@@ -79,6 +86,12 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     const savedPath = join(output, 'policy.downloaded.json'); await (await download).saveAs(savedPath);
     const policyBytes = new Uint8Array(await readFile(savedPath));
     await page.screenshot({ path: join(output, 'policy-saved.png'), fullPage: true });
+    // A reload ends the page session's grant: Your sources says plainly that the folder needs choosing again.
+    await page.reload(); await page.locator('#browse-family option[value="Extensions"]').waitFor({ state: 'attached' });
+    assert.equal(await page.locator('#browse-family option[value="Personal"]').count(), 0);
+    await page.locator('#your-sources-rail button').filter({ hasText: 'choose again' }).filter({ hasText: 'personal' }).click();
+    await page.locator('#your-sources-list').getByRole('button', { name: 'Choose personal again', exact: true }).waitFor();
+    assert.match(await page.locator('#your-sources-list').textContent(), /can't read personal any more/);
     const fresh = await pageSetup(await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 1000 } }));
     assert.equal(await fresh.locator('#browse-family option[value="Personal"]').count(), 0);
     await openPolicyWorkspace(fresh); await openPolicyFileActions(fresh); await fresh.locator('#policy-open').setInputFiles(savedPath);
