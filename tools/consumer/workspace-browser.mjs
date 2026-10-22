@@ -158,11 +158,15 @@ export async function runWorkspaceBrowser({ origin, output, playwrightModule }) 
   };
   const noToken = async page => assert.ok(!(await page.locator('body').innerText()).includes(TOKEN), 'The credential is never shown.');
   const records = (envelopeBytes, schema) => JSON.parse(decode(envelopeBytes)).records.filter(record => record.schema === schema);
+  // Repository knowledge sits under a collapsed optional section; a person opens it before describing a member.
+  const FACT_LABELS = { responsibilities: 'What this repository owns', instructions: 'Agent instruction files', contracts: 'Shared interfaces or contracts' };
   const memberForm = async (page, member) => {
-    await input(page, 'Member id').fill(member.id); await input(page, 'Remote identity').fill(member.identity);
-    for (const field of ['responsibilities', 'instructions', 'contracts']) {
-      await select(page, `${field} status`).selectOption(member[field] ? 'known' : 'unresolved');
-      await input(page, `${field} (comma-separated)`).fill(member[field] ?? '');
+    await input(page, 'Repository key (required)').fill(member.id); await input(page, 'Repository identity (required)').fill(member.identity);
+    const facts = section(page).locator('details', { has: page.getByText('Aliases and repository knowledge (optional)', { exact: true }) });
+    if (!await facts.evaluate(node => node.open)) await facts.getByText('Aliases and repository knowledge (optional)', { exact: true }).click();
+    for (const [field, label] of Object.entries(FACT_LABELS)) {
+      await select(page, `${label} — knowledge`).selectOption(member[field] ? 'known' : 'unresolved');
+      await input(page, `${label} (comma-separated)`).fill(member[field] ?? '');
     }
   };
   const steps = {}, screenshots = [];
