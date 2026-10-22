@@ -100,7 +100,8 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
   const safe = action => async () => { try { await action(); } catch (error) { report(error.message); } finally { syncPrerequisites(); } };
   const identify = (control, id) => { control.id = id; return control; };
   const actions = new Map();
-  const action = (label, id, run) => { const control = identify(button(label, safe(async () => { if (control.dataset.busy) return; control.dataset.busy = 'true'; control.disabled = true; control.setAttribute('aria-busy', 'true'); try { await run(); } finally { delete control.dataset.busy; control.removeAttribute('aria-busy'); syncPrerequisites(); } })), id); control.disabled = id !== 'org-draft-new' && !session.value; actions.set(id, control); return control; };
+  // A busy action is marked aria-disabled, not disabled: disabling the focused control would drop focus before the re-render restores it.
+  const action = (label, id, run) => { const control = identify(button(label, safe(async () => { if (control.dataset.busy) return; control.dataset.busy = 'true'; control.setAttribute('aria-disabled', 'true'); control.setAttribute('aria-busy', 'true'); try { await run(); } finally { delete control.dataset.busy; control.removeAttribute('aria-busy'); syncPrerequisites(); } })), id); control.disabled = id !== 'org-draft-new' && !session.value; actions.set(id, control); return control; };
   const fieldClass = 'bg-wb-input text-on-surface border border-wb-border rounded p-1 max-w-full text-[11px]';
   function input(label, id, value = '') {
     const control = identify(el('input', fieldClass), id); control.type = 'text'; control.value = value; control.setAttribute('aria-label', label); return control;
