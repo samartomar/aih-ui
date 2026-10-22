@@ -146,3 +146,16 @@ test('isolated guided clients neither restore nor overwrite the accepted Workben
   assert.deepEqual(recoverDraftSession().bytes, Uint8Array.of(42));
   assert.equal([...storage.values()][0], accepted);
 });
+test('a project folder change supersedes every host result still out, and an inventory read does not supersede Install', async t => {
+  const pending = requests(t), client = createAuthoringClient();
+  const preview = client.requestHost('prepare'), inventory = client.requestCurrent('managed');
+  pending[1].resolve(response({ selections: ['folder-a'] }));
+  pending[0].resolve(response({ status: 'ready', sessionId: 'a' }));
+  assert.equal((await preview).sessionId, 'a');
+  assert.deepEqual((await inventory).selections, ['folder-a']);
+  const latePreview = client.requestHost('prepare'), lateInventory = client.requestCurrent('managed');
+  client.discardHostWork();
+  pending[2].resolve(response({ status: 'ready', sessionId: 'a2' })); pending[3].resolve(response({ selections: ['folder-a'] }));
+  assert.equal((await latePreview).status, 'superseded');
+  assert.equal((await lateInventory).status, 'superseded');
+});

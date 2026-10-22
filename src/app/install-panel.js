@@ -78,7 +78,7 @@ function refusal(result) {
 
 export function createInstallPanel({ client, el, button, tools = () => ({}), onInstalled = () => {} }) {
   const node = el('section', 'p-4 rounded border-2 border-primary space-y-3'); node.id = 'install-panel'; node.hidden = true;
-  const title = el('h3', 'text-base font-semibold text-on-surface', 'Install these items into your project');
+  const title = el('h3', 'text-base font-semibold text-on-surface', 'Install your setup into your project');
   const where = el('p', 'font-mono text-[11px] text-outline break-all');
   const items = el('ul', 'list-disc pl-5 space-y-0.5');
   const warning = el('p', 'p-2 rounded border border-error/60 bg-error-container text-on-surface'); warning.id = 'install-tool-warning'; warning.hidden = true;
@@ -88,14 +88,14 @@ export function createInstallPanel({ client, el, button, tools = () => ({}), onI
   const install = button('Install', () => run(), true); install.id = 'install-button'; install.disabled = true;
   node.append(title, where, items, warning, filesHeading, files, install, message);
 
-  let preview, previewing = false, installing = false, shownFor, managed = false;
+  let preview, previewing = false, installing = false, shownFor, managed = false, again = false;
   const itemOf = ref => client.catalog?.items.find(item => item.id === ref.itemId && item.root.releaseSha256 === ref.releaseSha256);
   const label = ref => { const item = itemOf(ref); return item ? `${item.label ?? item.id} — ${toolLine(item)}` : ref.itemId; };
-  const available = () => Boolean(client.catalog?.executionAvailable && client.intent && !client.candidate && !(client.draft && !client.compiled));
+  const ready = () => Boolean(client.catalog && client.intent && !client.candidate && !(client.draft && !client.compiled));
 
   function show(review) {
     const rows = installFiles(review), project = review?.target?.project;
-    title.textContent = `Install these items into ${projectName(project)}`;
+    title.textContent = `Install your setup into ${projectName(project)}`;
     where.textContent = project ?? '';
     filesHeading.textContent = installSummary(rows, { managed }).heading;
     files.replaceChildren(...rows.map(row => el('li', '', `${row.action}  ${row.path}`)));
@@ -113,7 +113,11 @@ export function createInstallPanel({ client, el, button, tools = () => ({}), onI
         install.disabled = false; message.textContent = installSummary(rows, { managed }).message;
       } else { files.replaceChildren(); message.textContent = `Can't install yet: ${refusal(result)}`; }
     } catch (error) { message.textContent = `Can't install yet: ${error.message}`; }
-    finally { previewing = false; }
+    finally {
+      previewing = false;
+      // The project folder changed while this preview was out; check the new one.
+      if (again) { again = false; shownFor = undefined; render(); }
+    }
   }
   async function run() {
     if (!preview || installing) return;
@@ -138,17 +142,29 @@ export function createInstallPanel({ client, el, button, tools = () => ({}), onI
     finally { installing = false; install.removeAttribute('aria-busy'); if (sent) onInstalled(); }
   }
   function render() {
-    node.hidden = !available();
+    node.hidden = !ready();
     const refs = client.intent?.pins ?? client.intent?.roots ?? [];
     items.replaceChildren(...refs.map(ref => el('li', '', label(ref))));
     warning.textContent = toolWarning(refs.map(itemOf).filter(Boolean), tools()); warning.hidden = !warning.textContent;
     if (node.hidden) { shownFor = undefined; preview = undefined; return; }
+    // No project folder: there is nothing to preview until one is chosen above.
+    if (!client.catalog.executionAvailable) {
+      shownFor = undefined; preview = undefined; install.disabled = true; delete message.dataset.outcome;
+      title.textContent = 'Install your setup into your project'; where.textContent = ''; filesHeading.textContent = 'Files that will be added'; files.replaceChildren();
+      message.textContent = 'Choose a project folder above to install your setup.'; return;
+    }
     const key = client.bytes.join(',');
     if (key === shownFor) return;
     shownFor = key; delete message.dataset.outcome; void loadPreview();
   }
-  // After a removal elsewhere: the earlier outcome no longer describes the project, so check it again.
-  function recheck() { message.textContent = ''; delete message.dataset.outcome; shownFor = undefined; render(); }
+  // After a removal elsewhere or a change of project folder: the earlier preview and outcome no longer describe the
+  // folder, so they are dropped and it is checked again (once the preview already out has come back).
+  function recheck() {
+    message.textContent = ''; delete message.dataset.outcome; shownFor = undefined; preview = undefined; install.disabled = true;
+    files.replaceChildren(); where.textContent = ''; title.textContent = 'Install your setup into your project';
+    if (previewing) { again = true; return; }
+    render();
+  }
   // Whether Core's managed inventory lists every selection of this setup; read by the installed list.
   function setManaged(value) {
     managed = Boolean(value);
@@ -156,5 +172,5 @@ export function createInstallPanel({ client, el, button, tools = () => ({}), onI
     const rows = installFiles(preview.review), summary = installSummary(rows, { managed });
     filesHeading.textContent = summary.heading; message.textContent = summary.message;
   }
-  return { node, render, recheck, setManaged };
+  return { node, render, recheck, setManaged, get busy() { return installing; } };
 }
