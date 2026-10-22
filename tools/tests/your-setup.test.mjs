@@ -59,7 +59,8 @@ function drawer(t, { roots = [{ itemId: 'grill-me' }], width = 1280, heading = t
   return { registry, client, review, entry, install, events, docListeners, backs, subscribers,
     async load() {
       const { createPolicyReview } = await import('../../src/app/policy-review.js');
-      const panel = createPolicyReview({ client, accept: make('button'), proposed: make('div'), status: make('p'),
+      const accept = make('button'); accept.id = 'policy-accept';
+      const panel = createPolicyReview({ client, accept, proposed: make('div'), status: make('p'),
         setupHeading: () => heading ? install : null, onBack: () => backs.push('back') });
       panel.node.append(install);
       return panel;
@@ -135,4 +136,16 @@ test('the drawer names its parts in plain words', async t => {
 test('the drawer still works on a page without the "Your setup" entry', async t => {
   const h = drawer(t, { withEntry: false }); const panel = await h.load();
   h.review.click(); assert.equal(panel.node.hidden, false);
+});
+
+test('the accept button says Add to setup for an addition and Update setup for a removal', async t => {
+  const h = drawer(t); await h.load();
+  const accept = h.registry.ids.get('policy-accept');
+  h.client.bytes = new Uint8Array();
+  h.client.candidate = { intent: { roots: [{ itemId: 'grill-me' }, { itemId: 'other' }] } };
+  h.entry.click();
+  assert.equal(accept.textContent, 'Add to setup');
+  h.client.candidate = { intent: { roots: [] } };
+  for (const fn of h.subscribers) fn();
+  assert.equal(accept.textContent, 'Update setup');
 });
