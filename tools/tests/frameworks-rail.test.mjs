@@ -36,7 +36,7 @@ test('family labels: the default release reads as other Catalog content, never a
   assert.equal(familyLabel('Extensions'), 'AIH-Extensions');
   assert.equal(familyLabel('Catalog'), 'Other Catalog content');
   assert.equal(familyLabel('ECC'), 'ECC');
-  assert.equal(familyLabel('Personal'), 'Personal');
+  assert.equal(familyLabel('Personal'), 'Your sources', 'GLOSSARY: Your sources, never Personal');
   // The catalog scopes under Advanced name family releases the same way.
   assert.equal(describeScope({ type: 'family', identityKey: 'Catalog', source: {} }).name, 'Other Catalog content');
   assert.equal(describeScope({ type: 'family', identityKey: 'Extensions', source: {} }).name, 'AIH-Extensions');

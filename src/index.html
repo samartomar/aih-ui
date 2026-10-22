@@ -365,9 +365,15 @@
 <p><button type="button" class="px-3 py-1.5 rounded border border-wb-border text-on-surface-variant opacity-50 cursor-not-allowed" disabled aria-disabled="true" aria-describedby="your-sources-npm-reason">Add an npm package</button></p>
 </li>
 <li class="p-3 rounded border border-wb-border bg-surface-container-lowest space-y-2" id="your-sources-github">
-<h3 class="font-medium text-on-surface">GitHub repository</h3>
-<p class="text-on-surface-variant" id="your-sources-github-reason">Coming next: a GitHub repository at an exact commit (samartomar/aih-ui#125).</p>
-<p><button type="button" class="px-3 py-1.5 rounded border border-wb-border text-on-surface-variant opacity-50 cursor-not-allowed" disabled aria-disabled="true" aria-describedby="your-sources-github-reason">Add a GitHub repository</button></p>
+<h3 class="font-medium text-on-surface">A GitHub repository at an exact commit</h3>
+<p class="text-on-surface-variant" id="your-sources-github-about">Name a public repository, its full 40-character commit and the folder that holds the skills, one folder per skill with its SKILL.md. This Workbench's server then downloads that exact commit from GitHub, read-only: up to 8 MB, within 30 seconds, without any sign-in. It keeps only that folder (up to 256 files and 1 MB) and the license. Nothing is run. A branch or tag is refused and nothing is fetched.</p>
+<form class="grid grid-cols-1 md:grid-cols-3 gap-2" id="your-sources-github-form" novalidate>
+<label class="text-on-surface-variant">Repository <input class="block w-full mt-1 p-1 rounded bg-wb-input border border-wb-border text-on-surface font-mono text-[11px]" id="your-sources-github-repository" name="repository" type="text" autocomplete="off" spellcheck="false" placeholder="owner/repo"></label>
+<label class="text-on-surface-variant">Commit <input class="block w-full mt-1 p-1 rounded bg-wb-input border border-wb-border text-on-surface font-mono text-[11px]" id="your-sources-github-commit" name="commit" type="text" autocomplete="off" spellcheck="false" maxlength="64" placeholder="40-character commit"></label>
+<label class="text-on-surface-variant">Folder <input class="block w-full mt-1 p-1 rounded bg-wb-input border border-wb-border text-on-surface font-mono text-[11px]" id="your-sources-github-path" name="path" type="text" autocomplete="off" spellcheck="false" placeholder="skills"></label>
+<p class="md:col-span-3"><button type="submit" class="px-3 py-1.5 rounded border border-wb-border text-primary hover:bg-surface-container" id="your-sources-github-add" aria-describedby="your-sources-github-about your-sources-github-result">Add the repository</button></p>
+</form>
+<p class="text-on-surface-variant" id="your-sources-github-result" role="status">Its skills can be browsed and chosen, but can't be installed yet: Catalog does not publish a material source for a git commit (samartomar/aih-catalog#124). Not scanned.</p>
 </li>
 </ul>
 </section>

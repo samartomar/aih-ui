@@ -110,7 +110,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   const projectBasics = createProjectBasics({ elements: elements.projectBasics, onSelect: (entryId) => select(entryId), onOpenWorkspace });
   const basicsOpen = () => !elements.projectBasics.section.hidden;
   // Your sources (#124) shows in place of the cards too: one section per folder the person added.
-  const yourSources = createYourSources({ onSelect: (entryId) => select(entryId), onOpen: onYourSources, onChange: () => render() });
+  const yourSources = createYourSources({ authoring, onSelect: (entryId) => select(entryId), onOpen: onYourSources, onChange: () => render() });
   const sourcesOpen = () => !document.getElementById('your-sources').hidden;
   document.addEventListener('aih:view-changed', () => { if (restoredView) renderFrameworks(); });
   const renderFrameworks = () => frameworkRail.render({ rows: frameworkRows(authoring.catalog?.items ?? []), selected: basicsOpen() || sourcesOpen() ? null : state.view.family });

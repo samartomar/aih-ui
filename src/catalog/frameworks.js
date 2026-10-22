@@ -15,7 +15,7 @@ import { el } from "../app/dom.js";
 // the order is the owner's. A family missing here is still listed, under its own name.
 const FRAMEWORK_NAMES = new Map([["Extensions", "AIH-Extensions"], ["ECC", "ECC"], ["Anthropic", "Anthropic"], ["Superpowers", "Superpowers"]]);
 // Host families that are not frameworks: the default release, an independent inventory, personal content.
-const NOT_FRAMEWORKS = new Map([["Catalog", "Other Catalog content"], ["Independent", "Independent"], ["Personal", "Personal"]]);
+const NOT_FRAMEWORKS = new Map([["Catalog", "Other Catalog content"], ["Independent", "Independent"], ["Personal", "Your sources"]]);
 
 /** Said wherever a framework name is shown, until the Catalog publishes the names. */
 export const WORKBENCH_NAMED = "Name supplied by the Workbench; the Catalog does not publish framework names yet.";

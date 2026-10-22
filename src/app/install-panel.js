@@ -117,7 +117,7 @@ export function createInstallPanel({ client, el, button, tools = () => ({}), onI
       if (preparation) {
         preview = preparation; const rows = show(preparation.review);
         install.disabled = false; message.textContent = installSummary(rows, { managed }).message;
-      } else { files.replaceChildren(); message.textContent = `Can't install yet: ${refusal(result)}`; }
+      } else { files.replaceChildren(); filesHeading.textContent = 'Files that will be added'; message.textContent = `Can't install yet: ${refusal(result)}`; }
     } catch (error) { message.textContent = `Can't install yet: ${error.message}`; }
     finally {
       previewing = false;

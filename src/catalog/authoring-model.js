@@ -2,9 +2,18 @@
 export function projectItems(items) {
   return items.map(item => ({
     entryId: `${item.root.releaseSha256}/${item.id}`, authoringItem: item,
-    subject: { id: item.id, kind: item.kind,
-      source: { type: item.family === 'Personal' ? 'local' : 'family', release: item.family, revision: item.root.releaseSha256 } },
+    subject: { id: item.id, kind: item.kind, source: subjectSource(item) },
   }));
+}
+// A GitHub source's items (#125) carry the exact repository, commit and the folder of their SKILL.md, as Catalog compiled them.
+export function subjectSource(item) {
+  const origin = item.sources?.[0]?.origin;
+  if (item.family === 'Personal' && origin?.kind === 'git' && typeof origin.repository === 'string') {
+    const path = item.metadata?.sourceFacts?.provenance?.path;
+    return { type: 'github', repository: origin.repository.replace(/^https:\/\/github\.com\//, ''), commit: origin.revision,
+      path: typeof path === 'string' ? path.replace(/\/?SKILL\.md$/, '') : undefined, release: item.family, revision: item.root.releaseSha256 };
+  }
+  return { type: item.family === 'Personal' ? 'local' : 'family', release: item.family, revision: item.root.releaseSha256 };
 }
 export function capabilityFacts(item, target) {
   const declared = item.metadata?.discovery?.clientCapabilities;

@@ -17,12 +17,15 @@ import { createMixedService } from './mixed-service.mjs';
 import { installedFamilies, installedReleaseInventory } from './installed-families.mjs';
 import { inspectAuthenticatedReviewEvidence } from './review-host.mjs';
 import { intakePersonalFolder } from './personal-folder.mjs';
+import { acquireGitHubSource, NOT_INSTALLABLE } from './github-source.mjs';
+import { archiveUrl, checkGitHubSource, downloadArchive } from './github-archive.mjs';
 import { observeCheckout } from './workspace-host.mjs';
 import { createCatalogUpdateSource } from './update-source.mjs';
 import { inspectorSummary } from './scan-evidence.mjs';
 import { createScanEvidenceHost } from './scan-evidence-host.mjs';
 
-export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, updateSourceCatalogRoots, evidenceSources, evidenceDetectorIds, reviewNoteFixture = false, port = 0, createExecutionHost = createHost } = {}) {
+export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, updateSourceCatalogRoots, evidenceSources, evidenceDetectorIds, reviewNoteFixture = false, port = 0, createExecutionHost = createHost, githubDownload = downloadArchive } = {}) {
+  // `githubDownload` is the GitHub archive download (./github-archive.mjs); tests pass a local one so they need no network.
   // `reviewNoteFixture` browses the review-note test fixture; only test and proof hosts set it.
   // `createExecutionHost` is createHost; tests pass one that holds Install work while they act.
   // The fixture is a test source; a host names one update source, so both together would be ambiguous.
@@ -80,6 +83,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   // Client tokens exist only in the live page. No cookie, saved intent or imported
   // snapshot restores a client's inventory, material grants or prepared handles.
   const clients = new Map(), clientStages = new Set();
+  let githubBusy = false;
   const clientHost = client => folder.project ? createExecutionHost({ projectRoot: folder.project, materialRoots: client.roots, organizationSource, recipeMaterials: client.recipeMaterials, controls }) : null;
   // Session ids prepared for an earlier project folder, so applying one is refused by name. Bounded; older ones read as lost.
   const retired = new Set();
@@ -113,7 +117,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
     }
     if (!clients.has(id)) {
       if (clients.size >= 64) throw new Error('Too many active authoring clients; reopen after idle sessions expire.');
-      const client = { usedAt: now, stages: [], grants: new Map(), roots: { ...authoringRoots },
+      const client = { usedAt: now, stages: [], grants: new Map(), github: new Map(), roots: { ...authoringRoots },
         scanEvidence: createScanEvidenceHost({ sources: evidenceSources, packageRoot: catalogRoot, trust: reviewTrust, detectorIds: evidenceDetectorIds }) };
       clients.set(id, client);
       client.ready = (async () => {
@@ -223,6 +227,34 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
           return send(response, 200, { status: 'ok', diagnostics: [], value: { input: inventory.input, grantId, releaseSha256: inventory.release.sha256, itemIds: inventory.release.items.map(item => item.id),
             message: body.rebind ? 'Exact folder rebound for this page session. Validate and reopen the saved policy.' : 'Folder validated for this page session. Choose its Personal items alongside maintained content.' } });
         }
+        // A GitHub repository at an exact commit (#125): the server's one network read of content. Only an exact
+        // owner/repo, commit and folder is fetched (./github-archive.mjs); the content is this page client's alone and,
+        // until Catalog publishes a git material source, is never installed.
+        if (operation === 'github' || operation === 'github-forget') {
+          if (!client.github) return send(response, 400, { status: 'refused', diagnostics: [{ code: 'CLIENT_REQUIRED', message: 'Open a fresh authoring client before supplying content.' }] });
+          if (operation === 'github-forget') {
+            if (!client.github.has(body.releaseSha256)) return send(response, 200, { status: 'refused', diagnostics: [{ code: 'GITHUB_SOURCE_UNKNOWN', message: 'This page has no such GitHub source.' }] });
+            client.github.delete(body.releaseSha256); mixedService.removeInventory(body.releaseSha256);
+            return send(response, 200, { status: 'ok', diagnostics: [], value: { releaseSha256: body.releaseSha256 } });
+          }
+          if (client.github.size >= 8) return send(response, 200, { status: 'refused', diagnostics: [{ code: 'GITHUB_SOURCE_LIMIT', message: 'Up to 8 GitHub sources per page session; reopen a fresh page to start again.' }] });
+          const spec = { repository: body.repository, commit: body.commit, path: body.path };
+          const checked = checkGitHubSource(spec);
+          if (checked.status !== 'ok') { console.log(`[github-source] refused before any fetch: ${checked.diagnostics[0].code}`); return send(response, 200, checked); }
+          // One download at a time for the whole host, so at most one archive's bounds are held in memory.
+          if (githubBusy) return send(response, 200, { status: 'refused', diagnostics: [{ code: 'GITHUB_BUSY', message: 'Another GitHub repository is being added. Try again when it has finished.' }] });
+          console.log(`[github-source] fetching ${archiveUrl(checked.value)} (folder ${checked.value.path})`);
+          githubBusy = true;
+          let result;
+          try { result = await acquireGitHubSource(spec, { download: githubDownload }); } finally { githubBusy = false; }
+          console.log(`[github-source] ${result.status === 'ok' ? `added ${result.value.release.items.length} skills` : `refused: ${result.diagnostics[0].code}`}`);
+          if (result.status !== 'ok') return send(response, 200, JSON.parse(JSON.stringify(result, (_key, value) => value instanceof Uint8Array ? undefined : value)));
+          const inventory = result.value, { repository, commit, path } = inventory.github;
+          mixedService.addInventory(inventory); client.github.set(inventory.release.sha256, { repository, commit, path, input: inventory.materialSource.input });
+          return send(response, 200, { status: 'ok', diagnostics: [], value: { releaseSha256: inventory.release.sha256, itemIds: inventory.release.items.map(item => item.id),
+            source: { repository, commit, path }, name: `${repository}@${commit.slice(0, 7)}`, installable: false, installReason: NOT_INSTALLABLE,
+            message: `Added ${repository}@${commit.slice(0, 7)} (${path}) for this page session: ${inventory.release.items.length === 1 ? '1 skill' : `${inventory.release.items.length} skills`}, listed under Your sources. Not scanned.` } });
+        }
         // Host-configured source and controls only; the request body is ignored and needs no project root.
         if (operation === 'authority-source') return send(response, 200, await readAuthoritySource({ organizationSource, controls }));
         if (['authority', 'prepare', 'apply', 'managed', 'remove'].includes(operation)) {
@@ -238,6 +270,13 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
               const checked = await mixedService.run('read', { policyBytes: body.policyBytes });
               if (checked.status === 'ok' && checked.value.editing === 'available' && checked.value.intent.pins.some(pin => historicalOnly.has(pin.releaseSha256))) {
                 return { status: 'refused', diagnostics: [{ code: 'HISTORICAL_SOURCE_UPDATE_REQUIRED', message: 'This policy includes historical Catalog content. Review and explicitly accept its source update before preparing against the current installed package. Your saved policy is unchanged.' }] };
+              }
+            }
+            // Content from a GitHub source has no material source Core can install from yet (samartomar/aih-catalog#124).
+            if (operation === 'prepare' && client.github?.size) {
+              const inputs = new Set([...client.github.values()].map(value => value.input)), parsed = parsePolicy(policyText);
+              if (parsed.valid && parsed.document.selections.some(selection => inputs.has(selection.recipe?.reference?.source?.input))) {
+                return { status: 'refused', diagnostics: [{ code: 'GITHUB_NOT_INSTALLABLE', reason: 'not-installable', message: NOT_INSTALLABLE }] };
               }
             }
             const host = client.host;

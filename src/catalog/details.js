@@ -24,7 +24,7 @@
 import { createGapIndicator } from '../app/gap-indicator.js';
 import { createInspectorEvidence } from '../app/inspector-evidence.js';
 import { el, text } from "../app/dom.js";
-import { capabilityFacts } from './authoring-model.js';
+import { capabilityFacts, subjectSource } from './authoring-model.js';
 import { sourcePresentation } from './source-facts.js';
 import { describeClientIdentity } from '../app/client-identity.js';
 import {
@@ -214,7 +214,15 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
         }
         row(elements.detailsSource, 'Content family', familyLabel(item.family));
         row(elements.detailsSource, 'Package', `${item.package.name}@${item.package.version}`);
-        row(elements.detailsSource, 'Provenance', item.family === 'Personal' ? 'Local folder explicitly selected in this page session; no GitHub provenance inferred.' : 'Published installed release; upstream origins retained below.');
+        const brought = subjectSource(item);
+        if (brought.type === 'github') {
+          // A GitHub source (#125): the exact repository, commit and folder Catalog compiled it from.
+          row(elements.detailsSource, 'Provenance', 'GitHub repository at an exact commit, downloaded read-only by this Workbench for this page session. Not scanned.');
+          codeRow(elements.detailsSource, 'Repository', brought.repository);
+          codeRow(elements.detailsSource, 'Commit', brought.commit);
+          codeRow(elements.detailsSource, 'Folder', brought.path);
+          row(elements.detailsSource, 'Install', "Can't be installed yet: Catalog does not publish a material source for a git commit (samartomar/aih-catalog#124).");
+        } else row(elements.detailsSource, 'Provenance', item.family === 'Personal' ? 'Local folder explicitly selected in this page session; no GitHub provenance inferred.' : 'Published installed release; upstream origins retained below.');
         for (const fact of capabilityFacts(item, target)) {
           const node = el('p', 'p-2 rounded border border-wb-border text-[11px]', fact.support === 'not-declared' ? fact.reason : `${fact.support} · ${fact.capability} · ${fact.surface} — ${fact.reason ?? 'No producer reason supplied.'}`);
           elements.detailsCapabilities.append(node);

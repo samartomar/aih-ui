@@ -59,6 +59,13 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     await page.locator('#personal-result').filter({ hasText: 'LOCAL_FOLDER_INVALID' }).waitFor();
     await choosePersonalFolder(page, folder);
     await page.locator('#personal-result').filter({ hasText: 'Folder validated' }).waitFor();
+    // A GitHub repository needs an exact commit: a branch name is refused before anything is fetched, and nothing is added (#125).
+    await page.locator('#your-sources-github-repository').fill('mattpocock/skills');
+    await page.locator('#your-sources-github-commit').fill('main');
+    await page.locator('#your-sources-github-path').fill('skills/productivity');
+    await page.locator('#your-sources-github-add').click();
+    await page.locator('#your-sources-github-result').filter({ hasText: 'needs an exact commit' }).waitFor();
+    assert.match(await page.locator('#your-sources-github-result').textContent(), /nothing was fetched/);
     // The folder is one of Your sources, named by the folder, with its skill as a card (#124).
     await page.locator('#your-sources-list section h2').filter({ hasText: /^personal$/ }).waitFor();
     assert.deepEqual(await page.locator('#your-sources-rail button span.truncate').allInnerTexts(), ['personal']);

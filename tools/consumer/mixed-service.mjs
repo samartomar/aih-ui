@@ -86,6 +86,11 @@ export async function createMixedService(maintained, { suppliedInventories, fami
       if (!all.some(entry => entry.release.sha256 === inventory.release.sha256)) all.push(inventory);
       if (!current.some(entry => entry.release.sha256 === inventory.release.sha256)) current.push(inventory);
     },
+    // No longer browsed (a forgotten source); exact saved reads still resolve it for the rest of this service's life.
+    removeInventory(releaseSha256) {
+      const index = current.findIndex(entry => entry.release.sha256 === releaseSha256 && !maintainedInventories.includes(entry));
+      if (index !== -1) current.splice(index, 1);
+    },
     catalog() { return { executionAvailable: false, description: browsesNotes ? 'Installed Catalog families and independently authored review-note. Template is an authored demonstration. Family grouping preserves upstream origins and exact identities.' : 'Installed Catalog families. Family grouping preserves upstream origins and exact identities.',
       items: browsed().flatMap(entry => entry.release.items.map(item => ({ ...item, root: root(entry, item), package: entry.release.package,
         family: entry.family ?? (entry === maintained ? 'Catalog' : 'Independent'),
