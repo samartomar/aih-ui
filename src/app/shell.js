@@ -180,6 +180,8 @@ export function createShell(elements) {
     if (jsonTab.hidden && currentTab === "json") switchTab("details");
   }
   if (advanced) { rememberOpen(advanced, "catalog"); advanced.addEventListener("toggle", syncJsonTab); }
+  // Close, inside the open section (a side panel on wide screens), does what its summary does and returns focus there.
+  document.getElementById("catalog-advanced-close")?.addEventListener("click", () => { advanced.open = false; advanced.querySelector(":scope > summary")?.focus(); });
   syncJsonTab();
 
   elements.toggleNavBtn.addEventListener("click", toggleNav);

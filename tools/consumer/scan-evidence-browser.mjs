@@ -12,7 +12,7 @@ import { createScanEvidenceHost } from './scan-evidence-host.mjs';
 import { createGitHubFixture } from './github-fixture.mjs';
 import { createHost } from './host.mjs';
 import { authenticateEvidence } from '@aihq/core';
-import { openScanReview, openSetupAdvanced, openFileActions, chooseFamily } from './advanced-browser.mjs';
+import { openScanReview, openSetupAdvanced, openFileActions, chooseFamily, chooseSupport } from './advanced-browser.mjs';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 export async function runScanEvidenceBrowser({origin,output,fixtureRoot,sourcePaths,playwrightModule}) {
   const start=performance.now();await mkdir(output,{recursive:true});
@@ -47,7 +47,7 @@ export async function runScanEvidenceBrowser({origin,output,fixtureRoot,sourcePa
   try {
     await page.goto(origin+'/');await page.locator('#browse-family option[value="Catalog"]').waitFor({state:'attached'});
     if(await page.locator('#setup-dialog').isVisible()){await page.getByRole('radio',{name:/Vibe coder/}).check();for(let i=0;i<4;i++)await page.locator('#setup-next').click();await page.locator('#setup-dialog').waitFor({state:'hidden'});}
-    await page.locator('#browse-support').selectOption('all');await chooseFamily(page, 'Catalog');
+    await chooseSupport(page, 'all');await chooseFamily(page, 'Catalog');
     await page.getByRole('button',{name:'Choose alpha',exact:true}).click();await page.locator('#policy-accept:not([disabled])').waitFor();await page.locator('#policy-accept').click();
     await openScanReview(page);await panel.waitFor();
     await panel.getByLabel('Scan content',{exact:true}).selectOption(`${installed.release.sha256}/alpha`);
@@ -167,7 +167,7 @@ export async function runScanEvidenceBrowser({origin,output,fixtureRoot,sourcePa
     // An independent item has no matching evidence and remains selectable.
     const catalog=await(await page.request.get(origin+'/api/authoring-catalog')).json();const note=catalog.items.find(value=>value.id==='consumer-proof.review-note');
     await openFileActions(page); await page.getByRole('button', { name: 'New project policy', exact: true }).click();
-    await page.locator('#nav-sources').click();await page.locator('#browse-support').selectOption('all');await chooseFamily(page, 'Independent');
+    await page.locator('#nav-sources').click();await chooseSupport(page, 'all');await chooseFamily(page, 'Independent');
     await page.getByRole('button',{name:`Choose ${note.id}`,exact:true}).click();await page.locator('#policy-accept:not([disabled])').waitFor();await page.locator('#policy-accept').click();
     const noEvidencePolicy=await download('no-evidence.policy.json',()=>openSetupAdvanced(page).then(() => page.locator('#policy-save').click()));
     const noEvidenceDocument=JSON.parse(new TextDecoder().decode(noEvidencePolicy));assert.equal(noEvidenceDocument.mode,'vibe');assert.ok(noEvidenceDocument.metadata['aih.workbench'].roots.some(root=>root.itemId===note.id));assert.ok(!noEvidenceDocument.evidence?.length);

@@ -134,3 +134,21 @@ test("returning to the catalog focuses the chosen card when the grid shows it, a
   assert.equal(cards.focus("not-shown.skill"), false);
   assert.equal(cards.focus(null), false);
 });
+
+test("a card names its framework as the left panel does, and the default release as other Catalog content", (t) => {
+  for (const [family, label] of [["Extensions", "AIH-Extensions"], ["Catalog", "Other Catalog content"], ["ECC", "ECC"]]) {
+    const previous = Object.getOwnPropertyDescriptor(globalThis, "document");
+    globalThis.document = { createElement: element };
+    const entry = { entryId: `${family}.skill`, subject: { id: "x", kind: "skill", source: { type: "family" } },
+      authoringItem: { id: "x", label: "X", family, description: "d", root: { releaseSha256: "a".repeat(64), itemId: "x" } } };
+    const elements = Object.fromEntries(["cardsGrid", "visibleCount", "visibleCaption", "categoryContext"].map(key => [key, element("div")]));
+    createCards({ elements, onSelect() {} }).render({ entries: [entry], total: 1, selectedId: null });
+    if (previous) Object.defineProperty(globalThis, "document", previous); else delete globalThis.document;
+    const card = elements.cardsGrid.children[0];
+    assert.equal(card.dataset.categoryLabel, label);
+    const badge = descendants(card).find(node => node.textContent === label);
+    assert.ok(badge, `${label} is shown on the card`);
+    assert.doesNotMatch(badge.className, /uppercase/, "the name is shown as written");
+    assert.equal(elements.categoryContext.textContent, `Content family · ${label}`);
+  }
+});

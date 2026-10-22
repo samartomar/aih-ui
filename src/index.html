@@ -59,7 +59,7 @@
 <span id="publish-project-policy" data-gap-reason="Git publishing is not connected. Save the project policy in Policy workspace, then review and publish through your Git workflow." data-gap-label="Publish not connected"></span>
 <!-- Settings: the workspace menu and the mode in one menu, with Check this machine and Get started. -->
 <div class="relative workspace-menu-container">
-<button class="wb-header-control" type="button" id="org-modal-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="workspace-actions" title="Settings: workspace, mode, this machine and getting started">
+<button class="wb-header-control" type="button" id="org-modal-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="workspace-actions" title="Settings: workspace, mode, Core tools, this machine and getting started">
 <span class="material-symbols-outlined text-[14px]" aria-hidden="true">settings</span>
 <span>Settings</span>
 <span class="wb-header-chevron" aria-hidden="true">▾</span>
@@ -196,7 +196,9 @@
 <!-- Advanced (owner decision 4): the kind tiles, the catalog scopes, the Policy workspace links and Scan Review.
      Placement only: each keeps its id, code and behaviour. Closed for a new viewer; app/advanced.js remembers it. -->
 <details id="catalog-advanced" class="catalog-advanced"><summary class="cursor-pointer text-on-surface-variant hover:text-on-surface font-medium">Advanced</summary>
-<div class="catalog-advanced-body space-y-3 pt-2">
+<!-- On a wide screen the open section is a panel beside the cards, so it never pushes them down (#122). -->
+<div class="catalog-advanced-body space-y-3 pt-2" role="region" aria-label="Advanced">
+<div class="catalog-advanced-head flex items-center justify-between gap-2"><span class="font-medium text-on-surface">Advanced</span><button type="button" id="catalog-advanced-close" class="px-2 py-0.5 rounded border border-wb-border text-on-surface-variant hover:bg-surface-container hover:text-on-surface">Close</button></div>
 <nav class="flex flex-wrap items-center gap-2" aria-label="Advanced views">
 <button class="inline-flex items-center gap-2 px-2 py-1 rounded border border-wb-border text-on-surface-variant hover:bg-surface-container hover:text-on-surface" id="nav-policy" type="button" aria-controls="policy-workspace">
 <span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[14px] text-outline" aria-hidden="true">policy</span><span>Policy workspace</span></span>
@@ -222,6 +224,15 @@
 <button type="button" id="catalog-tools-undeclared" class="px-2 py-1 rounded border border-wb-border bg-surface-container text-on-surface hover:bg-surface-container-high" aria-pressed="false" hidden></button>
 <p id="catalog-tools-unmatched" class="w-full text-on-surface-variant text-[11px]" hidden></p>
 </div>
+<!-- The catalog filters and personal content (moved here from above the cards by #122; same ids and behaviour). -->
+<details id="catalog-filter-disclosure" open><summary>Catalog filters and personal content</summary><div class="flex flex-wrap gap-2 mb-3 text-[11px]" id="authoring-browse">
+<label>Support <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-support" aria-label="Target support"><option value="supported">With supported facts</option><option value="all">Full inventory</option><option value="unsupported">With unsupported facts</option><option value="unknown">With unknown facts</option><option value="not-declared">Not declared for this tool</option></select></label>
+<label class="cursor-pointer rounded border border-wb-border p-1">Choose personal folder <input id="personal-folder" type="file" webkitdirectory multiple aria-label="Choose personal folder"></label>
+<label>Folder binding <select class="bg-wb-input border border-wb-border rounded p-1" id="personal-binding" aria-label="Personal folder binding"><option value="">Add new personal content</option></select></label>
+<button type="button" id="catalog-reset-filters" class="border border-wb-border rounded px-3 py-1">Reset filters</button><p class="w-full text-outline" id="support-counts" role="status"></p>
+<p class="w-full text-on-surface-variant" id="personal-result" role="status">Personal content stays local to this page session. Choose skills/&lt;name&gt;/SKILL.md with Agent Skills name and description, plus root license material.</p>
+</div>
+</details>
 <!-- Every content family, including the Catalog's other content (its default release) and personal content. -->
 <label class="flex flex-wrap items-center gap-2 text-on-surface-variant">Family <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-family" aria-label="Content family"></select></label>
 <!-- CATALOG SCOPES: one row per published source identity -->
@@ -272,14 +283,7 @@
 <div class="catalog-cards-region flex-1 flex overflow-hidden">
 <div class="flex-1 overflow-y-auto p-4 bg-wb-cards flex flex-col gap-3">
 <div id="category-context" aria-live="polite"></div>
-<details id="catalog-filter-disclosure" open><summary>Catalog filters and personal content</summary><div class="flex flex-wrap gap-2 mb-3 text-[11px]" id="authoring-browse">
-<label>Support <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-support" aria-label="Target support"><option value="supported">With supported facts</option><option value="all">Full inventory</option><option value="unsupported">With unsupported facts</option><option value="unknown">With unknown facts</option><option value="not-declared">Not declared for this tool</option></select></label>
-<label class="cursor-pointer rounded border border-wb-border p-1">Choose personal folder <input id="personal-folder" type="file" webkitdirectory multiple aria-label="Choose personal folder"></label>
-<label>Folder binding <select class="bg-wb-input border border-wb-border rounded p-1" id="personal-binding" aria-label="Personal folder binding"><option value="">Add new personal content</option></select></label>
-<button type="button" id="catalog-reset-filters" class="border border-wb-border rounded px-3 py-1">Reset filters</button><p class="w-full text-outline" id="support-counts" role="status"></p>
-<p class="w-full text-on-surface-variant" id="personal-result" role="status">Personal content stays local to this page session. Choose skills/&lt;name&gt;/SKILL.md with Agent Skills name and description, plus root license material.</p>
-</div>
-</details><div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3" id="cards-grid" aria-busy="true"></div>
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3" id="cards-grid" aria-busy="true"></div>
 </div>
 </div>
 </div>

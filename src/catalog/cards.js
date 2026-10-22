@@ -23,7 +23,7 @@ import { createGapIndicator } from "../app/gap-indicator.js";
 import { el } from "../app/dom.js";
 import { sourcePresentation } from './source-facts.js';
 import { NOT_PUBLISHED, NOT_SUPPLIED } from "../app/absence.js";
-import { KIND_ICON, KIND_TONE, identity } from "./entry.js"; import { toolLine } from "./tool-match.js";
+import { KIND_ICON, KIND_TONE, identity } from "./entry.js"; import { familyLabel, WORKBENCH_NAMED } from "./frameworks.js"; import { toolLine } from "./tool-match.js";
 
 const AUTHORITY = "Producer authenticity is unchecked; this is not an approval or execution authority.";
 // One entry per evidence state the host reports; the dot keeps the status colour meanings.
@@ -44,7 +44,7 @@ function card(entry, selectedId, onSelect, model) {
   const source = entry.authoringItem ? sourcePresentation(entry.authoringItem) : null;
   const title = source?.name ?? null;
   const description = source?.description ?? null;
-  const badge = entry.authoringItem ? { text: entry.authoringItem.family, value: true, title: 'Installed content family; upstream origins are shown in the inspector.', source: 'Content family' } : NO_FAMILY;
+  const badge = entry.authoringItem ? { text: familyLabel(entry.authoringItem.family), value: true, title: `Installed content family; upstream origins are shown in the inspector. ${WORKBENCH_NAMED}`, source: 'Content family' } : NO_FAMILY;
   const isSelected = selectedId === id.entryId;
 
   const node = el("div", "wb-card group rounded border p-3 flex flex-col justify-between cursor-pointer");
@@ -74,7 +74,7 @@ function card(entry, selectedId, onSelect, model) {
   const badges = el("div", "flex items-center gap-1 shrink-0");
   const category = el(
     "span",
-    `px-1.5 py-0.5 rounded bg-wb-meta-bg border border-wb-border text-[8.5px] font-mono text-wb-meta${badge.value ? " uppercase" : ""}`,
+    `px-1.5 py-0.5 rounded bg-wb-meta-bg border border-wb-border text-[8.5px] font-mono text-wb-meta`,
     badge.text,
   );
   category.title = badge.title;

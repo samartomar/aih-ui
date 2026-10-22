@@ -121,3 +121,24 @@ test('the default catalog screen uses plain words: no policy, pins, artifacts, d
   assert.doesNotMatch(text, ENGINE_WORDS);
   assert.match(text, /Choose content for your AI tool/);
 });
+
+test('the words say where Mode and Core tools now live: the Settings menu', () => {
+  const html = readFileSync(new URL('../../src/index.html', import.meta.url), 'utf8');
+  assert.match(/id="org-modal-trigger"[^>]*title="([^"]*)"/.exec(html)[1], /Core tools/, 'the Settings button names Core tools');
+  const onboarding = readFileSync(new URL('../../src/app/onboarding.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(onboarding, /Mode control in the header/);
+  assert.match(onboarding, /Change mode in Settings/);
+});
+
+test('an open Advanced section is a panel beside the cards on a wide screen, with its own Close (#122)', () => {
+  assert.ok(inside('catalog-advanced-close', 'catalog-advanced'), 'Close is inside the Advanced section');
+  const css = readFileSync(new URL('../../src/styles/workbench.css', import.meta.url), 'utf8');
+  const wide = /@media \(min-width: 900px\) \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? '';
+  assert.match(wide, /#catalog-advanced\[open\] > \.catalog-advanced-body \{[^}]*position: absolute/, 'the open body leaves the flow');
+  assert.match(wide, /#catalog-workspace:has\(#catalog-advanced\[open\]\) \{ padding-left/, 'the cards make room rather than being covered');
+});
+
+test('the catalog filters and personal content are under Advanced, so the cards come straight after the search (#122)', () => {
+  for (const id of ['catalog-filter-disclosure', 'browse-support', 'personal-folder', 'personal-binding', 'catalog-reset-filters', 'support-counts', 'personal-result'])
+    assert.ok(inside(id, 'catalog-advanced'), `${id} is inside the catalog Advanced section`);
+});
