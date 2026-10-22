@@ -49,6 +49,15 @@ const CONDITION = /^condition:/;
 const PERSISTED = 'persisted-configuration';
 const conditionKey = measure => String(measure).replace(CONDITION, '');
 
+// Readiness guidance routes name a target followed by an optional check id.
+// Other routes stay visible as evidence without offering an unrelated action.
+export function guidanceDestination(route) {
+  if (route?.kind !== 'guidance' || typeof route.id !== 'string' || route.id.includes('usage-unavailable')) return null;
+  const target = route.id.split('/')[0];
+  if (!/^[a-zA-Z0-9._-]{1,100}$/.test(target) || ['.', '..'].includes(target)) return null;
+  return { target, href: `/readiness.html?target=${encodeURIComponent(target)}` };
+}
+
 export function reportPanels(projection) {
   const claims = list(projection?.claims);
   const byRef = new Map(claims.map(claim => [keyOf(claim), claim]));
@@ -132,16 +141,16 @@ export function reportPanels(projection) {
   const actions = list(projection?.actions);
   const actionPanel = panel('actions', 'Suggested actions', actions.length ? `${plural(actions.length, 'action')}, most urgent first.` : 'No action is suggested.',
     actions.some(action => action.category === 'blocker') ? 'error' : actions.length ? 'warning' : 'neutral',
-    actions.map(action => item(action.id, action.category === 'blocker' ? 'error' : 'warning',
+    actions.map(action => ({ ...item(action.id, action.category === 'blocker' ? 'error' : 'warning',
       `${action.order?.rank ?? ''}${action.order ? '. ' : ''}${CATEGORY_LABELS[action.category] ?? action.category} — ${action.reason}`,
       [`Route: ${action.route.kind} ${action.route.id}`, ...(list(action.evidence).length ? [`Evidence: ${action.evidence.map(label).join(', ')}`] : []),
-        ...list(action.prerequisites).map(text => `Prerequisite: ${text}`)])));
+        ...list(action.prerequisites).map(text => `Prerequisite: ${text}`)]), route: action.route })));
 
   // Claims: the checks, conditions and repairs. Context claims have their own panel.
   const isContext = claim => !['configuration-check', 'repair', 'external-repair', PERSISTED].includes(claim.measure) && !CONDITION.test(claim.measure);
   const evidence = claims.filter(claim => !isContext(claim));
   const claimsPanel = panel('claims', 'Claims', evidence.length ? `${plural(evidence.length, 'claim')} behind the score and repairs.` : 'No check or repair claim has been recorded.',
-    'neutral', evidence.map(claim => claimItem(claim, label(claim))));
+    'neutral', evidence.map(claim => ({ ...claimItem(claim, `${parsed(claim)?.role ?? claim.measure}: ${valueText(claim)}`), group: label(claim) })));
 
   // Context: measured file size, estimated context and observed usage are never merged or compared here.
   const context = claims.filter(isContext);
@@ -180,7 +189,7 @@ export function reportPanels(projection) {
   const observations = panel('observations', 'De-duplication', observationItems.length ? `${plural(observationItems.length, 'note')}.` : 'No duplicate, conflicting or unidentified event.',
     observationItems.some(entry => entry.tone === 'warning') ? 'warning' : 'neutral', observationItems);
 
-  return { score, repairs, actions: actionPanel, claims: claimsPanel, context: contextPanel, observations };
+  return { actions: actionPanel, score, repairs, claims: claimsPanel, context: contextPanel, observations };
 }
 
 // Headless rendering: panel strings only, plus list markers and indentation.

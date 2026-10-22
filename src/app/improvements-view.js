@@ -120,24 +120,31 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
     groups.replaceChildren();
     for (const group of groupImprovements(value)) {
       if (!group.rows.length) continue;
-      const section = el('div', 'space-y-1'); section.append(el('h4', 'font-medium', group.label));
+      const section = el(group.label === 'Leading suggestion' ? 'div' : 'details', 'space-y-1'); section.append(el(group.label === 'Leading suggestion' ? 'h4' : 'summary', 'font-medium cursor-pointer', `${group.label === 'Alternatives' ? 'Other suggestions' : group.label}${group.label === 'Leading suggestion' ? '' : ` (${group.rows.length})`}`));
+      if (group.label === 'Alternatives') section.append(el('p', 'text-on-surface-variant', 'These are additional ideas for this policy, not interchangeable replacements for the leading suggestion.'));
       const preserved = group.label === 'Preserved dismissals', dismissed = group.label === 'Dismissed', earlier = !!group.earlier;
       for (const row of group.rows) {
         const suggestion = preserved ? row.suggestion : row;
         const card = el('div', 'p-2 border border-wb-border rounded space-y-1'); card.dataset.suggestionId = suggestion.id;
         card.append(el('p', 'font-medium', suggestion.label ?? suggestion.change.itemId), el('p', 'text-outline text-[11px]', `Scope: ${suggestion.scope}`));
+        const detail = el('details', 'space-y-1');
+        detail.append(el('summary', 'text-primary cursor-pointer', 'Why suggested, effects and evidence'));
+        const appendDetail = (...nodes) => detail.append(...nodes);
+        const firstReason = suggestion.triggers?.[0]?.text;
+        if (firstReason) card.append(el('p', 'text-on-surface-variant', firstReason));
         // The exact content the suggestion describes, in full, like the digest lines of an update.
-        if (suggestion.change?.releaseSha256 && suggestion.change?.itemSha256) card.append(el('p', 'font-mono text-[10px] text-outline break-all', `Content: release ${suggestion.change.releaseSha256} · item ${suggestion.change.itemSha256}`));
+        if (suggestion.change?.releaseSha256 && suggestion.change?.itemSha256) appendDetail(el('p', 'font-mono text-[10px] text-outline break-all', `Content: release ${suggestion.change.releaseSha256} · item ${suggestion.change.itemSha256}`));
         // Why a dismissed suggestion is back comes first, so it is not mistaken for repeated nudging.
-        for (const reason of promotionText(suggestion)) card.append(el('p', 'px-1.5 py-0.5 rounded bg-tertiary-container text-tertiary', reason));
-        if (suggestion.description) card.append(el('p', 'text-on-surface-variant', suggestion.description));
-        if (suggestion.goal) card.append(el('p', 'text-on-surface-variant', `Goal: ${suggestion.goal}`));
-        for (const trigger of suggestion.triggers ?? []) card.append(el('p', 'text-on-surface-variant', trigger.text));
-        for (const fact of suggestion.facts ?? []) card.append(el('p', 'text-on-surface-variant text-[11px]', fact.text));
+        for (const reason of promotionText(suggestion)) appendDetail(el('p', 'px-1.5 py-0.5 rounded bg-tertiary-container text-tertiary', reason));
+        if (suggestion.description) appendDetail(el('p', 'text-on-surface-variant', suggestion.description));
+        if (suggestion.goal) appendDetail(el('p', 'text-on-surface-variant', `Goal: ${suggestion.goal}`));
+        for (const trigger of (suggestion.triggers ?? []).slice(firstReason ? 1 : 0)) appendDetail(el('p', 'text-on-surface-variant', trigger.text));
+        for (const fact of suggestion.facts ?? []) appendDetail(el('p', 'text-on-surface-variant text-[11px]', fact.text));
         // Adapter target, Core support and installed state: three separate facts, shown for a current suggestion only.
-        if (suggestion.client) for (const fact of [suggestion.client.target, suggestion.client.core, suggestion.client.installed]) card.append(el('p', 'text-on-surface-variant text-[11px]', fact.text));
-        for (const unknown of suggestion.unknowns ?? []) card.append(el('p', 'text-outline text-[11px]', unknown));
-        for (const reference of suggestion.references ?? []) card.append(el('p', 'text-outline text-[11px]', referenceText(reference)));
+        if (suggestion.client) for (const fact of [suggestion.client.target, suggestion.client.core, suggestion.client.installed]) appendDetail(el('p', 'text-on-surface-variant text-[11px]', fact.text));
+        for (const unknown of suggestion.unknowns ?? []) appendDetail(el('p', 'text-outline text-[11px]', unknown));
+        for (const reference of suggestion.references ?? []) appendDetail(el('p', 'text-outline text-[11px]', referenceText(reference)));
+        card.append(detail);
         const dismissal = preserved ? row.dismissal : suggestion.dismissal;
         if (dismissal?.reason) card.append(el('p', 'text-outline text-[11px]', dismissal.reason));
         if (preserved) card.append(el('p', 'text-on-surface-variant', 'This suggestion is not current: none of its reasons applies now. Its dismissal is preserved; forgetting it shows nothing until a reason applies again.'));
