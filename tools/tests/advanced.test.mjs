@@ -69,9 +69,13 @@ test('the default catalog keeps the search, the kind pills, the tool line and th
 });
 
 test('one Settings menu holds the workspace actions, the mode, Check this machine and Get started', () => {
-  for (const id of ['workbench-mode-trigger', 'workbench-experience', 'org-trigger-label', 'workbench-role', 'nav-readiness', 'nav-guided'])
+  for (const id of ['workbench-mode-trigger', 'workbench-experience', 'org-trigger-label', 'nav-readiness', 'nav-guided'])
     assert.ok(inside(id, 'workspace-actions'), `${id} is in the Settings menu`);
   assert.equal(inside('org-modal-trigger', 'workspace-actions'), false, 'the Settings button itself is in the header');
+  // The role badge is not on the agreed list, so it stays in the header beside the product name, outside the menu.
+  assert.equal(inside('workbench-role', 'workspace-actions'), false, 'the role badge is not moved into Settings');
+  const html = readFileSync(new URL('../../src/index.html', import.meta.url), 'utf8');
+  assert.match(/<header[\s\S]*?<\/header>/.exec(html)[0], /id="workbench-role"/, 'the role badge renders in the header');
 });
 
 test('the header has one button for your setup: Review Changes and Check Policy are not header buttons', () => {
