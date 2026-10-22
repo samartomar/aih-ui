@@ -9,8 +9,7 @@ export async function openAuthorityPage({ browser, origin }) {
   await page.locator('#browse-family option[value="Extensions"]').waitFor({ state: 'attached' });
   if (await page.locator('#setup-dialog').isVisible()) {
     await page.getByRole('radio', { name: /Vibe coder/ }).check();
-    // First-run Vibe setup: experience, AI clients, review.
-    for (let step = 0; step < 3; step++) await page.locator('#setup-next').click();
+    for (let step = 0; step < 4; step++) await page.locator('#setup-next').click();
     await page.locator('#setup-dialog').waitFor({ state: 'hidden' });
   }
   await page.locator('#nav-policy').click();
