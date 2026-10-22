@@ -73,10 +73,41 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     await page.locator('#added-notice-message').filter({ hasText: 'Added claude-code whole workflow convenience template to your setup: 46 skills, 4 agents, 2 commands, plus 2 supporting files.' }).waitFor();
     assert.equal((await policy(page)).metadata['aih.workbench'].pins.length, 55, 'the set and everything it requires, in one step');
     assert.equal(await page.locator('#your-setup').textContent(), 'Your setup (1)');
+    // An item the set brought in is in the setup as a needed item: its card says who needs it and offers no second Add (#134).
+    await page.locator('#catalog-search').fill('grill-me');
+    const grillMe = page.locator('#cards-grid [data-card-id$="/extensions.matt.grill-me"] button').filter({ hasText: /^In your setup/ });
+    assert.equal(await grillMe.textContent(), 'In your setup (needed by claude-code whole workflow convenience template)');
+    assert.equal(await grillMe.isDisabled(), true);
     await page.locator('#added-notice-undo').click();
     await page.locator('#added-notice-message').filter({ hasText: /^Undone: claude-code whole workflow convenience template is no longer in your setup\.$/ }).waitFor();
     assert.equal(await page.locator('#policy-current-context').textContent(), idle, 'Undo returns the status bar to the exact prior state');
+    await page.getByRole('button', { name: 'Add extensions.matt.grill-me', exact: true }).waitFor();
+    await page.locator('#catalog-search').fill('');
     await page.locator('#added-notice-dismiss').click();
+    // Hooks (#135): not cards; a Hooks section offers the ones for Your tool, with the command each runs. The Catalog
+    // publishes no command, so each row says so and asks for the reviewed command through the configuration editor.
+    assert.equal(await page.locator('#cards-grid [data-card-id$="/extensions.claude.hook.git-guard"]').count(), 0, 'a hook is not a card');
+    const hookRows = page.locator('#hooks-list .wb-hook');
+    assert.equal(await hookRows.count(), 3);
+    for (const text of await hookRows.allInnerTexts()) {
+      assert.match(text, /Command it runs\s+The Catalog does not publish the command this hook runs\./);
+      assert.doesNotMatch(text, /For claude-code|kiro/);
+    }
+    const gitGuard = hookRows.filter({ hasText: 'Claude Code: git-guard hook group' });
+    await gitGuard.getByRole('textbox', { name: 'hookCommand for Claude Code: git-guard hook group' }).fill('node "$CLAUDE_PROJECT_DIR/.aih-extensions/source/hooks/git-guard.mjs"');
+    await gitGuard.getByRole('button', { name: 'Add with this command' }).click();
+    await page.locator('#added-notice-message').filter({ hasText: /^Added Claude Code: git-guard hook group/ }).waitFor();
+    assert.equal(await gitGuard.getByRole('button', { name: 'Added: Claude Code: git-guard hook group' }).isDisabled(), true);
+    const installHook = page.locator('#install-hooks .wb-install-hook');
+    assert.equal(await installHook.textContent(), 'Claude Code: git-guard hook group runs this command' + 'node "$CLAUDE_PROJECT_DIR/.aih-extensions/source/hooks/git-guard.mjs"'
+      + "claude-code will run this command each time the hook's event happens. The Catalog does not say which event that is.");
+    await page.locator('#added-notice-undo').click();
+    await page.locator('#added-notice-message').filter({ hasText: /^Undone: Claude Code: git-guard hook group is no longer in your setup\.$/ }).waitFor();
+    assert.equal(await page.locator('#install-hooks .wb-install-hook').count(), 0);
+    await page.locator('#added-notice-dismiss').click();
+    await openCatalogAdvanced(page); await page.locator('#browse-target').selectOption('kiro-ide');
+    assert.equal(await page.locator('#hooks').isHidden(), true, 'no Hooks section for a tool with no hooks here');
+    await openCatalogAdvanced(page); await page.locator('#browse-target').selectOption('claude-code');
     await openCatalogAdvanced(page); await page.locator('#browse-target').selectOption('');
     await openCatalogAdvanced(page); await page.locator('#rail-scope-list button').filter({ hasText: 'Extensions' }).first().click();
     await chooseFramework(page, 'ECC');

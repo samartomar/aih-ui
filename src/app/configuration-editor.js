@@ -43,9 +43,12 @@ function valueEditor(value, type, name, depth = 0) {
   } };
 }
 
-export function createConfigurationEditor({ configuration = {}, inputs = {}, label, button, review }) {
-  const node = el('details', 'space-y-2');
-  node.append(el('summary', 'cursor-pointer text-outline', `Configure ${label}`), el('p', 'text-on-surface-variant', 'Edit declared inputs and existing values. Catalog validates the proposal before acceptance. Required fields must be set; optional inputs may keep their declared defaults.'));
+// `summary`, `submitLabel`, `open` and `intro` let another place reuse the same editor in its own words (the Hooks section, #135).
+export function createConfigurationEditor({ configuration = {}, inputs = {}, label, button, review, summary = `Configure ${label}`, submitLabel = 'Review configuration', open = false,
+  intro = 'Edit declared inputs and existing values. Catalog validates the proposal before acceptance. Required fields must be set; optional inputs may keep their declared defaults.' }) {
+  const node = el('details', 'space-y-2'); if (open) node.open = true;
+  node.append(el('summary', 'cursor-pointer text-outline', summary));
+  if (intro) node.append(el('p', 'text-on-surface-variant', intro));
   const values = [];
   for (const field of configurationFields(configuration, inputs)) {
     const wrapper = el('div', 'space-y-1'), include = el('input'); include.type = 'checkbox'; include.checked = field.present || field.spec.required === true; include.disabled = field.spec.required === true;
@@ -60,7 +63,7 @@ export function createConfigurationEditor({ configuration = {}, inputs = {}, lab
     node.append(wrapper); values.push({ field, include, editor });
   }
   const blocked = el('p', 'text-on-surface-variant'); blocked.setAttribute('role', 'status');
-  const submit = button('Review configuration', async () => {
+  const submit = button(submitLabel, async () => {
     if (submit.disabled) return;
     const next = {};
     try { for (const { field, include, editor } of values) if (include.checked) Object.defineProperty(next, field.name, { value: editor.read(), enumerable: true }); }

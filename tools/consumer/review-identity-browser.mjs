@@ -200,7 +200,8 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
     assert.deepEqual(await origins(exporting), { 'review-me': 'imported', 'review-team': 'imported' });
     assert.match(await summaryOf(exporting), /^0 of your decisions; 2 imported/);
     assert.equal(await drawer(exporting).getByLabel('Your reviewer identity', { exact: true }).inputValue(), SENTINEL);
-    await choose(exporting, 'Catalog', 'mattpocock.grilling'); await openPolicyDrawer(exporting);
+    // An ordinary edit adds content not yet in the setup: the review note's needed items (grilling among them) offer no second Add (#134).
+    await choose(exporting, 'Catalog', 'mattpocock.grill-me'); await openPolicyDrawer(exporting);
     await exporting.locator('#review-judgments li[data-record-id]').first().waitFor();
     const editedPath = join(output, 'policy.edited.downloaded.json');
     const editedBytes = await download(exporting, async () => { await openPolicyDrawer(exporting); await openSetupAdvanced(exporting).then(() => exporting.locator('#policy-save').click()); }, editedPath);
