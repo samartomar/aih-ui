@@ -47,7 +47,7 @@ test('reports success only when every operation was applied and verified', () =>
 
   const partial = installOutcome({ ...run('partial', [['applied', 'passed'], ['not-applied', 'not-run']]), diagnostics: [{ code: 'X', message: 'Disk full.' }] }, files, project);
   assert.equal(partial.ok, false);
-  assert.match(partial.message, /1 of 2 applied.*Disk full\./);
+  assert.match(partial.message, /1 of 3 applied.*Disk full\./);
 
   // Files already in place with the expected bytes are verified by Core and count as installed, but are named apart.
   const inPlace = installOutcome(run('complete', [['already-satisfied', 'passed'], ['applied', 'passed'], ['applied', 'passed']]), files, project);
@@ -55,9 +55,17 @@ test('reports success only when every operation was applied and verified', () =>
   assert.match(inPlace.message, /Installed 3 files into sample-js-app \(1 was already in place\)\./);
   const inPlaceUnverified = installOutcome(run('complete', [['already-satisfied', 'failed'], ['applied', 'passed']]), files, project);
   assert.equal(inPlaceUnverified.ok, false);
-  assert.match(inPlaceUnverified.message, /1 of 2 applied, 1 already in place, 1 verified/);
+  assert.match(inPlaceUnverified.message, /1 of 3 applied, 1 already in place, 1 verified/);
 
   assert.equal(installOutcome(run('complete', []), files, project).ok, false, 'an empty run is not a success');
-  assert.equal(installOutcome({ status: 'superseded' }, files, project).ok, false);
+  // A newer page request can supersede Apply after the host already wrote files, so it never claims nothing changed.
+  const superseded = installOutcome({ status: 'superseded' }, files, project);
+  assert.equal(superseded.ok, false);
+  assert.match(superseded.message, /cannot tell whether any files were written/);
+  assert.doesNotMatch(superseded.message, /interrupted|Nothing is reported/);
+  // A run that reports fewer operations than were reviewed is not a complete install.
+  const short = installOutcome(run('complete', [['applied', 'passed'], ['applied', 'passed']]), files, project);
+  assert.equal(short.ok, false);
+  assert.match(short.message, /2 of 3 applied/);
   assert.equal(installOutcome(undefined, files, project).ok, false);
 });
