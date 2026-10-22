@@ -8,7 +8,7 @@ import { readInstalledRelease } from '@aihq/catalog/node';
 import { readAuthoring, openDraft } from './headless.mjs';
 import { installedFamilies } from './installed-families.mjs';
 import { addFromCatalog, closePolicyDrawer, drawer, openPolicyAdvanced, openPolicyDrawer, openPolicyFileActions } from './policy-drawer.mjs';
-import { openPolicyWorkspace, openSetupAdvanced, chooseFamily } from './advanced-browser.mjs';
+import { openPolicyWorkspace, openSetupAdvanced, chooseFamily, chooseSupport, choosePersonalFolder } from './advanced-browser.mjs';
 
 const PERSONAL = 'personal.skill.example', MAINTAINED = ['mattpocock.grill-with-docs', 'mattpocock.code-review'];
 
@@ -41,7 +41,7 @@ export async function runUnresolvedDraftBrowser({ origin, output, playwrightModu
     return page;
   };
   const choose = async (page, family, id) => {
-    await page.locator('#nav-sources').click(); await page.locator('#browse-support').selectOption('all'); await chooseFamily(page, family);
+    await page.locator('#nav-sources').click(); await chooseSupport(page, 'all'); await chooseFamily(page, family);
     await addFromCatalog(page, id);
   };
   const download = async (page, trigger, path) => { const event = page.waitForEvent('download'); await trigger(); await (await event).saveAs(path); return new Uint8Array(await readFile(path)); };
@@ -50,7 +50,7 @@ export async function runUnresolvedDraftBrowser({ origin, output, playwrightModu
   try {
     // Context A: choose a personal skill and a maintained item with a dependency, then save the policy.
     const authoring = await openPage();
-    await authoring.locator('#personal-folder').setInputFiles(folder);
+    await choosePersonalFolder(authoring, folder);
     await authoring.locator('#personal-result').filter({ hasText: 'Folder validated' }).waitFor();
     await choose(authoring, 'Personal', PERSONAL);
     await choose(authoring, 'Catalog', MAINTAINED[0]);

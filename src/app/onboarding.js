@@ -197,7 +197,7 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
     elements.setupCancel.hidden = !editing;
     elements.setupCancel.disabled = saving;
     elements.setupFixedExperience.hidden = !editing || loading || retryLoad;
-    elements.setupFixedExperience.textContent = editing ? `${experienceLabel(draft)} · Change mode using the Mode control in the header.` : "";
+    elements.setupFixedExperience.textContent = editing ? `${experienceLabel(draft)} · Change mode in Settings.` : "";
     elements.setupSkip.hidden = loading || retryLoad || !["capabilities", "clients"].includes(current());
     elements.setupSkip.disabled = saving;
     elements.setupSkip.textContent = editing ? "Keep current choices" : current() === "clients" ? "Choose tools later" : "Skip assistance";

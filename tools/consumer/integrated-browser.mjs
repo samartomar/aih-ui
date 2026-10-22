@@ -8,7 +8,7 @@ import { intakePersonalFolder } from './personal-folder.mjs';
 import { readAuthoring } from './headless.mjs';
 import { installedFamilies } from './installed-families.mjs';
 import { addFromCatalog, closePolicyDrawer, drawer, openPolicyDrawer, openPolicyFileActions } from './policy-drawer.mjs';
-import { openCatalogAdvanced, openPolicyWorkspace, openSetupAdvanced, chooseFamily, chooseFramework } from './advanced-browser.mjs';
+import { openCatalogAdvanced, openPolicyWorkspace, openSetupAdvanced, chooseFamily, chooseFramework, chooseSupport, choosePersonalFolder } from './advanced-browser.mjs';
 
 export async function runIntegratedBrowser({ origin, output, playwrightModule }) {
   const { chromium } = await import(playwrightModule);
@@ -53,11 +53,11 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     assert.ok(await page.getByRole('button', { name: 'Add ecc.skill.accessibility', exact: true }).isVisible(), 'Changing families clears the alternate rail filter.');
     await chooseFramework(page, 'Extensions');
     const before = await page.locator('#policy-bytes').textContent();
-    await page.locator('#browse-support').selectOption('unknown'); assert.match(await page.locator('#support-counts').textContent(), /with unknown facts/);
-    await page.locator('#browse-support').selectOption('all'); assert.equal(await page.locator('#policy-bytes').textContent(), before);
-    await page.locator('#personal-folder').setInputFiles(invalid);
+    await chooseSupport(page, 'unknown'); assert.match(await page.locator('#support-counts').textContent(), /with unknown facts/);
+    await chooseSupport(page, 'all'); assert.equal(await page.locator('#policy-bytes').textContent(), before);
+    await choosePersonalFolder(page, invalid);
     await page.locator('#personal-result').filter({ hasText: 'LOCAL_FOLDER_INVALID' }).waitFor();
-    await page.locator('#personal-folder').setInputFiles(folder);
+    await choosePersonalFolder(page, folder);
     await page.locator('#personal-result').filter({ hasText: 'Folder validated' }).waitFor();
     await chooseFamily(page, 'Personal');
     assert.equal(await page.locator('#cards-grid [data-card-id]').count(), 1);
@@ -87,13 +87,13 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     assert.equal(await fresh.locator('#policy-save').isDisabled(), true);
     await fresh.locator('#nav-sources').click(); assert.equal(await fresh.locator('#personal-binding option').count(), 2);
     await writeFile(join(folder, 'skills/example/support/checklist.txt'), 'Changed content.\n');
-    await fresh.locator('#personal-folder').setInputFiles(folder);
+    await choosePersonalFolder(fresh, folder);
     await fresh.locator('#personal-result').filter({ hasText: 'LOCAL_ROOT_CHANGED' }).waitFor();
     assert.deepEqual(await policy(fresh), saved);
     await writeFile(join(folder, 'skills/example/support/checklist.txt'), sources['skills/example/support/checklist.txt']);
     let releaseCatalog, observedCatalog; const gate = new Promise(resolve => { releaseCatalog = resolve; }); const observedGate = new Promise(resolve => { observedCatalog = resolve; });
     await fresh.route('**/api/authoring-catalog', async route => { const response = await route.fetch(); observedCatalog(); await gate; await route.fulfill({ response }); });
-    await fresh.locator('#personal-folder').setInputFiles(folder); await observedGate;
+    await choosePersonalFolder(fresh, folder); await observedGate;
     assert.doesNotMatch(await fresh.locator('#personal-result').textContent(), /Exact folder rebound/);
     releaseCatalog(); await fresh.locator('#personal-result').filter({ hasText: 'Exact folder rebound' }).waitFor(); await fresh.unroute('**/api/authoring-catalog');
     await openPolicyWorkspace(fresh); await openPolicyFileActions(fresh); await drawer(fresh).getByRole('button', { name: 'Validate and reopen', exact: true }).click();

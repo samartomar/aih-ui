@@ -10,7 +10,7 @@ import { createScanEvidenceHost } from './scan-evidence-host.mjs';
 import { authenticateEvidence } from '@aihq/core';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { addFromCatalog } from './policy-drawer.mjs';
-import { openSetupAdvanced, openFileActions, chooseFamily } from './advanced-browser.mjs';
+import { openSetupAdvanced, openFileActions, chooseFamily, chooseSupport } from './advanced-browser.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 export async function runCompleteEvidenceBrowser({ plan, output, playwrightModule, authoringModule }) {
@@ -67,7 +67,7 @@ export async function runCompleteEvidenceBrowser({ plan, output, playwrightModul
     await page.goto(plan.origin + '/');
     await page.locator('#browse-family option[value="ECC"]').waitFor({ state: 'attached' });
     assert.equal(await page.locator('#setup-dialog').isVisible(), false, 'Existing actual local setup must survive upgrade');
-    await page.locator('#browse-support').selectOption('all');
+    await chooseSupport(page, 'all');
     for (const family of allInventories) {
       await chooseFamily(page, family.family);
       const authored = family.release.items.find(value => value.metadata?.sourceFacts?.description.state === 'authored');

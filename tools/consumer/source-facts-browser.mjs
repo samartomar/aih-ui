@@ -9,7 +9,7 @@ import { performance } from 'node:perf_hooks';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { addFromCatalog, closePolicyDrawer, drawer, openPolicyDrawer, openSourceDetails } from './policy-drawer.mjs';
-import { openPolicyWorkspace, openScanReview, openSetupAdvanced, chooseFamily } from './advanced-browser.mjs';
+import { openPolicyWorkspace, openScanReview, openSetupAdvanced, chooseFamily, chooseSupport, choosePersonalFolder } from './advanced-browser.mjs';
 export async function runSourceFactsBrowser({ origin, output, playwrightModule }) {
   const began = performance.now();
   const { chromium } = await import(playwrightModule);
@@ -27,7 +27,7 @@ export async function runSourceFactsBrowser({ origin, output, playwrightModule }
       for (let step = 0; step < 4; step++) await page.locator('#setup-next').click();
       await page.locator('#setup-dialog').waitFor({ state: 'hidden' });
     }
-    await page.locator('#browse-support').selectOption('all');
+    await chooseSupport(page, 'all');
     await chooseFamily(page, 'ECC');
     const first = page.locator('#cards-grid [data-card-id]').first();
     await first.click();
@@ -70,7 +70,7 @@ export async function runSourceFactsBrowser({ origin, output, playwrightModule }
     const files = [{ path: 'LICENSE', bytes: [...Buffer.from('Personal license terms.')] }, { path: 'skills/example/SKILL.md', bytes: [...Buffer.from(source)] }];
     for (const file of files) { const path = join(folder, file.path); await mkdir(dirname(path), { recursive: true }); await writeFile(path, Uint8Array.from(file.bytes)); }
     const personal = await intakePersonalFolder({ files }); assert.equal(personal.status, 'ok');
-    await page.locator('#personal-folder').setInputFiles(folder);
+    await choosePersonalFolder(page, folder);
     await page.locator('#personal-result').filter({ hasText: 'Folder validated' }).waitFor();
     await chooseFamily(page, 'Personal');
     await page.locator('#cards-grid [data-card-id]').click();

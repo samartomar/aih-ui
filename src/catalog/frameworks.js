@@ -34,9 +34,30 @@ export function frameworkRows(items) {
   return [...named, ...others].map((family) => ({ family, label: familyLabel(family), count: counts.get(family) }));
 }
 
+// The framework a viewer last chose, remembered in this browser only (#122). Storage can be missing or refuse; the page
+// then opens on the first framework.
+const LAST_FRAMEWORK = "aih-workbench-framework";
+const browserStorage = () => { try { return globalThis.localStorage; } catch { return undefined; } };
+
+/** The framework this viewer last chose, or null. */
+export function savedFramework(storage = browserStorage()) {
+  try { return storage?.getItem(LAST_FRAMEWORK) || null; } catch { return null; }
+}
+
+/** Remembers a framework the viewer chose; a family that is not a framework is not remembered. */
+export function rememberFramework(family, storage = browserStorage()) {
+  if (!family || NOT_FRAMEWORKS.has(family)) return;
+  try { storage?.setItem(LAST_FRAMEWORK, family); } catch { /* Forgetting is harmless. */ }
+}
+
+/** A framework is always open: the remembered one while it is installed, else the first in the left panel. */
+export function openFramework(rows, remembered) {
+  return rows.find((row) => row.family === remembered)?.family ?? rows[0]?.family ?? "";
+}
+
 /**
  * @param list      the left panel's framework list element
- * @param onSelect  called with a framework's family, or "" to show every family
+ * @param onSelect  called with a framework's family; selecting the selected one keeps it selected
  */
 export function createFrameworkRail({ list, onSelect }) {
   return {
@@ -49,9 +70,9 @@ export function createFrameworkRail({ list, onSelect }) {
         button.type = "button";
         button.dataset.family = row.family;
         button.setAttribute("aria-pressed", String(chosen));
-        button.title = `${chosen ? `${row.label}: selected. Select again to show every framework.` : `Show the ${row.count} items from ${row.label}.`} ${WORKBENCH_NAMED}`;
+        button.title = `${chosen ? `${row.label}: selected (${row.count} items).` : `Show the ${row.count} items from ${row.label}.`} ${WORKBENCH_NAMED}`;
         button.append(el("span", "truncate", row.label), el("span", "font-mono text-[10px] px-1 text-outline shrink-0", String(row.count)));
-        button.addEventListener("click", () => onSelect(chosen ? "" : row.family));
+        button.addEventListener("click", () => onSelect(row.family));
         return button;
       }));
       if (focused) [...list.querySelectorAll("button")].find((button) => button.dataset.family === focused)?.focus({ preventScroll: true });

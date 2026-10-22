@@ -12,7 +12,7 @@ import { createCards } from "./cards.js";
 import { createDetails } from "./details.js";
 import { createMetrics } from "./metrics.js";
 import { createNavigation } from "./navigation.js";
-import { createFrameworkRail, familyLabel, frameworkRows } from "./frameworks.js";
+import { createFrameworkRail, familyLabel, frameworkRows, openFramework, rememberFramework, savedFramework } from "./frameworks.js";
 import { createProvenance } from "./provenance.js";
 import { createToolbar } from "./toolbar.js";
 import { projectItems, capabilityFacts, declaredTargets, supportedEntries } from "./authoring-model.js";
@@ -92,18 +92,20 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   const target = document.getElementById('browse-target');
   const support = document.getElementById('browse-support');
   const counts = document.getElementById('support-counts');
-  // The left panel's frameworks and the family dropdown under Advanced choose the same family.
-  const chooseFamily = (value) => {
+  // The left panel's frameworks and the family dropdown under Advanced choose the same family. A framework chosen
+  // either way is remembered for this viewer's next visit.
+  const familyView = (value) => {
     const row = value ? sourceScopes(state.counts).find(row => row.source.release === value) : null;
-    changeView({ family: value, source: row?.filterValue ?? null, sourceType: null });
+    return { family: value, source: row?.filterValue ?? null, sourceType: null };
   };
+  const chooseFamily = (value) => { rememberFramework(value); changeView(familyView(value)); };
   family.addEventListener('change', () => chooseFamily(family.value));
   const frameworkRail = createFrameworkRail({ list: document.getElementById('framework-list'), onSelect: chooseFamily });
   // The Catalog tool name is the person's own choice; it is remembered for the next visit and shared with the page.
   target.addEventListener('change', () => { saveCatalogTool(target.value); changeView({ target: target.value }); });
   support.addEventListener('change', () => changeView({ support: support.value }));
-  // Reset clears the filters, not the person's tool choice.
-  const resetFilters = () => { const tool = state.view.target; Object.assign(state.view, emptyView()); toolbar.setQuery(''); changeView({ target: tool }); };
+  // Reset clears the filters, not the person's tool choice or the open framework.
+  const resetFilters = () => { const tool = state.view.target, open = state.view.family; Object.assign(state.view, emptyView()); toolbar.setQuery(''); changeView({ target: tool, ...familyView(open) }); };
   document.getElementById('catalog-reset-filters').addEventListener('click', resetFilters);
   const filterDisclosure = document.getElementById('catalog-filter-disclosure');
   if (window.innerWidth <= 760) filterDisclosure.open = false;
@@ -302,12 +304,20 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
         // Startup loads the catalog and shell concurrently. Restore only after
         // the real inventory exists, so saved kinds and sources are validated
         // against its counts rather than the initial empty placeholder.
+        const opening = !restoredView;
         if (!restoredView) {
           state.counts = inventoryCounts(state.entries);
           restoreView(state.view, state.counts);
           restoredView = true;
         }
         if (![...family.options].some(option => option.value === state.view.family)) state.view.family = '';
+        // A framework is always open (#122): on the first load, or when the open family is no longer installed, the
+        // viewer's last framework, else the first in the left panel. "All families" under Advanced stays a choice.
+        if (!state.view.family && (opening || selectedFamily)) {
+          state.counts = inventoryCounts(state.entries);
+          Object.assign(state.view, familyView(openFramework(frameworkRows(authoring.catalog.items), savedFramework())));
+          saveView(state.view);
+        }
         if (![...target.options].some(option => option.value === state.view.target)) state.view.target = target.value;
         toolbar.setQuery(state.view.query);
         render();

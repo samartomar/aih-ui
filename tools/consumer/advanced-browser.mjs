@@ -49,3 +49,15 @@ export const openFileActions = page => openSetupAdvanced(page, 'File actions');
 export async function openSettings(page) {
   if (await page.locator('#workspace-actions').isHidden()) await page.locator('#org-modal-trigger').click();
 }
+
+/** The target-support filter, under the catalog's Advanced section (#122). */
+export async function chooseSupport(page, value) {
+  await openCatalogAdvanced(page);
+  await page.locator('#browse-support').selectOption(value);
+}
+
+/** A personal folder, chosen under the catalog's Advanced section (#122). */
+export async function choosePersonalFolder(page, files) {
+  await openCatalogAdvanced(page);
+  await page.locator('#personal-folder').setInputFiles(files);
+}

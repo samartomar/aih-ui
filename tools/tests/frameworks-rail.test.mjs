@@ -61,3 +61,54 @@ test('the framework list is in the left panel; the family dropdown is under Adva
   // Until the Catalog publishes names (#119), the list says its names are the Workbench's own.
   assert.match(section('nav-rail'), /id="framework-list-title" title="Names supplied by the Workbench/);
 });
+
+// A framework is always open (#122): the person's last, else the first in the left panel.
+import { openFramework, rememberFramework, savedFramework, createFrameworkRail } from '../../src/catalog/frameworks.js';
+const rows = frameworkRows(catalog);
+function memory() {
+  const values = new Map();
+  return { values, getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, String(value)) };
+}
+
+test('a fresh viewer opens on the first framework in the left panel', () => {
+  assert.equal(openFramework(rows, null), 'Extensions');
+});
+
+test('a returning viewer opens on the framework they last chose', () => {
+  const storage = memory();
+  rememberFramework('ECC', storage);
+  assert.equal(openFramework(rows, savedFramework(storage)), 'ECC');
+});
+
+test('a remembered framework that is no longer installed falls back to the first', () => {
+  assert.equal(openFramework(rows, 'Gone'), 'Extensions');
+  assert.equal(openFramework([], 'ECC'), '', 'no frameworks installed: nothing to open');
+});
+
+test('only frameworks are remembered, and a refusing browser storage is harmless', () => {
+  const storage = memory();
+  rememberFramework('Catalog', storage);
+  assert.equal(savedFramework(storage), null, 'the default release is not a framework to come back to');
+  const refusing = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };
+  assert.doesNotThrow(() => rememberFramework('ECC', refusing));
+  assert.equal(savedFramework(refusing), null);
+  assert.equal(savedFramework(undefined), null);
+});
+
+test('selecting the framework already selected keeps it selected', (t) => {
+  const node = tag => ({ tag, children: [], dataset: {}, attributes: {}, listeners: {}, className: '', textContent: '',
+    append(...children) { this.children.push(...children); }, setAttribute(name, value) { this.attributes[name] = value; },
+    addEventListener(name, fn) { this.listeners[name] = fn; } });
+  const previous = globalThis.document;
+  globalThis.document = { createElement: node, activeElement: null };
+  t.after(() => { globalThis.document = previous; });
+  const list = { children: [], contains: () => false, replaceChildren(...children) { this.children = children; } };
+  const chosen = [];
+  createFrameworkRail({ list, onSelect: family => chosen.push(family) }).render({ rows, selected: 'ECC' });
+  const ecc = list.children.find(button => button.dataset.family === 'ECC');
+  assert.equal(ecc.attributes['aria-pressed'], 'true');
+  ecc.listeners.click();
+  list.children.find(button => button.dataset.family === 'Anthropic').listeners.click();
+  assert.deepEqual(chosen, ['ECC', 'Anthropic']);
+  assert.doesNotMatch(ecc.title, /every framework/);
+});

@@ -35,6 +35,7 @@ import {
 } from "../app/absence.js";
 import { KIND_ICON, KIND_TONE, identity, sourceDetailRows, sourceIdentity, statementsOf } from "./entry.js";
 import { scopeCountOf } from "./selectors.js";
+import { familyLabel } from "./frameworks.js";
 
 /* These Catalog inspector slots have no verified per-entry scan input. */
 const DETECTOR_RUN_STATE_ABSENT =
@@ -211,7 +212,7 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
             original.append(load, content); elements.detailsSource.append(original);
           }
         }
-        row(elements.detailsSource, 'Content family', item.family);
+        row(elements.detailsSource, 'Content family', familyLabel(item.family));
         row(elements.detailsSource, 'Package', `${item.package.name}@${item.package.version}`);
         row(elements.detailsSource, 'Provenance', item.family === 'Personal' ? 'Local folder explicitly selected in this page session; no GitHub provenance inferred.' : 'Published installed release; upstream origins retained below.');
         for (const fact of capabilityFacts(item, target)) {
