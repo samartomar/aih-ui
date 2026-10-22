@@ -200,9 +200,19 @@ export function reportText(projection) {
     lines.push(`${pad}${panelValue.title}`);
     if (panelValue.value !== undefined) lines.push(`${pad}${panelValue.value}`);
     lines.push(`${pad}${panelValue.summary}`);
+    // Grouped entries follow the ungrouped ones under their group label, as the report page shows them.
+    const groups = new Map();
     for (const entry of panelValue.items) {
+      if (entry.group) { if (!groups.has(entry.group)) groups.set(entry.group, []); groups.get(entry.group).push(entry); continue; }
       lines.push(`${pad}- ${entry.text}`);
       for (const detail of entry.details) lines.push(`${pad}  ${detail}`);
+    }
+    for (const [label, entries] of groups) {
+      lines.push(`${pad}- ${label}`);
+      for (const entry of entries) {
+        lines.push(`${pad}  - ${entry.text}`);
+        for (const detail of entry.details) lines.push(`${pad}    ${detail}`);
+      }
     }
     for (const section of panelValue.sections ?? []) write(section, depth + 1);
   };

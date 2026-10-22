@@ -103,6 +103,8 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   staticFiles.set('/authoring', ['authoring.html', 'text/html']);
   staticFiles.set('/authoring.js', ['authoring.js', 'text/javascript']);
   staticFiles.set('/policy-file.js', ['policy-file.js', 'text/javascript']);
+  // The authoring page's configuration editor and the DOM helper it imports.
+  for (const name of ['app/dom.js', 'app/configuration-editor.js']) staticFiles.set(`/${name}`, [name, 'text/javascript']);
   const send = (response, status, body, type = 'application/json') => {
     response.writeHead(status, { 'content-type': `${type}; charset=utf-8`, 'cache-control': 'no-store',
       'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" });
