@@ -8,6 +8,8 @@ import { adapterClientIds } from './app/client-identity.js';
 import { createAuthoringClient, importLimitError } from './app/authoring-client.js';
 import { loadSetup } from './app/settings-client.js';
 import { saveDraftHandoff } from './app/draft-session.js';
+import { defaultCatalogTool, saveCatalogTool, savedCatalogTool } from './catalog/catalog-tool.js';
+import { declaredTargets } from './catalog/authoring-model.js';
 import { ADDED_BY_YOU, KNOWN_STACK, MANIFEST_BYTE_LIMIT, addDetection, choiceReason, clientPrompt, describePolicy, detectStack, observationsFrom, provenanceText, reconcileClient, suggestStarters, wantsContent }
   from './app/guided-rules.js';
 
@@ -41,7 +43,9 @@ const ensureClient = () => clientPromise ??= (async () => {
 const goal = () => $('goal').value.trim();
 const selectedClients = () => [...clients].filter(([, state]) => state.checked).map(([id]) => id).sort();
 const messagesOf = result => (result?.diagnostics ?? []).map(item => item.message).filter(Boolean);
-const inputsNow = () => ({ goal: goal(), detections, clients: selectedClients(), projectInspected: folderChosen, observations: observed });
+// The tool name the Catalog uses for the person's AI tool, as chosen here or above the catalog's cards; never derived from the clients.
+const catalogTool = () => $('catalog-tool').value;
+const inputsNow = () => ({ goal: goal(), detections, clients: selectedClients(), projectInspected: folderChosen, observations: observed, catalogTool: catalogTool() });
 const sameInputs = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const STALE_MESSAGE = 'Your inputs changed; suggest again to update the choices.';
 const SUPERSEDED_SAVE = 'Nothing was saved: a newer action replaced this one. Try again.';
@@ -360,6 +364,14 @@ async function reopen(file) {
   }
 }
 
+// The Catalog's own tool names, with the person's saved choice selected when the Catalog still declares it.
+function fillCatalogTools(client) {
+  const declared = declaredTargets(client.catalog.items), select = $('catalog-tool');
+  select.replaceChildren(new Option('choose…', ''), ...declared.map(value => new Option(value, value)));
+  select.value = defaultCatalogTool(declared, savedCatalogTool());
+  checkStale();
+}
+
 function startGuided() {
   $('guided').hidden = false;
   $('start-guided').setAttribute('aria-expanded', 'true');
@@ -367,7 +379,7 @@ function startGuided() {
   started = true;
   renderDetections();
   loadClients();
-  ensureClient().catch(() => { /* reported when suggestions are requested */ });
+  ensureClient().then(fillCatalogTools).catch(() => { /* reported when suggestions are requested */ });
   $('goal').focus();
 }
 
@@ -377,6 +389,7 @@ $('folder').addEventListener('change', () => inspectFolder([...$('folder').files
 $('add-stack-button').addEventListener('click', () => { if ($('add-stack').value) { detections = addDetection(detections, $('add-stack').value); renderDetections(); } });
 $('detect-clients').addEventListener('click', detectClients);
 $('suggest').addEventListener('click', suggest);
+$('catalog-tool').addEventListener('change', () => { saveCatalogTool(catalogTool()); checkStale(); });
 $('copy-prompt').addEventListener('click', copyPrompt);
 $('save').addEventListener('click', save);
 $('download').addEventListener('click', () => {

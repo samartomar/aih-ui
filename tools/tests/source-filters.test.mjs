@@ -42,7 +42,10 @@ test("a saved view restores only the filters the installed inventory still offer
   t.after(() => previous ? Object.defineProperty(globalThis, "sessionStorage", previous) : delete globalThis.sessionStorage);
   const saved = view({ query: "beta", kind: "agent", sort: "name-desc", family: "Fixture family", target: "fixture-client", support: "unknown" });
   saveView(saved);
-  assert.deepEqual(restoreView(emptyView(), counts), saved);
+  // The Catalog tool is the person's own saved choice (catalog-tool.js); a session view, which an earlier build filled in by itself, does not restore it.
+  assert.deepEqual(restoreView(emptyView(), counts), { ...saved, target: '' });
+  saveView(view({ support: 'not-declared' }));
+  assert.equal(restoreView(emptyView(), counts).support, 'not-declared');
   saveView(view({ source: sourceFilterValue("github", "removed/source", "abcdef1"), kind: "unknown-kind", sort: "unknown" }));
   assert.deepEqual(restoreView(emptyView(), counts), emptyView());
   saveView(view({ support: 'invalid' }));

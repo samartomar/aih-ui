@@ -2,7 +2,8 @@
 // then one Install button that prepares again, checks the review is unchanged and applies it. The
 // advanced Prepare and Apply buttons stay where they are; this reuses the same host operations.
 
-import { declaredTools, toolLine, toolRelation } from '../catalog/tool-match.js';
+import { declaredTools, toolLine } from '../catalog/tool-match.js';
+import { sameSourceWarning } from './source-copies.js';
 import { applyIfUnchanged, diagnosticWords, effectsFingerprint, fileCount, installFiles, IN_PLACE } from './host-review.js';
 
 export { relativeTarget } from './host-review.js';
@@ -53,20 +54,16 @@ export function installOutcome(run, files, project) {
 }
 
 /**
- * A warning when any item being installed is not clearly for one of the selected tools, or ''.
- * `items` are Catalog items; names are compared exactly (see tool-match.js).
+ * A warning naming each chosen item that does not declare the Catalog tool name the person chose above the cards, or ''.
+ * `items` are Catalog items; names are compared exactly, in the Catalog's own names (see tool-match.js). With no
+ * Catalog tool chosen there is nothing to compare, and the header's Core ids are never compared with Catalog names.
  */
-export function toolWarning(items, { selected = [], coreIds = [], labels = {} } = {}) {
-  if (!selected.length || !coreIds.length) return '';
-  const yours = selected.map(id => labels[id] ? `${labels[id]} (${id})` : id).join(', ');
-  const name = item => item.label ?? item.id;
-  const tools = item => declaredTools(item).map(tool => tool.client).join(', ');
-  const other = items.filter(item => toolRelation(item, { selected, coreIds }) === 'other');
-  const unmatched = items.filter(item => toolRelation(item, { selected, coreIds }) === 'unmatched');
-  const lines = [];
-  if (other.length) lines.push(`Not for your tools: ${other.map(item => `${name(item)} is for ${tools(item)}`).join('; ')}. Your tools: ${yours}.`);
-  if (unmatched.length) lines.push(`Check the tool: ${unmatched.map(item => `${name(item)} is for ${tools(item)}`).join('; ')}. The Catalog names tools differently from your Tools list (${yours}), so this page cannot confirm they match.`);
-  return lines.join(' ');
+export function toolWarning(items, { catalogTool } = {}) {
+  if (!catalogTool) return '';
+  const tools = item => { const named = declaredTools(item).map(tool => tool.client), specific = named.filter(tool => tool !== 'generic');
+    return specific.length ? specific.join(', ') : named.length ? 'any AI tool' : 'no declared tool'; };
+  const missing = items.filter(item => !declaredTools(item).some(tool => tool.client === catalogTool));
+  return missing.length ? `Not listed for ${catalogTool}: ${missing.map(item => `${item.label ?? item.id} (${tools(item)})`).join(', ')}.` : '';
 }
 
 const readyPreparation = result => { const preparation = result?.preparation ?? result; return preparation?.status === 'ready' && preparation.sessionId && preparation.review ? preparation : undefined; };
@@ -82,11 +79,12 @@ export function createInstallPanel({ client, el, button, tools = () => ({}), onI
   const where = el('p', 'font-mono text-[11px] text-outline break-all');
   const items = el('ul', 'list-disc pl-5 space-y-0.5');
   const warning = el('p', 'p-2 rounded border border-error/60 bg-error-container text-on-surface'); warning.id = 'install-tool-warning'; warning.hidden = true;
+  const sameSource = el('p', 'p-2 rounded border border-wb-border bg-tertiary-container text-on-surface'); sameSource.id = 'install-same-source'; sameSource.hidden = true;
   const filesHeading = el('p', 'font-medium', 'Files that will be added');
   const files = el('ul', 'space-y-0.5 font-mono text-[11px]'); files.id = 'install-files';
   const message = el('p', 'text-on-surface'); message.id = 'install-message'; message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
   const install = button('Install', () => run(), true); install.id = 'install-button'; install.disabled = true;
-  node.append(title, where, items, warning, filesHeading, files, install, message);
+  node.append(title, where, items, warning, sameSource, filesHeading, files, install, message);
 
   let preview, previewing = false, installing = false, shownFor, managed = false, again = false;
   const itemOf = ref => client.catalog?.items.find(item => item.id === ref.itemId && item.root.releaseSha256 === ref.releaseSha256);
@@ -145,7 +143,10 @@ export function createInstallPanel({ client, el, button, tools = () => ({}), onI
     node.hidden = !ready();
     const refs = client.intent?.pins ?? client.intent?.roots ?? [];
     items.replaceChildren(...refs.map(ref => el('li', '', label(ref))));
-    warning.textContent = toolWarning(refs.map(itemOf).filter(Boolean), tools()); warning.hidden = !warning.textContent;
+    // Both checks are about what the person chose, not the items those choices need.
+    const chosen = (client.intent?.roots ?? []).map(itemOf).filter(Boolean);
+    warning.textContent = toolWarning(chosen, tools()); warning.hidden = !warning.textContent;
+    sameSource.textContent = sameSourceWarning(chosen); sameSource.hidden = !sameSource.textContent;
     if (node.hidden) { shownFor = undefined; preview = undefined; return; }
     // No project folder: there is nothing to preview until one is chosen above.
     if (!client.catalog.executionAvailable) {

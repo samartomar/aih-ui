@@ -14,6 +14,7 @@ import { createInstallPanel } from './install-panel.js';
 import { createInstalledPanel } from './installed-panel.js';
 import { createProjectFolderRow } from './project-folder.js';
 import { publishedClients } from './core-targets.js';
+import { CATALOG_TOOL_EVENT, savedCatalogTool } from '../catalog/catalog-tool.js';
 
 const buttonClass = 'px-3 py-1.5 rounded bg-surface-container text-on-surface border border-wb-border hover:bg-surface-container-high';
 function button(label, action, primary = false) {
@@ -126,7 +127,9 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   const setupHeading = () => [installPanel, installedPanel].find(panel => !panel.node.hidden)?.heading ?? null;
   const reviewPanel = createPolicyReview({ client, accept, proposed, status, setupHeading, onBack: onBackToCatalog });
   // The header's chosen tools and Core's supported list, for the Install panel's tool check.
-  const chosenTools = { selected: [], coreIds: [], labels: {} };
+  // The Catalog tool name chosen above the cards is what the Install check compares with; the header's Core ids are kept for display only.
+  const chosenTools = { selected: [], coreIds: [], labels: {}, catalogTool: savedCatalogTool() };
+  document.addEventListener(CATALOG_TOOL_EVENT, event => { chosenTools.catalogTool = event.detail?.tool ?? ''; installPanel.render(); });
   const installPanel = createInstallPanel({ client, el, button, tools: () => chosenTools, onInstalled: () => void installedPanel.refresh() });
   const installedPanel = createInstalledPanel({ client, el, button, onRemoved: () => installPanel.recheck(), onInventory: view => installPanel.setManaged(view?.setupInstalled) });
   // Changing the folder discards what this page prepared for the old one, then checks the new one.

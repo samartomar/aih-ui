@@ -1,5 +1,6 @@
 import { loadSetup } from './settings-client.js';
 import { publishedClients, offersClient, clientLabel } from './core-targets.js';
+import { savedCatalogTool } from '../catalog/catalog-tool.js';
 
 // Mirrors the record URNs in tools/consumer/improvement-record.mjs, the source of truth; the page cannot import it.
 export const SUGGESTION_RECORD = 'urn:aihq:workbench:journey-record:improvement-suggestion:1.0.0';
@@ -176,7 +177,9 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
       saved = loaded;
       const clients = saved.filter(id => offersClient(published?.ids ?? [], id));
       const labels = Object.fromEntries(clients.flatMap(id => { const label = clientLabel(published?.labels ?? {}, id); return label ? [[id, label]] : []; }));
-      result = await client.checkImprovements({ clients, ...(Object.keys(labels).length ? { labels } : {}), ...(requestedGoal ? { goal: requestedGoal } : {}) });
+      // The Catalog tool name chosen above the cards, if any: a rule then suggests the copy that declares it.
+      const catalogTool = savedCatalogTool();
+      result = await client.checkImprovements({ clients, ...(Object.keys(labels).length ? { labels } : {}), ...(requestedGoal ? { goal: requestedGoal } : {}), ...(catalogTool ? { catalogTool } : {}) });
     } catch (error) { result = { status: 'refused', error: error.message }; }
     if (current !== attempt) return;
     pending = false;

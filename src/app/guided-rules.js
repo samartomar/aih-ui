@@ -14,9 +14,11 @@
  */
 
 import { adapterFor, describeClientIdentity, programWasFound } from './client-identity.js';
+import { preferredCopy } from './source-copies.js';
 
 // 1.1.0: the client rule matches adapters by Catalog clientId; an adapter without one is not suggested.
-export const GUIDED_RULES_VERSION = '1.1.0';
+// 1.2.0: with a chosen Catalog tool name, a rule's item is replaced by the copy from the same declared source file that declares that tool, when one exists.
+export const GUIDED_RULES_VERSION = '1.2.0';
 export const ADDED_BY_YOU = 'added by you';
 
 const MAX_GOAL = 300;
@@ -212,11 +214,13 @@ function changesFor(item, scope, byId) {
 /**
  * goal: free text. detections: from detectStack, possibly edited. clients: ids (or { id }). catalogItems: the served items.
  * projectInspected (optional): true when a project folder was inspected; defaults to "some detection came from a file".
+ * catalogTool (optional): the Catalog tool name the person chose (claude-code, ...); a rule then names the copy from the same declared
+ * source file that declares it, when one exists (source-copies.js). It is never derived from `clients`.
  * coreClients (optional): Core's nativeClientIds; observations (optional): client id -> readiness presence. They only fill the facts a client choice
  * carries (`choice.client`: target, Core support, installed) and never decide which choices are made.
  * An inspected project whose language was not recognised (and not added by hand) is never confident, even when the goal matched.
  */
-export function suggestStarters({ goal, detections = [], clients = [], catalogItems = [], projectInspected, coreClients, observations } = {}) {
+export function suggestStarters({ goal, detections = [], clients = [], catalogItems = [], projectInspected, coreClients, observations, catalogTool } = {}) {
   const byId = new Map((catalogItems ?? []).filter(item => item && typeof item.id === 'string').map(item => [item.id, item]));
   const text = goalWords(goal);
   const inspected = projectInspected ?? detections.some(detection => detection.provenance.some(path => path !== ADDED_BY_YOU));
@@ -248,7 +252,7 @@ export function suggestStarters({ goal, detections = [], clients = [], catalogIt
   for (const candidate of candidates) {
     if (choices.length >= MAX_CHOICES) break;
     if (candidate.fill && choices.length >= MIN_CHOICES) continue;
-    const item = byId.get(candidate.itemId);
+    const item = candidate.adapter ? byId.get(candidate.itemId) : preferredCopy(byId.get(candidate.itemId), catalogItems, catalogTool);
     if (!item || taken.has(item.id) || covered.has(item.id)) continue;
     const scopes = Array.isArray(item.scopes) && item.scopes.length ? item.scopes : ['project'];
     const scope = scopes.includes('project') && (inspected || scopes.length === 1) ? 'project' : scopes.find(value => value !== 'project') ?? scopes[0];

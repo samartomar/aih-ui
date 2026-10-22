@@ -215,7 +215,7 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
         row(elements.detailsSource, 'Package', `${item.package.name}@${item.package.version}`);
         row(elements.detailsSource, 'Provenance', item.family === 'Personal' ? 'Local folder explicitly selected in this page session; no GitHub provenance inferred.' : 'Published installed release; upstream origins retained below.');
         for (const fact of capabilityFacts(item, target)) {
-          const node = el('p', 'p-2 rounded border border-wb-border text-[11px]', `${fact.support} · ${fact.capability} · ${fact.surface} — ${fact.reason ?? 'No producer reason supplied.'}`);
+          const node = el('p', 'p-2 rounded border border-wb-border text-[11px]', fact.support === 'not-declared' ? fact.reason : `${fact.support} · ${fact.capability} · ${fact.surface} — ${fact.reason ?? 'No producer reason supplied.'}`);
           elements.detailsCapabilities.append(node);
         }
         // A client adapter's target, whether Core supports it and whether the client is installed are three separate facts.
