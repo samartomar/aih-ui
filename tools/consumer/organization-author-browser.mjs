@@ -130,7 +130,10 @@ export async function runOrganizationAuthorBrowser({ page, output, fixture, refr
     await download(page, () => page.locator('#org-draft-save').click(), draftPath);
     await edit(page, () => page.locator('#org-draft-new').click());
     assert.equal((await readDraft(page)).entries.length, 0);
+    // The new empty draft counts as not downloaded, so Open asks before replacing it; the author confirms.
+    const replaceAsked = new Promise(resolve => page.once('dialog', dialog => { resolve(dialog.message()); void dialog.accept(); }));
     assert.match(await settle(page, () => page.locator('#org-draft-open').setInputFiles(draftPath)), /^Organization draft updated/);
+    assert.match(await replaceAsked, /Replace the current draft\?/);
     assert.deepEqual(await readDraft(page), before);
     assert.deepEqual(before.entries.map(entry => [entry.obligation, entry.badge]), [['required', 'Enforced'], ['prohibited', 'Enforced'], ['required', 'Enforced'], ['recommended', 'Advisory']]);
     // Old saved client facts stay visible and labelled; opening does not rewrite them.
