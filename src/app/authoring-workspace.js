@@ -11,6 +11,7 @@ import { authorityFromResult, changeSummary, compareRevision, reviewFreshness, r
 import { isJourneyEnvelope, importLimitError } from './authoring-client.js';
 import { dependencyRows } from './dependency-set.js';
 import { createInstallPanel } from './install-panel.js';
+import { createInstalledPanel } from './installed-panel.js';
 import { publishedClients } from './core-targets.js';
 
 const buttonClass = 'px-3 py-1.5 rounded bg-surface-container text-on-surface border border-wb-border hover:bg-surface-container-high';
@@ -123,7 +124,9 @@ export function createAuthoringWorkspace(client) {
   const reviewPanel = createPolicyReview({ client, accept, proposed, status });
   // The header's chosen tools and Core's supported list, for the Install panel's tool check.
   const chosenTools = { selected: [], coreIds: [], labels: {} };
-  const installPanel = createInstallPanel({ client, el, button, tools: () => chosenTools });
+  const installPanel = createInstallPanel({ client, el, button, tools: () => chosenTools, onInstalled: () => void installedPanel.refresh() });
+  const installedPanel = createInstalledPanel({ client, el, button, onRemoved: () => installPanel.recheck() });
+  document.addEventListener('aih:policy-review-open', () => void installedPanel.refresh());
   review.after(button('Open policy choices and review', () => reviewPanel.open(), true));
   const pageContext = el('p', 'text-on-surface-variant'); choices.after(pageContext);
   const canReplace = () => !(client.dirty || client.candidate) || window.confirm('This policy has accepted changes that have not been downloaded or a proposal awaiting acceptance. Replace them with another artifact?');
@@ -517,7 +520,7 @@ export function createAuthoringWorkspace(client) {
   tools.addEventListener('toggle', () => { if (tools.open) syncSource(); });
   const currentChoices = el('section', 'space-y-2'); currentChoices.append(el('h3', 'font-medium', 'Accepted choices'), roots, draftSection);
   const fileActions = el('details', 'policy-advanced rounded border border-wb-border p-3'); fileActions.id = 'policy-file-actions'; fileActions.append(el('summary', 'cursor-pointer font-medium', 'File actions: new, open and validate'), controls);
-  reviewPanel.node.append(installPanel.node, currentChoices, save, fileActions);
+  reviewPanel.node.append(installPanel.node, installedPanel.node, currentChoices, save, fileActions);
   for (const view of [updates, improvements, trials, workspace]) reviewPanel.node.append(view.node.parentElement);
   reviewPanel.node.append(organizationAuthor.node, tools);
   organizationAuthor.node.hidden = true;
