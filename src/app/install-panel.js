@@ -3,36 +3,25 @@
 // advanced Prepare and Apply buttons stay where they are; this reuses the same host operations.
 
 import { declaredTools, toolLine, toolRelation } from '../catalog/tool-match.js';
+import { applyIfUnchanged, diagnosticWords, effectsFingerprint, fileCount, installFiles, IN_PLACE } from './host-review.js';
 
-const effectVerb ={ 'create-file': 'Add', 'replace-file': 'Replace', 'update-file': 'Update', 'remove-file': 'Remove', 'already-satisfied': 'Already in place' };
-
-export function relativeTarget(target, project) {
-  if (!target) return '';
-  const lower = target.toLowerCase(), base = project?.toLowerCase();
-  const inside = base && lower.startsWith(base) ? target.slice(project.length).replace(/^[\\/]+/, '') : target;
-  return inside.replace(/\\/g, '/');
-}
+export { relativeTarget } from './host-review.js';
 
 export function projectName(project) {
   return project?.split(/[\\/]/).filter(Boolean).at(-1) ?? 'your project';
 }
 
-/** Readable rows for every operation in a prepared review. */
-export function installFiles(review) {
-  const project = review?.target?.project;
-  return (review?.operations ?? []).map(operation => ({
-    action: effectVerb[operation.effects] ?? operation.purpose ?? operation.kind,
-    path: relativeTarget(operation.details?.target, project) || operation.purpose || operation.id,
-  }));
-}
-
 /**
- * What the person agreed to: each operation's kind, effect, target and expected content. Core's
- * review digest differs on every Prepare even for identical effects, so it cannot be compared across two.
+ * The heading and status line for a preview: files already in place are not counted as changes. Matching bytes
+ * do not show that Core manages them, so "installed" is said only when Core lists the whole setup (`managed`).
  */
-export function effectsFingerprint(review) {
-  return JSON.stringify((review?.operations ?? []).map(operation => [operation.kind, operation.effects, operation.details?.target ?? null,
-    (operation.checks ?? []).map(check => check.details?.content ?? null)]));
+export function installSummary(rows, { managed = false } = {}) {
+  const inPlace = rows.filter(row => row.action === IN_PLACE).length, changed = rows.length - inPlace;
+  if (!rows.length) return { heading: 'Nothing to change', message: 'Nothing has been installed yet.' };
+  if (!changed) return { heading: `All ${fileCount(rows.length)} are already in place`,
+    message: `${managed ? `Already installed: all ${fileCount(rows.length)} are in place.` : `All ${fileCount(rows.length)} are already in place.`} Install checks them again.` };
+  return { heading: `${fileCount(changed)} will be changed${inPlace ? ` (${inPlace} already in place)` : ''}`,
+    message: inPlace ? `Not fully installed: ${inPlace} of ${fileCount(rows.length)} are already in place.` : 'Nothing has been installed yet.' };
 }
 
 /** Skill folders the install writes, so the success message can say what to try. */
@@ -80,13 +69,14 @@ export function toolWarning(items, { selected = [], coreIds = [], labels = {} } 
   return lines.join(' ');
 }
 
+const readyPreparation = result => { const preparation = result?.preparation ?? result; return preparation?.status === 'ready' && preparation.sessionId && preparation.review ? preparation : undefined; };
+
 function refusal(result) {
   const preparation = result?.preparation ?? result;
-  const reasons = [...(preparation?.diagnostics ?? []), ...(result?.diagnostics ?? [])].map(diagnostic => diagnostic.message ?? diagnostic.code).filter(Boolean);
-  return [...new Set(reasons)].join(' ') || result?.error || preparation?.status || 'The host did not return a review.';
+  return diagnosticWords(preparation, result) || result?.error || preparation?.status || 'The host did not return a review.';
 }
 
-export function createInstallPanel({ client, el, button, tools = () => ({}) }) {
+export function createInstallPanel({ client, el, button, tools = () => ({}), onInstalled = () => {} }) {
   const node = el('section', 'p-4 rounded border-2 border-primary space-y-3'); node.id = 'install-panel'; node.hidden = true;
   const title = el('h3', 'text-base font-semibold text-on-surface', 'Install these items into your project');
   const where = el('p', 'font-mono text-[11px] text-outline break-all');
@@ -98,7 +88,7 @@ export function createInstallPanel({ client, el, button, tools = () => ({}) }) {
   const install = button('Install', () => run(), true); install.id = 'install-button'; install.disabled = true;
   node.append(title, where, items, warning, filesHeading, files, install, message);
 
-  let preview, previewing = false, installing = false, shownFor;
+  let preview, previewing = false, installing = false, shownFor, managed = false;
   const itemOf = ref => client.catalog?.items.find(item => item.id === ref.itemId && item.root.releaseSha256 === ref.releaseSha256);
   const label = ref => { const item = itemOf(ref); return item ? `${item.label ?? item.id} — ${toolLine(item)}` : ref.itemId; };
   const available = () => Boolean(client.catalog?.executionAvailable && client.intent && !client.candidate && !(client.draft && !client.compiled));
@@ -107,7 +97,7 @@ export function createInstallPanel({ client, el, button, tools = () => ({}) }) {
     const rows = installFiles(review), project = review?.target?.project;
     title.textContent = `Install these items into ${projectName(project)}`;
     where.textContent = project ?? '';
-    filesHeading.textContent = rows.length ? `${rows.length} ${rows.length === 1 ? 'file' : 'files'} will be changed` : 'Nothing to change';
+    filesHeading.textContent = installSummary(rows, { managed }).heading;
     files.replaceChildren(...rows.map(row => el('li', '', `${row.action}  ${row.path}`)));
     return rows;
   }
@@ -117,10 +107,10 @@ export function createInstallPanel({ client, el, button, tools = () => ({}) }) {
     try {
       const result = await client.requestHost('prepare');
       if (result.status === 'superseded') { message.textContent = ''; return; }
-      const preparation = result.preparation ?? result;
-      if (preparation.status === 'ready' && preparation.sessionId && preparation.review) {
-        preview = preparation; show(preparation.review);
-        install.disabled = false; message.textContent = 'Nothing has been installed yet.';
+      const preparation = readyPreparation(result);
+      if (preparation) {
+        preview = preparation; const rows = show(preparation.review);
+        install.disabled = false; message.textContent = installSummary(rows, { managed }).message;
       } else { files.replaceChildren(); message.textContent = `Can't install yet: ${refusal(result)}`; }
     } catch (error) { message.textContent = `Can't install yet: ${error.message}`; }
     finally { previewing = false; }
@@ -128,23 +118,24 @@ export function createInstallPanel({ client, el, button, tools = () => ({}) }) {
   async function run() {
     if (!preview || installing) return;
     const shown = effectsFingerprint(preview.review);
+    let sent = false;
     installing = true; install.disabled = true; install.setAttribute('aria-busy', 'true'); message.textContent = 'Installing…';
     try {
       // Prepare again so the approval is for what is on disk now; refuse if its effects differ from the list shown.
-      const fresh = await client.requestHost('prepare');
-      const preparation = fresh.preparation ?? fresh;
-      if (preparation.status !== 'ready' || !preparation.sessionId) { message.textContent = `Install did not start: ${refusal(fresh)}`; return; }
-      if (effectsFingerprint(preparation.review) !== shown) {
+      // Apply is bound to this fresh review's own digest, exactly as the advanced Apply button does.
+      const attemptResult = await applyIfUnchanged({ prepare: () => client.requestHost('prepare'), readyPreparation, shown,
+        apply: approval => { sent = true; return client.requestHost('apply', approval); } });
+      if (attemptResult.state === 'not-ready') { message.textContent = `Install did not start: ${refusal(attemptResult.result)}`; return; }
+      const { preparation } = attemptResult;
+      if (attemptResult.state === 'changed') {
         preview = preparation; const rows = show(preparation.review); install.disabled = false;
         message.textContent = `The files changed since this list was shown (${rows.length} now). Check the list and click Install again.`; return;
       }
-      // Apply is bound to this fresh review's own digest, exactly as the advanced Apply button does.
-      const applied = await client.requestHost('apply', { sessionId: preparation.sessionId, reviewDigest: preparation.review.reviewDigest });
-      const outcome = installOutcome(applied, installFiles(preparation.review), preparation.review.target?.project);
+      const outcome = installOutcome(attemptResult.run, installFiles(preparation.review), preparation.review.target?.project);
       message.textContent = outcome.message; message.dataset.outcome = outcome.ok ? 'installed' : 'failed';
       preview = undefined;
     } catch (error) { message.textContent = `Install did not finish: ${error.message}`; message.dataset.outcome = 'failed'; }
-    finally { installing = false; install.removeAttribute('aria-busy'); }
+    finally { installing = false; install.removeAttribute('aria-busy'); if (sent) onInstalled(); }
   }
   function render() {
     node.hidden = !available();
@@ -156,5 +147,14 @@ export function createInstallPanel({ client, el, button, tools = () => ({}) }) {
     if (key === shownFor) return;
     shownFor = key; delete message.dataset.outcome; void loadPreview();
   }
-  return { node, render };
+  // After a removal elsewhere: the earlier outcome no longer describes the project, so check it again.
+  function recheck() { message.textContent = ''; delete message.dataset.outcome; shownFor = undefined; render(); }
+  // Whether Core's managed inventory lists every selection of this setup; read by the installed list.
+  function setManaged(value) {
+    managed = Boolean(value);
+    if (!preview || previewing || installing || message.dataset.outcome) return;
+    const rows = installFiles(preview.review), summary = installSummary(rows, { managed });
+    filesHeading.textContent = summary.heading; message.textContent = summary.message;
+  }
+  return { node, render, recheck, setManaged };
 }

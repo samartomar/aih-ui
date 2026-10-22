@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { effectsFingerprint, installFiles, installOutcome, projectName, relativeTarget, skillHints } from '../../src/app/install-panel.js';
+import { installOutcome, projectName, relativeTarget, skillHints } from '../../src/app/install-panel.js';
+import { effectsFingerprint, installFiles } from '../../src/app/host-review.js';
 
 const project = 'C:\\Temp\\proof\\sample-js-app';
 const write = (id, path) => ({ id, kind: 'file.write', effects: 'create-file', purpose: `Deliver ${path}`, details: { target: `${project}\\${path}` } });
@@ -68,4 +69,24 @@ test('reports success only when every operation was applied and verified', () =>
   assert.equal(short.ok, false);
   assert.match(short.message, /2 of 3 applied/);
   assert.equal(installOutcome(undefined, files, project).ok, false);
+});
+
+test('files in place are not called installed unless Core lists the whole setup as installed', async () => {
+  const { installSummary } = await import('../../src/app/install-panel.js');
+  const placed = path => ({ action: 'Already in place', path });
+  const rows = [placed('a'), placed('b'), placed('c')];
+  // Matching bytes alone do not show that Core manages them.
+  const unknown = installSummary(rows);
+  assert.equal(unknown.heading, 'All 3 files are already in place');
+  assert.match(unknown.message, /^All 3 files are already in place\./);
+  assert.doesNotMatch(`${unknown.heading} ${unknown.message}`, /installed|will be changed|Nothing has been installed yet/i);
+  assert.doesNotMatch(installSummary(rows, { managed: false }).message, /installed/i);
+  assert.match(installSummary(rows, { managed: true }).message, /^Already installed: all 3 files are in place\./);
+  const some = installSummary([placed('a'), { action: 'Add', path: 'b' }, { action: 'Add', path: 'c' }], { managed: true });
+  assert.equal(some.heading, '2 files will be changed (1 already in place)');
+  assert.match(some.message, /Not fully installed: 1 of 3 files are already in place\./);
+  const none = installSummary([{ action: 'Add', path: 'a' }]);
+  assert.equal(none.heading, '1 file will be changed');
+  assert.equal(none.message, 'Nothing has been installed yet.');
+  assert.equal(installSummary([]).heading, 'Nothing to change');
 });
