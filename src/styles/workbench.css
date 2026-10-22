@@ -424,6 +424,9 @@ body:has(#main-content) [hidden] { display: none !important; }
 .workspace-action:hover { background: var(--color-hover); }
 .workspace-menu-status { margin: 0 0 4px; padding: 6px 12px 8px; border-bottom: 1px solid var(--color-border); color: var(--color-on-surface-variant); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
 .catalog-advanced > summary { width: max-content; }
+/* An open Advanced section scrolls inside itself, and the cards keep room below it rather than collapsing to nothing. */
+.catalog-advanced-body { max-height: min(26rem, 45vh); overflow-y: auto; }
+.catalog-cards-region { min-height: min(32rem, 70vh); }
 #policy-current-context { margin: 0; overflow-wrap: anywhere; color: var(--color-text); }
 body:has(#main-content) > header + div { height: auto; min-height: 40px; flex-wrap: wrap; gap: 6px; padding-block: 5px; }
 body:has(#main-content) > header + div > div:first-child { flex-wrap: wrap; }
