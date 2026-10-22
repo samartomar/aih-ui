@@ -132,7 +132,7 @@ function card(entry, selectedId, onSelect, model) {
     button.addEventListener('click', async event => {
       event.stopPropagation();
       button.disabled = true; button.textContent = 'Reviewing…'; button.setAttribute('aria-busy', 'true');
-      try { await model.onChoose(entry.authoringItem); }
+      try { await model.onChoose(entry.authoringItem, id.entryId); }
       finally { button.disabled = Boolean(chosen); button.textContent = chosen ? chosenLabel : 'Choose'; button.removeAttribute('aria-busy'); }
     });
   }
@@ -194,6 +194,13 @@ export function createCards({ elements, onSelect }) {
      * grid, so the card the operator activated keeps keyboard focus. A card
      * the current view does not show is simply not there to mark.
      */
+    /** Moves keyboard focus to the card for an entry, if the grid shows it; false when it does not. */
+    focus(entryId) {
+      const node = entryId == null ? undefined : [...elements.cardsGrid.children].find((child) => child.dataset?.cardId === entryId);
+      node?.focus();
+      return Boolean(node);
+    },
+
     setSelected(previousId, nextId) {
       for (const [entryId, selected] of [[previousId, false], [nextId, true]]) {
         if (entryId === null || entryId === undefined) continue;

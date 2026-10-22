@@ -2,5 +2,8 @@
 .policy-review-panel[hidden] { display: none; }
 .policy-review-panel > * + * { margin-top: .85rem; }
 .policy-review-close { position: absolute; right: 1rem; top: .6rem; }
+.policy-review-panel h3 { scroll-margin-top: 3.5rem; }
+/* Back to catalog stays in reach wherever the panel is scrolled, such as at Install. */
+.policy-review-back { position: sticky; top: 0; z-index: 1; display: block; width: max-content; background: var(--color-panel); box-shadow: var(--shadow-xs); }
 
 @media (max-width: 700px) { .policy-review-panel { inset: var(--workbench-top, 5.5rem) 0 0; width: 100%; border-radius: 0; } }

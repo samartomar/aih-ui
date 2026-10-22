@@ -118,5 +118,5 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
   }
   // A different project folder: the list and any removal still being previewed belong to the old one.
   function clear() { inventoryRead++; list.replaceChildren(); message.textContent = ''; delete message.dataset.outcome; note.textContent = 'Checking what is installed…'; }
-  return { node, refresh, clear, get busy() { return removing; } };
+  return { node, heading: title, refresh, clear, get busy() { return removing; } };
 }
