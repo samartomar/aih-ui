@@ -133,7 +133,7 @@ function card(entry, selectedId, onSelect, model) {
     button.addEventListener('click', async event => {
       event.stopPropagation();
       button.disabled = true; button.textContent = 'Reviewing…'; button.setAttribute('aria-busy', 'true');
-      try { await model.onChoose(entry.authoringItem); }
+      try { await model.onChoose(entry.authoringItem, id.entryId); }
       finally { button.disabled = Boolean(chosen); button.textContent = chosen ? chosenLabel : 'Choose'; button.removeAttribute('aria-busy'); }
     });
   }
@@ -188,6 +188,13 @@ export function createCards({ elements, onSelect }) {
       elements.visibleCount.textContent = String(model.entries.length);
       elements.visibleCaption.textContent = model.entries.length === 1 ? "entry" : "entries";
       elements.visibleCaption.title = `Showing ${model.entries.length} of ${model.total} ${model.noun ?? "catalog entries"}.`;
+    },
+
+    /** Moves keyboard focus to the card for an entry, if the grid shows it; false when it does not. */
+    focus(entryId) {
+      const node = entryId == null ? undefined : [...elements.cardsGrid.children].find((child) => child.dataset?.cardId === entryId);
+      node?.focus();
+      return Boolean(node);
     },
 
     /**

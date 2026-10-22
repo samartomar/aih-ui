@@ -37,7 +37,7 @@ const refOf = ({ releaseSha256, itemId, scope }) => ({ releaseSha256, itemId, sc
 // Exact digests stay in the artifact; messages show a short prefix so they read as text.
 const readable = text => text.replace(/\b[a-f0-9]{64}\b/g, digest => `${digest.slice(0, 12)}…`);
 
-export function createAuthoringWorkspace(client) {
+export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } = {}) {
   const start = document.getElementById('policy-start-description');
   const choices = document.getElementById('policy-choices-description');
   const review = document.getElementById('policy-review-description');
@@ -122,7 +122,9 @@ export function createAuthoringWorkspace(client) {
   }));
   proposal.append(accept);
   const proposed = el('div', 'space-y-1'); proposed.id = 'policy-proposed-choices'; proposal.prepend(proposed);
-  const reviewPanel = createPolicyReview({ client, accept, proposed, status });
+  // "Your setup" lands on Install, or on the installed list when there is nothing to install.
+  const setupHeading = () => [installPanel, installedPanel].find(panel => !panel.node.hidden)?.heading ?? null;
+  const reviewPanel = createPolicyReview({ client, accept, proposed, status, setupHeading, onBack: onBackToCatalog });
   // The header's chosen tools and Core's supported list, for the Install panel's tool check.
   const chosenTools = { selected: [], coreIds: [], labels: {} };
   const installPanel = createInstallPanel({ client, el, button, tools: () => chosenTools, onInstalled: () => void installedPanel.refresh() });
