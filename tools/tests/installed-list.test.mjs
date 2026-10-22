@@ -65,3 +65,12 @@ test('a kept needed item names the installed chosen items that still need it', (
   const view = groupInstalled({ inventory: inventory('grill-me', 'grilling', 'notices', 'tdd'), policy, intent, label });
   assert.deepEqual(view.groups.find(group => group.name === 'grill-me').kept.map(item => [item.name, item.neededBy]), [['Extensions notices', ['TDD']]]);
 });
+
+test('the whole setup counts as installed only when Core lists every one of its selections', () => {
+  const all = inventory('grill-me', 'grilling', 'notices', 'tdd');
+  assert.equal(groupInstalled({ inventory: all, policy, intent, label }).setupInstalled, true);
+  assert.equal(groupInstalled({ inventory: inventory('grill-me', 'grilling', 'notices'), policy, intent, label }).setupInstalled, false);
+  assert.equal(groupInstalled({ inventory: { ...all, status: 'incomplete' }, policy, intent, label }).setupInstalled, true);
+  assert.equal(groupInstalled({ inventory: { status: 'invalid', selections: [] }, policy, intent, label }).setupInstalled, false);
+  assert.equal(groupInstalled({ inventory: all, policy: { selections: [] }, intent, label }).setupInstalled, false);
+});
