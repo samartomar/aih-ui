@@ -1,5 +1,5 @@
 /*
- * Supporting material (#133): licenses, notices, references, starting templates and a hook's script files. The Catalog
+ * Supporting material (#133): licenses, notices, references and a hook's script files. The Catalog
  * lists them as requirements of the content that needs them, so adding that content brings them; they are not cards of
  * their own on the default path, and Advanced shows them.
  *
@@ -11,7 +11,8 @@
 import { capabilityFacts } from './authoring-model.js';
 
 // Kinds that are supporting material whatever else they declare.
-const SUPPORTING_KINDS = new Set(['notice', 'reference', 'template']);
+// Templates are not supporting material: with framework items they are starting sets (starting-sets.js, #134).
+const SUPPORTING_KINDS = new Set(['notice', 'reference']);
 
 const entryKey = (releaseSha256, itemId) => `${releaseSha256}/${itemId}`;
 const supportedAnywhere = item => capabilityFacts(item).some(fact => fact.support === 'supported');
@@ -29,7 +30,7 @@ function requiredBy(items) {
 
 /**
  * Whether one item is supporting material:
- *   1. its declared kind is notice, reference or template; or
+ *   1. its declared kind is notice or reference; or
  *   2. it is an instruction that other content in its release requires (notices, shared references, pinned runtime
  *      source). Instructions nothing requires, such as rules and steering files, stay choosable content. This holds
  *      even where the Catalog marks the instruction supported for a tool, as it does for `ecc.notices`; or

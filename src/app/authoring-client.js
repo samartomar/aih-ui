@@ -27,12 +27,17 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
   const headers = { 'x-aih-client': crypto.randomUUID() };
   const listeners = new Set();
   let catalog, bytes = new Uint8Array(), intent, candidate, draftValue, compiled, revision = 0, catalogRevision = 0, hostRevision = 0, folderRevision = 0, reviewEvidence = [], evidenceRevision = 0, recipient, judgments = [], judgmentSummary;
-  let dirty = false, checkpoint, recoveryAvailable, startupSource;
+  // `clean` holds the bytes last downloaded, opened or started from: the artifact has changes waiting to download exactly
+  // while it differs from them, so an Add taken back by Undo is no change. `null` means no bytes are known to be
+  // downloaded (a handed-off or recovered artifact whose changes were never downloaded); `undefined`, nothing open yet.
+  let dirty = false, clean, recoveryAvailable, startupSource;
   const artifactBytes = () => draftValue?.envelopeBytes ?? bytes;
+  const same = (a, b) => a.length === b.length && a.every((byte, index) => byte === b[index]);
   const notify = () => {
     const current = artifactBytes();
-    if (checkpoint && (current.length !== checkpoint.length || current.some((byte, index) => byte !== checkpoint[index]))) dirty = true;
-    if (current.length) { checkpoint = current.slice(); if (sessionRecovery) recoveryAvailable = saveDraftSession(current, dirty); }
+    if (clean === undefined && current.length) clean = current.slice();
+    if (clean !== undefined) dirty = clean === null || !same(current, clean);
+    if (current.length && sessionRecovery) recoveryAvailable = saveDraftSession(current, dirty);
     for (const listener of listeners) listener();
   };
   let reviewEvidenceIds = [];
@@ -97,7 +102,7 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
   }
   return {
     get dirty() { return dirty; }, get recoveryAvailable() { return recoveryAvailable; }, get startupSource() { return startupSource; },
-    markDownloaded(downloaded = bytes) { const current = artifactBytes(); if (current.length !== downloaded.length || current.some((byte, index) => byte !== downloaded[index])) return; dirty = false; checkpoint = current.slice(); notify(); },
+    markDownloaded(downloaded = bytes) { const current = artifactBytes(); if (!same(current, downloaded)) return; clean = current.slice(); notify(); },
     discard() { revision++; candidate = undefined; notify(); },
     get catalog() { return catalog; }, get intent() { return intent; },
     get bytes() { return bytes.slice(); }, get candidate() { return candidate; },
@@ -140,13 +145,13 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
       if (handoff || recovery) {
         const input = handoff ?? recovery.bytes;
         if (!importLimitError(input.length, input)) {
-          this.importBytes(input); dirty = handoff ? true : recovery.dirty;
+          this.importBytes(input); if (handoff || recovery.dirty) { clean = null; dirty = true; }
           await this.reopen(); startupSource = handoff ? 'handoff' : 'recovery'; notify(); return;
         }
       }
       const result = await this.newDraft();
       if (result.status !== 'ok') throw new Error(JSON.stringify(result));
-      dirty = false; notify();
+      clean = artifactBytes().slice(); notify();
     },
     async newDraft(mode) {
       // A new policy is a different artifact from the moment it is requested, so queued choices stop here.
@@ -160,7 +165,7 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
       artifact++; revision++; candidate = undefined; draftValue = undefined; compiled = undefined;
       bytes = Uint8Array.from(value.policyBytes); intent = value.intent; keepJudgments(value); notify();
     },
-    importBytes(value) { artifact++; revision++; bytes = value.slice(); dirty = false; checkpoint = bytes.slice(); intent = undefined; keepJudgments(); candidate = undefined; draftValue = undefined; compiled = undefined; notify(); },
+    importBytes(value) { artifact++; revision++; bytes = value.slice(); clean = bytes.slice(); intent = undefined; keepJudgments(); candidate = undefined; draftValue = undefined; compiled = undefined; notify(); },
     // While a draft is open every edit goes through the draft operations: the recorded
     // choices are never composed as an executable policy until an explicit compile.
     async propose(operation) { return draftValue ? this.proposeDraft(operation) : this.proposeRequest('edit', { operation }); },

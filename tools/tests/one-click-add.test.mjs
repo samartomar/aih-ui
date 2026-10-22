@@ -215,3 +215,30 @@ test('the items it needs are named by their catalog label when the installed cat
   host(t, [policy([root('grill-me')], [{ root: ref('grill-me'), item: ref('grilling') }, { root: ref('grill-me'), item: ref('notes') }])]);
   assert.deepEqual((await addItem(client, item('grill-me', 'Grill me'))).needed, ['Grilling', 'notes']);
 });
+
+test('on the page, Add all adds a starting set and the optional hook ticked, lists counts, and Undo takes both out to the exact prior state', async t => {
+  const { byId, text } = page(t);
+  const hook = { ...item('hook.git-guard', 'git-guard hook group'), root: { ...root('hook.git-guard') } };
+  const edits = [policy([root('set.complete')], [{ root: ref('set.complete'), item: ref('skill.a') }]),
+    policy([root('set.complete'), { ...root('hook.git-guard'), configuration: { hookCommand: 'node guard.mjs' } }]),
+    policy([root('set.complete')]), policy([])];
+  const bodies = [], prior = globalThis.fetch;
+  globalThis.fetch = async (url, init) => { if (url === '/api/authoring-edit') bodies.push(JSON.parse(init.body).operation); return { ok: true, json: async () => url === '/api/authoring-edit' ? edits.shift() : { status: 'refused', diagnostics: [] } }; };
+  t.after(() => { globalThis.fetch = prior; });
+  const { createAuthoringWorkspace } = await import('../../src/app/authoring-workspace.js');
+  const client = opened(t);
+  const workspace = createAuthoringWorkspace(client);
+  client.discard(); // renders the status bar as the page first shows it
+  const before = globalThis.document.getElementById('policy-current-context').textContent;
+  assert.match(before, /No changes waiting to download/);
+  await workspace.addSet(item('set.complete', 'Whole set'), { optional: [{ item: hook, configuration: { hookCommand: 'node guard.mjs' } }], brings: { text: '1 skill' } });
+  assert.equal(text('added-notice-message'), 'Added Whole set to your setup: 1 skill, and 1 optional item (git-guard hook group).');
+  assert.deepEqual(bodies.map(body => [body.type, body.root.itemId, body.root.configuration]), [['select', 'set.complete', {}], ['select', 'hook.git-guard', { hookCommand: 'node guard.mjs' }]]);
+  assert.equal(text('your-setup'), 'Your setup (2)');
+  assert.match(globalThis.document.getElementById('policy-current-context').textContent, /Changes not downloaded/);
+  await byId('added-notice-undo').listeners.click();
+  assert.deepEqual(bodies.slice(2).map(body => [body.type, body.root.itemId]), [['remove-root', 'hook.git-guard'], ['remove-root', 'set.complete']], 'last added first');
+  assert.equal(text('added-notice-message'), 'Undone: Whole set and the 1 optional item added with it are no longer in your setup.');
+  assert.equal(text('your-setup'), 'Your setup');
+  assert.equal(globalThis.document.getElementById('policy-current-context').textContent, before, 'the status bar is back exactly as before the Add');
+});

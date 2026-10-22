@@ -735,13 +735,25 @@ chosen items whose declared source file (the same path in the same repository an
 together, on the proposal and in Install, as coming from the same source file; that is provenance, never a claim that
 they install the same thing.
 
-Supporting material is not a card on the default path (#133): items of the kinds notice, reference and template; an
+Supporting material is not a card on the default path (#133): items of the kinds notice and reference; an
 instruction that other content in its release requires (notices, shared references, pinned runtime source); and an
 item supported for no tool that a supported item of its own kind requires (a hook's script files). The page decides
 this from those published facts only (`src/catalog/supporting.js`), because the Catalog publishes no role for it
 (samartomar/aih-catalog#127). The grid, kind tabs and framework counts leave it out; the content that needs it brings it,
 and a card's details say *Comes with N supporting files: …* from the host's read-only `needs` operation, which asks
 Catalog's `resolveSelections` for that item alone. *Show supporting material (N)* in the tool line under Advanced shows it.
+
+Starting sets are the Catalog's `framework` and `template` items (#134), such as everything AIH-Extensions has for one
+tool. They are not cards: a *Starting sets* line above a framework's cards offers each one that fits Your tool, with what
+it brings in counts and *Add all for my tool*. The Catalog does not publish which tool a set is for
+(samartomar/aih-catalog#126) and a set's label is never read for it: a set fits when every item the host's `needs`
+operation (Catalog's `resolveSelections`) says it requires, and the set itself, that declares a specific tool is marked
+`supported` for Your tool (`src/catalog/starting-sets.js`). With no tool chosen the line asks for one, since most sets
+exist once per tool. Add all adds the set itself through the same one-click Add, so the resolver brings what it requires;
+the optional items it lists that are supported for the tool (hooks) are added only when ticked, each with the input it
+needs typed (a hook's command). One confirmation lists the counts, and its Undo takes back every root it added. *Show
+starting sets as cards (N)* in the tool line under Advanced shows them in the grid. Changes waiting to download are
+measured against the bytes last downloaded or opened, so an Add taken back by Undo is no change.
 
 ### Recurring friction from stored Core results
 

@@ -58,6 +58,26 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     await page.locator('#cards-grid [data-card-id$="/extensions.notices"]').waitFor();
     await page.locator('#catalog-tools-supporting').click();
     await page.locator('#catalog-search').fill('');
+    // Starting sets (#134): framework items are not cards; the line above the cards offers the sets that fit Your tool,
+    // worked out from what each requires, and Add all adds one in a step that Undo takes back to the exact prior state.
+    assert.equal(await page.locator('#cards-grid [data-card-id$="/extensions.template.complete"]').count(), 0, 'a starting set is not a card');
+    await page.locator('#starting-sets-note').filter({ hasText: /^This framework has 6 starting sets\. Choose your tool/ }).waitFor();
+    const idle = await page.locator('#policy-current-context').textContent();
+    assert.match(idle, /No changes waiting to download/);
+    await openCatalogAdvanced(page); await page.locator('#browse-target').selectOption('claude-code');
+    await page.locator('#starting-sets-note').filter({ hasText: /^4 more starting sets in this framework need items the Catalog does not mark supported for claude-code\./ }).waitFor();
+    const whole = page.locator('#starting-sets-list .wb-starting-set').filter({ hasText: 'claude-code whole workflow convenience template' });
+    assert.equal(await page.locator('#starting-sets-list .wb-starting-set').count(), 2, 'only the claude-code sets');
+    assert.match(await whole.locator('.wb-starting-set-brings').textContent(), /^46 skills, 4 agents, 2 commands, plus 2 supporting files; 3 hooks optional$/);
+    await whole.getByRole('button', { name: 'Add all for my tool: claude-code whole workflow convenience template' }).click();
+    await page.locator('#added-notice-message').filter({ hasText: 'Added claude-code whole workflow convenience template to your setup: 46 skills, 4 agents, 2 commands, plus 2 supporting files.' }).waitFor();
+    assert.equal((await policy(page)).metadata['aih.workbench'].pins.length, 55, 'the set and everything it requires, in one step');
+    assert.equal(await page.locator('#your-setup').textContent(), 'Your setup (1)');
+    await page.locator('#added-notice-undo').click();
+    await page.locator('#added-notice-message').filter({ hasText: /^Undone: claude-code whole workflow convenience template is no longer in your setup\.$/ }).waitFor();
+    assert.equal(await page.locator('#policy-current-context').textContent(), idle, 'Undo returns the status bar to the exact prior state');
+    await page.locator('#added-notice-dismiss').click();
+    await openCatalogAdvanced(page); await page.locator('#browse-target').selectOption('');
     await openCatalogAdvanced(page); await page.locator('#rail-scope-list button').filter({ hasText: 'Extensions' }).first().click();
     await chooseFramework(page, 'ECC');
     assert.ok(await page.getByRole('button', { name: 'Add ecc.skill.accessibility', exact: true }).isVisible(), 'Changing families clears the alternate rail filter.');

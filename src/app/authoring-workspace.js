@@ -12,6 +12,7 @@ import { isJourneyEnvelope, importLimitError } from './authoring-client.js';
 import { dependencyRows } from './dependency-set.js';
 import { createInstallPanel } from './install-panel.js';
 import { addItem, addedMessage, undoAdd } from './one-click-add.js';
+import { setAddedMessage } from '../catalog/starting-sets.js';
 import { createAddedNotice } from './added-notice.js';
 import { createInstalledPanel } from './installed-panel.js';
 import { createProjectFolderRow } from './project-folder.js';
@@ -434,6 +435,43 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     const text = `Undone: ${name} is no longer in your ${setupWord()}.`;
     showStatus(text); notice.show({ text });
   }
+  // Add all for a starting set (#134): the set itself through the same one-click Add, so Catalog's resolver brings
+  // everything it requires, then each optional item the person ticked, with the inputs they typed. One confirmation
+  // lists the counts, and its Undo takes every root this added back out, last first.
+  async function addSet(set, { optional = [], brings } = {}) {
+    const name = set.label ?? set.id;
+    const first = await addItem(client, set).catch(thrown);
+    if (first.status === 'superseded') return;
+    diagnostics.textContent = JSON.stringify(first.result, null, 2);
+    if (first.status !== 'added') return openReview(first, `Nothing was added: ${name} was refused.`, `${name} is not added yet. Read what the check reported, then Add to setup or Cancel.`);
+    const roots = [first.root], extras = [];
+    let warning = first.warning;
+    for (const { item, configuration = {} } of optional) {
+      const extra = item.label ?? item.id, outcome = await addItem(client, { ...item, root: { ...item.root, configuration } }).catch(thrown);
+      if (outcome.status === 'superseded') return;
+      diagnostics.textContent = JSON.stringify(outcome.result, null, 2);
+      if (outcome.status !== 'added') {
+        const done = setAddedMessage({ name, brings: brings ?? { text: `${first.needed.length} items it needs` }, optional: extras, draft: first.draft });
+        openReview(outcome, `${done} ${extra} was refused, so it was not added.`, `${done} ${extra} is not added yet. Read what the check reported, then Add to setup or Cancel.`);
+        notice.show({ text: `${done} ${extra} was not added.`, warning, onUndo: () => undoSet(name, roots) });
+        return;
+      }
+      roots.push(outcome.root); extras.push(extra); warning = outcome.warning || warning;
+    }
+    const text = setAddedMessage({ name, brings: brings ?? { text: `${first.needed.length} items it needs` }, optional: extras, draft: first.draft });
+    showStatus(text);
+    notice.show({ text, warning, onUndo: () => undoSet(name, roots) });
+  }
+  async function undoSet(name, roots) {
+    for (const root of [...roots].reverse()) {
+      const outcome = await undoAdd(client, root).catch(thrown);
+      if (outcome.status === 'superseded') return;
+      diagnostics.textContent = JSON.stringify(outcome.result, null, 2);
+      if (outcome.status !== 'removed') return openReview(outcome, `Undo did not finish: ${root.itemId} is still in your ${setupWord()}.`, `Undo for ${name} is not done yet. Read what the check reported, then Update setup or Cancel.`);
+    }
+    const extras = roots.length - 1, text = `Undone: ${name}${extras ? ` and the ${extras} optional ${extras === 1 ? 'item' : 'items'} added with it are` : ' is'} no longer in your ${setupWord()}.`;
+    showStatus(text); notice.show({ text });
+  }
   function present(result) {
     diagnostics.textContent = JSON.stringify(result, null, 2);
     if (result.status !== 'ok') { showStatus(failure(result)); return; }
@@ -594,5 +632,5 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     const summary = disclosure.querySelector(':scope > summary');
     summary.scrollIntoView({ block: 'start' }); summary.focus({ preventScroll: true });
   }
-  return { present, add, openWorkspace, setSettings: setRole, select(entry) { selectedItem = entry?.authoringItem; render(); }, setTargets };
+  return { present, add, addSet, openWorkspace, setSettings: setRole, select(entry) { selectedItem = entry?.authoringItem; render(); }, setTargets };
 }
