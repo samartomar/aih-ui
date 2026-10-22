@@ -4,7 +4,7 @@
 
 import { declaredTools, toolLine, toolRelation } from '../catalog/tool-match.js';
 
-const effectVerb ={ 'create-file': 'Add', 'replace-file': 'Replace', 'update-file': 'Update', 'remove-file': 'Remove' };
+const effectVerb ={ 'create-file': 'Add', 'replace-file': 'Replace', 'update-file': 'Update', 'remove-file': 'Remove', 'already-satisfied': 'Already in place' };
 
 export function relativeTarget(target, project) {
   if (!target) return '';
@@ -46,14 +46,18 @@ export function installOutcome(run, files, project) {
   if (!run || run.status === 'superseded') return { ok: false, message: 'Install was interrupted by a newer change. Nothing is reported as installed; check the files below and try again.' };
   const operations = run.operations ?? [];
   const applied = operations.filter(operation => operation.application === 'applied').length;
+  // Core found these files already holding the expected bytes; they are verified like any other.
+  const inPlace = operations.filter(operation => operation.application === 'already-satisfied').length;
   const verified = operations.filter(operation => operation.verification?.status === 'passed').length;
-  if (run.completion === 'complete' && operations.length && applied === operations.length && verified === operations.length) {
+  const total = operations.length;
+  if (run.completion === 'complete' && total && applied + inPlace === total && verified === total) {
     const skills = skillHints(files);
     const tryLine = skills.length ? ` Open Claude Code in this folder and type ${skills.map(name => `/${name}`).join(' or ')}.` : ' Open your AI tool in this folder to use them.';
-    return { ok: true, message: `Installed ${applied} ${applied === 1 ? 'file' : 'files'} into ${projectName(project)}.${tryLine}` };
+    const already = inPlace ? ` (${inPlace} ${inPlace === 1 ? 'was' : 'were'} already in place)` : '';
+    return { ok: true, message: `Installed ${total} ${total === 1 ? 'file' : 'files'} into ${projectName(project)}${already}.${tryLine}` };
   }
   const reason = [...(run.diagnostics ?? [])].map(diagnostic => diagnostic.message ?? diagnostic.code).filter(Boolean).join(' ');
-  return { ok: false, message: `Install did not finish: ${applied} of ${operations.length} applied, ${verified} verified.${reason ? ` ${reason}` : ''} Nothing else was changed by this page.` };
+  return { ok: false, message: `Install did not finish: ${applied} of ${total} applied,${inPlace ? ` ${inPlace} already in place,` : ''} ${verified} verified.${reason ? ` ${reason}` : ''} Nothing else was changed by this page.` };
 }
 
 /**

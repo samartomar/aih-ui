@@ -18,6 +18,8 @@ test('lists every file the review will write, relative to the project, with a pl
   assert.equal(projectName(project), 'sample-js-app');
   assert.equal(relativeTarget('D:\\elsewhere\\file', project), 'D:/elsewhere/file');
   assert.deepEqual(installFiles(undefined), []);
+  const satisfied = { ...write('d', '.aih-extensions\\notices\\NOTICE.md'), effects: 'already-satisfied' };
+  assert.deepEqual(installFiles({ ...review, operations: [satisfied] }), [{ action: 'Already in place', path: '.aih-extensions/notices/NOTICE.md' }]);
 });
 
 test('two Prepares with the same effects match even though their review digests differ', () => {
@@ -46,6 +48,14 @@ test('reports success only when every operation was applied and verified', () =>
   const partial = installOutcome({ ...run('partial', [['applied', 'passed'], ['not-applied', 'not-run']]), diagnostics: [{ code: 'X', message: 'Disk full.' }] }, files, project);
   assert.equal(partial.ok, false);
   assert.match(partial.message, /1 of 2 applied.*Disk full\./);
+
+  // Files already in place with the expected bytes are verified by Core and count as installed, but are named apart.
+  const inPlace = installOutcome(run('complete', [['already-satisfied', 'passed'], ['applied', 'passed'], ['applied', 'passed']]), files, project);
+  assert.equal(inPlace.ok, true);
+  assert.match(inPlace.message, /Installed 3 files into sample-js-app \(1 was already in place\)\./);
+  const inPlaceUnverified = installOutcome(run('complete', [['already-satisfied', 'failed'], ['applied', 'passed']]), files, project);
+  assert.equal(inPlaceUnverified.ok, false);
+  assert.match(inPlaceUnverified.message, /1 of 2 applied, 1 already in place, 1 verified/);
 
   assert.equal(installOutcome(run('complete', []), files, project).ok, false, 'an empty run is not a success');
   assert.equal(installOutcome({ status: 'superseded' }, files, project).ok, false);
