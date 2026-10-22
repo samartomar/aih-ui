@@ -9,6 +9,7 @@ import { installedFamilies } from './installed-families.mjs';
 import { createScanEvidenceHost } from './scan-evidence-host.mjs';
 import { authenticateEvidence } from '@aihq/core';
 import { readInstalledRelease } from '@aihq/catalog/node';
+import { addFromCatalog } from './policy-drawer.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 export async function runCompleteEvidenceBrowser({ plan, output, playwrightModule, authoringModule }) {
@@ -81,8 +82,7 @@ export async function runCompleteEvidenceBrowser({ plan, output, playwrightModul
     for (const family of families) assert.equal(facts.find(value => value.family === family.family)?.sourceFacts?.description.state, 'authored', `${family.family} compares its authored purpose`);
     await page.locator('#browse-family').selectOption(plan.family);
     await page.locator(`[data-card-id="${inventory.release.sha256}/${item.id}"]`).click();
-    await page.getByRole('button', { name: `Choose ${item.id}`, exact: true }).click();
-    await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click();
+    await addFromCatalog(page, item.id);
     await page.locator('#nav-sources').click();
     await page.locator(`[data-card-id="${inventory.release.sha256}/${item.id}"]`).click();
     await page.locator('#tab-security').click();

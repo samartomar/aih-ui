@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { readAuthoring, openDraft } from './headless.mjs';
 import { installedFamilies } from './installed-families.mjs';
-import { closePolicyDrawer, drawer, openPolicyAdvanced, openPolicyFileActions } from './policy-drawer.mjs';
+import { addFromCatalog, closePolicyDrawer, drawer, openPolicyAdvanced, openPolicyDrawer, openPolicyFileActions } from './policy-drawer.mjs';
 
 const PERSONAL = 'personal.skill.example', MAINTAINED = ['mattpocock.grill-with-docs', 'mattpocock.code-review'];
 
@@ -41,8 +41,7 @@ export async function runUnresolvedDraftBrowser({ origin, output, playwrightModu
   };
   const choose = async (page, family, id) => {
     await page.locator('#nav-sources').click(); await page.locator('#browse-support').selectOption('all'); await page.locator('#browse-family').selectOption(family);
-    await closePolicyDrawer(page); await page.getByRole('button', { name: `Choose ${id}`, exact: true }).click();
-    await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click();
+    await addFromCatalog(page, id);
   };
   const download = async (page, trigger, path) => { const event = page.waitForEvent('download'); await trigger(); await (await event).saveAs(path); return new Uint8Array(await readFile(path)); };
   const shownChoices = page => page.locator('#policy-draft-roots > div').evaluateAll(rows => rows.map(row => [row.dataset.itemId, row.dataset.status]));
@@ -55,7 +54,7 @@ export async function runUnresolvedDraftBrowser({ origin, output, playwrightModu
     await choose(authoring, 'Personal', PERSONAL);
     await choose(authoring, 'Catalog', MAINTAINED[0]);
     const savedPath = join(output, 'policy.downloaded.json');
-    const policyBytes = await download(authoring, () => authoring.locator('#policy-save').click(), savedPath);
+    const policyBytes = await download(authoring, async () => { await openPolicyDrawer(authoring); await authoring.locator('#policy-save').click(); }, savedPath);
     const saved = JSON.parse(new TextDecoder().decode(policyBytes));
     assert.deepEqual(saved.metadata['aih.workbench'].roots.map(root => root.itemId).sort(), [PERSONAL, MAINTAINED[0]].sort());
 
@@ -78,14 +77,15 @@ export async function runUnresolvedDraftBrowser({ origin, output, playwrightModu
 
     // A safe edit keeps the unresolved choice and adds a maintained item through the draft operations.
     await choose(fresh, 'Catalog', MAINTAINED[1]);
-    await fresh.locator('#policy-draft-status').filter({ hasText: 'Draft change accepted' }).waitFor();
+    // One-click Add confirms a clean draft edit as added to the draft; an edit that needed review is accepted there.
+    await openPolicyDrawer(fresh); await fresh.locator('#policy-draft-status').filter({ hasText: /Draft change accepted|to your draft\. Save the draft to keep it\./ }).waitFor();
     const edited = await shownChoices(fresh);
     assert.deepEqual(edited.map(([id]) => id).sort(), [PERSONAL, ...MAINTAINED].sort());
     assert.equal(edited.find(([id]) => id === PERSONAL)[1], 'unresolved');
     await fresh.screenshot({ path: join(output, '02-edited.png'), fullPage: true });
     assert.match(await fresh.locator('#policy-draft-save-note').textContent(), /not executable/);
     const envelopePath = join(output, 'policy.draft.journey.json');
-    const envelopeBytes = await download(fresh, () => fresh.locator('#policy-draft-save').click(), envelopePath);
+    const envelopeBytes = await download(fresh, async () => { await openPolicyDrawer(fresh); await fresh.locator('#policy-draft-save').click(); }, envelopePath);
     const envelope = JSON.parse(new TextDecoder().decode(envelopeBytes));
     assert.equal(envelope.schema, 'urn:aihq:workbench:journey-envelope:1.0.0');
     assert.equal(envelope.executable, false);

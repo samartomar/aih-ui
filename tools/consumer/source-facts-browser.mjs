@@ -8,7 +8,7 @@ import { installedFamilies } from './installed-families.mjs';
 import { performance } from 'node:perf_hooks';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { closePolicyDrawer, drawer, openPolicyDrawer, openSourceDetails } from './policy-drawer.mjs';
+import { addFromCatalog, closePolicyDrawer, drawer, openPolicyDrawer, openSourceDetails } from './policy-drawer.mjs';
 export async function runSourceFactsBrowser({ origin, output, playwrightModule }) {
   const began = performance.now();
   const { chromium } = await import(playwrightModule);
@@ -78,8 +78,7 @@ export async function runSourceFactsBrowser({ origin, output, playwrightModule }
     await page.getByRole('button', { name: 'Read original source as text', exact: true }).click();
     await page.locator('#details-source pre').filter({ hasText: 'neverEvaluateSource()' }).waitFor();
     assert.equal(await page.locator('#details-source script').count(), 0);
-    await page.getByRole('button', { name: 'Choose personal.skill.example', exact: true }).click();
-    await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click(); await closePolicyDrawer(page);
+    await addFromCatalog(page, 'personal.skill.example');
     const before = await page.locator('#policy-bytes').textContent();
     await page.locator('#nav-scan-review').click();
     const panel = drawer(page).getByRole('region', { name: 'Latest Scan evidence' });
@@ -98,7 +97,7 @@ export async function runSourceFactsBrowser({ origin, output, playwrightModule }
     await page.screenshot({ path: join(output, 'unsupported-evidence.png'), fullPage: true });
     assert.equal(await page.locator('#policy-bytes').textContent(), before);
     await page.locator('#nav-policy').click(); await openPolicyDrawer(page);
-    const download = page.waitForEvent('download'); await page.locator('#policy-save').click();
+    const download = page.waitForEvent('download'); await openPolicyDrawer(page); await page.locator('#policy-save').click();
     const path = join(output, 'policy.downloaded.json'); await (await download).saveAs(path);
     assert.deepEqual(JSON.parse(await readFile(path, 'utf8')), JSON.parse(before));
     assert.deepEqual(errors, []);
