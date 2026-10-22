@@ -79,7 +79,8 @@ export async function runEvidenceStatesBrowser({ origin, output, playwrightModul
     const otherCard = page.locator(`[data-card-id]:not([data-card-id$="/${NOTE}"]) [data-evidence-state]`).first();
     await noteCard.waitFor();
     assert.equal(await page.locator('#cards-grid [data-evidence-state]:not([data-evidence-state="not-supplied"])').count(), 0);
-    assert.equal(await noteCard.innerText(), 'Not supplied');
+    // Missing evidence is a compact gap indicator whose accessible name is the state.
+    assert.equal(await noteCard.getByRole('button', { name: 'Not supplied', exact: true }).count(), 1);
     assert.equal(await page.locator('#cards-grid').getByText('Not published', { exact: true }).count(), 0, 'No card slot claims evidence or tokens are unpublished.');
     await page.screenshot({ path: join(output, '01-not-supplied.png'), fullPage: true });
     scenarios.push('not-supplied');

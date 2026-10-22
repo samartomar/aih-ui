@@ -91,6 +91,8 @@ export async function runTrialsBrowser({ origin, output, playwrightModule, setti
     await page.locator('#nav-policy').click(); await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(path);
     await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await page.locator('#policy-draft-status').filter({ hasText: OPENED }).waitFor();
+    // Reopening used to run every check; a person now opens each section, so the update check whose note the save records runs too.
+    await openPolicySection(page, 'Available updates');
     await openPolicySection(page, 'Improvement suggestions');
     await openPolicySection(page, 'Improvement trials');
     await suggestionsSettled(page); await idle(page);
