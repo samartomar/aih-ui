@@ -12,7 +12,7 @@ import { openDraft } from './headless.mjs';
 import { intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { installedFamilies } from './installed-families.mjs';
-import { closePolicyDrawer, drawer, openPolicyDrawer, openPolicyFileActions, openPolicySection } from './policy-drawer.mjs';
+import { addFromCatalog, closePolicyDrawer, drawer, openPolicyDrawer, openPolicyFileActions, openPolicySection } from './policy-drawer.mjs';
 
 const NOTE = 'consumer-proof.review-note', PERSONAL = 'personal.skill.example', OPENED = 'Unresolved draft opened', REVIEW = 'maintenance-review';
 const encode = value => new TextEncoder().encode(value), decode = bytes => new TextDecoder().decode(bytes);
@@ -85,7 +85,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     return page;
   };
   const download = async (page, trigger, path) => { const event = page.waitForEvent('download'); await trigger(); await (await event).saveAs(path); return new Uint8Array(await readFile(path)); };
-  const saveDraft = (page, path) => download(page, () => page.locator('#policy-draft-save').click(), path);
+  const saveDraft = (page, path) => download(page, async () => { await openPolicyDrawer(page); await page.locator('#policy-draft-save').click(); }, path);
   const sameBytes = (a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)) === 0;
   const checkedText = page => page.locator('#policy-updates-checked').textContent();
   const checkedAt = text => /(\d{4}-\d\d-\d\dT[\d:.]+Z)/.exec(text)?.[1];
@@ -134,8 +134,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
   const draftRevision = async page => Number(/Draft revision (\d+)/.exec(await page.locator('#policy-draft-note').textContent())?.[1]);
   const choose = async (page, family, id) => {
     await page.locator('#nav-sources').click(); await page.locator('#browse-support').selectOption('all'); await page.locator('#browse-family').selectOption(family);
-    await closePolicyDrawer(page); await page.getByRole('button', { name: `Choose ${id}`, exact: true }).click();
-    await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click();
+    await addFromCatalog(page, id);
   };
   // The evidence panel is the existing review flow's own: open it, then supply the original evidence bytes.
   const supplyEvidence = async page => {
@@ -161,7 +160,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     await choose(authoring, 'Personal', PERSONAL);
     await choose(authoring, 'Independent', NOTE);
     const policyPath = join(output, 'policy.downloaded.json');
-    const policyBytes = await download(authoring, () => authoring.locator('#policy-save').click(), policyPath);
+    const policyBytes = await download(authoring, async () => { await openPolicyDrawer(authoring); await authoring.locator('#policy-save').click(); }, policyPath);
     assert.deepEqual(JSON.parse(decode(policyBytes)).metadata['aih.workbench'].roots.map(root => root.itemId).sort(), [NOTE, PERSONAL].sort());
     scenarios.push('save-independent-choice');
 
@@ -379,7 +378,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     await drawer(resolvedAuthoring).getByRole('button', { name: 'Propose human review', exact: true }).click();
     await resolvedAuthoring.locator('#policy-accept:not([disabled])').waitFor(); await resolvedAuthoring.locator('#policy-accept').click();
     const resolvedPath = join(output, 'policy.resolved.downloaded.json');
-    const resolvedBytes = await download(resolvedAuthoring, () => resolvedAuthoring.locator('#policy-save').click(), resolvedPath);
+    const resolvedBytes = await download(resolvedAuthoring, async () => { await openPolicyDrawer(resolvedAuthoring); await resolvedAuthoring.locator('#policy-save').click(); }, resolvedPath);
     const resolvedIntent = JSON.parse(decode(resolvedBytes)).metadata['aih.workbench'];
     assert.deepEqual(resolvedIntent.roots.map(root => root.itemId), [NOTE]);
     assert.deepEqual(resolvedIntent.reviews.records.map(record => [record.id, record.state]), [[REVIEW, 'current']]);

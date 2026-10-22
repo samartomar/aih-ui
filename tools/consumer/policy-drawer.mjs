@@ -2,7 +2,8 @@
 // open, validate and reopen). Journeys reach them the way a person would: open the drawer, then expand the section.
 export async function openPolicyDrawer(page) {
   const panel = page.locator('#policy-review-panel');
-  if (await panel.isHidden()) await page.locator('section:has(> #policy-review-description)').getByRole('button', { name: 'Open policy choices and review', exact: true }).click();
+  // The header's Review Changes opens the drawer from any page.
+  if (await panel.isHidden()) await page.locator('#review-project-changes').click();
   await panel.waitFor();
 }
 
@@ -43,3 +44,15 @@ export async function openPolicySection(page, label) {
 // Controls inside the review drawer. A role or label query scoped here avoids walking the whole catalog grid, which
 // holds most of the page's nodes; the query still matches by accessible name exactly as a page-wide one would.
 export const drawer = page => page.locator('#policy-review-panel');
+
+// One-click Add: a card's Add proposes the item and, when nothing needs deciding, accepts it at once and confirms it
+// in a notice; a proposal with something to decide opens the review instead, where the person accepts it. Either way
+// the item is in the setup afterwards, and the notice is dismissed so it covers nothing.
+export async function addFromCatalog(page, id) {
+  await closePolicyDrawer(page);
+  await page.locator('#cards-grid').getByRole('button', { name: `Add ${id}`, exact: true }).click();
+  const added = page.locator('#added-notice-message').filter({ hasText: /^Added / }), review = page.locator('#policy-accept:not([disabled])');
+  await added.or(review).first().waitFor();
+  if (await review.isVisible()) await review.click();
+  else await page.locator('#added-notice-dismiss').click();
+}
