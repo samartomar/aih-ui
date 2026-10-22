@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { openPolicyAdvanced } from './policy-drawer.mjs';
+import { openPolicyWorkspace } from './advanced-browser.mjs';
 // The organization baseline author view is offered to an Enterprise Admin setup only; other phases read as a Vibe coder.
 export async function openAuthorityPage({ browser, origin, role }) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1100 } });
@@ -22,7 +23,7 @@ export async function openAuthorityPage({ browser, origin, role }) {
     await page.locator('#setup-dialog').waitFor({ state: 'hidden' });
   }
   // The organization source sits in the review drawer's Advanced section; a person opens it to read the source.
-  await page.locator('#nav-policy').click(); await openPolicyAdvanced(page);
+  await openPolicyWorkspace(page); await openPolicyAdvanced(page);
   assert.equal(await page.locator('#authority-source input, #authority-source select, #authority-source textarea, #authority-source [contenteditable="true"]').count(), 0);
   return { page, context };
 }

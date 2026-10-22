@@ -9,6 +9,7 @@ import { compareReleases } from '@aihq/catalog/reader';
 import { acquireBaselineArtifact } from '@aihq/catalog/node';
 import { readArtifact, readContentCoverage } from '@aihq/scan/read';
 import { authenticateEvidence } from '@aihq/core';
+import { openPolicyWorkspace, openSetupAdvanced, openFileActions } from './advanced-browser.mjs';
 
 export async function runSourceTransitionBrowser({ plan, output, playwrightModule, authoringModule }) {
   const began = performance.now(), hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -48,11 +49,11 @@ export async function runSourceTransitionBrowser({ plan, output, playwrightModul
   const { chromium } = await import(playwrightModule), browser = await chromium.launch({ headless: true });
   const page = await (await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 1000 } })).newPage(); page.setDefaultTimeout(60_000);
   const errors = []; page.on('pageerror', error => errors.push(error.message));
-  const download = async name => { const event = page.waitForEvent('download'); await page.locator('#policy-save').click(); const path = join(output, name); await (await event).saveAs(path); return new Uint8Array(await readFile(path)); };
+  const download = async name => { const event = page.waitForEvent('download'); await openSetupAdvanced(page).then(() => page.locator('#policy-save').click()); const path = join(output, name); await (await event).saveAs(path); return new Uint8Array(await readFile(path)); };
   try {
     await page.goto(plan.origin + '/'); await page.locator('#browse-family option[value="ECC"]').waitFor({ state: 'attached' });
-    await page.locator('#nav-policy').click(); await page.locator('#policy-open').setInputFiles(original);
-    await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+    await openPolicyWorkspace(page); await page.locator('#policy-open').setInputFiles(original);
+    await openFileActions(page); await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await page.locator('#policy-status').filter({ hasText: 'Saved choices recovered' }).waitFor();
     const beforeBytes = await download('before-refresh-policy.json');
     const checkEvent = page.waitForResponse(value => value.url().endsWith('/api/authoring-maintenance-check'));
@@ -62,7 +63,7 @@ export async function runSourceTransitionBrowser({ plan, output, playwrightModul
     await page.locator('#policy-updates-check:not([disabled])').waitFor();
     const unchanged = await download('after-discovery-policy.json'); assert.deepEqual(unchanged, beforeBytes);
     const event = page.waitForResponse(value => value.url().endsWith('/api/authoring-reconcile'));
-    await page.getByRole('button', { name: 'Review source changes', exact: true }).click();
+    await openSetupAdvanced(page, 'Sources and execution').then(() => page.getByRole('button', { name: 'Review source changes', exact: true }).click());
     const reconciliation = await (await event).json(); assert.deepEqual(reconciliation.value, headless.value);
     await page.getByRole('button', { name: `Review update ${oldItem.id}`, exact: true }).click();
     await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click();

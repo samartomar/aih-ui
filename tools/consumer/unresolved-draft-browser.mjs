@@ -8,6 +8,7 @@ import { readInstalledRelease } from '@aihq/catalog/node';
 import { readAuthoring, openDraft } from './headless.mjs';
 import { installedFamilies } from './installed-families.mjs';
 import { addFromCatalog, closePolicyDrawer, drawer, openPolicyAdvanced, openPolicyDrawer, openPolicyFileActions } from './policy-drawer.mjs';
+import { openPolicyWorkspace, openSetupAdvanced } from './advanced-browser.mjs';
 
 const PERSONAL = 'personal.skill.example', MAINTAINED = ['mattpocock.grill-with-docs', 'mattpocock.code-review'];
 
@@ -54,14 +55,14 @@ export async function runUnresolvedDraftBrowser({ origin, output, playwrightModu
     await choose(authoring, 'Personal', PERSONAL);
     await choose(authoring, 'Catalog', MAINTAINED[0]);
     const savedPath = join(output, 'policy.downloaded.json');
-    const policyBytes = await download(authoring, async () => { await openPolicyDrawer(authoring); await authoring.locator('#policy-save').click(); }, savedPath);
+    const policyBytes = await download(authoring, async () => { await openPolicyDrawer(authoring); await openSetupAdvanced(authoring).then(() => authoring.locator('#policy-save').click()); }, savedPath);
     const saved = JSON.parse(new TextDecoder().decode(policyBytes));
     assert.deepEqual(saved.metadata['aih.workbench'].roots.map(root => root.itemId).sort(), [PERSONAL, MAINTAINED[0]].sort());
 
     // Context B: the personal source is not rebound, so its choice reopens as unresolved with nothing dropped.
     const fresh = await openPage();
     assert.equal(await fresh.locator('#browse-family option[value="Personal"]').count(), 0);
-    await fresh.locator('#nav-policy').click(); await openPolicyFileActions(fresh); await fresh.locator('#policy-open').setInputFiles(savedPath);
+    await openPolicyWorkspace(fresh); await openPolicyFileActions(fresh); await fresh.locator('#policy-open').setInputFiles(savedPath);
     await drawer(fresh).getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await fresh.locator('#policy-draft-status').filter({ hasText: 'Unresolved draft opened' }).waitFor();
     assert.deepEqual((await shownChoices(fresh)).sort(), [[MAINTAINED[0], 'resolved'], [PERSONAL, 'unresolved']].sort());
@@ -95,7 +96,7 @@ export async function runUnresolvedDraftBrowser({ origin, output, playwrightModu
 
     // Context C: a fresh page opens the envelope with the same meaning.
     const reopened = await openPage();
-    await reopened.locator('#nav-policy').click(); await openPolicyFileActions(reopened); await reopened.locator('#policy-open').setInputFiles(envelopePath);
+    await openPolicyWorkspace(reopened); await openPolicyFileActions(reopened); await reopened.locator('#policy-open').setInputFiles(envelopePath);
     await reopened.locator('#policy-draft-status').filter({ hasText: 'Unresolved draft opened' }).waitFor();
     assert.deepEqual(await shownChoices(reopened), edited);
     const headless = await openDraft({ bytes: envelopeBytes, inventories: [maintainedInventory, ...await installedFamilies()] });

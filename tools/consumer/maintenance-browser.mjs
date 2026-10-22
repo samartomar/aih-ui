@@ -13,6 +13,7 @@ import { intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { installedFamilies } from './installed-families.mjs';
 import { addFromCatalog, closePolicyDrawer, drawer, openPolicyDrawer, openPolicyFileActions, openPolicySection } from './policy-drawer.mjs';
+import { openPolicyWorkspace, openSetupAdvanced } from './advanced-browser.mjs';
 
 const NOTE = 'consumer-proof.review-note', PERSONAL = 'personal.skill.example', OPENED = 'Unresolved draft opened', REVIEW = 'maintenance-review';
 const encode = value => new TextEncoder().encode(value), decode = bytes => new TextDecoder().decode(bytes);
@@ -115,7 +116,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
         return JSON.stringify(policyOf(input).metadata?.['aih.workbench']?.roots) === JSON.stringify(policyOf(original).metadata?.['aih.workbench']?.roots);
       } catch { return false; }
     });
-    await page.locator('#nav-policy').click(); await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(path);
+    await openPolicyWorkspace(page); await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(path);
     await drawer(page).getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await page.locator('#policy-draft-status').filter({ hasText: heading }).waitFor();
     await openPolicySection(page, 'Available updates');
@@ -138,7 +139,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
   };
   // The evidence panel is the existing review flow's own: open it, then supply the original evidence bytes.
   const supplyEvidence = async page => {
-    await page.locator('#nav-policy').click(); await openPolicyDrawer(page);
+    await openPolicyWorkspace(page); await openSetupAdvanced(page);
     await page.locator('summary').filter({ hasText: 'Evidence review and reconsideration' }).click();
     await drawer(page).getByLabel('Review evidence files', { exact: true }).setInputFiles(evidencePath);
     await drawer(page).getByText('Original evidence bytes loaded').waitFor();
@@ -160,7 +161,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     await choose(authoring, 'Personal', PERSONAL);
     await choose(authoring, 'Independent', NOTE);
     const policyPath = join(output, 'policy.downloaded.json');
-    const policyBytes = await download(authoring, async () => { await openPolicyDrawer(authoring); await authoring.locator('#policy-save').click(); }, policyPath);
+    const policyBytes = await download(authoring, async () => { await openPolicyDrawer(authoring); await openSetupAdvanced(authoring).then(() => authoring.locator('#policy-save').click()); }, policyPath);
     assert.deepEqual(JSON.parse(decode(policyBytes)).metadata['aih.workbench'].roots.map(root => root.itemId).sort(), [NOTE, PERSONAL].sort());
     scenarios.push('save-independent-choice');
 
@@ -378,7 +379,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     await drawer(resolvedAuthoring).getByRole('button', { name: 'Propose human review', exact: true }).click();
     await resolvedAuthoring.locator('#policy-accept:not([disabled])').waitFor(); await resolvedAuthoring.locator('#policy-accept').click();
     const resolvedPath = join(output, 'policy.resolved.downloaded.json');
-    const resolvedBytes = await download(resolvedAuthoring, async () => { await openPolicyDrawer(resolvedAuthoring); await resolvedAuthoring.locator('#policy-save').click(); }, resolvedPath);
+    const resolvedBytes = await download(resolvedAuthoring, async () => { await openPolicyDrawer(resolvedAuthoring); await openSetupAdvanced(resolvedAuthoring).then(() => resolvedAuthoring.locator('#policy-save').click()); }, resolvedPath);
     const resolvedIntent = JSON.parse(decode(resolvedBytes)).metadata['aih.workbench'];
     assert.deepEqual(resolvedIntent.roots.map(root => root.itemId), [NOTE]);
     assert.deepEqual(resolvedIntent.reviews.records.map(record => [record.id, record.state]), [[REVIEW, 'current']]);
