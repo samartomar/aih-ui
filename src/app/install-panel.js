@@ -152,5 +152,5 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
     const rows = installFiles(preview.review), summary = installSummary(rows, { managed });
     filesHeading.textContent = summary.heading; message.textContent = summary.message;
   }
-  return { node, render, recheck, setManaged, get busy() { return installing; } };
+  return { node, heading: title, render, recheck, setManaged, get busy() { return installing; } };
 }
