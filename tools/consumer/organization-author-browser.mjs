@@ -9,6 +9,7 @@ import { readInstalledRelease } from '@aihq/catalog/node';
 import { composeAuthoring, freshAuthoring } from './headless.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope } from './journey.mjs';
 import { organizationTargetId } from './organization-draft-record.mjs';
+import { openPolicyAdvanced, openPolicyFileActions } from './policy-drawer.mjs';
 
 const attacker = { provider: 'github', repository: { owner: 'attacker', name: 'redirect' }, path: 'evil.json', revision: { kind: 'branch', value: 'evil' } };
 const redirect = { organizationSource: attacker, source: attacker, repository: attacker.repository, path: attacker.path, revision: attacker.revision };
@@ -216,11 +217,11 @@ export async function runOrganizationAuthorBrowser({ page, output, fixture, refr
     assert.equal((await page.locator('#authority-source-policy').textContent()).trim(), 'fixture-baseline');
     states.push('published');
     const policyPath = join(output, 'developer-policy.json'); await writeFile(policyPath, await developerPolicyBytes());
-    await page.locator('#policy-open').setInputFiles(policyPath);
+    await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(policyPath);
     await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await page.locator('#policy-status').filter({ hasText: 'Saved choices recovered' }).waitFor();
     const prepared = page.waitForResponse(response => response.url().endsWith('/api/authoring-prepare') && response.request().method() === 'POST');
-    await page.getByRole('button', { name: 'Prepare exact effects', exact: true }).click();
+    await openPolicyAdvanced(page); await page.getByRole('button', { name: 'Prepare exact effects', exact: true }).click();
     const review = await (await prepared).json();
     assert.equal(review.status, 'ready', JSON.stringify(review));
     const apply = page.getByRole('button', { name: 'Approve and Apply reviewed effects', exact: true });

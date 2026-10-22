@@ -8,6 +8,7 @@ import { runScan, prepareArtifact } from '@aihq/scan/host';
 import { digestBytes } from './primitives.mjs';
 import { intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
+import { closePolicyDrawer } from './policy-drawer.mjs';
 
 const NOTE = 'consumer-proof.review-note';
 
@@ -84,7 +85,7 @@ export async function runEvidenceStatesBrowser({ origin, output, playwrightModul
     scenarios.push('not-supplied');
 
     // c. Choose the note so the review panel can inspect it, then open Scan Review from the navigation.
-    await page.getByRole('button', { name: `Choose ${NOTE}`, exact: true }).click();
+    await closePolicyDrawer(page); await page.getByRole('button', { name: `Choose ${NOTE}`, exact: true }).click();
     await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click();
     await page.locator('#nav-scan-review').click();
     await page.locator('#policy-workspace').waitFor({ state: 'visible' });

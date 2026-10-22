@@ -25,3 +25,17 @@ export async function openSourceDetails(page) {
   const section = page.locator('details:has(> #details-source)');
   if (!await section.evaluate(node => node.open)) await section.locator('> summary').click();
 }
+
+// Host preparation, exact artifact, source and intake controls sit in the drawer's collapsed "Advanced" section.
+export async function openPolicyAdvanced(page) {
+  await openPolicyDrawer(page);
+  const section = page.locator('#policy-review-panel details.policy-advanced', { has: page.getByText('Advanced: sources and execution', { exact: true }) });
+  if (!await section.evaluate(node => node.open)) await section.getByText('Advanced: sources and execution', { exact: true }).click();
+}
+
+// Updates, improvement suggestions, trials and workspace repositories each check when a person opens their section.
+export async function openPolicySection(page, label) {
+  await openPolicyDrawer(page);
+  const summary = page.locator('#policy-review-panel details.policy-advanced > summary').filter({ hasText: new RegExp(`^${label}$`) });
+  if (!await summary.evaluate(node => node.parentElement.open)) await summary.click();
+}
