@@ -233,14 +233,15 @@
 <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 divide-x divide-wb-border border-b border-wb-border bg-wb-matrix shrink-0 select-none w-full" id="framework-matrix-tabs"></div>
 </details>
 <!-- The tool line (moved here from above the cards by owner decision 3; same ids and behaviour): the same Catalog tool
-     choice as Your tool in the header, with Show all, the no-declared-tool and not-supported switches, and Show supporting
-     material (#133). -->
+     choice as Your tool in the header, with Show all, the no-declared-tool and not-supported switches, Show supporting
+     material (#133) and Show starting sets as cards (#134). -->
 <div id="catalog-tools-bar" class="flex flex-wrap items-center gap-x-3 gap-y-1 p-2 rounded border border-wb-border bg-surface-container-low">
 <label class="flex flex-wrap items-center gap-2 text-on-surface"><span id="catalog-tools-showing" role="status">Choose the tool name the Catalog uses for your AI tool</span> <select class="bg-wb-input border border-wb-border rounded p-1 font-medium" id="browse-target" aria-label="Catalog tool name"></select></label>
 <button type="button" id="catalog-tools-toggle" class="px-2 py-1 rounded border border-wb-border bg-surface-container text-on-surface hover:bg-surface-container-high" hidden>Show all</button>
 <button type="button" id="catalog-tools-undeclared" class="px-2 py-1 rounded border border-wb-border bg-surface-container text-on-surface hover:bg-surface-container-high" aria-pressed="false" hidden></button>
 <button type="button" id="catalog-tools-unsupported" class="px-2 py-1 rounded border border-wb-border bg-surface-container text-on-surface hover:bg-surface-container-high" aria-pressed="false" hidden></button>
 <button type="button" id="catalog-tools-supporting" class="px-2 py-1 rounded border border-wb-border bg-surface-container text-on-surface hover:bg-surface-container-high" aria-pressed="false" hidden></button>
+<button type="button" id="catalog-tools-starting" class="px-2 py-1 rounded border border-wb-border bg-surface-container text-on-surface hover:bg-surface-container-high" aria-pressed="false" hidden></button>
 <p id="catalog-tools-unmatched" class="w-full text-on-surface-variant text-[11px]" hidden></p>
 </div>
 <!-- The catalog filters (moved here from above the cards by #122; same ids and behaviour). The folder picker that sat
@@ -300,6 +301,13 @@
 </div>
 <div class="catalog-cards-region flex-1 flex overflow-hidden">
 <div class="flex-1 overflow-y-auto p-4 bg-wb-cards flex flex-col gap-3">
+<!-- STARTING SETS (#134): the open framework's framework and template items that fit Your tool, each with Add all for my
+     tool. They are not cards; Show starting sets as cards under Advanced shows them in the grid. -->
+<section id="starting-sets" class="space-y-2" aria-labelledby="starting-sets-title" hidden>
+<h2 id="starting-sets-title" class="text-[10px] font-mono uppercase tracking-wider text-outline">Starting sets</h2>
+<div id="starting-sets-list" class="space-y-2"></div>
+<p id="starting-sets-note" class="text-[11px] text-on-surface-variant" role="status" hidden></p>
+</section>
 <div id="category-context" aria-live="polite"></div>
 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3" id="cards-grid" aria-busy="true"></div>
 </div>

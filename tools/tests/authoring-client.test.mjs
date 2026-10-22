@@ -159,3 +159,42 @@ test('a project folder change supersedes every host result still out, and an inv
   assert.equal((await latePreview).status, 'superseded');
   assert.equal((await lateInventory).status, 'superseded');
 });
+
+test('an Add taken back with Undo leaves no changes waiting to download, as before the Add', async t => {
+  sessionStorageFor(t);
+  const pending = requests(t), client = createAuthoringClient();
+  client.publish(value(1)); client.markDownloaded(); assert.equal(client.dirty, false);
+  const added = client.propose({ type: 'select' });
+  pending[0].resolve(response({ status: 'ok', value: value(2) })); await added; client.accept();
+  assert.equal(client.dirty, true, 'the Add is a change not downloaded');
+  const undone = client.propose({ type: 'remove-root' });
+  pending[1].resolve(response({ status: 'ok', value: value(1) })); await undone; client.accept();
+  assert.equal(client.dirty, false, 'the same bytes as when last downloaded');
+  // A recovered artifact whose changes were never downloaded stays changed until it is downloaded.
+  const { recoverDraftSession } = await import('../../src/app/draft-session.js');
+  assert.equal(recoverDraftSession().dirty, false);
+});
+
+test('a fresh setup with an Add and its Undo is back to no changes waiting to download', async t => {
+  const previous = globalThis.fetch; t.after(() => { globalThis.fetch = previous; });
+  const answers = [{ items: [] }, { status: 'ok', value: value(1) }, { status: 'ok', value: value(2) }, { status: 'ok', value: value(1) }];
+  globalThis.fetch = async () => response(answers.shift());
+  const client = createAuthoringClient({ sessionRecovery: false }); await client.start();
+  assert.equal(client.dirty, false);
+  await client.propose({ type: 'select' }); client.accept(); assert.equal(client.dirty, true);
+  await client.propose({ type: 'remove-root' }); client.accept(); assert.equal(client.dirty, false);
+});
+
+test('a handed-off policy stays changed even when an edit returns it to the same bytes', async t => {
+  sessionStorageFor(t);
+  const { saveDraftHandoff } = await import('../../src/app/draft-session.js');
+  const input = Uint8Array.of(1); saveDraftHandoff(input);
+  const previous = globalThis.fetch; t.after(() => { globalThis.fetch = previous; });
+  const answers = [{ items: [] }, { status: 'ok', value: { editing: 'available', intent: { roots: [], pins: [] } } }, { status: 'ok', value: value(2) }, { status: 'ok', value: value(1) }];
+  globalThis.fetch = async () => response(answers.shift());
+  const client = createAuthoringClient(); await client.start();
+  assert.equal(client.dirty, true);
+  await client.propose({ type: 'select' }); client.accept();
+  await client.propose({ type: 'remove-root' }); client.accept();
+  assert.equal(client.dirty, true, 'never downloaded, so still waiting');
+});

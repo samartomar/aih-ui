@@ -12,10 +12,10 @@ const item = (id, kind, { facts, requires = [], release = RELEASE } = {}) => ({
 const key = value => `${value.root.releaseSha256}/${value.id}`;
 const supporting = items => [...supportingMaterial(items)].map(entryId => entryId.split('/')[1]).sort();
 
-test('notices, references and templates are supporting material by their declared kind', () => {
+test('notices and references are supporting material by their declared kind; templates are starting sets instead', () => {
   const items = [item('anthropic.notice.shadcn', 'notice'), item('x.reference', 'reference'), item('ecc.template.api-review', 'template', { facts: [fact('claude-code', 'supported')] }),
     item('anthropic.skill.web-artifacts-builder', 'skill', { facts: [fact('claude-code', 'supported')], requires: ['anthropic.notice.shadcn'] })];
-  assert.deepEqual(supporting(items), ['anthropic.notice.shadcn', 'ecc.template.api-review', 'x.reference']);
+  assert.deepEqual(supporting(items), ['anthropic.notice.shadcn', 'x.reference']);
 });
 
 test('an instruction other content in its release requires is supporting, even where the Catalog marks it supported', () => {
