@@ -68,6 +68,8 @@ async function main() {
       authoring,
       subscribeSecurity: shell.subscribeSecurity,
       onAdd: item => authoringWorkspace.add(item),
+      // Project basics opens the one workspace view.
+      onOpenWorkspace: () => authoringWorkspace.openWorkspace(),
       onSelectEntry: (entry) => {
         authoringWorkspace.select(entry);
         shell.setInspectorSelection(entry !== null);
