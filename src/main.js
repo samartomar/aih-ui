@@ -70,6 +70,9 @@ async function main() {
       authoring,
       subscribeSecurity: shell.subscribeSecurity,
       onAdd: item => authoringWorkspace.add(item),
+      // Choosing a framework shows its cards, in place of Project basics; Project basics opens the one workspace view.
+      onFramework: () => shell.showCards(),
+      onOpenWorkspace: () => authoringWorkspace.openWorkspace(),
       onSelectEntry: (entry) => {
         authoringWorkspace.select(entry);
         shell.setInspectorSelection(entry !== null);

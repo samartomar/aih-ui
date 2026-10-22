@@ -14,7 +14,7 @@ function node() {
 function shell(t, hash = '', width = 1200) {
   const windowListeners = {}, events = [], header = node(), subheader = node(), context = node();
   header.nextElementSibling = subheader;
-  const keys = ['catalogWorkspace', 'navRail', 'frameworkMatrixTabs', 'catalogKindsDisclosure', 'inspectorRail', 'toggleInspectorBtn', 'toggleNavBtn', 'closeInspectorBtn', 'policyWorkspace', 'catalogScopesSection', 'navSources', 'navPolicy', 'navScanReview', 'policyWorkspaceTitle', 'paneDetails', 'paneSecurity', 'paneJson'];
+  const keys = ['catalogWorkspace', 'navRail', 'frameworkMatrixTabs', 'catalogKindsDisclosure', 'inspectorRail', 'toggleInspectorBtn', 'toggleNavBtn', 'closeInspectorBtn', 'policyWorkspace', 'catalogScopesSection', 'navSources', 'navPolicy', 'navScanReview', 'policyWorkspaceTitle', 'paneDetails', 'paneSecurity', 'paneJson', 'projectBasics', 'navProjectBasics', 'projectBasicsTitle'];
   const elements = Object.fromEntries(keys.map(key => [key, node()])); elements.tabButtons = [];
   for (const [key, value] of Object.entries({
     window: { innerWidth: width, matchMedia: query => ({ matches: width <= (query.includes('1100') ? 1100 : 760), addEventListener() {} }), addEventListener: (name, handler) => { windowListeners[name] = handler; } },
@@ -55,4 +55,33 @@ test('mobile kind and policy context start compact, and inspector makes disclosu
   h.elements.closeInspectorBtn.listeners.click();
   assert.equal(h.elements.catalogKindsDisclosure.inert, false);
   assert.equal(h.elements.inspectorRail.attributes['aria-modal'], undefined);
+});
+
+test('Project basics is its own view: it shows in place of the cards and keeps the inspector for its project files', t => {
+  const h = shell(t, '#basics');
+  assert.equal(h.events.at(-1).detail.view, 'basics');
+  assert.equal(h.elements.projectBasics.hidden, false);
+  assert.equal(h.elements.catalogWorkspace.hidden, true, 'the cards give way to Project basics');
+  assert.equal(h.elements.policyWorkspace.hidden, true);
+  assert.equal(h.elements.inspectorRail.hidden, false, "a project file's details still open in the inspector");
+  assert.equal(h.elements.navProjectBasics.attributes['aria-current'], 'page');
+  assert.equal(h.elements.navSources.attributes['aria-current'], undefined);
+  assert.equal(h.elements.projectBasicsTitle.focused, true);
+  // Back to catalog (from Your setup) stays on Project basics; choosing a framework returns to the cards.
+  const changes = h.events.length;
+  h.instance.showCatalog();
+  assert.equal(h.events.length, changes, 'Back to catalog keeps Project basics');
+  h.instance.showCards();
+  assert.equal(h.events.at(-1).detail.view, 'catalog');
+  assert.equal(h.elements.catalogWorkspace.hidden, false);
+  assert.equal(h.elements.projectBasics.hidden, true);
+  assert.equal(h.elements.navProjectBasics.attributes['aria-current'], undefined);
+  h.route('#policy');
+  assert.equal(h.elements.projectBasics.hidden, true);
+});
+
+test('the inspector opens for a selection while Project basics shows', t => {
+  const h = shell(t, '#basics', 1200);
+  h.instance.setInspectorSelection(true);
+  assert.equal(h.elements.inspectorRail.attributes['aria-hidden'], 'false');
 });
