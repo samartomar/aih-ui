@@ -103,7 +103,10 @@ export async function runEvidenceStatesBrowser({ origin, output, playwrightModul
       const status = page.locator(`#evidence-review [role="status"][data-evidence-state="${state}"]`);
       await status.waitFor();
       const text = await status.innerText();
-      await page.locator('#evidence-review').screenshot({ path: join(output, `review-${state}.png`) });
+      // The review sits in the drawer, which can be shorter than the review. An element capture beyond the viewport lets
+      // Chromium resize the page to the element's own narrow width, which folds the navigation as on a phone; the
+      // evidence is a viewport capture with the review's status in view instead.
+      await status.scrollIntoViewIfNeeded(); await page.screenshot({ path: join(output, `review-${state}.png`) });
       await page.locator('#nav-sources').click();
       await page.waitForFunction(([expected, note]) => document.querySelector(`[data-card-id$="/${note}"] [data-evidence-state]`)?.dataset.evidenceState === expected, [state, NOTE]);
       await page.screenshot({ path: join(output, `catalog-${state}.png`), fullPage: true });
