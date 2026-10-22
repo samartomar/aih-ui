@@ -10,7 +10,7 @@ export function catalogElements() {
   const ids = [
     "provenance-strip", "masthead-name", "masthead-version", "masthead-status",
     "nav-sources-count", "rail-scope-list", "framework-matrix-tabs",
-    "review-filters", "review-summary",
+    "review-filters",
     "kind-filters", "catalog-search", "source-filter", "sort-select",
     "visible-count", "visible-caption", "category-context", "cards-grid",
     "inspector-name", "inspector-kind", "inspector-icon",
@@ -33,7 +33,6 @@ export function catalogElements() {
     metrics: { container: found.frameworkMatrixTabs },
     toolbar: {
       reviewFilters: found.reviewFilters,
-      reviewSummary: found.reviewSummary,
       kindFilters: found.kindFilters,
       search: found.catalogSearch,
       sourceFilter: found.sourceFilter,

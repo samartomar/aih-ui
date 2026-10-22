@@ -12,11 +12,11 @@ function node() {
     contains: () => false, focus() { this.focused = true; }, getBoundingClientRect: () => ({ height: 44 }),
   };
 }
-function shell(t, { width = 1280, hash = '' } = {}) {
+function shell(t, { width = 1280, hash = '', advanced = null, tabs = [] } = {}) {
   const windowListeners = {}, events = [], media = [], header = node(), subheader = node(), context = node();
   header.nextElementSibling = subheader;
   const keys = ['catalogWorkspace', 'navRail', 'frameworkMatrixTabs', 'catalogKindsDisclosure', 'inspectorRail', 'toggleInspectorBtn', 'toggleNavBtn', 'closeInspectorBtn', 'policyWorkspace', 'catalogScopesSection', 'navSources', 'navPolicy', 'navScanReview', 'policyWorkspaceTitle', 'paneDetails', 'paneSecurity', 'paneJson'];
-  const elements = Object.fromEntries(keys.map(key => [key, node()])); elements.tabButtons = [];
+  const elements = Object.fromEntries(keys.map(key => [key, node()])); elements.tabButtons = tabs;
   elements.navRail.classList.toggle('w-60', true); elements.navRail.id = 'nav-rail';
   const win = { innerWidth: width, addEventListener: (name, handler) => { windowListeners[name] = handler; },
     matchMedia(query) {
@@ -28,7 +28,7 @@ function shell(t, { width = 1280, hash = '' } = {}) {
     window: win, location: { hash }, ResizeObserver: class { observe() {} },
     document: { activeElement: node(), documentElement: { style: { setProperty() {} } },
       querySelector: selector => selector === 'body > header' ? header : null, querySelectorAll: () => [],
-      getElementById: id => id === 'policy-context-disclosure' ? context : null,
+      getElementById: id => id === 'policy-context-disclosure' ? context : id === 'catalog-advanced' ? advanced : null,
       addEventListener() {}, dispatchEvent: event => { events.push(event); } },
   })) {
     const previous = Object.getOwnPropertyDescriptor(globalThis, key);
@@ -88,4 +88,15 @@ test('showing the catalog from another view switches once, without a second view
   assert.equal(h.events.filter(event => event.type === 'aih:view-changed').length, before + 1);
   h.instance.showCatalog();
   assert.equal(h.events.filter(event => event.type === 'aih:view-changed').length, before + 1, 'already on the catalog: nothing moves');
+});
+
+test('the inspector shows its Policy JSON tab only while the catalog Advanced section is open', t => {
+  const advanced = node(); advanced.open = false;
+  const tab = name => { const button = node(); button.dataset = { tab: name }; button.hidden = false; return button; };
+  const details = tab('details'), json = tab('json');
+  shell(t, { advanced, tabs: [details, json] });
+  assert.equal(json.hidden, true, 'closed Advanced hides the Policy JSON tab');
+  assert.equal(details.hidden, false);
+  advanced.open = true; advanced.listeners.toggle();
+  assert.equal(json.hidden, false, 'opening Advanced shows it');
 });
