@@ -4,6 +4,7 @@
 
 import { declaredTools, supportedFor, toolLine } from '../catalog/tool-match.js';
 import { sameSourceWarning } from './source-copies.js';
+import { setupHookNote } from '../catalog/hooks.js';
 import { applyIfUnchanged, diagnosticWords, effectsFingerprint, fileCount, installFiles, IN_PLACE } from './host-review.js';
 
 export { relativeTarget } from './host-review.js';
@@ -92,11 +93,13 @@ export function createInstallPanel({ client, el, button, tools = () => ({}), onI
   const items = el('ul', 'list-disc pl-5 space-y-0.5');
   const warning = el('p', 'p-2 rounded border border-error/60 bg-error-container text-on-surface'); warning.id = 'install-tool-warning'; warning.hidden = true;
   const sameSource = el('p', 'p-2 rounded border border-wb-border bg-tertiary-container text-on-surface'); sameSource.id = 'install-same-source'; sameSource.hidden = true;
+  // Each chosen hook's command again, before Install (#135): what the tool will run once it is installed.
+  const hookCommands = el('div', 'space-y-2'); hookCommands.id = 'install-hooks'; hookCommands.hidden = true;
   const filesHeading = el('p', 'font-medium', 'Files that will be added');
   const files = el('ul', 'space-y-0.5 font-mono text-[11px]'); files.id = 'install-files';
   const message = el('p', 'text-on-surface'); message.id = 'install-message'; message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
   const install = button('Install', () => run(), true); install.id = 'install-button'; install.disabled = true;
-  node.append(title, where, items, warning, sameSource, filesHeading, files, install, message);
+  node.append(title, where, items, hookCommands, warning, sameSource, filesHeading, files, install, message);
 
   let preview, previewing = false, installing = false, shownFor, managed = false, again = false;
   const itemOf = ref => client.catalog?.items.find(item => item.id === ref.itemId && item.root.releaseSha256 === ref.releaseSha256);
@@ -159,6 +162,16 @@ export function createInstallPanel({ client, el, button, tools = () => ({}), onI
     const chosen = (client.intent?.roots ?? []).map(itemOf).filter(Boolean);
     warning.textContent = toolWarning(chosen, tools()); warning.hidden = !warning.textContent;
     sameSource.textContent = sameSourceWarning(chosen); sameSource.hidden = !sameSource.textContent;
+    const hooks = (client.intent?.roots ?? []).map(root => ({ root, item: itemOf(root) })).filter(({ item }) => item?.kind === 'hook');
+    hookCommands.replaceChildren(...hooks.map(({ root, item }) => {
+      const { command, text } = setupHookNote({ item, configuration: root.configuration, tool: tools().catalogTool });
+      const row = el('div', 'wb-install-hook p-2 rounded border border-wb-border bg-surface-container-low space-y-1');
+      row.append(el('p', 'font-medium', `${item.label ?? item.id} runs this command`));
+      if (command) row.append(el('code', 'block font-mono text-[11px] break-all', command));
+      row.append(el('p', 'text-[11px] text-on-surface-variant', text));
+      return row;
+    }));
+    hookCommands.hidden = !hooks.length;
     if (node.hidden) { shownFor = undefined; preview = undefined; return; }
     // No project folder: there is nothing to preview until one is chosen above.
     if (!client.catalog.executionAvailable) {

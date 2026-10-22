@@ -13,6 +13,7 @@ import { dependencyRows } from './dependency-set.js';
 import { createInstallPanel } from './install-panel.js';
 import { addItem, addedMessage, undoAdd } from './one-click-add.js';
 import { setAddedMessage } from '../catalog/starting-sets.js';
+import { inSetupLabel, setupNeeds } from './setup-needs.js';
 import { createAddedNotice } from './added-notice.js';
 import { createInstalledPanel } from './installed-panel.js';
 import { createProjectFolderRow } from './project-folder.js';
@@ -509,8 +510,11 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     copy.title = `Copy ${jsonKind.toLowerCase()}`; jsonDownload.title = `Download ${jsonKind.toLowerCase()}`;
     jsonDownload.textContent = draft && !client.compiled ? 'Download original policy' : 'Download policy';
     const selectedChosen = current.some(root => root.itemId === selectedItem?.id && root.releaseSha256 === selectedItem?.root.releaseSha256);
-    if (!stage.dataset.busy) stage.textContent = selectedChosen ? (draft ? 'In draft' : 'Added') : 'Add';
-    stage.disabled = Boolean(stage.dataset.busy) || !selectedItem || (!intent && !draft) || selectedChosen; reset.disabled = !selectedChosen;
+    // Already in the setup as an item something chosen needs (#134): no second Add from Details either.
+    const neededRoots = selectedItem && !selectedChosen ? setupNeeds({ intent, draft, policyBytes: draft ? undefined : client.bytes }).get(`${selectedItem.root.releaseSha256}/${selectedItem.id}`) : undefined;
+    const selectedNeeded = neededRoots?.length ? inSetupLabel(neededRoots, itemLabel) : '';
+    if (!stage.dataset.busy) stage.textContent = selectedChosen ? (draft ? 'In draft' : 'Added') : selectedNeeded || 'Add';
+    stage.disabled = Boolean(stage.dataset.busy) || !selectedItem || (!intent && !draft) || selectedChosen || Boolean(selectedNeeded); reset.disabled = !selectedChosen;
     for (const action of [stage, reset]) { action.setAttribute('aria-disabled', String(action.disabled)); action.classList.toggle('opacity-50', action.disabled); action.classList.toggle('cursor-not-allowed', action.disabled); }
     const persistentContext = document.getElementById('policy-current-context');
     const contextSummary = document.getElementById('policy-context-summary');

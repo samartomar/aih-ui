@@ -27,6 +27,8 @@ import { createProjectBasics, frameworkShows, projectFileEntries } from "./proje
 import { createYourSources } from "./your-sources.js";
 import { supportingMaterial } from "./supporting.js";
 import { createStartingSets, startingSetIds } from "./starting-sets.js";
+import { createHooks, hookEntryIds } from "./hooks.js";
+import { inSetupLabel, setupNeeds } from "../app/setup-needs.js";
 
 /**
  * @param onSelectEntry    called with the entry when the selection changes
@@ -66,6 +68,9 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     // Whether starting sets (framework and template items; see starting-sets.js) also show as cards. By default they are
     // offered only in the Starting sets line above the cards, and the grid, kind tabs and counts leave them out.
     showStartingSets: false,
+    // Whether hooks also show as cards. By default they are offered only in the Hooks section above the cards (#135),
+    // and the grid, kind tabs and counts leave them out.
+    showHooks: false,
   };
   let restoredView = false;
   // The tool names the installed Catalog declares, read once per catalog.
@@ -75,6 +80,20 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   let supporting = new Set();
   // The entry ids of the catalog's starting sets, worked out once per catalog.
   let starting = new Set();
+  // The entry ids of the catalog's hooks (hook items that are not supporting material), worked out once per catalog.
+  let hooks = new Set();
+  // Which items are in the setup because a chosen item or set needs them, read from the accepted setup once per change.
+  let needsFor, needs = new Map();
+  const neededBy = item => {
+    const intent = authoring.intent, draft = authoring.draft;
+    if (needsFor?.intent !== intent || needsFor?.draft !== draft) {
+      needsFor = { intent, draft }; needs = setupNeeds({ intent, draft, policyBytes: draft ? undefined : authoring.bytes });
+    }
+    const roots = needs.get(`${item.root?.releaseSha256}/${item.id}`);
+    if (!roots?.length) return '';
+    const labelOf = root => authoring.catalog?.items.find(value => value.id === root.itemId && value.root.releaseSha256 === root.releaseSha256)?.label ?? root.itemId;
+    return inSetupLabel(roots, labelOf);
+  };
 
   const changeView = (patch) => {
     Object.assign(state.view, patch);
@@ -130,7 +149,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   document.addEventListener('aih:view-changed', () => { if (restoredView) renderFrameworks(); });
   // The left panel counts what each framework shows for the chosen tool, by the same rules as its grid and kind tabs.
   const frameworkCounts = () => new Map(frameworkRows(authoring.catalog?.items ?? []).map(row => [row.family,
-    supportedEntries(browseEntries({ ...emptyView(), ...familyView(row.family), target: state.view.target }), state.view.target, state.view.support).length]));
+    supportedEntries(offeredEntries({ ...emptyView(), ...familyView(row.family), target: state.view.target }), state.view.target, state.view.support).length]));
   const renderFrameworks = () => frameworkRail.render({ rows: frameworkRows(authoring.catalog?.items ?? [], frameworkCounts()), selected: basicsOpen() || sourcesOpen() ? null : state.view.family });
   const focusCard = (entryId) => basicsOpen() ? projectBasics.focus(entryId) : sourcesOpen() ? yourSources.focus(entryId) : cards.focus(entryId);
   // The Catalog tool name is the person's own choice; it is remembered for the next visit and shared with the page.
@@ -153,6 +172,10 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   toolsStarting.addEventListener('click', () => { state.showStartingSets = !state.showStartingSets; render(); });
   const startingSets = createStartingSets({ section: document.getElementById('starting-sets'), list: document.getElementById('starting-sets-list'),
     note: document.getElementById('starting-sets-note'), authoring, onAddSet: (set, choice) => onAddSet(set, choice) });
+  const toolsHooks = document.getElementById('catalog-tools-hooks');
+  toolsHooks.addEventListener('click', () => { state.showHooks = !state.showHooks; render(); });
+  const hooksSection = createHooks({ section: document.getElementById('hooks'), list: document.getElementById('hooks-list'),
+    note: document.getElementById('hooks-note'), onAdd: item => onAdd(item) });
   toolsToggle.addEventListener('click', () => { state.toolsMode = state.toolsMode === 'mine' ? 'all' : 'mine'; render(); });
   toolsUndeclared.addEventListener('click', () => { state.showUndeclared = !state.showUndeclared; render(); });
   toolsUnsupported.addEventListener('click', () => { state.showUnsupported = !state.showUnsupported; render(); });
@@ -170,15 +193,27 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   function scopeEntries(view = state.view) {
     return visibleEntries(state.entries, view).filter(entry => frameworkShows(entry.authoringItem, view.family));
   }
-  // The Catalog tool filter decides content; supporting material and starting sets are left out of it (and of its
-  // counts). Supporting material shows, for every tool, only while Show supporting material is on, and starting sets
-  // only while Show starting sets as cards is on. `supporting` and `starting` count them in this scope either way.
+  // The Catalog tool filter decides content; supporting material, starting sets and hooks are left out of it (and of its
+  // counts). Supporting material shows, for every tool, only while Show supporting material is on; starting sets only
+  // while Show starting sets as cards is on; and hooks, filtered by the tool like other content, only while Show hooks
+  // as cards is on. `supporting`, `starting` and `hooks` count them in this scope either way.
   function catalogTool(view = state.view) {
-    const scoped = scopeEntries(view), isSupporting = entry => supporting.has(entry.entryId), isStarting = entry => starting.has(entry.entryId);
-    const content = catalogToolView(scoped.filter(entry => !isSupporting(entry) && !isStarting(entry)), { tool: view.target, mode: state.toolsMode, showUndeclared: state.showUndeclared, showUnsupported: state.showUnsupported });
-    const kept = new Set(content.entries);
-    return { ...content, supporting: scoped.filter(isSupporting).length, starting: scoped.filter(isStarting).length,
+    const scoped = scopeEntries(view), isSupporting = entry => supporting.has(entry.entryId), isStarting = entry => starting.has(entry.entryId), isHook = entry => hooks.has(entry.entryId);
+    const options = { tool: view.target, mode: state.toolsMode, showUndeclared: state.showUndeclared, showUnsupported: state.showUnsupported };
+    // Hooks have their own section in a framework view; with All families (under Advanced) they stay cards as before.
+    const apart = Boolean(view.family);
+    const content = catalogToolView(scoped.filter(entry => !isSupporting(entry) && !isStarting(entry) && !(apart && isHook(entry))), options);
+    const toolHooks = apart ? catalogToolView(scoped.filter(isHook), options).entries : [];
+    const kept = new Set([...content.entries, ...(state.showHooks ? toolHooks : [])]);
+    return { ...content, supporting: scoped.filter(isSupporting).length, starting: scoped.filter(isStarting).length, hooks: apart ? scoped.filter(isHook).length : 0,
+      // The hooks the Hooks section offers for the tool: counted with the framework's content, though not cards.
+      sectionHooks: state.showHooks ? [] : toolHooks,
       entries: scoped.filter(entry => kept.has(entry) || (state.showSupporting && isSupporting(entry)) || (state.showStartingSets && isStarting(entry))) };
+  }
+  // The open framework's hooks, whatever the search and kind: the Hooks section offers the ones for Your tool.
+  function frameworkHooks(view = state.view) {
+    if (!view.family) return [];
+    return scopeEntries({ ...view, query: '', kind: null, sourceType: null }).filter(entry => hooks.has(entry.entryId)).map(entry => entry.authoringItem);
   }
   // The open framework's starting sets, whatever the search and kind: the line above the cards offers the ones that fit.
   function frameworkSets(view = state.view) {
@@ -188,6 +223,12 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   // The Catalog tool filter first (Catalog names), then the header tools (Core names); neither is translated into the other.
   function browseEntries(view = state.view) {
     return filterByTools(catalogTool(view).entries, toolOptions());
+  }
+  // What the framework offers for the tool: its cards and the hooks in its Hooks section. The left panel and the kind
+  // pills count this, so a framework's hooks still count as content for the tool.
+  function offeredEntries(view = state.view) {
+    const { entries, sectionHooks } = catalogTool(view);
+    return filterByTools([...entries, ...sectionHooks], toolOptions());
   }
   function renderToolsBar() {
     const tool = state.view.target, view = catalogTool(), options = toolOptions();
@@ -213,6 +254,10 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     toolsStarting.textContent = `${state.showStartingSets ? 'Hide' : 'Show'} starting sets as cards (${view.starting})`;
     toolsStarting.setAttribute('aria-pressed', String(state.showStartingSets));
     toolsStarting.title = 'Whole sets, such as everything a framework has for one tool. The Starting sets line above the cards offers the ones that fit your tool.';
+    toolsHooks.hidden = !view.hooks;
+    toolsHooks.textContent = `${state.showHooks ? 'Hide' : 'Show'} hooks as cards (${view.hooks})`;
+    toolsHooks.setAttribute('aria-pressed', String(state.showHooks));
+    toolsHooks.title = 'Hooks run a command in your AI tool. The Hooks section above the cards offers the ones for your tool, with the command each runs.';
     const notice = state.toolsMode === 'mine' ? hiddenByCore : '';
     toolsUnmatched.textContent = notice; toolsUnmatched.hidden = !notice;
     yourTool.render(yourToolModel({ declared: declared(), tool, mode: state.toolsMode, coreIds: options.coreIds, coreLabels: options.labels,
@@ -236,6 +281,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       intent: authoring.intent,
       acceptedRoots: authoring.draft?.roots ?? authoring.intent?.roots ?? [],
       acceptedLabel: authoring.draft ? "In draft" : "Added",
+      neededBy,
       evidence: state.evidence,
       onReset: resetFilters,
       onChoose: async (item, entryId) => {
@@ -278,7 +324,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     const scoped = browseEntries();
     const count = status => scoped.filter(entry => capabilityFacts(entry.authoringItem, target.value).some(fact => fact.support === status)).length;
     counts.textContent = `${publishedClients(state.summary?.coreTargets)?.ids.length ?? 'Unknown'} Core clients are listed in setup; this catalog declares ${declared().length} tool names. Tool declarations do not establish installation. ${target.value || 'No Catalog tool chosen'} · ${scoped.length} items in family/search/source scope: ${count('supported')} with supported facts · ${count('unsupported')} with unsupported facts · ${count('unknown')} with unknown facts${target.value ? ` · ${count('not-declared')} not declared for ${target.value}` : ''}. Mixed items can count in more than one group.`;
-    const availableKinds = supportedEntries(browseEntries({ ...state.view, kind: null }), target.value, support.value);
+    const availableKinds = supportedEntries(offeredEntries({ ...state.view, kind: null }), target.value, support.value);
     const filteredCounts = inventoryCounts(availableKinds);
     provenance.render({
       summary: state.summary,
@@ -306,6 +352,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     cards.render(cardsView);
     startingSets.render({ sets: frameworkSets(), tool: state.view.target, items: authoring.catalog?.items ?? [], supporting,
       accepted: cardsView.acceptedRoots, acceptedLabel: cardsView.acceptedLabel });
+    hooksSection.render({ hooks: frameworkHooks(), tool: state.view.target, accepted: cardsView.acceptedRoots, acceptedLabel: cardsView.acceptedLabel, neededBy });
     // Project files are offered whatever the filters and the tool: they apply to every tool.
     const files = projectFileEntries(state.entries);
     projectBasics.render({ ...cardsView, entries: files, total: files.length, noun: 'project files' });
@@ -366,6 +413,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
         state.entries = projectItems(authoring.catalog.items);
         supporting = supportingMaterial(authoring.catalog.items);
         starting = startingSetIds(authoring.catalog.items);
+        hooks = hookEntryIds(authoring.catalog.items, supporting);
         if (state.selectedId && !selectedEntry()) { state.selectedId = null; onSelectEntry(null); }
         const selectedFamily = state.view.family, selectedTarget = state.view.target;
         family.replaceChildren(new Option('All families', ''));

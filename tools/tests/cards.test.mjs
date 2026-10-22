@@ -120,6 +120,19 @@ test("a card's Add reads Adding… while it adds, and a chosen item's card reads
   assert.ok(added); assert.equal(added.disabled, true); assert.equal(added.attributes['aria-label'], 'Added fixture');
 });
 
+test("an item already in the setup as a needed item says who needs it and offers no second Add", t => {
+  const { node } = renderCard(t, 'Described', undefined, { acceptedRoots: [{ itemId: 'set.complete', releaseSha256: 'a'.repeat(64) }],
+    neededBy: item => item.id === 'fixture' ? 'In your setup (needed by Whole set)' : '' });
+  const shown = descendants(node).find(node => node.textContent === 'In your setup (needed by Whole set)');
+  assert.ok(shown, 'the card names the chosen set that needs it');
+  assert.equal(shown.disabled, true);
+  assert.equal(shown.attributes['aria-label'], 'In your setup (needed by Whole set): fixture');
+  assert.equal(descendants(node).some(node => node.textContent === 'Add'), false);
+  // Chosen directly wins: it reads Added.
+  const chosen = renderCard(t, 'Described', undefined, { acceptedRoots: [{ itemId: 'fixture', releaseSha256: 'a'.repeat(64) }], neededBy: () => 'In your setup (needed by Whole set)' }).node;
+  assert.ok(descendants(chosen).some(node => node.textContent === 'Added'));
+});
+
 test("returning to the catalog focuses the chosen card when the grid shows it, and reports when it does not", t => {
   const previous = Object.getOwnPropertyDescriptor(globalThis, "document");
   let focused = null;

@@ -755,6 +755,24 @@ needs typed (a hook's command). One confirmation lists the counts, and its Undo 
 starting sets as cards (N)* in the tool line under Advanced shows them in the grid. Changes waiting to download are
 measured against the bytes last downloaded or opened, so an Add taken back by Undo is no change.
 
+Hooks are not cards in a framework view (#135). A *Hooks* section below Starting sets offers the framework's hook items
+that are not supporting material and that the Catalog marks `supported` for Your tool; with a tool that has none there
+it does not appear, and with no tool chosen it asks for one (`src/catalog/hooks.js`). Each row shows the hook's name and
+Catalog description, the command it runs, and Add. The Catalog publishes no command for today's hooks
+(samartomar/aih-catalog#131, samartomar/aih-extensions#16): each declares a required string input for a command the
+person reviews, so the row says so and asks for it through the same configuration editor Your setup uses; a command the
+Catalog declared (a default for that input) would be shown exactly, and none is invented. No event field is published
+on an item, so the row says the event is not published. In Your setup, before Install, each chosen hook shows its command
+again with a note that the tool runs it on the hook's event. The left panel and kind pills still count the hooks for Your
+tool; *Show hooks as cards (N)* in the tool line under Advanced brings the cards back, and with All families they stay
+cards.
+
+Content already in the setup because a chosen item or starting set needs it offers no second Add: its card (and Details)
+reads *In your setup (needed by <chosen item or set>)* with the button disabled. The relation is only what Catalog
+resolved, read from each compiled selection's `requires` in the policy bytes (matched to items through the saved
+intent's pins, as the installed list does) or, with a draft open, from each recorded choice's resolved dependencies
+(`src/app/setup-needs.js`).
+
 ### Recurring friction from stored Core results
 
 Rules 1.5.0 added one rule, `friction.recurrence`, and name what the check could not know; 1.6.0 also reads the readiness journal and the Core targets a selected item's

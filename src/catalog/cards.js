@@ -127,13 +127,15 @@ function card(entry, selectedId, onSelect, model) {
     // Add puts the item and the items it needs into the setup in one step; refusals and anything to decide open the review instead.
     const chosenLabel = model.acceptedLabel ?? 'Added';
     const chosen = (model.acceptedRoots ?? model.intent?.roots ?? []).some(root => root.itemId === entry.authoringItem.id && root.releaseSha256 === entry.authoringItem.root.releaseSha256);
-    const label = chosen ? chosenLabel : 'Add';
-    button.className = `px-2 py-1 rounded border text-[10px] font-medium ${chosen ? 'bg-primary-container text-on-primary border-primary' : 'border-wb-control-border text-on-surface-variant hover:text-primary hover:border-primary'}`;
+    // Already in the setup because a chosen item or set needs it (#134): no second Add, which would add it twice.
+    const needed = chosen ? '' : model.neededBy?.(entry.authoringItem) ?? '';
+    const label = chosen ? chosenLabel : needed || 'Add';
+    button.className = `px-2 py-1 rounded border text-[10px] font-medium ${chosen ? 'bg-primary-container text-on-primary border-primary' : needed ? 'border-wb-border text-on-surface-variant cursor-not-allowed text-left whitespace-normal max-w-[14rem]' : 'border-wb-control-border text-on-surface-variant hover:text-primary hover:border-primary'}`;
     button.replaceChildren(); button.textContent = label;
-    button.disabled = Boolean(chosen);
-    button.setAttribute('aria-label', `${label} ${entry.authoringItem.id}`);
+    button.disabled = Boolean(chosen || needed);
+    button.setAttribute('aria-label', needed ? `${needed}: ${entry.authoringItem.id}` : `${label} ${entry.authoringItem.id}`);
     button.removeAttribute('aria-disabled');
-    button.title = chosen ? 'In your setup with the items it needs.' : 'Add this item and the items it needs to your setup.';
+    button.title = chosen ? 'In your setup with the items it needs.' : needed ? 'Already in your setup as an item something you chose needs, so it is not added again.' : 'Add this item and the items it needs to your setup.';
     button.addEventListener('click', async event => {
       event.stopPropagation();
       button.disabled = true; button.textContent = 'Adding…'; button.setAttribute('aria-busy', 'true');
