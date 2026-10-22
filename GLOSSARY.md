@@ -12,6 +12,22 @@ _Avoid_: client (on default screens), harness, native client
 The tool name the Catalog declares for content, such as claude-code; the catalog shows content by this name.
 _Avoid_: target, client id
 
+**Framework**:
+A named collection of content released together, such as AIH-Extensions, ECC, Anthropic or Superpowers; the left panel lists the frameworks and one is always open.
+_Avoid_: family (on default screens), release, catalog, category
+
+**Project basics**:
+What applies to the project whichever framework is chosen: tool support, project files and the workspace. It has its own place and is never part of a framework.
+_Avoid_: shared selection, cross-cutting, adapter, harness
+
+**Project files**:
+Files in the project folder that AI tools read to learn about the project, such as AGENTS.md or CLAUDE.md.
+_Avoid_: project context, pointer, entry pointer, instructions file
+
+**Your sources**:
+Content a person or organization brings from outside the installed frameworks, such as a folder on this machine; it sits apart from the frameworks.
+_Avoid_: personal content, bring your own, BYO, independent, custom catalog
+
 **Content**:
 A Catalog item a person can choose, such as a skill or a command.
 _Avoid_: recipe, selection, item (on default screens)

@@ -20,6 +20,9 @@ const NOT_FRAMEWORKS = new Map([["Catalog", "Other Catalog content"], ["Independ
 /** Said wherever a framework name is shown, until the Catalog publishes the names. */
 export const WORKBENCH_NAMED = "Name supplied by the Workbench; the Catalog does not publish framework names yet.";
 
+/** Whether a family is a framework: a family release, not the default release, an independent inventory or personal content. */
+export const isFramework = (family) => Boolean(family) && !NOT_FRAMEWORKS.has(family);
+
 /** The words shown for a family, wherever it is shown. */
 export function familyLabel(family) {
   return FRAMEWORK_NAMES.get(family) ?? NOT_FRAMEWORKS.get(family) ?? family;

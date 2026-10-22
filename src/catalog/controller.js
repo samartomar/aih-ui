@@ -23,14 +23,17 @@ import { text } from "../app/dom.js";
 import { catalogToolView, filterByTools, toolsNotice } from "./tool-match.js";
 import { defaultCatalogTool, saveCatalogTool, savedCatalogTool } from "./catalog-tool.js";
 import { createYourTool, yourToolModel } from "./your-tool.js";
+import { createProjectBasics, frameworkShows, projectFileEntries } from "./project-basics.js";
 
 /**
  * @param onSelectEntry    called with the entry when the selection changes
  * @param onReselectEntry  called when the selected card is activated again
  * @param onSummary        called with the preview summary once it has loaded
  * @param onAdd            called with the catalog item when its card's Add is used; resolves when the Add has settled
+ * @param onFramework      called when a framework is chosen, so its cards show (in place of Project basics)
+ * @param onOpenWorkspace  called when Project basics opens the workspace
  */
-export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () => {}, onSummary, subscribeSecurity, onAdd = async () => {} }) {
+export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () => {}, onSummary, subscribeSecurity, onAdd = async () => {}, onFramework = () => {}, onOpenWorkspace = () => {} }) {
   const elements = catalogElements();
   const state = {
     entries: [],
@@ -100,7 +103,13 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   };
   const chooseFamily = (value) => { rememberFramework(value); changeView(familyView(value)); };
   family.addEventListener('change', () => chooseFamily(family.value));
-  const frameworkRail = createFrameworkRail({ list: document.getElementById('framework-list'), onSelect: chooseFamily });
+  const frameworkRail = createFrameworkRail({ list: document.getElementById('framework-list'), onSelect: (value) => { chooseFamily(value); onFramework(value); } });
+  // Project basics (#123) shows in place of the cards; while it shows, no framework is the selected one.
+  const projectBasics = createProjectBasics({ elements: elements.projectBasics, onSelect: (entryId) => select(entryId), onOpenWorkspace });
+  const basicsOpen = () => !elements.projectBasics.section.hidden;
+  document.addEventListener('aih:view-changed', () => { if (restoredView) renderFrameworks(); });
+  const renderFrameworks = () => frameworkRail.render({ rows: frameworkRows(authoring.catalog?.items ?? []), selected: basicsOpen() ? null : state.view.family });
+  const focusCard = (entryId) => basicsOpen() ? projectBasics.focus(entryId) : cards.focus(entryId);
   // The Catalog tool name is the person's own choice; it is remembered for the next visit and shared with the page.
   target.addEventListener('change', () => { saveCatalogTool(target.value); changeView({ target: target.value }); });
   support.addEventListener('change', () => changeView({ support: support.value }));
@@ -126,9 +135,9 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   const coreTools = () => publishedClients(state.summary?.coreTargets) ?? { ids: [], labels: {} };
   const toolOptions = () => ({ mode: state.toolsMode, coreIds: coreTools().ids, selected: state.selectedTools, labels: coreTools().labels });
 
-  // Search, kind, source and family, before any tool filter.
+  // Search, kind, source and family, before any tool filter. A framework never shows tool adapters or project files.
   function scopeEntries(view = state.view) {
-    return visibleEntries(state.entries, view).filter(entry => !view.family || entry.authoringItem.family === view.family);
+    return visibleEntries(state.entries, view).filter(entry => frameworkShows(entry.authoringItem, view.family));
   }
   function catalogTool(view = state.view) {
     return catalogToolView(scopeEntries(view), { tool: view.target, mode: state.toolsMode, showUndeclared: state.showUndeclared });
@@ -175,7 +184,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
         state.chosenId = entryId ?? null;
         await onAdd(item);
         // A clean Add rebuilds the grid without opening the review; keyboard focus returns to the card.
-        if (document.activeElement === document.body || !document.activeElement?.isConnected) cards.focus(state.chosenId);
+        if (document.activeElement === document.body || !document.activeElement?.isConnected) focusCard(state.chosenId);
       },
     };
   }
@@ -225,7 +234,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     document.getElementById('catalog-kinds-summary').textContent = `Kinds · ${state.view.kind ?? 'All kinds'} · ${metricScope.length} items`;
     metrics.render({ kindCounts: new Map([...state.counts.kindCounts.keys()].map(kind => [kind, filteredCounts.kindCounts.get(kind) ?? 0])), total: metricScope.length, activeKind: state.view.kind });
     navigation.render(navigationModel());
-    frameworkRail.render({ rows: frameworkRows(authoring.catalog?.items ?? []), selected: state.view.family });
+    renderFrameworks();
     toolbar.render({
       // Keep zero-result kinds visible so an active kind can still be cleared.
       kindCounts: new Map([...state.counts.kindCounts.keys()].map((kind) => [kind, filteredCounts.kindCounts.get(kind) ?? 0])),
@@ -237,6 +246,9 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     elements.cards.cardsGrid.setAttribute('aria-busy', 'false');
     renderToolsBar();
     cards.render(cardsView);
+    // Project files are offered whatever the filters and the tool: they apply to every tool.
+    const files = projectFileEntries(state.entries);
+    projectBasics.render({ ...cardsView, entries: files, total: files.length, noun: 'project files' });
     details.render(detailsModel(selectedEntry()));
   }
 
@@ -277,6 +289,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     // The two cards concerned are updated in place. The grid is not rebuilt,
     // so the card the operator activated keeps keyboard focus.
     cards.setSelected(previous, entryId);
+    projectBasics.setSelected(previous, entryId);
     details.render(detailsModel(entry));
     onSelectEntry(entry);
   }
@@ -335,7 +348,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
 
     /** Back to the catalog: focus the card just chosen (or the selected one) if shown, otherwise the search box. */
     focusCatalog() {
-      if (!cards.focus(state.chosenId ?? state.selectedId)) elements.toolbar.search.focus();
+      if (!focusCard(state.chosenId ?? state.selectedId)) (basicsOpen() ? document.getElementById('project-basics-title') : elements.toolbar.search).focus();
     },
 
     /** The organization name the user saved, or null. Re-renders the rail. */

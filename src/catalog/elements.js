@@ -19,6 +19,8 @@ export function catalogElements() {
     "statement-count", "security-statements",
     "your-tool-trigger", "your-tool-value", "your-tool-core", "your-tool-pop", "your-tool-list",
     "your-tool-undeclared", "your-tool-note", "your-tool-status",
+    "project-basics", "project-files-grid", "project-files-context", "project-files-count", "project-files-caption",
+    "project-files-empty", "project-basics-open-workspace",
   ];
   const found = collectIds(ids);
   return {
@@ -45,6 +47,15 @@ export function catalogElements() {
       visibleCount: found.visibleCount,
       visibleCaption: found.visibleCaption,
       categoryContext: found.categoryContext,
+    },
+    projectBasics: {
+      section: found.projectBasics,
+      grid: found.projectFilesGrid,
+      context: found.projectFilesContext,
+      count: found.projectFilesCount,
+      caption: found.projectFilesCaption,
+      empty: found.projectFilesEmpty,
+      openWorkspace: found.projectBasicsOpenWorkspace,
     },
     yourTool: {
       trigger: found.yourToolTrigger,

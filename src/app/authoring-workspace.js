@@ -583,5 +583,13 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     improvements.setTargets(coreTargets); organizationAuthor.setTargets(coreTargets);
     const published = publishedClients(coreTargets); chosenTools.coreIds = published?.ids ?? []; chosenTools.labels = published?.labels ?? {}; installPanel.render();
   }
-  return { present, add, setSettings: setRole, select(entry) { selectedItem = entry?.authoringItem; render(); }, setTargets };
+  // Project basics reaches the same workspace view in its Advanced home: Your setup opens with Advanced and the
+  // workspace open, and focus moves to it.
+  function openWorkspace() {
+    const disclosure = workspace.node.parentElement;
+    reviewPanel.open(); advanced.open = true; disclosure.open = true;
+    const summary = disclosure.querySelector(':scope > summary');
+    summary.scrollIntoView({ block: 'start' }); summary.focus({ preventScroll: true });
+  }
+  return { present, add, openWorkspace, setSettings: setRole, select(entry) { selectedItem = entry?.authoringItem; render(); }, setTargets };
 }
