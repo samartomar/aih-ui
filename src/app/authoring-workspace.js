@@ -122,7 +122,7 @@ export function createAuthoringWorkspace(client) {
   const proposed = el('div', 'space-y-1'); proposed.id = 'policy-proposed-choices'; proposal.prepend(proposed);
   const reviewPanel = createPolicyReview({ client, accept, proposed, status });
   const installPanel = createInstallPanel({ client, el, button, onInstalled: () => void installedPanel.refresh() });
-  const installedPanel = createInstalledPanel({ client, el, button, onRemoved: () => installPanel.recheck() });
+  const installedPanel = createInstalledPanel({ client, el, button, onRemoved: () => installPanel.recheck(), onInventory: view => installPanel.setManaged(view?.setupInstalled) });
   document.addEventListener('aih:policy-review-open', () => void installedPanel.refresh());
   review.after(button('Open policy choices and review', () => reviewPanel.open(), true));
   const pageContext = el('p', 'text-on-surface-variant'); choices.after(pageContext);
