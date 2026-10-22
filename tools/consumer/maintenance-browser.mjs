@@ -12,6 +12,7 @@ import { openDraft } from './headless.mjs';
 import { intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { installedFamilies } from './installed-families.mjs';
+import { closePolicyDrawer, openPolicyDrawer, openPolicyFileActions, openPolicySection } from './policy-drawer.mjs';
 
 const NOTE = 'consumer-proof.review-note', PERSONAL = 'personal.skill.example', OPENED = 'Unresolved draft opened', REVIEW = 'maintenance-review';
 const encode = value => new TextEncoder().encode(value), decode = bytes => new TextDecoder().decode(bytes);
@@ -114,9 +115,10 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
         return JSON.stringify(policyOf(input).metadata?.['aih.workbench']?.roots) === JSON.stringify(policyOf(original).metadata?.['aih.workbench']?.roots);
       } catch { return false; }
     });
-    await page.locator('#nav-policy').click(); await page.locator('#policy-open').setInputFiles(path);
+    await page.locator('#nav-policy').click(); await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(path);
     await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await page.locator('#policy-draft-status').filter({ hasText: heading }).waitFor();
+    await openPolicySection(page, 'Available updates');
     await checked;
     await page.locator('#policy-updates-check:not([disabled])').waitFor();
     await waitSettled(page, null);
@@ -132,12 +134,12 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
   const draftRevision = async page => Number(/Draft revision (\d+)/.exec(await page.locator('#policy-draft-note').textContent())?.[1]);
   const choose = async (page, family, id) => {
     await page.locator('#nav-sources').click(); await page.locator('#browse-support').selectOption('all'); await page.locator('#browse-family').selectOption(family);
-    await page.getByRole('button', { name: `Choose ${id}`, exact: true }).click();
+    await closePolicyDrawer(page); await page.getByRole('button', { name: `Choose ${id}`, exact: true }).click();
     await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click();
   };
   // The evidence panel is the existing review flow's own: open it, then supply the original evidence bytes.
   const supplyEvidence = async page => {
-    await page.locator('#nav-policy').click();
+    await page.locator('#nav-policy').click(); await openPolicyDrawer(page);
     await page.locator('summary').filter({ hasText: 'Evidence review and reconsideration' }).click();
     await page.getByLabel('Review evidence files', { exact: true }).setInputFiles(evidencePath);
     await page.getByText('Original evidence bytes loaded').waitFor();
@@ -372,6 +374,8 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     await resolvedAuthoring.getByLabel('Reviewer', { exact: true }).fill('fixture-reviewer');
     await resolvedAuthoring.getByLabel('Review disposition', { exact: true }).selectOption('false-alarm');
     await resolvedAuthoring.getByLabel('Review reason', { exact: true }).fill('Fixture note intentionally has no license declaration.');
+    // A person chooses the checked finding they are reviewing; the first is the one bound to the fixture note.
+    await resolvedAuthoring.getByLabel('Checked finding', { exact: true }).selectOption('0');
     await resolvedAuthoring.getByRole('button', { name: 'Propose human review', exact: true }).click();
     await resolvedAuthoring.locator('#policy-accept:not([disabled])').waitFor(); await resolvedAuthoring.locator('#policy-accept').click();
     const resolvedPath = join(output, 'policy.resolved.downloaded.json');
@@ -392,9 +396,10 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     const resolvedPage = await openPage();
     operations = []; categoriesSent = []; checkInputs = [];
     await supplyEvidence(resolvedPage);
-    await resolvedPage.locator('#policy-open').setInputFiles(resolvedPath);
+    await openPolicyFileActions(resolvedPage); await resolvedPage.locator('#policy-open').setInputFiles(resolvedPath);
     await resolvedPage.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await resolvedPage.locator('#policy-status').filter({ hasText: 'Saved choices recovered' }).waitFor();
+    await openPolicySection(resolvedPage, 'Available updates');
     await waitSettled(resolvedPage, null);
     assert.equal(await resolvedPage.locator('#policy-draft').isHidden(), true, 'A resolved policy reopens as an ordinary policy, not a draft.');
     assert.equal(await resolvedPage.locator('#policy-updates').isVisible(), true);

@@ -11,6 +11,7 @@ import { readAuthoring } from './headless.mjs';
 import { intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { installedFamilies } from './installed-families.mjs';
+import { closePolicyDrawer, openPolicyDrawer, openPolicyFileActions } from './policy-drawer.mjs';
 
 const NOTE = 'consumer-proof.review-note', ME = 'fixture-me', TEAM = 'fixture-team', SENTINEL = 'settings-only-sentinel';
 const encode = value => new TextEncoder().encode(value), decode = bytes => new TextDecoder().decode(bytes);
@@ -57,11 +58,11 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
   const download = async (page, trigger, path) => { const event = page.waitForEvent('download'); await trigger(); await (await event).saveAs(path); return new Uint8Array(await readFile(path)); };
   const choose = async (page, family, id) => {
     await page.locator('#nav-sources').click(); await page.locator('#browse-support').selectOption('all'); await page.locator('#browse-family').selectOption(family);
-    await page.getByRole('button', { name: `Choose ${id}`, exact: true }).click();
+    await closePolicyDrawer(page); await page.getByRole('button', { name: `Choose ${id}`, exact: true }).click();
     await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click();
   };
   const openPanel = async page => {
-    await page.locator('#nav-policy').click();
+    await page.locator('#nav-policy').click(); await openPolicyDrawer(page);
     const summary = page.locator('summary').filter({ hasText: 'Evidence review and reconsideration' });
     if (!await summary.evaluate(node => node.parentElement.open)) await summary.click();
   };
@@ -80,12 +81,14 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
     await page.getByLabel('Reviewer', { exact: true }).fill(actor);
     await page.getByLabel('Review disposition', { exact: true }).selectOption('false-alarm');
     await page.getByLabel('Review reason', { exact: true }).fill('Fixture note intentionally has no license declaration.');
+    // A person chooses the checked finding they are reviewing; the first is the one bound to the fixture note.
+    await page.getByLabel('Checked finding', { exact: true }).selectOption('0');
     await page.getByRole('button', { name: 'Propose human review', exact: true }).click();
     await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click();
   };
   const reopen = async (page, path) => {
     await supplyEvidence(page);
-    await page.locator('#policy-open').setInputFiles(path);
+    await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(path);
     await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await page.locator('#policy-status').filter({ hasText: 'Saved choices recovered' }).waitFor();
     await page.locator('#review-judgments li[data-record-id]').first().waitFor();
@@ -97,9 +100,15 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
   };
   const origins = async page => Object.fromEntries(await page.locator('#review-judgments li[data-record-id]').evaluateAll(rows => rows.map(row => [row.dataset.recordId, row.dataset.origin])));
   const summaryOf = page => page.locator('#review-judgments-summary').textContent();
+  // The header's workspace trigger opens its actions menu; Workspace settings opens the saved setup.
+  const openWorkspaceSettings = async page => {
+    await page.locator('#org-modal-trigger').click();
+    await page.locator('#workspace-actions').getByRole('button', { name: 'Workspace settings', exact: true }).click();
+    await page.locator('#org-modal-overlay').waitFor();
+  };
   // Edit setup from the header, move to the review step and set the optional identity (empty clears it).
   const editSetup = async (page, reviewer, shot) => {
-    await page.locator('#org-modal-trigger').click(); await page.locator('#update-org-setup-btn').click();
+    await openWorkspaceSettings(page); await page.locator('#update-org-setup-btn').click();
     await page.locator('#setup-dialog').waitFor({ state: 'visible' });
     const id = page.locator('#setup-field-reviewer-id');
     await page.locator('#setup-next:not([disabled])').waitFor();
@@ -148,7 +157,7 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
     assert.deepEqual(await setupReviewer(author), { kind: 'individual', id: ME });
     assert.equal(await author.getByLabel('Your reviewer identity', { exact: true }).inputValue(), ME);
     assert.match(await author.getByRole('status').filter({ hasText: 'setup preferences' }).first().textContent(), /individual fixture-me \(from your setup preferences\)/);
-    await author.locator('#org-modal-trigger').click();
+    await openWorkspaceSettings(author);
     assert.match(await author.locator('#org-setup-summary').textContent(), /Reviewing as\s*individual fixture-me/);
     await author.screenshot({ path: join(output, '03-setup-saved.png'), fullPage: true });
     await author.locator('#close-org-modal-btn').click();
