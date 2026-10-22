@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { reportPanels, reportText } from '../../src/app/claims-view.js';
+import { guidanceDestination, reportPanels, reportText } from '../../src/app/claims-view.js';
+
+test('guidance destinations preserve the target and leave unsupported routes without a misleading action', () => {
+  assert.deepEqual(guidanceDestination({ kind: 'guidance', id: 'npm/tls/node' }), { target: 'npm', href: '/readiness.html?target=npm' });
+  for (const route of [null, { kind: 'repair', id: 'npm/tls' }, { kind: 'guidance', id: 'usage-unavailable' }, { kind: 'guidance', id: '../npm' }, { kind: 'guidance', id: '' }])
+    assert.equal(guidanceDestination(route), null);
+});
 
 // Hand-built claims projections (shape: claims-projection 1.0.0). The repository has no
 // @aihq package installed, so the adapter-to-Core path is covered by tools/consumer/claims.test.mjs.
@@ -165,7 +171,8 @@ test('only claims of the Workbench readiness producer have their claim id read a
   const foreign = claim('rec-9/check/npm/version', { producer: { id: 'other/producer', version: '1.0.0' }, measure: 'configured-context',
     kind: 'estimated', value: { amount: 3, unit: 'tokens' }, subject: { kind: 'instruction-set', id: 'p' } });
   const items = reportPanels(projection({ claims: [own, foreign] })).claims.items;
-  assert.deepEqual(items.map(entry => entry.text), ['npm/version on npm']);
+  assert.deepEqual(items.map(entry => entry.group), ['npm/version on npm']);
+  assert.deepEqual(items.map(entry => entry.text), ['check: passed']);
   const foreignText = reportPanels(projection({ claims: [foreign], calculations: [score({ failed: [ref('rec-9/check/npm/version')] })] }));
   assert.match(foreignText.score.items[0].text, /^Failed: configured-context on p$/);
 });
@@ -189,7 +196,7 @@ test('a missing or empty projection renders honest placeholders', () => {
   for (const value of [null, undefined, {}]) {
     const panels = reportPanels(value);
     assert.equal(panels.score.value, 'Unavailable');
-    assert.deepEqual(Object.keys(panels), ['score', 'repairs', 'actions', 'claims', 'context', 'observations']);
+    assert.deepEqual(Object.keys(panels), ['actions', 'score', 'repairs', 'claims', 'context', 'observations']);
     assert.equal(typeof reportText(value), 'string');
   }
 });
