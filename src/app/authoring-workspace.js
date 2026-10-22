@@ -12,6 +12,7 @@ import { isJourneyEnvelope, importLimitError } from './authoring-client.js';
 import { dependencyRows } from './dependency-set.js';
 import { createInstallPanel } from './install-panel.js';
 import { createInstalledPanel } from './installed-panel.js';
+import { createProjectFolderRow } from './project-folder.js';
 
 const buttonClass = 'px-3 py-1.5 rounded bg-surface-container text-on-surface border border-wb-border hover:bg-surface-container-high';
 function button(label, action, primary = false) {
@@ -123,7 +124,12 @@ export function createAuthoringWorkspace(client) {
   const reviewPanel = createPolicyReview({ client, accept, proposed, status });
   const installPanel = createInstallPanel({ client, el, button, onInstalled: () => void installedPanel.refresh() });
   const installedPanel = createInstalledPanel({ client, el, button, onRemoved: () => installPanel.recheck(), onInventory: view => installPanel.setManaged(view?.setupInstalled) });
-  document.addEventListener('aih:policy-review-open', () => void installedPanel.refresh());
+  // Changing the folder discards what this page prepared for the old one, then checks the new one.
+  const folderRow = createProjectFolderRow({ el, button, busy: () => installPanel.busy || installedPanel.busy, onChanged: async () => {
+    client.discardHostWork(); await client.loadCatalog(); installPanel.recheck(); await installedPanel.reset();
+  } });
+  void folderRow.refresh();
+  document.addEventListener('aih:policy-review-open', () => { void folderRow.refresh(); void installedPanel.refresh(); });
   review.after(button('Open policy choices and review', () => reviewPanel.open(), true));
   const pageContext = el('p', 'text-on-surface-variant'); choices.after(pageContext);
   const canReplace = () => !(client.dirty || client.candidate) || window.confirm('This policy has accepted changes that have not been downloaded or a proposal awaiting acceptance. Replace them with another artifact?');
@@ -517,7 +523,7 @@ export function createAuthoringWorkspace(client) {
   tools.addEventListener('toggle', () => { if (tools.open) syncSource(); });
   const currentChoices = el('section', 'space-y-2'); currentChoices.append(el('h3', 'font-medium', 'Accepted choices'), roots, draftSection);
   const fileActions = el('details', 'policy-advanced rounded border border-wb-border p-3'); fileActions.id = 'policy-file-actions'; fileActions.append(el('summary', 'cursor-pointer font-medium', 'File actions: new, open and validate'), controls);
-  reviewPanel.node.append(installPanel.node, installedPanel.node, currentChoices, save, fileActions);
+  reviewPanel.node.append(folderRow.node, installPanel.node, installedPanel.node, currentChoices, save, fileActions);
   for (const view of [updates, improvements, trials, workspace]) reviewPanel.node.append(view.node.parentElement);
   reviewPanel.node.append(organizationAuthor.node, tools);
   organizationAuthor.node.hidden = true;
