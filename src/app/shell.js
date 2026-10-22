@@ -17,6 +17,9 @@ export function createShell(elements) {
   let currentView = "catalog";
   let currentTab = "details";
   let inspectorReturnFocus = null;
+  // True while the navigation is folded only because the window was phone-width; a wider window brings it back.
+  // A navigation the person folded with the toggle stays folded.
+  let navFoldedForWidth = false;
   const overlayMedia = window.matchMedia('(max-width: 1100px)');
   const background = [elements.catalogWorkspace, elements.navRail, elements.catalogKindsDisclosure, document.querySelector("body > header"), document.querySelector("body > header").nextElementSibling];
   elements.catalogKindsDisclosure.open = window.innerWidth > 760;
@@ -58,7 +61,15 @@ export function createShell(elements) {
     notifySecurity();
   }
 
+  function syncNavToggle() {
+    const open = !elements.navRail.classList.contains("w-0");
+    elements.toggleNavBtn.setAttribute("aria-controls", elements.navRail.id || "nav-rail");
+    elements.toggleNavBtn.setAttribute("aria-expanded", String(open));
+    elements.toggleNavBtn.title = open ? "Hide navigation" : "Show navigation";
+  }
+
   function toggleNav() {
+    navFoldedForWidth = false;
     if (currentView === "catalog" && window.innerWidth <= 760 && elements.navRail.classList.contains("w-0") && !elements.inspectorRail.classList.contains("w-0")) {
       toggleInspector();
     }
@@ -67,6 +78,12 @@ export function createShell(elements) {
     elements.navRail.classList.toggle("border-r-0", collapsed);
     elements.toggleNavBtn.classList.toggle("text-primary", !collapsed);
     elements.toggleNavBtn.classList.toggle("text-on-surface-variant", collapsed);
+    syncNavToggle();
+  }
+  // The page folds the navigation on a phone-width window; this records that the fold was the page's, not the person's.
+  function foldNavForWidth() {
+    if (elements.navRail.classList.contains("w-0")) return;
+    toggleNav(); navFoldedForWidth = true;
   }
 
   function setInspectorOpen(open) {
@@ -96,9 +113,7 @@ export function createShell(elements) {
 
   function toggleInspector() {
     if (!hasInspectorSelection || currentView !== "catalog") return;
-    if (window.innerWidth <= 760 && elements.inspectorRail.classList.contains("w-0") && !elements.navRail.classList.contains("w-0")) {
-      toggleNav();
-    }
+    if (window.innerWidth <= 760 && elements.inspectorRail.classList.contains("w-0")) foldNavForWidth();
     setInspectorOpen(elements.inspectorRail.classList.contains("w-0"));
   }
 
@@ -135,7 +150,7 @@ export function createShell(elements) {
     } else {
       setInspectorOpen(!elements.inspectorRail.classList.contains("w-0") && window.innerWidth > 1100);
     }
-    if (window.innerWidth <= 760 && !elements.navRail.classList.contains("w-0")) toggleNav();
+    if (window.innerWidth <= 760) foldNavForWidth();
     notifySecurity();
     if (policy) elements.policyWorkspaceTitle.focus();
     else elements.catalogWorkspace.querySelector("h1")?.focus();
@@ -155,7 +170,11 @@ export function createShell(elements) {
   elements.navPolicy.addEventListener("click", () => setView("policy"));
   elements.navScanReview.addEventListener("click", () => setView("review"));
   document.addEventListener('aih:policy-review-open', () => setInspectorOpen(false));
-  window.addEventListener('hashchange', () => setView(['policy', 'review'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'catalog', false));
+  // A view this page already switched to (a click updates the address too) is not switched again.
+  window.addEventListener('hashchange', () => {
+    const view = ['policy', 'review'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'catalog';
+    if (view !== currentView) setView(view, false);
+  });
   if (location.hash) setView(['policy', 'review'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'catalog', false);
   document.addEventListener('keydown', event => {
     if (elements.inspectorRail.classList.contains('w-0') || currentView !== 'catalog' || document.querySelector('dialog[open]')) return;
@@ -172,7 +191,8 @@ export function createShell(elements) {
     elements.catalogKindsDisclosure.open = !narrowNav.matches;
     contextDisclosure.open = !narrowNav.matches;
     if (narrowInspector.matches && !elements.inspectorRail.classList.contains("w-0")) toggleInspector();
-    if (narrowNav.matches && !elements.navRail.classList.contains("w-0")) toggleNav();
+    if (narrowNav.matches) foldNavForWidth();
+    else if (navFoldedForWidth && elements.navRail.classList.contains("w-0")) toggleNav();
   }
   narrowInspector.addEventListener("change", fitRails);
   narrowNav.addEventListener("change", fitRails);
@@ -201,7 +221,11 @@ export function createShell(elements) {
     if (link.getAttribute("aria-disabled") === "true") link.tabIndex = -1;
   }
 
+  syncNavToggle();
+
   return {
+    /** Shows Sources & Catalogs if another view is showing; on the catalog already, nothing moves. */
+    showCatalog() { if (currentView !== "catalog") setView("catalog"); },
     subscribeSecurity(listener) { securityListeners.add(listener); listener(securityVisible()); return () => securityListeners.delete(listener); },
     /** Selection availability comes from Catalog; an empty rail cannot open. */
     setInspectorSelection(selected) {

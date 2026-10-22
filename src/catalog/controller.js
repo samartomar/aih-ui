@@ -34,6 +34,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     counts: inventoryCounts([]),
     view: emptyView(),
     selectedId: null,
+    // The card whose own Choose button was used last; Back to catalog returns to it (else to the selected card).
+    chosenId: null,
     // entryId -> { state, scanId } from the host's read of the supplied Scan evidence; empty means not supplied.
     evidence: new Map(),
     // The organization's own name, when the user has saved one. It labels the
@@ -128,7 +130,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       acceptedLabel: authoring.draft ? "In draft" : "In policy",
       evidence: state.evidence,
       onReset: resetFilters,
-      onChoose: async item => {
+      onChoose: async (item, entryId) => {
+        state.chosenId = entryId ?? null;
         try { onProposal(await authoring.propose({ type: 'select', root: item.root })); }
         catch (error) { onProposal({ status: 'refused', diagnostics: [{ message: error.message }] }); }
       },
@@ -226,6 +229,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     }
     const previous = state.selectedId;
     state.selectedId = entryId;
+    state.chosenId = null;
     const entry = selectedEntry();
     // The two cards concerned are updated in place. The grid is not rebuilt,
     // so the card the operator activated keeps keyboard focus.
@@ -275,6 +279,11 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     setSelectedTools(clients) {
       state.selectedTools = [...(clients ?? [])];
       if (restoredView) render();
+    },
+
+    /** Back to the catalog: focus the card just chosen (or the selected one) if shown, otherwise the search box. */
+    focusCatalog() {
+      if (!cards.focus(state.chosenId ?? state.selectedId)) elements.toolbar.search.focus();
     },
 
     /** The organization name the user saved, or null. Re-renders the rail. */

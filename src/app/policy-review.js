@@ -1,21 +1,31 @@
 import { el } from './dom.js';
 import { artifactDiff, readArtifact } from './proposal-diff.js';
+import { setupEntry } from './setup-entry.js';
 
-/** One review surface shared by every catalog page, independent of the policy screen. */
-export function createPolicyReview({ client, accept, proposed, status }) {
+/**
+ * One review surface shared by every catalog page, independent of the policy screen. The header's Review Changes
+ * opens it at the top; the header's "Your setup" entry, where the page has one, opens it at `setupHeading()` (the
+ * Install or Installed heading, when shown). Back to catalog closes it and calls `onBack` to return to the catalog.
+ */
+export function createPolicyReview({ client, accept, proposed, status, setupHeading = () => null, onBack = () => {} }) {
   const trigger = document.getElementById('review-project-changes');
+  const entry = document.getElementById('your-setup');
+  let opener = trigger;
   const node = el('aside', 'policy-review-panel'); node.id = 'policy-review-panel'; node.hidden = true;
   node.setAttribute('aria-labelledby', 'policy-review-panel-title');
   const title = el('h2', 'font-semibold', 'Review policy changes'); title.id = 'policy-review-panel-title'; title.tabIndex = -1;
   const context = el('p', 'text-on-surface-variant');
   const changes = el('div', 'space-y-2');
   const close = el('button', 'policy-review-close', 'Close'); close.type = 'button';
+  const back = el('button', 'policy-review-back px-3 py-1.5 rounded border border-wb-border text-on-surface hover:bg-surface-container', 'Back to catalog'); back.type = 'button'; back.id = 'policy-back-to-catalog';
+  back.title = 'Close this panel and return to the catalog to choose more content.';
   const discard = el('button', 'px-3 py-1.5 rounded border border-wb-border', 'Discard proposed changes'); discard.type = 'button'; discard.id = 'policy-discard';
   const actions = el('div', 'flex flex-wrap gap-2'); actions.append(accept, discard);
   actions.id = 'policy-proposal-actions';
-  node.append(title, close, context, status, changes, proposed, actions);
+  node.append(title, close, back, context, status, changes, proposed, actions);
   document.body.append(node);
-  trigger.setAttribute('aria-controls', node.id); trigger.setAttribute('aria-expanded', 'false');
+  const triggers = [trigger, entry].filter(Boolean);
+  for (const control of triggers) { control.setAttribute('aria-controls', node.id); control.setAttribute('aria-expanded', 'false'); }
   const mobile = window.matchMedia('(max-width: 700px)');
   const main = document.getElementById('main-content'), navigation = document.getElementById('nav-rail');
   const header = document.querySelector('body > header');
@@ -28,12 +38,27 @@ export function createPolicyReview({ client, accept, proposed, status }) {
     for (const surface of covered) surface.inert = modal;
   }
   function show(open) {
-    node.hidden = !open; trigger.setAttribute('aria-expanded', String(open));
+    node.hidden = !open; for (const control of triggers) control.setAttribute('aria-expanded', String(open));
     if (open) document.dispatchEvent(new CustomEvent('aih:policy-review-open'));
     syncOverlay();
     if (open) { render(); title.focus({ preventScroll: true }); }
   }
-  trigger.addEventListener('click', () => show(node.hidden)); close.addEventListener('click', () => { show(false); trigger.focus(); });
+  const dismiss = () => { show(false); opener.focus(); };
+  trigger.addEventListener('click', () => { if (node.hidden) opener = trigger; show(node.hidden); });
+  close.addEventListener('click', dismiss);
+  // "Your setup" always lands on Install / Installed; while the drawer is open it goes back there rather than closing.
+  entry?.addEventListener('click', () => { if (node.hidden) { opener = entry; show(true); } atSetup(); });
+  back.addEventListener('click', () => { show(false); onBack(); });
+  function atSetup() {
+    const heading = setupHeading();
+    if (!heading) { title.focus({ preventScroll: true }); return; }
+    heading.tabIndex = -1; heading.scrollIntoView({ block: 'start' }); heading.focus({ preventScroll: true });
+  }
+  function syncEntry() {
+    if (!entry) return;
+    const words = setupEntry(client);
+    entry.textContent = words.label; entry.title = words.title; entry.setAttribute('aria-label', words.accessibleName);
+  }
   discard.addEventListener('click', () => { client.discard(); status.textContent = 'Proposal discarded. Accepted choices are unchanged.'; title.focus({ preventScroll: true }); });
   accept.addEventListener('click', () => title.focus({ preventScroll: true }));
   document.addEventListener('aih:inspector-open', () => show(false));
@@ -46,7 +71,7 @@ export function createPolicyReview({ client, accept, proposed, status }) {
     if (!node.hidden && mobile.matches && !inAllowedSurface(event.target) && !document.querySelector('dialog[open]')) title.focus({ preventScroll: true });
   });
   document.addEventListener('keydown', event => {
-    if (!node.hidden && event.key === 'Escape' && !document.querySelector('dialog[open]')) { show(false); trigger.focus(); return; }
+    if (!node.hidden && event.key === 'Escape' && !document.querySelector('dialog[open]')) { dismiss(); return; }
     if (node.hidden || !mobile.matches || event.key !== 'Tab' || document.querySelector('dialog[open]')) return;
     const surfaces = [header, pageContext, node].filter(Boolean);
     const controls = surfaces.flatMap(surface => [...surface.querySelectorAll('button, a[href], input, select, textarea, summary, [tabindex]')])
@@ -56,7 +81,7 @@ export function createPolicyReview({ client, accept, proposed, status }) {
     if (event.shiftKey && index <= 0) { event.preventDefault(); controls.at(-1).focus(); }
     else if (!event.shiftKey && (index === -1 || index === controls.length - 1)) { event.preventDefault(); controls[0].focus(); }
   });
-  node.addEventListener('keydown', event => { if (event.key === 'Escape') { show(false); trigger.focus(); } });
+  node.addEventListener('keydown', event => { if (event.key === 'Escape' && !node.hidden) dismiss(); });
   function render() {
     const current = client.draft?.roots ?? client.intent?.roots ?? [];
     const next = client.candidate?.roots ?? client.candidate?.intent?.roots;
@@ -88,6 +113,7 @@ export function createPolicyReview({ client, accept, proposed, status }) {
     if (!diffs.length) details.append(el('p', '', 'No artifact values changed.'));
     changes.append(details);
   }
-  client.subscribe(render);
-  return { node, open: () => show(true), render };
+  client.subscribe(() => { render(); syncEntry(); });
+  syncEntry();
+  return { node, open: () => { if (node.hidden) opener = trigger; show(true); }, render };
 }

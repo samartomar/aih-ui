@@ -105,3 +105,18 @@ test("accepted draft roots stay chosen even without executable intent roots", t 
   assert.equal(choice.attributes['aria-label'], 'In draft fixture');
   assert.equal(descendants(node).some(node => node.textContent === 'Choose'), false);
 });
+
+test("returning to the catalog focuses the chosen card when the grid shows it, and reports when it does not", t => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "document");
+  let focused = null;
+  globalThis.document = { createElement: tag => Object.assign(element(tag), { focus() { focused = this; } }) };
+  t.after(() => { if (previous) Object.defineProperty(globalThis, "document", previous); else delete globalThis.document; });
+  const entry = id => ({ entryId: id, subject: { id, kind: "skill", subjectDigest: `sha256:${id}`, source: { type: "github" } } });
+  const elements = Object.fromEntries(["cardsGrid", "visibleCount", "visibleCaption", "categoryContext"].map(key => [key, element("div")]));
+  const cards = createCards({ elements, onSelect() {} });
+  cards.render({ entries: [entry("a.skill"), entry("b.skill")], total: 2, selectedId: null });
+  assert.equal(cards.focus("b.skill"), true);
+  assert.equal(focused.dataset.cardId, "b.skill");
+  assert.equal(cards.focus("not-shown.skill"), false);
+  assert.equal(cards.focus(null), false);
+});

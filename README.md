@@ -973,6 +973,13 @@ moves the operator's focus or state without their asking:
 - Setup uses native modal dialogs: the background is inert and keyboard focus
   stays inside. The first-run wizard keeps Escape from bypassing setup; the
   read-only saved setup view can be closed normally.
+- **Your setup (N)** in the header counts the chosen items of the current
+  setup and opens the review panel at Install (or the installed list when there
+  is nothing to install), with focus on that heading. **Back to catalog** in the
+  panel closes it and puts focus on the card just chosen, or on the search box.
+  Close and Escape return focus to the control that opened the panel.
+- The navigation rail folds on a phone-width window and comes back when the
+  window is wide again; a rail the person folded with its toggle stays folded.
 - A rail link to a screen with no contract yet is marked unavailable: it is
   followed nowhere and is not a tab stop. The Sources link is this page
   (`aria-current="page"`) and is not followed either.
