@@ -93,7 +93,8 @@ test('supported-first browsing preserves mixed capability facts and exposes unde
 });
 
 test('ordinary target changes refresh counts and reasons while preserving accepted exact choices', async () => {
-  const started = await startConsumer();
+  // A test host: the review-note fixture declares the generic tool name this test switches to.
+  const started = await startConsumer({ reviewNoteFixture: true });
   try {
     const requests = [];
     const pageFetch = async (url, options) => {

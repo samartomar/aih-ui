@@ -118,6 +118,12 @@
 </a>
 </nav>
 </div>
+<!-- FRAMEWORKS (owner decision 1 of the second gate A run): the installed frameworks only. The Catalog's default
+     release, personal content and the family dropdown are under the catalog's Advanced section. -->
+<section class="space-y-1 pt-1 border-t border-wb-border" aria-labelledby="framework-list-title">
+<div class="px-2 py-0.5 text-[10px] font-mono tracking-wider text-outline uppercase font-medium" id="framework-list-title" title="Names supplied by the Workbench; the Catalog does not publish framework names yet.">Frameworks</div>
+<nav class="space-y-0.5 text-[11px]" id="framework-list" aria-labelledby="framework-list-title"></nav>
+</section>
 <details class="space-y-1 pt-1 border-t border-wb-border">
 <summary class="px-2 text-on-surface-variant cursor-pointer">Telemetry connections</summary>
 <nav class="space-y-0.5 text-[11px]">
@@ -189,6 +195,8 @@
 <summary class="px-3 text-on-surface-variant cursor-pointer" id="catalog-kinds-summary">Kinds and item counts</summary>
 <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 divide-x divide-wb-border border-b border-wb-border bg-wb-matrix shrink-0 select-none w-full" id="framework-matrix-tabs"></div>
 </details>
+<!-- Every content family, including the Catalog's other content (its default release) and personal content. -->
+<label class="flex flex-wrap items-center gap-2 text-on-surface-variant">Family <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-family" aria-label="Content family"></select></label>
 <!-- CATALOG SCOPES: one row per published source identity -->
 <div class="space-y-1 w-60 max-w-full" id="catalog-scopes-section">
 <div class="px-2 py-0.5 text-[10px] font-mono tracking-wider text-outline uppercase font-medium flex items-center justify-between">
@@ -244,7 +252,6 @@
 <p id="catalog-tools-unmatched" class="w-full text-on-surface-variant text-[11px]" hidden></p>
 </div>
 <details id="catalog-filter-disclosure" open><summary>Catalog filters and personal content</summary><div class="flex flex-wrap gap-2 mb-3 text-[11px]" id="authoring-browse">
-<label>Family <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-family" aria-label="Content family"></select></label>
 <label>Support <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-support" aria-label="Target support"><option value="supported">With supported facts</option><option value="all">Full inventory</option><option value="unsupported">With unsupported facts</option><option value="unknown">With unknown facts</option><option value="not-declared">Not declared for this tool</option></select></label>
 <label class="cursor-pointer rounded border border-wb-border p-1">Choose personal folder <input id="personal-folder" type="file" webkitdirectory multiple aria-label="Choose personal folder"></label>
 <label>Folder binding <select class="bg-wb-input border border-wb-border rounded p-1" id="personal-binding" aria-label="Personal folder binding"><option value="">Add new personal content</option></select></label>

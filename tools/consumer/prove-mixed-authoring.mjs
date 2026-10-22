@@ -14,10 +14,11 @@ const output = process.argv[2]; await mkdir(output, { recursive: true });
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE);
 const installed = await readInstalledRelease({ root: dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'))), sourceInput: 'maintained' });
 assert.equal(installed.valid, true);
-const service = await createMixedService({ release: installed.release, materialSource: installed.source });
+const service = await createMixedService({ release: installed.release, materialSource: installed.source }, { reviewNoteFixture: true });
 const inventories = service.inventories;
 const apiCatalog = service.catalog(), note = apiCatalog.items.find(item => item.id === 'consumer-proof.review-note');
-const started = await startConsumer();
+// A proof host: it browses the review-note fixture.
+const started = await startConsumer({ reviewNoteFixture: true });
 let browser, evidencePage;
 const errors = [], cases = [];
 try {

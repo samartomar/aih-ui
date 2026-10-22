@@ -12,6 +12,7 @@ import { createCards } from "./cards.js";
 import { createDetails } from "./details.js";
 import { createMetrics } from "./metrics.js";
 import { createNavigation } from "./navigation.js";
+import { createFrameworkRail, familyLabel, frameworkRows } from "./frameworks.js";
 import { createProvenance } from "./provenance.js";
 import { createToolbar } from "./toolbar.js";
 import { projectItems, capabilityFacts, declaredTargets, supportedEntries } from "./authoring-model.js";
@@ -90,10 +91,13 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   const target = document.getElementById('browse-target');
   const support = document.getElementById('browse-support');
   const counts = document.getElementById('support-counts');
-  family.addEventListener('change', () => {
-    const row = sourceScopes(state.counts).find(row => row.source.release === family.value);
-    changeView({ family: family.value, source: row?.filterValue ?? null, sourceType: null });
-  });
+  // The left panel's frameworks and the family dropdown under Advanced choose the same family.
+  const chooseFamily = (value) => {
+    const row = value ? sourceScopes(state.counts).find(row => row.source.release === value) : null;
+    changeView({ family: value, source: row?.filterValue ?? null, sourceType: null });
+  };
+  family.addEventListener('change', () => chooseFamily(family.value));
+  const frameworkRail = createFrameworkRail({ list: document.getElementById('framework-list'), onSelect: chooseFamily });
   // The Catalog tool name is the person's own choice; it is remembered for the next visit and shared with the page.
   target.addEventListener('change', () => { saveCatalogTool(target.value); changeView({ target: target.value }); });
   support.addEventListener('change', () => changeView({ support: support.value }));
@@ -209,6 +213,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     document.getElementById('catalog-kinds-summary').textContent = `Kinds · ${state.view.kind ?? 'All kinds'} · ${metricScope.length} items`;
     metrics.render({ kindCounts: new Map([...state.counts.kindCounts.keys()].map(kind => [kind, filteredCounts.kindCounts.get(kind) ?? 0])), total: metricScope.length, activeKind: state.view.kind });
     navigation.render(navigationModel());
+    frameworkRail.render({ rows: frameworkRows(authoring.catalog?.items ?? []), selected: state.view.family });
     toolbar.render({
       // Keep zero-result kinds visible so an active kind can still be cleared.
       kindCounts: new Map([...state.counts.kindCounts.keys()].map((kind) => [kind, filteredCounts.kindCounts.get(kind) ?? 0])),
@@ -275,7 +280,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
         const selectedFamily = state.view.family, selectedTarget = state.view.target;
         family.replaceChildren(new Option('All families', ''));
         for (const value of [...new Set(authoring.catalog.items.map(item => item.family))]) {
-          family.append(new Option(`${value} (${authoring.catalog.items.filter(item => item.family === value).length})`, value));
+          family.append(new Option(`${familyLabel(value)} (${authoring.catalog.items.filter(item => item.family === value).length})`, value));
         }
         family.value = [...family.options].some(option => option.value === selectedFamily) ? selectedFamily : '';
         declaredNames = declaredTargets(authoring.catalog.items);

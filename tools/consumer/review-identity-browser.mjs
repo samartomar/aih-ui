@@ -12,7 +12,7 @@ import { intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { installedFamilies } from './installed-families.mjs';
 import { addFromCatalog, closePolicyDrawer, drawer, openPolicyDrawer, openPolicyFileActions } from './policy-drawer.mjs';
-import { openPolicyWorkspace, openSetupAdvanced } from './advanced-browser.mjs';
+import { openPolicyWorkspace, openSetupAdvanced, chooseFamily } from './advanced-browser.mjs';
 
 const NOTE = 'consumer-proof.review-note', ME = 'fixture-me', TEAM = 'fixture-team', SENTINEL = 'settings-only-sentinel';
 const encode = value => new TextEncoder().encode(value), decode = bytes => new TextDecoder().decode(bytes);
@@ -58,7 +58,7 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
   };
   const download = async (page, trigger, path) => { const event = page.waitForEvent('download'); await trigger(); await (await event).saveAs(path); return new Uint8Array(await readFile(path)); };
   const choose = async (page, family, id) => {
-    await page.locator('#nav-sources').click(); await page.locator('#browse-support').selectOption('all'); await page.locator('#browse-family').selectOption(family);
+    await page.locator('#nav-sources').click(); await page.locator('#browse-support').selectOption('all'); await chooseFamily(page, family);
     await addFromCatalog(page, id);
   };
   const openPanel = async page => {
