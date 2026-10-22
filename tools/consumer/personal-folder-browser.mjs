@@ -44,8 +44,8 @@ try {
   await page.locator('#folder').setInputFiles(folder);
   await page.locator('#folder-result').filter({ hasText: 'Folder validated' }).waitFor();
   await page.locator('#family').selectOption('Personal');
-  await page.locator('#items legend').filter({ hasText: 'example' }).waitFor();
-  assert.equal(await page.locator('#items fieldset').count(), 2);
+  await page.locator('#items > fieldset > legend').filter({ hasText: 'example' }).waitFor();
+  assert.equal(await page.locator('#items > fieldset').count(), 2);
   const provenance = await page.locator('#items pre').first().textContent();
   assert.match(provenance, /"kind": "local"/); assert.doesNotMatch(provenance, /github.com/);
   assert.match(await page.locator('#items').textContent(), /unknown · native-execution/);
@@ -113,7 +113,7 @@ try {
     await reopened.locator('#folder-result').filter({ hasText: 'Exact folder rebound' }).waitFor();
     await reopened.locator('#reopen').click(); await reopened.locator('#proposal').filter({ hasText: '"editing": "available"' }).waitFor();
     await reopened.locator('#family').selectOption('Personal');
-    assert.equal(await reopened.locator('#items fieldset').count(), 2);
+    assert.equal(await reopened.locator('#items > fieldset').count(), 2);
   } finally { releaseCatalog(); await catalogFinished; await reopened.unroute('**/api/authoring-catalog', holdCatalog); }
   assert.deepEqual(JSON.parse(await reopened.locator('#summary').textContent()).roots, saved.metadata['aih.workbench'].roots);
   // A separate effect-free headless call acquires the same files through the

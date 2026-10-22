@@ -30,7 +30,7 @@ if (!npm || !/\.[cm]?js$/.test(npm)) throw new Error('Set npm_execpath to npm-cl
 const packed = JSON.parse(run([npm, 'pack', '--ignore-scripts', '--json', '--pack-destination', output], repo, 'pack.log'))[0];
 const uiArchive = join(output, packed.filename);
 const extraFiles = Object.fromEntries(readdirSync(join(repo, 'tools/consumer')).map(name => [`consumer/${name}`, join(repo, 'tools/consumer', name)]));
-for (const name of ['consumer.html', 'consumer.js', 'intent.html', 'intent.js', 'authoring.html', 'authoring.js', 'policy-file.js']) extraFiles[`page/${name}`] = join(repo, 'src', name);
+for (const name of ['consumer.html', 'consumer.js', 'intent.html', 'intent.js', 'authoring.html', 'authoring.js', 'policy-file.js', 'app/dom.js', 'app/configuration-editor.js']) extraFiles[`page/${name}`] = join(repo, 'src', name);
 for (const name of ['consumer.css', 'tokens.css']) extraFiles[`page/${name}`] = join(repo, 'src/styles', name);
 installConsumer({ consumerDir, packages, extraFiles, log: console.log });
 run([npm, 'install', '--ignore-scripts', '--no-audit', '--no-fund', uiArchive], consumerDir, 'install-ui.log');

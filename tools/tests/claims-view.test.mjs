@@ -27,7 +27,7 @@ const attempt = (reason, extra = {}) => ({ operation: 'node-npm-ca', subject: { 
   precheck: null, repair: null, postcheck: null, counted: reason === 'verified', reason, ...extra });
 const repairs = (count, attempts) => ({ id: 'verified-repairs', method: { id: 'verified-repair-count', version: '1.0.0' }, status: 'available',
   reason: null, inputs: [], count, attempts, deduplication: { status: 'established', unidentified: [] } });
-const strings = panel => [panel.title, panel.value, panel.summary, ...panel.items.flatMap(item => [item.text, ...item.details]),
+const strings = panel => [panel.title, panel.value, panel.summary, ...panel.items.flatMap(item => [item.group, item.text, ...item.details]),
   ...(panel.sections ?? []).flatMap(strings)].filter(Boolean);
 
 test('a score keeps unknown checks in the denominator and lists failed checks even when the score is high', () => {
