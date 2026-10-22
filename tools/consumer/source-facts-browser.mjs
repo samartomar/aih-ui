@@ -8,6 +8,7 @@ import { installedFamilies } from './installed-families.mjs';
 import { performance } from 'node:perf_hooks';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { closePolicyDrawer, openPolicyDrawer, openSourceDetails } from './policy-drawer.mjs';
 export async function runSourceFactsBrowser({ origin, output, playwrightModule }) {
   const began = performance.now();
   const { chromium } = await import(playwrightModule);
@@ -52,7 +53,7 @@ export async function runSourceFactsBrowser({ origin, output, playwrightModule }
       await card.click();
       assert.ok((await page.locator('#details-source').textContent()).includes(facts.provenance.sha256));
       assert.match(await page.locator('#details-desc').textContent(), /Description not declared/);
-      await page.getByText('Source declarations — separate from installation requirements', { exact: true }).click();
+      await openSourceDetails(page); await page.getByText('Source declarations — separate from installation requirements', { exact: true }).click();
       if (example.id === 'hooks') for (const fact of ['PreToolUse', 'Bash', 'reviewed-handler']) assert.ok((await page.locator('#details-source').textContent()).includes(fact));
       if (example.id === 'mcp') {
         assert.match(await page.locator('#details-source').textContent(), /Individual tool metadata/);
@@ -73,15 +74,17 @@ export async function runSourceFactsBrowser({ origin, output, playwrightModule }
     await page.locator('#browse-family').selectOption('Personal');
     await page.locator('#cards-grid [data-card-id]').click();
     assert.equal(await page.locator('#details-desc').textContent(), personal.value.release.items[0].metadata.sourceFacts.description.value);
-    await page.getByText('Original source material (may contain sensitive values)', { exact: true }).click();
+    await openSourceDetails(page); await page.getByText('Original source material (may contain sensitive values)', { exact: true }).click();
     await page.getByRole('button', { name: 'Read original source as text', exact: true }).click();
     await page.locator('#details-source pre').filter({ hasText: 'neverEvaluateSource()' }).waitFor();
     assert.equal(await page.locator('#details-source script').count(), 0);
     await page.getByRole('button', { name: 'Choose personal.skill.example', exact: true }).click();
-    await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click();
+    await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click(); await closePolicyDrawer(page);
     const before = await page.locator('#policy-bytes').textContent();
     await page.locator('#nav-scan-review').click();
     const panel = page.getByRole('region', { name: 'Latest Scan evidence' });
+    // The subject list is bounded; a person searches for the item before choosing it.
+    await panel.getByLabel('Search evidence subjects', { exact: true }).fill('personal.skill.example');
     await panel.getByLabel('Scan content', { exact: true }).selectOption(`${personal.value.release.sha256}/personal.skill.example`);
     await panel.getByRole('button', { name: 'Check Scan evidence', exact: true }).click();
     await panel.getByRole('status').filter({ hasText: 'No assessment available: no evidence source configured or supplied' }).waitFor();
@@ -94,7 +97,7 @@ export async function runSourceFactsBrowser({ origin, output, playwrightModule }
     await panel.getByRole('status').filter({ hasText: 'unsupported-report' }).waitFor();
     await page.screenshot({ path: join(output, 'unsupported-evidence.png'), fullPage: true });
     assert.equal(await page.locator('#policy-bytes').textContent(), before);
-    await page.locator('#nav-policy').click();
+    await page.locator('#nav-policy').click(); await openPolicyDrawer(page);
     const download = page.waitForEvent('download'); await page.locator('#policy-save').click();
     const path = join(output, 'policy.downloaded.json'); await (await download).saveAs(path);
     assert.deepEqual(JSON.parse(await readFile(path, 'utf8')), JSON.parse(before));
