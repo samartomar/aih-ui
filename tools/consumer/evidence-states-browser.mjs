@@ -69,17 +69,18 @@ export async function runEvidenceStatesBrowser({ origin, output, playwrightModul
       await tile(kind).click();
     }
     assert.match(await tile('hook').innerText(), /HOOK ITEMS[\s\S]*items, not events/i);
-    assert.equal(await tile('tokens').isDisabled(), true);
-    assert.match(await tile('tokens').innerText(), /Unknown/);
+    // Tokens are not measured, so no tile claims a token count (the metrics unit check owns the same rule).
+    assert.equal(await tile('tokens').count(), 0, 'No token tile is shown while tokens are unmeasured.');
     assert.equal(/Not published/.test(await page.locator('#framework-matrix-tabs').innerText()), false, 'No tile claims a kind is unpublished.');
-    scenarios.push('metrics-match-list', 'hook-items-not-events', 'tokens-unknown');
+    scenarios.push('metrics-match-list', 'hook-items-not-events', 'tokens-unmeasured-no-tile');
 
     // b. With nothing supplied, every card says not supplied.
     const noteCard = page.locator(`[data-card-id$="/${NOTE}"] [data-evidence-state]`);
     const otherCard = page.locator(`[data-card-id]:not([data-card-id$="/${NOTE}"]) [data-evidence-state]`).first();
     await noteCard.waitFor();
     assert.equal(await page.locator('#cards-grid [data-evidence-state]:not([data-evidence-state="not-supplied"])').count(), 0);
-    assert.equal(await noteCard.innerText(), 'Not supplied');
+    // Missing evidence is a compact gap indicator whose accessible name is the state.
+    assert.equal(await noteCard.getByRole('button', { name: 'Not supplied', exact: true }).count(), 1);
     assert.equal(await page.locator('#cards-grid').getByText('Not published', { exact: true }).count(), 0, 'No card slot claims evidence or tokens are unpublished.');
     await page.screenshot({ path: join(output, '01-not-supplied.png'), fullPage: true });
     scenarios.push('not-supplied');
