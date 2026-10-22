@@ -177,7 +177,7 @@ export function createImprovementsView({ client, el, button, showStatus, loadCli
       saved = loaded;
       const clients = saved.filter(id => offersClient(published?.ids ?? [], id));
       const labels = Object.fromEntries(clients.flatMap(id => { const label = clientLabel(published?.labels ?? {}, id); return label ? [[id, label]] : []; }));
-      // The Catalog tool name chosen above the cards, if any: a rule then suggests the copy that declares it.
+      // The Catalog tool name chosen as Your tool in the header, if any: a rule then suggests the copy that declares it.
       const catalogTool = savedCatalogTool();
       result = await client.checkImprovements({ clients, ...(Object.keys(labels).length ? { labels } : {}), ...(requestedGoal ? { goal: requestedGoal } : {}), ...(catalogTool ? { catalogTool } : {}) });
     } catch (error) { result = { status: 'refused', error: error.message }; }

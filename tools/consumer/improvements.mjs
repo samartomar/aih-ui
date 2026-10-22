@@ -84,7 +84,7 @@ export function projectDismissals(envelope) {
 // `releaseOrder` (optional) is the host's declared source order; where it orders two releases of a package it decides which is newer, else Catalog's version order (compareReleases) does,
 // and a pair neither orders is `version-order-unknown`, never "nothing changed".
 // `coreClients` (optional) is the host's own reading of Core's nativeClientIds, never a request field; it only fills the `client` facts of an adapter suggestion, a display field a recorded suggestion never carries.
-// `catalogTool` (optional) is the Catalog tool name the person chose above the cards (claude-code, ...); a rule then suggests the copy that declares it, when one exists.
+// `catalogTool` (optional) is the Catalog tool name the person chose as Your tool in the header (claude-code, ...); a rule then suggests the copy that declares it, when one exists.
 export async function checkImprovements({ envelopeBytes, inventories, candidateInventories, candidateSource = candidateInventories === undefined ? 'unconfigured' : 'configured', candidateCoverage = 'complete', clients = [], labels = {}, coreClients, goal, evidence, now, releaseOrder, catalogTool } = {}) {
   const loaded = await load(envelopeBytes);
   if (loaded.status !== 'ok') return loaded;

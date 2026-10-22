@@ -25,7 +25,9 @@ export function createOrganization({ elements, onEdit, onModeComplete }) {
   action("Workspace settings", () => open());
   action("Browse catalog", () => document.getElementById("nav-sources").click());
   const items = () => [...menu.querySelectorAll("button, a[href]")];
-  menu.addEventListener("click", event => { if (items().some(item => item.contains(event.target))) setMenu(false); });
+  // An item opens or does something and closes the menu, except the Core tools chip and its panel (data-menu-keep),
+  // which stay open so the choice can be made there.
+  menu.addEventListener("click", event => { if (!event.target.closest?.("[data-menu-keep]") && items().some(item => item.contains(event.target))) setMenu(false); });
   document.addEventListener("click", event => { if (!menu.hidden && !menu.contains(event.target) && !elements.orgModalTrigger.contains(event.target)) setMenu(false); });
   document.addEventListener("keydown", event => {
     if (menu.hidden) return;

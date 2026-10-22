@@ -36,7 +36,7 @@ test('the header tools hide only content clearly for an unselected Core tool, an
   assert.equal(filterByTools(entries, { mode: 'all', ...core }).length, 5);
   assert.equal(filterByTools(entries, { mode: 'mine', ...core, selected: [] }).length, 5, 'no tools chosen: nothing hidden');
   assert.equal(filterByTools(entries, { mode: 'mine', ...core, coreIds: [] }).length, 5, 'no Core list: nothing hidden');
-  assert.match(toolsNotice(entries, { mode: 'mine', ...core }), /^1 item the Catalog lists only for Core tools you did not choose in the header \(codex\) is also hidden\.$/);
+  assert.match(toolsNotice(entries, { mode: 'mine', ...core }), /^1 item the Catalog lists only for Core tools you did not choose in Settings \(codex\) is also hidden\.$/);
   const noCodex = entries.filter(entry => entry.authoringItem !== codexCopy);
   assert.equal(toolsNotice(noCodex, { mode: 'mine', ...core }), '', 'hides nothing, so says nothing');
   assert.equal(toolsNotice(entries, { mode: 'all', ...core }), '');
