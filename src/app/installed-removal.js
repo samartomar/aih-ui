@@ -36,6 +36,10 @@ function notPrepared(result) {
 }
 const preparedRemoval = result => result?.disposition === 'prepared' && result.preparation?.status === 'ready' && result.preparation.sessionId && result.preparation.review
   ? result.preparation : undefined;
+const waitingMessage = pending => `Core checks this after ${listNames(pending.map(step => step.entry.name))} ${pending.length === 1 ? 'is' : 'are'} removed; its files are shown before it is removed.`;
+// A later round names only the items still to be removed before a waiting one, not those already gone.
+const rewordWaiting = steps => steps.map((step, index) => step.state === 'after'
+  ? { ...step, message: waitingMessage(steps.slice(0, index).filter(before => ['ready', 'after'].includes(before.state))) } : step);
 const shownStep = (entry, review) => ({ entry, state: 'ready', files: installFiles(review), fingerprint: effectsFingerprint(review), message: `${fileCount(review.operations.length)} will be removed.` });
 
 /** The outcome of a removal Apply: removed, unverified (complete but Core ran no check) or failed. */
@@ -66,7 +70,7 @@ export async function previewRemoval({ entries, request, mode }) {
     if (result?.status === 'superseded') { steps.push({ entry, state: 'blocked', files: [], message: 'The page changed while checking. Click Remove again.' }); break; }
     if (preparation) steps.push(shownStep(entry, preparation.review));
     else if (result?.disposition === 'retained' && pending.length) {
-      steps.push({ entry, state: 'after', files: [], message: `Core checks this after ${listNames(pending.map(step => step.entry.name))} ${pending.length === 1 ? 'is' : 'are'} removed; its files are shown before it is removed.` });
+      steps.push({ entry, state: 'after', files: [], message: waitingMessage(pending) });
     } else if (result?.disposition === 'retained') steps.push({ entry, state: 'kept', files: [], message: `Kept: ${STILL_NEEDED}` });
     else if (result?.disposition === 'absent') steps.push({ entry, state: 'absent', files: [], message: 'Already gone; nothing to remove.' });
     else steps.push({ entry, state: 'blocked', files: [], message: notPrepared(result) });
@@ -91,7 +95,7 @@ export async function confirmRemoval({ preview, request, mode, results: earlier 
     if (step.state === 'after') {
       // Its files were not shown: show what Core would remove now and ask again.
       const fresh = await removal(), preparation = preparedRemoval(fresh);
-      if (preparation) return finish(results, { steps: [shownStep(step.entry, preparation.review), ...remaining], canConfirm: true, note: preview.note }, name);
+      if (preparation) return finish(results, { steps: rewordWaiting([shownStep(step.entry, preparation.review), ...remaining]), canConfirm: true, note: preview.note }, name);
       if (fresh?.disposition === 'retained') { results.push({ name, state: 'kept', message: STILL_NEEDED }); continue; }
       if (fresh?.disposition === 'absent') { results.push({ name, state: 'absent' }); continue; }
       stop(fresh?.status === 'superseded' ? 'superseded' : 'failed', fresh?.status === 'superseded' ? `${name} was not removed: the page changed before it was. Check the list.` : `${name} ${notPrepared(fresh)}`);
