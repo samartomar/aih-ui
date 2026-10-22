@@ -1,6 +1,6 @@
 import { digestBytes, stable, refuse } from './primitives.mjs';
 import { intakeDeclaration } from './intake.mjs';
-import { composeAuthoring, readAuthoring, reconcileAuthoring, editAuthoring, freshAuthoring, inspectReviewEvidence, recordReview, reconsiderReviews, openDraft, editDraft, compileDraft } from './headless.mjs';
+import { composeAuthoring, readAuthoring, reconcileAuthoring, editAuthoring, freshAuthoring, inspectReviewEvidence, recordReview, reconsiderReviews, openDraft, editDraft, compileDraft, resolveNeeds } from './headless.mjs';
 import { describeEvidenceStates } from './review-bindings.mjs';
 import { checkMaintenance, recordMaintenance } from './maintenance.mjs';
 import { checkImprovements, recordImprovement } from './improvements.mjs';
@@ -115,6 +115,8 @@ export async function createMixedService(maintained, { suppliedInventories, fami
         try { return { status: 'read', sha256: digest, text: new TextDecoder('utf-8', { fatal: true }).decode(material.bytes) }; }
         catch { return { status: 'unavailable' }; }
       }
+      // What one catalog item would bring with it, from Catalog's resolver; reads only, and changes no setup.
+      if (operation === 'needs') return resolveNeeds({ inventories: all, root: body.root });
       if (typeof operation === 'string' && operation.startsWith('organization-')) return runOrganizationAuthor(operation, body, { inventories: all });
       const policyBytes = body.policyBytes ? Uint8Array.from(body.policyBytes) : undefined;
       const reviewEvidence = (body.reviewEvidence ?? []).map(bytes => Uint8Array.from(bytes)), comparisons = body.comparisons ?? [];

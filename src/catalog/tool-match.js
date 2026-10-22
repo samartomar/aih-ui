@@ -42,11 +42,21 @@ export function toolRelation(item, { coreIds = [], selected = [] } = {}) {
   return 'unmatched';
 }
 
-/** The line a card shows under its description. */
-export function toolLine(item) {
-  const tools = declaredTools(item).filter(tool => tool.client !== ANY_TOOL);
+/**
+ * The line a card shows under its description. It names only the tools the Catalog marks `supported` for the item,
+ * with the folder of a supported capability; with a Catalog tool chosen (`tool`), just that tool and its support.
+ */
+export function toolLine(item, tool = '') {
+  const tools = declaredTools(item).filter(declared => declared.client !== ANY_TOOL);
   if (!tools.length) return declaredTools(item).length ? 'For any AI tool' : 'Tool not declared';
-  return `For ${tools.map(tool => tool.surface ? `${tool.client} · ${tool.surface}` : tool.client).join(', ')}`;
+  const supportedSurface = client => capabilityFacts(item, client).find(fact => fact.support === 'supported')?.surface;
+  const named = client => { const surface = supportedSurface(client); return surface ? `${client} · ${surface}` : client; };
+  if (tool) {
+    if (!tools.some(declared => declared.client === tool)) return `Not declared for ${tool}`;
+    return supportedFor(item, tool) ? `For ${named(tool)} · supported` : `Not marked supported for ${tool}`;
+  }
+  const supported = tools.filter(declared => supportedFor(item, declared.client));
+  return supported.length ? `For ${supported.map(declared => named(declared.client)).join(', ')}` : 'Not marked supported for any tool';
 }
 
 /** With "your tools" on, hides only items that are clearly for a tool you did not select. */

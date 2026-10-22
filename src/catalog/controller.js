@@ -25,6 +25,7 @@ import { defaultCatalogTool, saveCatalogTool, savedCatalogTool } from "./catalog
 import { createYourTool, yourToolModel } from "./your-tool.js";
 import { createProjectBasics, frameworkShows, projectFileEntries } from "./project-basics.js";
 import { createYourSources } from "./your-sources.js";
+import { supportingMaterial } from "./supporting.js";
 
 /**
  * @param onSelectEntry    called with the entry when the selection changes
@@ -57,11 +58,16 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     showUndeclared: false,
     // Whether items that declare the chosen tool but are not marked supported for it (unsupported or unknown) are shown.
     showUnsupported: false,
+    // Whether supporting material (notices, references, templates, hook script files; see supporting.js) shows as cards.
+    // It comes with the content that needs it, so the default path leaves it out of the grid, the kind tabs and the counts.
+    showSupporting: false,
   };
   let restoredView = false;
   // The tool names the installed Catalog declares, read once per catalog.
   let declaredNames = [];
   const declared = () => declaredNames;
+  // The entry ids of the catalog's supporting material, worked out once per catalog.
+  let supporting = new Set();
 
   const changeView = (patch) => {
     Object.assign(state.view, patch);
@@ -134,6 +140,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   const toolsUndeclared = document.getElementById('catalog-tools-undeclared');
   const toolsUnsupported = document.getElementById('catalog-tools-unsupported');
   const toolsUnmatched = document.getElementById('catalog-tools-unmatched');
+  const toolsSupporting = document.getElementById('catalog-tools-supporting');
+  toolsSupporting.addEventListener('click', () => { state.showSupporting = !state.showSupporting; render(); });
   toolsToggle.addEventListener('click', () => { state.toolsMode = state.toolsMode === 'mine' ? 'all' : 'mine'; render(); });
   toolsUndeclared.addEventListener('click', () => { state.showUndeclared = !state.showUndeclared; render(); });
   toolsUnsupported.addEventListener('click', () => { state.showUnsupported = !state.showUnsupported; render(); });
@@ -151,8 +159,14 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   function scopeEntries(view = state.view) {
     return visibleEntries(state.entries, view).filter(entry => frameworkShows(entry.authoringItem, view.family));
   }
+  // The Catalog tool filter decides content; supporting material is left out of it (and of its counts) and shows, for
+  // every tool, only while Show supporting material is on. `supporting` counts it in this scope either way.
   function catalogTool(view = state.view) {
-    return catalogToolView(scopeEntries(view), { tool: view.target, mode: state.toolsMode, showUndeclared: state.showUndeclared, showUnsupported: state.showUnsupported });
+    const scoped = scopeEntries(view), isSupporting = entry => supporting.has(entry.entryId);
+    const content = catalogToolView(scoped.filter(entry => !isSupporting(entry)), { tool: view.target, mode: state.toolsMode, showUndeclared: state.showUndeclared, showUnsupported: state.showUnsupported });
+    const kept = new Set(content.entries);
+    return { ...content, supporting: scoped.filter(isSupporting).length,
+      entries: state.showSupporting ? scoped.filter(entry => kept.has(entry) || isSupporting(entry)) : content.entries };
   }
   // The Catalog tool filter first (Catalog names), then the header tools (Core names); neither is translated into the other.
   function browseEntries(view = state.view) {
@@ -174,6 +188,10 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     toolsUnsupported.textContent = `${state.showUnsupported ? 'Hide' : 'Show'} content not marked supported for ${tool} (${view.notSupported})`;
     toolsUnsupported.setAttribute('aria-pressed', String(state.showUnsupported));
     toolsUnsupported.title = `Items that declare ${tool} but that the Catalog marks unsupported or unknown for it.`;
+    toolsSupporting.hidden = !view.supporting;
+    toolsSupporting.textContent = `${state.showSupporting ? 'Hide' : 'Show'} supporting material (${view.supporting})`;
+    toolsSupporting.setAttribute('aria-pressed', String(state.showSupporting));
+    toolsSupporting.title = 'Licenses, notices, references, templates and hook script files. They come with the content that needs them, so they are not cards of their own.';
     const notice = state.toolsMode === 'mine' ? hiddenByCore : '';
     toolsUnmatched.textContent = notice; toolsUnmatched.hidden = !notice;
     yourTool.render(yourToolModel({ declared: declared(), tool, mode: state.toolsMode, coreIds: options.coreIds, coreLabels: options.labels,
@@ -190,6 +208,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     return {
       entries: supportedEntries(browseEntries(), target.value, support.value),
       total: scopeTotal(state.entries, state.view),
+      // The card's tool line names this tool only, with its support.
+      tool: target.value,
       noun: scope === null ? "catalog entries" : "entries from this source",
       selectedId: state.selectedId,
       intent: authoring.intent,
@@ -217,7 +237,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   }
 
   function detailsModel(entry) {
-    return { entry, counts: state.counts, target: target.value,
+    return { entry, counts: state.counts, target: target.value, items: authoring.catalog?.items ?? [], supporting,
       // Core's nativeClientIds when it published them, otherwise null (support unknown).
       coreClients: publishedClients(state.summary?.coreTargets)?.ids ?? null };
   }
@@ -321,6 +341,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       const refresh = () => {
         if (!authoring.catalog) return;
         state.entries = projectItems(authoring.catalog.items);
+        supporting = supportingMaterial(authoring.catalog.items);
         if (state.selectedId && !selectedEntry()) { state.selectedId = null; onSelectEntry(null); }
         const selectedFamily = state.view.family, selectedTarget = state.view.target;
         family.replaceChildren(new Option('All families', ''));

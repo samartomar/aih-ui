@@ -728,10 +728,20 @@ tool line under Advanced, which writes the same choice) lifts the filter. The ch
 tool* and the page says the content is not filtered. The Core tools chosen in Settings show beside it only when chosen.
 It is never derived from those Core ids, and the page does not
 translate between the two vocabularies (#95). An item that declares nothing for the chosen name reads *Not declared for
-<tool>*, not an unknown support value. Install warns only about a chosen item that does not declare the chosen name. Two
+<tool>*, not an unknown support value. A card's tool line names only the tools the Catalog marks `supported` for it
+(with a tool chosen, that tool and its support). Install warns about a chosen item that does not declare the chosen name,
+and about one that declares it but is not marked `supported` for it. Two
 chosen items whose declared source file (the same path in the same repository and revision) is the same are named
 together, on the proposal and in Install, as coming from the same source file; that is provenance, never a claim that
 they install the same thing.
+
+Supporting material is not a card on the default path (#133): items of the kinds notice, reference and template; an
+instruction that other content in its release requires (notices, shared references, pinned runtime source); and an
+item supported for no tool that a supported item of its own kind requires (a hook's script files). The page decides
+this from those published facts only (`src/catalog/supporting.js`), because the Catalog publishes no role for it
+(samartomar/aih-catalog#127). The grid, kind tabs and framework counts leave it out; the content that needs it brings it,
+and a card's details say *Comes with N supporting files: …* from the host's read-only `needs` operation, which asks
+Catalog's `resolveSelections` for that item alone. *Show supporting material (N)* in the tool line under Advanced shows it.
 
 ### Recurring friction from stored Core results
 

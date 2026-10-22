@@ -340,6 +340,23 @@ function liveClosure(index, root, skips) {
   if (!validation.valid) return refusal('/selections', 'Catalog refused the resolved set.', validation.diagnostics);
   return { closure: new Set(resolved.value.inclusions.filter(i => rootKey(i.root) === rootKey(root)).map(i => rootKey(i.item))) };
 }
+// What one item would bring into a setup, read only: the items Catalog's resolver requires with it (its inclusions for
+// that root alone, without the root), in Catalog's order, or Catalog's refusal. The catalog's details say what comes with an item from this.
+export function resolveNeeds({ inventories, root }) {
+  if (!isRef(root)) return refuse('INPUT_INVALID', '/root', 'Supply the item: releaseSha256, itemId and scope.');
+  let index;
+  try { index = inventoryIndex(inventories); }
+  catch (error) { return refuse('SOURCE_IDENTITY_MISMATCH', '/inventories', error.message); }
+  if (!index.items.has(pinKey(root))) return refuse('SOURCE_REVISION_UNAVAILABLE', '/root', `Exact source/item unavailable: ${pinKey(root)}`);
+  const resolved = resolveSelections({ releases: index.releases, roots: [{ releaseSha256: root.releaseSha256, itemId: root.itemId, scope: root.scope, configuration: {} }], skips: [] });
+  if (resolved.status !== 'ok') return resolved;
+  const seen = new Set([rootKey(root)]), needs = [];
+  for (const { item, root: from } of resolved.value.inclusions) {
+    if (rootKey(from) !== rootKey(root) || seen.has(rootKey(item))) continue;
+    seen.add(rootKey(item)); needs.push({ releaseSha256: item.releaseSha256, itemId: item.itemId, scope: item.scope });
+  }
+  return ok({ needs });
+}
 // Required items Catalog could not resolve from the supplied inventories: the references its refusal names on each unavailable release or item a
 // dependency declaration requires (`reference`, with the declaring item as `declaredBy`), once each, in Catalog's order. The item digest a
 // declaration pins is read from the declaration Catalog points at (`path`, a JSON pointer into the request), since `reference` does not carry it (temporary until samartomar/aih-catalog#105 adds it).

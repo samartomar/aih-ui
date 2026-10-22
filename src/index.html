@@ -233,12 +233,14 @@
 <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 divide-x divide-wb-border border-b border-wb-border bg-wb-matrix shrink-0 select-none w-full" id="framework-matrix-tabs"></div>
 </details>
 <!-- The tool line (moved here from above the cards by owner decision 3; same ids and behaviour): the same Catalog tool
-     choice as Your tool in the header, with Show all and the no-declared-tool switch. -->
+     choice as Your tool in the header, with Show all, the no-declared-tool and not-supported switches, and Show supporting
+     material (#133). -->
 <div id="catalog-tools-bar" class="flex flex-wrap items-center gap-x-3 gap-y-1 p-2 rounded border border-wb-border bg-surface-container-low">
 <label class="flex flex-wrap items-center gap-2 text-on-surface"><span id="catalog-tools-showing" role="status">Choose the tool name the Catalog uses for your AI tool</span> <select class="bg-wb-input border border-wb-border rounded p-1 font-medium" id="browse-target" aria-label="Catalog tool name"></select></label>
 <button type="button" id="catalog-tools-toggle" class="px-2 py-1 rounded border border-wb-border bg-surface-container text-on-surface hover:bg-surface-container-high" hidden>Show all</button>
 <button type="button" id="catalog-tools-undeclared" class="px-2 py-1 rounded border border-wb-border bg-surface-container text-on-surface hover:bg-surface-container-high" aria-pressed="false" hidden></button>
 <button type="button" id="catalog-tools-unsupported" class="px-2 py-1 rounded border border-wb-border bg-surface-container text-on-surface hover:bg-surface-container-high" aria-pressed="false" hidden></button>
+<button type="button" id="catalog-tools-supporting" class="px-2 py-1 rounded border border-wb-border bg-surface-container text-on-surface hover:bg-surface-container-high" aria-pressed="false" hidden></button>
 <p id="catalog-tools-unmatched" class="w-full text-on-surface-variant text-[11px]" hidden></p>
 </div>
 <!-- The catalog filters (moved here from above the cards by #122; same ids and behaviour). The folder picker that sat
@@ -433,6 +435,7 @@
 <div class="space-y-1">
 <span class="text-[10px] font-mono uppercase tracking-wider text-outline">Overview</span>
 <div class="text-on-surface leading-relaxed text-[11px]" id="details-desc">Not published</div>
+<div class="text-on-surface-variant text-[11px] space-y-0.5" id="details-comes-with" role="status" hidden></div>
 </div>
 <div class="space-y-1.5">
 <span class="text-[10px] font-mono uppercase tracking-wider text-outline">Declared Capabilities</span>
