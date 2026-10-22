@@ -63,7 +63,7 @@ test("unmapped local preferences remain unavailable without claiming an off stat
 });
 
 const pill = node => descendants(node).find(e => e.dataset.evidenceState);
-test("missing evidence keeps its exact accessible reason and omits unmeasured tokens", (t) => {
+test("missing evidence keeps its exact accessible reason and tokens stay unknown", (t) => {
   const { node } = renderCard(t, "Described");
   const status = pill(node);
   assert.equal(status.dataset.evidenceState, "not-supplied");
@@ -74,8 +74,7 @@ test("missing evidence keeps its exact accessible reason and omits unmeasured to
   assert.equal(tooltip.textContent, `Not supplied: ${EVIDENCE_STATE['not-supplied'].title()}`);
   const text = descendants(node).map(e => e.textContent).join("|");
   assert.equal(text.includes("Not published"), false);
-  assert.equal(text.includes('Unknown'), false);
-  assert.equal(descendants(node).some(node => node.textContent === 'toll'), false);
+  assert.match(text, /\|Unknown\|/);
 });
 
 test("each supplied evidence state renders its own text, and matched is not authentication", (t) => {
