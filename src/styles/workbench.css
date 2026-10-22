@@ -161,6 +161,8 @@ body:has(#main-content) > header > div::-webkit-scrollbar-thumb {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)) !important;
   gap: 8px !important;
 }
+/* While the Add confirmation is shown, the last cards can still scroll clear of it. */
+body:has(#added-notice:not([hidden])) #cards-grid { padding-bottom: 10rem; }
 #cards-grid [data-card-id] {
   padding: 10px !important;
   min-width: 0;

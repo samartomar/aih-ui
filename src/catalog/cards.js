@@ -122,19 +122,21 @@ function card(entry, selectedId, onSelect, model) {
   button.appendChild(el("div", "w-2.5 h-2.5 rounded-full bg-outline"));
   toggle.appendChild(button);
   if (entry.authoringItem) {
-    const chosenLabel = model.acceptedLabel ?? 'In policy';
+    // Add puts the item and the items it needs into the setup in one step; refusals and anything to decide open the review instead.
+    const chosenLabel = model.acceptedLabel ?? 'Added';
     const chosen = (model.acceptedRoots ?? model.intent?.roots ?? []).some(root => root.itemId === entry.authoringItem.id && root.releaseSha256 === entry.authoringItem.root.releaseSha256);
+    const label = chosen ? chosenLabel : 'Add';
     button.className = `px-2 py-1 rounded border text-[10px] font-medium ${chosen ? 'bg-primary-container text-on-primary border-primary' : 'border-wb-control-border text-on-surface-variant hover:text-primary hover:border-primary'}`;
-    button.replaceChildren(); button.textContent = chosen ? chosenLabel : 'Choose';
+    button.replaceChildren(); button.textContent = label;
     button.disabled = Boolean(chosen);
-    button.setAttribute('aria-label', `${chosen ? chosenLabel : 'Choose'} ${entry.authoringItem.id}`);
+    button.setAttribute('aria-label', `${label} ${entry.authoringItem.id}`);
     button.removeAttribute('aria-disabled');
-    button.title = 'Review this choice in the panel before accepting it.';
+    button.title = chosen ? 'In your setup with the items it needs.' : 'Add this item and the items it needs to your setup.';
     button.addEventListener('click', async event => {
       event.stopPropagation();
-      button.disabled = true; button.textContent = 'Reviewing…'; button.setAttribute('aria-busy', 'true');
+      button.disabled = true; button.textContent = 'Adding…'; button.setAttribute('aria-busy', 'true');
       try { await model.onChoose(entry.authoringItem, id.entryId); }
-      finally { button.disabled = Boolean(chosen); button.textContent = chosen ? chosenLabel : 'Choose'; button.removeAttribute('aria-busy'); }
+      finally { button.disabled = Boolean(chosen); button.textContent = label; button.removeAttribute('aria-busy'); }
     });
   }
   foot.appendChild(toggle);

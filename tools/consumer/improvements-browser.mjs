@@ -18,7 +18,7 @@ import { noteFixture } from './note-fixture.mjs';
 import { frictionFixture } from './friction-fixture.mjs';
 import { IMPROVEMENT_SUGGESTION_SCHEMA, IMPROVEMENT_DISMISSAL_SCHEMA } from './improvements.mjs';
 import { UNKNOWNS, FRICTION_COVERAGE, IMPROVEMENT_RULES_VERSION } from './improvement-rules.mjs';
-import { drawer, openPolicyFileActions, openPolicySection } from './policy-drawer.mjs';
+import { drawer, openPolicyDrawer, openPolicyFileActions, openPolicySection } from './policy-drawer.mjs';
 
 const decode = bytes => new TextDecoder().decode(bytes);
 const ROOT = 'mattpocock.implement', CLIENTS = ['claude', 'codex'];
@@ -74,7 +74,7 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
     return page;
   };
   const download = async (page, trigger, path) => { const event = page.waitForEvent('download'); await trigger(); await (await event).saveAs(path); return new Uint8Array(await readFile(path)); };
-  const saveDraft = (page, path) => download(page, () => page.locator('#policy-draft-save').click(), path);
+  const saveDraft = (page, path) => download(page, async () => { await openPolicyDrawer(page); await page.locator('#policy-draft-save').click(); }, path);
   const section = page => page.locator('#policy-improvements');
   // The leading suggestion has a heading; other groups are collapsed sections whose summary adds a count, as in "Dismissed (1)".
   const groupHeadings = page => section(page).locator('h4, details > summary.font-medium');
