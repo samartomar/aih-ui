@@ -17,7 +17,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
   const policyDocument = () => { try { return JSON.parse(new TextDecoder().decode(client.bytes)); } catch { return undefined; } };
   const label = itemId => { const item = client.catalog?.items.find(entry => entry.id === itemId); return item ? item.label ?? item.id : undefined; };
   const requestHost = (operation, body) => client.requestHost(operation, body);
-  const available = () => Boolean(client.catalog?.executionAvailable);
+  const available = () => Boolean(client.catalog);
 
   // The steps of one preview round: each item's message and the files Core would remove.
   function stepRows(preview) {
@@ -99,6 +99,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
     if (node.hidden || removing) return;
     const read = ++inventoryRead;
     if (!keepMessage) { message.textContent = ''; delete message.dataset.outcome; }
+    if (!client.catalog.executionAvailable) { list.replaceChildren(); note.textContent = 'Choose a project folder above to see what is installed there.'; onInventory(undefined); return; }
     note.textContent = 'Checking what is installed…';
     try {
       const inventory = await client.request('managed');
@@ -107,5 +108,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       show(view); onInventory(view);
     } catch (error) { if (read === inventoryRead) { list.replaceChildren(); note.textContent = `Cannot show what is installed: ${error.message}`; onInventory(undefined); } }
   }
-  return { node, refresh };
+  // A different project folder: the list and any removal still being previewed belong to the old one.
+  function reset() { inventoryRead++; list.replaceChildren(); message.textContent = ''; delete message.dataset.outcome; return refresh(); }
+  return { node, refresh, reset, get busy() { return removing; } };
 }

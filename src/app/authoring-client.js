@@ -107,6 +107,8 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
     invalidate() { revision++; candidate = undefined; notify(); return revision; },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     request,
+    // Host results still out (an Install preview, say) were for the previous project folder; they come back superseded.
+    discardHostWork() { hostRevision++; },
     async requestHost(operation, body = {}) {
       const attempt = ++hostRevision, draft = revision;
       const result = await request(operation, body);

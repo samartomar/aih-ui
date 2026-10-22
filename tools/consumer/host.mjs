@@ -52,6 +52,8 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
   }
   return {
     inspectAuthority,
+    // Session ids still held, so a host replaced for another project folder can name what it discarded.
+    heldSessions: () => [...sessions.keys()],
     managedInventory() { return listManagedSelections({ target: { project: projectRoot }, scope: 'project' }); },
     async prepareRemovalSession({ managementId, scope, mode, controls } = {}) {
       // Removal reads Core's retained custody; it does not acquire recipe material.
