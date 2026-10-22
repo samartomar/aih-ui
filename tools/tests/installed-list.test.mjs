@@ -31,9 +31,37 @@ test('Remove takes the chosen item and only the needed items nothing else instal
   assert.deepEqual(tdd.removes.map(item => item.managementId), ['m-tdd']);
 });
 
-test('installed items outside the current setup are listed apart by their management id', () => {
+test('an installed item outside the current setup is named by its last id segment, keeping the full id apart', () => {
   const view = groupInstalled({ inventory: inventory('m-project--kiro.grill-me', 'grill-me', 'grilling', 'notices'), policy, intent, label });
-  assert.deepEqual(view.others, [{ managementId: 'm-project--kiro.grill-me', scope: 'project', name: 'm-project--kiro.grill-me', inSetup: false }]);
+  assert.deepEqual(view.others, [{ managementId: 'm-project--kiro.grill-me', scope: 'project', name: 'grill-me', inSetup: false, known: false }]);
+});
+
+// The Workbench builds the id it gives an item at a scope (management-id.js), so it can look up which Catalog item an
+// installed selection is without reading Core's id apart.
+const catalogItem = (id, label, packageName = '@aihq/catalog') => ({ id, label, family: 'AIH-Extensions', package: { name: packageName } });
+const managed = (...ids) => ({ status: 'complete', selections: ids.map(managementId => ({ managementId, scope: 'project' })) });
+
+test('an installed item outside the setup shows the Catalog name when the Workbench id maps a known Catalog item to it', () => {
+  const items = [catalogItem('extensions.matt.grilling', 'grilling'), catalogItem('extensions.notices', 'Extensions licenses and notices')];
+  const view = groupInstalled({ inventory: managed('project--aihq.catalog--extensions.matt.grilling', 'project--aihq.catalog--extensions.notices', 'project--other.pkg--x.y.unknown-thing'),
+    policy: undefined, intent: undefined, label, items });
+  assert.deepEqual(view.others.map(item => [item.name, item.known, item.inSetup, item.family]), [
+    ['grilling', true, false, 'AIH-Extensions'], ['Extensions licenses and notices', true, false, 'AIH-Extensions'], ['unknown-thing', false, false, undefined]]);
+  // The scope is part of the id: the same item at user scope is not this project's.
+  const user = groupInstalled({ inventory: { status: 'complete', selections: [{ managementId: 'user--aihq.catalog--extensions.matt.grilling', scope: 'user' }] }, policy: undefined, intent: undefined, label, items });
+  assert.equal(user.others[0].name, 'grilling');
+  assert.equal(groupInstalled({ inventory: managed('user--aihq.catalog--extensions.matt.grilling'), policy: undefined, intent: undefined, label, items }).others[0].known, false);
+});
+
+test('two Catalog items that map to one id with different names are not guessed between', () => {
+  const items = [catalogItem('a.b.same', 'First'), catalogItem('a.b.same', 'Second')];
+  const view = groupInstalled({ inventory: managed('project--aihq.catalog--a.b.same'), policy: undefined, intent: undefined, label, items });
+  assert.deepEqual(view.others.map(item => [item.name, item.known]), [['same', false]]);
+});
+
+test('no raw management id is ever the name of an installed item', () => {
+  const view = groupInstalled({ inventory: managed('project--aihq.catalog--extensions.notices', 'project--aihq.catalog--grill-me'), policy, intent: { roots: [], pins: [] }, label });
+  for (const item of [...view.groups, ...view.others]) assert.doesNotMatch(item.name, /--/);
 });
 
 test('a needed item whose chosen item is no longer installed is listed apart with its name', () => {
@@ -53,7 +81,7 @@ test('an incomplete inventory is reported as possibly partial, and an unreadable
 test('without a policy every installed item is listed apart', () => {
   const view = groupInstalled({ inventory: inventory('grill-me'), policy: undefined, intent: undefined, label });
   assert.deepEqual(view.groups, []);
-  assert.deepEqual(view.others.map(item => item.name), ['m-grill-me']);
+  assert.deepEqual(view.others.map(item => item.name), ['m-grill-me'], 'an id with no segments to shorten is its own short name');
 });
 
 test('removal order puts every item before the items it requires', () => {

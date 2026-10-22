@@ -3,6 +3,7 @@
 // advanced Prepare and Apply buttons stay where they are; this reuses the same host operations.
 
 import { declaredTools, supportedFor, toolLine } from '../catalog/tool-match.js';
+import { supportingMaterial } from '../catalog/supporting.js';
 import { sameSourceWarning } from './source-copies.js';
 import { setupHookNote } from '../catalog/hooks.js';
 import { applyIfUnchanged, diagnosticWords, effectsFingerprint, fileCount, installFiles, IN_PLACE } from './host-review.js';
@@ -22,8 +23,25 @@ export function installSummary(rows, { managed = false } = {}) {
   if (!rows.length) return { heading: 'Nothing to change', message: 'Nothing has been installed yet.' };
   if (!changed) return { heading: `All ${fileCount(rows.length)} are already in place`,
     message: `${managed ? `Already installed: all ${fileCount(rows.length)} are in place.` : `All ${fileCount(rows.length)} are already in place.`} Install checks them again.` };
-  return { heading: `${fileCount(changed)} will be changed${inPlace ? ` (${inPlace} already in place)` : ''}`,
+  return { heading: `${fileCount(changed)} will change${inPlace ? ` (${inPlace} already in place)` : ''}`,
     message: inPlace ? `Not fully installed: ${inPlace} of ${fileCount(rows.length)} are already in place.` : 'Nothing has been installed yet.' };
+}
+
+/**
+ * What Install brings, one row per item in the setup: chosen content with its tool line for Your tool (`tool`), and
+ * the items it needs named for what they are. Tool lines are for chosen content only: a supporting file (a hook's
+ * script files, notices) or a needed item is never flagged for your tool. `supporting` is supportingMaterial's set.
+ */
+export function installItems({ roots = [], pins = [], items = [], supporting = new Set(), tool = '' }) {
+  const key = ref => `${ref.releaseSha256}/${ref.itemId}`;
+  const itemOf = ref => items.find(item => item.id === ref.itemId && item.root?.releaseSha256 === ref.releaseSha256);
+  const chosen = new Set(roots.map(key));
+  const refs = pins.length ? pins : roots;
+  return refs.map(ref => {
+    const item = itemOf(ref), name = String(item?.label ?? item?.id ?? ref.itemId);
+    if (chosen.has(key(ref))) return { name, line: item ? toolLine(item, tool) : 'not in the installed Catalog' };
+    return { name, line: supporting.has(key(ref)) ? 'supporting file' : 'needed by a chosen item' };
+  });
 }
 
 /** Skill folders the install writes, so the success message can say what to try. */
@@ -87,23 +105,29 @@ function refusal(result) {
 }
 
 export function createInstallPanel({ client, el, button, tools = () => ({}), onInstalled = () => {} }) {
-  const node = el('section', 'p-4 rounded border-2 border-primary space-y-3'); node.id = 'install-panel'; node.hidden = true;
-  const title = el('h3', 'text-base font-semibold text-on-surface', 'Install your setup into your project');
+  const node = el('section', 'p-3 rounded border-2 border-primary space-y-2'); node.id = 'install-panel'; node.hidden = true;
+  const title = el('h3', 'text-sm font-semibold text-on-surface', 'Install your setup into your project');
   const where = el('p', 'font-mono text-[11px] text-outline break-all');
-  const items = el('ul', 'list-disc pl-5 space-y-0.5');
+  const items = el('ul', 'list-disc pl-5 space-y-0.5'); items.id = 'install-items';
   const warning = el('p', 'p-2 rounded border border-error/60 bg-error-container text-on-surface'); warning.id = 'install-tool-warning'; warning.hidden = true;
   const sameSource = el('p', 'p-2 rounded border border-wb-border bg-tertiary-container text-on-surface'); sameSource.id = 'install-same-source'; sameSource.hidden = true;
   // Each chosen hook's command again, before Install (#135): what the tool will run once it is installed.
   const hookCommands = el('div', 'space-y-2'); hookCommands.id = 'install-hooks'; hookCommands.hidden = true;
-  const filesHeading = el('p', 'font-medium', 'Files that will be added');
+  const filesHeading = el('span', 'font-medium', 'What will be installed'); filesHeading.id = 'install-summary';
   const files = el('ul', 'space-y-0.5 font-mono text-[11px]'); files.id = 'install-files';
   const message = el('p', 'text-on-surface'); message.id = 'install-message'; message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
   const install = button('Install', () => run(), true); install.id = 'install-button'; install.disabled = true;
-  node.append(title, where, items, hookCommands, warning, sameSource, filesHeading, files, install, message);
+  // One button and "N files will change", which opens what will be installed and every file (#137).
+  const details = el('details', 'install-details text-on-surface-variant'); details.id = 'install-details';
+  const detailsSummary = el('summary', 'cursor-pointer'); detailsSummary.append(filesHeading);
+  details.append(detailsSummary, where, items, files);
+  const action = el('div', 'flex flex-wrap items-center gap-x-3 gap-y-1'); action.append(install, details);
+  node.append(title, hookCommands, warning, sameSource, action, message);
 
   let preview, previewing = false, installing = false, shownFor, managed = false, again = false;
   const itemOf = ref => client.catalog?.items.find(item => item.id === ref.itemId && item.root.releaseSha256 === ref.releaseSha256);
-  const label = ref => { const item = itemOf(ref); return item ? `${item.label ?? item.id} — ${toolLine(item, tools().catalogTool)}` : ref.itemId; };
+  const supportingCache = new WeakMap();
+  const supporting = () => { const all = client.catalog?.items ?? []; if (!supportingCache.has(all)) supportingCache.set(all, supportingMaterial(all)); return supportingCache.get(all); };
   const ready = () => Boolean(client.catalog && client.intent && !client.candidate && !(client.draft && !client.compiled));
 
   function show(review) {
@@ -124,7 +148,7 @@ export function createInstallPanel({ client, el, button, tools = () => ({}), onI
       if (preparation) {
         preview = preparation; const rows = show(preparation.review);
         install.disabled = false; message.textContent = installSummary(rows, { managed }).message;
-      } else { files.replaceChildren(); filesHeading.textContent = 'Files that will be added'; message.textContent = `Can't install yet: ${refusal(result)}`; }
+      } else { files.replaceChildren(); filesHeading.textContent = 'What will be installed'; message.textContent = `Can't install yet: ${refusal(result)}`; }
     } catch (error) { message.textContent = `Can't install yet: ${error.message}`; }
     finally {
       previewing = false;
@@ -150,14 +174,16 @@ export function createInstallPanel({ client, el, button, tools = () => ({}), onI
       }
       const outcome = installOutcome(attemptResult.run, installFiles(preparation.review), preparation.review.target?.project);
       message.textContent = outcome.message; message.dataset.outcome = outcome.ok ? 'installed' : outcome.state ?? 'failed';
+      // The count said what would change; once written, the same list is what was installed.
+      if (outcome.ok || outcome.state === 'unchecked') filesHeading.textContent = 'What was installed';
       preview = undefined;
     } catch (error) { message.textContent = `Install did not finish: ${error.message}`; message.dataset.outcome = 'failed'; }
     finally { installing = false; install.removeAttribute('aria-busy'); if (sent) onInstalled(); }
   }
   function render() {
     node.hidden = !ready();
-    const refs = client.intent?.pins ?? client.intent?.roots ?? [];
-    items.replaceChildren(...refs.map(ref => el('li', '', label(ref))));
+    const rows = installItems({ roots: client.intent?.roots ?? [], pins: client.intent?.pins ?? [], items: client.catalog?.items ?? [], supporting: supporting(), tool: tools().catalogTool });
+    items.replaceChildren(...rows.map(row => el('li', '', `${row.name} — ${row.line}`)));
     // Both checks are about what the person chose, not the items those choices need.
     const chosen = (client.intent?.roots ?? []).map(itemOf).filter(Boolean);
     warning.textContent = toolWarning(chosen, tools()); warning.hidden = !warning.textContent;
@@ -165,10 +191,11 @@ export function createInstallPanel({ client, el, button, tools = () => ({}), onI
     const hooks = (client.intent?.roots ?? []).map(root => ({ root, item: itemOf(root) })).filter(({ item }) => item?.kind === 'hook');
     hookCommands.replaceChildren(...hooks.map(({ root, item }) => {
       const { command, text } = setupHookNote({ item, configuration: root.configuration, tool: tools().catalogTool });
-      const row = el('div', 'wb-install-hook p-2 rounded border border-wb-border bg-surface-container-low space-y-1');
-      row.append(el('p', 'font-medium', `${item.label ?? item.id} runs this command`));
-      if (command) row.append(el('code', 'block font-mono text-[11px] break-all', command));
-      row.append(el('p', 'text-[11px] text-on-surface-variant', text));
+      const row = el('div', 'wb-install-hook px-2 py-1 rounded border border-wb-border bg-surface-container-low');
+      const head = el('p', 'font-medium', `${item.label ?? item.id} runs this command:`);
+      if (command) { head.append(' '); head.append(el('code', 'font-mono text-[11px] break-all', command)); }
+      row.append(head);
+      row.append(el('p', 'wb-install-hook-note text-on-surface-variant', text));
       return row;
     }));
     hookCommands.hidden = !hooks.length;
@@ -176,7 +203,7 @@ export function createInstallPanel({ client, el, button, tools = () => ({}), onI
     // No project folder: there is nothing to preview until one is chosen above.
     if (!client.catalog.executionAvailable) {
       shownFor = undefined; preview = undefined; install.disabled = true; delete message.dataset.outcome;
-      title.textContent = 'Install your setup into your project'; where.textContent = ''; filesHeading.textContent = 'Files that will be added'; files.replaceChildren();
+      title.textContent = 'Install your setup into your project'; where.textContent = ''; filesHeading.textContent = 'What will be installed'; files.replaceChildren();
       message.textContent = 'Choose a project folder above to install your setup.'; return;
     }
     const key = client.bytes.join(',');

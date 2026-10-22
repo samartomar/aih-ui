@@ -48,7 +48,7 @@ export function setupHookNote({ item, configuration = {}, tool }) {
   const { declared, inputs } = commandOf(item);
   const typed = inputs.map(input => configuration[input.name]).find(value => typeof value === 'string' && value.trim());
   const command = typed ?? declared;
-  if (!command) return { command: null, text: 'No command typed yet. Type the command in Chosen items below before you Install.' };
+  if (!command) return { command: null, text: 'No command typed yet. Type it under Advanced, Chosen items, before you Install.' };
   return { command, text: `${toolWords(item, tool)} will run this command each time the hook's event happens. The Catalog does not say which event that is.` };
 }
 
