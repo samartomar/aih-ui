@@ -44,7 +44,9 @@ function card(entry, selectedId, onSelect, model) {
   const source = entry.authoringItem ? sourcePresentation(entry.authoringItem) : null;
   const title = source?.name ?? null;
   const description = source?.description ?? null;
-  const badge = entry.authoringItem ? { text: familyLabel(entry.authoringItem.family), value: true, title: `Installed content family; upstream origins are shown in the inspector. ${WORKBENCH_NAMED}`, source: 'Content family' } : NO_FAMILY;
+  // Your sources content ("Personal" is the host's family for it) is what the person brought, not an installed family.
+  const brought = entry.authoringItem?.family === 'Personal';
+  const badge = entry.authoringItem ? { text: familyLabel(entry.authoringItem.family), value: true, title: brought ? 'Your sources: content you brought, never a framework. Its exact origin is shown in the inspector.' : `Installed content family; upstream origins are shown in the inspector. ${WORKBENCH_NAMED}`, source: 'Content family' } : NO_FAMILY;
   const isSelected = selectedId === id.entryId;
 
   const node = el("div", "wb-card group rounded border p-3 flex flex-col justify-between cursor-pointer");

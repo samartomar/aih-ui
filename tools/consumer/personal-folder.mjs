@@ -9,6 +9,39 @@ const safePath = path => typeof path === 'string' && path.length <= 240
   && path.split('/').every(part => /^[A-Za-z0-9_. -]+$/.test(part) && !['', '.', '..', '.git'].includes(part.toLowerCase())
     && !/[. ]$/.test(part) && !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part));
 const decode = bytes => new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+/**
+ * Each SKILL.md path as a 3.1 producer item, through Catalog's public source reader: `<skillsDirectory>/<name>/SKILL.md`
+ * whose declared name is <name>, with the other files of its folder as support files. Shared by the folder source and
+ * the GitHub source (./github-source.mjs); throws with the reason (and Catalog's facts) when a skill is not recognized.
+ */
+export function recognizeSkills({ files, paths, licensePath, revision, skillsDirectory, source, acquisition, undeclaredLicense }) {
+  const names = new Set();
+  let license;
+  const items = paths.map(path => {
+    const facts = extractSourceFacts({ profile: 'agent-skills', path, revision, bytes: files[path] });
+    if (facts.status !== 'valid') {
+      const error = new Error(`${path}: ${facts.status} — ${facts.diagnostics.map(value => `${value.field}: ${value.message}`).join('; ')}. Check Agent Skills front matter.`);
+      error.sourceFacts = facts;
+      throw error;
+    }
+    const fields = { name: facts.name.value, description: facts.description.value, license: facts.native.license ?? undeclaredLicense }, directory = path.slice(0, -'SKILL.md'.length);
+    if (directory && directory !== `${skillsDirectory}/${fields.name}/`) throw new Error(`${path}: directory must match the declared name ${fields.name}.`);
+    if (names.has(fields.name)) throw new Error(`${path}: duplicate skill name.`);
+    names.add(fields.name);
+    license ??= fields.license;
+    if (license !== fields.license) throw new Error('All skills must declare the same root license identifier. Use advanced declarations for multiple licenses.');
+    return { id: `${source}.skill.${fields.name}`, source, skillPath: path, sourceDiscovery: { profile: 'agent-skills', path },
+      supportPaths: Object.keys(files).filter(member => member.startsWith(directory) && member !== path && member !== licensePath).map(member => member.slice(directory.length)).sort(),
+      label: fields.name, description: fields.description, kind: 'skill', requires: [], optional: [], conflicts: [],
+      clientCapabilities: [
+        { client: 'claude-code', surface: '.claude/skills', capability: 'skill-material-format', support: 'supported', reason: 'Recognized SKILL.md material layout; validated through Catalog. Native use is unobserved.' },
+        { client: 'claude-code', surface: 'agent-tools', capability: 'native-execution', support: 'unknown', reason: `${acquisition} does not execute supplied code or observe native use.` },
+        { client: 'claude-code', surface: 'agent-tools', capability: 'automatic-guardrails', support: 'unsupported', reason: 'Skill instructions do not intercept or enforce tool execution.' }
+      ], activation: [], configuration: { agentDirectory: { type: 'string', required: true, default: '.claude', minLength: 1, maxLength: 64,
+        description: 'Project directory that receives skills/<name>/ (Claude Code reads .claude).' } } };
+  });
+  return { items, license };
+}
 export async function intakePersonalFolder({ files: supplied, rebind } = {}) {
   const fail = message => refuse('LOCAL_FOLDER_INVALID', '/files', message);
   if (!Array.isArray(supplied) || !supplied.length || supplied.length > FOLDER_LIMITS.files) return fail('Choose a folder with 1–256 regular files, up to 250 KB per file and 1 MB total.');
@@ -33,30 +66,7 @@ export async function intakePersonalFolder({ files: supplied, rebind } = {}) {
   let items, license;
   try {
     if (!decode(files[licensePath]).trim()) throw new Error('The root license must contain UTF-8 text.');
-    const names = new Set();
-    items = paths.map(path => {
-      const facts = extractSourceFacts({ profile: 'agent-skills', path, revision, bytes: files[path] });
-      if (facts.status !== 'valid') {
-        const error = new Error(`${path}: ${facts.status} — ${facts.diagnostics.map(value => `${value.field}: ${value.message}`).join('; ')}. Check Agent Skills front matter.`);
-        error.sourceFacts = facts;
-        throw error;
-      }
-      const fields = { name: facts.name.value, description: facts.description.value, license: facts.native.license ?? 'LicenseRef-Personal' }, directory = path.slice(0, -'SKILL.md'.length);
-      if (directory && directory !== `skills/${fields.name}/`) throw new Error(`${path}: directory must match the declared name ${fields.name}.`);
-      if (names.has(fields.name)) throw new Error(`${path}: duplicate skill name.`);
-      names.add(fields.name);
-      license ??= fields.license;
-      if (license !== fields.license) throw new Error('All skills must declare the same root license identifier. Use advanced declarations for multiple licenses.');
-      return { id: `personal.skill.${fields.name}`, source: 'personal', skillPath: path, sourceDiscovery: { profile: 'agent-skills', path },
-        supportPaths: Object.keys(files).filter(member => member.startsWith(directory) && member !== path && member !== licensePath).map(member => member.slice(directory.length)).sort(),
-        label: fields.name, description: fields.description, kind: 'skill', requires: [], optional: [], conflicts: [],
-        clientCapabilities: [
-          { client: 'claude-code', surface: '.claude/skills', capability: 'skill-material-format', support: 'supported', reason: 'Recognized SKILL.md material layout; validated through Catalog. Native use is unobserved.' },
-          { client: 'claude-code', surface: 'agent-tools', capability: 'native-execution', support: 'unknown', reason: 'Folder acquisition does not execute supplied code or observe native use.' },
-          { client: 'claude-code', surface: 'agent-tools', capability: 'automatic-guardrails', support: 'unsupported', reason: 'Skill instructions do not intercept or enforce tool execution.' }
-        ], activation: [], configuration: { agentDirectory: { type: 'string', required: true, default: '.claude', minLength: 1, maxLength: 64,
-          description: 'Project directory that receives skills/<name>/ (Claude Code reads .claude).' } } };
-    });
+    ({ items, license } = recognizeSkills({ files, paths, licensePath, revision, skillsDirectory: 'skills', source: 'personal', acquisition: 'Folder acquisition', undeclaredLicense: 'LicenseRef-Personal' }));
   } catch (error) { return refuse('LOCAL_FOLDER_INVALID', '/files', error.message, undefined,
     error.sourceFacts ? { owner: 'catalog', sourceFacts: error.sourceFacts } : undefined); }
   const declarationBytes = encode(stable({ schema: 'urn:aihq:catalog:producer-declaration:3.1.0', format: 'aihq-catalog-producer-declaration', version: 3,

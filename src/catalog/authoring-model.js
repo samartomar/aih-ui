@@ -2,9 +2,21 @@
 export function projectItems(items) {
   return items.map(item => ({
     entryId: `${item.root.releaseSha256}/${item.id}`, authoringItem: item,
-    subject: { id: item.id, kind: item.kind,
-      source: { type: item.family === 'Personal' ? 'local' : 'family', release: item.family, revision: item.root.releaseSha256 } },
+    subject: { id: item.id, kind: item.kind, source: subjectSource(item) },
   }));
+}
+// GitHub serves any commit of a repository's fork network under that repository's name, and nothing here checks that the
+// commit is on the repository's branches: it is never presented as the owner's published code.
+export const GITHUB_PROVENANCE = "Commit as served by GitHub for this repository's network (its forks included); not verified to be on its branches. Downloaded read-only by this Workbench for this page session. Not scanned.";
+// A GitHub source's items (#125) carry the exact repository, commit and the folder of their SKILL.md, as Catalog compiled them.
+export function subjectSource(item) {
+  const origin = item.sources?.[0]?.origin;
+  if (item.family === 'Personal' && origin?.kind === 'git' && typeof origin.repository === 'string') {
+    const path = item.metadata?.sourceFacts?.provenance?.path;
+    return { type: 'github', repository: origin.repository.replace(/^https:\/\/github\.com\//, ''), commit: origin.revision,
+      path: typeof path === 'string' ? path.replace(/\/?SKILL\.md$/, '') : undefined, release: item.family, revision: item.root.releaseSha256 };
+  }
+  return { type: item.family === 'Personal' ? 'local' : 'family', release: item.family, revision: item.root.releaseSha256 };
 }
 export function capabilityFacts(item, target) {
   const declared = item.metadata?.discovery?.clientCapabilities;
