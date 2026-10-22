@@ -139,7 +139,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
   };
   // The evidence panel is the existing review flow's own: open it, then supply the original evidence bytes.
   const supplyEvidence = async page => {
-    await openPolicyWorkspace(page); await openPolicyDrawer(page);
+    await openPolicyWorkspace(page); await openSetupAdvanced(page);
     await page.locator('summary').filter({ hasText: 'Evidence review and reconsideration' }).click();
     await drawer(page).getByLabel('Review evidence files', { exact: true }).setInputFiles(evidencePath);
     await drawer(page).getByText('Original evidence bytes loaded').waitFor();

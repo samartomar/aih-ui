@@ -62,7 +62,7 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
     await addFromCatalog(page, id);
   };
   const openPanel = async page => {
-    await openPolicyWorkspace(page); await openPolicyDrawer(page);
+    await openPolicyWorkspace(page); await openSetupAdvanced(page);
     const summary = page.locator('summary').filter({ hasText: 'Evidence review and reconsideration' });
     if (!await summary.evaluate(node => node.parentElement.open)) await summary.click();
   };
