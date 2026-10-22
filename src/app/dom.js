@@ -13,6 +13,7 @@ export function text(value) {
 export function el(tag, className, value) {
   const node = document.createElement(tag);
   if (className) node.className = className;
+  if (className?.split(/\s+/).includes("material-symbols-outlined")) node.setAttribute("aria-hidden", "true");
   if (value !== undefined && value !== null) node.textContent = String(value);
   return node;
 }
