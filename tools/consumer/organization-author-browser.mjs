@@ -9,7 +9,7 @@ import { readInstalledRelease } from '@aihq/catalog/node';
 import { composeAuthoring, freshAuthoring } from './headless.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope } from './journey.mjs';
 import { organizationTargetId } from './organization-draft-record.mjs';
-import { openPolicyAdvanced, openPolicyFileActions } from './policy-drawer.mjs';
+import { drawer, openPolicyAdvanced, openPolicyFileActions } from './policy-drawer.mjs';
 
 const attacker = { provider: 'github', repository: { owner: 'attacker', name: 'redirect' }, path: 'evil.json', revision: { kind: 'branch', value: 'evil' } };
 const redirect = { organizationSource: attacker, source: attacker, repository: attacker.repository, path: attacker.path, revision: attacker.revision };
@@ -221,13 +221,13 @@ export async function runOrganizationAuthorBrowser({ page, output, fixture, refr
     states.push('published');
     const policyPath = join(output, 'developer-policy.json'); await writeFile(policyPath, await developerPolicyBytes());
     await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(policyPath);
-    await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+    await drawer(page).getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await page.locator('#policy-status').filter({ hasText: 'Saved choices recovered' }).waitFor();
     const prepared = page.waitForResponse(response => response.url().endsWith('/api/authoring-prepare') && response.request().method() === 'POST');
-    await openPolicyAdvanced(page); await page.getByRole('button', { name: 'Prepare exact effects', exact: true }).click();
+    await openPolicyAdvanced(page); await drawer(page).getByRole('button', { name: 'Prepare exact effects', exact: true }).click();
     const review = await (await prepared).json();
     assert.equal(review.status, 'ready', JSON.stringify(review));
-    const apply = page.getByRole('button', { name: 'Approve and Apply reviewed effects', exact: true });
+    const apply = drawer(page).getByRole('button', { name: 'Approve and Apply reviewed effects', exact: true });
     await apply.and(page.locator(':not([disabled])')).waitFor();
     await page.locator('#authority-source-review[data-review="current"]').waitFor();
     for (const key of Object.keys(revisionB)) assert.equal(review.review.inputs.organization[key], revisionB[key], key);

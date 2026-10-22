@@ -11,7 +11,7 @@ import { readAuthoring } from './headless.mjs';
 import { intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { installedFamilies } from './installed-families.mjs';
-import { closePolicyDrawer, openPolicyDrawer, openPolicyFileActions } from './policy-drawer.mjs';
+import { closePolicyDrawer, drawer, openPolicyDrawer, openPolicyFileActions } from './policy-drawer.mjs';
 
 const NOTE = 'consumer-proof.review-note', ME = 'fixture-me', TEAM = 'fixture-team', SENTINEL = 'settings-only-sentinel';
 const encode = value => new TextEncoder().encode(value), decode = bytes => new TextDecoder().decode(bytes);
@@ -68,28 +68,28 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
   };
   const supplyEvidence = async page => {
     await openPanel(page);
-    await page.getByLabel('Review evidence files', { exact: true }).setInputFiles(evidencePath);
-    await page.getByText('Original evidence bytes loaded').waitFor();
+    await drawer(page).getByLabel('Review evidence files', { exact: true }).setInputFiles(evidencePath);
+    await drawer(page).getByText('Original evidence bytes loaded').waitFor();
   };
   const record = async (page, { id, kind, owner, actor }) => {
-    await page.getByLabel('Evidence review subject', { exact: true }).selectOption({ label: NOTE });
-    await page.getByRole('button', { name: 'Inspect evidence', exact: true }).click();
+    await drawer(page).getByLabel('Evidence review subject', { exact: true }).selectOption({ label: NOTE });
+    await drawer(page).getByRole('button', { name: 'Inspect evidence', exact: true }).click();
     await page.getByText(/findings bound to the checked subject/).waitFor();
-    await page.getByLabel('Review decision ID', { exact: true }).fill(id);
-    await page.getByLabel('Review owner kind', { exact: true }).selectOption(kind);
-    await page.getByLabel('Review owner', { exact: true }).fill(owner);
-    await page.getByLabel('Reviewer', { exact: true }).fill(actor);
-    await page.getByLabel('Review disposition', { exact: true }).selectOption('false-alarm');
-    await page.getByLabel('Review reason', { exact: true }).fill('Fixture note intentionally has no license declaration.');
+    await drawer(page).getByLabel('Review decision ID', { exact: true }).fill(id);
+    await drawer(page).getByLabel('Review owner kind', { exact: true }).selectOption(kind);
+    await drawer(page).getByLabel('Review owner', { exact: true }).fill(owner);
+    await drawer(page).getByLabel('Reviewer', { exact: true }).fill(actor);
+    await drawer(page).getByLabel('Review disposition', { exact: true }).selectOption('false-alarm');
+    await drawer(page).getByLabel('Review reason', { exact: true }).fill('Fixture note intentionally has no license declaration.');
     // A person chooses the checked finding they are reviewing; the first is the one bound to the fixture note.
-    await page.getByLabel('Checked finding', { exact: true }).selectOption('0');
-    await page.getByRole('button', { name: 'Propose human review', exact: true }).click();
+    await drawer(page).getByLabel('Checked finding', { exact: true }).selectOption('0');
+    await drawer(page).getByRole('button', { name: 'Propose human review', exact: true }).click();
     await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click();
   };
   const reopen = async (page, path) => {
     await supplyEvidence(page);
     await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(path);
-    await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+    await drawer(page).getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await page.locator('#policy-status').filter({ hasText: 'Saved choices recovered' }).waitFor();
     await page.locator('#review-judgments li[data-record-id]').first().waitFor();
   };
@@ -148,14 +148,14 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
     const policyBytes = await download(author, () => author.locator('#policy-save').click(), policyPath);
     assert.deepEqual(await origins(author), { 'review-me': 'imported', 'review-team': 'imported' });
     assert.match(await summaryOf(author), /^0 of your decisions; 2 imported/);
-    assert.equal(await author.getByLabel('Your reviewer identity', { exact: true }).inputValue(), '');
+    assert.equal(await drawer(author).getByLabel('Your reviewer identity', { exact: true }).inputValue(), '');
     await shot(author, '01-no-identity-imported.png');
     scenarios.push('no-saved-identity-all-imported');
 
     // b. Save the identity in setup, on the existing review step.
     await editSetup(author, { kind: 'individual', id: ME }, { before: '02-setup-review-step.png' });
     assert.deepEqual(await setupReviewer(author), { kind: 'individual', id: ME });
-    assert.equal(await author.getByLabel('Your reviewer identity', { exact: true }).inputValue(), ME);
+    assert.equal(await drawer(author).getByLabel('Your reviewer identity', { exact: true }).inputValue(), ME);
     assert.match(await author.getByRole('status').filter({ hasText: 'setup preferences' }).first().textContent(), /individual fixture-me \(from your setup preferences\)/);
     await openWorkspaceSettings(author);
     assert.match(await author.locator('#org-setup-summary').textContent(), /Reviewing as\s*individual fixture-me/);
@@ -168,8 +168,8 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
     await reopen(defaulted, policyPath);
     assert.deepEqual(await origins(defaulted), { 'review-me': 'recipient', 'review-team': 'imported' });
     assert.match(await summaryOf(defaulted), /^1 of your decisions; 1 imported/);
-    assert.equal(await defaulted.getByLabel('Your reviewer kind', { exact: true }).inputValue(), 'individual');
-    assert.equal(await defaulted.getByLabel('Your reviewer identity', { exact: true }).inputValue(), ME);
+    assert.equal(await drawer(defaulted).getByLabel('Your reviewer kind', { exact: true }).inputValue(), 'individual');
+    assert.equal(await drawer(defaulted).getByLabel('Your reviewer identity', { exact: true }).inputValue(), ME);
     await shot(defaulted, '04-default-from-setup.png');
     const headless = await readAuthoring({ policyBytes, inventories, reviewEvidence: [evidence.bytes], recipient: { kind: 'individual', id: ME } });
     assert.equal(headless.status, 'ok', JSON.stringify(headless));
@@ -177,9 +177,9 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
     scenarios.push('setup-identity-is-default', 'headless-agreement');
 
     // d. The person can still change it for the session; editing setup afterwards does not undo that choice.
-    await defaulted.getByLabel('Your reviewer kind', { exact: true }).selectOption('organization');
-    await defaulted.getByLabel('Your reviewer identity', { exact: true }).fill(TEAM);
-    await defaulted.getByRole('button', { name: 'Use identity', exact: true }).click();
+    await drawer(defaulted).getByLabel('Your reviewer kind', { exact: true }).selectOption('organization');
+    await drawer(defaulted).getByLabel('Your reviewer identity', { exact: true }).fill(TEAM);
+    await drawer(defaulted).getByRole('button', { name: 'Use identity', exact: true }).click();
     await defaulted.getByText(`Saved judgments are labelled for organization ${TEAM}.`).waitFor();
     assert.deepEqual(await origins(defaulted), { 'review-me': 'imported', 'review-team': 'recipient' });
     assert.match(await summaryOf(defaulted), /^1 of your decisions; 1 imported/);
@@ -187,7 +187,7 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
     // e. A saved identity that owns no judgment, set while the session choice stands.
     await editSetup(defaulted, { kind: 'individual', id: SENTINEL });
     assert.deepEqual(await setupReviewer(defaulted), { kind: 'individual', id: SENTINEL });
-    assert.equal(await defaulted.getByLabel('Your reviewer identity', { exact: true }).inputValue(), TEAM, 'The session choice outranks a later setup change.');
+    assert.equal(await drawer(defaulted).getByLabel('Your reviewer identity', { exact: true }).inputValue(), TEAM, 'The session choice outranks a later setup change.');
     assert.deepEqual(await origins(defaulted), { 'review-me': 'imported', 'review-team': 'recipient' });
     scenarios.push('session-choice-wins', 'session-choice-survives-setup-edit');
 
@@ -199,7 +199,7 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
     await reopen(exporting, policyPath);
     assert.deepEqual(await origins(exporting), { 'review-me': 'imported', 'review-team': 'imported' });
     assert.match(await summaryOf(exporting), /^0 of your decisions; 2 imported/);
-    assert.equal(await exporting.getByLabel('Your reviewer identity', { exact: true }).inputValue(), SENTINEL);
+    assert.equal(await drawer(exporting).getByLabel('Your reviewer identity', { exact: true }).inputValue(), SENTINEL);
     await choose(exporting, 'Catalog', 'mattpocock.grilling');
     await exporting.locator('#review-judgments li[data-record-id]').first().waitFor();
     const editedPath = join(output, 'policy.edited.downloaded.json');
@@ -222,7 +222,7 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
     await reopen(cleared, policyPath);
     assert.deepEqual(await origins(cleared), { 'review-me': 'imported', 'review-team': 'imported' });
     assert.match(await summaryOf(cleared), /^0 of your decisions; 2 imported/);
-    assert.equal(await cleared.getByLabel('Your reviewer identity', { exact: true }).inputValue(), '');
+    assert.equal(await drawer(cleared).getByLabel('Your reviewer identity', { exact: true }).inputValue(), '');
     assert.equal(Object.hasOwn((await (await fetch(origin + '/api/workbench-settings')).json()).settings, 'reviewer'), false);
     await shot(cleared, '07-cleared-imported.png');
     scenarios.push('cleared-identity-all-imported', 'setup-left-as-found');

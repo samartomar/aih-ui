@@ -7,7 +7,7 @@ import { readInstalledRelease } from '@aihq/catalog/node';
 import { intakePersonalFolder } from './personal-folder.mjs';
 import { readAuthoring } from './headless.mjs';
 import { installedFamilies } from './installed-families.mjs';
-import { closePolicyDrawer, openPolicyFileActions } from './policy-drawer.mjs';
+import { closePolicyDrawer, drawer, openPolicyFileActions } from './policy-drawer.mjs';
 
 export async function runIntegratedBrowser({ origin, output, playwrightModule }) {
   const { chromium } = await import(playwrightModule);
@@ -80,7 +80,7 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     const fresh = await pageSetup(await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 1000 } }));
     assert.equal(await fresh.locator('#browse-family option[value="Personal"]').count(), 0);
     await fresh.locator('#nav-policy').click(); await openPolicyFileActions(fresh); await fresh.locator('#policy-open').setInputFiles(savedPath);
-    await fresh.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+    await drawer(fresh).getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await fresh.locator('#policy-status').filter({ hasText: 'SOURCE_REVISION_UNAVAILABLE' }).waitFor();
     assert.equal(await fresh.locator('#policy-save').isDisabled(), true);
     await fresh.locator('#nav-sources').click(); assert.equal(await fresh.locator('#personal-binding option').count(), 2);
@@ -94,7 +94,7 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     await fresh.locator('#personal-folder').setInputFiles(folder); await observedGate;
     assert.doesNotMatch(await fresh.locator('#personal-result').textContent(), /Exact folder rebound/);
     releaseCatalog(); await fresh.locator('#personal-result').filter({ hasText: 'Exact folder rebound' }).waitFor(); await fresh.unroute('**/api/authoring-catalog');
-    await fresh.locator('#nav-policy').click(); await openPolicyFileActions(fresh); await fresh.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+    await fresh.locator('#nav-policy').click(); await openPolicyFileActions(fresh); await drawer(fresh).getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await fresh.locator('#policy-status').filter({ hasText: 'Saved choices recovered' }).waitFor();
     assert.deepEqual((await policy(fresh)).metadata['aih.workbench'].roots, saved.metadata['aih.workbench'].roots);
     assert.deepEqual((await policy(fresh)).selections, saved.selections);

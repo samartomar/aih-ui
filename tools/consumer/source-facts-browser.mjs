@@ -8,7 +8,7 @@ import { installedFamilies } from './installed-families.mjs';
 import { performance } from 'node:perf_hooks';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { closePolicyDrawer, openPolicyDrawer, openSourceDetails } from './policy-drawer.mjs';
+import { closePolicyDrawer, drawer, openPolicyDrawer, openSourceDetails } from './policy-drawer.mjs';
 export async function runSourceFactsBrowser({ origin, output, playwrightModule }) {
   const began = performance.now();
   const { chromium } = await import(playwrightModule);
@@ -43,7 +43,7 @@ export async function runSourceFactsBrowser({ origin, output, playwrightModule }
       const transport = JSON.stringify(snapshot, (_key, value) => value instanceof Uint8Array ? [...value] : value);
       await page.locator('#nav-policy').click();
       const response = page.waitForResponse(value => value.url().endsWith('/api/authoring-intake'));
-      await page.getByLabel('Portable declaration snapshot').setInputFiles({ name: `${example.id}.json`, mimeType: 'application/json', buffer: Buffer.from(transport) });
+      await drawer(page).getByLabel('Portable declaration snapshot').setInputFiles({ name: `${example.id}.json`, mimeType: 'application/json', buffer: Buffer.from(transport) });
       assert.equal((await (await response).json()).status, 'ok');
       await page.locator('#browse-family option[value="Independent"]').waitFor({ state: 'attached' });
       await page.locator('#nav-sources').click();
@@ -82,7 +82,7 @@ export async function runSourceFactsBrowser({ origin, output, playwrightModule }
     await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click(); await closePolicyDrawer(page);
     const before = await page.locator('#policy-bytes').textContent();
     await page.locator('#nav-scan-review').click();
-    const panel = page.getByRole('region', { name: 'Latest Scan evidence' });
+    const panel = drawer(page).getByRole('region', { name: 'Latest Scan evidence' });
     // The subject list is bounded; a person searches for the item before choosing it.
     await panel.getByLabel('Search evidence subjects', { exact: true }).fill('personal.skill.example');
     await panel.getByLabel('Scan content', { exact: true }).selectOption(`${personal.value.release.sha256}/personal.skill.example`);

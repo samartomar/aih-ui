@@ -8,7 +8,7 @@ import { runScan, prepareArtifact } from '@aihq/scan/host';
 import { digestBytes } from './primitives.mjs';
 import { intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
-import { closePolicyDrawer } from './policy-drawer.mjs';
+import { closePolicyDrawer, drawer } from './policy-drawer.mjs';
 
 const NOTE = 'consumer-proof.review-note';
 
@@ -91,15 +91,15 @@ export async function runEvidenceStatesBrowser({ origin, output, playwrightModul
     await page.locator('#nav-scan-review').click();
     await page.locator('#policy-workspace').waitFor({ state: 'visible' });
     assert.equal(await page.locator('#evidence-review').evaluate(node => node.open), true, 'Scan Review opens the supplied-evidence review.');
-    assert.equal(await page.getByLabel('Review evidence files', { exact: true }).evaluate(node => node === document.activeElement), true);
+    assert.equal(await drawer(page).getByLabel('Review evidence files', { exact: true }).evaluate(node => node === document.activeElement), true);
     scenarios.push('scan-review-opens-evidence-review');
 
     const supply = async (path, state) => {
       await page.locator('#nav-scan-review').click();
-      await page.getByLabel('Review evidence files', { exact: true }).setInputFiles(path);
-      await page.getByText('Original evidence bytes loaded').waitFor();
-      await page.getByLabel('Evidence review subject', { exact: true }).selectOption({ label: NOTE });
-      await page.getByRole('button', { name: 'Inspect evidence', exact: true }).click();
+      await drawer(page).getByLabel('Review evidence files', { exact: true }).setInputFiles(path);
+      await drawer(page).getByText('Original evidence bytes loaded').waitFor();
+      await drawer(page).getByLabel('Evidence review subject', { exact: true }).selectOption({ label: NOTE });
+      await drawer(page).getByRole('button', { name: 'Inspect evidence', exact: true }).click();
       const status = page.locator(`#evidence-review [role="status"][data-evidence-state="${state}"]`);
       await status.waitFor();
       const text = await status.innerText();
@@ -127,8 +127,8 @@ export async function runEvidenceStatesBrowser({ origin, output, playwrightModul
     scenarios.push('invalid');
     // g. Forgetting the evidence returns every card to not supplied.
     await page.locator('#nav-scan-review').click();
-    await page.getByRole('button', { name: 'Forget supplied evidence', exact: true }).click();
-    await page.getByText('Supplied evidence forgotten').waitFor();
+    await drawer(page).getByRole('button', { name: 'Forget supplied evidence', exact: true }).click();
+    await drawer(page).getByText('Supplied evidence forgotten').waitFor();
     await page.locator('#nav-sources').click();
     await page.waitForFunction(note => document.querySelector(`[data-card-id$="/${note}"] [data-evidence-state]`)?.dataset.evidenceState === 'not-supplied', NOTE);
     scenarios.push('forgotten-not-supplied');
