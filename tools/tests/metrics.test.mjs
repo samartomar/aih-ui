@@ -18,7 +18,7 @@ function element(tag) {
 }
 const descendants = node => [node, ...node.children.flatMap(descendants)];
 
-test("metrics count actual inventory kinds and omit unmeasured token tiles", (t) => {
+test("metrics count actual inventory kinds; tokens are unknown, not published", (t) => {
   const previous = Object.getOwnPropertyDescriptor(globalThis, "document");
   globalThis.document = { createElement: element };
   t.after(() => { if (previous) Object.defineProperty(globalThis, "document", previous); else delete globalThis.document; });
@@ -37,8 +37,12 @@ test("metrics count actual inventory kinds and omit unmeasured token tiles", (t)
   assert.equal(tiles.command.disabled, undefined);
   tiles.hook.listeners.click(); tiles.command.listeners.click();
   assert.deepEqual(toggled, ["hook", "command"]);
-  assert.deepEqual(Object.keys(tiles), ['skill', 'command', 'hook', 'package', 'profile']);
-  assert.equal(tiles.tokens, undefined);
+  assert.deepEqual(Object.keys(tiles), ['skill', 'command', 'hook', 'package', 'profile', 'tokens']);
+  assert.equal(tiles.tokens.disabled, true);
+  assert.ok(texts(tiles.tokens).includes("Unknown"));
+  assert.equal(tiles.tokens.title, "Tokens: unknown. No defined producer supplies token values.");
+  assert.equal(tiles.tokens.listeners.click, undefined);
+  assert.match(tiles.tokens.attributes["aria-label"], /^Tokens: Unknown\. No defined producer supplies token values\.$/);
   assert.ok(texts(tiles.package).includes('Packages') && texts(tiles.package).includes('2'));
   assert.ok(texts(tiles.profile).includes('Profiles') && texts(tiles.profile).includes('3'));
   for (const tile of container.children) {
