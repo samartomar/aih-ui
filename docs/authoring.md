@@ -12,10 +12,13 @@ No source checkout imports or `npm link` are needed.
 
 The ordinary application retains its shell, onboarding, catalog, inspector and
 role-specific Policy workspace. Choose a content family in the rail or family
-selector, browse producer capability facts for a target, then choose an item
-from its card or the inspector's **Add to project policy** action. Review the
-proposal in Policy workspace and accept it before saving. Configuration changes
-and removal use the same proposal boundary. **Check Policy** validates current
+selector, browse producer capability facts for a target, then use **Add** on an
+item's card or in the inspector. Add proposes the item; when the composition
+validator and Core return the proposal with nothing to decide, it is accepted
+in the same step with the items it needs, and a confirmation offers **Undo**.
+A refusal, or a proposal returned with diagnostics, opens the review with its
+reasons and adds nothing until it is accepted. Configuration changes and
+removal use the same proposal boundary, reviewed before acceptance. **Check Policy** validates current
 bytes and exact available sources; it establishes no organization approval.
 
 **Choose personal folder** supplies only explicitly selected bytes to the

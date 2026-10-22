@@ -87,9 +87,9 @@ test("each supplied evidence state renders its own text, and matched is not auth
   assert.match(pill(renderCard(t, "Described", { state: "matched", scanId: "scan-1" }).node).title, /scan-1.*unchecked; this is not an approval or execution authority/);
 });
 
-test("keyboard activation on Choose does not inspect its parent card", t => {
+test("keyboard activation on Add does not inspect its parent card", t => {
   const { node, selections } = renderCard(t, 'Described');
-  const choose = descendants(node).find(node => node.textContent === 'Choose');
+  const choose = descendants(node).find(node => node.textContent === 'Add');
   assert.ok(choose);
   for (const key of ['Enter', ' ']) node.listeners.keydown({ key, target: choose, preventDefault() { assert.fail('Parent must not cancel child keyboard input'); } });
   assert.deepEqual(selections, []);
@@ -103,7 +103,21 @@ test("accepted draft roots stay chosen even without executable intent roots", t 
   assert.ok(choice);
   assert.equal(choice.disabled, true);
   assert.equal(choice.attributes['aria-label'], 'In draft fixture');
-  assert.equal(descendants(node).some(node => node.textContent === 'Choose'), false);
+  assert.equal(descendants(node).some(node => node.textContent === 'Add'), false);
+});
+
+test("a card's Add reads Adding… while it adds, and a chosen item's card reads Added and cannot be added again", async t => {
+  let finish;
+  const { node } = renderCard(t, 'Described', undefined, { onChoose: () => new Promise(resolve => { finish = resolve; }) });
+  const add = descendants(node).find(node => node.textContent === 'Add');
+  assert.equal(add.attributes['aria-label'], 'Add fixture');
+  const pending = add.listeners.click({ stopPropagation() {} });
+  assert.equal(add.textContent, 'Adding…'); assert.equal(add.disabled, true); assert.equal(add.attributes['aria-busy'], 'true');
+  finish(); await pending;
+  assert.equal(add.textContent, 'Add'); assert.equal(add.attributes['aria-busy'], undefined);
+  const chosen = renderCard(t, 'Described', undefined, { acceptedRoots: [{ itemId: 'fixture', releaseSha256: 'a'.repeat(64) }] }).node;
+  const added = descendants(chosen).find(node => node.textContent === 'Added');
+  assert.ok(added); assert.equal(added.disabled, true); assert.equal(added.attributes['aria-label'], 'Added fixture');
 });
 
 test("returning to the catalog focuses the chosen card when the grid shows it, and reports when it does not", t => {
