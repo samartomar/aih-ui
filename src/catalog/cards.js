@@ -89,7 +89,7 @@ function card(entry, selectedId, onSelect, model) {
   // keeps the design source's card proportions instead of closing up.
   const body = el("p", "wb-card-description text-wb-card-description text-on-surface-variant mt-2 line-clamp-3 break-words", description ?? NOT_PUBLISHED);
   body.title = description === null ? "Description: not published for this entry." : "Description from the installed Catalog release.";
-  top.appendChild(body); if (entry.authoringItem) { const tool = el("p", "wb-card-tool mt-1 text-[11px] font-mono text-on-surface truncate", toolLine(entry.authoringItem)); tool.title = "Which AI tool this item installs for, as the Catalog declares it."; top.appendChild(tool); }
+  top.appendChild(body); if (entry.authoringItem) { const tool = el("p", "wb-card-tool mt-1 text-[11px] font-mono text-on-surface truncate", toolLine(entry.authoringItem, model.tool)); tool.title = "The AI tools the Catalog marks this item supported for (with Your tool chosen, that tool only)."; top.appendChild(tool); }
   node.appendChild(top);
 
   const foot = el("div", "pt-2.5 mt-2.5 border-t border-wb-border flex items-center justify-between text-[10px]");

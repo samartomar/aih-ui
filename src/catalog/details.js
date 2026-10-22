@@ -36,6 +36,7 @@ import {
 import { KIND_ICON, KIND_TONE, identity, sourceDetailRows, sourceIdentity, statementsOf } from "./entry.js";
 import { scopeCountOf } from "./selectors.js";
 import { familyLabel } from "./frameworks.js";
+import { comesWith } from "./supporting.js";
 
 /* These Catalog inspector slots have no verified per-entry scan input. */
 const DETECTOR_RUN_STATE_ABSENT =
@@ -96,6 +97,31 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
   elements.detectorRunState.title = DETECTOR_RUN_STATE_ABSENT;
   elements.detectorFindingDetail.title = `${NOT_PUBLISHED}: ${FINDING_DETAIL_ABSENT}`;
 
+  // What comes with the selected item: the items Catalog's resolver brings with it, asked of the host once per item.
+  let needsAsked = 0, needsFor = null; const needs = new Map(), known = new Map();
+  function showComesWith(item, { items = [], supporting = new Set() } = {}) {
+    const node = elements.detailsComesWith, ask = ++needsAsked;
+    if (!node) return;
+    if (!item || !authoring?.request) { node.hidden = true; node.replaceChildren(); return; }
+    if (needsFor !== items) { needs.clear(); known.clear(); needsFor = items; }
+    const show = lines => { if (ask !== needsAsked) return; node.hidden = false; node.replaceChildren(...lines.map(line => el('p', '', line))); };
+    const root = { releaseSha256: item.root.releaseSha256, itemId: item.id, scope: item.root.scope };
+    const key = JSON.stringify(root);
+    if (!needs.has(key)) needs.set(key, authoring.request('needs', { root, policyBytes: undefined }).catch(() => null)
+      .then(result => { if (result?.status === 'ok') known.set(key, result); return result; }));
+    // An item already worked out is shown at once, so a re-render does not flash the waiting line.
+    if (known.has(key)) return show(comesWith({ needs: known.get(key).value.needs, items, supporting }));
+    show(['Working out what comes with this item…']);
+    needs.get(key).then(result => {
+      if (result?.status === 'ok') show(comesWith({ needs: result.value.needs, items, supporting }));
+      else {
+        needs.delete(key);
+        const said = (result?.diagnostics ?? []).map(diagnostic => diagnostic.message ?? diagnostic.code).filter(Boolean).join(' ');
+        show([result ? `The Catalog could not work out what comes with this item.${said ? ` ${said}` : ''}` : 'What comes with this item could not be read.']);
+      }
+    });
+  }
+
   function reset() {
     elements.detailsIdentity.replaceChildren();
     elements.detailsSource.replaceChildren();
@@ -148,11 +174,13 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
 
   return {
     /**
-     * @param model { entry, counts, target, coreClients } `target` is the AI client whose capability facts the
-     *   page shows; `coreClients` is Core's nativeClientIds, or null when Core published none (client support is then unknown)
+     * @param model { entry, counts, target, coreClients, items, supporting } `target` is the AI client whose capability facts the
+     *   page shows; `coreClients` is Core's nativeClientIds, or null when Core published none (client support is then unknown);
+     *   `items` and `supporting` (the catalog's items and its supporting material) name what comes with the item
      */
-    render({ entry, counts, target, coreClients }) {
+    render({ entry, counts, target, coreClients, items, supporting }) {
       reset();
+      showComesWith(entry?.authoringItem, { items, supporting });
       evidence.show(entry?.authoringItem);
       elements.detectorRunState.title = DETECTOR_RUN_STATE_ABSENT;
       elements.detectorFindingDetail.title = `${NOT_PUBLISHED}: ${FINDING_DETAIL_ABSENT}`;

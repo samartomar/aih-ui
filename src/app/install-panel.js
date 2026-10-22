@@ -2,7 +2,7 @@
 // then one Install button that prepares again, checks the review is unchanged and applies it. The
 // advanced Prepare and Apply buttons stay where they are; this reuses the same host operations.
 
-import { declaredTools, toolLine } from '../catalog/tool-match.js';
+import { declaredTools, supportedFor, toolLine } from '../catalog/tool-match.js';
 import { sameSourceWarning } from './source-copies.js';
 import { applyIfUnchanged, diagnosticWords, effectsFingerprint, fileCount, installFiles, IN_PLACE } from './host-review.js';
 
@@ -62,7 +62,8 @@ export function installOutcome(run, files, project) {
 }
 
 /**
- * A warning naming each chosen item that does not declare the Catalog tool name the person chose as Your tool in the header, or ''.
+ * A warning naming each chosen item that does not declare the Catalog tool name the person chose as Your tool in the header,
+ * and each that declares it but is not marked `supported` for it, or ''.
  * `items` are Catalog items; names are compared exactly, in the Catalog's own names (see tool-match.js). With no
  * Catalog tool chosen there is nothing to compare, and the Core ids chosen in Settings are never compared with Catalog names.
  */
@@ -70,8 +71,11 @@ export function toolWarning(items, { catalogTool } = {}) {
   if (!catalogTool) return '';
   const tools = item => { const named = declaredTools(item).map(tool => tool.client), specific = named.filter(tool => tool !== 'generic');
     return specific.length ? specific.join(', ') : named.length ? 'any AI tool' : 'no declared tool'; };
-  const missing = items.filter(item => !declaredTools(item).some(tool => tool.client === catalogTool));
-  return missing.length ? `Not listed for ${catalogTool}: ${missing.map(item => `${item.label ?? item.id} (${tools(item)})`).join(', ')}.` : '';
+  const declares = item => declaredTools(item).some(tool => tool.client === catalogTool);
+  const missing = items.filter(item => !declares(item));
+  const notSupported = items.filter(item => declares(item) && !supportedFor(item, catalogTool));
+  return [missing.length ? `Not listed for ${catalogTool}: ${missing.map(item => `${item.label ?? item.id} (${tools(item)})`).join(', ')}.` : '',
+    notSupported.length ? `Not marked supported for ${catalogTool} by the Catalog: ${notSupported.map(item => item.label ?? item.id).join(', ')}.` : ''].filter(Boolean).join(' ');
 }
 
 const readyPreparation = result => { const preparation = result?.preparation ?? result; return preparation?.status === 'ready' && preparation.sessionId && preparation.review ? preparation : undefined; };
@@ -96,7 +100,7 @@ export function createInstallPanel({ client, el, button, tools = () => ({}), onI
 
   let preview, previewing = false, installing = false, shownFor, managed = false, again = false;
   const itemOf = ref => client.catalog?.items.find(item => item.id === ref.itemId && item.root.releaseSha256 === ref.releaseSha256);
-  const label = ref => { const item = itemOf(ref); return item ? `${item.label ?? item.id} — ${toolLine(item)}` : ref.itemId; };
+  const label = ref => { const item = itemOf(ref); return item ? `${item.label ?? item.id} — ${toolLine(item, tools().catalogTool)}` : ref.itemId; };
   const ready = () => Boolean(client.catalog && client.intent && !client.candidate && !(client.draft && !client.compiled));
 
   function show(review) {

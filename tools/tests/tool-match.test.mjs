@@ -21,6 +21,18 @@ test('a card names the tool and folder the Catalog declares, once per tool', () 
   assert.equal(toolLine(undeclared), 'Tool not declared');
 });
 
+test('a card names only the tools the Catalog marks supported, and with a tool chosen just that tool and its support', () => {
+  const runtimeSource = item('superpowers.runtime-source.codex', ...['claude-code', 'kiro-ide'].map(client => ({ ...fact(client, 'plugins/hooks'), capability: 'native-adapter-installation', support: 'unsupported', reason: 'Catalog projection only.' })));
+  const mixed = item('ecc.skill.x', fact('claude-code', '.claude/skills'), { ...fact('kiro-ide', '.kiro/skills'), support: 'unsupported', reason: 'Not for Kiro.' });
+  assert.equal(toolLine(mixed), 'For claude-code · .claude/skills', 'kiro-ide is marked unsupported, so it is not named');
+  assert.equal(toolLine(runtimeSource), 'Not marked supported for any tool');
+  assert.equal(toolLine(mixed, 'claude-code'), 'For claude-code · .claude/skills · supported');
+  assert.equal(toolLine(mixed, 'kiro-ide'), 'Not marked supported for kiro-ide');
+  assert.equal(toolLine(kiroCopy, 'claude-code'), 'Not declared for claude-code');
+  assert.equal(toolLine(anyTool, 'claude-code'), 'For any AI tool');
+  assert.equal(toolLine(undeclared, 'claude-code'), 'Tool not declared');
+});
+
 test('names are compared exactly: claude-code is not translated to claude', () => {
   assert.equal(toolRelation(codexCopy, { ...core, selected: ['codex'] }), 'selected');
   assert.equal(toolRelation(codexCopy, core), 'other');
@@ -75,11 +87,14 @@ test('one rule decides an item for the grid and for the counts', () => {
   assert.equal(toolKeeps(kiroCopy, { tool: '' }), true);
 });
 
-test('Install warns only about a chosen item that does not declare the chosen Catalog tool', () => {
+test('Install warns about a chosen item that does not declare the chosen Catalog tool, or is not marked supported for it', () => {
   assert.equal(toolWarning([claudeCopy], { catalogTool: 'claude-code' }), '', 'the correct copy gets no warning');
   assert.equal(toolWarning([kiroCopy], { catalogTool: 'claude-code' }), 'Not listed for claude-code: grill-me (kiro-ide).');
   assert.equal(toolWarning([claudeCopy, undeclared, anyTool], { catalogTool: 'claude-code' }), 'Not listed for claude-code: grill-me (no declared tool), grill-me (any AI tool).');
   assert.equal(toolWarning([kiroCopy], {}), '', 'no Catalog tool chosen: nothing to compare');
+  const unsupportedCopy = item('ecc.skill.x', { ...fact('claude-code', '.claude/skills'), support: 'unsupported', reason: 'Not for Claude.' });
+  assert.equal(toolWarning([claudeCopy, unsupportedCopy], { catalogTool: 'claude-code' }), 'Not marked supported for claude-code by the Catalog: grill-me.');
+  assert.equal(toolWarning([kiroCopy, unsupportedCopy], { catalogTool: 'claude-code' }), 'Not listed for claude-code: grill-me (kiro-ide). Not marked supported for claude-code by the Catalog: grill-me.');
   assert.equal(toolWarning([kiroCopy], { ...core }), '', 'the header Core ids are never compared with Catalog names');
 });
 

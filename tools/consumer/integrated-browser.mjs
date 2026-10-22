@@ -47,6 +47,16 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     assert.equal(await page.locator('iframe').count(), 0); assert.equal(new URL(page.url()).pathname, '/');
     await chooseFramework(page, 'Extensions'); await page.locator('#catalog-search').fill('matt');
     assert.ok(await page.getByRole('button', { name: 'Add extensions.matt.ask-matt', exact: true }).isVisible());
+    // Supporting material is not a card (#133); a card's details say what comes with it, from Catalog's resolver.
+    await page.locator('#catalog-search').fill('notices');
+    assert.equal(await page.locator('#cards-grid [data-card-id$="/extensions.notices"]').count(), 0, 'the notices are not a card');
+    await page.locator('#catalog-search').fill('matt');
+    await page.locator('#cards-grid [data-card-id$="/extensions.matt.ask-matt"]').click();
+    await page.locator('#details-comes-with').filter({ hasText: /Comes with 1 supporting file: Extensions licenses and upstream notices\./ }).waitFor();
+    await openCatalogAdvanced(page); await page.locator('#catalog-search').fill('notices');
+    await page.locator('#catalog-tools-supporting').filter({ hasText: /^Show supporting material \(\d+\)$/ }).click();
+    await page.locator('#cards-grid [data-card-id$="/extensions.notices"]').waitFor();
+    await page.locator('#catalog-tools-supporting').click();
     await page.locator('#catalog-search').fill('');
     await openCatalogAdvanced(page); await page.locator('#rail-scope-list button').filter({ hasText: 'Extensions' }).first().click();
     await chooseFramework(page, 'ECC');
