@@ -68,11 +68,13 @@ test('the default catalog keeps the search, the kind pills, Your tool and the ca
     assert.equal(inside(id, 'catalog-advanced'), false, `${id} stays on the default screen`);
 });
 
-test('the tool line is under Advanced and the Core tools chip is in Settings, with their ids (owner decision 3)', () => {
+test('the tool line is under Advanced and the Core tools chip is in Settings, Advanced, with their ids (owner decision 3, #136)', () => {
   for (const id of ['catalog-tools-bar', 'browse-target', 'catalog-tools-toggle', 'catalog-tools-undeclared', 'catalog-tools-unsupported', 'catalog-tools-unmatched'])
     assert.ok(inside(id, 'catalog-advanced'), `${id} is inside the catalog Advanced section`);
-  for (const id of ['ai-tools-trigger', 'ai-tools-count', 'ai-tools-pop', 'ai-tools-list', 'ai-tools-note'])
+  for (const id of ['ai-tools-trigger', 'ai-tools-count', 'ai-tools-pop', 'ai-tools-list', 'ai-tools-note', 'your-tool-core']) {
     assert.ok(inside(id, 'workspace-actions'), `${id} is in the Settings menu`);
+    assert.ok(inside(id, 'settings-advanced'), `${id} is in the Settings menu's Advanced part`);
+  }
 });
 
 test('one Settings menu holds the workspace actions, the mode, Check this machine and Get started', () => {
@@ -124,10 +126,13 @@ test('the default catalog screen uses plain words: no policy, pins, artifacts, d
 
 test('the words say where Mode and Core tools now live: the Settings menu', () => {
   const html = readFileSync(new URL('../../src/index.html', import.meta.url), 'utf8');
-  assert.match(/id="org-modal-trigger"[^>]*title="([^"]*)"/.exec(html)[1], /Core tools/, 'the Settings button names Core tools');
+  assert.match(/id="org-modal-trigger"[^>]*title="([^"]*)"/.exec(html)[1], /Advanced, the tools to set up on this machine/, 'the Settings button says where the Core tools list is');
   const onboarding = readFileSync(new URL('../../src/app/onboarding.js', import.meta.url), 'utf8');
   assert.doesNotMatch(onboarding, /Mode control in the header/);
   assert.match(onboarding, /Change mode in Settings/);
+  // One tool list where people work (#136): setup names the Core list by its place and says it does not choose content.
+  assert.doesNotMatch(onboarding, /AI tools control/);
+  assert.match(onboarding, /Settings, Advanced, Tools to set up on this machine/);
 });
 
 test('an open Advanced section is a panel beside the cards on a wide screen, with its own Close (#122)', () => {

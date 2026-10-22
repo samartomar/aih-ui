@@ -21,7 +21,7 @@ import { inventoryCounts, scopeTotal, selectedScope, visibleEntries, sourceScope
 import { emptyView, restoreView, saveView } from "./view-state.js";
 import { text } from "../app/dom.js";
 import { catalogToolView, filterByTools, toolsNotice } from "./tool-match.js";
-import { defaultCatalogTool, saveCatalogTool, savedCatalogTool } from "./catalog-tool.js";
+import { catalogToolOnRefresh, saveCatalogTool, savedCatalogTool } from "./catalog-tool.js";
 import { createYourTool, yourToolModel } from "./your-tool.js";
 import { createProjectBasics, frameworkShows, projectFileEntries } from "./project-basics.js";
 import { createYourSources } from "./your-sources.js";
@@ -153,7 +153,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   const renderFrameworks = () => frameworkRail.render({ rows: frameworkRows(authoring.catalog?.items ?? [], frameworkCounts()), selected: basicsOpen() || sourcesOpen() ? null : state.view.family });
   const focusCard = (entryId) => basicsOpen() ? projectBasics.focus(entryId) : sourcesOpen() ? yourSources.focus(entryId) : cards.focus(entryId);
   // The Catalog tool name is the person's own choice; it is remembered for the next visit and shared with the page.
-  target.addEventListener('change', () => { saveCatalogTool(target.value); changeView({ target: target.value }); });
+  target.addEventListener('change', () => { state.forgottenTool = ''; saveCatalogTool(target.value); changeView({ target: target.value }); });
   support.addEventListener('change', () => changeView({ support: support.value }));
   // Reset clears the filters, not the person's tool choice or the open framework.
   const resetFilters = () => { const tool = state.view.target, open = state.view.family; Object.assign(state.view, emptyView()); toolbar.setQuery(''); changeView({ target: tool, ...familyView(open) }); };
@@ -183,7 +183,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   // there filters by it again, even after Show all.
   const yourTool = createYourTool({
     elements: elements.yourTool,
-    onChoose: (tool) => { saveCatalogTool(tool); state.toolsMode = 'mine'; changeView({ target: tool }); },
+    onChoose: (tool) => { state.forgottenTool = ''; saveCatalogTool(tool); state.toolsMode = 'mine'; changeView({ target: tool }); },
     onToggleUndeclared: () => { state.showUndeclared = !state.showUndeclared; render(); },
   });
   const coreTools = () => publishedClients(state.summary?.coreTargets) ?? { ids: [], labels: {} };
@@ -262,7 +262,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     toolsUnmatched.textContent = notice; toolsUnmatched.hidden = !notice;
     yourTool.render(yourToolModel({ declared: declared(), tool, mode: state.toolsMode, coreIds: options.coreIds, coreLabels: options.labels,
       coreSelected: state.selectedTools, undeclared: view.undeclared, showUndeclared: state.showUndeclared,
-      notSupported: view.notSupported, showUnsupported: state.showUnsupported, coreHidden: hiddenByCore }));
+      notSupported: view.notSupported, showUnsupported: state.showUnsupported, coreHidden: hiddenByCore,
+      place: location.host, forgotten: state.forgottenTool ?? '' }));
   }
 
   function selectedEntry() {
@@ -422,9 +423,14 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
         }
         family.value = [...family.options].some(option => option.value === selectedFamily) ? selectedFamily : '';
         declaredNames = declaredTargets(authoring.catalog.items);
-        // The Catalog's own tool names. The default is the person's saved choice, else none: never a guess from the Core ids chosen in Settings.
+        // The Catalog's own tool names. The tool is the person's saved choice, else none: never a guess from the Core ids
+        // chosen in Settings. It is tried on every refresh, so a refresh before the framework releases load cannot lose it,
+        // and it is forgotten, and said so, only when the loaded frameworks no longer declare it (#136).
         target.replaceChildren(new Option('choose…', ''), ...declared().map(value => new Option(value, value)));
-        target.value = defaultCatalogTool(declared(), restoredView ? selectedTarget : savedCatalogTool());
+        const restored = catalogToolOnRefresh({ declared: declared(), frameworksLoaded: frameworkRows(authoring.catalog.items).length > 0,
+          saved: savedCatalogTool(), current: selectedTarget });
+        target.value = restored.tool;
+        if (restored.forget) { state.forgottenTool = restored.forget; saveCatalogTool(''); }
         state.view.family = family.value;
         state.view.target = target.value;
         // Startup loads the catalog and shell concurrently. Restore only after

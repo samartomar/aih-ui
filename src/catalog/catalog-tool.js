@@ -29,3 +29,18 @@ export function saveCatalogTool(tool) {
 export function defaultCatalogTool(declared, saved) {
   return typeof saved === 'string' && saved && declared.includes(saved) ? saved : '';
 }
+
+/**
+ * The tool for one catalog refresh, and the saved tool to forget, or ''.
+ *
+ * The catalog refreshes more than once while the page opens, and an early refresh can come before the framework
+ * releases have loaded: the Catalog's default release alone declares no tool names. So the saved choice (the latest
+ * one: every choice on the page is saved at once) is tried on every refresh, not only the first, and it is forgotten
+ * only once frameworks have loaded and the Catalog still does not declare it (samartomar/aih-ui#136). With storage
+ * refused nothing is saved, and the page keeps the tool chosen on it (`current`).
+ */
+export function catalogToolOnRefresh({ declared = [], frameworksLoaded = false, saved = '', current = '' }) {
+  const wanted = saved || current;
+  if (wanted && declared.includes(wanted)) return { tool: wanted, forget: '' };
+  return { tool: '', forget: saved && frameworksLoaded ? saved : '' };
+}

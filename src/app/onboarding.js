@@ -131,7 +131,7 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
       label.append(box, ...clientNodes(labels, target));
       group.append(label);
     }
-    elements.setupContent.append(group, el("p", "text-outline mt-4 text-[11px]", "Your explicit choices carry into the Workbench's AI tools control. You can change clients there later, or use Mode to change your experience."));
+    elements.setupContent.append(group, el("p", "text-outline mt-4 text-[11px]", "These are the tools to set up on this machine. Change them later in Settings, Advanced, Tools to set up on this machine. Your tool in the header chooses the content you see. Use Mode to change your experience."));
     const unlisted = draft.clients.filter((client) => !targets.includes(client));
     if (unlisted.length) elements.setupContent.append(el("p", "setup-notice mt-4", `Saved clients no longer listed by this Core stay selected: ${unlisted.join(", ")}.`));
   }

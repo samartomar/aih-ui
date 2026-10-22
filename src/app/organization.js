@@ -24,7 +24,8 @@ export function createOrganization({ elements, onEdit, onModeComplete }) {
   };
   action("Workspace settings", () => open());
   action("Browse catalog", () => document.getElementById("nav-sources").click());
-  const items = () => [...menu.querySelectorAll("button, a[href]")];
+  // The items a person can reach: Advanced's summary, and what is inside Advanced only while it is open.
+  const items = () => [...menu.querySelectorAll("button, a[href], summary")].filter(item => item.tagName === "SUMMARY" || !item.closest("details:not([open])"));
   // An item opens or does something and closes the menu, except the Core tools chip and its panel (data-menu-keep),
   // which stay open so the choice can be made there.
   menu.addEventListener("click", event => { if (!event.target.closest?.("[data-menu-keep]") && items().some(item => item.contains(event.target))) setMenu(false); });
