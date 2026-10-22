@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, parse } from 'node:path';
-import { checkProjectFolder, createProjectFolder } from '../consumer/project-folder.mjs';
+import { checkProjectFolder, createProjectFolder, shared } from '../consumer/project-folder.mjs';
 
 async function layout() {
   const base = await realpath(await mkdtemp(join(tmpdir(), 'project-folder-')));
@@ -29,7 +29,7 @@ test('refuses each unsafe path with a plain reason', async () => {
     assert.match(await reason('code/app'), /full path/);
     assert.match(await reason(join(fixture.base, 'missing')), /does not exist/);
     assert.match(await reason(join(fixture.base, 'notes.txt')), /is a file, not a folder/);
-    assert.match(await reason(parse(fixture.base).root), /drive or filesystem root/);
+    assert.match(await reason(parse(fixture.base).root), /whole drive/);
     assert.match(await reason(fixture.home), /home folder/);
     assert.match(await reason(fixture.envHome), /home folder/);
     assert.match(await reason(join(fixture.home, '.aih')), /Core keeps its own records/);
@@ -81,4 +81,32 @@ test('a switch while Install or Remove is running is refused and changes nothing
     assert.equal((await folder.choose(fixture.project)).status, 'ok');
     assert.deepEqual(changes, [fixture.project]);
   } finally { await fixture.done(); }
+});
+
+test('before each run the chosen folder is checked again; a folder replaced or removed since is refused', async () => {
+  const fixture = await layout();
+  try {
+    const folder = createProjectFolder({ initial: 'C:/configured', onChange: () => {}, options: fixture.options });
+    assert.equal(await folder.verify(), undefined, 'the host default is the override and is not re-checked');
+    assert.equal((await folder.choose(fixture.project)).status, 'ok');
+    assert.equal(await folder.verify(), undefined);
+    // The same path now leads somewhere else.
+    const elsewhere = join(fixture.base, 'elsewhere'); await mkdir(elsewhere);
+    await rename(fixture.project, join(fixture.base, 'moved'));
+    await symlink(elsewhere, fixture.project, 'junction');
+    const replaced = await folder.verify();
+    assert.equal(replaced.code, 'FOLDER_CHANGED'); assert.match(replaced.reason, /no longer the folder you chose/);
+    await rm(fixture.project, { recursive: true, force: true });
+    assert.match((await folder.verify()).reason, /does not exist/);
+  } finally { await fixture.done(); }
+});
+
+test('first-folder preparation runs once at a time, later callers wait for it, and a failure can be retried', async () => {
+  let runs = 0, fail = true, release;
+  const task = shared(async () => { runs++; await new Promise(resolve => { release = resolve; }); if (fail) throw new Error('disk full'); });
+  const first = task(), second = task();
+  release(); await assert.rejects(first, /disk full/); await assert.rejects(second, /disk full/);
+  assert.equal(runs, 1);
+  fail = false; const retry = task(); release(); await retry; await task();
+  assert.equal(runs, 2);
 });
