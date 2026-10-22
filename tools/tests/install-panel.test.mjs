@@ -69,3 +69,20 @@ test('reports success only when every operation was applied and verified', () =>
   assert.match(short.message, /2 of 3 applied/);
   assert.equal(installOutcome(undefined, files, project).ok, false);
 });
+
+test('a setup whose files are all in place says it is already installed, and counts only real changes', async () => {
+  const { installSummary } = await import('../../src/app/install-panel.js');
+  const placed = path => ({ action: 'Already in place', path });
+  const all = installSummary([placed('a'), placed('b'), placed('c')]);
+  assert.equal(all.installed, true);
+  assert.match(all.message, /Already installed: all 3 files are in place\./);
+  assert.doesNotMatch(`${all.heading} ${all.message}`, /will be changed|Nothing has been installed yet/);
+  const some = installSummary([placed('a'), { action: 'Add', path: 'b' }, { action: 'Add', path: 'c' }]);
+  assert.equal(some.installed, false);
+  assert.match(some.heading, /^2 files will be changed \(1 already in place\)$/);
+  assert.match(some.message, /Not fully installed: 1 of 3 files are already in place\./);
+  const none = installSummary([{ action: 'Add', path: 'a' }]);
+  assert.equal(none.heading, '1 file will be changed');
+  assert.equal(none.message, 'Nothing has been installed yet.');
+  assert.equal(installSummary([]).heading, 'Nothing to change');
+});

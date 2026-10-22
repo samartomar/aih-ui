@@ -24,6 +24,17 @@ export function installFiles(review) {
   }));
 }
 
+const files = count => `${count} ${count === 1 ? 'file' : 'files'}`;
+
+/** The heading and status line for a preview: files already in place are not counted as changes. */
+export function installSummary(rows) {
+  const inPlace = rows.filter(row => row.action === effectVerb['already-satisfied']).length, changed = rows.length - inPlace;
+  if (!rows.length) return { installed: false, heading: 'Nothing to change', message: 'Nothing has been installed yet.' };
+  if (!changed) return { installed: true, heading: `All ${files(rows.length)} already in place`, message: `Already installed: all ${files(rows.length)} are in place. Install checks them again.` };
+  return { installed: false, heading: `${files(changed)} will be changed${inPlace ? ` (${inPlace} already in place)` : ''}`,
+    message: inPlace ? `Not fully installed: ${inPlace} of ${files(rows.length)} are already in place.` : 'Nothing has been installed yet.' };
+}
+
 /**
  * What the person agreed to: each operation's kind, effect, target and expected content. Core's
  * review digest differs on every Prepare even for identical effects, so it cannot be compared across two.
@@ -67,7 +78,7 @@ function refusal(result) {
   return [...new Set(reasons)].join(' ') || result?.error || preparation?.status || 'The host did not return a review.';
 }
 
-export function createInstallPanel({ client, el, button }) {
+export function createInstallPanel({ client, el, button, onInstalled = () => {} }) {
   const node = el('section', 'p-4 rounded border-2 border-primary space-y-3'); node.id = 'install-panel'; node.hidden = true;
   const title = el('h3', 'text-base font-semibold text-on-surface', 'Install these items into your project');
   const where = el('p', 'font-mono text-[11px] text-outline break-all');
@@ -87,7 +98,7 @@ export function createInstallPanel({ client, el, button }) {
     const rows = installFiles(review), project = review?.target?.project;
     title.textContent = `Install these items into ${projectName(project)}`;
     where.textContent = project ?? '';
-    filesHeading.textContent = rows.length ? `${rows.length} ${rows.length === 1 ? 'file' : 'files'} will be changed` : 'Nothing to change';
+    filesHeading.textContent = installSummary(rows).heading;
     files.replaceChildren(...rows.map(row => el('li', '', `${row.action}  ${row.path}`)));
     return rows;
   }
@@ -99,8 +110,8 @@ export function createInstallPanel({ client, el, button }) {
       if (result.status === 'superseded') { message.textContent = ''; return; }
       const preparation = result.preparation ?? result;
       if (preparation.status === 'ready' && preparation.sessionId && preparation.review) {
-        preview = preparation; show(preparation.review);
-        install.disabled = false; message.textContent = 'Nothing has been installed yet.';
+        preview = preparation; const rows = show(preparation.review);
+        install.disabled = false; message.textContent = installSummary(rows).message;
       } else { files.replaceChildren(); message.textContent = `Can't install yet: ${refusal(result)}`; }
     } catch (error) { message.textContent = `Can't install yet: ${error.message}`; }
     finally { previewing = false; }
@@ -108,6 +119,7 @@ export function createInstallPanel({ client, el, button }) {
   async function run() {
     if (!preview || installing) return;
     const shown = effectsFingerprint(preview.review);
+    let sent = false;
     installing = true; install.disabled = true; install.setAttribute('aria-busy', 'true'); message.textContent = 'Installing…';
     try {
       // Prepare again so the approval is for what is on disk now; refuse if its effects differ from the list shown.
@@ -119,12 +131,13 @@ export function createInstallPanel({ client, el, button }) {
         message.textContent = `The files changed since this list was shown (${rows.length} now). Check the list and click Install again.`; return;
       }
       // Apply is bound to this fresh review's own digest, exactly as the advanced Apply button does.
+      sent = true;
       const applied = await client.requestHost('apply', { sessionId: preparation.sessionId, reviewDigest: preparation.review.reviewDigest });
       const outcome = installOutcome(applied, installFiles(preparation.review), preparation.review.target?.project);
       message.textContent = outcome.message; message.dataset.outcome = outcome.ok ? 'installed' : 'failed';
       preview = undefined;
     } catch (error) { message.textContent = `Install did not finish: ${error.message}`; message.dataset.outcome = 'failed'; }
-    finally { installing = false; install.removeAttribute('aria-busy'); }
+    finally { installing = false; install.removeAttribute('aria-busy'); if (sent) onInstalled(); }
   }
   function render() {
     node.hidden = !available();
@@ -135,5 +148,7 @@ export function createInstallPanel({ client, el, button }) {
     if (key === shownFor) return;
     shownFor = key; delete message.dataset.outcome; void loadPreview();
   }
-  return { node, render };
+  // After a removal elsewhere: the earlier outcome no longer describes the project, so check it again.
+  function recheck() { message.textContent = ''; delete message.dataset.outcome; shownFor = undefined; render(); }
+  return { node, render, recheck };
 }
