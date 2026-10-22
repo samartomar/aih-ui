@@ -168,10 +168,11 @@ test('a repair is verified against a precheck failed in both configurations, and
   assert.ok(!JSON.stringify(claimSet).includes('/home/dev'), 'no machine-local path reaches a claim');
   const items = reportPanels(projection).claims.items;
   const shown = items.find(entry => entry.id.startsWith(`${repaired.id}/persisted/`));
-  assert.equal(shown.text, 'persisted configuration npm-cafile found by the re-check of npm');
+  assert.equal(shown.group, 'persisted configuration npm-cafile found by the re-check of npm');
+  assert.equal(shown.text, 'persisted-configuration: applied');
   assert.ok(shown.details.includes('Value: applied'), JSON.stringify(shown.details));
   assert.ok(reportText(projection).includes('persisted configuration npm-cafile found by the re-check of npm'));
-  assert.ok(items.some(entry => entry.text === 'npm/tls/node on npm with the persisted configuration' && entry.details.includes('Value: failed')), 'the persisted precheck is listed');
+  assert.ok(items.some(entry => entry.group === 'npm/tls/node on npm with the persisted configuration' && entry.details.includes('Value: failed')), 'the persisted precheck is listed');
   // The journal keeps what Core reported about the value, without its paths.
   assert.deepEqual(repaired.repair.outcome.condition.persisted, [{ id: 'npm-cafile', repair: 'node-npm-ca', managementId: 'm-1', state: 'applied', certificates: 1, materialSha256: 'a'.repeat(64) }]);
 });
@@ -485,7 +486,7 @@ test('headless text is built only from the strings of the UI panels', () => {
     estimates: [{ subject: { kind: 'instruction-set', id: 'p' }, amount: 10, unit: 'tokens', method: { id: 'm', version: '1' }, source: { id: 'e', schema: 'urn:aih-ui:estimate:1.0.0' },
       observation: 'e#1', capturedAt: '2026-10-15T09:00:00.000Z' }] });
   const panels = reportPanels(projection), text = reportText(projection);
-  const strings = value => [value.title, value.value, value.summary, ...value.items.flatMap(entry => [entry.text, ...entry.details]), ...(value.sections ?? []).flatMap(strings)];
+  const strings = value => [value.title, value.value, value.summary, ...value.items.flatMap(entry => [entry.group, entry.text, ...entry.details]), ...(value.sections ?? []).flatMap(strings)];
   const meanings = [...new Set(Object.values(panels).flatMap(strings).filter(Boolean))].sort((a, b) => b.length - a.length);
   assert.ok(meanings.length > 20);
   for (const meaning of meanings) assert.ok(text.includes(meaning), `reportText lacks: ${meaning}`);

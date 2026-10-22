@@ -3,13 +3,22 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { startConsumer } from './server.mjs';
 import { fixtureItem, fixtureRelease, rootFor } from './intent-fixtures.mjs';
-const source = (await readFile(new URL('../page/policy-file.js', import.meta.url), 'utf8')).replace('export function', 'function') + '\n' +
-  (await readFile(new URL('../page/authoring.js', import.meta.url), 'utf8')).replace("import { policyFile } from './policy-file.js';", '');
+const page = name => readFile(new URL(`../page/${name}`, import.meta.url), 'utf8');
+const unexported = text => text.replace(/^export /gm, '');
+// The page's own modules, inlined in their own scope so their top-level names stay private.
+const editorModule = `const { createConfigurationEditor } = (() => {\n${unexported(await page('app/dom.js'))}\n` +
+  `${unexported((await page('app/configuration-editor.js')).replace("import { el } from './dom.js';", ''))}\nreturn { createConfigurationEditor };\n})();\n`;
+const source = unexported(await page('policy-file.js')) + '\n' + editorModule +
+  (await page('authoring.js')).replace("import { policyFile } from './policy-file.js';", '').replace("import { createConfigurationEditor } from './app/configuration-editor.js';", '');
+
+// Every node below one node, in document order; the configuration editor nests its controls.
+const descendants = node => [node, ...(node.children ?? []).flatMap(descendants)];
+const chooseButton = box => descendants(box).find(node => node.tagName === 'button' && node.textContent.startsWith('Choose '));
 
 async function openPage(fetch) {
   const nodes = new Map();
   const node = tagName => ({ tagName, value: '', children: [], textContent: '', disabled: false,
-    addEventListener() {}, setAttribute() {}, append(...values) { this.children.push(...values); }, replaceChildren() { this.children = []; } });
+    addEventListener() {}, setAttribute() {}, append(...values) { this.children.push(...values); }, replaceChildren(...values) { this.children = values; } });
   const document = { getElementById(id) { if (!nodes.has(id)) nodes.set(id, node('node')); return nodes.get(id); }, createElement: node };
   const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
   await new AsyncFunction('document', 'fetch', source)(document, fetch);
@@ -103,7 +112,7 @@ test('ordinary target changes refresh counts and reasons while preserving accept
     assert.match(text(matt), /unsupported · automatic-guardrails · agent-tools — Skills are instructions/);
     const ecc = nodes.get('items').children.find(box => box.children[0].textContent.includes('accessibility'));
     assert.match(text(ecc), /unknown · native-execution/);
-    await ecc.children.find(node => node.tagName === 'button').onclick();
+    await chooseButton(ecc).onclick();
     assert.equal(nodes.get('accept').disabled, false);
     nodes.get('accept').onclick();
     const policy = nodes.get('policy').value, summary = nodes.get('summary').textContent;
@@ -175,7 +184,7 @@ test('public-reader accepted malformed capability metadata stays unknown without
 });
 test('fresh reopen restores saved user scope/configuration and switching scopes restores each choice', async () => {
   const nodes = new Map();
-  const node = tagName => ({ tagName, value: '', children: [], textContent: '', disabled: false, attributes: {}, addEventListener() {}, setAttribute(k, v) { this.attributes[k] = v; }, append(...values) { this.children.push(...values); }, replaceChildren() { this.children = []; } });
+  const node = tagName => ({ tagName, value: '', children: [], textContent: '', disabled: false, attributes: {}, addEventListener() {}, setAttribute(k, v) { this.attributes[k] = v; }, append(...values) { this.children.push(...values); }, replaceChildren(...values) { this.children = values; } });
   const document = { getElementById(id) { if (!nodes.has(id)) nodes.set(id, node('node')); return nodes.get(id); }, createElement: node };
   const root = { releaseSha256: 'a'.repeat(64), itemId: 'configured', itemSha256: 'b'.repeat(64), scope: 'user', configuration: { directory: 'chosen' }, originIds: ['direct'] };
   const intent = { origins: [{ id: 'direct', kind: 'direct' }], roots: [root], pins: [], exclusions: [], inputs: [], reviews: {} };
@@ -190,19 +199,21 @@ test('fresh reopen restores saved user scope/configuration and switching scopes 
   const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
   await new AsyncFunction('document', 'fetch', source)(document, fetch);
   await nodes.get('reopen').onclick();
-  const controls = nodes.get('items').children[0].children;
-  const config = controls.find(n => n.tagName === 'input'), scope = controls.find(n => n.tagName === 'select'), choose = controls.find(n => n.tagName === 'button');
-  assert.equal(scope.value, 'user'); assert.equal(config.value, '{"directory":"chosen"}');
-  await choose.onclick(); assert.equal(operations[0].root.scope, 'user'); assert.deepEqual(operations[0].root.configuration, { directory: 'chosen' });
-  scope.value = 'project'; scope.onchange(); assert.equal(config.value, '{}');
-  scope.value = 'user'; scope.onchange(); assert.equal(config.value, '{"directory":"chosen"}');
+  const box = nodes.get('items').children[0], scope = box.children.find(n => n.tagName === 'select');
+  // The editor is rebuilt for each scope, so its controls are looked up again after every change.
+  const field = () => descendants(box).find(n => n.tagName === 'input' && n.attributes['aria-label'] === 'directory for configured');
+  const advanced = () => JSON.parse(descendants(box).find(n => n.tagName === 'textarea').value);
+  assert.equal(scope.value, 'user'); assert.equal(field().value, 'chosen'); assert.deepEqual(advanced(), { directory: 'chosen' });
+  await chooseButton(box).onclick(); assert.equal(operations[0].root.scope, 'user'); assert.deepEqual(operations[0].root.configuration, { directory: 'chosen' });
+  scope.value = 'project'; scope.onchange(); assert.equal(field(), undefined); assert.deepEqual(advanced(), {});
+  scope.value = 'user'; scope.onchange(); assert.equal(field().value, 'chosen'); assert.deepEqual(advanced(), { directory: 'chosen' });
 });
 
 test('editing while Prepare is pending cannot enable Apply for an older draft', async () => {
   const nodes = new Map();
   const node = tagName => ({ tagName, value: '', children: [], textContent: '', disabled: false, listeners: {},
     addEventListener(name, listener) { (this.listeners[name] ??= []).push(listener); },
-    setAttribute() {}, append(...values) { this.children.push(...values); }, replaceChildren() { this.children = []; } });
+    setAttribute() {}, append(...values) { this.children.push(...values); }, replaceChildren(...values) { this.children = values; } });
   const document = { getElementById(id) { if (!nodes.has(id)) nodes.set(id, node('node')); return nodes.get(id); }, createElement: node };
   const intent = { origins: [], roots: [], pins: [], exclusions: [], inputs: [], reviews: { records: [], history: [] } };
   let answerPrepare;
@@ -229,7 +240,7 @@ test('editing while Prepare is pending cannot enable Apply for an older draft', 
 test('family filters expose every item including beyond the former forty-item cap without selecting content', async () => {
   const nodes = new Map();
   const node = tagName => ({ tagName, value: '', children: [], textContent: '', disabled: false,
-    addEventListener() {}, setAttribute() {}, append(...values) { this.children.push(...values); }, replaceChildren() { this.children = []; } });
+    addEventListener() {}, setAttribute() {}, append(...values) { this.children.push(...values); }, replaceChildren(...values) { this.children = values; } });
   const document = { getElementById(id) { if (!nodes.has(id)) nodes.set(id, node('node')); return nodes.get(id); }, createElement: node };
   const intent = { origins: [], roots: [], pins: [], exclusions: [], inputs: [], reviews: { records: [], history: [] } };
   const items = Array.from({ length: 45 }, (_, index) => ({ id: `item-${index}`, family: index < 42 ? 'Extensions' : 'Anthropic',
