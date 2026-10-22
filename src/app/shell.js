@@ -128,6 +128,12 @@ export function createShell(elements) {
     else node.removeAttribute("aria-current");
   }
 
+  /** The view the address names: policy or review, otherwise the catalog. */
+  function viewFromHash() {
+    const named = location.hash.slice(1);
+    return ['policy', 'review'].includes(named) ? named : 'catalog';
+  }
+
   function setView(view, updateHash = true) {
     if (updateHash && location.hash !== `#${view}`) location.hash = view;
     const policy = view === "policy" || view === "review";
@@ -172,10 +178,10 @@ export function createShell(elements) {
   document.addEventListener('aih:policy-review-open', () => setInspectorOpen(false));
   // A view this page already switched to (a click updates the address too) is not switched again.
   window.addEventListener('hashchange', () => {
-    const view = ['policy', 'review'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'catalog';
+    const view = viewFromHash();
     if (view !== currentView) setView(view, false);
   });
-  if (location.hash) setView(['policy', 'review'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'catalog', false);
+  if (location.hash) setView(viewFromHash(), false);
   document.addEventListener('keydown', event => {
     if (elements.inspectorRail.classList.contains('w-0') || currentView !== 'catalog' || document.querySelector('dialog[open]')) return;
     if (event.key === 'Escape') { event.preventDefault(); setInspectorOpen(false); return; }
