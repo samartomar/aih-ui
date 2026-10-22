@@ -28,13 +28,17 @@ export function familyLabel(family) {
   return FRAMEWORK_NAMES.get(family) ?? NOT_FRAMEWORKS.get(family) ?? family;
 }
 
-/** The frameworks among the catalog's items: the named ones in the owner's order, then any other, with their counts. */
-export function frameworkRows(items) {
+/**
+ * The frameworks among the catalog's items: the named ones in the owner's order, then any other, with their counts.
+ * `counted` (family -> count) gives the counts the page shows, such as the items kept for the chosen tool; every
+ * installed framework stays listed, and a family it does not name keeps its item count.
+ */
+export function frameworkRows(items, counted = new Map()) {
   const counts = new Map();
   for (const item of items) if (typeof item.family === "string" && !NOT_FRAMEWORKS.has(item.family)) counts.set(item.family, (counts.get(item.family) ?? 0) + 1);
   const named = [...FRAMEWORK_NAMES.keys()].filter((family) => counts.has(family));
   const others = [...counts.keys()].filter((family) => !FRAMEWORK_NAMES.has(family)).sort((a, b) => a.localeCompare(b));
-  return [...named, ...others].map((family) => ({ family, label: familyLabel(family), count: counts.get(family) }));
+  return [...named, ...others].map((family) => ({ family, label: familyLabel(family), count: counted.get(family) ?? counts.get(family) }));
 }
 
 // The framework a viewer last chose, remembered in this browser only (#122). Storage can be missing or refuse; the page

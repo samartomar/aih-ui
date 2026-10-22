@@ -7,8 +7,11 @@
  * name only: Catalog writes `claude-code` where Core writes `claude`, and no published contract links
  * them, so this file does not translate. An item whose tool name Core does not list is "unmatched": it
  * stays visible and says which tool it is for, rather than being hidden or guessed. The catalog's real tool
- * filter is the Catalog tool name the person chooses (catalogToolView), compared with Catalog names only.
+ * filter is the Catalog tool name the person chooses (catalogToolView), compared with Catalog names only: it keeps the
+ * items whose declared support for that name is `supported`.
  */
+
+import { capabilityFacts } from './authoring-model.js';
 
 const ANY_TOOL = 'generic';
 const usable = value => typeof value === 'string' && value.trim().length > 0;
@@ -62,15 +65,31 @@ export function toolsNotice(entries, { mode, coreIds, selected }) {
 }
 
 const declaresSpecificTool = item => declaredTools(item).some(tool => tool.client !== ANY_TOOL);
+const declaresTool = (item, tool) => declaredTools(item).some(declared => declared.client === tool);
+/** The Catalog marks the item `supported` for the tool on at least one capability it declares (its usable facts only). */
+export const supportedFor = (item, tool) => capabilityFacts(item, tool).some(fact => fact.support === 'supported');
 
 /**
- * The grid filtered by the Catalog tool name the person chose (`tool`, in the Catalog's own names): items that declare
- * it, with any support value. Items that declare no specific tool (none, or only `generic`) are shown only with
- * `showUndeclared`, and `undeclared` counts them either way. With no tool, or `mode` 'all', nothing is hidden.
+ * Whether the Catalog tool filter keeps one item; the grid, the left panel and the kind tabs use this one rule. With a
+ * tool (`tool`, in the Catalog's own names) and `mode` 'mine', it keeps the items the Catalog marks supported for that
+ * tool. Items that declare the tool only as unsupported or unknown are kept with `showUnsupported`, and items that
+ * declare no specific tool (none, or only `generic`) with `showUndeclared`. With no tool, or `mode` 'all', it keeps all.
  */
-export function catalogToolView(entries, { tool, mode = 'mine', showUndeclared = false } = {}) {
+export function toolKeeps(item, { tool, mode = 'mine', showUndeclared = false, showUnsupported = false } = {}) {
+  if (!tool || mode !== 'mine') return true;
+  if (!declaresSpecificTool(item)) return showUndeclared;
+  if (!declaresTool(item, tool)) return false;
+  return showUnsupported || supportedFor(item, tool);
+}
+
+/**
+ * The grid filtered by the chosen Catalog tool (toolKeeps). `undeclared` counts the items that declare no specific tool
+ * and `notSupported` the items that declare the tool but are not marked supported for it, whether shown or not.
+ */
+export function catalogToolView(entries, options = {}) {
+  const { tool, mode = 'mine' } = options;
   const undeclared = entries.filter(entry => !declaresSpecificTool(entry.authoringItem)).length;
-  if (!tool || mode !== 'mine') return { entries, undeclared, filtered: false };
-  return { undeclared, filtered: true, entries: entries.filter(entry => declaredTools(entry.authoringItem).some(declared => declared.client === tool)
-    || (showUndeclared && !declaresSpecificTool(entry.authoringItem))) };
+  const notSupported = tool ? entries.filter(entry => declaresTool(entry.authoringItem, tool) && !supportedFor(entry.authoringItem, tool)).length : 0;
+  if (!tool || mode !== 'mine') return { entries, undeclared, notSupported, filtered: false };
+  return { undeclared, notSupported, filtered: true, entries: entries.filter(entry => toolKeeps(entry.authoringItem, options)) };
 }

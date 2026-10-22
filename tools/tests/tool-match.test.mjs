@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { catalogToolView, declaredTools, filterByTools, toolLine, toolRelation, toolsNotice } from '../../src/catalog/tool-match.js';
+import { catalogToolView, declaredTools, toolKeeps, filterByTools, toolLine, toolRelation, toolsNotice } from '../../src/catalog/tool-match.js';
 import { toolWarning } from '../../src/app/install-panel.js';
 
 const fact = (client, surface) => ({ capability: 'skill-material-format', client, surface, support: 'supported' });
@@ -42,21 +42,37 @@ test('the header tools hide only content clearly for an unselected Core tool, an
   assert.equal(toolsNotice(entries, { mode: 'all', ...core }), '');
 });
 
-test('the chosen Catalog tool is the real filter, whatever its support value, with undeclared items behind a counted switch', () => {
+test('the chosen Catalog tool shows only items the Catalog marks supported for it, with the rest behind counted switches', () => {
   const ids = view => view.entries.map(entry => entry.authoringItem.id);
-  const unsupported = item('extensions.kiro.agent', { ...fact('kiro-ide', 'agents'), support: 'unsupported' });
-  const all = [...entries, { authoringItem: unsupported }];
+  const unsupported = item('extensions.kiro.agent', { ...fact('kiro-ide', 'agents'), support: 'unsupported', reason: 'Not for Kiro.' });
+  const runtimeSource = item('superpowers.runtime-source.codex', { ...fact('claude-code', 'plugins/hooks'), capability: 'native-adapter-installation', support: 'unsupported', reason: 'Catalog projection only.' });
+  const unknownOnly = item('ecc.unknown', { ...fact('claude-code', '.claude'), capability: 'native-execution', support: 'unknown' });
+  const all = [...entries, ...[unsupported, runtimeSource, unknownOnly].map(authoringItem => ({ authoringItem }))];
   const claudeView = catalogToolView(all, { tool: 'claude-code', mode: 'mine' });
+  // Supported on one capability and unsupported on another (automatic-guardrails) still counts as supported content.
   assert.deepEqual(ids(claudeView), ['extensions.matt.grill-me']);
   assert.equal(claudeView.undeclared, 2, 'no tool, or only generic');
+  assert.equal(claudeView.notSupported, 2, 'declares claude-code, but not as supported: unsupported or unknown');
   assert.equal(claudeView.filtered, true);
   assert.deepEqual(ids(catalogToolView(all, { tool: 'claude-code', mode: 'mine', showUndeclared: true })), ['extensions.matt.grill-me', 'extensions.notices', 'mattpocock.grill-me']);
-  assert.deepEqual(ids(catalogToolView(all, { tool: 'kiro-ide', mode: 'mine' })), ['extensions.kiro.matt.grill-me', 'extensions.kiro.agent']);
-  assert.equal(catalogToolView(all, { tool: 'claude-code', mode: 'all' }).entries.length, 6, 'Show all');
+  assert.deepEqual(ids(catalogToolView(all, { tool: 'claude-code', mode: 'mine', showUnsupported: true })), ['extensions.matt.grill-me', 'superpowers.runtime-source.codex', 'ecc.unknown']);
+  const kiro = catalogToolView(all, { tool: 'kiro-ide', mode: 'mine' });
+  assert.deepEqual(ids(kiro), ['extensions.kiro.matt.grill-me']);
+  assert.equal(kiro.notSupported, 1);
+  assert.equal(catalogToolView(all, { tool: 'claude-code', mode: 'all' }).entries.length, 8, 'Show all');
   const none = catalogToolView(all, { tool: '', mode: 'mine' });
-  assert.equal(none.entries.length, 6, 'no tool chosen: nothing hidden');
+  assert.equal(none.entries.length, 8, 'no tool chosen: nothing hidden');
   assert.equal(none.filtered, false);
   assert.equal(none.undeclared, 2);
+});
+
+test('one rule decides an item for the grid and for the counts', () => {
+  const view = { tool: 'claude-code', mode: 'mine' };
+  assert.equal(toolKeeps(claudeCopy, view), true);
+  assert.equal(toolKeeps(kiroCopy, view), false);
+  assert.equal(toolKeeps(undeclared, view), false);
+  assert.equal(toolKeeps(undeclared, { ...view, showUndeclared: true }), true);
+  assert.equal(toolKeeps(kiroCopy, { tool: '' }), true);
 });
 
 test('Install warns only about a chosen item that does not declare the chosen Catalog tool', () => {

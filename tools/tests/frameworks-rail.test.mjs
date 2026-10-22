@@ -28,6 +28,13 @@ test('a family installed later appears after the named ones, under its own name'
   assert.deepEqual(rows.at(-1), { family: 'Future', label: 'Future', count: 2 });
 });
 
+test('the counts can follow the tool filter, while every installed framework stays listed', () => {
+  const counted = new Map([['Extensions', 2], ['ECC', 0]]);
+  const rows = frameworkRows(catalog, counted);
+  assert.deepEqual(rows.map(row => row.count), [2, 0, 3, 2], 'a family with no count given keeps its item count');
+  assert.equal(rows.length, 4);
+});
+
 test('a framework with no items is not listed', () => {
   assert.deepEqual(frameworkRows(items('ECC', 1)).map(row => row.family), ['ECC']);
 });

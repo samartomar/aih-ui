@@ -53,8 +53,10 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     // The AI tools chosen in Settings (Core ids) and whether the grid shows only content for them.
     selectedTools: [],
     toolsMode: 'mine',
-    // Whether items that declare no specific tool are shown beside those the Catalog lists for the chosen tool.
+    // Whether items that declare no specific tool are shown beside those the Catalog marks supported for the chosen tool.
     showUndeclared: false,
+    // Whether items that declare the chosen tool but are not marked supported for it (unsupported or unknown) are shown.
+    showUnsupported: false,
   };
   let restoredView = false;
   // The tool names the installed Catalog declares, read once per catalog.
@@ -113,7 +115,10 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   const yourSources = createYourSources({ authoring, onSelect: (entryId) => select(entryId), onOpen: onYourSources, onChange: () => render() });
   const sourcesOpen = () => !document.getElementById('your-sources').hidden;
   document.addEventListener('aih:view-changed', () => { if (restoredView) renderFrameworks(); });
-  const renderFrameworks = () => frameworkRail.render({ rows: frameworkRows(authoring.catalog?.items ?? []), selected: basicsOpen() || sourcesOpen() ? null : state.view.family });
+  // The left panel counts what each framework shows for the chosen tool, by the same rules as its grid and kind tabs.
+  const frameworkCounts = () => new Map(frameworkRows(authoring.catalog?.items ?? []).map(row => [row.family,
+    supportedEntries(browseEntries({ ...emptyView(), ...familyView(row.family), target: state.view.target }), state.view.target, state.view.support).length]));
+  const renderFrameworks = () => frameworkRail.render({ rows: frameworkRows(authoring.catalog?.items ?? [], frameworkCounts()), selected: basicsOpen() || sourcesOpen() ? null : state.view.family });
   const focusCard = (entryId) => basicsOpen() ? projectBasics.focus(entryId) : sourcesOpen() ? yourSources.focus(entryId) : cards.focus(entryId);
   // The Catalog tool name is the person's own choice; it is remembered for the next visit and shared with the page.
   target.addEventListener('change', () => { saveCatalogTool(target.value); changeView({ target: target.value }); });
@@ -127,9 +132,11 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   const toolsShowing = document.getElementById('catalog-tools-showing');
   const toolsToggle = document.getElementById('catalog-tools-toggle');
   const toolsUndeclared = document.getElementById('catalog-tools-undeclared');
+  const toolsUnsupported = document.getElementById('catalog-tools-unsupported');
   const toolsUnmatched = document.getElementById('catalog-tools-unmatched');
   toolsToggle.addEventListener('click', () => { state.toolsMode = state.toolsMode === 'mine' ? 'all' : 'mine'; render(); });
   toolsUndeclared.addEventListener('click', () => { state.showUndeclared = !state.showUndeclared; render(); });
+  toolsUnsupported.addEventListener('click', () => { state.showUnsupported = !state.showUnsupported; render(); });
   // The header's Your tool: the same Catalog tool choice as the tool line under Advanced, in one click. Choosing a tool
   // there filters by it again, even after Show all.
   const yourTool = createYourTool({
@@ -145,7 +152,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     return visibleEntries(state.entries, view).filter(entry => frameworkShows(entry.authoringItem, view.family));
   }
   function catalogTool(view = state.view) {
-    return catalogToolView(scopeEntries(view), { tool: view.target, mode: state.toolsMode, showUndeclared: state.showUndeclared });
+    return catalogToolView(scopeEntries(view), { tool: view.target, mode: state.toolsMode, showUndeclared: state.showUndeclared, showUnsupported: state.showUnsupported });
   }
   // The Catalog tool filter first (Catalog names), then the header tools (Core names); neither is translated into the other.
   function browseEntries(view = state.view) {
@@ -154,7 +161,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   function renderToolsBar() {
     const tool = state.view.target, view = catalogTool(), options = toolOptions();
     toolsShowing.textContent = !tool ? 'Choose the tool name the Catalog uses for your AI tool'
-      : state.toolsMode === 'mine' ? 'Content the Catalog lists for' : 'Showing content for every tool. Your Catalog tool:';
+      : state.toolsMode === 'mine' ? 'Content supported, according to the Catalog, for' : 'Showing content for every tool. Your Catalog tool:';
     // What the header tools would hide; without a Catalog tool the switch shows only when that is something.
     const hiddenByCore = toolsNotice(view.entries, { ...options, mode: 'mine' });
     toolsToggle.hidden = !tool && !hiddenByCore;
@@ -163,10 +170,15 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     toolsUndeclared.textContent = `${state.showUndeclared ? 'Hide' : 'Show'} ${view.undeclared} with no declared tool`;
     toolsUndeclared.setAttribute('aria-pressed', String(state.showUndeclared));
     toolsUndeclared.title = 'Items that declare no tool, or only a generic one. The Catalog does not list them for any specific tool.';
+    toolsUnsupported.hidden = !view.filtered || !view.notSupported;
+    toolsUnsupported.textContent = `${state.showUnsupported ? 'Hide' : 'Show'} content not marked supported for ${tool} (${view.notSupported})`;
+    toolsUnsupported.setAttribute('aria-pressed', String(state.showUnsupported));
+    toolsUnsupported.title = `Items that declare ${tool} but that the Catalog marks unsupported or unknown for it.`;
     const notice = state.toolsMode === 'mine' ? hiddenByCore : '';
     toolsUnmatched.textContent = notice; toolsUnmatched.hidden = !notice;
     yourTool.render(yourToolModel({ declared: declared(), tool, mode: state.toolsMode, coreIds: options.coreIds, coreLabels: options.labels,
-      coreSelected: state.selectedTools, undeclared: view.undeclared, showUndeclared: state.showUndeclared, coreHidden: hiddenByCore }));
+      coreSelected: state.selectedTools, undeclared: view.undeclared, showUndeclared: state.showUndeclared,
+      notSupported: view.notSupported, showUnsupported: state.showUnsupported, coreHidden: hiddenByCore }));
   }
 
   function selectedEntry() {
