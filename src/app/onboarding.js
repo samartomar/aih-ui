@@ -1,6 +1,6 @@
 import { el, collectIds } from "./dom.js";
 import { clientNodes, publishedClients } from "./core-targets.js";
-import { CAPABILITIES, REVIEWER_KINDS, newSetupSettings, experienceLabel, organizationErrors, settingsErrors } from "./setup-model.js";
+import { CAPABILITIES, REVIEWER_KINDS, newSetupSettings, setupSteps, experienceLabel, organizationErrors, settingsErrors } from "./setup-model.js";
 import { reviewerText, setupSummary } from "./setup-summary.js";
 import { loadSetup, saveSetup, updateSetup } from "./settings-client.js";
 
@@ -24,11 +24,7 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
   let loadSequence = 0;
   let reviewerKind = "individual";
   const fields = new Map();
-  const steps = () => editSection ? [...(editSection === "review" ? [] : [editSection]), "review"] : [
-    ...(!editing ? ["experience", ...(draft.experience === "enterprise" ? ["role"] : [])] : []),
-    ...(draft.experience === "enterprise" && draft.role === "admin" ? ["organization"] : []),
-    ...(editing ? ["capabilities"] : []), "clients", "review",
-  ];
+  const steps = () => setupSteps({ draft, editing, editSection });
   const current = () => steps()[step];
   function error(message) {
     elements.setupError.textContent = message || "";
@@ -337,7 +333,13 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
   elements.setupCancel.addEventListener("click", cancelEdit);
   elements.setupForm.addEventListener("submit", (event) => { event.preventDefault(); void advance(); });
   elements.setupBack.addEventListener("click", () => { if (step > 0 && !saving) { step -= 1; render(); } });
-  elements.setupSkip.addEventListener("click", () => { if (!saving && !loading) { step += 1; render(); } });
+  elements.setupSkip.addEventListener("click", () => {
+    if (saving || loading) return;
+    // First-run "Skip assistance" saves no assistance; while editing, "Keep current choices" leaves them as they are.
+    if (!editing && current() === "capabilities") draft.capabilities = [];
+    step += 1;
+    render();
+  });
   return {
     start,
     edit: section => start(true, section),
