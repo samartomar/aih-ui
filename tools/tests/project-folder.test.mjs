@@ -38,6 +38,17 @@ test('refuses each unsafe path with a plain reason', async () => {
   } finally { await fixture.done(); }
 });
 
+test('refuses the account\'s own home even when the environment names a different one', async () => {
+  const fixture = await layout(), account = join(fixture.base, 'account');
+  try {
+    await mkdir(join(account, '.aih'), { recursive: true });
+    const options = { ...fixture.options, accountHome: account };
+    assert.match((await checkProjectFolder(account, options)).reason, /home folder/);
+    assert.match((await checkProjectFolder(join(account, '.aih'), options)).reason, /Core keeps its own records/);
+    assert.equal((await checkProjectFolder(fixture.project, options)).status, 'ok');
+  } finally { await fixture.done(); }
+});
+
 test('the host default stays until a folder is chosen; the change replaces the execution hosts', async () => {
   const fixture = await layout(), changes = [];
   try {

@@ -3,15 +3,18 @@
 // for this server's lifetime. A switch is refused while Install or Remove is running, and `onChange` replaces the
 // execution hosts, so nothing prepared for the old folder can be applied in the new one.
 import { realpath, stat } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import { homedir, userInfo } from 'node:os';
 import { isAbsolute, join, parse, sep } from 'node:path';
 
 const refused = reason => ({ status: 'refused', reason });
 const comparable = path => process.platform === 'win32' ? path.toLowerCase() : path;
+// The account's own home, from the account database rather than the environment: a host run with an isolated
+// HOME (the candidate, a test) must still refuse the real one, where Claude Code loads skills for every project.
+const accountHomeDir = () => { try { return userInfo().homedir; } catch { return undefined; } };
 const realOrSame = async path => { try { return await realpath(path); } catch { return path; } };
 
 /** Whether `path` may be the project folder: { status: 'ok', project } with its real path, or { status: 'refused', reason }. */
-export async function checkProjectFolder(path, { env = process.env, home = homedir() } = {}) {
+export async function checkProjectFolder(path, { env = process.env, home = homedir(), accountHome = accountHomeDir() } = {}) {
   if (typeof path !== 'string' || !path.trim()) return refused('Type the full path of a folder.');
   if (!isAbsolute(path)) return refused('Use the full path of the folder, starting from the drive or /.');
   let project, folder;
@@ -19,7 +22,7 @@ export async function checkProjectFolder(path, { env = process.env, home = homed
   if (!folder) return refused('That path is a file, not a folder.');
   if (parse(project).root === project) return refused('A drive or filesystem root cannot be the project folder. Choose a folder inside it.');
   const target = comparable(project);
-  for (const value of new Set([home, env.HOME, env.USERPROFILE].filter(value => typeof value === 'string' && value))) {
+  for (const value of new Set([home, accountHome, env.HOME, env.USERPROFILE].filter(value => typeof value === 'string' && value))) {
     const own = await realOrSame(value);
     if (target === comparable(own)) return refused('Your home folder cannot be the project folder. Choose a project inside it.');
     const state = comparable(await realOrSame(join(own, '.aih')));
