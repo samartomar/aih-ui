@@ -1,4 +1,5 @@
 import { policyFile } from './policy-file.js';
+import { createConfigurationEditor } from './app/configuration-editor.js';
 const $ = id => document.getElementById(id), documentFile = policyFile($('policy'));
 const clientHeaders = { 'x-aih-client': crypto.randomUUID() };
 const loadCatalog = async () => (await fetch('/api/authoring-catalog', { headers: clientHeaders })).json();
@@ -92,12 +93,17 @@ function render(intent = currentIntent, optional = currentOptional) {
     provenance.append(caption, facts); box.append(provenance);
     const savedRoots = intent?.roots.filter(root => root.releaseSha256 === item.root.releaseSha256 && root.itemId === item.id) ?? [];
     const savedRoot = savedRoots[0];
-    const config = document.createElement('input'); config.value = JSON.stringify(savedRoot?.configuration ?? {}); config.setAttribute('aria-label', `Configuration for ${item.id}`); config.oninput = invalidate; box.append(config);
+    const config = document.createElement('div'); box.append(config);
     const scope = document.createElement('select'); scope.setAttribute('aria-label', `Scope for ${item.id}`);
     for (const value of item.scopes) { const option = document.createElement('option'); option.value = value; option.textContent = value; scope.append(option); }
     scope.value = savedRoot?.scope ?? item.root.scope;
-    scope.onchange = () => { invalidate(); config.value = JSON.stringify(savedRoots.find(root => root.scope === scope.value)?.configuration ?? {}); }; box.append(scope);
-    box.append(button(`Choose ${item.id}`, () => { try { return propose({ type: 'select', root: { ...item.root, scope: scope.value, configuration: JSON.parse(config.value) } }); } catch (error) { invalidate(); show('proposal', error.message); } })); $('items').append(box);
+    const renderConfig = () => {
+      const editor = createConfigurationEditor({ configuration: savedRoots.find(root => root.scope === scope.value)?.configuration ?? {}, inputs: item.inputs, label: item.id,
+        button: (label, action) => button(label === 'Review configuration' ? `Choose ${item.id}` : label, action),
+        review: configuration => propose({ type: 'select', root: { ...item.root, scope: scope.value, configuration } }) });
+      editor.open = true; editor.addEventListener('input', invalidate); config.replaceChildren(editor);
+    };
+    scope.onchange = () => { invalidate(); renderConfig(); }; box.append(scope); renderConfig(); $('items').append(box);
   }
   $('templates').replaceChildren();
   for (const template of catalog.templates) $('templates').append(button(`Add authored template ${template.id}`, () => propose({ type: 'template', releaseSha256: template.releaseSha256, templateId: template.id, templateSha256: template.sha256, originId: `template-${revision}` })));
@@ -189,7 +195,7 @@ const clearInspection = () => { inspected = undefined; $('record-review').disabl
 $('review-target').onchange = () => { invalidate(); clearInspection(); };
 $('review-file').onchange = async () => {
   invalidate(); clearInspection(); const attempt = revision, files = [...$('review-file').files]; if (!files.length) return;
-  if (files.length + evidenceFiles.length > 32 || files.reduce((sum, file) => sum + file.size, evidenceFiles.reduce((sum, file) => sum + file.bytes.length, 0)) > 750_000) return show('review-facts', 'This page accepts up to 32 reports with 750,000 total bytes. Use the headless reader for larger bounded artifacts.');
+  if (files.length + evidenceFiles.length > 32 || files.reduce((sum, file) => sum + file.size, evidenceFiles.reduce((sum, file) => sum + file.bytes.length, 0)) > 750_000) return show('review-facts', 'This page accepts up to 32 reports with 750,000 total bytes. Choose fewer or smaller evidence documents, then try again.');
   const loaded = await Promise.all(files.map(async file => ({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) }))); if (attempt !== revision) return;
   evidenceFiles.push(...loaded); $('review-evidence').replaceChildren();
   for (const [index, file] of evidenceFiles.entries()) { const option = document.createElement('option'); option.value = index; option.textContent = file.name; $('review-evidence').append(option); }
