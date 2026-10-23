@@ -130,3 +130,12 @@ test('only chosen content carries a tool line; supporting files and needed items
 test('the Install line counts the files that will change', () => {
   assert.equal(installSummary([{ action: 'Add', path: 'a' }, { action: 'Add', path: 'b' }]).heading, '2 files will change');
 });
+
+test('Install says why it is unavailable when the review has nothing to change (#144), and is offered otherwise', async () => {
+  const { nothingToInstall } = await import('../../src/app/install-panel.js');
+  assert.equal(nothingToInstall({ roots: [], rows: [] }), 'Nothing to change yet — add something from the catalog first.');
+  assert.match(nothingToInstall({ roots: [{ itemId: 'x' }], rows: [] }), /^Nothing to change: /);
+  assert.equal(nothingToInstall({ roots: [{ itemId: 'x' }], rows: [{ action: 'Add', path: 'a' }] }), '');
+  // Files already in place are still checked again by Install, as before.
+  assert.equal(nothingToInstall({ roots: [{ itemId: 'x' }], rows: [{ action: 'Already in place', path: 'a' }] }), '');
+});

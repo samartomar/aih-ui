@@ -63,9 +63,10 @@ function button(label, handler) {
  * The Hooks section. It shows only when the open framework has hooks supported for Your tool; with no tool chosen it
  * asks for one, since hooks are made for one tool.
  *
- * @param onAdd  called with the hook item, its root carrying the configuration typed; resolves when the Add has settled
+ * @param onAdd     called with the hook item, its root carrying the configuration typed; resolves when the Add has settled
+ * @param onRemove  called with a chosen hook item when its Remove is used (#144); resolves when the removal has settled
  */
-export function createHooks({ section, list, note, onAdd }) {
+export function createHooks({ section, list, note, onAdd, onRemove = async () => {} }) {
   let drawn = '';
 
   function row(item, { accepted, acceptedLabel, neededBy }) {
@@ -82,11 +83,23 @@ export function createHooks({ section, list, note, onAdd }) {
       command.append(value ? el('code', 'block font-mono text-[11px] text-on-surface break-all', value) : el('p', 'text-[11px] text-on-surface-variant', text));
     } else command.append(el('p', 'text-[11px] text-on-surface-variant break-words', commandOf(item).text));
     node.append(command, el('p', 'text-[11px] text-on-surface-variant', 'Event: not published by the Catalog.'));
-    if (chosen || needed) {
-      const label = chosen ? acceptedLabel : needed;
-      const state = el('button', `px-2 py-1 rounded border text-[11px] font-medium ${chosen ? 'bg-primary-container text-on-primary border-primary' : 'border-wb-border text-on-surface-variant cursor-not-allowed'}`, label);
+    if (chosen) {
+      // A chosen hook's button is Remove (#144): the same removal as the card's.
+      const remove = el('button', 'px-2 py-1 rounded border text-[11px] font-medium bg-primary-container text-on-primary border-primary hover:border-error', 'Remove');
+      remove.type = 'button'; remove.setAttribute('aria-label', `Remove: ${nameOf(item)}`);
+      remove.title = `In your ${acceptedLabel === 'In draft' ? 'draft' : 'setup'}. Remove takes it out; Undo puts it back.`;
+      remove.addEventListener('click', async () => {
+        if (remove.disabled) return;
+        remove.disabled = true; remove.textContent = 'Removing…'; remove.setAttribute('aria-busy', 'true');
+        try { await onRemove(item); } finally { remove.disabled = false; remove.textContent = 'Remove'; remove.removeAttribute('aria-busy'); }
+      });
+      node.append(remove);
+      return node;
+    }
+    if (needed) {
+      const state = el('button', 'px-2 py-1 rounded border text-[11px] font-medium border-wb-border text-on-surface-variant cursor-not-allowed', needed);
       state.type = 'button'; state.disabled = true; state.setAttribute('aria-disabled', 'true');
-      state.setAttribute('aria-label', `${label}: ${nameOf(item)}`);
+      state.setAttribute('aria-label', `${needed}: ${nameOf(item)}`);
       node.append(state);
       return node;
     }

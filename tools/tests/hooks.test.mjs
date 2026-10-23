@@ -90,21 +90,24 @@ test('the section lists each hook with what it does, the command, and Add; Add s
   assert.deepEqual(added.map(item => [item.id, item.root.configuration]), [['git-guard', { hookCommand: 'node guard.mjs' }]]);
 });
 
-test('a hook in the setup shows its command and no second Add; a needed one says who needs it', t => {
+test('a hook in the setup shows its command and Remove (#144), not a second Add; a needed one says who needs it', async t => {
   dom(t);
-  const section = element('section'), list = element('div'), note = element('p');
-  const view = createHooks({ section, list, note, onAdd: async () => {} });
+  const section = element('section'), list = element('div'), note = element('p'), removed = [];
+  const view = createHooks({ section, list, note, onAdd: async () => {}, onRemove: async item => { removed.push(item.id); } });
   const hooks = items.filter(item => hookEntryIds(items, supporting).has(`${R}/${item.id}`));
   view.render({ hooks, tool: 'claude-code', accepted: [{ releaseSha256: R, itemId: 'git-guard', configuration: { hookCommand: 'node guard.mjs' } }], acceptedLabel: 'Added',
     neededBy: item => item.id === 'lanes-card' ? 'In your setup (needed by Whole set)' : '' });
   const [first, second] = list.children;
   assert.ok(all(first).some(node => node.textContent === 'node guard.mjs'));
-  const done = all(first).find(node => node.textContent === 'Added');
-  assert.equal(done.disabled, true);
+  const remove = all(first).find(node => node.textContent === 'Remove');
+  assert.equal(remove.disabled, false);
+  assert.equal(remove.attributes['aria-label'], 'Remove: Claude Code: git-guard hook group');
+  await remove.listeners.click();
+  assert.deepEqual(removed, ['git-guard']);
   assert.equal(all(first).some(node => node.textContent === 'Add with this command'), false);
   const needed = all(second).find(node => node.textContent === 'In your setup (needed by Whole set)');
   assert.equal(needed.disabled, true);
-  assert.equal(all(second).some(node => node.textContent === 'Add with this command'), false);
+  assert.equal(all(second).some(node => node.textContent === 'Add with this command' || node.textContent === 'Remove'), false);
 });
 
 test('with a tool that has no hooks here the section does not appear; with no tool it asks for one', t => {

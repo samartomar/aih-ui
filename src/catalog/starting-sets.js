@@ -111,9 +111,10 @@ const optionalKey = item => entryKey(item.root?.releaseSha256, item.id);
  * catalog) and offers each set that fits the chosen tool, with Add all for my tool. With no tool chosen it says how many
  * sets there are and asks for the tool, since most sets exist once per tool.
  *
- * @param onAddSet  called with the set item and { optional: [{ item, configuration }], brings }; resolves when the Add has settled
+ * @param onAddSet     called with the set item and { optional: [{ item, configuration }], brings }; resolves when the Add has settled
+ * @param onRemoveSet  called with the set item when Remove set is used (#144); resolves when the removal has settled
  */
-export function createStartingSets({ section, list, note, authoring, onAddSet }) {
+export function createStartingSets({ section, list, note, authoring, onAddSet, onRemoveSet = async () => {} }) {
   const needs = new Map(); let needsFor = null, drawn = '', model = null;
   // What the person ticked and typed for each set's optional items, kept across re-renders.
   const choices = new Map();
@@ -175,24 +176,37 @@ export function createStartingSets({ section, list, note, authoring, onAddSet })
     const choice = choiceOf(key);
     const missingInput = () => choice.include && offered.some(({ item, inputs }) => inputs.some(input => input.required && !(choice.values.get(optionalKey(item))?.[input.name] ?? '').trim()));
     const chosen = accepted.some(root => root.itemId === set.id && root.releaseSha256 === set.root.releaseSha256);
-    const label = chosen ? acceptedLabel : 'Add all for my tool';
+    // Once the set is in the setup, Add all becomes Remove set (#144): it takes out the set's own root.
+    const label = chosen ? 'Remove set' : 'Add all for my tool';
     const action = el('button', '', label);
     action.type = 'button'; action.className = 'wb-starting-set-add';
     action.setAttribute('aria-label', `${label}: ${name}`);
     const update = () => {
-      const blocked = chosen || missingInput() || fit.status !== 'fits';
+      const blocked = !chosen && (missingInput() || fit.status !== 'fits');
       action.disabled = blocked; action.setAttribute('aria-disabled', String(blocked));
       action.className = `wb-starting-set-add px-2 py-1 rounded border text-[11px] font-medium shrink-0 ${chosen ? 'bg-primary-container text-on-primary border-primary' : blocked ? 'border-wb-border text-outline cursor-not-allowed' : 'border-wb-control-border text-on-surface hover:text-primary hover:border-primary'}`;
-      action.title = chosen ? 'In your setup with everything it needs.' : fit.status !== 'fits' ? `Whether this set fits ${tool} cannot be read, so it is not added from here.` : missingInput() ? 'Type the command each optional item needs, or untick Include.'
+      action.title = chosen ? `In your ${acceptedLabel === 'In draft' ? 'draft' : 'setup'} with everything it needs. Remove set takes the set out; Undo puts it back.` : fit.status !== 'fits' ? `Whether this set fits ${tool} cannot be read, so it is not added from here.` : missingInput() ? 'Type the command each optional item needs, or untick Include.'
         : `Add ${name} and everything it requires to your setup in one step${choice.include ? ', with the optional items you ticked' : ''}.`;
+    };
+    // Once it settles the row may be redrawn (Add all ↔ Remove set); keyboard focus moves to its new button rather than the page.
+    const settled = () => {
+      action.removeAttribute('aria-busy');
+      if (action.isConnected) { action.textContent = label; update(); return; }
+      if (document.activeElement === action || document.activeElement === document.body || !document.activeElement?.isConnected)
+        [...list.children].find(row => row.dataset.setId === key)?.querySelector?.('.wb-starting-set-add')?.focus();
     };
     action.addEventListener('click', async () => {
       if (action.disabled) return;
+      if (chosen) {
+        action.disabled = true; action.textContent = 'Removing…'; action.setAttribute('aria-busy', 'true');
+        try { await onRemoveSet(set); } finally { settled(); }
+        return;
+      }
       const optional = choice.include ? offered.map(({ item, inputs }) => ({ item,
         configuration: Object.fromEntries(inputs.map(input => [input.name, choice.values.get(optionalKey(item))?.[input.name] ?? '']).filter(([, value]) => value !== '')) })) : [];
       action.disabled = true; action.textContent = 'Adding…'; action.setAttribute('aria-busy', 'true');
       try { await onAddSet(set, { optional, brings: setBrings({ needs: result.value.needs, items, supporting }) }); }
-      finally { action.removeAttribute('aria-busy'); if (action.isConnected) { action.textContent = label; update(); } }
+      finally { settled(); }
     });
     node.append(action);
     if (offered.length && !chosen) node.append(optionalBox(offered, choice, update));

@@ -71,6 +71,8 @@ async function main() {
       subscribeSecurity: shell.subscribeSecurity,
       onAdd: item => authoringWorkspace.add(item),
       onAddSet: (set, choice) => authoringWorkspace.addSet(set, choice),
+      onRemove: item => authoringWorkspace.remove(item),
+      onRemoveSet: set => authoringWorkspace.removeSet(set),
       // Choosing a framework shows its cards, in place of Project basics; Project basics opens the one workspace view.
       onFramework: () => shell.showCards(),
       onOpenWorkspace: () => authoringWorkspace.openWorkspace(),

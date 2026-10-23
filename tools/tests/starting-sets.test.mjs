@@ -2,7 +2,7 @@
 // for is worked out from the items Catalog's resolver says it requires, never from its label.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isStartingSet, startingSetIds, setFit, setBrings, optionalFor, setAddedMessage, fitNote } from '../../src/catalog/starting-sets.js';
+import { isStartingSet, startingSetIds, setFit, setBrings, optionalFor, setAddedMessage, fitNote, createStartingSets } from '../../src/catalog/starting-sets.js';
 
 const RELEASE = 'a'.repeat(64), OTHER = 'b'.repeat(64);
 const fact = (client, support, capability = 'skill-material-format') => ({ client, support, capability, surface: 'project', ...(support === 'unsupported' ? { reason: 'Not for this tool.' } : {}) });
@@ -84,4 +84,38 @@ test('the note under the sets says honestly how many do not fit the tool, and wh
   assert.equal(fitNote({ tool: 'claude-code', statuses: ['fits'] }), '');
   assert.equal(fitNote({ tool: 'kiro-ide', statuses: ['other-tool'] }), 'No starting set in this framework fits kiro-ide: 1 needs items the Catalog does not mark supported for kiro-ide. Advanced shows them all.');
   assert.equal(fitNote({ tool: '', statuses: ['fits', 'other-tool'] }), 'This framework has 2 starting sets. Choose your tool in the header to see the ones that fit it.');
+});
+
+// A small DOM, enough for the Starting sets line.
+function element(tag) {
+  return { tagName: tag, children: [], dataset: {}, attributes: {}, listeners: {}, className: '', textContent: '', hidden: false, value: '', disabled: false, checked: false,
+    append(...children) { this.children.push(...children); }, replaceChildren(...children) { this.children = children; },
+    setAttribute(name, value) { this.attributes[name] = value; }, removeAttribute(name) { delete this.attributes[name]; },
+    addEventListener(name, callback) { this.listeners[name] = callback; }, get isConnected() { return true; } };
+}
+const all = node => [node, ...node.children.flatMap(all)];
+
+test('once a starting set is in the setup, its Add all becomes Remove set (#144), which takes out the root of the set itself', async t => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  globalThis.document = { createElement: element };
+  t.after(() => { if (previous) Object.defineProperty(globalThis, 'document', previous); else delete globalThis.document; });
+  const set = byId('extensions.template.complete'), removed = [];
+  let finish;
+  const authoring = { request: async () => ({ status: 'ok', value: { needs: completeNeeds } }) };
+  const section = element('section'), list = element('div'), note = element('p');
+  const view = createStartingSets({ section, list, note, authoring, onAddSet: async () => {}, onRemoveSet: item => { removed.push(item.id); return new Promise(resolve => { finish = resolve; }); } });
+  const model = { sets: [set], tool: 'claude-code', items, supporting, accepted: [], acceptedLabel: 'Added' };
+  view.render(model);
+  await new Promise(resolve => setTimeout(resolve, 0)); await new Promise(resolve => setTimeout(resolve, 0));
+  assert.ok(all(list).some(node => node.textContent === 'Add all for my tool'));
+  view.render({ ...model, accepted: [ref('extensions.template.complete')] });
+  const action = all(list).find(node => node.textContent === 'Remove set');
+  assert.ok(action, 'Remove set replaces Add all');
+  assert.equal(action.disabled, false);
+  assert.equal(action.attributes['aria-label'], 'Remove set: claude-code whole workflow convenience template');
+  const pending = action.listeners.click();
+  assert.equal(action.textContent, 'Removing…'); assert.equal(action.attributes['aria-busy'], 'true'); assert.equal(action.disabled, true);
+  finish(); await pending;
+  assert.deepEqual(removed, ['extensions.template.complete']);
+  assert.equal(action.textContent, 'Remove set'); assert.equal(action.attributes['aria-busy'], undefined);
 });
