@@ -125,22 +125,26 @@ function card(entry, selectedId, onSelect, model) {
   toggle.appendChild(button);
   if (entry.authoringItem) {
     // Add puts the item and the items it needs into the setup in one step; refusals and anything to decide open the review instead.
-    const chosenLabel = model.acceptedLabel ?? 'Added';
+    // A chosen item's button is Remove (#144), which takes it back out the same way the panel's Remove from setup does.
     const chosen = (model.acceptedRoots ?? model.intent?.roots ?? []).some(root => root.itemId === entry.authoringItem.id && root.releaseSha256 === entry.authoringItem.root.releaseSha256);
-    // Already in the setup because a chosen item or set needs it (#134): no second Add, which would add it twice.
+    // Already in the setup because a chosen item or set needs it (#134): no second Add, which would add it twice, and no Remove.
     const needed = chosen ? '' : model.neededBy?.(entry.authoringItem) ?? '';
-    const label = chosen ? chosenLabel : needed || 'Add';
-    button.className = `px-2 py-1 rounded border text-[10px] font-medium ${chosen ? 'bg-primary-container text-on-primary border-primary' : needed ? 'border-wb-border text-on-surface-variant cursor-not-allowed text-left whitespace-normal max-w-[14rem]' : 'border-wb-control-border text-on-surface-variant hover:text-primary hover:border-primary'}`;
+    const label = chosen ? 'Remove' : needed || 'Add', busy = chosen ? 'Removing…' : 'Adding…';
+    button.className = `px-2 py-1 rounded border text-[10px] font-medium ${chosen ? 'bg-primary-container text-on-primary border-primary hover:border-error' : needed ? 'border-wb-border text-on-surface-variant cursor-not-allowed text-left whitespace-normal max-w-[14rem]' : 'border-wb-control-border text-on-surface-variant hover:text-primary hover:border-primary'}`;
     button.replaceChildren(); button.textContent = label;
-    button.disabled = Boolean(chosen || needed);
+    button.disabled = Boolean(needed);
     button.setAttribute('aria-label', needed ? `${needed}: ${entry.authoringItem.id}` : `${label} ${entry.authoringItem.id}`);
     button.removeAttribute('aria-disabled');
-    button.title = chosen ? 'In your setup with the items it needs.' : needed ? 'Already in your setup as an item something you chose needs, so it is not added again.' : 'Add this item and the items it needs to your setup.';
+    button.title = chosen ? `In your ${model.setupWord ?? 'setup'} with the items it needs. Remove takes it out; Undo puts it back.` : needed ? 'Already in your setup as an item something you chose needs, so it is not added again.' : 'Add this item and the items it needs to your setup.';
+    // An Add or Remove still in flight keeps its busy label when the grid is redrawn meanwhile, so it cannot be used twice.
+    const pending = model.busy?.get(id.entryId);
+    if (pending) { button.textContent = pending; button.disabled = true; button.setAttribute('aria-busy', 'true'); }
     button.addEventListener('click', async event => {
       event.stopPropagation();
-      button.disabled = true; button.textContent = 'Adding…'; button.setAttribute('aria-busy', 'true');
-      try { await model.onChoose(entry.authoringItem, id.entryId); }
-      finally { button.disabled = Boolean(chosen); button.textContent = label; button.removeAttribute('aria-busy'); }
+      if (button.disabled) return;
+      button.disabled = true; button.textContent = busy; button.setAttribute('aria-busy', 'true');
+      try { await (chosen ? model.onRemove?.(entry.authoringItem, id.entryId) : model.onChoose?.(entry.authoringItem, id.entryId)); }
+      finally { button.disabled = false; button.textContent = label; button.removeAttribute('aria-busy'); }
     });
   }
   foot.appendChild(toggle);

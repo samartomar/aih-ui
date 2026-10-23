@@ -80,8 +80,13 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     await again.locator('#org-modal-trigger').click();
     await again.locator('#settings-advanced > summary').click();
     await again.locator('#ai-tools-trigger').filter({ hasText: 'Tools to set up on this machine' }).click();
+    // #144: the Core tools only affect machine setup; unticking one changes no card or count in any framework.
+    assert.match(await again.locator('#settings-advanced-note').textContent(), /^Only affects machine setup/);
+    const shownCounts = async () => [await again.locator('#visible-count').textContent(), await again.locator('#framework-list').innerText()];
+    const countsBefore = await shownCounts();
     const box = again.locator('#ai-tools-list input[type="checkbox"]').first(), was = await box.isChecked();
     await box.setChecked(!was); await again.locator('#ai-tools-note').filter({ hasText: 'Selection saved locally.' }).waitFor();
+    assert.deepEqual(await shownCounts(), countsBefore, 'the Core tools choice hides no catalog content');
     await again.reload();
     await again.locator('#org-modal-trigger').click();
     if (!await again.locator('#settings-advanced').evaluate(node => node.open)) await again.locator('#settings-advanced > summary').click();
@@ -99,6 +104,8 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     await page.locator('#added-notice-message').filter({ hasText: 'Added claude-code whole workflow convenience template to your setup: 46 skills, 4 agents, 2 commands, plus 2 supporting files.' }).waitFor();
     assert.equal((await policy(page)).metadata['aih.workbench'].pins.length, 55, 'the set and everything it requires, in one step');
     assert.equal(await page.locator('#your-setup').textContent(), 'Your setup (1)');
+    // #144: once added, the set's Add all is Remove set.
+    assert.equal(await whole.getByRole('button', { name: 'Remove set: claude-code whole workflow convenience template' }).isEnabled(), true);
     // An item the set brought in is in the setup as a needed item: its card says who needs it and offers no second Add (#134).
     await page.locator('#catalog-search').fill('grill-me');
     const grillMe = page.locator('#cards-grid [data-card-id$="/extensions.matt.grill-me"] button').filter({ hasText: /^In your setup/ });
@@ -108,6 +115,15 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     await page.locator('#added-notice-message').filter({ hasText: /^Undone: claude-code whole workflow convenience template is no longer in your setup\.$/ }).waitFor();
     assert.equal(await page.locator('#policy-current-context').textContent(), idle, 'Undo returns the status bar to the exact prior state');
     await page.getByRole('button', { name: 'Add extensions.matt.grill-me', exact: true }).waitFor();
+    // #144: Add on the card turns it into Remove; Remove returns it to Add with the setup and status bar exactly as before.
+    const bytesBefore = await page.locator('#policy-bytes').textContent();
+    await page.getByRole('button', { name: 'Add extensions.matt.grill-me', exact: true }).click();
+    await page.locator('#added-notice-message').filter({ hasText: /^Added grill-me/ }).waitFor();
+    await page.getByRole('button', { name: 'Remove extensions.matt.grill-me', exact: true }).click();
+    await page.locator('#added-notice-message').filter({ hasText: /^Removed grill-me from your setup\.$/ }).waitFor();
+    await page.getByRole('button', { name: 'Add extensions.matt.grill-me', exact: true }).waitFor();
+    assert.equal(await page.locator('#policy-current-context').textContent(), idle, 'Remove returns the status bar to the exact prior state');
+    assert.equal(await page.locator('#policy-bytes').textContent(), bytesBefore, 'Remove returns the setup to the exact prior bytes');
     await page.locator('#catalog-search').fill('');
     await page.locator('#added-notice-dismiss').click();
     // Hooks (#135): not cards; a Hooks section offers the ones for Your tool, with the command each runs. The Catalog
@@ -123,7 +139,7 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     await gitGuard.getByRole('textbox', { name: 'hookCommand for Claude Code: git-guard hook group' }).fill('node "$CLAUDE_PROJECT_DIR/.aih-extensions/source/hooks/git-guard.mjs"');
     await gitGuard.getByRole('button', { name: 'Add with this command' }).click();
     await page.locator('#added-notice-message').filter({ hasText: /^Added Claude Code: git-guard hook group/ }).waitFor();
-    assert.equal(await gitGuard.getByRole('button', { name: 'Added: Claude Code: git-guard hook group' }).isDisabled(), true);
+    assert.equal(await gitGuard.getByRole('button', { name: 'Remove: Claude Code: git-guard hook group' }).isEnabled(), true);
     const installHook = page.locator('#install-hooks .wb-install-hook');
     assert.equal(await installHook.textContent(), 'Claude Code: git-guard hook group runs this command: ' + 'node "$CLAUDE_PROJECT_DIR/.aih-extensions/source/hooks/git-guard.mjs"'
       + "claude-code will run this command each time the hook's event happens. The Catalog does not say which event that is.");

@@ -28,6 +28,15 @@ export function installSummary(rows, { managed = false } = {}) {
 }
 
 /**
+ * Why Install is not offered for a review (#144), or '' when it is: with nothing chosen, or a review that writes no
+ * file, there is nothing for it to change. Files already in place still count: Install checks them again.
+ */
+export function nothingToInstall({ roots = [], rows = [] }) {
+  if (rows.length) return '';
+  return roots.length ? 'Nothing to change: your setup writes no files into this project.' : 'Nothing to change yet — add something from the catalog first.';
+}
+
+/**
  * What Install brings, one row per item in the setup: chosen content with its tool line for Your tool (`tool`), and
  * the items it needs named for what they are. Tool lines are for chosen content only: a supporting file (a hook's
  * script files, notices) or a needed item is never flagged for your tool. `supporting` is supportingMaterial's set.
@@ -115,8 +124,10 @@ export function createInstallPanel({ client, el, button, tools = () => ({}), onI
   const hookCommands = el('div', 'space-y-2'); hookCommands.id = 'install-hooks'; hookCommands.hidden = true;
   const filesHeading = el('span', 'font-medium', 'What will be installed'); filesHeading.id = 'install-summary';
   const files = el('ul', 'space-y-0.5 font-mono text-[11px]'); files.id = 'install-files';
-  const message = el('p', 'text-on-surface'); message.id = 'install-message'; message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
+  const message = el('p', 'wb-status-area text-on-surface'); message.id = 'install-message'; message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
   const install = button('Install', () => run(), true); install.id = 'install-button'; install.disabled = true;
+  // A disabled Install says why in the status line beside it.
+  install.setAttribute('aria-describedby', message.id);
   // One button and "N files will change", which opens what will be installed and every file (#137).
   const details = el('details', 'install-details text-on-surface-variant'); details.id = 'install-details';
   const detailsSummary = el('summary', 'cursor-pointer'); detailsSummary.append(filesHeading);
@@ -147,7 +158,9 @@ export function createInstallPanel({ client, el, button, tools = () => ({}), onI
       const preparation = readyPreparation(result);
       if (preparation) {
         preview = preparation; const rows = show(preparation.review);
-        install.disabled = false; message.textContent = installSummary(rows, { managed }).message;
+        const reason = nothingToInstall({ roots: client.intent?.roots ?? [], rows });
+        install.disabled = Boolean(reason); message.textContent = reason || installSummary(rows, { managed }).message;
+        install.title = reason || 'Install your setup into this project folder.';
       } else { files.replaceChildren(); filesHeading.textContent = 'What will be installed'; message.textContent = `Can't install yet: ${refusal(result)}`; }
     } catch (error) { message.textContent = `Can't install yet: ${error.message}`; }
     finally {
@@ -157,7 +170,7 @@ export function createInstallPanel({ client, el, button, tools = () => ({}), onI
     }
   }
   async function run() {
-    if (!preview || installing) return;
+    if (!preview || installing || install.disabled) return;
     const shown = effectsFingerprint(preview.review);
     let sent = false;
     installing = true; install.disabled = true; install.setAttribute('aria-busy', 'true'); message.textContent = 'Installing…';
@@ -169,7 +182,7 @@ export function createInstallPanel({ client, el, button, tools = () => ({}), onI
       if (attemptResult.state === 'not-ready') { message.textContent = `Install did not start: ${refusal(attemptResult.result)}`; return; }
       const { preparation } = attemptResult;
       if (attemptResult.state === 'changed') {
-        preview = preparation; const rows = show(preparation.review); install.disabled = false;
+        preview = preparation; const rows = show(preparation.review); install.disabled = Boolean(nothingToInstall({ roots: client.intent?.roots ?? [], rows }));
         message.textContent = `The files changed since this list was shown (${rows.length} now). Check the list and click Install again.`; return;
       }
       const outcome = installOutcome(attemptResult.run, installFiles(preparation.review), preparation.review.target?.project);
@@ -208,6 +221,12 @@ export function createInstallPanel({ client, el, button, tools = () => ({}), onI
     }
     const key = client.bytes.join(',');
     if (key === shownFor) return;
+    // Nothing chosen: there is nothing to prepare, and Install says so (#144).
+    if (!client.intent.roots.length) {
+      shownFor = key; preview = undefined; install.disabled = true; delete message.dataset.outcome;
+      title.textContent = 'Install your setup into your project'; filesHeading.textContent = installSummary([]).heading; files.replaceChildren();
+      message.textContent = install.title = nothingToInstall({ roots: [], rows: [] }); return;
+    }
     shownFor = key; delete message.dataset.outcome; void loadPreview();
   }
   // After a removal elsewhere or a change of project folder: the earlier preview and outcome no longer describe the
@@ -223,7 +242,7 @@ export function createInstallPanel({ client, el, button, tools = () => ({}), onI
     managed = Boolean(value);
     if (!preview || previewing || installing || message.dataset.outcome) return;
     const rows = installFiles(preview.review), summary = installSummary(rows, { managed });
-    filesHeading.textContent = summary.heading; message.textContent = summary.message;
+    filesHeading.textContent = summary.heading; message.textContent = nothingToInstall({ roots: client.intent?.roots ?? [], rows }) || summary.message;
   }
   return { node, heading: title, render, recheck, setManaged, get busy() { return installing; } };
 }

@@ -77,6 +77,14 @@ test('the tool line is under Advanced and the Core tools chip is in Settings, Ad
   }
 });
 
+test('the Core tools in Settings say they only affect machine setup; Your tool is the only content filter (#144)', () => {
+  const note = /id="settings-advanced-note">([^<]*)</.exec(readFileSync(new URL('../../src/index.html', import.meta.url), 'utf8'))?.[1] ?? '';
+  assert.match(note, /^Only affects machine setup/);
+  assert.match(note, /never hides catalog content/);
+  const controller = readFileSync(new URL('../../src/catalog/controller.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(controller, /filterByTools|toolsNotice/, 'the Core tools choice is not applied to the grid, the left panel or the counts');
+});
+
 test('one Settings menu holds the workspace actions, the mode, Check this machine and Get started', () => {
   for (const id of ['workbench-mode-trigger', 'workbench-experience', 'org-trigger-label', 'nav-readiness', 'nav-guided'])
     assert.ok(inside(id, 'workspace-actions'), `${id} is in the Settings menu`);

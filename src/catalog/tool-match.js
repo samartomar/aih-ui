@@ -59,7 +59,10 @@ export function toolLine(item, tool = '') {
   return supported.length ? `For ${supported.map(declared => named(declared.client)).join(', ')}` : 'Not marked supported for any tool';
 }
 
-/** With "your tools" on, hides only items that are clearly for a tool you did not select. */
+/**
+ * With "your tools" on, hides only items that are clearly for a tool you did not select. Kept for the comparison it
+ * states; since #144 nothing applies it to the catalog, whose only content filter is Your tool (catalogToolView).
+ */
 export function filterByTools(entries, { mode, coreIds, selected }) {
   if (mode !== 'mine' || !selected?.length || !coreIds?.length) return entries;
   return entries.filter(entry => toolRelation(entry.authoringItem, { coreIds, selected }) !== 'other');

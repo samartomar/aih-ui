@@ -20,7 +20,7 @@ import { publishedClients } from "../app/core-targets.js";
 import { inventoryCounts, scopeTotal, selectedScope, visibleEntries, sourceScopes } from "./selectors.js";
 import { emptyView, restoreView, saveView } from "./view-state.js";
 import { text } from "../app/dom.js";
-import { catalogToolView, filterByTools, toolsNotice } from "./tool-match.js";
+import { catalogToolView } from "./tool-match.js";
 import { catalogToolOnRefresh, saveCatalogTool, savedCatalogTool } from "./catalog-tool.js";
 import { createYourTool, yourToolModel } from "./your-tool.js";
 import { createProjectBasics, frameworkShows, projectFileEntries } from "./project-basics.js";
@@ -36,11 +36,13 @@ import { inSetupLabel, setupNeeds } from "../app/setup-needs.js";
  * @param onSummary        called with the preview summary once it has loaded
  * @param onAdd            called with the catalog item when its card's Add is used; resolves when the Add has settled
  * @param onAddSet         called with a starting set and its chosen optional items when Add all is used; resolves when it has settled
+ * @param onRemove         called with a chosen catalog item when its card's (or hook's) Remove is used (#144); resolves when it has settled
+ * @param onRemoveSet      called with a starting set in the setup when its Remove set is used; resolves when it has settled
  * @param onFramework      called when a framework is chosen, so its cards show (in place of Project basics)
  * @param onOpenWorkspace  called when Project basics opens the workspace
  * @param onYourSources    called to show Your sources (Add a source, or one of the person's folders)
  */
-export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () => {}, onSummary, subscribeSecurity, onAdd = async () => {}, onAddSet = async () => {}, onFramework = () => {}, onOpenWorkspace = () => {}, onYourSources = () => {} }) {
+export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () => {}, onSummary, subscribeSecurity, onAdd = async () => {}, onAddSet = async () => {}, onRemove = async () => {}, onRemoveSet = async () => {}, onFramework = () => {}, onOpenWorkspace = () => {}, onYourSources = () => {} }) {
   const elements = catalogElements();
   const state = {
     entries: [],
@@ -55,7 +57,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     // The organization's own name, when the user has saved one. It labels the
     // organization's additions row; nothing here reads or invents it.
     organizationName: null,
-    // The AI tools chosen in Settings (Core ids) and whether the grid shows only content for them.
+    // The AI tools chosen in Settings (Core ids): for setting up this machine only. They never hide catalog content (#144);
+    // Your tool is the only content filter.
     selectedTools: [],
     toolsMode: 'mine',
     // Whether items that declare no specific tool are shown beside those the Catalog marks supported for the chosen tool.
@@ -71,6 +74,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     // Whether hooks also show as cards. By default they are offered only in the Hooks section above the cards (#135),
     // and the grid, kind tabs and counts leave them out.
     showHooks: false,
+    // entryId -> 'Adding…' or 'Removing…' while a card's Add or Remove is in flight (the grid is redrawn meanwhile).
+    busy: new Map(),
   };
   let restoredView = false;
   // The tool names the installed Catalog declares, read once per catalog.
@@ -171,11 +176,11 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   const toolsStarting = document.getElementById('catalog-tools-starting');
   toolsStarting.addEventListener('click', () => { state.showStartingSets = !state.showStartingSets; render(); });
   const startingSets = createStartingSets({ section: document.getElementById('starting-sets'), list: document.getElementById('starting-sets-list'),
-    note: document.getElementById('starting-sets-note'), authoring, onAddSet: (set, choice) => onAddSet(set, choice) });
+    note: document.getElementById('starting-sets-note'), authoring, onAddSet: (set, choice) => onAddSet(set, choice), onRemoveSet: set => onRemoveSet(set) });
   const toolsHooks = document.getElementById('catalog-tools-hooks');
   toolsHooks.addEventListener('click', () => { state.showHooks = !state.showHooks; render(); });
   const hooksSection = createHooks({ section: document.getElementById('hooks'), list: document.getElementById('hooks-list'),
-    note: document.getElementById('hooks-note'), onAdd: item => onAdd(item) });
+    note: document.getElementById('hooks-note'), onAdd: item => onAdd(item), onRemove: item => onRemove(item) });
   toolsToggle.addEventListener('click', () => { state.toolsMode = state.toolsMode === 'mine' ? 'all' : 'mine'; render(); });
   toolsUndeclared.addEventListener('click', () => { state.showUndeclared = !state.showUndeclared; render(); });
   toolsUnsupported.addEventListener('click', () => { state.showUnsupported = !state.showUnsupported; render(); });
@@ -220,23 +225,22 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     if (!view.family) return [];
     return scopeEntries({ ...view, query: '', kind: null, sourceType: null }).filter(entry => starting.has(entry.entryId)).map(entry => entry.authoringItem);
   }
-  // The Catalog tool filter first (Catalog names), then the header tools (Core names); neither is translated into the other.
+  // Your tool (Catalog names) is the only content filter (#144): the Core tools chosen in Settings never hide content.
   function browseEntries(view = state.view) {
-    return filterByTools(catalogTool(view).entries, toolOptions());
+    return catalogTool(view).entries;
   }
   // What the framework offers for the tool: its cards and the hooks in its Hooks section. The left panel and the kind
   // pills count this, so a framework's hooks still count as content for the tool.
   function offeredEntries(view = state.view) {
     const { entries, sectionHooks } = catalogTool(view);
-    return filterByTools([...entries, ...sectionHooks], toolOptions());
+    return [...entries, ...sectionHooks];
   }
   function renderToolsBar() {
     const tool = state.view.target, view = catalogTool(), options = toolOptions();
     toolsShowing.textContent = !tool ? 'Choose the tool name the Catalog uses for your AI tool'
       : state.toolsMode === 'mine' ? 'Content supported, according to the Catalog, for' : 'Showing content for every tool. Your Catalog tool:';
-    // What the header tools would hide; without a Catalog tool the switch shows only when that is something.
-    const hiddenByCore = toolsNotice(view.entries, { ...options, mode: 'mine' });
-    toolsToggle.hidden = !tool && !hiddenByCore;
+    // Show all is about Your tool only; the Core tools in Settings hide nothing, so they add no switch or notice (#144).
+    toolsToggle.hidden = !tool;
     toolsToggle.textContent = state.toolsMode === 'mine' ? 'Show all' : tool ? `Show only ${tool}` : 'Show only my tools';
     toolsUndeclared.hidden = !view.filtered;
     toolsUndeclared.textContent = `${state.showUndeclared ? 'Hide' : 'Show'} ${view.undeclared} with no declared tool`;
@@ -258,11 +262,10 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     toolsHooks.textContent = `${state.showHooks ? 'Hide' : 'Show'} hooks as cards (${view.hooks})`;
     toolsHooks.setAttribute('aria-pressed', String(state.showHooks));
     toolsHooks.title = 'Hooks run a command in your AI tool. The Hooks section above the cards offers the ones for your tool, with the command each runs.';
-    const notice = state.toolsMode === 'mine' ? hiddenByCore : '';
-    toolsUnmatched.textContent = notice; toolsUnmatched.hidden = !notice;
+    toolsUnmatched.textContent = ''; toolsUnmatched.hidden = true;
     yourTool.render(yourToolModel({ declared: declared(), tool, mode: state.toolsMode, coreIds: options.coreIds, coreLabels: options.labels,
       coreSelected: state.selectedTools, undeclared: view.undeclared, showUndeclared: state.showUndeclared,
-      notSupported: view.notSupported, showUnsupported: state.showUnsupported, coreHidden: hiddenByCore,
+      notSupported: view.notSupported, showUnsupported: state.showUnsupported,
       place: location.host, forgotten: state.forgottenTool ?? '' }));
   }
 
@@ -282,13 +285,22 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       intent: authoring.intent,
       acceptedRoots: authoring.draft?.roots ?? authoring.intent?.roots ?? [],
       acceptedLabel: authoring.draft ? "In draft" : "Added",
+      setupWord: authoring.draft ? "draft" : "setup",
       neededBy,
       evidence: state.evidence,
       onReset: resetFilters,
+      busy: state.busy,
       onChoose: async (item, entryId) => {
         state.chosenId = entryId ?? null;
-        await onAdd(item);
+        state.busy.set(entryId, 'Adding…');
+        try { await onAdd(item); } finally { state.busy.delete(entryId); render(); }
         // A clean Add rebuilds the grid without opening the review; keyboard focus returns to the card.
+        if (document.activeElement === document.body || !document.activeElement?.isConnected) focusCard(state.chosenId);
+      },
+      onRemove: async (item, entryId) => {
+        state.chosenId = entryId ?? null;
+        state.busy.set(entryId, 'Removing…');
+        try { await onRemove(item); } finally { state.busy.delete(entryId); render(); }
         if (document.activeElement === document.body || !document.activeElement?.isConnected) focusCard(state.chosenId);
       },
     };
@@ -459,7 +471,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       refresh();
     },
 
-    /** The AI tools chosen in Settings (Core ids). The grid defaults to showing content for them. */
+    /** The AI tools chosen in Settings (Core ids). They are for setting up this machine and hide no content (#144). */
     setSelectedTools(clients) {
       state.selectedTools = [...(clients ?? [])];
       if (restoredView) render();

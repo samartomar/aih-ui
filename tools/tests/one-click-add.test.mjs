@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createAuthoringClient } from '../../src/app/authoring-client.js';
-import { addItem, undoAdd, addedMessage } from '../../src/app/one-click-add.js';
+import { addItem, undoAdd, addedMessage, chosenRoot, removeItem } from '../../src/app/one-click-add.js';
 
 const release = 'a'.repeat(64);
 const ref = (itemId, scope = 'project') => ({ releaseSha256: release, itemId, scope });
@@ -140,6 +140,22 @@ test('with a draft open, Undo removes the choice from the draft by its reference
   assert.deepEqual(requests[0].body.operation, { type: 'remove-root', root: ref('grill-me'), keep: [] });
 });
 
+test('Remove (#144) finds the chosen root for a catalog item and takes it out through the same remove-root proposal and acceptance', async t => {
+  const configured = { ...root('tdd'), configuration: { level: 'strict' } };
+  const client = opened(t, [root('grill-me'), configured]);
+  assert.deepEqual(chosenRoot(client, item('tdd')), configured);
+  assert.equal(chosenRoot(client, item('other')), undefined);
+  assert.equal(chosenRoot(client, { ...item('tdd'), root: { ...root('tdd'), releaseSha256: 'f'.repeat(64) } }), undefined, 'same id, another release: not chosen');
+  const requests = host(t, [policy([root('grill-me')])]);
+  const removed = await removeItem(client, item('tdd'));
+  assert.equal(removed.status, 'removed');
+  assert.deepEqual(removed.root, configured, 'the removed root, with its configuration, is kept for Undo');
+  assert.deepEqual(client.intent.roots.map(value => value.itemId), ['grill-me']);
+  assert.deepEqual(requests.map(request => request.body.operation), [{ type: 'remove-root', root: configured, keep: [] }]);
+  const none = await removeItem(client, item('tdd'));
+  assert.equal(none.status, 'refused'); assert.match(none.result.diagnostics[0].message, /no longer in your setup/);
+});
+
 test('the confirmation names the chosen item and the items it needs, in the Workbench words', () => {
   assert.equal(addedMessage({ name: 'grill-me', needed: ['grilling', 'domain-modeling'] }), 'Added grill-me + 2 it needs (grilling, domain-modeling) to your setup.');
   assert.equal(addedMessage({ name: 'tdd', needed: [] }), 'Added tdd to your setup.');
@@ -241,4 +257,35 @@ test('on the page, Add all adds a starting set and the optional hook ticked, lis
   assert.equal(text('added-notice-message'), 'Undone: Whole set and the 1 optional item added with it are no longer in your setup.');
   assert.equal(text('your-setup'), 'Your setup');
   assert.equal(globalThis.document.getElementById('policy-current-context').textContent, before, 'the status bar is back exactly as before the Add');
+});
+
+test('on the page, Remove on a chosen item (#144) confirms with Undo, and Add then Remove leaves the setup and status bar exactly as before', async t => {
+  const { byId, text } = page(t);
+  const bodies = [], edits = [policy([root('grill-me')], [{ root: ref('grill-me'), item: ref('grilling') }]), policy([]), policy([root('grill-me')]), policy([])], prior = globalThis.fetch;
+  globalThis.fetch = async (url, init) => { if (url === '/api/authoring-edit') bodies.push(JSON.parse(init.body).operation); return { ok: true, json: async () => url === '/api/authoring-edit' ? edits.shift() : { status: 'refused', diagnostics: [] } }; };
+  t.after(() => { globalThis.fetch = prior; });
+  const { createAuthoringWorkspace } = await import('../../src/app/authoring-workspace.js');
+  const client = opened(t);
+  const workspace = createAuthoringWorkspace(client);
+  client.discard();
+  const before = { context: text('policy-current-context'), bytes: [...client.bytes], roots: structuredClone(client.intent.roots) };
+  await workspace.add(item('grill-me'));
+  assert.equal(text('your-setup'), 'Your setup (1)');
+  await workspace.remove(item('grill-me'));
+  assert.equal(text('added-notice-message'), 'Removed grill-me from your setup.');
+  assert.equal(byId('added-notice-undo').hidden, false);
+  assert.equal(byId('policy-review-panel').hidden, true, 'the person keeps browsing');
+  assert.equal(text('your-setup'), 'Your setup');
+  assert.equal(text('policy-current-context'), before.context, 'the status bar is back exactly as before the Add');
+  assert.deepEqual([...client.bytes], before.bytes, 'the setup bytes are back exactly as before the Add');
+  assert.deepEqual(client.intent.roots, before.roots);
+  // Undo puts the same root back, through the one-click Add.
+  await byId('added-notice-undo').listeners.click();
+  assert.equal(text('added-notice-message'), 'Undone: grill-me is back in your setup.');
+  assert.deepEqual(bodies.map(body => [body.type, body.root.itemId]), [['select', 'grill-me'], ['remove-root', 'grill-me'], ['select', 'grill-me']]);
+  assert.equal(text('your-setup'), 'Your setup (1)');
+  // Remove of a starting set takes out the set's own root.
+  await workspace.removeSet(item('grill-me'));
+  assert.equal(text('added-notice-message'), 'Removed grill-me from your setup.');
+  assert.deepEqual(bodies.at(-1), { type: 'remove-root', root: root('grill-me'), keep: [] });
 });
