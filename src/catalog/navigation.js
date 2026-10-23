@@ -71,6 +71,7 @@ function scopeRow(row, selected, onSelect) {
   head.addEventListener("click", () => onSelect(selected ? null : row.filterValue));
   panel.appendChild(head);
 
+  for (const glyph of panel.querySelectorAll(".material-symbols-outlined")) glyph.setAttribute("aria-hidden", "true");
   return panel;
 }
 
@@ -87,6 +88,7 @@ function additionsRow(organizationName) {
   head.appendChild(left);
   head.appendChild(el("span", "font-mono text-[10.5px] px-1 text-outline shrink-0", NOT_SUPPLIED));
   panel.appendChild(head);
+  for (const glyph of panel.querySelectorAll(".material-symbols-outlined")) glyph.setAttribute("aria-hidden", "true");
   return panel;
 }
 

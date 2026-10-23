@@ -39,31 +39,34 @@ async function main() {
     // Core's supported targets arrive with the preview summary the catalog
     // loads. Every control that offers a client reads that SAME list and keeps
     // no copy of its own.
-    const organization = createOrganization({ elements: organizationElements(), onEdit: () => onboarding.edit() });
+    const organization = createOrganization({ elements: organizationElements(), onEdit: section => onboarding.edit(section), onModeComplete: applySettings });
     const aiTools = createAiTools({
       elements: aiToolsElements(),
       onSelectionChange: async (clients) => {
         const result = await saveClients(clients);
         organization.setSettings(result.settings, result.location);
+        if (result.settings) authoringWorkspace.setSettings(result.settings);
       },
     });
 
+    function applySettings(settings, location) {
+      organization.setSettings(settings, location);
+      policyWorkspace.setSettings(settings);
+      authoringWorkspace.setSettings(settings);
+      void evidenceReview.setDefaultRecipient(settings.reviewer ?? null);
+      aiTools.setSelection(settings.clients);
+      catalog.setOrganizationName(settings.role === "admin" ? settings.organization?.name ?? null : null);
+    }
     const onboarding = createOnboarding({
       onCloseEdit: () => organization.open(),
-      onComplete: (settings, location) => {
-        organization.setSettings(settings, location);
-        policyWorkspace.setSettings(settings);
-        void evidenceReview.setDefaultRecipient(settings.reviewer ?? null);
-        aiTools.setSelection(settings.clients);
-        catalog.setOrganizationName(settings.role === "admin" ? settings.organization?.name ?? null : null);
-      },
+      onComplete: applySettings,
     });
 
     const catalog = createCatalog({
       authoring,
+      subscribeSecurity: shell.subscribeSecurity,
       onProposal: result => {
         authoringWorkspace.present(result);
-        document.getElementById('nav-policy').click();
       },
       onSelectEntry: (entry) => {
         authoringWorkspace.select(entry);
@@ -75,6 +78,7 @@ async function main() {
       onSummary: (summary) => {
         const coreTargets = summary?.coreTargets ?? null;
         aiTools.setTargets(coreTargets);
+        organization.setTargets(coreTargets);
         onboarding.setTargets(coreTargets);
         authoringWorkspace.setTargets(coreTargets);
       },
@@ -82,8 +86,7 @@ async function main() {
 
     // Open setup immediately while the catalog and Core's published clients load.
     // Browser-local drafts never decide whether first-run setup is complete.
-    await authoring.start();
-    await Promise.all([onboarding.start(), catalog.start()]);
+    await Promise.all([authoring.start(), onboarding.start(), catalog.start()]);
   } catch (error) {
     shell.showError(error?.message ?? String(error));
   }

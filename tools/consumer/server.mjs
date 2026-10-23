@@ -18,6 +18,7 @@ import { inspectAuthenticatedReviewEvidence } from './review-host.mjs';
 import { intakePersonalFolder } from './personal-folder.mjs';
 import { observeCheckout } from './workspace-host.mjs';
 import { createCatalogUpdateSource } from './update-source.mjs';
+import { inspectorSummary } from './scan-evidence.mjs';
 import { createScanEvidenceHost } from './scan-evidence-host.mjs';
 
 export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, updateSourceCatalogRoots, evidenceSources, evidenceDetectorIds, port = 0 } = {}) {
@@ -159,7 +160,8 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
           const [releaseSha256, itemId] = String(body.target ?? '').split('/');
           const inventory = mixedService.inventories.find(entry => entry.release.sha256 === releaseSha256);
           if (!inventory) return send(response, 200, { status: 'invalid', diagnostics: [{ code: 'ITEM_UNAVAILABLE', detail: 'Exact content unavailable.' }] });
-          return send(response, 200, await client.scanEvidence.check({ inventory, itemId, supplied: (body.reviewEvidence ?? []).map(bytes => Uint8Array.from(bytes)), evaluationTime: body.evaluationTime, selection: body.selection }));
+          const result = await client.scanEvidence.check({ inventory, itemId, supplied: (body.reviewEvidence ?? []).map(bytes => Uint8Array.from(bytes)), evaluationTime: body.evaluationTime, selection: body.selection });
+          return send(response, 200, body.projection === 'inspector' ? inspectorSummary(result) : result);
         }
         if (['intake', 'folder'].includes(operation) && !client.grants) return send(response, 400, { status: 'refused', diagnostics: [{ code: 'CLIENT_REQUIRED', message: 'Open a fresh authoring client before supplying content.' }] });
         if (operation === 'folder') {
