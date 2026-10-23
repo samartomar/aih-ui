@@ -69,6 +69,7 @@ export function createOrganization({ elements, onEdit, onModeComplete }) {
       location = settingsLocation;
       elements.orgTriggerLabel.textContent = settings.role === "developer" ? "Developer workspace" : settings.organization?.name ?? "Personal workspace";
       elements.orgModalTrigger.title = "Workspace settings and actions";
+      elements.workbenchRole.textContent = settings.role ?? "personal";
       modePicker.setSettings(settings);
       elements.orgModalTitle.textContent = experienceLabel(settings) + " · local setup";
       render();

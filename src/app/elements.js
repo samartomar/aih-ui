@@ -21,7 +21,7 @@ export function shellElements() {
 export function organizationElements() {
   const ids = [
     "org-modal-trigger", "org-trigger-label", "org-modal-overlay", "org-modal-title",
-    "close-org-modal-btn", "update-org-setup-btn", "org-setup-summary",
+    "close-org-modal-btn", "update-org-setup-btn", "org-setup-summary", "workbench-role",
   ];
   return collectIds(ids);
 }
