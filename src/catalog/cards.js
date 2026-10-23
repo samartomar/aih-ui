@@ -9,9 +9,11 @@
  *
  * The evidence pill is the item's state against the Scan evidence the person
  * supplied, read by Scan's public read and coverage operations on the host:
- * not supplied, invalid, unsupported, mismatched or matched. Missing evidence
- * is never a publication claim, and matched is unchecked coverage of exact
- * bytes, not producer authentication, approval or execution authority.
+ * not supplied, invalid, unsupported, mismatched or matched, worded as the
+ * neutral scan line (never Verified until Scan publishes item summaries).
+ * Missing evidence is never a publication claim, and matched is unchecked
+ * coverage of exact bytes, not producer authentication, approval or execution
+ * authority.
  * No defined producer supplies token values, so the token chip says Unknown.
  * When every visible entry shares a family, its label is shown once above the
  * grid.
@@ -21,18 +23,22 @@
 
 import { el } from "../app/dom.js";
 import { sourcePresentation } from './source-facts.js';
-import { NOT_PUBLISHED, NOT_SUPPLIED } from "../app/absence.js";
-import { KIND_ICON, KIND_TONE, identity } from "./entry.js";
+import { NOT_PUBLISHED } from "../app/absence.js";
+import { iconFor, iconSpan } from "../app/icons.js";
+import { attachTooltip } from "../app/tooltip.js";
+import { identity } from "./entry.js";
 
 const AUTHORITY = "Producer authenticity is unchecked; this is not an approval or execution authority.";
-// One entry per evidence state the host reports; the dot keeps the status colour meanings.
+// One entry per evidence state the host reports, worded as the neutral scan line until Scan publishes item
+// summaries: nothing here can say Verified, and the icon (app/icons.js) keeps the status colour meanings.
+// `scan` is the scan state whose icon and words the pill borrows; "Not assessable" has no scan-line wording.
 export const EVIDENCE_STATE = {
-  "not-supplied": { text: NOT_SUPPLIED, dot: "bg-outline", title: () => "Scan evidence: not supplied. Supply a Scan report in Scan Review to see this item's state." },
-  invalid: { text: "Invalid evidence", dot: "bg-error", title: () => "Scan evidence: the supplied documents are not valid Scan reports or artifacts." },
-  unsupported: { text: "Unsupported report", dot: "bg-tertiary", title: () => "Scan evidence: the supplied report uses a version this Scan reader does not support." },
-  unavailable: { text: "Not assessable", dot: "bg-tertiary", title: () => "Scan evidence: Scan could not assess this item against the supplied reports." },
-  mismatched: { text: "Mismatched", dot: "bg-error", title: value => `Scan evidence: report ${value.scanId ?? ""} did not capture this item's exact files. ${AUTHORITY}` },
-  matched: { text: "Matched", dot: "bg-primary", title: value => `Scan evidence: report ${value.scanId ?? ""} captured this item's exact files; Scan Review shows which observations cover them. ${AUTHORITY}` },
+  "not-supplied": { scan: "not-scanned", text: "No scan record", title: () => "No scan record: no Scan report or artifact was supplied. Supply one in Scan Review to see this item's state." },
+  invalid: { scan: "unreadable", text: "Scan record can't be read", title: () => "Scan record can't be read: the supplied documents are not valid Scan reports or artifacts." },
+  unsupported: { scan: "unreadable", text: "Scan record can't be read", title: () => "Scan record can't be read: the supplied report uses a version this Scan reader does not support." },
+  unavailable: { scan: null, text: "Not assessable", title: () => "Not assessable: Scan could not assess this item against the supplied reports." },
+  mismatched: { scan: "not-covered", text: "The scan offered covers other files", title: value => `The scan offered covers other files: report ${value.scanId ?? ""} did not capture this item's exact files. ${AUTHORITY}` },
+  matched: { scan: "not-verified", text: "Scanned, not verified (unchecked)", title: value => `Scanned, not verified (unchecked): report ${value.scanId ?? ""} captured this item's exact files; Scan Review shows which observations cover them. ${AUTHORITY}` },
 };
 const NOT_SUPPLIED_EVIDENCE = { state: "not-supplied" };
 
@@ -60,13 +66,9 @@ function card(entry, selectedId, onSelect, model) {
   const top = el("div");
   const head = el("div", "flex items-start justify-between gap-2");
   const name = el("div", "flex items-center gap-1.5 min-w-0");
-  name.appendChild(
-    el(
-      "span",
-      `material-symbols-outlined text-[15px] shrink-0 ${KIND_TONE[id.kind] ?? "text-metadata-emphasis"}`,
-      KIND_ICON[id.kind] ?? "extension",
-    ),
-  );
+  const kindIcon = iconSpan("kind", id.kind, { size: "text-[15px]", className: "shrink-0" });
+  attachTooltip(kindIcon, `Kind: ${iconFor("kind", id.kind).label}`);
+  name.appendChild(kindIcon);
   // The item's label from the installed release; otherwise its id.
   name.appendChild(el("span", "wb-card-title text-wb-body font-mono font-medium text-wb-title tracking-tight truncate", title ?? id.name));
   head.appendChild(name);
@@ -94,11 +96,13 @@ function card(entry, selectedId, onSelect, model) {
 
   const evidence = model.evidence?.get(id.entryId) ?? NOT_SUPPLIED_EVIDENCE;
   const shown = EVIDENCE_STATE[evidence.state] ?? EVIDENCE_STATE.unavailable;
-  const status = el("span", "px-1.5 py-0.5 rounded bg-wb-meta-bg border border-wb-border text-wb-meta font-mono font-medium flex items-center gap-1 shrink-0");
+  const status = el("span", "px-1.5 py-0.5 rounded bg-wb-meta-bg border border-wb-border text-wb-meta font-mono font-medium flex items-center gap-1 min-w-0");
   status.dataset.evidenceState = evidence.state;
-  status.appendChild(el("span", `w-1 h-1 rounded-full ${shown.dot}`));
-  status.appendChild(el("span", "", shown.text));
-  status.title = shown.title(evidence);
+  status.appendChild(iconSpan("scan", shown.scan, { size: "text-[12px]", className: "shrink-0" }));
+  const words = el("span", "truncate", shown.text);
+  words.dataset.evidenceText = "";
+  status.appendChild(words);
+  attachTooltip(status, shown.title(evidence));
   left.appendChild(status);
 
   const tokens = el("span", "px-1.5 py-0.5 rounded bg-wb-meta-bg border border-wb-border text-wb-meta font-mono hidden sm:inline-flex items-center gap-1 shrink-0");

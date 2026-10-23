@@ -1,0 +1,22 @@
+{
+  "schema": "urn:aih-ui:contract-reads:1.0.0",
+  "package": "aih-ui",
+  "reads": [
+    { "short": "Idx", "id": "urn:aihq:catalog:release-index:1.0.0", "role": "accepts", "status": "planned" },
+    { "short": "Cat", "id": "urn:aihq:catalog:release:1.7.0", "role": "accepts", "status": "planned" },
+    { "short": "Cat", "id": "urn:aihq:catalog:release:2.0.0", "role": "accepts", "status": "planned" },
+    { "short": "Reg", "id": "urn:aihq:core:tool-registry:1.0.0", "role": "accepts", "status": "planned" },
+    { "short": "Rdy", "id": null, "role": "accepts", "status": "planned", "unversioned": "The contracts name Core readiness but give it no id or version yet." },
+    { "short": "Bind", "id": "urn:aihq:core:tool-binding:1.0.0", "role": "accepts", "status": "planned" },
+    { "short": "Comp", "id": "urn:aihq:core:compatibility-result:1.0.0", "role": "accepts", "status": "planned" },
+    { "short": "Prev", "id": "urn:aihq:core:prepared-work:1.6.0", "role": "accepts", "status": "planned" },
+    { "short": "Run", "id": "urn:aihq:core:run-result:1.4.0", "role": "accepts", "status": "planned" },
+    { "short": "Inv", "id": "urn:aihq:core:managed-inventory-result:1.1.0", "role": "accepts", "status": "planned" },
+    { "short": "Rem", "id": "urn:aihq:core:managed-removal-preparation:1.2.0", "role": "accepts", "status": "planned" },
+    { "short": "Sum", "id": "urn:aihq:scan:item-summary:1.0.0", "role": "accepts", "status": "planned" },
+    { "short": "Rec", "id": "urn:aihq:scan:item-record:1.0.0", "role": "accepts", "status": "planned" },
+    { "short": "Pkg", "id": "urn:aihq:package-support:1.0.0", "role": "both", "status": "planned" },
+    { "short": null, "id": "urn:aihq:core:file-state-result:1.1.0", "role": "accepts", "status": "today" },
+    { "short": null, "id": "urn:aihq:core:native-verification-result:1.0.0", "role": "accepts", "status": "today" }
+  ]
+}

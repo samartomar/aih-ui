@@ -21,6 +21,8 @@
 import { el, text } from "../app/dom.js";
 import { NOT_CONNECTED, NOT_PUBLISHED, NOT_SUPPLIED } from "../app/absence.js";
 import { describeScope, sourceScopes } from "./selectors.js";
+import { iconSpan } from "../app/icons.js";
+import { attachTooltip } from "../app/tooltip.js";
 
 const PACKAGE_ORDER = ["@aihq/core", "@aihq/scan", "@aihq/catalog"];
 const GITHUB_REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
@@ -32,6 +34,22 @@ const STATUS_SEPARATOR = "·";
 
 function dot(separator = STATUS_SEPARATOR) {
   return el("span", "text-outline", separator);
+}
+
+/* The start-up contract check, worded as the Workbench reads contract words it.
+   Only a Core without `checkContracts` has wording today; it is information, once,
+   in the strip, and blocks nothing. */
+export const CONTRACT_CHECK_ABSENT = "This Core can't check contracts yet.";
+
+export function contractCheckNote(contractCheck) {
+  if (contractCheck?.state !== "absent") return null;
+  const note = el("span", "px-1.5 py-0.2 rounded bg-info-bg text-info font-mono text-[10px] shrink-0 inline-flex items-center gap-1");
+  note.id = "contract-check-note";
+  note.setAttribute("role", "note");
+  note.appendChild(iconSpan("state", "info", { size: "text-[12px]" }));
+  note.appendChild(el("span", "", CONTRACT_CHECK_ABSENT));
+  attachTooltip(note, `${CONTRACT_CHECK_ABSENT} The installed @aihq/core publishes no checkContracts, so the Workbench cannot ask whether each package can read the contracts the others write. Nothing is blocked; everything keeps working as before.`);
+  return note;
 }
 
 export function createProvenance({ elements }) {
@@ -67,6 +85,8 @@ export function createProvenance({ elements }) {
       strip.appendChild(group);
     });
     strip.appendChild(el("span", "px-1.5 py-0.2 rounded bg-surface-container text-outline font-mono text-[10px] shrink-0", "read-only-mirror"));
+    const contractNote = contractCheckNote(summary.contractCheck);
+    if (contractNote) strip.appendChild(contractNote);
     strip.appendChild(diagnostics(model));
   }
 
@@ -102,6 +122,13 @@ export function createProvenance({ elements }) {
       targets.state === "published"
         ? `${targets.targets.length} from ${targets.source}`
         : `${NOT_PUBLISHED}: ${text(targets.reason) ?? "no target list"}`,
+    );
+    const check = summary.contractCheck ?? {};
+    line(
+      "contract check",
+      check.state === "absent" ? CONTRACT_CHECK_ABSENT
+        : check.state === "available" ? `checkContracts published by ${text(check.entry) ?? "@aihq/core"}; not run by this Workbench yet`
+        : `Not checked: ${text(check.reason) ?? "this host did not inspect it"}`,
     );
 
     // A package packed on this machine, not a registry release. Say which.

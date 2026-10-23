@@ -70,3 +70,42 @@ test('setup accepts a client from the published list and refuses one outside it'
   const inside = await post('/api/workbench-settings/clients', { clients: nativeClientIds.slice(0, 2) });
   assert.equal(inside.status, 200);
 });
+
+// The start-up contract check reports exactly what the installed Core publishes, and runs nothing.
+test('the contractCheck service operation says whether the installed Core publishes checkContracts', async () => {
+  const { contractCheckSummary } = await load('tools/server/contract-check-summary.mjs');
+  const contracts = await import('@aihq/core/contracts');
+  const root = await import('@aihq/core');
+  const published = typeof contracts.checkContracts === 'function' || typeof root.checkContracts === 'function';
+  const answer = callService(consumerDir, { op: 'contractCheck' });
+  assert.equal(answer.ok, true, JSON.stringify(answer));
+  assert.equal(contractCheckSummary(answer).state, published ? 'available' : 'absent');
+});
+
+// The Workbench's package-support declaration has the shape Core's published schema gives it, and every
+// contract it accepts from Core names a schema the installed Core exports.
+test('the Workbench package-support fixture matches the installed Core package-support schema', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { createRequire } = await import('node:module');
+  const require = createRequire(join(consumerDir, 'package.json'));
+  const schema = JSON.parse(readFileSync(require.resolve('@aihq/core/schemas/package-support/1.0.0.json'), 'utf8'));
+  const declared = JSON.parse(readFileSync(join(repo, 'fixtures/package-support/aih-ui.json'), 'utf8'));
+  assert.equal(declared.schema, schema.properties.schema.const);
+  assert.deepEqual(Object.keys(declared).sort(), Object.keys(schema.properties).sort());
+  for (const key of schema.required) assert.ok(Object.hasOwn(declared, key), key);
+  assert.deepEqual(Object.keys(declared.package).sort(), [...schema.properties.package.required].sort());
+  const contract = schema.properties.contracts.items;
+  for (const record of declared.contracts) {
+    assert.deepEqual(Object.keys(record).sort(), [...contract.required].sort(), JSON.stringify(record));
+    assert.ok(contract.properties.role.enum.includes(record.role), record.id);
+    if (record.schemaExport.startsWith('@aihq/core/')) {
+      const exported = JSON.parse(readFileSync(require.resolve(record.schemaExport), 'utf8'));
+      assert.equal(exported.$id, record.id, record.schemaExport);
+    }
+  }
+  const shapes = schema.properties.entries.items.oneOf;
+  for (const entry of declared.entries) {
+    const matches = shapes.filter(shape => Object.keys(entry).sort().join() === [...shape.required].sort().join() && shape.properties.runtime.const === entry.runtime);
+    assert.equal(matches.length, 1, JSON.stringify(entry));
+  }
+});
