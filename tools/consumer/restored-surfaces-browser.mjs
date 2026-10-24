@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 // "Upstream provenance" heading, its three disabled policy-choice radios and "Staged policy delta"; the "Telemetry"
 // heading; and the review "Signals" disclosure. None of these may be removed without the maintainer's approval.
 // requireCommitChips: the served packages must record Git commits (a manifest candidate), so the chips are checked.
-export async function runRestoredSurfacesBrowser({ origin, output, playwrightModule, requireCommitChips = false }) {
+export async function runRestoredSurfacesBrowser({ origin, output, playwrightModule, requireCommitChips = false, theme = 'dark' }) {
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
   // The page renders commit chips only for packages whose recorded commit is a Git object name.
@@ -28,6 +28,8 @@ export async function runRestoredSurfacesBrowser({ origin, output, playwrightMod
       for (let step = 0; step < 4; step++) await page.locator('#setup-next').click();
       await page.locator('#setup-dialog').waitFor({ state: 'hidden' });
     }
+    const destination = `Switch to ${theme} mode`;
+    if (await page.getByRole('button', { name: destination, exact: true }).count()) await page.getByRole('button', { name: destination, exact: true }).click();
 
     const strip = page.locator('#provenance-strip');
     await strip.getByText('read-only-mirror', { exact: true }).waitFor();

@@ -84,6 +84,16 @@ if (process.exitCode === 0) {
   process.exitCode = integrated.status ?? 1;
 }
 if (process.exitCode === 0) {
+  // Its own budget: real Core install/removal does several serial filesystem rounds on Windows.
+  const installed = spawnSync(process.execPath, [join(repo, 'tools/check-installed-workbench.mjs'), output], {
+    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 360_000, env: isolated,
+  });
+  writeFileSync(join(output, 'installed-panel-check.log'), `${installed.stdout ?? ''}${installed.stderr ?? ''}`);
+  process.stdout.write(installed.stdout ?? ''); process.stderr.write(installed.stderr ?? '');
+  if (installed.error) throw installed.error;
+  process.exitCode = installed.status ?? 1;
+}
+if (process.exitCode === 0) {
   const authority = spawnSync(process.execPath, [join(repo, 'tools/check-authority-source.mjs'), output, join(output, 'authority-source-evidence')], {
     cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 180_000, env: isolated,
   });
