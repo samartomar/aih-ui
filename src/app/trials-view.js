@@ -41,6 +41,8 @@ export function createTrialsView({ client, el, button, showStatus }) {
   const diagnostic = result => result?.diagnostics?.map(row => row.message).join(' ') || result?.error || 'The trials could not be read.';
   const safe = action => async () => { if (recording) return; try { await action(); } catch (error) { showStatus(error.message); } };
   const choice = (label, action) => { const control = button(label, safe(action)); control.disabled = recording; return control; };
+  const refresh = button('Refresh trials', safe(() => read()));
+  refresh.type = 'button'; node.append(refresh);
   function field(parent, label, value = '', options) {
     const wrap = el('label', 'block text-on-surface-variant', label);
     const input = el(options ? 'select' : 'input', 'bg-wb-input border border-wb-border rounded p-1 max-w-full text-[11px]'); input.setAttribute('aria-label', label);
@@ -68,8 +70,9 @@ export function createTrialsView({ client, el, button, showStatus }) {
     planning.append(el('h4', 'font-medium', previous ? 'Revise trial' : 'Plan a trial'));
     const scope = field(planning, 'Trial scope', form.scope, [['project', 'Project'], ['user', 'User']]);
     const task = field(planning, 'Representative task', form.task);
-    const outcome = field(planning, 'Acceptable outcome', form.quality.outcome);
+    const outcome = field(planning, 'Acceptable outcome (required)', form.quality.outcome); outcome.required = true; outcome.setAttribute('aria-label', 'Acceptable outcome'); outcome.placeholder = 'Example: finish the same task with fewer errors'; planning.append(el('p', 'text-on-surface-variant', 'Define success before the trial. Add at least one pass/fail quality check and one complete advisory bound: label, value of zero or more, and unit. Task and comparison conditions are optional context.'));
     const checks = el('div', 'space-y-1'); planning.append(checks);
+    checks.append(el('p', 'text-on-surface-variant', 'Quality checks: write at least one condition you can mark pass or fail.'));
     let checkRows = form.quality.checks.map(check => ({ ...check })), nextCheck = checkRows.reduce((max, row) => Math.max(max, Number(row.id.split('-').pop()) || 0), 0);
     const conditions = field(planning, 'Comparison conditions', form.conditions);
     const bounds = el('div', 'space-y-1'); planning.append(bounds);
@@ -90,15 +93,23 @@ export function createTrialsView({ client, el, button, showStatus }) {
       if (!proposal.quality.outcome || !proposal.quality.checks.length || !proposal.bounds.length) return;
       return record(previous ? { type: 'revise', id: previous.id, proposal, ...(reason.value.trim() ? { reason: reason.value.trim() } : {}) } : proposeOperation(suggestion, proposal));
     });
-    const validate = () => { submit.disabled = recording || !outcome.value.trim() || !checkRows.some(row => row.input.value.trim()) || !boundRows.some(row => boundComplete(boundOf(row))); };
+    const missing = el('p', 'text-on-surface-variant'); missing.setAttribute('role', 'status');
+    const validate = () => {
+      const reasons = [!outcome.value.trim() && 'an acceptable outcome', !checkRows.some(row => row.input.value.trim()) && 'at least one quality check', !boundRows.some(row => boundComplete(boundOf(row))) && 'a bound with a label, non-negative value and unit'].filter(Boolean);
+      submit.disabled = recording || reasons.length > 0;
+      missing.textContent = reasons.length ? `To propose this trial, add ${reasons.join('; ')}.` : 'Required criteria are complete. You can propose this trial.';
+      submit.title = recording ? 'A trial record is being saved.' : reasons.length ? missing.textContent : '';
+    };
     // Preserve typed edits when an in-flight request makes every control inert.
     editor.capture = capture;
     function drawChecks() {
       checks.replaceChildren();
+      checks.append(el('p', 'text-on-surface-variant', 'Quality checks (at least one required): use a pass/fail condition, such as “all existing tests pass”.'));
       checkRows.forEach((row, index) => { row.input = field(checks, `Quality check ${index + 1}`, row.input?.value ?? row.text); row.input.addEventListener('input', validate); checks.append(choice('Remove quality check', () => { checkRows = checkRows.filter(item => item !== row); drawChecks(); validate(); })); });
     }
     function drawBounds() {
       bounds.replaceChildren();
+      bounds.append(el('p', 'text-on-surface-variant', 'Advisory bounds (at least one required): name what you limit, its amount, and its unit, for example Time box / 2 / hours.'));
       boundRows.forEach((row, index) => {
         row.labelInput = field(bounds, `Bound ${index + 1} label`, row.labelInput?.value ?? row.label ?? '');
         row.valueInput = field(bounds, `Bound ${index + 1} value`, row.valueInput?.value ?? row.value ?? ''); row.valueInput.type = 'number'; row.valueInput.min = 0; row.valueInput.step = 'any';
@@ -112,7 +123,7 @@ export function createTrialsView({ client, el, button, showStatus }) {
       unknowns.replaceChildren(); unknownRows.forEach((row, index) => { row.input = field(unknowns, `Unknown cost ${index + 1}`, row.input?.value ?? row.text); unknowns.append(choice('Remove unknown cost', () => { unknownRows = unknownRows.filter(item => item !== row); drawUnknowns(); })); });
     }
     drawChecks(); drawBounds(); drawUnknowns(); outcome.addEventListener('input', validate);
-    planning.append(choice('Add quality check', () => { if (checkRows.length < 16) { checkRows.push({ id: `check-${++nextCheck}`, text: '' }); drawChecks(); validate(); } }), choice('Add bound', () => { if (boundRows.length < 16) { boundRows.push({ id: `bound-${++nextBound}` }); drawBounds(); validate(); } }), choice('Add unknown cost', () => { if (unknownRows.length < 16) { unknownRows.push({ text: '' }); drawUnknowns(); } }), submit, choice('Cancel plan', () => { editor = undefined; render(); })); validate();
+    planning.append(choice('Add quality check', () => { if (checkRows.length < 16) { checkRows.push({ id: `check-${++nextCheck}`, text: '' }); drawChecks(); validate(); } }), choice('Add bound', () => { if (boundRows.length < 16) { boundRows.push({ id: `bound-${++nextBound}` }); drawBounds(); validate(); } }), choice('Add unknown cost', () => { if (unknownRows.length < 16) { unknownRows.push({ text: '' }); drawUnknowns(); } }), missing, submit, choice('Cancel plan', () => { editor = undefined; render(); })); validate();
   }
   function trialCard({ record: trial, evaluation, suggestion }) {
     const card = el('div', 'p-2 border border-wb-border rounded space-y-1'); card.dataset.trialId = trial.id;
@@ -184,7 +195,8 @@ export function createTrialsView({ client, el, button, showStatus }) {
     if (node.hidden) { attempt++; value = undefined; editor = undefined; pending = false; changed = false; }
     if (editor?.capture) editor.form = editor.capture();
     renderPlan(); cards.replaceChildren();
-    status.textContent = pending ? 'Reading trials…' : changed ? 'The open policy or its inputs changed. Open trials again to refresh.' : 'Save the draft to keep trial records.';
+    refresh.disabled = pending || recording || node.hidden;
+    status.textContent = pending ? 'Reading trials…' : changed ? 'The open policy or its inputs changed. Select Refresh trials to load current records.' : 'Save the draft to keep trial records.';
     if (value && !node.hidden) for (const row of [...value.trials].sort((a, b) => b.record.proposedAt.localeCompare(a.record.proposedAt))) cards.append(trialCard(row));
   }
   async function read() {

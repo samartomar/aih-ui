@@ -23,7 +23,7 @@ const COPY = {
   developer: {
     role: "Enterprise Developer · Project policy",
     title: "Project policy under your organization",
-    intro: "Open the policy supplied by your admin, then save a separate policy for your project. The organization policy stays read-only.",
+    intro: "Prepare a separate project policy. Your configured execution host reads and enforces the policy supplied by your administrator.",
     startTitle: "Organization policy and project start",
     start: "Start or open a project policy below. The organization policy your admin publishes is read by the configured execution host, not opened here.",
     choices: "Project choices below are portable authoring. Organization narrowing requires current operator-supplied authority; saved setup and imported structure do not verify approval.",

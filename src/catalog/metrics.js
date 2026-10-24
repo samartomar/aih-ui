@@ -42,17 +42,17 @@ function tile(kind, model, onToggleKind) {
   name.appendChild(el("span", `material-symbols-outlined text-[14px] ${kind.iconTone}`, kind.icon));
   name.appendChild(el("span", `text-[10px] uppercase font-medium tracking-[0.08em] truncate ${active ? "text-wb-title" : "text-outline"}`, kind.label));
   head.appendChild(name);
-  head.appendChild(el("span", "text-[10px] font-mono tabular-nums shrink-0 text-outline", count === null ? UNKNOWN : `${count}`));
+  button.setAttribute("aria-label", kind.key === null ? `${kind.label}: ${UNKNOWN}. No defined producer supplies token values.` : `${kind.label}: ${count}.${kind.caption ? ` ${kind.caption}.` : ''} Filter items in this view.`);
   button.appendChild(head);
 
-  const metrics = el("div", "flex items-baseline justify-between gap-2");
+  const metrics = el("div", "wb-metric-values flex flex-wrap items-baseline justify-between gap-2 min-w-0");
   if (count === null) {
     metrics.appendChild(el("span", "text-[11px] leading-none font-medium font-mono tracking-tight text-outline", UNKNOWN));
   } else {
     const numbers = el("span", "flex items-baseline gap-1");
     numbers.appendChild(el("span", "wb-metric-count text-wb-metric leading-none font-semibold font-mono tabular-nums tracking-tight text-wb-title", String(count)));
     metrics.appendChild(numbers);
-    metrics.appendChild(el("span", "text-[10px] font-mono tabular-nums whitespace-nowrap text-outline", kind.caption ?? "in this view"));
+    metrics.appendChild(el("span", "wb-metric-caption text-[10px] font-mono tabular-nums text-outline", kind.caption ?? "in this view"));
   }
   button.appendChild(metrics);
 
@@ -65,6 +65,7 @@ function tile(kind, model, onToggleKind) {
   button.appendChild(track);
 
   if (kind.key !== null) button.addEventListener("click", () => onToggleKind(kind.key));
+  for (const glyph of button.querySelectorAll(".material-symbols-outlined")) glyph.setAttribute("aria-hidden", "true");
   return button;
 }
 
@@ -76,7 +77,10 @@ export function createMetrics({ container, onToggleKind }) {
   return {
     /** @param model { kindCounts, total, activeKind }: counts and total over the list's scope before the kind selection */
     render(model) {
-      container.replaceChildren(...LEDGER.map((kind) => tile(kind, model, onToggleKind)));
+      const kinds = [...model.kindCounts.keys()];
+      const ledger = kinds.map(key => LEDGER.find(value => value.key === key) ?? { key, label: `${key[0].toUpperCase()}${key.slice(1)}s`, icon: KIND_ICON[key] ?? 'extension', iconTone: 'text-metadata-emphasis', barTone: 'bg-primary' });
+      ledger.push(LEDGER.find(value => value.key === null));
+      container.replaceChildren(...ledger.map(kind => tile(kind, model, onToggleKind)));
     },
   };
 }

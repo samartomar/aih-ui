@@ -1,3 +1,6 @@
+import { createConfigurationEditor } from './configuration-editor.js';
+import { fillBoundedOptions } from './bounded-options.js';
+import { createPolicyReview } from './policy-review.js';
 import { el } from './dom.js';
 import { createUpdatesView } from './updates-view.js';
 import { createTrialsView } from './trials-view.js';
@@ -7,10 +10,12 @@ import { createOrganizationAuthorView } from './organization-author.js';
 import { authorityFromResult, changeSummary, compareRevision, reviewFreshness, revisionOf, setupInstructions, sourceRows, staleReviewMessage } from './authority-source.js';
 import { isJourneyEnvelope, importLimitError } from './authoring-client.js';
 import { dependencyRows } from './dependency-set.js';
+import { createInstallPanel } from './install-panel.js';
+import { publishedClients } from './core-targets.js';
 
 const buttonClass = 'px-3 py-1.5 rounded bg-surface-container text-on-surface border border-wb-border hover:bg-surface-container-high';
-function button(label, action) {
-  const node = el('button', buttonClass, label); node.type = 'button';
+function button(label, action, primary = false) {
+  const node = el('button', `${primary ? 'px-3 py-1.5 rounded bg-primary-container text-on-primary border border-primary font-medium' : buttonClass} disabled:opacity-50 disabled:cursor-not-allowed`, label); node.type = 'button';
   node.addEventListener('click', action); return node;
 }
 function download(bytes, name) {
@@ -37,15 +42,17 @@ export function createAuthoringWorkspace(client) {
   const controls = el('div', 'flex flex-wrap gap-2'); start.after(controls);
   const roots = el('div', 'space-y-2'); choices.after(roots);
   const proposal = el('div', 'space-y-2'); proposal.id = 'policy-proposal'; proposal.setAttribute('role', 'status'); review.after(proposal);
-  const status = el('p', 'text-on-surface-variant'); status.id = 'policy-status'; controls.after(status);
+  const status = el('p', 'text-on-surface-variant'); status.id = 'policy-status'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite'); controls.after(status);
   const file = el('input'); file.type = 'file'; file.accept = 'application/json,.json'; file.id = 'policy-open'; file.setAttribute('aria-label', 'Open saved project policy');
   const accepted = el('div', 'space-y-2'); accepted.id = 'policy-roots'; roots.append(accepted);
   const accept = button('Accept choices with dependencies', () => {
     client.accept();
-    showStatus(client.draft ? 'Draft change accepted. Save the draft to keep it; compile a resolved scope to produce an executable policy.' : 'Changes accepted. Review your policy and save the exact artifact.');
-  });
+    showStatus(client.draft ? 'Draft change accepted. Save the draft to keep it; compile a resolved scope to produce an executable policy.'
+      : client.catalog?.executionAvailable ? 'Changes accepted. Install them into your project below.' : 'Changes accepted. Review your policy and save the exact artifact.');
+    if (!installPanel.node.hidden) installPanel.node.scrollIntoView({ block: 'nearest' });
+  }, true);
   accept.id = 'policy-accept'; accept.disabled = true;
-  const save = button('Save project policy', () => download(client.bytes, 'policy.json')); save.id = 'policy-save';
+  const save = button('Download project policy', () => { download(client.bytes, 'policy.json'); client.markDownloaded(); }, true); save.id = 'policy-save';
   let original, optional = [], prepared;
   let selectedItem;
   const draftStatus = el('p', 'text-on-surface-variant break-words'); draftStatus.id = 'policy-draft-status'; draftStatus.setAttribute('role', 'status');
@@ -53,43 +60,51 @@ export function createAuthoringWorkspace(client) {
   const safe = action => async () => { try { await action(); } catch (error) { showStatus(error.message); } };
   const originalDownload = button('Download original artifact', () => original && download(original, 'policy.original.json'));
   originalDownload.disabled = true;
-  const goToPolicy = () => document.getElementById('nav-policy').click();
+  const goToPolicy = () => reviewPanel.open();
   for (const id of ['review-project-changes', 'check-project-policy']) {
     const action = document.getElementById(id); action.classList.remove('opacity-50', 'cursor-not-allowed');
   }
   document.getElementById('review-project-changes').replaceChildren(document.createTextNode('Review Changes'));
-  document.getElementById('review-project-changes').addEventListener('click', goToPolicy);
-  document.getElementById('check-project-policy').addEventListener('click', safe(async () => {
-    goToPolicy(); const result = await client.reopen(); diagnostics.textContent = JSON.stringify(result, null, 2);
-    if (reopenedDraft(result)) return;
-    if (result.status === 'ok' && result.value.editing === 'available') { showStatus('Policy and exact sources validated. This is not organization approval or execution authorization.'); updates.open(); improvements.open(); trials.open(); workspace.open(); }
-    else showStatus(failure(result));
+
+  const check = document.getElementById('check-project-policy');
+  let checking = false;
+  check.addEventListener('click', safe(async () => {
+    if (checking) return;
+    if (client.candidate && !window.confirm('Discard the current proposal and validate the accepted choices again?')) return;
+    reviewPanel.open(); checking = true; check.disabled = true; check.setAttribute('aria-busy', 'true'); status.setAttribute('aria-busy', 'true'); showStatus('Checking policy and exact sources…'); render();
+    try {
+      const result = await client.reopen(); diagnostics.textContent = JSON.stringify(result, null, 2);
+      if (reopenedDraft(result)) return;
+      if (result.status === 'ok' && result.value.editing === 'available') showStatus('Policy and exact sources validated. This is not organization approval or execution authorization.');
+      else showStatus(failure(result));
+    } finally { checking = false; check.disabled = false; check.removeAttribute('aria-busy'); status.removeAttribute('aria-busy'); render(); }
   }));
   const copy = document.getElementById('copy-json-btn'), jsonDownload = document.getElementById('download-json-btn');
-  for (const action of [copy, jsonDownload]) { action.disabled = false; action.removeAttribute('aria-disabled'); action.classList.remove('cursor-not-allowed'); }
-  copy.addEventListener('click', safe(async () => { await navigator.clipboard.writeText(new TextDecoder().decode(client.bytes)); copy.textContent = 'Copied'; }));
-  jsonDownload.addEventListener('click', () => download(client.bytes, 'policy.json'));
+  for (const action of [copy, jsonDownload]) { action.disabled = true; action.setAttribute('aria-disabled', 'true'); }
+  copy.addEventListener('click', safe(async () => { if (!client.bytes.length || checking) return; await navigator.clipboard.writeText(new TextDecoder().decode(client.bytes)); copy.textContent = 'Copied'; }));
+  jsonDownload.addEventListener('click', () => { if (!client.bytes.length || checking) return; download(client.bytes, client.draft && !client.compiled ? 'policy.original.json' : 'policy.json'); client.markDownloaded(); });
   const stage = document.getElementById('apply-staging-btn');
-  stage.textContent = 'Add to project policy'; stage.title = 'Propose this exact catalog item; review and accept in the project policy workspace.';
+  stage.textContent = 'Choose'; stage.title = 'Review this item and its dependencies before accepting it.';
   // With a draft open the client routes this through the draft edit, not the policy proposal.
-  stage.addEventListener('click', safe(async () => { if (!selectedItem) return; present(await client.propose({ type: 'select', root: selectedItem.root })); goToPolicy(); }));
+  stage.addEventListener('click', safe(async () => { if (!selectedItem || stage.dataset.busy) return; stage.dataset.busy = 'true'; stage.setAttribute('aria-busy', 'true'); stage.textContent = 'Reviewing choice…'; stage.disabled = true; try { present(await client.propose({ type: 'select', root: selectedItem.root })); goToPolicy(); } finally { delete stage.dataset.busy; stage.removeAttribute('aria-busy'); stage.textContent = 'Choose'; render(); } }));
   const reset = document.getElementById('reset-item-btn'); reset.textContent = 'Remove project choice'; reset.title = 'Review removing this explicit project root; shared required dependencies remain owned by the composition validator.';
   reset.addEventListener('click', safe(async () => {
     const root = (client.draft?.roots ?? client.intent?.roots)?.find(root => root.itemId === selectedItem?.id && root.releaseSha256 === selectedItem?.root.releaseSha256);
     if (root) { present(await client.propose({ type: 'remove-root', root: client.draft ? refOf(root) : root, keep: [] })); goToPolicy(); }
   }));
   controls.append(button('New project policy', safe(async () => {
-    original = client.bytes; const result = await client.newDraft();
+    if (!canReplace()) return; original = client.bytes; const result = await client.newDraft();
     if (result.status === 'ok') { showStatus('New project policy has no selected content. Browse Sources & Catalogs to choose content.'); }
     else present(result);
   })), file, button('Validate and reopen', safe(async () => {
+    if (client.candidate && !window.confirm('Discard the current proposal and validate the accepted choices again?')) return;
     const result = await client.reopen();
     if (reopenedDraft(result)) return;
-    if (result.status === 'ok' && result.value.editing === 'available') { optional = result.value.optional ?? []; render(); showStatus('Saved choices recovered from exact source snapshots.'); updates.open(); improvements.open(); trials.open(); workspace.open(); }
+    if (result.status === 'ok' && result.value.editing === 'available') { optional = result.value.optional ?? []; render(); showStatus('Saved choices recovered from exact source snapshots.');  }
     else showStatus(`${failure(result)} Reselect the saved personal folder and its binding in Sources & Catalogs, then validate and reopen again. Original bytes retained.`);
-  })), save, originalDownload);
+  })), originalDownload);
   file.addEventListener('change', safe(async () => {
-    const selected = file.files[0]; if (!selected) return;
+    const selected = file.files[0]; if (!selected) return; if (!canReplace()) { file.value = ''; return; }
     const tooLarge = importLimitError(selected.size);
     if (tooLarge) throw new Error(tooLarge);
     const attempt = client.invalidate(), loaded = new Uint8Array(await selected.arrayBuffer());
@@ -105,6 +120,14 @@ export function createAuthoringWorkspace(client) {
   }));
   proposal.append(accept);
   const proposed = el('div', 'space-y-1'); proposed.id = 'policy-proposed-choices'; proposal.prepend(proposed);
+  const reviewPanel = createPolicyReview({ client, accept, proposed, status });
+  // The header's chosen tools and Core's supported list, for the Install panel's tool check.
+  const chosenTools = { selected: [], coreIds: [], labels: {} };
+  const installPanel = createInstallPanel({ client, el, button, tools: () => chosenTools });
+  review.after(button('Open policy choices and review', () => reviewPanel.open(), true));
+  const pageContext = el('p', 'text-on-surface-variant'); choices.after(pageContext);
+  const canReplace = () => !(client.dirty || client.candidate) || window.confirm('This policy has accepted changes that have not been downloaded or a proposal awaiting acceptance. Replace them with another artifact?');
+  window.addEventListener('beforeunload', event => { if (client.dirty || client.candidate) { event.preventDefault(); event.returnValue = ''; } });
   const summary = el('p', 'text-outline'); summary.id = 'policy-summary'; roots.prepend(summary);
   const exact = el('details', 'mt-3'); exact.append(el('summary', 'cursor-pointer text-outline', 'Exact policy artifact and diagnostics'));
   const bytes = el('pre', 'whitespace-pre-wrap break-all text-[10px]'); bytes.id = 'policy-bytes'; exact.append(bytes);
@@ -184,7 +207,7 @@ export function createAuthoringWorkspace(client) {
     sourceChange.dataset.change = change; sourceChange.textContent = changeSummary(change, known, next);
     known = next; latest = next; latestAuthority = authority; sourceState = 'configured'; sourceDiagnostics.textContent = '';
   }
-  const syncSource = () => { renderSource(); if (client.catalog && configuredSource() && !sourceRead) safe(readSource)(); };
+  const syncSource = () => { renderSource(); if (source.closest('details')?.open && client.catalog && configuredSource() && !sourceRead) safe(readSource)(); };
   async function readSource() {
     if (!configuredSource()) return;
     const attempt = ++sourceAttempt; sourceRead = true;
@@ -245,11 +268,11 @@ export function createAuthoringWorkspace(client) {
   const draftMissing = el('div', 'space-y-1'); draftMissing.id = 'policy-draft-unresolved';
   const draftChanges = el('p', 'text-outline'); draftChanges.id = 'policy-draft-changes';
   // Saving the envelope first records the last successful check, so a later offline reopen can still show it.
-  const draftSave = button('Save unresolved draft', async () => {
+  const draftSave = button('Download draft', safe(async () => {
     await updates.noteCheck();
-    if (client.draft) download(client.draft.envelopeBytes, 'policy.draft.journey.json');
-  }); draftSave.id = 'policy-draft-save';
-  const draftSaveNote = el('p', 'text-outline', 'Saves a journey envelope that is not executable. It keeps your original policy bytes exactly and every recorded choice, so you can reopen it later.'); draftSaveNote.id = 'policy-draft-save-note';
+    if (client.draft) { download(client.draft.envelopeBytes, 'policy.draft.journey.json'); client.markDownloaded(client.draft.envelopeBytes); }
+  }), true); draftSave.id = 'policy-draft-save';
+  const draftSaveNote = el('p', 'text-outline', 'Downloads a journey envelope that is not executable. It keeps your original policy bytes exactly and every recorded choice, so you can reopen it later.'); draftSaveNote.id = 'policy-draft-save-note';
   const compileNote = el('p', 'text-on-surface-variant break-words'); compileNote.id = 'policy-draft-compile-note';
   const compileScope = async roots => {
     const result = await client.compileDraft(roots); diagnostics.textContent = JSON.stringify(result, null, 2);
@@ -264,10 +287,15 @@ export function createAuthoringWorkspace(client) {
   draftSection.append(draftTitle, draftNote, draftRoots, draftMissing, draftChanges, draftActions, draftSaveNote, compileNote, draftStatus);
   choices.after(draftSection);
   const updates = createUpdatesView({ client, el, button, showStatus }); draftSection.after(updates.node);
-  const improvements = createImprovementsView({ client, el, button, showStatus, onPlanTrial: suggestion => trials.plan(suggestion) }); updates.node.after(improvements.node);
+  const improvements = createImprovementsView({ client, el, button, showStatus, onPlanTrial: suggestion => { const disclosure = trials.node.parentElement; disclosure.dataset.planning = 'true'; disclosure.open = true; trials.plan(suggestion); } }); updates.node.after(improvements.node);
   const trials = createTrialsView({ client, el, button, showStatus }); improvements.node.after(trials.node);
   const workspace = createWorkspaceView({ client, el, button, showStatus }); trials.node.after(workspace.node);
   const organizationAuthor = createOrganizationAuthorView({ client, el, button, showStatus }); workspace.node.after(organizationAuthor.node);
+  for (const [view, label] of [[updates, 'Available updates'], [improvements, 'Improvement suggestions'], [trials, 'Improvement trials'], [workspace, 'Workspace repositories']]) {
+    const disclosure = el('details', 'policy-advanced rounded border border-wb-border p-3');
+    disclosure.append(el('summary', 'cursor-pointer font-medium', label)); view.node.before(disclosure); disclosure.append(view.node);
+    disclosure.addEventListener('toggle', () => { if (disclosure.open && !disclosure.dataset.planning) view.open(); delete disclosure.dataset.planning; });
+  }
   const itemLabel = ref => client.catalog?.items.find(item => item.id === ref.itemId && item.root.releaseSha256 === ref.releaseSha256)?.label ?? ref.itemId ?? ref.templateId ?? ref.id;
   const blocker = entry => {
     const what = entry.kind === 'root' ? 'its exact source' : entry.kind === 'dependency' ? `required item ${itemLabel(entry.ref)}`
@@ -290,7 +318,7 @@ export function createAuthoringWorkspace(client) {
     const unresolvedRoots = draft.roots.filter(root => root.status === 'unresolved'), resolvedRoots = draft.roots.filter(root => root.status === 'resolved');
     // An envelope with required records this version cannot interpret is shown but never compiled.
     const compilable = draft.supported !== false;
-    draftTitle.textContent = draft.editing === 'unresolved' ? 'Unresolved draft' : 'Saved draft';
+    draftTitle.textContent = draft.editing === 'unresolved' ? 'Unresolved draft' : 'Working draft';
     draftNote.textContent = `Draft revision ${draft.projection.revision.sequence} · ${draft.roots.length} recorded ${draft.roots.length === 1 ? 'choice' : 'choices'}, ${unresolvedRoots.length} unresolved. Every original choice is kept exactly as recorded; nothing is dropped and no other revision is substituted. This draft is not an executable policy.`;
     draftRoots.replaceChildren();
     for (const root of draft.roots) {
@@ -303,10 +331,12 @@ export function createAuthoringWorkspace(client) {
       actions.append(button(`Remove ${root.itemId}`, safe(async () => present(await client.propose({ type: 'remove-root', root: refOf(root), keep: [] })))));
       const replacements = (client.catalog?.items ?? []).filter(entry => entry.scopes?.includes(root.scope) && !(entry.id === root.itemId && entry.root.releaseSha256 === root.releaseSha256));
       if (replacements.length) {
-        const pick = el('select', 'bg-wb-input border border-wb-border rounded p-1 max-w-full text-[11px]'); pick.setAttribute('aria-label', `Replacement for ${root.itemId}`);
-        pick.append(new Option('Choose an available replacement', ''));
-        for (const [index, entry] of replacements.entries()) pick.append(new Option(`${entry.label ?? entry.id} · ${entry.family}`, String(index)));
-        actions.append(pick, button(`Replace ${root.itemId}`, safe(async () => {
+        const pick = el('select', 'bg-wb-input border border-wb-border rounded p-2 max-w-full'); pick.setAttribute('aria-label', `Replacement for ${root.itemId}`);
+        const search = el('input', 'bg-wb-input border border-wb-border rounded p-2'); search.type = 'search'; search.placeholder = 'Search replacements'; search.setAttribute('aria-label', `Search replacements for ${root.itemId}`);
+        const matches = el('p', 'text-on-surface-variant');
+        const fill = () => fillBoundedOptions({ select: pick, entries: replacements, query: search.value, label: entry => `${entry.label ?? entry.id} · ${entry.family}`, key: entry => String(replacements.indexOf(entry)), message: matches, placeholder: 'Choose an available replacement' });
+        search.addEventListener('input', fill); fill();
+        actions.append(search, pick, matches, button(`Replace ${root.itemId}`, safe(async () => {
           if (pick.value === '') return showStatus('Choose an available catalog item to replace this choice with.');
           const target = replacements[Number(pick.value)];
           present(await client.propose({ type: 'replace', root: refOf(root), replacement: { releaseSha256: target.root.releaseSha256, itemId: target.id } }));
@@ -314,8 +344,8 @@ export function createAuthoringWorkspace(client) {
       }
       row.append(actions);
       if (root.status !== 'unresolved') {
-        const configuration = el('input', 'w-full bg-wb-input border border-wb-border rounded p-1 font-mono text-[10px]'); configuration.value = JSON.stringify(root.configuration); configuration.setAttribute('aria-label', `Configuration for ${root.itemId}`);
-        row.append(configuration, button(`Review configuration of ${root.itemId}`, safe(async () => present(await client.propose({ type: 'select', root: { ...refOf(root), configuration: JSON.parse(configuration.value) } })))));
+        row.append(createConfigurationEditor({ configuration: root.configuration, inputs: item?.inputs, label: root.itemId, button,
+          review: async value => { try { present(await client.propose({ type: 'select', root: { ...refOf(root), configuration: value } })); } catch (error) { showStatus(error.message); } } }));
       }
       draftRoots.append(row);
     }
@@ -328,11 +358,11 @@ export function createAuthoringWorkspace(client) {
     }
     const changes = draft.changes, what = changes && [['removed', changes.removedRoots], ['added', changes.addedRoots]].filter(([, list]) => list?.length).map(([verb, list]) => `${verb} ${list.map(itemLabel).join(', ')}`).join('; ');
     draftChanges.textContent = changes ? `Last change: ${what || 'no choice added or removed'}.` : '';
-    compileNote.textContent = (draft.compile.status === 'available' ? 'Every recorded choice resolves with its dependencies: the whole draft can be compiled.'
+    compileNote.textContent = !draft.roots.length ? 'No choices yet. Choose catalog content before compiling a policy.' : (draft.compile.status === 'available' ? 'Every recorded choice resolves with its dependencies: the whole draft can be compiled.'
       : `The whole draft cannot be compiled yet. ${readable(failure({ diagnostics: draft.compile.reasons }))}`)
       + (compilable && resolvedRoots.length && unresolvedRoots.length ? ` ${resolvedRoots.length} of ${draft.roots.length} choices are resolved and can be compiled on their own; the others stay in the draft.` : '')
       + (!compilable || resolvedRoots.length ? '' : ' No choice is resolved yet, so there is no resolved scope to compile.');
-    compileAll.disabled = !compilable; compileResolved.disabled = !compilable || !resolvedRoots.length;
+    compileAll.disabled = !compilable || !draft.roots.length || draft.compile.status !== 'available'; compileResolved.disabled = !compilable || !resolvedRoots.length;
     for (const action of [compileAll, compileResolved]) { action.setAttribute('aria-disabled', String(action.disabled)); action.classList.toggle('opacity-50', action.disabled); action.classList.toggle('cursor-not-allowed', action.disabled); }
   }
   // Returns true when the reopened artifact is a draft and this has described it.
@@ -340,7 +370,7 @@ export function createAuthoringWorkspace(client) {
     if (result.status !== 'ok' || !client.draft) return false;
     const draft = client.draft, open = draft.roots.filter(root => root.status === 'unresolved').length;
     original = draft.savedIntentBytes.slice(); optional = [];
-    updates.open(); improvements.open(); trials.open(); workspace.open();
+
     render();
     showStatus(draft.editing === 'unresolved'
       ? `Unresolved draft opened: ${draft.roots.length} saved ${draft.roots.length === 1 ? 'choice' : 'choices'} kept, ${open} unresolved. Nothing was dropped and no other revision was substituted. Rebind the saved sources in Sources & Catalogs and validate again, or edit the draft and compile its resolved choices. Availability: ${[...new Set(draft.diagnostics.map(diagnostic => diagnostic.code))].join(', ')}.`
@@ -379,17 +409,32 @@ export function createAuthoringWorkspace(client) {
       appendDependencySets(candidate.intent.roots, candidate.inclusions, root => root.itemId);
       showStatus('Review the proposed choices and dependencies, then accept. Your current saved artifact is retained until acceptance.');
     }
-    render();
+    render(); if (client.candidate) reviewPanel.open();
   }
   function render() {
     const intent = client.intent, draft = client.draft, current = draft ? draft.roots : intent?.roots ?? [];
-    accept.disabled = !client.candidate; save.disabled = !client.bytes.length || !intent;
+    accept.disabled = !client.candidate; save.disabled = !client.bytes.length || !intent || checking; save.hidden = Boolean(draft && !intent);
     originalDownload.disabled = !original?.length;
     if (!client.candidate) proposed.replaceChildren();
     bytes.textContent = new TextDecoder().decode(client.bytes);
     document.getElementById('live-json-viewer').textContent = new TextDecoder().decode(client.bytes);
+    const jsonHeading = document.getElementById('policy-json-heading'), jsonDescription = document.getElementById('policy-json-description');
+    const jsonKind = !client.bytes.length ? 'Policy JSON unavailable' : draft && !client.compiled ? 'Original retained policy JSON' : client.compiled ? 'Current compiled policy JSON' : 'Current project policy JSON';
+    jsonHeading.textContent = jsonKind;
+    jsonDescription.textContent = !client.bytes.length ? 'Load or create a policy before copying or downloading JSON.'
+      : draft && !client.compiled ? 'These exact original policy bytes are retained inside your working draft. They do not include accepted draft edits. Download draft in Review Changes to keep the complete working draft.'
+      : client.compiled ? 'These are the exact executable policy bytes compiled from the draft. The working draft is separate and can be downloaded from Review Changes.'
+      : 'These are the complete current project policy bytes. Proposed changes appear here only after acceptance.';
+    for (const action of [copy, jsonDownload]) { action.disabled = checking || !client.bytes.length; action.setAttribute('aria-disabled', String(action.disabled)); action.classList.toggle('cursor-not-allowed', action.disabled); }
+    copy.title = `Copy ${jsonKind.toLowerCase()}`; jsonDownload.title = `Download ${jsonKind.toLowerCase()}`;
+    jsonDownload.textContent = draft && !client.compiled ? 'Download original policy' : 'Download policy';
     stage.disabled = !selectedItem || (!intent && !draft); reset.disabled = !current.some(root => root.itemId === selectedItem?.id && root.releaseSha256 === selectedItem?.root.releaseSha256);
     for (const action of [stage, reset]) { action.setAttribute('aria-disabled', String(action.disabled)); action.classList.toggle('opacity-50', action.disabled); action.classList.toggle('cursor-not-allowed', action.disabled); }
+    const persistentContext = document.getElementById('policy-current-context');
+    const contextSummary = document.getElementById('policy-context-summary');
+    if (contextSummary) contextSummary.textContent = `${draft ? 'Draft' : 'Policy'} · ${client.candidate ? 'Proposal' : client.dirty ? 'Unsaved' : `${current.length} choices`}`;
+    if (persistentContext) persistentContext.textContent = `${draft ? 'Working draft' : 'Project policy'} · ${current.length} accepted choices${client.candidate ? ' · Proposal awaiting acceptance' : ''}${client.dirty ? ' · Changes not downloaded' : ' · No undownloaded accepted changes'}${client.recoveryAvailable === false ? ' · Browser recovery unavailable' : ''}`;
+    pageContext.textContent = `${draft ? 'Working draft' : 'Current project policy'}: ${current.length} accepted choices${client.dirty ? ' · Changes not downloaded' : ''}${client.startupSource === 'recovery' ? ' · Recovered from this browser session' : ''}. Open policy choices and review to edit, download or reopen an artifact.`;
     summary.textContent = draft ? (intent
       ? `Current executable policy: compiled from the draft · ${intent.roots.length} explicit choices · ${intent.pins.length} exact pins including dependencies. The draft envelope is kept separately and is not executable.`
       : 'Current artifact: draft (journey envelope, not executable). Your original policy bytes are retained inside it. Compile a resolved scope to produce an executable policy.')
@@ -399,22 +444,23 @@ export function createAuthoringWorkspace(client) {
       const item = client.catalog?.items.find(item => item.id === root.itemId && item.root.releaseSha256 === root.releaseSha256);
       const row = el('div', 'p-2 border border-wb-border rounded space-y-1');
       row.append(el('p', 'font-medium', item?.label ?? root.itemId), el('p', 'font-mono text-[10px] text-outline', `${item?.family ?? 'Saved source'} · ${root.scope} · ${root.itemId}`));
-      const configuration = el('input', 'w-full bg-wb-input border border-wb-border rounded p-1 font-mono text-[10px]'); configuration.value = JSON.stringify(root.configuration); configuration.setAttribute('aria-label', `Configuration for ${root.itemId}`);
-      row.append(configuration, button('Review configuration', safe(async () => present(await client.propose({ type: 'select', root: { ...root, configuration: JSON.parse(configuration.value) } })))),
-        button(`Remove ${root.itemId}`, safe(async () => present(await client.propose({ type: 'remove-root', root, keep: [] })))));
+      row.append(createConfigurationEditor({ configuration: root.configuration, inputs: item?.inputs, label: root.itemId, button,
+        review: async value => { try { present(await client.propose({ type: 'select', root: { ...root, configuration: value } })); } catch (error) { showStatus(error.message); } } }));
+      row.append(button(`Remove ${root.itemId}`, safe(async () => present(await client.propose({ type: 'remove-root', root, keep: [] })))));
       accepted.append(row);
     }
     for (const suggestion of draft ? [] : optional) {
       const exclusion = { originId: intent?.origins.find(origin => origin.kind === 'direct')?.id ?? intent?.origins[0]?.id, ...suggestion.to };
       accepted.append(button(`${suggestion.skipped ? 'Clear skip' : 'Skip optional'} ${suggestion.to.itemId}`, safe(async () => present(await client.propose({ type: suggestion.skipped ? 'unskip' : 'skip', exclusion })))));
     }
-    renderDraft(); updates.render(); improvements.render(); trials.render(); workspace.render();
+    renderDraft(); reviewPanel.render(); installPanel.render(); for (const view of [updates, improvements, trials, workspace]) if (view.node.parentElement.open) view.render();
     host.textContent = draft && !intent ? 'Prepare and Apply are unavailable: this draft is not an executable policy. Compile a resolved scope first; the compiled policy is then reviewed with the exact host effects.'
       : client.catalog?.executionAvailable
       ? 'Execution host connected. Prepare and Apply require target review; Enterprise also requires current organization authority.'
       : 'Execution is not connected: this preview has no operator-selected project, material roots or controls. Save the policy for a configured CLI host; supported material facts do not establish native execution or automatic guardrails.';
   }
   const binding = document.getElementById('personal-binding');
+  let handoffAnnounced = false;
   syncSource();
   client.subscribe(() => {
     prepared = undefined; apply.disabled = true;
@@ -427,6 +473,7 @@ export function createAuthoringWorkspace(client) {
       binding.value = selected && [...binding.options].some(option => option.value === selected) ? selected : binding.options.length === 2 ? binding.options[1].value : '';
     } catch { /* Original malformed bytes stay available for diagnostics. */ }
     render(); syncSource();
+    if (client.startupSource === 'handoff' && !handoffAnnounced) { handoffAnnounced = true; reviewPanel.open(); showStatus(client.draft || client.intent ? 'Your guided choices are open. Review the accepted choices below, then download the policy or draft.' : 'Your guided artifact was transferred, but exact-source validation needs attention. Original bytes are retained.'); }
   });
   const folder = document.getElementById('personal-folder'), folderResult = document.getElementById('personal-result');
   folder.addEventListener('change', async () => {
@@ -465,8 +512,25 @@ export function createAuthoringWorkspace(client) {
     } catch (error) { intakeStatus.textContent = error.message; }
     finally { snapshot.disabled = false; snapshot.value = ''; }
   });
-  intake.append(snapshot, intakeStatus); document.querySelector('#policy-workspace > .p-4').append(intake);
+  intake.append(snapshot, intakeStatus);
+  const tools = el('details', 'policy-advanced rounded border border-wb-border p-3'); tools.append(el('summary', 'cursor-pointer font-medium', 'Advanced: sources and execution'), exact, reconcile, host, source, execution, intake);
+  tools.addEventListener('toggle', () => { if (tools.open) syncSource(); });
+  const currentChoices = el('section', 'space-y-2'); currentChoices.append(el('h3', 'font-medium', 'Accepted choices'), roots, draftSection);
+  const fileActions = el('details', 'policy-advanced rounded border border-wb-border p-3'); fileActions.id = 'policy-file-actions'; fileActions.append(el('summary', 'cursor-pointer font-medium', 'File actions: new, open and validate'), controls);
+  reviewPanel.node.append(installPanel.node, currentChoices, save, fileActions);
+  for (const view of [updates, improvements, trials, workspace]) reviewPanel.node.append(view.node.parentElement);
+  reviewPanel.node.append(organizationAuthor.node, tools);
+  organizationAuthor.node.hidden = true;
+  const setRole = settings => {
+    organizationAuthor.node.hidden = settings?.role !== 'admin';
+    if (Array.isArray(settings?.clients)) { chosenTools.selected = [...settings.clients]; installPanel.render(); }
+  };
+  import('./settings-client.js').then(({ loadSetup }) => loadSetup()).then(result => setRole(result.settings)).catch(() => {});
+  document.addEventListener('aih:settings-changed', event => setRole(event.detail?.settings ?? event.detail));
   // Core's published AI clients reach the views that offer or name a client.
-  function setTargets(coreTargets) { improvements.setTargets(coreTargets); organizationAuthor.setTargets(coreTargets); }
-  return { present, select(entry) { selectedItem = entry?.authoringItem; render(); }, setTargets };
+  function setTargets(coreTargets) {
+    improvements.setTargets(coreTargets); organizationAuthor.setTargets(coreTargets);
+    const published = publishedClients(coreTargets); chosenTools.coreIds = published?.ids ?? []; chosenTools.labels = published?.labels ?? {}; installPanel.render();
+  }
+  return { present, setSettings: setRole, select(entry) { selectedItem = entry?.authoringItem; render(); }, setTargets };
 }

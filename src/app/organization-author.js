@@ -1,4 +1,6 @@
 import { publishedClients, clientText } from './core-targets.js';
+import { fillBoundedOptions } from './bounded-options.js';
+import { recoverOrganizationSession, saveOrganizationSession } from './draft-session.js';
 
 // These helpers translate author input and server results; policy decisions belong to the server.
 export function parseSelectors(text) {
@@ -28,36 +30,50 @@ export function previewSectionText(section, value) {
   }).join('\n') || 'None reported.';
 }
 
-// Queue edits against the last returned envelope. Replacing an artifact invalidates all old work.
+// Drain accepted edit requests before replacement; a failed Open keeps their latest result.
 export function createOrganizationSession(client) {
-  let value, artifact = 0, revision = 0, queue = Promise.resolve();
+  let value, artifact = 0, replacement = 0, revision = 0, queue = Promise.resolve(), dirty = false, recoveryAvailable, replacing = false, pendingEdits = 0;
+  const checkpoint = () => { if (value) recoveryAvailable = saveOrganizationSession(value.envelopeBytes, dirty); };
   const request = (op, body) => client.request(op, { ...body, policyBytes: undefined, reviewEvidence: undefined });
   const superseded = () => ({ status: 'superseded' });
   return {
     get value() { return value; },
-    async replace(op, body = {}) {
-      const attempt = ++artifact; revision++; value = undefined; queue = Promise.resolve();
-      // A file read may finish after another New/Open; reserve its artifact before reading.
-      const input = typeof body === 'function' ? await body() : body;
-      if (attempt !== artifact) return superseded();
-      const result = await request(op, input);
-      if (attempt !== artifact) return superseded();
-      if (result.status === 'ok') value = result.value;
-      return result;
+    get dirty() { return dirty; }, get recoveryAvailable() { return recoveryAvailable; },
+    get replacing() { return replacing; },
+    get pendingEdits() { return pendingEdits; },
+    markDownloaded() { dirty = false; checkpoint(); },
+    async replace(op, body = {}, { recoveredDirty } = {}) {
+      const attempt = ++replacement; revision++;
+      replacing = true;
+      try {
+        // New edits are locked, while edits already queued finish against their original artifact.
+        await queue;
+        if (attempt !== replacement) return superseded();
+        artifact++; queue = Promise.resolve();
+        // A file read may finish after another New/Open; reserve its artifact before reading.
+        const input = typeof body === 'function' ? await body() : body;
+        if (attempt !== replacement) return superseded();
+        const result = await request(op, input);
+        if (attempt !== replacement) return superseded();
+        if (result.status === 'ok') { value = result.value; dirty = recoveredDirty ?? (op === 'organization-new'); checkpoint(); }
+        return result;
+      } finally { if (attempt === replacement) replacing = false; }
     },
     edit(operation) {
-      const attempt = artifact; revision++;
+      if (replacing) return Promise.resolve({ status: 'refused', diagnostics: [{ code: 'REPLACEMENT_PENDING', message: 'Wait for New or Open to finish before editing this draft.' }] });
+      const attempt = artifact; revision++; pendingEdits++;
       const task = queue.then(async () => {
         if (attempt !== artifact) return superseded();
         if (!value) throw new Error('Create or open an organization draft first.');
         const result = await request('organization-edit', { envelopeBytes: [...value.envelopeBytes], operation });
         if (attempt !== artifact) return superseded();
-        if (result.status === 'ok') value = result.value;
+        if (result.status === 'ok') { value = result.value; dirty = true; checkpoint(); }
         return result;
-      });
+      }).finally(() => { pendingEdits--; });
       queue = task.catch(() => {}); return task;
     },
     async read(op) {
+      if (replacing) return { status: 'refused', diagnostics: [{ code: 'REPLACEMENT_PENDING', message: 'Wait for New or Open to finish before reading this draft.' }] };
       const attempt = artifact, version = revision; await queue;
       if (attempt !== artifact || version !== revision) return superseded();
       if (!value) throw new Error('Create or open an organization draft first.');
@@ -65,6 +81,7 @@ export function createOrganizationSession(client) {
       return attempt === artifact && version === revision ? result : superseded();
     },
     async savedBytes() {
+      if (replacing) throw new Error('Wait for New or Open to finish before downloading this draft.');
       const attempt = artifact; await queue;
       if (attempt !== artifact) throw new Error('Draft changed while saving. Save again.');
       if (!value) throw new Error('Create or open an organization draft first.');
@@ -76,11 +93,15 @@ export function createOrganizationSession(client) {
 export function createOrganizationAuthorView({ client, el, button, showStatus }) {
   const node = el('details', 'p-3 border border-wb-border rounded bg-surface-container-low space-y-2'); node.id = 'organization-author';
   const session = createOrganizationSession(client);
+  const canReplace = () => !session.replacing && (!(session.dirty || session.pendingEdits) || window.confirm('This organization draft has changes that have not been downloaded or edits still being saved into the draft. Replace the current draft?'));
+  window.addEventListener('beforeunload', event => { if (session.dirty || session.pendingEdits) { event.preventDefault(); event.returnValue = ''; } });
   const status = el('p', 'text-on-surface-variant'); status.id = 'org-status'; status.setAttribute('role', 'status');
   const report = message => { status.textContent = message; showStatus(message); };
-  const safe = action => async () => { try { await action(); } catch (error) { report(error.message); } };
+  const safe = action => async () => { try { await action(); } catch (error) { report(error.message); } finally { syncPrerequisites(); } };
   const identify = (control, id) => { control.id = id; return control; };
-  const action = (label, id, run) => identify(button(label, safe(run)), id);
+  const actions = new Map();
+  // A busy action is marked aria-disabled, not disabled: disabling the focused control would drop focus before the re-render restores it.
+  const action = (label, id, run) => { const control = identify(button(label, safe(async () => { if (control.dataset.busy) return; control.dataset.busy = 'true'; control.setAttribute('aria-disabled', 'true'); control.setAttribute('aria-busy', 'true'); try { await run(); } finally { delete control.dataset.busy; control.removeAttribute('aria-busy'); syncPrerequisites(); } })), id); control.disabled = id !== 'org-draft-new' && !session.value; actions.set(id, control); return control; };
   const fieldClass = 'bg-wb-input text-on-surface border border-wb-border rounded p-1 max-w-full text-[11px]';
   function input(label, id, value = '') {
     const control = identify(el('input', fieldClass), id); control.type = 'text'; control.value = value; control.setAttribute('aria-label', label); return control;
@@ -114,12 +135,15 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
   const open = identify(el('input', fieldClass), 'org-draft-open'); open.type = 'file'; open.setAttribute('aria-label', 'Open organization draft');
   open.addEventListener('change', safe(async () => {
     const file = open.files?.[0]; if (!file) return;
+    if (!canReplace()) { open.value = ''; return; }
+    if (file.size > 2_000_000) throw new Error('Organization draft exceeds the 2 MB journey envelope limit.');
     const pending = session.replace('organization-open', async () => ({ bytes: [...new Uint8Array(await file.arrayBuffer())] }));
     renderDraft(); await adopt(pending); open.value = '';
   }));
   const draftActions = line(); draftActions.append(action('New draft', 'org-draft-new', async () => {
+    if (!canReplace()) return;
     const pending = session.replace('organization-new'); renderDraft(); await adopt(pending);
-  }), labeled('Open draft', open), action('Save draft', 'org-draft-save', async () => download(await session.savedBytes(), 'organization-draft.journey.json')));
+  }), labeled('Open draft', open), action('Download draft', 'org-draft-save', async () => { download(await session.savedBytes(), 'organization-draft.journey.json'); session.markDownloaded(); report('Organization draft download started. Keep the downloaded file to reopen your choices.'); }));
   const policyId = input('Policy id', 'org-policy-id');
   const policyRow = line(); policyRow.append(labeled('Policy id', policyId), action('Apply policy id', 'org-policy-id-apply', () => edit({ kind: 'set-policy-id', policyId: policyId.value || null })));
   const owner = input('Source owner', 'org-source-owner'), name = input('Source repository name', 'org-source-name'), path = input('Source path', 'org-source-path');
@@ -127,11 +151,14 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
   const sourceRow = line();
   sourceRow.append(labeled('Owner', owner), labeled('Repository', name), labeled('Path', path), labeled('Revision kind', refKind), labeled('Revision', ref), action('Apply source', 'org-source-apply', () => edit({ kind: 'set-source', source: [owner, name, path, ref].every(control => !control.value) ? null : { provider: 'github', repository: { owner: owner.value, name: name.value }, path: path.value, revision: { kind: refKind.value, value: ref.value } } })));
   const items = select('Catalog item', 'org-add-item', []), scope = select('Entry scope', 'org-add-scope', scopes, 'project');
-  const addRow = line(); addRow.append(labeled('Catalog item', items), labeled('Scope', scope), action('Add item', 'org-add-entry', () => {
+  const itemSearch = input('Search Catalog items', 'org-item-search'); itemSearch.type = 'search'; itemSearch.placeholder = 'Search Catalog items'; itemSearch.addEventListener('input', renderCatalog);
+  const itemMatches = el('p', 'text-on-surface-variant');
+  const addRow = line(); addRow.append(labeled('Search', itemSearch),labeled('Catalog item', items), labeled('Scope', scope), action('Add item', 'org-add-entry', () => {
     const slash = items.value.indexOf('/');
     if (slash < 0) throw new Error('Select a Catalog item first.');
     return edit({ kind: 'add-entry', releaseSha256: items.value.slice(0, slash), itemId: items.value.slice(slash + 1), scope: scope.value });
   }));
+  addRow.append(itemMatches);
   const entries = block(), targets = block(), unresolved = identify(el('ul', 'space-y-1 text-on-surface-variant'), 'org-unresolved');
   const targetScope = select('Target scope', 'org-target-scope', scopes, 'project'), targetClient = select('Target client', 'org-target-client', [['', 'Not declared']]), repository = input('Target repository', 'org-target-repository');
   const clientStatus = identify(el('p', 'text-on-surface-variant'), 'org-target-client-status'); targetClient.setAttribute('aria-describedby', clientStatus.id);
@@ -143,10 +170,21 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
     return edit({ kind: 'add-target', scope: targetScope.value, ...(targetClient.value ? { client: targetClient.value } : {}), ...(repository.value ? { repository: repository.value } : {}) });
   }));
   function renderCatalog() {
-    const current = items.value; items.replaceChildren();
-    for (const item of client.catalog?.items ?? []) { const option = el('option', '', `${item.label ?? item.id} · ${item.id}`); option.value = `${item.root.releaseSha256}/${item.id}`; items.append(option); }
-    if ([...items.options].some(option => option.value === current)) items.value = current;
+    fillBoundedOptions({ select: items, entries: client.catalog?.items ?? [], query: itemSearch.value, label: item => `${item.label ?? item.id} · ${item.id}`, key: item => `${item.root.releaseSha256}/${item.id}`, message: itemMatches });
+    syncPrerequisites();
   }
+  function syncPrerequisites() {
+    node.inert = session.replacing;
+    node.setAttribute('aria-busy', String(session.replacing));
+    for (const [id, control] of actions) {
+      if (control.dataset.busy) continue;
+      control.disabled = session.replacing || (id !== 'org-draft-new' && !session.value);
+      if (id === 'org-add-entry') control.disabled ||= !items.value;
+      control.setAttribute('aria-disabled', String(control.disabled));
+    }
+    open.disabled = session.replacing;
+  }
+  items.addEventListener('change', syncPrerequisites);
   client.subscribe?.(renderCatalog); renderCatalog();
   function fillEntryClients(control, selected) {
     control.replaceChildren(); control.disabled = !listed().length;
@@ -180,6 +218,7 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
   }
   function renderDraft() {
     const draft = session.value?.draft;
+    syncPrerequisites();
     policyId.value = draft?.policyId ?? ''; const source = draft?.source;
     owner.value = source?.repository.owner ?? ''; name.value = source?.repository.name ?? ''; path.value = source?.path ?? ''; refKind.value = source?.revision.kind ?? 'branch'; ref.value = source?.revision.value ?? '';
     // Rebuild rows only after an author action, restoring focus to its corresponding control.
@@ -268,6 +307,17 @@ export function createOrganizationAuthorView({ client, el, button, showStatus })
     const byId = id => [...node.querySelectorAll('[id]')].find(control => control.id === id), control = focusedId && byId(focusedId);
     if (focusedId) (control && !control.disabled ? control : byId('org-target-add'))?.focus();
   }
-  renderClients();
+  renderClients(); syncPrerequisites();
+  let recoveryChecked = false;
+  node.addEventListener('toggle', safe(async () => {
+    if (!node.open || recoveryChecked || session.value) return;
+    recoveryChecked = true;
+    const saved = recoverOrganizationSession();
+    if (!saved) return;
+    const pending = session.replace('organization-open', { bytes: [...saved.bytes] }, { recoveredDirty: saved.dirty }); renderDraft();
+    const result = await pending;
+    if (result.status === 'superseded') return;
+    renderDraft(); report(result.status === 'ok' ? 'Organization draft recovered from this browser session. Download it to keep a file.' : failure(result));
+  }));
   return { node, setTargets };
 }

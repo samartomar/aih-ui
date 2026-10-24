@@ -32,5 +32,5 @@ test('the AI tools control says an unchecked client is not checked, never "not c
   assert.match(note, /Installed or connected: not checked\./);
   assert.match(tip, /Installed or connected: not checked\./);
   for (const text of [note, tip]) assert.doesNotMatch(text, /not connected/i);
-  assert.match(elements.aiToolsCount.textContent, /^1 of 2$/);
+  assert.match(elements.aiToolsCount.textContent, /^1\/2$/);
 });

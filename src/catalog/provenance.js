@@ -19,6 +19,7 @@
  */
 
 import { el, text } from "../app/dom.js";
+import { createGapIndicator } from "../app/gap-indicator.js";
 import { NOT_CONNECTED, NOT_PUBLISHED, NOT_SUPPLIED } from "../app/absence.js";
 import { describeScope, sourceScopes } from "./selectors.js";
 
@@ -47,26 +48,7 @@ export function createProvenance({ elements }) {
     strip.replaceChildren();
     const summary = model.summary ?? {};
 
-    strip.appendChild(el("span", "material-symbols-outlined text-[14px] text-primary shrink-0", "account_tree"));
-    packagesInOrder(summary).forEach(({ name, pkg }, position) => {
-      if (position > 0) strip.appendChild(dot(STRIP_SEPARATOR));
-      const group = el("span", "flex items-center gap-1 shrink-0");
-      const label = el("span", "text-on-surface font-medium", `${name} `);
-      const version = text(pkg?.version);
-      label.appendChild(el("span", "text-outline", version ?? NOT_PUBLISHED));
-      label.title = version === null
-        ? `${name}: no installed version was recorded`
-        : `${name} ${version}, as npm recorded installing it in this preview`;
-      group.appendChild(label);
-      const commit = text(pkg?.commit);
-      if (commit !== null && /^[0-9a-f]{7,40}$/.test(commit)) {
-        const chip = el("span", "px-1.5 py-0.5 rounded bg-surface-container-high/80 text-metadata-revision font-mono text-[10px]", commit.slice(0, 7));
-        chip.title = `Local package packed from checkpoint ${commit}. Not a registry release.`;
-        group.appendChild(chip);
-      }
-      strip.appendChild(group);
-    });
-    strip.appendChild(el("span", "px-1.5 py-0.2 rounded bg-surface-container text-outline font-mono text-[10px] shrink-0", "read-only-mirror"));
+    strip.appendChild(el('span', 'text-on-surface-variant', 'Policy Workbench'));
     strip.appendChild(diagnostics(model));
   }
 
@@ -75,7 +57,7 @@ export function createProvenance({ elements }) {
     const summary = model.summary ?? {};
     const indexPkg = summary.indexPackage ?? {};
     const details = el("details", "relative shrink-0");
-    const summaryNode = el("summary", "cursor-pointer list-none px-1.5 py-0.2 rounded bg-surface-container hover:bg-surface-container-high text-outline hover:text-on-surface font-mono text-[10px] select-none", "provenance");
+    const summaryNode = el("summary", "cursor-pointer list-none px-1.5 py-0.2 rounded bg-surface-container hover:bg-surface-container-high text-outline hover:text-on-surface font-mono text-[10px] select-none", "Packages");
     summaryNode.title = "Package hashes, commits and index metadata";
     details.appendChild(summaryNode);
 
@@ -179,13 +161,6 @@ export function createProvenance({ elements }) {
     const line = elements.mastheadStatus;
     line.replaceChildren();
 
-    // The design source's ENABLED slot: organization / Core state, not Catalog's.
-    const enabled = el("span", "px-2 py-0.5 rounded bg-surface-container border border-wb-border text-outline font-medium flex items-center gap-1.5 text-[10.5px]");
-    enabled.appendChild(el("span", "w-1.5 h-1.5 rounded-full bg-outline"));
-    enabled.appendChild(document.createTextNode(`ENABLED · ${NOT_CONNECTED}`));
-    enabled.title = `Whether this source is enabled is organization and Core state. ${NOT_CONNECTED}: nothing supplies it yet.`;
-    line.appendChild(enabled);
-
     if (model.scope === null) {
       line.appendChild(dot());
       const indexed = Number.isInteger(model.summary?.entryCount) ? model.summary.entryCount : null;
@@ -203,10 +178,8 @@ export function createProvenance({ elements }) {
       line.appendChild(dot());
       line.appendChild(identityNode(model, scope));
     }
-    line.appendChild(dot());
-    line.appendChild(fact("scope", NOT_SUPPLIED, "Project or user scope is the organization's input. Not supplied."));
-    line.appendChild(dot());
-    line.appendChild(fact("pinned", NOT_CONNECTED, "An installation pin is Core state. Not connected; a commit Catalog recorded is not a pin."));
+    const unavailable = createGapIndicator({ label: 'Authority and installation not connected', reason: 'Organization source enablement, project/user scope and installation pins are not connected. A recorded source revision does not establish organization authority or an installation pin.' });
+    line.append(unavailable);
   }
 
   return {

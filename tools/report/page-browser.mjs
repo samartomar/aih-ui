@@ -35,6 +35,8 @@ export async function runReportPageBrowser({ origin, consumerDir, output, playwr
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(`${origin}/report.html`);
+    // The snapshot report is a collapsed section of the Report page; a person opens it first.
+    await page.locator('#snapshot-report > summary').click();
     assert.equal(await page.locator('#snapshot-render').isDisabled(), true, 'Render waits for a file');
     await page.setInputFiles('#snapshot-file', snapshotPath);
     for (const mode of ['report', 'demo']) {

@@ -19,10 +19,11 @@
  * from every displayed entry to its authoring asset identity.
  */
 
+import { createGapIndicator } from "../app/gap-indicator.js";
 import { el } from "../app/dom.js";
 import { sourcePresentation } from './source-facts.js';
 import { NOT_PUBLISHED, NOT_SUPPLIED } from "../app/absence.js";
-import { KIND_ICON, KIND_TONE, identity } from "./entry.js";
+import { KIND_ICON, KIND_TONE, identity } from "./entry.js"; import { toolLine } from "./tool-match.js";
 
 const AUTHORITY = "Producer authenticity is unchecked; this is not an approval or execution authority.";
 // One entry per evidence state the host reports; the dot keeps the status colour meanings.
@@ -55,7 +56,7 @@ function card(entry, selectedId, onSelect, model) {
   node.setAttribute("role", "button");
   node.setAttribute("aria-pressed", String(isSelected));
   // The exact identifier is always one hover away; the inspector shows it too.
-  node.title = id.entryId;
+  node.title = `Inspect ${title ?? id.name} · ${id.entryId}`;
 
   const top = el("div");
   const head = el("div", "flex items-start justify-between gap-2");
@@ -86,7 +87,7 @@ function card(entry, selectedId, onSelect, model) {
   // keeps the design source's card proportions instead of closing up.
   const body = el("p", "wb-card-description text-wb-card-description text-on-surface-variant mt-2 line-clamp-3 break-words", description ?? NOT_PUBLISHED);
   body.title = description === null ? "Description: not published for this entry." : "Description from the installed Catalog release.";
-  top.appendChild(body);
+  top.appendChild(body); if (entry.authoringItem) { const tool = el("p", "wb-card-tool mt-1 text-[11px] font-mono text-on-surface truncate", toolLine(entry.authoringItem)); tool.title = "Which AI tool this item installs for, as the Catalog declares it."; top.appendChild(tool); }
   node.appendChild(top);
 
   const foot = el("div", "pt-2.5 mt-2.5 border-t border-wb-border flex items-center justify-between text-[10px]");
@@ -96,8 +97,10 @@ function card(entry, selectedId, onSelect, model) {
   const shown = EVIDENCE_STATE[evidence.state] ?? EVIDENCE_STATE.unavailable;
   const status = el("span", "px-1.5 py-0.5 rounded bg-wb-meta-bg border border-wb-border text-wb-meta font-mono font-medium flex items-center gap-1 shrink-0");
   status.dataset.evidenceState = evidence.state;
+  if (evidence.state === 'not-supplied') status.className = 'text-outline font-mono flex items-center gap-1 shrink-0';
   status.appendChild(el("span", `w-1 h-1 rounded-full ${shown.dot}`));
-  status.appendChild(el("span", "", shown.text));
+  if (evidence.state === 'not-supplied') status.append(createGapIndicator({ label: shown.text, reason: shown.title(evidence) }));
+  else status.appendChild(el('span', '', shown.text));
   status.title = shown.title(evidence);
   left.appendChild(status);
 
@@ -106,6 +109,7 @@ function card(entry, selectedId, onSelect, model) {
   tokens.appendChild(el("span", "", "Unknown"));
   tokens.title = "Tokens: unknown. No defined producer supplies token values for this item.";
   left.appendChild(tokens);
+
   foot.appendChild(left);
 
   const toggle = el("div", "flex items-center gap-1.5");
@@ -118,13 +122,20 @@ function card(entry, selectedId, onSelect, model) {
   button.appendChild(el("div", "w-2.5 h-2.5 rounded-full bg-outline"));
   toggle.appendChild(button);
   if (entry.authoringItem) {
-    const chosen = model.intent?.roots.some(root => root.itemId === entry.authoringItem.id && root.releaseSha256 === entry.authoringItem.root.releaseSha256);
-    button.className = 'px-2 py-1 rounded bg-primary-container text-on-primary text-[10px] font-medium';
-    button.replaceChildren(); button.textContent = chosen ? 'Selected' : 'Choose';
-    button.setAttribute('aria-label', `Choose ${entry.authoringItem.id}`);
+    const chosenLabel = model.acceptedLabel ?? 'In policy';
+    const chosen = (model.acceptedRoots ?? model.intent?.roots ?? []).some(root => root.itemId === entry.authoringItem.id && root.releaseSha256 === entry.authoringItem.root.releaseSha256);
+    button.className = `px-2 py-1 rounded border text-[10px] font-medium ${chosen ? 'bg-primary-container text-on-primary border-primary' : 'border-wb-control-border text-on-surface-variant hover:text-primary hover:border-primary'}`;
+    button.replaceChildren(); button.textContent = chosen ? chosenLabel : 'Choose';
+    button.disabled = Boolean(chosen);
+    button.setAttribute('aria-label', `${chosen ? chosenLabel : 'Choose'} ${entry.authoringItem.id}`);
     button.removeAttribute('aria-disabled');
-    button.title = 'Review this proposed choice in your policy workspace before accepting it.';
-    button.addEventListener('click', event => { event.stopPropagation(); model.onChoose(entry.authoringItem); });
+    button.title = 'Review this choice in the panel before accepting it.';
+    button.addEventListener('click', async event => {
+      event.stopPropagation();
+      button.disabled = true; button.textContent = 'Reviewing…'; button.setAttribute('aria-busy', 'true');
+      try { await model.onChoose(entry.authoringItem); }
+      finally { button.disabled = Boolean(chosen); button.textContent = chosen ? chosenLabel : 'Choose'; button.removeAttribute('aria-busy'); }
+    });
   }
   foot.appendChild(toggle);
   node.appendChild(foot);
@@ -135,11 +146,13 @@ function card(entry, selectedId, onSelect, model) {
     select();
   });
   node.addEventListener("keydown", (event) => {
+    if (event.target !== node) return;
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       select();
     }
   });
+  for (const glyph of node.querySelectorAll(".material-symbols-outlined")) glyph.setAttribute("aria-hidden", "true");
   return node;
 }
 
@@ -156,6 +169,8 @@ export function createCards({ elements, onSelect }) {
       if (!model.entries.length) {
         const empty = el("div", "p-4 rounded border border-wb-border text-on-surface-variant text-[12px]", "No catalog entry matches this view. Published entries: ");
         empty.appendChild(el("span", "font-mono text-on-surface", String(model.total)));
+        const reset = el('button', 'block mt-3 border border-wb-border rounded px-3 py-1', 'Reset filters');
+        reset.type = 'button'; reset.addEventListener('click', model.onReset); empty.append(reset);
         elements.cardsGrid.appendChild(empty);
       } else {
         const nodes = model.entries.map((entry) => card(entry, model.selectedId, onSelect, model));
