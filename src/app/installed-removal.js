@@ -117,6 +117,12 @@ export async function confirmRemoval({ preview, request, mode, results: earlier 
   return finish(results);
 }
 
+/** Stops future rounds without undoing results from the confirmations already completed. */
+export function cancelRemoval({ preview, results }) {
+  const stopped = finish([...results, ...preview.steps.map(step => ({ name: step.entry.name, state: 'not-attempted' }))]);
+  return { ...stopped, message: `Removal stopped. ${stopped.message}` };
+}
+
 function finish(results, next, waitingFor) {
   const named = state => results.filter(result => result.state === state).map(result => result.name);
   const removed = named('removed'), unverified = named('unverified'), kept = named('kept'), gone = named('absent'), skipped = named('not-attempted');

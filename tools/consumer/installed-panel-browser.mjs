@@ -6,7 +6,7 @@ import { closePolicyDrawer, openPolicyDrawer, openPolicyFileActions } from './po
 
 // Real packed packages and a disposable host project. Every mutation goes through the running page's
 // ordinary reviewed Core path; no mocked inventory, preparation, Apply or browser client state.
-export async function runInstalledPanelBrowser({ origin, output, playwrightModule }) {
+export async function runInstalledPanelBrowser({ origin, output, playwrightModule, cancellationThemes = [] }) {
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true }), errors = [], outcomes = [];
@@ -27,6 +27,7 @@ export async function runInstalledPanelBrowser({ origin, output, playwrightModul
   }
   try {
     for (const theme of ['dark', 'light']) {
+      const cancelAfterFirst = cancellationThemes.includes(theme);
       const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 1000 } });
       page = await open(context, theme);
       await page.locator('#browse-family').selectOption('Extensions');
@@ -43,21 +44,30 @@ export async function runInstalledPanelBrowser({ origin, output, playwrightModul
       await page.screenshot({ path: join(output, `${theme}-installed.png`), fullPage: true });
       const download = page.waitForEvent('download'); await page.locator('#policy-save').click();
       const saved = join(output, `${theme}-policy.json`); await (await download).saveAs(saved);
-      await context.close();
-
-      // A fresh browser has no recovered draft; reopen the downloaded policy and read Core's disk inventory.
-      const reopened = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
-      page = await open(reopened, theme); await page.locator('#nav-policy').click();
-      await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(saved);
-      await page.locator('#policy-review-panel').getByRole('button', { name: 'Validate and reopen', exact: true }).click();
-      await page.locator('#policy-status').filter({ hasText: 'Saved choices recovered from exact source snapshots' }).waitFor();
-      await closePolicyDrawer(page); await openPolicyDrawer(page);
+      // The normal journey proves a fresh reopen. Cancellation keeps the original Install outcome,
+      // so it also catches an old data-outcome=installed surviving a partially applied Remove.
+      const reopened = cancelAfterFirst ? context : await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+      if (!cancelAfterFirst) {
+        await context.close();
+        page = await open(reopened, theme); await page.locator('#nav-policy').click();
+        await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(saved);
+        await page.locator('#policy-review-panel').getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+        await page.locator('#policy-status').filter({ hasText: 'Saved choices recovered from exact source snapshots' }).waitFor();
+        await closePolicyDrawer(page); await openPolicyDrawer(page);
+      }
       const installed = page.locator('[data-installed-item="extensions.matt.grill-me"]');
       await installed.waitFor();
-      await page.locator('#install-message').filter({ hasText: 'Already installed:' }).waitFor();
+      if (cancelAfterFirst) assert.equal(await page.locator('#install-message').getAttribute('data-outcome'), 'installed');
+      else await page.locator('#install-message').filter({ hasText: 'Already installed:' }).waitFor();
       await installed.getByRole('button', { name: 'Remove', exact: true }).click();
       await installed.getByText(/grill-me:.*files/).waitFor();
       assert.match(await page.locator('#installed-message').innerText(), /Nothing has been removed yet/);
+      const beforeCancel = await page.locator('#install-message').innerText();
+      await installed.getByRole('button', { name: 'Cancel', exact: true }).click();
+      assert.ok(await installed.isVisible(), 'Cancel before confirmation keeps the installed item.');
+      assert.equal(await page.locator('#install-message').innerText(), beforeCancel, 'Cancel before confirmation leaves Install unchanged.');
+      await installed.getByRole('button', { name: 'Remove', exact: true }).click();
+      await installed.getByRole('button', { name: 'Confirm remove', exact: true }).waitFor();
       await page.screenshot({ path: join(output, `${theme}-remove-preview.png`), fullPage: true });
       let rounds = 0;
       while (rounds < 5) {
@@ -69,8 +79,29 @@ export async function runInstalledPanelBrowser({ origin, output, playwrightModul
         assert.match(await installed.innerText(), /files? will be removed/);
         assert.ok(await installed.locator('ul li').count(), 'The next confirmation shows actual file rows.');
         await page.screenshot({ path: join(output, `${theme}-needed-files-${rounds}.png`), fullPage: true });
+        if (cancelAfterFirst) {
+          await installed.getByRole('button', { name: 'Cancel', exact: true }).click();
+          await installed.waitFor({ state: 'hidden' });
+          const stopped = await page.locator('#installed-message').innerText();
+          assert.match(stopped, /Removal stopped.*did not verify.*Not removed:.*grilling/s);
+          assert.doesNotMatch(stopped, /confirm again/i);
+          assert.equal(await page.locator('#installed-message').getAttribute('data-outcome'), 'unverified');
+          await page.locator('#install-message').filter({ hasText: 'Not fully installed:' }).waitFor();
+          assert.equal(await page.locator('#install-message').getAttribute('data-outcome'), null);
+          assert.equal(await page.locator('[data-installed-other]').count(), 2, 'Only the two dependencies remain in inventory.');
+          await page.screenshot({ path: join(output, `${theme}-cancelled-after-progress.png`), fullPage: true });
+          // Clean up the remaining dependencies through their own real reviewed controls.
+          for (let remaining = 2; remaining > 0; remaining--) {
+            const other = page.locator('[data-installed-other]').first();
+            await other.getByRole('button', { name: 'Remove', exact: true }).click();
+            await other.getByRole('button', { name: 'Confirm remove', exact: true }).click();
+            await page.locator('#installed-message').filter({ hasNotText: /^Removing…$/ }).waitFor({ timeout: 120_000 });
+            await page.waitForFunction(count => document.querySelectorAll('[data-installed-other]').length === count, remaining - 1);
+          }
+          break;
+        }
       }
-      assert.ok(rounds > 1 && rounds < 5, 'Needed files receive their own confirmation.');
+      assert.ok(cancelAfterFirst ? rounds === 1 : rounds > 1 && rounds < 5, 'The requested confirmation rounds completed.');
       const outcome = await page.locator('#installed-message').getAttribute('data-outcome');
       assert.ok(['removed', 'unverified'].includes(outcome), await page.locator('#installed-message').innerText());
       if (outcome === 'unverified') assert.match(await page.locator('#installed-message').innerText(), /did not verify/);
@@ -79,7 +110,7 @@ export async function runInstalledPanelBrowser({ origin, output, playwrightModul
       await page.locator('#install-message').filter({ hasText: 'Nothing has been installed yet' }).waitFor();
       assert.equal(await page.locator('#install-message').getAttribute('data-outcome'), null, 'Removal clears the old install outcome.');
       await page.screenshot({ path: join(output, `${theme}-removed.png`), fullPage: true });
-      outcomes.push({ theme, rounds, outcome, message: await page.locator('#installed-message').innerText() });
+      outcomes.push({ theme, rounds, cancelAfterFirst, outcome, message: await page.locator('#installed-message').innerText() });
       await reopened.close();
     }
     assert.deepEqual(errors, []);

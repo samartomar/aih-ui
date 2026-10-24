@@ -3,7 +3,7 @@
 // it tells the Install panel whether Core lists the whole setup as installed.
 
 import { groupInstalled } from './installed-list.js';
-import { confirmRemoval, previewRemoval } from './installed-removal.js';
+import { cancelRemoval, confirmRemoval, previewRemoval } from './installed-removal.js';
 
 export function createInstalledPanel({ client, el, button, onRemoved = () => {}, onInventory = () => {} }) {
   const node = el('section', 'p-4 rounded border border-wb-border bg-surface-container-low space-y-3'); node.id = 'installed-panel'; node.hidden = true;
@@ -35,7 +35,15 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
     const close = () => { area.hidden = true; area.replaceChildren(); };
     function showRound(preview, mode, results) {
       const actions = el('div', 'flex flex-wrap gap-2');
-      const cancel = button('Cancel', () => { close(); if (!results.length) message.textContent = ''; });
+      const cancel = button('Cancel', async () => {
+        close();
+        if (!results.length) { message.textContent = ''; return; }
+        // Earlier confirmations may already have deleted files. Stopping future rounds must
+        // retain that outcome, refresh inventory and invalidate the old Install success.
+        const stopped = cancelRemoval({ preview, results });
+        message.textContent = stopped.message; message.dataset.outcome = stopped.outcome;
+        await refresh({ keepMessage: true }); onRemoved();
+      });
       const confirm = button('Confirm remove', async () => {
         if (removing) return;
         removing = true; confirm.disabled = true; cancel.disabled = true; confirm.setAttribute('aria-busy', 'true'); message.textContent = 'Removing…';
