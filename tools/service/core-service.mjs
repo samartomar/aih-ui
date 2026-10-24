@@ -20,6 +20,11 @@ const OPS = {
     const { coreTargets } = await import("./core-targets.mjs");
     return coreTargets();
   },
+  /** Whether the installed Core publishes a contract check; nothing is run. */
+  async contractCheck() {
+    const { contractCheck } = await import("./contract-check.mjs");
+    return contractCheck();
+  },
 };
 
 async function main() {

@@ -520,6 +520,8 @@ src/
     elements.js         the shell's own element ids
     dom.js              el / text / collectIds, shared by both features
     absence.js          Not published / Not supplied / Not connected
+    icons.js            one icon, colour class and words per contract value (kinds, tool fit, scan states, states)
+    tooltip.js          the one tooltip helper: title, aria-describedby, focus and touch bubble
     workbench.css       interaction-specific presentation rules
     mode.js             theme preference and toggle
     onboarding.js       first-run wizard and saved-setup loading
@@ -687,6 +689,25 @@ reads `<selected> of <supported>`. Supported, selected and connected are kept ap
 
 The Workbench design's `3 of 11` was sample data and is not restored as state.
 
+The strip also carries the start-up contract check, once and as information
+only. The preview asks the installed Core whether `@aihq/core/contracts` or
+`@aihq/core` exports `checkContracts` (the service's `contractCheck`
+operation; nothing is called) and records it as the summary's `contractCheck`.
+Every Core so far has none, so the strip reads "This Core can't check
+contracts yet." and nothing is blocked. A Core that publishes it is listed in
+the provenance detail; running it waits for its published result format.
+
+`fixtures/package-support/aih-ui.json` is the Workbench's own package-support
+declaration in the shape of Core's published
+`@aihq/core/schemas/package-support/1.0.0.json`: each schema this package
+exports (read and written, `both`), the two Core results it reads today
+(`file-state-result` 1.1.0 and `native-verification-result` 1.0.0) and its
+entries with their runtime. `fixtures/package-support/reads.json` lists, by the
+short names of the Workbench reads contract, the contracts the new screens will
+read; none is read yet. `tools/tests/package-support.test.mjs` checks both
+against the export map, and the installed-Core check compares the declaration
+with Core's schema.
+
 A client adapter is tied to its client by the `clientId` Catalog release format 1.4 puts on
 the item, never by its item id. Three facts stay apart wherever an adapter is shown
 (`src/app/client-identity.js`, mirrored byte for byte for the headless readers in
@@ -810,16 +831,22 @@ has no published value it keeps its place, its look and its size and reads
 **Not published**.
 
 The evidence pill is the item's state against the Scan evidence the person
-supplied in Scan Review: **Not supplied** (no document), **Invalid evidence**
-(the document is not a valid Scan report or artifact), **Unsupported report**,
+supplied in Scan Review, in the neutral words of the scan line: until Scan
+publishes item summaries nothing can be **Verified**, so a pill never says it,
+and never says safe, clean or passed. **No scan record** (no document), **Scan
+record can't be read** (the document is not a valid Scan report or artifact, or
+uses a report version this reader does not support; the tooltip says which),
 **Not assessable** (Scan cannot assess this item's descriptors against the
-report), **Mismatched** (the report did not capture this exact item's recipe and
-material files) or **Matched** (the report captured these exact files; detector
-coverage is shown in Scan Review). The host reads each
+report), **The scan offered covers other files** (the report did not capture
+this exact item's recipe and material files) or **Scanned, not verified
+(unchecked)** (the report captured these exact files; detector coverage is
+shown in Scan Review). Each has its scan icon from `src/app/icons.js`; green is
+kept for Verified. The pill's `data-evidence-state` keeps the host's state name.
+Scan Review's evidence check uses the same words. The host reads each
 document with `@aihq/scan/read` `readReport`/`readArtifact` and each item with
 `readContentCoverage` against the item's exact `{path, sha256, byteLength}`
 descriptors; with several documents the newest matching assessment in the explicit scope is selected by Scan. Missing
-evidence is never shown as unpublished. Matched is not producer
+evidence is never shown as unpublished. A match is not producer
 authentication, a human judgment or execution authority. The token chip
 reads **Unknown**: no defined producer supplies token values. Card descriptions use the dedicated 10.5px type token and a
 1.5 line height, reserving three lines even for unavailable text. The inspector
@@ -855,8 +882,16 @@ than once -- the same agent ships in several aih releases -- and the full entry 
 is on the tooltip and in the inspector. Scoping the grid to one source removes the
 repetition.
 
-The skill icon is `bolt` in the skill primitive's colour, as the Workbench design
-renders it; agents and MCP servers use their own primitive colours.
+Kind icons and accents come from one map, `src/app/icons.js`, keyed by the
+contract's kinds (skill `auto_awesome`, rule `rule`, command `terminal`, agent
+`smart_toy`, hook `bolt`, MCP server `hub`, document `description`); today's
+Catalog value `mcp` shares the MCP server icon, and any other value gets a
+neutral icon with its own name. The same map holds the tool-fit, scan-state and
+install-state icons the later screens use. The hook accent is orange, and green
+stays reserved for Verified and confirmed on disk. Cards, kind pills, metric
+tiles and the inspector header use it; `src/app/tooltip.js` gives each icon,
+pill and tile its tooltip (`title` for hover, an `aria-describedby`
+description, and a bubble on keyboard focus and touch).
 
 ### The toolbar keeps the Workbench design's task
 

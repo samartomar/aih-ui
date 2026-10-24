@@ -35,6 +35,7 @@ import { installConsumer, resolvePackage } from "./packages.mjs";
 import { createWorkbench } from "./server/workbench.mjs";
 import { callService } from "./server/service-client.mjs";
 import { coreTargetsSummary } from "./server/core-targets-summary.mjs";
+import { contractCheckSummary } from "./server/contract-check-summary.mjs";
 import { assertReadable, pageAssets, serviceAssets } from "./server/assets.mjs";
 import { listen } from "./server/static.mjs";
 
@@ -215,6 +216,7 @@ export async function startPreview({ supplied = {}, expected = {}, port, runDir,
         tarball: basename(pkg.tarball), sha256: pkg.sha256, commit: pkg.commit, source: pkg.source,
       })),
       coreTargets: coreTargetsSummary(callService(consumerDir, { op: 'coreTargets' })),
+      contractCheck: contractCheckSummary(callService(consumerDir, { op: 'contractCheck' })),
     };
     const { server, catalog: currentCatalog } = await createWorkbench({ consumerDir, runDir, summary, settingsPath: settingsPath ?? process.env.AIH_UI_SETTINGS_PATH });
     summary.entryCount = currentCatalog.items.length;

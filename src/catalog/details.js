@@ -31,7 +31,8 @@ import {
   NOT_DECLARED,
   NOT_PUBLISHED,
 } from "../app/absence.js";
-import { KIND_ICON, KIND_TONE, identity, sourceDetailRows, sourceIdentity, statementsOf } from "./entry.js";
+import { identity, sourceDetailRows, sourceIdentity, statementsOf } from "./entry.js";
+import { iconFor } from "../app/icons.js";
 import { scopeCountOf } from "./selectors.js";
 
 /* These Catalog inspector slots have no verified per-entry scan input. */
@@ -90,6 +91,13 @@ export function createDetails({ elements, authoring }) {
   // Neither depends on the selection, so each states its reason once, here.
   elements.detectorRunState.title = DETECTOR_RUN_STATE_ABSENT;
   elements.detectorFindingDetail.title = `${NOT_PUBLISHED}: ${FINDING_DETAIL_ABSENT}`;
+
+  /** The header's kind icon and accent, from the shared icon map. */
+  function showKindIcon(kind) {
+    const shown = iconFor("kind", kind);
+    elements.inspectorIcon.textContent = shown.icon;
+    elements.inspectorIcon.className = `material-symbols-outlined text-[15px] ${shown.tone}`;
+  }
 
   function reset() {
     elements.detailsIdentity.replaceChildren();
@@ -163,7 +171,7 @@ export function createDetails({ elements, authoring }) {
         const source = sourcePresentation(item);
         elements.inspectorName.textContent = source.name;
         elements.inspectorKind.setAttribute('aria-label', `Kind: ${item.kind}`);
-        elements.inspectorIcon.textContent = KIND_ICON[item.kind] ?? 'extension';
+        showKindIcon(item.kind);
         elements.detailsDesc.textContent = source.description;
         if (source.facts) {
           const facts = source.facts;
@@ -237,8 +245,7 @@ export function createDetails({ elements, authoring }) {
       elements.inspectorName.title = id.entryId;
       elements.inspectorKind.setAttribute("aria-label", `Kind: ${id.kind}`);
       elements.inspectorKind.dataset.label = `Kind: ${id.kind}`;
-      elements.inspectorIcon.textContent = KIND_ICON[id.kind] ?? "extension";
-      elements.inspectorIcon.className = `material-symbols-outlined text-[15px] ${KIND_TONE[id.kind] ?? "text-outline"}`;
+      showKindIcon(id.kind);
 
       // --------------------------------------------------------- Overview
       elements.detailsDesc.textContent = NOT_PUBLISHED;

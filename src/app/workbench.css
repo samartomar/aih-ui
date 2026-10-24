@@ -37,3 +37,25 @@ html.theme-switching *::after {
 
 /* The inspector's identity disclosure uses its own chevron, not the marker. */
 #details-disclosure > summary::-webkit-details-marker { display: none; }
+
+/* A filled icon (Verified, works in your tool): the same glyph, solid. */
+.material-symbols-outlined.wb-icon-filled {
+  font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+/* The one bubble app/tooltip.js shows on keyboard focus and touch; hover uses
+   the browser's title tooltip. Inverted theme roles keep it legible in both modes. */
+.wb-tooltip {
+  position: fixed;
+  z-index: 100;
+  max-width: 320px;
+  padding: 6px 8px;
+  border-radius: var(--r-lg);
+  background: var(--color-text);
+  color: var(--color-canvas);
+  box-shadow: var(--shadow-sm);
+  font: var(--fw-regular) 11.5px/1.45 var(--font);
+  white-space: pre-line;
+  pointer-events: none;
+}
+.wb-tooltip[hidden] { display: none; }
