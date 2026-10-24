@@ -6,3 +6,19 @@
 4. Build the smallest version first, and put a clickable page in front of the owner before anything else.
 5. Keep no plans, handoffs or status documents in this repo. A decision that changes what the repo owns goes in `README.md`.
 6. Never publish to npm or force-push without the owner's explicit approval.
+
+## Agent skills
+
+Use the installed Matt Pocock engineering skills and aih-extensions within this repository's existing rules. Keep the skills in their managed user installation.
+
+### Issue tracker
+
+GitHub Issues on `samartomar/aih-ui`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the five default triage roles. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+One product vocabulary with the existing decision authority. See `docs/agents/domain.md`.
