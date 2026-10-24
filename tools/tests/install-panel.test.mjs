@@ -69,3 +69,20 @@ test('reports success only when every operation was applied and verified', () =>
   assert.match(short.message, /2 of 3 applied/);
   assert.equal(installOutcome(undefined, files, project).ok, false);
 });
+
+// Core gives an operation the Catalog declared no check for "unverified" (no-supplied-check), e.g. a marked block merged
+// into AGENTS.md. Everything was applied; the page says which change was not checked, and never calls it verified.
+test('an applied change with no check is named as not checked, not as an unfinished install', () => {
+  const files = [{ action: 'Add', path: 'ai-coding/RULE_ROUTER.md' }, { action: 'Add', path: 'AGENTS.md' }];
+  const noCheck = { completion: 'complete', diagnostics: [], operations: [
+    { id: 'a', application: 'applied', verification: { status: 'passed' } },
+    { id: 'b', application: 'applied', verification: { status: 'unverified', reason: 'no-supplied-check' } }] };
+  const outcome = installOutcome(noCheck, files, project);
+  assert.equal(outcome.ok, false, 'not a verified success');
+  assert.equal(outcome.state, 'unchecked');
+  assert.match(outcome.message, /^Installed 2 files into sample-js-app\. 1 was checked; AGENTS\.md was written but has no check from the Catalog, so it is not verified\. Open it to confirm\.$/);
+  assert.doesNotMatch(outcome.message, /did not finish/);
+  // A failed or unavailable check is still an unfinished install.
+  const failed = structuredClone(noCheck); failed.operations[0].verification = { status: 'failed' };
+  assert.match(installOutcome(failed, files, project).message, /Install did not finish: 2 of 2 applied, 0 verified/);
+});

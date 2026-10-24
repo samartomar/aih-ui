@@ -57,6 +57,14 @@ export function installOutcome(run, files, project) {
     const already = inPlace ? ` (${inPlace} ${inPlace === 1 ? 'was' : 'were'} already in place)` : '';
     return { ok: true, message: `Installed ${total} ${total === 1 ? 'file' : 'files'} into ${projectName(project)}${already}.${tryLine}` };
   }
+  // Everything was written and every supplied check passed, but Core had no check for some changes (the Catalog declared
+  // none, e.g. a marked section merged into AGENTS.md): Core reports them unverified. Named, never called verified.
+  const unchecked = operations.filter(operation => operation.verification?.status === 'unverified' && operation.verification?.reason === 'no-supplied-check');
+  if (run.completion === 'complete' && total && operations.length === files.length && applied + inPlace === total && unchecked.length && verified + unchecked.length === total) {
+    const names = unchecked.map(operation => files[operations.indexOf(operation)]?.path ?? operation.id);
+    const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+    return { ok: false, state: 'unchecked', message: `Installed ${total} ${total === 1 ? 'file' : 'files'} into ${projectName(project)}. ${verified} ${verified === 1 ? 'was' : 'were'} checked; ${list} ${names.length === 1 ? 'was' : 'were'} written but ${names.length === 1 ? 'has' : 'have'} no check from the Catalog, so ${names.length === 1 ? 'it is' : 'they are'} not verified. Open ${names.length === 1 ? 'it' : 'them'} to confirm.` };
+  }
   const reason = [...(run.diagnostics ?? [])].map(diagnostic => diagnostic.message ?? diagnostic.code).filter(Boolean).join(' ');
   return { ok: false, message: `Install did not finish: ${applied} of ${total} applied,${inPlace ? ` ${inPlace} already in place,` : ''} ${verified} verified.${reason ? ` ${reason}` : ''} Nothing else was changed by this page.` };
 }
@@ -121,7 +129,7 @@ export function createInstallPanel({ client, el, button }) {
       // Apply is bound to this fresh review's own digest, exactly as the advanced Apply button does.
       const applied = await client.requestHost('apply', { sessionId: preparation.sessionId, reviewDigest: preparation.review.reviewDigest });
       const outcome = installOutcome(applied, installFiles(preparation.review), preparation.review.target?.project);
-      message.textContent = outcome.message; message.dataset.outcome = outcome.ok ? 'installed' : 'failed';
+      message.textContent = outcome.message; message.dataset.outcome = outcome.ok ? 'installed' : outcome.state ?? 'failed';
       preview = undefined;
     } catch (error) { message.textContent = `Install did not finish: ${error.message}`; message.dataset.outcome = 'failed'; }
     finally { installing = false; install.removeAttribute('aria-busy'); }
