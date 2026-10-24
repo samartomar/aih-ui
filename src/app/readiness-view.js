@@ -31,11 +31,20 @@ const sourceRows = projection => ['machine-check', 'repair-recheck'].includes(pr
 
 export function rowsFor(projection) {
   return sourceRows(projection).map(item => ({
-    id: item.id, label: item.label ?? item.id, target: item.target ?? null, state: known(item.state), stateLabel: stateLabel(item.state),
-    tone: stateTone(item.state), reason: item.reason ?? '', reasonText: reasonText(item.reason), detail: item.detail ?? '',
+    id: item.id, label: item.label ?? item.id, target: item.target ?? null, state: known(item.state), stateLabel: projection?.kind === 'repair-condition' && item.state === 'failed' && item.reason === 'changes-needed' ? 'Planned' : stateLabel(item.state),
+    tone: projection?.kind === 'repair-condition' && item.state === 'failed' && item.reason === 'changes-needed' ? 'neutral' : stateTone(item.state), reason: item.reason ?? '', reasonText: reasonText(item.reason), detail: item.detail ?? '',
     guidance: item.guidance ?? null, purpose: item.purpose ?? null, effects: item.effects ?? null,
     application: item.application ?? null, verification: item.verification ?? null,
   }));
+}
+
+export function repairRelevance(repair, projection, beforeRepair = false) {
+  const targets = (repair.targets ?? []).join(', ');
+  if (!projection) return `Run a machine check to see whether this repair matches a failed check. Covers: ${targets}.`;
+  if (beforeRepair || projection.beforeRepair) return `Repair relevance is based on a machine check taken before the repair. Run Check this machine again to refresh the failed checks for ${targets}.`;
+  const failed = rowsFor(projection).filter(row => row.state === 'failed' && repair.targets.includes(row.target));
+  return failed.length ? `Matches failed checks: ${failed.map(row => row.label).join(', ')}. Covers only ${targets}; other failures need their own guidance.`
+    : `No failed check for ${targets} appeared in the latest machine check. This repair may not address the problem you are investigating.`;
 }
 
 export function summaryCounts(projection) {

@@ -13,14 +13,15 @@
  *     a tool, so it reads "not checked" and is never implied - not by the dot,
  *     not by the count.
  *
- * The count reads "<selected> of <supported>", as the design source lays it
- * out, and its tooltip says what each number is. The design source's "3 of 11"
+ * The count reads "<selected>/<supported>", and its tooltip says what each
+ * number is. The design source's "3 of 11"
  * was sample data; it is not restored as state.
  */
 
 import { el, text } from "./dom.js";
 import { NOT_PUBLISHED } from "./absence.js";
 import { clientNodes, publishedClients } from "./core-targets.js";
+import { createGapIndicator } from "./gap-indicator.js";
 
 /** @param elements { aiToolsTrigger, aiToolsCount, aiToolsPop, aiToolsList, aiToolsNote } */
 export function createAiTools({ elements, onSelectionChange }) {
@@ -30,11 +31,13 @@ export function createAiTools({ elements, onSelectionChange }) {
   let selected = [];
   let saving = false;
   let saveError = null;
+  let loading = true;
 
   const isOpen = () => !elements.aiToolsPop.classList.contains("hidden");
   function setOpen(open) {
     elements.aiToolsPop.classList.toggle("hidden", !open);
     elements.aiToolsTrigger.setAttribute("aria-expanded", String(open));
+    if (open) elements.aiToolsList.querySelector("input")?.focus();
   }
 
   function note(value) {
@@ -46,16 +49,18 @@ export function createAiTools({ elements, onSelectionChange }) {
     elements.aiToolsNote.replaceChildren();
 
     if (supported === null) {
-      elements.aiToolsCount.textContent = NOT_PUBLISHED;
+      elements.aiToolsTrigger.classList.add("wb-header-muted");
+      elements.aiToolsCount.textContent = loading ? "Loading…" : "—";
       elements.aiToolsTrigger.title =
-        `AI tools: ${NOT_PUBLISHED}. ${unavailableReason ?? "The installed @aihq/core lists no supported targets."}`;
-      elements.aiToolsList.appendChild(el("div", "px-1.5 py-1 text-outline", NOT_PUBLISHED));
-      note(`The installed @aihq/core does not publish its supported targets${unavailableReason ? `: ${unavailableReason}` : "."}`);
+        loading ? "Loading available AI tools…" : `AI tools: ${NOT_PUBLISHED}. ${unavailableReason ?? "The installed @aihq/core lists no supported targets."}`;
+      if (loading) note("Loading available AI tools…");
+      else elements.aiToolsList.append(createGapIndicator({ label: NOT_PUBLISHED, reason: unavailableReason ?? "The installed Core package does not publish a supported tools list." }));
       return;
     }
 
     const chosen = supported.filter((target) => selected.includes(target));
-    elements.aiToolsCount.textContent = `${chosen.length} of ${supported.length}`;
+    elements.aiToolsCount.textContent = `${chosen.length}/${supported.length}`;
+    elements.aiToolsTrigger.classList.toggle("wb-header-muted", chosen.length === 0);
     elements.aiToolsTrigger.title =
       `${supported.length} AI clients @aihq/core supports as targets; ${chosen.length} selected in this workspace's local setup. ` +
       "Installed or connected: not checked.";
@@ -84,14 +89,16 @@ export function createAiTools({ elements, onSelectionChange }) {
       elements.aiToolsList.appendChild(row);
     }
 
-    note(`Supported: the ${supported.length} AI clients @aihq/core lists (nativeClientIds).`);
-    note(saving ? "Saving client selection…" : "Selected: saved in this workspace's local setup file. It is not a policy.");
+    note(`${supported.length} supported tools. Changes save automatically to your local preferences.`);
+    const status = el("p", "", saving ? "Saving selection…" : "Selection saved locally.");
+    status.setAttribute("role", "status");
+    elements.aiToolsNote.append(status);
     if (saveError) {
       const failure = el("p", "text-error", `Selection was not saved: ${saveError}`);
       failure.setAttribute("role", "alert");
       elements.aiToolsNote.appendChild(failure);
     }
-    note("Installed or connected: not checked. Nothing here checks a tool.");
+    elements.aiToolsNote.append(createGapIndicator({ label: "Connection not checked", reason: "Installed or connected: not checked. The counter shows selected tools. This control saves preferences only." }));
     // A saved choice this Core no longer lists stays saved, but is not counted.
     const unknown = selected.filter((item) => !supported.includes(item));
     if (unknown.length > 0) {
@@ -121,6 +128,7 @@ export function createAiTools({ elements, onSelectionChange }) {
     },
     /** @param coreTargets the summary's { state, targets, labels } or { state, reason } */
     setTargets(coreTargets) {
+      loading = false;
       const published = publishedClients(coreTargets);
       if (published) {
         supported = published.ids;

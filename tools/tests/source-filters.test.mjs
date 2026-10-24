@@ -40,11 +40,13 @@ test("a saved view restores only the filters the installed inventory still offer
     getItem: (key) => store.get(key) ?? null, setItem: (key, value) => store.set(key, value),
   } });
   t.after(() => previous ? Object.defineProperty(globalThis, "sessionStorage", previous) : delete globalThis.sessionStorage);
-  const saved = view({ query: "beta", kind: "agent", sort: "name-desc" });
+  const saved = view({ query: "beta", kind: "agent", sort: "name-desc", family: "Fixture family", target: "fixture-client", support: "unknown" });
   saveView(saved);
   assert.deepEqual(restoreView(emptyView(), counts), saved);
   saveView(view({ source: sourceFilterValue("github", "removed/source", "abcdef1"), kind: "unknown-kind", sort: "unknown" }));
   assert.deepEqual(restoreView(emptyView(), counts), emptyView());
+  saveView(view({ support: 'invalid' }));
+  assert.equal(restoreView(emptyView(), counts).support, 'all');
   // A view saved by an earlier build may carry a retired category filter; it is not restored.
   saveView({ ...view(), category: { id: "build" } });
   assert.equal("category" in restoreView(emptyView(), counts), false);

@@ -38,17 +38,23 @@ test('proposal renders dependency hooks and one acceptance publishes the whole c
   const nodes = new Map(), created = [];
   const element = tagName => {
     const node = { tagName, children: [], dataset: {}, listeners: {}, value: '', textContent: '', options: [],
-      classList: { remove() {}, toggle() {} }, getAttribute() { return null; }, setAttribute() {}, removeAttribute() {}, after() {},
-      addEventListener(name, listener) { this.listeners[name] = listener; },
-      append(...children) { this.children.push(...children); }, prepend(...children) { this.children.unshift(...children); },
+      classList: { remove() {}, toggle() {} }, getAttribute() { return null; }, setAttribute() {}, removeAttribute() {}, after() {}, before() {}, focus() { globalThis.document.activeElement = this; }, contains(target) { return target === this || this.children.some(child => child.contains?.(target)); },
+      closest(selector) { if (selector === 'details') { let ancestor = this.parentElement; while (ancestor) { if (ancestor.tagName === 'details') return ancestor; ancestor = ancestor.parentElement; } } return null; },
+      get childNodes() { return this.children; },
+      addEventListener(name, listener) { const prior = this.listeners[name]; this.listeners[name] = prior ? (...args) => { prior(...args); return listener(...args); } : listener; },
+      append(...children) { for (const child of children) { child.parentElement = this; this.children.push(child); } }, prepend(...children) { this.children.unshift(...children); },
       replaceChildren(...children) { this.children = children; }, get lastChild() { return this.children.at(-1); } };
     created.push(node); return node;
   };
-  const prior = { document: globalThis.document, fetch: globalThis.fetch, Option: globalThis.Option };
+  const prior = { document: globalThis.document, fetch: globalThis.fetch, Option: globalThis.Option, window: globalThis.window };
   t.after(() => { for (const [key, value] of Object.entries(prior)) { if (value === undefined) delete globalThis[key]; else globalThis[key] = value; } });
-  globalThis.document = { createElement: element, createTextNode: textContent => ({ textContent }),
-    getElementById(id) { if (!nodes.has(id)) nodes.set(id, element('div')); return nodes.get(id); }, querySelector() { return element('div'); } };
+  const media = { matches: false, addEventListener(name, callback) { this.change = callback; } };
+  globalThis.window = { addEventListener() {}, matchMedia: () => media };
+  const documentListeners = {};
+  globalThis.document = { body: element('body'), addEventListener(name, listener) { documentListeners[name] = listener; }, dispatchEvent(event) { documentListeners[event.type]?.(event); }, createElement: element, createTextNode: textContent => ({ textContent }),
+    getElementById(id) { if (!nodes.has(id)) nodes.set(id, element('div')); return nodes.get(id); }, querySelector(selector) { return selector === 'dialog[open]' ? null : element('div'); } };
   globalThis.Option = function(textContent, value) { return { textContent, value }; };
+  const metricWrapper = element('details'), metricStrip = globalThis.document.getElementById('framework-matrix-tabs'); metricWrapper.append(metricStrip);
   const root = ref('chosen'), dependency = ref('dependency');
   const initial = { roots: [], pins: [], origins: [] };
   const candidate = { intent: { ...initial, roots: [root], pins: [root, dependency] }, inclusions: [inclusion(root, root, [root]), inclusion(root, dependency)], policyBytes: [...new TextEncoder().encode('{"complete":true}')] };
@@ -62,8 +68,35 @@ test('proposal renders dependency hooks and one acceptance publishes the whole c
   assert.equal(client.intent.roots.length, 0);
   const accept = created.find(node => node.id === 'policy-accept');
   assert.equal(accept.textContent, 'Accept choices with dependencies');
+  const reviewPanel = created.find(node => node.id === 'policy-review-panel');
+  assert.equal(reviewPanel.hidden, false, 'choosing opens review without navigation');
+  const discard = created.find(node => node.id === 'policy-discard'); discard.listeners.click();
+  assert.equal(client.candidate, undefined); assert.equal(client.intent.roots.length, 0);
+  workspace.present(await client.propose({ type: 'select', root }));
   accept.listeners.click();
+  assert.equal(reviewPanel.hidden, false, 'acceptance keeps the same review surface');
   assert.deepEqual(client.intent, candidate.intent);
   assert.deepEqual([...client.bytes], candidate.policyBytes);
   assert.equal(client.candidate, undefined);
+  assert.equal(created.find(node => node.id === 'policy-proposal-actions').hidden, true);
+  assert.equal(document.activeElement.id, 'policy-review-panel-title');
+  const reviewTrigger = document.getElementById('review-project-changes');
+  reviewTrigger.listeners.click(); assert.equal(reviewPanel.hidden, true);
+  client.reopen = async () => ({ status: 'refused', diagnostics: [{ message: 'Exact source unavailable' }] });
+  await document.getElementById('check-project-policy').listeners.click();
+  assert.equal(reviewPanel.hidden, false, 'Check Policy opens visible results');
+  assert.match(created.find(node => node.id === 'policy-status').textContent, /Exact source unavailable/);
+  media.matches = true; media.change();
+  assert.equal(document.getElementById('main-content').inert, true);
+  assert.equal(document.getElementById('nav-rail').inert, true);
+  assert.equal(metricWrapper.inert, true, 'covered metric disclosure blocks pointer and focus through native inert');
+  documentListeners.focusin({ target: document.getElementById('nav-rail') });
+  assert.equal(document.activeElement.id, 'policy-review-panel-title', 'covered background cannot take focus');
+  documentListeners.focusin({ target: metricStrip });
+  assert.equal(document.activeElement.id, 'policy-review-panel-title', 'covered metric controls cannot take focus');
+  document.dispatchEvent(new CustomEvent('aih:inspector-open'));
+  assert.equal(reviewPanel.hidden, true);
+  assert.equal(document.getElementById('main-content').inert, false);
+  assert.equal(document.getElementById('nav-rail').inert, false);
+  assert.equal(metricWrapper.inert, false);
 });

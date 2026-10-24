@@ -75,7 +75,7 @@ export function createProvenance({ elements }) {
     const summary = model.summary ?? {};
     const indexPkg = summary.indexPackage ?? {};
     const details = el("details", "relative shrink-0");
-    const summaryNode = el("summary", "cursor-pointer list-none px-1.5 py-0.2 rounded bg-surface-container hover:bg-surface-container-high text-outline hover:text-on-surface font-mono text-[10px] select-none", "provenance");
+    const summaryNode = el("summary", "cursor-pointer list-none px-1.5 py-0.2 rounded bg-surface-container hover:bg-surface-container-high text-outline hover:text-on-surface font-mono text-[10px] select-none", "Packages");
     summaryNode.title = "Package hashes, commits and index metadata";
     details.appendChild(summaryNode);
 

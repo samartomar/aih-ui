@@ -77,3 +77,72 @@ test('recording an update choice adopts the judgments of the draft it returns', 
   assert.equal((await client.recordDisposition({ type: 'clear', id: 'one' })).status, 'ok');
   assert.deepEqual(client.reviewJudgments, judged);
 });
+
+
+function sessionStorageFor(t) {
+  const previous = globalThis.sessionStorage, values = new Map();
+  globalThis.sessionStorage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
+  t.after(() => { if (previous === undefined) delete globalThis.sessionStorage; else globalThis.sessionStorage = previous; });
+  return values;
+}
+
+test('session recovery keeps accepted exact bytes and dirty state, never an unaccepted candidate', async t => {
+  sessionStorageFor(t);
+  const { recoverDraftSession } = await import('../../src/app/draft-session.js');
+  const pending = requests(t), client = createAuthoringClient();
+  client.publish(value(1));
+  const proposed = client.propose({ type: 'select' });
+  pending[0].resolve(response({ status: 'ok', value: value(2) })); await proposed;
+  assert.deepEqual(recoverDraftSession().bytes, Uint8Array.of(1));
+  client.discard(); assert.deepEqual(recoverDraftSession().bytes, Uint8Array.of(1));
+  client.publish(value(3)); assert.equal(client.dirty, true);
+  assert.equal(recoverDraftSession().dirty, true);
+  client.markDownloaded(); assert.equal(recoverDraftSession().dirty, false);
+  client.publish(value(4)); assert.equal(client.dirty, true);
+  client.importBytes(Uint8Array.of(5)); assert.equal(client.dirty, false, 'opening a saved file starts a clean artifact');
+});
+
+test('startup consumes guided handoff and validates the exact bytes before permitting editing', async t => {
+  sessionStorageFor(t);
+  const { saveDraftHandoff, takeDraftHandoff } = await import('../../src/app/draft-session.js');
+  const input = new TextEncoder().encode('{ "policy": "exact bytes" }');
+  assert.equal(saveDraftHandoff(input), true);
+  const calls = [], prior = globalThis.fetch;
+  globalThis.fetch = async (url, options) => { calls.push({ url, body: options.body && JSON.parse(options.body) }); return response(url === '/api/authoring-catalog' ? { items: [] } : { status: 'ok', value: { editing: 'available', intent: { roots: [], pins: [] } } }); };
+  t.after(() => { globalThis.fetch = prior; });
+  const client = createAuthoringClient(); await client.start();
+  assert.deepEqual(client.bytes, input); assert.ok(client.intent); assert.equal(client.dirty, true); assert.equal(client.startupSource, 'handoff');
+  assert.equal(calls[1].url, '/api/authoring-read'); assert.deepEqual(calls[1].body.policyBytes, [...input]);
+  assert.equal(takeDraftHandoff(), undefined);
+});
+
+test('maximum envelope recovery has a bounded base64 round trip and refuses malformed storage', async t => {
+  const storage = sessionStorageFor(t);
+  const { saveDraftSession, recoverDraftSession } = await import('../../src/app/draft-session.js');
+  const bytes = new Uint8Array(2_000_000); bytes[17] = 255; bytes[1_999_999] = 127;
+  assert.equal(saveDraftSession(bytes, true), true);
+  assert.ok([...storage.values()][0].length < 2_700_000);
+  assert.deepEqual(recoverDraftSession().bytes, bytes);
+  assert.equal(saveDraftSession(new Uint8Array(2_000_001), true), false);
+  for (const key of storage.keys()) storage.set(key, '{"base64":"not base64"}');
+  assert.equal(recoverDraftSession(), undefined);
+});
+
+
+test('isolated guided clients neither restore nor overwrite the accepted Workbench session', async t => {
+  const storage = sessionStorageFor(t);
+  const { saveDraftSession, saveDraftHandoff, recoverDraftSession, takeDraftHandoff } = await import('../../src/app/draft-session.js');
+  saveDraftSession(Uint8Array.of(42), true); saveDraftHandoff(Uint8Array.of(43));
+  const prior = globalThis.fetch, calls = [];
+  globalThis.fetch = async url => { calls.push(url); return response(url === '/api/authoring-catalog' ? { items: [] } : { status: 'ok', value: value(1) }); };
+  t.after(() => { globalThis.fetch = prior; });
+  const isolated = createAuthoringClient({ sessionRecovery: false }); await isolated.start(); isolated.publish(value(2));
+  assert.deepEqual(recoverDraftSession().bytes, Uint8Array.of(42));
+  assert.deepEqual(takeDraftHandoff(), Uint8Array.of(43));
+  assert.deepEqual(calls, ['/api/authoring-catalog', '/api/authoring-new']);
+  const accepted = [...storage.values()][0];
+  globalThis.sessionStorage.setItem = () => { throw new Error('quota exceeded'); };
+  assert.equal(saveDraftHandoff(new Uint8Array(2_000_000)), false);
+  assert.deepEqual(recoverDraftSession().bytes, Uint8Array.of(42));
+  assert.equal([...storage.values()][0], accepted);
+});

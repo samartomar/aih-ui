@@ -1,10 +1,40 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+// Browser-only recovery and unload controls use the same minimal DOM as these view tests.
+globalThis.window = { addEventListener() {}, confirm: () => true };
+globalThis.Option = class { constructor(text, value) { this.textContent = text; this.value = value; this.children = []; this.dataset = {}; } };
 import { createAuthoringClient } from '../../src/app/authoring-client.js';
 import { parsePermission, parseSelectors, enforcementText, targetLabel, previewSectionText, unresolvedLines, handoffText, createOrganizationSession, createOrganizationAuthorView } from '../../src/app/organization-author.js';
 
 const ok = (bytes, draft = {}) => ({ status: 'ok', value: { envelopeBytes: bytes, draft } });
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
+
+test('replacement locks edits and downloads until a delayed Open settles and retains prior draft on refusal', async () => {
+  const pending = deferred(), calls = [];
+  const session = createOrganizationSession({ request: async (op, body) => { calls.push({ op, body }); return op === 'organization-open' ? pending.promise : ok([1], { policyId: 'prior' }); } });
+  await session.replace('organization-new');
+  const opening = session.replace('organization-open', async () => { await new Promise(resolve => setImmediate(resolve)); return { bytes: [2] }; });
+  assert.equal(session.replacing, true);
+  assert.equal((await session.edit({ kind: 'set-policy-id', policyId: 'late' })).status, 'refused');
+  await assert.rejects(session.savedBytes(), /Wait for New or Open/);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(calls.map(call => call.op), ['organization-new', 'organization-open']);
+  pending.resolve({ status: 'refused', diagnostics: [{ message: 'Unreadable file' }] });
+  assert.equal((await opening).status, 'refused');
+  assert.equal(session.replacing, false); assert.deepEqual(session.value.envelopeBytes, [1]); assert.equal(session.dirty, true);
+  await session.edit({ kind: 'set-policy-id', policyId: 'allowed-after-failure' });
+  assert.deepEqual(calls.at(-1).body.envelopeBytes, [1]);
+});
+
+test('successful replacement cannot be overwritten by edits attempted during New', async () => {
+  const pending = deferred(); let creating = false, edits = 0;
+  const session = createOrganizationSession({ request: async op => { if (op === 'organization-edit') edits++; return creating ? pending.promise : ok([1]); } });
+  await session.replace('organization-new'); creating = true;
+  const replacement = session.replace('organization-new');
+  assert.equal((await session.edit({ kind: 'set-policy-id', policyId: 'old' })).status, 'refused');
+  pending.resolve(ok([2])); await replacement;
+  assert.deepEqual(await session.savedBytes(), [2]); assert.equal(edits, 0); assert.equal(session.replacing, false);
+});
 
 test('permission and selector text represents author choices without policy evaluation', () => {
   assert.equal(parsePermission('', 'ignored'), null);
@@ -50,7 +80,7 @@ test('requests omit workspace policy and evidence, serialize edits, and use adop
   assert.deepEqual(session.value.envelopeBytes, [3]);
 });
 
-test('New replaces an artifact immediately and discards in-flight and queued old edits', async () => {
+test('New drains in-flight and queued edits, then installs only the exact replacement', async () => {
   const pending = deferred(), calls = [];
   const session = createOrganizationSession({ request: async (op, body) => {
     calls.push({ op, body });
@@ -60,11 +90,38 @@ test('New replaces an artifact immediately and discards in-flight and queued old
   const first = session.edit({ kind: 'remove-entry', entryId: 'old' });
   const queued = session.edit({ kind: 'remove-entry', entryId: 'also-old' });
   await new Promise(resolve => setImmediate(resolve));
-  await session.replace('organization-new'); pending.resolve(ok([2]));
-  assert.equal((await first).status, 'superseded');
-  assert.equal((await queued).status, 'superseded');
+  const replacing = session.replace('organization-new');
+  assert.equal(session.replacing, true); assert.equal(calls.length, 2);
+  pending.resolve(ok([2]));
+  assert.equal((await first).status, 'ok');
+  assert.equal((await queued).status, 'ok');
+  await replacing;
   assert.deepEqual(session.value.envelopeBytes, [9]);
-  assert.equal(calls.length, 3);
+  assert.deepEqual(calls.map(call => call.op), ['organization-new', 'organization-edit', 'organization-edit', 'organization-new']);
+});
+
+test('a refused Open preserves an edit that was already pending when replacement began', async () => {
+  const editResult = deferred(), calls = [];
+  const session = createOrganizationSession({ request: async (op, body) => {
+    calls.push({ op, body });
+    if (op === 'organization-edit') return editResult.promise;
+    if (op === 'organization-open') return { status: 'refused', diagnostics: [{ message: 'Invalid replacement' }] };
+    return ok([1]);
+  } });
+  await session.replace('organization-new');
+  const editing = session.edit({ kind: 'set-policy-id', policyId: 'keep-my-edit' });
+  await new Promise(resolve => setImmediate(resolve));
+  const opening = session.replace('organization-open', { bytes: [9] });
+  assert.equal(session.replacing, true);
+  await assert.rejects(session.savedBytes(), /Wait for New or Open/);
+  assert.equal((await session.edit({ kind: 'set-policy-id', policyId: 'blocked' })).status, 'refused');
+  assert.deepEqual(calls.map(call => call.op), ['organization-new', 'organization-edit']);
+  editResult.resolve(ok([2]));
+  assert.equal((await editing).status, 'ok');
+  assert.equal((await opening).status, 'refused');
+  assert.deepEqual(session.value.envelopeBytes, [2]);
+  assert.deepEqual(await session.savedBytes(), [2]);
+  assert.equal(session.dirty, true); assert.equal(session.replacing, false);
 });
 
 test('preview waits for edits and old preview results are discarded after an edit', async () => {
@@ -84,6 +141,7 @@ class Node {
   replaceChildren(...nodes) { this.children = nodes; }
   setAttribute(name, value) { this[name] = value; }
   getAttribute(name) { return this[name] ?? null; }
+  removeAttribute(name) { delete this[name]; }
   addEventListener(name, handler) { this.listeners[name] = handler; }
   get options() { return this.children; }
   closest() { return null; }
@@ -111,7 +169,8 @@ test('view renders accessible author controls and all six server preview section
   const find = id => elements(node).find(control => control.id === id);
   assert.equal(node.id, 'organization-author'); assert.ok(!node.open);
   assert.equal(find('org-status').role, 'status');
-  assert.equal(find('org-add-item').options[0].value, 'abc/notes');
+  assert.equal(find('org-add-item').options[0].value, '');
+  assert.equal(find('org-add-item').options[1].value, 'abc/notes');
   await find('org-draft-new').listeners.click();
   assert.match(textOf(node), /Warning.*unavailable/);
   assert.match(textOf(find('org-unresolved')), /Choose a source/);
@@ -131,11 +190,11 @@ test('view renders accessible author controls and all six server preview section
 });
 
 // The target client field follows Core's published list; the server's preview stays the authority on an unknown client.
-async function mountTargets(t, targets = [], entries = []) {
+async function mountTargets(t, targets = [], entries = [], onRequest) {
   const previous = globalThis.document; globalThis.document = { activeElement: null };
   t.after(() => { globalThis.document = previous; });
   const calls = [], draft = { entries, targets, unresolved: [] }, statuses = [];
-  const client = { request: async (op, body) => { calls.push({ op, body }); return ok([1], draft); } };
+  const client = { request: async (op, body) => { calls.push({ op, body }); return onRequest?.(op, body) ?? ok([1], draft); } };
   const el = (tag, cls, text) => new Node(tag, cls, text), button = (label, handler) => { const node = el('button', '', label); node.listeners.click = handler; return node; };
   const view = createOrganizationAuthorView({ client, el, button, showStatus: message => statuses.push(message) });
   const find = id => elements(view.node).find(control => control.id === id);
@@ -144,6 +203,25 @@ async function mountTargets(t, targets = [], entries = []) {
 }
 const published = { state: 'published', targets: ['claude', 'codex', 'zed'], labels: { claude: 'Claude Code', codex: 'Codex' } };
 const clientOptions = find => find('org-target-client').options.map(option => [option.value, option.textContent]);
+
+for (const replacementAction of ['New', 'Open']) test(`a clean loaded draft with a pending edit requires confirmation before ${replacementAction}`, async t => {
+  const pending = deferred();
+  const priorConfirm = window.confirm; t.after(() => { window.confirm = priorConfirm; });
+  window.confirm = () => true;
+  const { find, calls } = await mountTargets(t, [], [], op => op === 'organization-edit' ? pending.promise : undefined);
+  const file = find('org-draft-open'); file.files = [{ size: 1, arrayBuffer: async () => Uint8Array.of(1).buffer }];
+  await file.listeners.change(); // A successfully opened draft has no undownloaded changes.
+  calls.length = 0;
+  const editing = find('org-policy-id-apply').listeners.click();
+  await new Promise(resolve => setImmediate(resolve));
+  let confirmations = 0; window.confirm = message => { confirmations++; assert.match(message, /edits still/); return false; };
+  if (replacementAction === 'New') await find('org-draft-new').listeners.click();
+  else { file.files = [{ size: 1, arrayBuffer: async () => Uint8Array.of(9).buffer }]; await file.listeners.change(); }
+  assert.equal(confirmations, 1);
+  assert.deepEqual(calls.map(call => call.op), ['organization-edit'], 'cancelling keeps the pending edit and sends no replacement');
+  pending.resolve(ok([2], { entries: [], targets: [], unresolved: [] })); await editing;
+  assert.match(find('org-status').textContent, /draft updated/);
+});
 
 test('target labels render a listed client through its Harness label and keep the old call shape', () => {
   const target = { scope: 'project', client: 'claude', repository: 'host/team/repo' };

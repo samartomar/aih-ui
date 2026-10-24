@@ -1,8 +1,9 @@
 // Check this machine: a read-only machine check, copyable guidance, and an
 // explicitly approved repair. The host owns Core; this page only renders the
 // projections it returns and never applies anything without the approval control.
-import { overallLine, rowsFor, summaryCounts, stagedNotice } from './app/readiness-view.js';
+import { overallLine, repairRelevance, rowsFor, summaryCounts, stagedNotice } from './app/readiness-view.js';
 import { clientNodes, publishedClients } from './app/core-targets.js';
+import { createGapIndicator } from './app/gap-indicator.js';
 
 const $ = id => document.getElementById(id);
 const TONE_CLASS = {
@@ -57,6 +58,13 @@ function renderSummary(container, projection) {
     el('span', `px-1.5 py-0.5 rounded text-xs font-medium ${TONE_CLASS[item.tone]}`, `${item.label} ${item.count}`)));
 }
 
+function showOverall(node, projection, fallback) {
+  const line = fallback ?? overallLine(projection);
+  if (line.includes('Not ready')) {
+    node.replaceChildren(createGapIndicator({ reason: line }), el('span', 'ml-2', projection?.beforeRepair ? 'This machine check was taken before the repair. Run it again to confirm readiness.' : projection?.kind === 'machine-check' && !rowsFor(projection).some(row => row.state === 'failed') ? 'Readiness is not confirmed. Some checks are unknown or unverified.' : 'Readiness is not confirmed. Review the conditions below.'));
+  } else node.textContent = line;
+}
+
 function showGuidance(text, source) {
   $('guidance').value = text;
   $('guidance-label').textContent = `Guidance for your AI client (read-only) — ${source}`;
@@ -64,12 +72,18 @@ function showGuidance(text, source) {
   $('result-section').hidden = false;
 }
 
-let busy = false, prepared = null;
+let busy = false, prepared = null, latestCheck = null, checkBeforeRepair = false;
+const repairRows = [];
+function updateRepairRelevance() {
+  for (const { repair, context } of repairRows) {
+    context.textContent = repairRelevance(repair, latestCheck, checkBeforeRepair);
+  }
+}
 const setBusy = value => { busy = value; $('check').disabled = value; for (const button of $('repairs').querySelectorAll('button')) button.disabled = value; syncApply(); };
 const syncApply = () => { $('apply').disabled = busy || !$('approve').checked || !prepared?.approvable; };
 
 // Core publishes AI client targets; other tool ids are free entry that Core validates.
-const targetList = () => [...new Set($('targets').value.split(/[\s,]+/).filter(Boolean))];
+const targetList = () => [...new Set([...$('targets').value.split(/[\s,]+/).filter(Boolean), ...[...$('target-choices').querySelectorAll('input:checked')].map(input => input.value)])];
 
 async function runCheck() {
   setBusy(true);
@@ -79,9 +93,10 @@ async function runCheck() {
   setBusy(false);
   if (result.status !== 'ok') { $('check-status').textContent = `The check did not run: ${result.message}`; return; }
   const { projection, guidance } = result.value;
+  latestCheck = projection; checkBeforeRepair = false; updateRepairRelevance();
   $('check-status').textContent = 'Check finished.';
   $('result-section').hidden = false;
-  $('overall').textContent = overallLine(projection);
+  showOverall($('overall'), projection);
   renderSummary($('summary'), projection);
   renderRows($('rows'), projection);
   for (const diagnostic of projection.diagnostics ?? []) $('rows').append(el('li', 'text-xs text-on-surface-variant', `${diagnostic.code}: ${diagnostic.message}`));
@@ -98,9 +113,9 @@ async function prepareRepair(repair) {
   prepared = { sessionId, reviewDigest, approvable: projection.approvable === true && typeof sessionId === 'string' && typeof reviewDigest === 'string' };
   $('review').hidden = false;
   $('review-heading').textContent = `Review: ${repair.id} for ${repair.targets.join(', ')}`;
-  $('review-overall').textContent = overallLine(projection);
+  showOverall($('review-overall'), projection);
   renderRows($('review-rows'), projection, new Map(operations.map(item => [item.id, [`Target: ${item.target}`, `Kind: ${item.kind} · Scope: ${item.scope}`]])));
-  $('repair-status').textContent = prepared.approvable ? 'Review the changes, then approve to apply. Nothing has been changed.'
+  $('repair-status').textContent = prepared.approvable ? 'Review the changes, then approve to apply. Destination detail is limited to the target and scope reported below; this host does not supply an exact checkout or file destination. Nothing has been changed.'
     : 'This repair cannot be approved from its current state. Nothing has been changed.';
   setBusy(false);
 }
@@ -109,6 +124,7 @@ async function applyRepair() {
   if (!prepared?.approvable || !$('approve').checked) return;
   const session = prepared;
   prepared = null; $('approve').checked = false;
+  checkBeforeRepair = true; updateRepairRelevance();
   setBusy(true);
   $('repair-status').textContent = 'Applying the approved repair…';
   const result = await call('/api/readiness-repair-apply', { sessionId: session.sessionId, reviewDigest: session.reviewDigest, approved: true });
@@ -120,13 +136,13 @@ async function applyRepair() {
   const { outcome, recheck, machine, guidance } = result.value;
   $('repair-status').textContent = 'The approved repair ran. Each change below shows whether it was applied and whether it was verified.';
   $('outcome').hidden = false;
-  $('outcome-overall').textContent = overallLine(outcome);
+  showOverall($('outcome-overall'), outcome);
   renderRows($('outcome-rows'), outcome);
   // The recheck covers only the repair's targets; the Result line stays with the latest machine check.
   $('recheck-heading').textContent = `Recheck of the repair's targets only: ${(recheck?.scope ?? outcome.targets).join(', ')}`;
-  $('recheck-overall').textContent = overallLine(recheck);
+  showOverall($('recheck-overall'), recheck);
   renderRows($('recheck-rows'), recheck);
-  $('overall').textContent = machine ? overallLine(machine) : "Not ready — no machine check has run; the recheck covered only the repair's targets.";
+  showOverall($('overall'), machine, machine ? undefined : "Not ready — no machine check has run; the recheck covered only the repair's targets.");
   showGuidance(guidance, "from the latest machine check, the repair outcome and the recheck of the repair's targets");
 }
 
@@ -146,17 +162,20 @@ async function loadRepairs() {
   $('staged-condition').replaceChildren(...(notice ? [el('p', 'font-semibold', notice.label), ...(notice.detail ? [el('p', '', notice.detail)] : [])] : []));
   $('staged-condition').hidden = !notice;
   const repairs = result.value.repairs ?? [];
-  $('repairs-note').textContent = repairs.length ? 'These repairs were configured by the host. Preparing one shows exactly what would change; nothing is applied without your approval.'
+  $('repairs-note').textContent = repairs.length ? 'These repairs were configured by the host. Prepare one to review its reported operations, targets and scope before approval. Exact checkout and file destinations are not supplied by this host.'
     : 'No repair is configured for this Workbench. Supported repairs require host configuration; guidance remains available.';
   for (const repair of repairs) {
     const item = el('li', 'flex flex-wrap items-center gap-3');
     item.append(el('span', '', `${repair.id} for ${repair.targets.join(', ')} (network ${repair.network})`));
+    const context = el('p', 'text-on-surface-variant');
+    repairRows.push({ repair, context }); item.append(context);
     const button = el('button', 'px-3 py-1.5 rounded border border-wb-control-border hover:bg-surface-container disabled:opacity-50', 'Prepare repair');
     button.type = 'button';
     button.addEventListener('click', () => prepareRepair(repair));
     item.append(button);
     $('repairs').append(item);
   }
+  updateRepairRelevance();
 }
 
 // The summary's coreTargets are the AI clients Core publishes; they are offered as shortcuts, never as the only choice.
@@ -169,14 +188,13 @@ async function loadPublishedTargets() {
     else reason = 'The installed Core does not publish its supported clients to this Workbench.';
   } catch { /* the free-entry field still works */ }
   $('target-help').textContent = published
-    ? 'Core publishes these AI clients; choose any to add them, or type other target ids. Core reports any id it does not recognize.'
+    ? 'These AI clients come from Core. Check any to include them. Other tool IDs remain available in the advanced field.'
     : `${reason} Type target ids; Core reports any id it does not recognize.`;
   for (const target of published ?? []) {
-    const button = el('button', 'inline-flex items-baseline gap-1.5 px-2 py-0.5 rounded border border-wb-control-border text-xs hover:bg-surface-container');
-    button.append(...clientNodes(labels, target));
-    button.type = 'button';
-    button.addEventListener('click', () => { $('targets').value = [...new Set([...targetList(), target])].join(', '); });
-    $('target-choices').append(button);
+    const label = el('label', 'inline-flex items-baseline gap-1.5 px-2 py-1 rounded border border-wb-control-border');
+    const box = el('input'); box.type = 'checkbox'; box.value = target;
+    label.append(box, ...clientNodes(labels, target));
+    $('target-choices').append(label);
   }
 }
 
@@ -184,5 +202,10 @@ $('check').addEventListener('click', runCheck);
 $('apply').addEventListener('click', applyRepair);
 $('approve').addEventListener('change', syncApply);
 $('copy-guidance').addEventListener('click', copyGuidance);
+const requestedTarget = new URLSearchParams(window.location.search).get('target');
+if (requestedTarget && /^[a-zA-Z0-9._-]{1,100}$/.test(requestedTarget)) {
+  $('targets').value = requestedTarget;
+  $('check-status').textContent = `Report action for ${requestedTarget}. Run Check this machine to get current results and guidance; opening this page changes nothing.`;
+}
 loadRepairs();
 loadPublishedTargets();
