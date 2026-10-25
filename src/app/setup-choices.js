@@ -1,9 +1,8 @@
 /*
  * "Your choices" in Your setup (#137): one line per chosen item, with the items it needs folded under it ("+ 2 it
  * needs") and Remove from setup. The needed-by relation is only what Catalog resolved (setup-needs.js); nothing here
- * decides it. Remove from setup goes through the same
- * remove-root proposal and acceptance as Undo after Add (`onRemove`). Configuration, skips and an open draft's
- * markers and compile stay in Advanced, under Chosen items.
+ * decides it. Remove from setup goes through the same remove-root proposal and acceptance as Undo after Add
+ * (`onRemove`). Configuration, skips and an open draft's markers and compile stay in Advanced, under Chosen items.
  */
 
 import { setupNeeds } from './setup-needs.js';

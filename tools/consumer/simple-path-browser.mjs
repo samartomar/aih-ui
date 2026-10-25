@@ -67,6 +67,7 @@ export async function runSimplePathBrowser({ origin, output, playwrightModule, t
     const drawer = page.locator('#policy-review-panel');
     await drawer.waitFor();
     assert.equal(await drawer.locator('#policy-review-panel-title').innerText(), 'Your setup');
+    assert.equal(await drawer.locator('#policy-proposal-actions').isVisible(), false, 'Nothing is left waiting to be accepted.');
     const choice = drawer.locator(`#setup-choices-list > li[data-choice-item="${item}"]`);
     await choice.waitFor();
     assert.match(await choice.locator('summary').innerText(), /^\+ \d+ it needs$/);

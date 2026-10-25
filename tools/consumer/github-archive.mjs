@@ -1,4 +1,5 @@
-// A GitHub repository at an exact commit (owner decision 5 on #96): the server's only network read of content. It is
+// A GitHub repository at an exact commit (owner decision 5 on #96): the consumer host's acquisition of one, not yet
+// wired to a server route; when it is, it is the server's only network read of content. It is
 // plain acquisition, never interpretation: the person names owner/repo, a 40-character commit and a folder; this module
 // checks those, downloads that commit's archive from codeload.github.com over HTTPS within fixed bounds, and unpacks only
 // the regular files under that folder (and the license) into memory. Nothing is resolved (a branch or tag is refused
