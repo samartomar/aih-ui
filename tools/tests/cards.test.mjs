@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createCards, EVIDENCE_STATE } from "../../src/catalog/cards.js";
-import { KIND_ICON, KIND_TONE } from "../../src/catalog/entry.js";
+import { ICONS } from "../../src/app/icons.js";
 
 function element(tag) {
   return {
@@ -40,11 +40,11 @@ test("skill cards use the shared skill icon and preserve full description text f
   const { node, selections } = renderCard(t, text);
   const nodes = descendants(node);
   const icon = nodes.find(e => e.className.includes("material-symbols-outlined"));
-  assert.equal(KIND_ICON.skill, "auto_awesome");
+  assert.equal(ICONS.kind.skill.icon, "auto_awesome");
   assert.equal(icon.attributes["aria-hidden"], "true");
   assert.equal(icon.title, "Kind: Skill");
-  assert.equal(icon.textContent, KIND_ICON.skill);
-  assert.match(icon.className, new RegExp(KIND_TONE.skill));
+  assert.equal(icon.textContent, ICONS.kind.skill.icon);
+  assert.match(icon.className, new RegExp(ICONS.kind.skill.tone));
   const description = nodes.find(e => e.className.includes("wb-card-description"));
   assert.equal(description.textContent, text);
   assert.match(description.className, /text-wb-card-description/);

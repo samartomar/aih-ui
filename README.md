@@ -716,9 +716,12 @@ stays unavailable (`reader-missing`), never passed. The message
 
 When every required check passed nothing is shown; the Packages detail lists
 every line. `tools/consumer/fixtures/contract-check/states/` holds one answer per
-state for the running-page check, and `refused.json` a declaration of a newer
-writer that the installed Core refuses, so the "can't read" message can be shown
-through Core's real engine (the test-only host input `AIH_CONTRACT_CHECK_EXTRA`).
+state for the running-page check (loading is that answer held back until the
+page shows it), and `refused.json` a declaration of a newer writer that the
+installed Core refuses, so the "can't read" message is shown through Core's real
+engine (the test-only host input `AIH_CONTRACT_CHECK_EXTRA`; the integrated check
+runs it whenever the installed Core publishes `checkContracts`). A check that
+does not answer within two minutes is the failed state.
 
 `package-support-1.1.json`, exported as `aih-ui/package-support-1.1.json`, is
 the Workbench's package-support declaration in Core's published
@@ -728,7 +731,8 @@ reads and writes:
 - each format this package exports a schema for, which it writes and reopens
   (`both`), with an accepted and a refused fixture read by the Workbench's own
   reader (journey envelope, records written into an envelope and read back,
-  workspace validators);
+  workspace validators, and the migration that reopens the consumer pages'
+  earlier saved intent 2.0.0 and setup intent 1.0.0);
 - the Core results it reads itself (`accepts`): `file-state-result` 1.1.0 and
   `native-verification-result` 1.0.0, read by the friction adapter. The
   Workbench publishes no reader for them, so the contract check reports those
@@ -741,11 +745,13 @@ reads and writes:
 Formats another package reads for the Workbench (Catalog releases, Scan reports,
 Core's prepared work and run results) are that package's to declare. The
 fixtures are exported under `aih-ui/fixtures/*` from `fixtures/contracts/`, taken
-from documents the Workbench wrote in its own browser journeys, with machine
-paths replaced by example paths. `tools/tests/package-support.test.mjs` checks
-the declaration against the export map and reads each own-format fixture; the
-installed-Core check validates it with Core's `validatePackageSupport` when Core
-has one.
+from documents the Workbench wrote in its own browser journeys or with its own
+writers, with machine paths replaced by example paths. The installed-package
+check (`tools/consumer/core-targets.test.mjs`) validates the declaration with
+Core's `validatePackageSupport` when Core has one, resolves every schema and
+fixture through the export map and reads each own-format fixture with the
+Workbench's own reader. An installed package whose declaration is missing or
+unreadable is never counted as checked: the message says so.
 
 A client adapter is tied to its client by the `clientId` Catalog release format 1.4 puts on
 the item, never by its item id. Three facts stay apart wherever an adapter is shown

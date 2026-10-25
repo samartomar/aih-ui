@@ -40,6 +40,9 @@ const KIND = {
   template: { icon: "file_copy", tone: "text-on-surface-variant", label: "Template" },
   notice: { icon: "campaign", tone: "text-on-surface-variant", label: "Notice" },
   "project-context": { icon: "folder_special", tone: "text-on-surface-variant", label: "Project context" },
+  package: { icon: "deployed_code", tone: "text-on-surface-variant", label: "Package" },
+  profile: { icon: "badge", tone: "text-on-surface-variant", label: "Profile" },
+  tool: { icon: "handyman", tone: "text-on-surface-variant", label: "Tool" },
 };
 
 /* How far "works in your tool" was proven (Core compatibility `support`). */

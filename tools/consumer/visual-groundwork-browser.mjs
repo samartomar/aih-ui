@@ -60,16 +60,19 @@ async function auditIcons(page, where) {
     const icons = [...document.querySelectorAll('.material-symbols-outlined')].filter(visible);
     const untipped = icons.filter(node => !node.closest('[data-tooltip],.gap-indicator') && !node.parentElement?.querySelector(':scope > .gap-indicator')).map(node => `${node.textContent.trim()} in #${node.closest('[id]')?.id ?? '?'}`);
     const unreachable = [...document.querySelectorAll('[data-tooltip]')].filter(visible).filter(node => !reachable(node)).map(node => node.outerHTML.slice(0, 100));
+    // A stop the keyboard reaches is never hidden from assistive technology.
+    const silent = [...document.querySelectorAll('[tabindex="0"], [data-tooltip]')].filter(visible).filter(node => node.closest('[aria-hidden="true"]')).map(node => node.outerHTML.slice(0, 100));
     const unnamed = [...document.querySelectorAll('button, [role="button"], a[href], summary')].filter(visible).filter(node => {
       const words = [...node.childNodes].filter(child => !child.classList?.contains('material-symbols-outlined')).map(child => child.textContent).join('').trim();
       return !words && !node.getAttribute('aria-label') && !node.getAttribute('aria-labelledby');
     }).map(node => node.outerHTML.slice(0, 100));
-    return { count: icons.length, untipped: [...new Set(untipped)], unreachable, unnamed };
+    return { count: icons.length, untipped: [...new Set(untipped)], unreachable, unnamed, silent };
   });
   assert.ok(found.count > 0, `${where}: icons are shown`);
   assert.deepEqual(found.untipped, [], `${where}: every icon has a tooltip`);
   assert.deepEqual(found.unreachable, [], `${where}: every tooltip is reachable by keyboard focus`);
   assert.deepEqual(found.unnamed, [], `${where}: every icon-only control has an accessible name`);
+  assert.deepEqual(found.silent, [], `${where}: nothing focusable is hidden from assistive technology`);
   // Green is kept for Verified and confirmed on disk: no other shown text or icon is drawn in the success role.
   const green = await page.evaluate(() => {
     const success = getComputedStyle(document.documentElement).getPropertyValue('--color-success').trim();
@@ -151,6 +154,16 @@ export async function runVisualGroundworkBrowser({ origin, output, playwrightMod
       assert.ok(ratio >= 4.5, `${theme}: ${name} on ${surface} is ${ratio.toFixed(2)}:1`);
     }
     assert.ok(contrast(rgb(roles.info), rgb(roles['info-bg'])) >= 4.5, `${theme}: info on info-bg`);
+    // The new roles are palette values only in the two root themes; everything else uses them by name.
+    const definedAt = await page.evaluate(() => {
+      const names = ['--color-kind-hook', '--color-kind-rule', '--color-kind-document', '--color-info', '--color-info-bg'];
+      const found = [];
+      const walk = rules => { for (const rule of rules) { if (rule.cssRules) walk(rule.cssRules); if (rule.style) for (const name of names) if (rule.style.getPropertyValue(name)) found.push(`${rule.selectorText} ${name}`); } };
+      for (const sheet of document.styleSheets) { try { walk(sheet.cssRules); } catch { /* a cross-origin font sheet */ } }
+      return found;
+    });
+    assert.ok(definedAt.length >= 10, `each new role is defined in both themes: ${definedAt.join(', ')}`);
+    assert.deepEqual([...new Set(definedAt.map(line => line.split(' ')[0]))].sort(), [':root', 'html.light'], 'only the root themes define the new roles');
     const hookIcon = page.locator(`[data-kind='"hook"'] [data-icon="kind:hook"]`).first();
     if (await hookIcon.count()) {
       const [color, hook] = [await hookIcon.evaluate(node => getComputedStyle(node).color), roles['kind-hook']];
@@ -192,7 +205,7 @@ export async function runVisualGroundworkBrowser({ origin, output, playwrightMod
     // ------------------------------------------------------------- each message state from its fixture
     let release;
     const held = new Promise(resolve => { release = resolve; });
-    ({ context, page } = await openPage(browser, origin, theme, { route: async route => { await held; await route.fulfill({ path: join(STATES, 'unavailable.json'), contentType: 'application/json' }); } }));
+    ({ context, page } = await openPage(browser, origin, theme, { route: async route => { await held; await route.fulfill({ path: join(STATES, 'loading.json'), contentType: 'application/json' }); } }));
     const loading = await expectNote(page, 'loading', 'Checking contracts…');
     assert.equal(await loading.getAttribute('aria-busy'), 'true');
     await page.screenshot({ path: join(output, '04-state-loading.png') });

@@ -3,13 +3,13 @@
  *
  * The host runs Core's `checkContracts` once at start-up over the installed
  * packages' package-support declarations (tools/service/contract-check.mjs) and
- * answers GET /api/contract-check. This module words that answer, as the
- * Workbench reads contract words it:
+ * answers GET /api/contract-check. This module words that answer:
  *
  *   loading      the answer has not arrived
  *   empty        the check ran and no contract one package reads from another applies
  *   unavailable  Core has no contract check ("This Core can't check contracts yet."),
- *                or some required checks could not run (no reader, no fixture)
+ *                some required checks could not run (no reader, no fixture), or an
+ *                installed package's declaration is missing or unreadable
  *   cant-read    a package refused a fixture it should read:
  *                "{package} {version} can't read {contract}; update {package}."
  *   failed       the check itself could not run
@@ -34,7 +34,7 @@ const reasonText = row => REASONS[row.reason] ?? (row.reason ? `the check report
 const versionOf = (answer, name) => answer.versions?.[name] ?? "";
 const named = (answer, name) => [name, versionOf(answer, name)].filter(Boolean).join(" ");
 
-/** The words for one refused contract, exactly as the reads contract gives them. */
+/** The words for one refused contract: the package Core's check names to update. */
 export function cantReadWords(answer, row) {
   const reader = row.updatePackage ?? row.readerPackage;
   return `${named(answer, reader)} can't read ${row.contractId}; update ${reader}.`;
@@ -57,7 +57,10 @@ export function contractCheckView(answer) {
   if (answer.state === "absent") return { state: "unavailable", words: CONTRACT_CHECK_ABSENT, tone: "text-info", icon: ["state", "info"],
     detail: [`${CONTRACT_CHECK_ABSENT} The installed @aihq/core publishes no checkContracts, so the Workbench cannot ask whether each package can read the contracts the others write.`, NOTHING_BLOCKED] };
   const checks = answer.checks ?? [];
-  if (!checks.length) return { state: "empty", words: "No contract checks apply.", tone: "text-outline", icon: ["state", "info"],
+  // A package whose declaration could not be read was never checked; it is never folded into "passed" or "empty".
+  const unchecked = (answer.packages ?? []).filter(item => item.status !== "found")
+    .map(item => `Can't check ${[item.name, item.version].filter(Boolean).join(" ")}: ${item.status === "missing" ? "it publishes no package-support declaration" : `its declaration ${item.status === "mismatched" ? "does not name it" : "can't be read"}${item.reason ? ` (${item.reason})` : ""}`}.`);
+  if (!checks.length && !unchecked.length) return { state: "empty", words: "No contract checks apply.", tone: "text-outline", icon: ["state", "info"],
     detail: ["Core's contract check ran over the installed packages' declarations, and no package reads a contract another one publishes fixtures for. This makes no claim either way."] };
   const failed = checks.filter(row => row.status === "failed");
   const unavailable = checks.filter(row => row.status === "unavailable");
@@ -66,10 +69,13 @@ export function contractCheckView(answer) {
   if (failed.length) {
     const lines = [...new Set(failed.map(row => cantReadWords(answer, row)))];
     return { state: "cant-read", words: lines.length > 1 ? `${lines[0]} (+${lines.length - 1} more)` : lines[0], tone: "text-tertiary", icon: ["state", "needs-ok"],
-      detail: [...lines, ...unavailable.map(row => unavailableWords(answer, row)), tally, NOTHING_BLOCKED] };
+      detail: [...lines, ...unchecked, ...unavailable.map(row => unavailableWords(answer, row)), tally, NOTHING_BLOCKED] };
   }
-  if (unavailable.length) return { state: "unavailable", words: `${plural(unavailable.length, "contract check", "contract checks")} can't run.`, tone: "text-info", icon: ["state", "info"],
-    detail: [...unavailable.map(row => unavailableWords(answer, row)), tally, NOTHING_BLOCKED] };
+  if (unavailable.length || unchecked.length) {
+    const count = unavailable.length + unchecked.length;
+    return { state: "unavailable", words: `${plural(count, "contract check", "contract checks")} can't run.`, tone: "text-info", icon: ["state", "info"],
+      detail: [...unchecked, ...unavailable.map(row => unavailableWords(answer, row)), tally, NOTHING_BLOCKED] };
+  }
   return { state: "passed", words: `Contracts checked: ${plural(passed, "check", "checks")} passed.`, tone: "text-outline", icon: ["state", "info"], detail: [tally] };
 }
 

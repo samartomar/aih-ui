@@ -45,8 +45,9 @@ const supportVersion = value => SUPPORT.exec(value.schema).slice(1).map(Number);
 const newer = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
 const json = path => JSON.parse(readFileSync(path, "utf8"));
 
-/* One package's export target for a specifier, by exact key or one `*` pattern; null when not exported. */
-function exportTarget(manifest, subpath) {
+/* One package's export target for a specifier, by exact key or one `*` pattern; null when not exported.
+   Used for the Workbench's own copy, which is not an installed package; installed packages resolve through Node. */
+export function exportTarget(manifest, subpath) {
   const exports = manifest.exports && typeof manifest.exports === "object" ? manifest.exports : {};
   const plain = value => typeof value === "string" ? value : typeof value?.default === "string" ? value.default : typeof value?.import === "string" ? value.import : null;
   if (Object.hasOwn(exports, subpath)) return plain(exports[subpath]);
@@ -69,12 +70,17 @@ async function declarationOf(name) {
   try {
     const { root, manifest } = installed(name);
     found = [];
-    for (const key of Object.keys(manifest.exports ?? {}).filter(key => SUPPORT_JSON.test(key))) found.push({ from: `${name}${key.slice(1)}`, value: json(join(root, exportTarget(manifest, key))) });
+    for (const key of Object.keys(manifest.exports ?? {}).filter(key => SUPPORT_JSON.test(key))) {
+      const path = name === "aih-ui" ? join(root, exportTarget(manifest, key)) : fileURLToPath(import.meta.resolve(`${name}${key.slice(1)}`));
+      found.push({ from: `${name}${key.slice(1)}`, value: json(path) });
+    }
     if (name !== "aih-ui" && Object.hasOwn(manifest.exports ?? {}, "./contracts")) {
       const module = await import(`${name}/contracts`);
       for (const key of Object.keys(module)) if (isDeclaration(module[key])) found.push({ from: `${name}/contracts#${key}`, value: module[key] });
     }
-    found = found.filter(item => isDeclaration(item.value) && item.value.package?.name === name && item.value.package?.version === manifest.version);
+    found = found.filter(item => isDeclaration(item.value));
+    const foreign = found.find(item => item.value.package?.name !== name || item.value.package?.version !== manifest.version);
+    if (foreign) return { name, status: "mismatched", from: foreign.from, reason: `it names ${foreign.value.package?.name} ${foreign.value.package?.version}, not the installed ${name} ${manifest.version}` };
   } catch (error) {
     return { name, status: "unreadable", reason: error?.message ?? String(error) };
   }
@@ -96,9 +102,12 @@ function loader(extra) {
     try {
       if (extra && packageName === extra.declaration.package.name) return Object.hasOwn(extra.files, specifier) ? new Uint8Array(readFileSync(extra.files[specifier])) : "unavailable";
       const { root, manifest } = installed(packageName);
-      const target = exportTarget(manifest, `.${specifier.slice(packageName.length)}`);
-      if (!target) return "unavailable";
-      const path = realpathSync(join(root, target));
+      let path;
+      if (packageName === "aih-ui") {
+        const target = exportTarget(manifest, `.${specifier.slice(packageName.length)}`);
+        if (!target) return "unavailable";
+        path = realpathSync(join(root, target));
+      } else path = realpathSync(fileURLToPath(import.meta.resolve(specifier)));
       if (!path.startsWith(realpathSync(root) + sep)) return "unavailable";
       return new Uint8Array(readFileSync(path));
     } catch {

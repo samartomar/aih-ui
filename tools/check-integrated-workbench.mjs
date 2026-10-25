@@ -61,6 +61,19 @@ try {
   for (const theme of ['dark', 'light']) {
     starting(`runVisualGroundworkBrowser ${theme}`); await runVisualGroundworkBrowser({ origin, output: join(consumerDir, `visual-groundwork-evidence-${theme}`), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, theme });
   }
+  // With a Core that publishes checkContracts, a second host is given a newer writer's declaration that Core refuses, so
+  // "can't read" is shown through Core's real engine. A Core without it has no engine to refuse anything.
+  const engine = callService(consumerDir, { op: 'contractCheck' });
+  if (engine.ok && engine.state !== 'absent') {
+    process.env.AIH_CONTRACT_CHECK_EXTRA = join(consumerDir, 'consumer/fixtures/contract-check/refused.json');
+    const refused = await createWorkbench({ consumerDir, runDir, summary, settingsPath: join(consumerDir, 'refused-settings.json') });
+    try {
+      const refusedOrigin = `http://127.0.0.1:${(await listen(refused.server, 0)).port}`;
+      for (const theme of ['dark', 'light']) {
+        starting(`runVisualGroundworkBrowser refused ${theme}`); await runVisualGroundworkBrowser({ origin: refusedOrigin, output: join(consumerDir, `visual-groundwork-refused-evidence-${theme}`), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, theme, actual: 'refused' });
+      }
+    } finally { delete process.env.AIH_CONTRACT_CHECK_EXTRA; await new Promise(resolve => refused.server.close(resolve)); }
+  } else console.log(`The installed Core publishes no checkContracts (${engine.state ?? engine.error}); the real-engine "can't read" journey needs one.`);
   const { runSourceFactsBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/source-facts-browser.mjs')));
   starting('runSourceFactsBrowser'); await runSourceFactsBrowser({ origin, output: join(consumerDir, 'source-facts-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
   const { runUnresolvedDraftBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/unresolved-draft-browser.mjs')));

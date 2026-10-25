@@ -35,7 +35,7 @@ import {
 } from "../app/absence.js";
 import { identity, sourceDetailRows, sourceIdentity, statementsOf } from "./entry.js";
 import { iconFor } from "../app/icons.js";
-import { attachTooltip } from "../app/tooltip.js";
+import { attachTooltip, clearTooltip } from "../app/tooltip.js";
 import { scopeCountOf } from "./selectors.js";
 
 /* These Catalog inspector slots have no verified per-entry scan input. */
@@ -116,6 +116,7 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
     elements.inspectorName.textContent = "";
     elements.inspectorName.title = "";
     elements.inspectorKind.removeAttribute("aria-label");
+    clearTooltip(elements.inspectorKind);
     elements.detailsDesc.textContent = NOT_PUBLISHED;
     capability(elements.detailsCapabilities, "Network Egress", "wifi", "tertiary", NOT_PUBLISHED);
     capability(elements.detailsCapabilities, "Execution Sandbox", "terminal", "outline", NOT_PUBLISHED);

@@ -7,6 +7,8 @@
     "./authoring": "./tools/consumer/headless.mjs",
     "./intake": "./tools/consumer/intake.mjs",
     "./schemas/saved-intent/3.0.0.json": "./schemas/saved-intent-3.0.0.json",
+    "./schemas/saved-intent/2.0.0.json": "./schemas/saved-intent-2.0.0.json",
+    "./schemas/setup-intent/1.0.0.json": "./schemas/setup-intent-1.0.0.json",
     "./schemas/review-decisions/1.0.0.json": "./schemas/review-decisions-1.0.0.json",
     "./journey": "./tools/consumer/journey-entry.mjs",
     "./maintenance": "./tools/consumer/maintenance.mjs",
@@ -25,6 +27,7 @@
     "./organization-author": "./tools/consumer/organization-author.mjs",
     "./schemas/journey-record-organization-draft/1.0.0.json": "./schemas/journey-record-organization-draft-1.0.0.json",
     "./schemas/journey-envelope/1.0.0.json": "./schemas/journey-envelope-1.0.0.json",
+    "./schemas/journey-record-unresolved-draft/1.0.0.json": "./schemas/journey-record-unresolved-draft-1.0.0.json",
     "./scan-evidence": "./tools/consumer/scan-evidence.mjs",
     "./package-support-1.1.json": "./package-support-1.1.json",
     "./fixtures/*": "./fixtures/contracts/*"

@@ -36,9 +36,14 @@ export function callService(consumerDir, request) {
 }
 
 /** The same request without blocking the server: for the start-up contract check, which the page shows as loading meanwhile. */
-export function callServiceAsync(consumerDir, request) {
+// A check that never answers would leave the page loading for good; past this it is the failed state.
+export const ASYNC_SERVICE_TIMEOUT_MS = 120_000;
+export function callServiceAsync(consumerDir, request, { timeoutMs = ASYNC_SERVICE_TIMEOUT_MS } = {}) {
   return new Promise((resolveAnswer) => {
     const child = spawn(process.execPath, [SERVICE_ENTRY], { cwd: consumerDir, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+    const timer = setTimeout(() => { child.kill(); resolveAnswer({ ok: false, error: `core service did not answer within ${Math.round(timeoutMs / 1000)}s` }); }, timeoutMs);
+    timer.unref?.();
+    child.on("close", () => clearTimeout(timer));
     const out = [], err = [];
     child.stdout.on("data", chunk => out.push(chunk));
     child.stderr.on("data", chunk => err.push(chunk));

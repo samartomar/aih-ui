@@ -165,7 +165,8 @@ function card(entry, selectedId, onSelect, model) {
       select();
     }
   });
-  for (const glyph of node.querySelectorAll(".material-symbols-outlined")) glyph.setAttribute("aria-hidden", "true");
+  // Decorative glyphs stay hidden; an icon that carries a tooltip is named by its words (app/tooltip.js).
+  for (const glyph of node.querySelectorAll(".material-symbols-outlined")) if (!glyph.dataset?.tooltip) glyph.setAttribute("aria-hidden", "true");
   return node;
 }
 

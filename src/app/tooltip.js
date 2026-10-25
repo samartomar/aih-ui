@@ -173,6 +173,14 @@ export function attachTooltip(element, text, { label } = {}) {
   return element;
 }
 
+/** Takes an element's words away again, as when the inspector shows no item. */
+export function clearTooltip(element) {
+  element.removeAttribute?.("title");
+  if (element.dataset) delete element.dataset.tooltip;
+  const others = (element.getAttribute?.("aria-describedby") ?? "").split(/\s+/).filter(value => value && !value.startsWith("wb-tip-"));
+  if (others.length) element.setAttribute("aria-describedby", others.join(" ")); else element.removeAttribute?.("aria-describedby");
+}
+
 /** The page's own markup names its tooltips with data-tip; each gets the same helper. */
 export function attachStaticTooltips(root) {
   for (const node of root.querySelectorAll("[data-tip]")) attachTooltip(node, node.dataset.tip);

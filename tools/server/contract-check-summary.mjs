@@ -13,7 +13,9 @@ export function contractCheckSummary(answer) {
   if (answer.state === "ran") return {
     state: "ran",
     versions: answer.versions ?? {},
-    packages: (answer.packages ?? []).map(item => ({ name: item.name, status: item.status, version: text(item.version), schema: text(item.schema), from: text(item.from) })),
+    // An unreadable declaration's error can name a local path, so only a mismatch keeps its (package-named) reason.
+    packages: (answer.packages ?? []).map(item => ({ name: item.name, status: item.status, version: text(item.version), schema: text(item.schema), from: text(item.from),
+      ...(item.status === "mismatched" && text(item.reason) ? { reason: item.reason } : {}) })),
     checks: (answer.checks ?? []).map(row => Object.fromEntries(ROW_FIELDS.filter(key => row[key] !== undefined).map(key => [key, row[key]]))),
   };
   return { state: "unknown", reason: text(answer.reason) ?? "the contract check could not be inspected" };

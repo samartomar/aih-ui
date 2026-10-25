@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:aihq:workbench:saved-intent:2.0.0",
+  "description": "The earlier saved intent the consumer pages write into an execution policy's aih.workbench metadata, and the Workbench reopens and migrates. Origins, roots and exclusions are checked as the consumer pages check them; a pin's recipe and materials are the Catalog's.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "origins",
+    "roots",
+    "exclusions",
+    "pins",
+    "provenance"
+  ],
+  "properties": {
+    "schema": {
+      "const": "urn:aihq:workbench:saved-intent:2.0.0"
+    },
+    "origins": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "kind"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[\\w.-]{1,100}$"
+              },
+              "kind": {
+                "const": "direct"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "kind",
+              "templateId",
+              "templateSha256"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[\\w.-]{1,100}$"
+              },
+              "kind": {
+                "const": "template"
+              },
+              "templateId": {
+                "type": "string"
+              },
+              "templateSha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "roots": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "releaseSha256",
+          "itemId",
+          "itemSha256",
+          "scope",
+          "configuration",
+          "originIds"
+        ],
+        "properties": {
+          "releaseSha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "itemId": {
+            "type": "string",
+            "pattern": "^[\\w.-]{1,180}$"
+          },
+          "itemSha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "scope": {
+            "enum": [
+              "project",
+              "user"
+            ]
+          },
+          "configuration": {
+            "type": "object"
+          },
+          "originIds": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[\\w.-]{1,100}$"
+            }
+          }
+        }
+      }
+    },
+    "exclusions": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "releaseSha256",
+          "itemId",
+          "itemSha256",
+          "originIds"
+        ],
+        "properties": {
+          "releaseSha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "itemId": {
+            "type": "string",
+            "pattern": "^[\\w.-]{1,180}$"
+          },
+          "itemSha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "originIds": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[\\w.-]{1,100}$"
+            }
+          }
+        }
+      }
+    },
+    "pins": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "releaseSha256",
+          "itemId",
+          "itemSha256",
+          "recipe",
+          "materials"
+        ],
+        "properties": {
+          "releaseSha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "itemId": {
+            "type": "string",
+            "pattern": "^[\\w.-]{1,180}$"
+          },
+          "itemSha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "recipe": {
+            "type": "object"
+          },
+          "materials": {
+            "type": "array"
+          }
+        }
+      }
+    },
+    "provenance": {
+      "type": "array",
+      "maxItems": 32
+    }
+  }
+}

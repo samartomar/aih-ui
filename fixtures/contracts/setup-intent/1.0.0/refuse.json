@@ -1,0 +1,15 @@
+{
+  "schema": "urn:aihq:workbench:setup-intent:1.0.0",
+  "source": {
+    "releaseSha256": "0ff699f240ac4c667c1891fe0f0a2629c60af67dfb1d9483405d2bbc45d6f124"
+  },
+  "roots": [
+    {
+      "itemId": "mattpocock.grill-with-docs",
+      "scope": "project",
+      "configuration": {}
+    }
+  ],
+  "excludedItemIds": [],
+  "unexpected": true
+}

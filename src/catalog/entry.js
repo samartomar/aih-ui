@@ -15,12 +15,6 @@ import { sourcePresentation } from "./source-facts.js";
 
 import { text } from "../app/dom.js";
 import { NOT_PUBLISHED } from "../app/absence.js";
-import { ICONS } from "../app/icons.js";
-
-/* Kind icons and accents come from the one shared map (app/icons.js) and use the
-   theme's per-kind colour roles. A kind the map does not name gets its neutral icon. */
-export const KIND_ICON = Object.fromEntries(Object.entries(ICONS.kind).map(([kind, value]) => [kind, value.icon]));
-export const KIND_TONE = Object.fromEntries(Object.entries(ICONS.kind).map(([kind, value]) => [kind, value.tone]));
 
 /* A published revision, shortened for display. Raw revision digests keep their "sha256:"
    prefix in the index; the inspector shows one of the two consistently, and says the digest

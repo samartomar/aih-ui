@@ -25,6 +25,44 @@
       ]
     },
     {
+      "id": "urn:aihq:workbench:saved-intent:2.0.0",
+      "role": "both",
+      "schemaExport": "aih-ui/schemas/saved-intent/2.0.0.json",
+      "versions": [
+        "2.0.0"
+      ],
+      "fixtures": [
+        {
+          "export": "aih-ui/fixtures/saved-intent/2.0.0/accept.json",
+          "expect": "accept"
+        },
+        {
+          "export": "aih-ui/fixtures/saved-intent/2.0.0/refuse.json",
+          "expect": "refuse",
+          "code": "FIELD_SEMANTICS_UNSUPPORTED"
+        }
+      ]
+    },
+    {
+      "id": "urn:aihq:workbench:setup-intent:1.0.0",
+      "role": "both",
+      "schemaExport": "aih-ui/schemas/setup-intent/1.0.0.json",
+      "versions": [
+        "1.0.0"
+      ],
+      "fixtures": [
+        {
+          "export": "aih-ui/fixtures/setup-intent/1.0.0/accept.json",
+          "expect": "accept"
+        },
+        {
+          "export": "aih-ui/fixtures/setup-intent/1.0.0/refuse.json",
+          "expect": "refuse",
+          "code": "FIELD_SEMANTICS_UNSUPPORTED"
+        }
+      ]
+    },
+    {
       "id": "urn:aihq:workbench:review-decisions:1.0.0",
       "role": "both",
       "schemaExport": "aih-ui/schemas/review-decisions/1.0.0.json",
@@ -207,6 +245,25 @@
         },
         {
           "export": "aih-ui/fixtures/journey-record-organization-draft/1.0.0/refuse.json",
+          "expect": "refuse",
+          "code": "INPUT_INVALID"
+        }
+      ]
+    },
+    {
+      "id": "urn:aihq:workbench:journey-record:unresolved-draft:1.0.0",
+      "role": "both",
+      "schemaExport": "aih-ui/schemas/journey-record-unresolved-draft/1.0.0.json",
+      "versions": [
+        "1.0.0"
+      ],
+      "fixtures": [
+        {
+          "export": "aih-ui/fixtures/journey-record-unresolved-draft/1.0.0/accept.json",
+          "expect": "accept"
+        },
+        {
+          "export": "aih-ui/fixtures/journey-record-unresolved-draft/1.0.0/refuse.json",
           "expect": "refuse",
           "code": "INPUT_INVALID"
         }
