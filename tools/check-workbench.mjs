@@ -75,8 +75,10 @@ if (process.exitCode === 0) {
 }
 if (process.exitCode === 0) {
   // The reviewed-batch journey runs several fresh Core prepares and applies, in a disposable account home, so this stage takes longer.
+  // The visual-groundwork journey adds about 50s per theme on a hosted runner (and as much again for its real-engine
+  // "can't read" run once Core publishes checkContracts), so the stage budget is 9 minutes.
   const integrated = spawnSync(process.execPath, [join(repo, 'tools/check-integrated-workbench.mjs'), output], {
-    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 300_000, env: isolated,
+    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 540_000, env: isolated,
   });
   writeFileSync(join(output, 'prototype-check.log'), `${integrated.stdout ?? ''}${integrated.stderr ?? ''}`);
   process.stdout.write(integrated.stdout ?? ''); process.stderr.write(integrated.stderr ?? '');
