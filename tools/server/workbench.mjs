@@ -4,6 +4,8 @@ import { createBatchAdapter } from './batch.mjs';
 import { createReadinessAdapter } from './readiness.mjs';
 import { createReportAdapter } from './report.mjs';
 import { createStaticServer } from './static.mjs';
+import { callServiceAsync } from './service-client.mjs';
+import { contractCheckSummary } from './contract-check-summary.mjs';
 
 // The ordinary preview and its regression share this composition boundary.
 export async function createWorkbench({ consumerDir, runDir, summary, settingsPath }) {
@@ -13,7 +15,9 @@ export async function createWorkbench({ consumerDir, runDir, summary, settingsPa
   const authoring = await createAuthoringAdapter(consumerDir, { frictionEvidence: await journalFrictionEvidence(consumerDir, () => readiness.records()) });
   const batch = createBatchAdapter(consumerDir);
   const report = createReportAdapter(consumerDir);
-  const existingApi = createApi({ summary, settingsPath });
+  // Started now and answered when done, so the page can show it loading; it never delays the server.
+  const contractCheck = callServiceAsync(consumerDir, { op: 'contractCheck' }).then(contractCheckSummary);
+  const existingApi = createApi({ summary, settingsPath, contractCheck });
   const server = createStaticServer(runDir, async (request, response, pathname) => {
     try { return await batch.handle(request, response, pathname) || await readiness.handle(request, response, pathname) || await report.handle(request, response, pathname) || await authoring.handle(request, response, pathname) || await existingApi(request, response, pathname); }
     catch (error) {

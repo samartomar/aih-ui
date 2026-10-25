@@ -1,0 +1,66 @@
+{
+  "id": "workspace-declaration",
+  "schema": "urn:aihq:workbench:journey-record:workspace-declaration:1.0.0",
+  "required": false,
+  "workspace": {
+    "id": "workspace-5c36592dfe5dad91a6b1d8860c3b9e60",
+    "label": "Acme platform"
+  },
+  "members": [
+    {
+      "id": "api",
+      "identity": "github.com/acme/api",
+      "aliases": [],
+      "responsibilities": {
+        "status": "known",
+        "values": [
+          "HTTP API"
+        ]
+      },
+      "instructions": {
+        "status": "known",
+        "locations": [
+          "AGENTS.md"
+        ]
+      },
+      "contracts": {
+        "status": "known",
+        "references": [
+          "openapi/api.yaml"
+        ]
+      }
+    },
+    {
+      "id": "ui",
+      "identity": "github.com/acme/ui",
+      "aliases": [],
+      "responsibilities": {
+        "status": "unresolved"
+      },
+      "instructions": {
+        "status": "unresolved"
+      },
+      "contracts": {
+        "status": "unresolved"
+      }
+    }
+  ],
+  "relationships": {
+    "status": "unresolved",
+    "confirmed": [
+      {
+        "id": "relationship-395692859d1cfcfdf06397f2955d2f4f",
+        "from": "ui",
+        "to": "api",
+        "kind": "consumes-api",
+        "provenance": {
+          "kind": "owner",
+          "recordedAt": "2026-10-25T17:52:30.608Z"
+        }
+      }
+    ],
+    "suggested": []
+  },
+  "revision": "206a81271cde1ac925ba7dc252a034ef1b0576c5eacacfca51e34942ff763fa5",
+  "unexpected": true
+}

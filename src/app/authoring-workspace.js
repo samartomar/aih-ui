@@ -329,7 +329,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   };
   const markers = root => {
     const row = el('p', 'flex flex-wrap gap-1');
-    if (root.status === 'resolved') { row.append(el('span', `${markerClass} bg-secondary-container border-secondary/40 text-secondary`, 'Resolved')); return row; }
+    if (root.status === 'resolved') { row.append(el('span', `${markerClass} bg-info-bg border-info/40 text-info`, 'Resolved')); return row; }
     // A contradiction is not a missing source: Catalog refused a choice whose content is fully supplied.
     if (root.status === 'refused') { row.append(el('span', `${markerClass} bg-error-container border-error/40 text-error`, 'Refused by Catalog — change or remove this choice')); return row; }
     for (const reason of new Set(root.blockedBy.map(entry => entry.reason))) row.append(el('span', `${markerClass} bg-tertiary-container border-tertiary/40 text-tertiary`,

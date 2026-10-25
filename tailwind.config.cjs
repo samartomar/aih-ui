@@ -14,8 +14,8 @@ const roles = [
   "surface-variant", "on-surface", "on-surface-variant", "outline", "outline-variant",
   "primary", "primary-bright", "primary-container", "on-primary",
   "secondary", "secondary-container", "tertiary", "tertiary-container",
-  "error", "error-container",
-  "kind-skill", "kind-command", "kind-agent", "kind-mcp", "kind-hook", "kind-token",
+  "error", "error-container", "info", "info-bg",
+  "kind-skill", "kind-command", "kind-agent", "kind-mcp", "kind-hook", "kind-rule", "kind-document", "kind-token",
   "ledger-command", "ledger-agent", "ledger-mcp", "ledger-hook",
   "metadata-emphasis", "metadata-revision", "metric-selected",
 ];

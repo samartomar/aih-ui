@@ -24,8 +24,10 @@ import { createAuthoringWorkspace } from './app/authoring-workspace.js';
 import { createEvidenceReview } from './app/evidence-review.js';
 import { saveClients } from "./app/settings-client.js";
 import { createCatalog } from "./catalog/controller.js";
+import { attachStaticTooltips } from "./app/tooltip.js";
 
 async function main() {
+  attachStaticTooltips(document);
   // Before anything renders: a theme change has to reach elements that are
   // already on screen, not only ones built after it.
   createTheme();

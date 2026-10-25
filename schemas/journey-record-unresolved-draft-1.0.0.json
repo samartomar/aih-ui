@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:aihq:workbench:journey-record:unresolved-draft:1.0.0",
+  "description": "A draft whose choices are not yet resolved, kept in a journey envelope beside the saved-intent bytes it was made from. Its savedIntentSha256 names the envelope's saved intent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "schema",
+    "required",
+    "savedIntentSha256",
+    "intent"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[\\w.-]{1,180}$"
+    },
+    "schema": {
+      "const": "urn:aihq:workbench:journey-record:unresolved-draft:1.0.0"
+    },
+    "required": {
+      "const": true
+    },
+    "savedIntentSha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "intent": {
+      "$ref": "urn:aihq:workbench:saved-intent:3.0.0"
+    }
+  }
+}

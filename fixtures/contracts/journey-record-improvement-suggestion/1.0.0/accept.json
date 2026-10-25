@@ -1,0 +1,58 @@
+{
+  "id": "suggestion-f66e3a9ee22e5a6eb6166fd7df272086",
+  "schema": "urn:aihq:workbench:journey-record:improvement-suggestion:1.0.0",
+  "required": false,
+  "rulesVersion": "1.7.0",
+  "revision": "e1f0818f9980afee6bde4c3e730816f3d3b3438c5ccf20d70aacdcc549e29075",
+  "scope": "project",
+  "change": {
+    "kind": "add-item",
+    "itemId": "mattpocock.tdd",
+    "releaseSha256": "0ff699f240ac4c667c1891fe0f0a2629c60af67dfb1d9483405d2bbc45d6f124",
+    "itemSha256": "d74745cdb22b649b7ceda221c17fc2e077d3beb43a06fd9ab4a4c1b243bdae0d",
+    "content": {
+      "recipeSha256": "12f0b561d77238dd0e492855b00583ad26171d9ce87aae13a861fa6a6c44e9de",
+      "materials": [
+        "0e7ac423bf2c6e223b7c5b156f8cf72da49d748e56a1641402c31f22ad07dbb5",
+        "3ceb807fdf4a47d6a93d4d9a891e5ba6d362a6247bd08adc451feebfc17361ef",
+        "859f9e592c188fda4fc7277dd180e4ce9c7a2e13f6efe1f6f29eccc9d28c106a",
+        "93ea419b76e9caaf26153b828e984f7c3fb136f4caa67b14af95f32ea965a1cc"
+      ],
+      "requires": []
+    }
+  },
+  "triggers": [
+    {
+      "ruleId": "goal.test",
+      "key": "goal:goal.test",
+      "text": "Your saved goal “add tests to my app” mentions “tests”."
+    }
+  ],
+  "goal": "add tests to my app",
+  "references": [
+    {
+      "kind": "saved-reason",
+      "ref": "mattpocock.implement"
+    },
+    {
+      "kind": "catalog-item",
+      "ref": "mattpocock.tdd"
+    }
+  ],
+  "facts": [
+    {
+      "kind": "overhead",
+      "text": "Adds 5 files, 12353 bytes in total, and needs 0 other items."
+    },
+    {
+      "kind": "scope",
+      "text": "Applies in this project only; other repositories and AI clients are unchanged."
+    }
+  ],
+  "unknowns": [
+    "Whether it improves your results is unknown until you try it.",
+    "Actual usage and cost are unknown; no usage data is read.",
+    "Recurring friction was not checked: this host supplied no stored Core results."
+  ],
+  "recordedAt": "2026-10-25T17:52:07.533Z"
+}

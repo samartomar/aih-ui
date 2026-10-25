@@ -1,0 +1,110 @@
+{
+  "schema": "urn:aihq:core:organization-policy:1.1.0",
+  "id": "fixture-baseline",
+  "selections": [
+    {
+      "selectionId": "project--aihq.catalog--mattpocock.implement",
+      "recipeIdentity": "sha256:442151e6773fbf3bc6aefb66768f4563a07c55f8e4e8399936463593abcbfda9",
+      "obligation": "required",
+      "scopes": [
+        "project"
+      ],
+      "inputs": {
+        "agentDirectory": {
+          "fixed": ".claude"
+        }
+      },
+      "lifecycle": {
+        "replace": true,
+        "remove": true
+      }
+    },
+    {
+      "selectionId": "project--aihq.catalog--mattpocock.code-review",
+      "recipeIdentity": "sha256:126e61f27854dc1d15c346a672f184649b175b4035bcaaaea86d2246f412bcd2",
+      "obligation": "permitted",
+      "scopes": [
+        "project"
+      ],
+      "inputs": {
+        "agentDirectory": {
+          "fixed": ".claude"
+        }
+      },
+      "lifecycle": {
+        "replace": true,
+        "remove": true
+      }
+    },
+    {
+      "selectionId": "unsupported-user--project--aihq.catalog--mattpocock.tdd",
+      "recipeIdentity": "sha256:6e743e9529c69a16821bd90037b0776db1cb625c3877c8a878e03a7f1491f49a",
+      "obligation": "required",
+      "scopes": [
+        "user"
+      ],
+      "inputs": {
+        "agentDirectory": {
+          "fixed": ".claude"
+        }
+      },
+      "lifecycle": {
+        "replace": true,
+        "remove": true
+      }
+    },
+    {
+      "selectionId": "project--aihq.catalog--mattpocock.grilling",
+      "recipeIdentity": "sha256:f5a470a8812f8cdc0d1bd6ddf3c80d9f6117c8bac96ba206d4c281c1b8b5363f",
+      "obligation": "recommended",
+      "scopes": [
+        "project"
+      ],
+      "inputs": {
+        "agentDirectory": {
+          "fixed": ".claude"
+        }
+      },
+      "lifecycle": {
+        "replace": true,
+        "remove": true
+      }
+    }
+  ],
+  "metadata": {
+    "aih.workbench": {
+      "journeyId": "journey-dcad8e3e9aefffdb9fdef207e7137fc1",
+      "revisionSha256": "c14ebb4d9814e9051b4f7ec2ac841ede9afef61e29454215427b0684e313e81f",
+      "entries": [
+        {
+          "selectionId": "project--aihq.catalog--mattpocock.implement",
+          "releaseSha256": "0ff699f240ac4c667c1891fe0f0a2629c60af67dfb1d9483405d2bbc45d6f124",
+          "itemId": "mattpocock.implement",
+          "itemSha256": "592840b886fcec3abec949a5c4bd3aa61eb02324aa0236e4cc3450c8dabb99b5",
+          "origin": "authored"
+        },
+        {
+          "selectionId": "project--aihq.catalog--mattpocock.code-review",
+          "releaseSha256": "0ff699f240ac4c667c1891fe0f0a2629c60af67dfb1d9483405d2bbc45d6f124",
+          "itemId": "mattpocock.code-review",
+          "itemSha256": "6f23fe0ec120e931d54b9a6a411cb210775bf3e39b550b65fb5da3f1bb22463e",
+          "origin": "authored"
+        },
+        {
+          "selectionId": "unsupported-user--project--aihq.catalog--mattpocock.tdd",
+          "releaseSha256": "0ff699f240ac4c667c1891fe0f0a2629c60af67dfb1d9483405d2bbc45d6f124",
+          "itemId": "mattpocock.tdd",
+          "itemSha256": "d74745cdb22b649b7ceda221c17fc2e077d3beb43a06fd9ab4a4c1b243bdae0d",
+          "origin": "authored"
+        },
+        {
+          "selectionId": "project--aihq.catalog--mattpocock.grilling",
+          "releaseSha256": "0ff699f240ac4c667c1891fe0f0a2629c60af67dfb1d9483405d2bbc45d6f124",
+          "itemId": "mattpocock.grilling",
+          "itemSha256": "3b42918b2034af33e0cde693386b30fdd1256acab4c2374d3d3aa8060676f2fa",
+          "origin": "authored"
+        }
+      ]
+    }
+  }
+}

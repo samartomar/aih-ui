@@ -18,7 +18,7 @@ const packages = ['core', 'catalog', 'scan'].map(name => {
 const extraFiles = Object.fromEntries(readdirSync(join(repo, 'tools/consumer'))
   .map(name => [`consumer/${name}`, join(repo, 'tools/consumer', name)]));
 // The backend worker callService runs inside the consumer.
-for (const asset of serviceAssets(repo)) if (asset.to.startsWith('service/')) extraFiles[asset.to] = join(repo, asset.from);
+for (const asset of serviceAssets(repo)) if (asset.to.startsWith('service/') || asset.to.startsWith('workbench/')) extraFiles[asset.to] = join(repo, asset.from);
 for (const name of ['consumer.html', 'consumer.js', 'intent.html', 'intent.js', 'authoring.html', 'authoring.js', 'policy-file.js', 'app/dom.js', 'app/configuration-editor.js', 'app/claims-view.js']) extraFiles[`page/${name}`] = join(repo, 'src', name);
 for (const name of ['consumer.css', 'tokens.css']) extraFiles[`page/${name}`] = join(repo, 'src/styles', name);
 for (const name of readdirSync(join(repo, 'schemas'))) extraFiles[`schemas/${name}`] = join(repo, 'schemas', name);
@@ -75,8 +75,10 @@ if (process.exitCode === 0) {
 }
 if (process.exitCode === 0) {
   // The reviewed-batch journey runs several fresh Core prepares and applies, in a disposable account home, so this stage takes longer.
+  // The visual-groundwork journey adds about 50s per theme on a hosted runner (and as much again for its real-engine
+  // "can't read" run once Core publishes checkContracts), so the stage budget is 9 minutes.
   const integrated = spawnSync(process.execPath, [join(repo, 'tools/check-integrated-workbench.mjs'), output], {
-    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 300_000, env: isolated,
+    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 540_000, env: isolated,
   });
   writeFileSync(join(output, 'prototype-check.log'), `${integrated.stdout ?? ''}${integrated.stderr ?? ''}`);
   process.stdout.write(integrated.stdout ?? ''); process.stderr.write(integrated.stderr ?? '');

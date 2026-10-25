@@ -20,12 +20,13 @@ const applicabilityText = judgment => ({
 // recorded below stays separate from it: neither makes the producer authentic or authorizes execution.
 const inspectedState = value => value.reportSupport === 'invalid' ? 'invalid' : value.reportSupport !== 'supported' ? 'unsupported'
   : ['matched', 'mismatched'].includes(value.sourceAssociation) ? value.sourceAssociation : 'unavailable';
+// The same neutral scan words as the catalog card: until Scan publishes item summaries nothing here says Verified.
 const stateText = {
-  invalid: 'Evidence invalid: this is not a valid Scan report or artifact.',
-  unsupported: 'Evidence unsupported: this Scan reader does not support the report version.',
-  unavailable: 'Evidence not assessable for this subject. Supply a supported report for the selected exact item.',
-  mismatched: "Evidence mismatched: the report did not capture this subject's exact files. Select a matching item or supply matching evidence.",
-  matched: "Evidence matched: the report captured this subject's exact files. Choose a finding, enter your reviewer and reason, then propose a review.",
+  invalid: "Scan record can't be read: this is not a valid Scan report or artifact.",
+  unsupported: "Scan record can't be read: this Scan reader does not support the report version.",
+  unavailable: 'Not assessable for this subject. Supply a supported report for the selected exact item.',
+  mismatched: "The scan offered covers other files: the report did not capture this subject's exact files. Select a matching item or supply matching evidence.",
+  matched: "Scanned, not verified (unchecked): the report captured this subject's exact files. Choose a finding, enter your reviewer and reason, then propose a review.",
 };
 const originText = judgment => judgment.origin === 'recipient' ? 'Your decision'
   : `Imported — recorded by ${judgment.owner.kind} ${judgment.owner.id}; not counted as your decision`;

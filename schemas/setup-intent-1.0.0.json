@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:aihq:workbench:setup-intent:1.0.0",
+  "description": "The first setup intent the consumer pages write into an execution policy's aih.workbench metadata: the exact Catalog release, the chosen roots and the left-out items. The Workbench reopens and migrates it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "source",
+    "roots",
+    "excludedItemIds"
+  ],
+  "properties": {
+    "schema": {
+      "const": "urn:aihq:workbench:setup-intent:1.0.0"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "releaseSha256"
+      ],
+      "properties": {
+        "releaseSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "roots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "itemId",
+          "scope",
+          "configuration"
+        ],
+        "properties": {
+          "itemId": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "configuration": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "excludedItemIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

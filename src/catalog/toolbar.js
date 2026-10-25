@@ -23,6 +23,8 @@ import { createGapIndicator } from "../app/gap-indicator.js";
 import { el } from "../app/dom.js";
 import { NOT_PUBLISHED } from "../app/absence.js";
 import { sortedCounts } from "./selectors.js";
+import { iconFor, iconSpan } from "../app/icons.js";
+import { attachTooltip } from "../app/tooltip.js";
 
 const PILL_ACTIVE = "px-2.5 py-1 rounded bg-surface-container-highest text-on-surface font-medium text-[10.5px] font-mono shadow-xs transition-colors shrink-0";
 const PILL_IDLE = "px-2.5 py-1 rounded hover:bg-surface-container text-on-surface-variant text-[10.5px] font-mono transition-colors shrink-0";
@@ -47,9 +49,9 @@ function reviewPill(label, count, active, onClick) {
   if (available) {
     button.addEventListener("click", onClick);
   } else {
-    button.disabled = true;
+    // Greyed, not disabled, so its reason stays reachable by keyboard; it has no action.
     button.setAttribute("aria-disabled", "true");
-    button.title = UNAVAILABLE[label];
+    attachTooltip(button, UNAVAILABLE[label]);
   }
   return button;
 }
@@ -59,6 +61,7 @@ function summaryChip(icon, label, title) {
   chip.appendChild(el("span", "material-symbols-outlined text-[12px] text-outline", icon));
   chip.appendChild(el("span", "font-medium", label));
   chip.appendChild(createGapIndicator({ label: NOT_PUBLISHED, reason: title }));
+  // The gap indicator is the chip's keyboard and touch way to the reason; hover keeps the title.
   chip.title = title;
   for (const glyph of chip.querySelectorAll(".material-symbols-outlined")) glyph.setAttribute("aria-hidden", "true");
   return chip;
@@ -66,12 +69,15 @@ function summaryChip(icon, label, title) {
 
 function kindPill(label, count, active, onClick, key = label) {
   // Keep the chips compact and non-wrapping within their scrollable strip.
-  const button = el("button", `px-2 py-0 leading-[16.5px] rounded text-[10px] font-mono transition-colors shrink-0 ${active ? "bg-surface-container-highest text-on-surface font-medium shadow-xs" : "hover:bg-surface-container text-on-surface-variant"}`, undefined);
+  const button = el("button", `px-2 py-0 leading-[16.5px] rounded text-[10px] font-mono transition-colors shrink-0 inline-flex items-center gap-1 ${active ? "bg-surface-container-highest text-on-surface font-medium shadow-xs" : "hover:bg-surface-container text-on-surface-variant"}`, undefined);
   button.type = "button";
   button.dataset.kind = JSON.stringify(key);
   button.setAttribute("aria-pressed", String(active));
-  button.title = `${count} items matching this kind and the current family, source, search and target-support filters.`;
-  button.textContent = key === null ? label : `${label} (${count})`;
+  // The kind's own icon and accent from the shared map; "All" names no kind.
+  if (key !== null) button.appendChild(iconSpan("kind", key, { size: "text-[12px]" }));
+  button.appendChild(el("span", "", key === null ? label : `${label} (${count})`));
+  const kind = key === null ? "All kinds" : iconFor("kind", key).label;
+  attachTooltip(button, `${kind}: ${count} items matching ${key === null ? "the current" : "this kind and the current"} family, source, search and target-support filters.`);
   button.addEventListener("click", onClick);
   return button;
 }

@@ -16,22 +16,6 @@ import { sourcePresentation } from "./source-facts.js";
 import { text } from "../app/dom.js";
 import { NOT_PUBLISHED } from "../app/absence.js";
 
-/* Kind icons and accents use the theme's per-kind color roles. */
-export const KIND_ICON = {
-  skill: "extension",
-  agent: "smart_toy",
-  mcp: "dns",
-  package: "deployed_code",
-  profile: "badge",
-  tool: "handyman",
-};
-
-export const KIND_TONE = {
-  skill: "text-kind-skill",
-  agent: "text-kind-agent",
-  mcp: "text-kind-mcp",
-};
-
 /* A published revision, shortened for display. Raw revision digests keep their "sha256:"
    prefix in the index; the inspector shows one of the two consistently, and says the digest
    is abbreviated instead of passing a short hash off as the whole value. */

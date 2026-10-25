@@ -247,23 +247,7 @@ body:has(#added-notice:not([hidden])) #cards-grid { padding-bottom: 10rem; }
 #inspector-name { overflow-wrap: anywhere; }
 .inspector-kind { position: relative; display: inline-flex; border-radius: 2px; }
 .inspector-kind:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
-.inspector-kind::after {
-  content: attr(data-label);
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  z-index: 1;
-  padding: 4px 6px;
-  border: 1px solid var(--color-control-border);
-  border-radius: 3px;
-  background: var(--color-panel);
-  color: var(--color-text);
-  font-size: var(--type-body);
-  white-space: nowrap;
-  pointer-events: none;
-  visibility: hidden;
-}
-.inspector-kind:hover::after, .inspector-kind:focus-visible::after { visibility: visible; }
+/* The kind's words come from the shared tooltip helper (src/app/tooltip.js). */
 .inspector-section-heading { align-items: flex-start; flex-wrap: wrap; gap: 4px 8px; }
 .inspector-content .inspector-row {
   display: grid;

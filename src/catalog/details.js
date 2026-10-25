@@ -33,7 +33,9 @@ import {
   NOT_DECLARED,
   NOT_PUBLISHED,
 } from "../app/absence.js";
-import { KIND_ICON, KIND_TONE, identity, sourceDetailRows, sourceIdentity, statementsOf } from "./entry.js";
+import { identity, sourceDetailRows, sourceIdentity, statementsOf } from "./entry.js";
+import { iconFor } from "../app/icons.js";
+import { attachTooltip, clearTooltip } from "../app/tooltip.js";
 import { scopeCountOf } from "./selectors.js";
 
 /* These Catalog inspector slots have no verified per-entry scan input. */
@@ -95,6 +97,13 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
   elements.detectorRunState.title = DETECTOR_RUN_STATE_ABSENT;
   elements.detectorFindingDetail.title = `${NOT_PUBLISHED}: ${FINDING_DETAIL_ABSENT}`;
 
+  /** The header's kind icon and accent, from the shared icon map. */
+  function showKindIcon(kind) {
+    const shown = iconFor("kind", kind);
+    elements.inspectorIcon.textContent = shown.icon;
+    elements.inspectorIcon.className = `material-symbols-outlined text-[15px] ${shown.tone}`;
+  }
+
   function reset() {
     elements.detailsIdentity.replaceChildren();
     elements.detailsSource.replaceChildren();
@@ -107,10 +116,10 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
     elements.inspectorName.textContent = "";
     elements.inspectorName.title = "";
     elements.inspectorKind.removeAttribute("aria-label");
-    delete elements.inspectorKind.dataset.label;
+    clearTooltip(elements.inspectorKind);
     elements.detailsDesc.textContent = NOT_PUBLISHED;
     capability(elements.detailsCapabilities, "Network Egress", "wifi", "tertiary", NOT_PUBLISHED);
-    capability(elements.detailsCapabilities, "Execution Sandbox", "terminal", "secondary", NOT_PUBLISHED);
+    capability(elements.detailsCapabilities, "Execution Sandbox", "terminal", "outline", NOT_PUBLISHED);
     capability(elements.detailsCapabilities, "Required Secrets", "vpn_key", "outline", NOT_PUBLISHED);
     row(elements.detailsSource, "Origin", null);
     row(elements.detailsIdentity, "Entry id", null);
@@ -168,8 +177,8 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
         const source = sourcePresentation(item);
         elements.inspectorName.textContent = source.name;
         elements.inspectorKind.setAttribute('aria-label', `Kind: ${item.kind}`);
-        elements.inspectorKind.dataset.label = `Kind: ${item.kind}`;
-        elements.inspectorIcon.textContent = KIND_ICON[item.kind] ?? 'extension';
+        attachTooltip(elements.inspectorKind, `Kind: ${iconFor('kind', item.kind).label}`);
+        showKindIcon(item.kind);
         elements.detailsDesc.replaceChildren();
         if (source.description.length > 320) {
           elements.detailsDesc.append(el('span', '', `${source.description.slice(0, 300).trimEnd()}…`));
@@ -249,9 +258,8 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
       elements.inspectorName.textContent = id.name;
       elements.inspectorName.title = id.entryId;
       elements.inspectorKind.setAttribute("aria-label", `Kind: ${id.kind}`);
-      elements.inspectorKind.dataset.label = `Kind: ${id.kind}`;
-      elements.inspectorIcon.textContent = KIND_ICON[id.kind] ?? "extension";
-      elements.inspectorIcon.className = `material-symbols-outlined text-[15px] ${KIND_TONE[id.kind] ?? "text-outline"}`;
+      attachTooltip(elements.inspectorKind, `Kind: ${iconFor('kind', id.kind).label}`);
+      showKindIcon(id.kind);
 
       // --------------------------------------------------------- Overview
       elements.detailsDesc.textContent = NOT_PUBLISHED;
@@ -269,7 +277,7 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
         egress === NOT_DECLARED ? emptyNote : "Declared by the index",
       );
       capability(
-        elements.detailsCapabilities, "Execution Sandbox", "terminal", "secondary", NOT_PUBLISHED,
+        elements.detailsCapabilities, "Execution Sandbox", "terminal", "outline", NOT_PUBLISHED,
         "The index carries no execution sandbox field.",
       );
       capability(

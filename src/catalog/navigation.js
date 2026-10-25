@@ -16,6 +16,7 @@
 import { el } from "../app/dom.js";
 import { NOT_SUPPLIED } from "../app/absence.js";
 import { describeScope, sourceScopes } from "./selectors.js";
+import { attachTooltip } from "../app/tooltip.js";
 
 function badgeNode(scope, selected) {
   if (scope.badge === null) return null;
@@ -46,9 +47,9 @@ function scopeRow(row, selected, onSelect) {
   head.type = "button";
   head.dataset.focusKey = JSON.stringify(["source", row.filterValue]);
   head.setAttribute("aria-pressed", String(selected));
-  head.title = selected
+  attachTooltip(head, selected
     ? `${scope.name}: selected. Select again to show every published source.`
-    : `Show the ${row.total} items published from ${scope.name}`;
+    : `Show the ${row.total} items published from ${scope.name}`);
   const left = el("div", `flex items-center ${selected ? "gap-1.5" : "gap-2"} min-w-0 flex-1 mr-1`);
   left.appendChild(
     el("span", `material-symbols-outlined ${selected ? "text-[14px] text-primary" : "text-[15px] text-outline"} shrink-0`, selected ? "folder_open" : "folder"),
@@ -78,7 +79,7 @@ function scopeRow(row, selected, onSelect) {
 /** The organization's own additions: nothing is imported yet, and it says so. */
 function additionsRow(organizationName) {
   const panel = el("div", "rounded bg-surface-container-low/40 p-1 border border-wb-border opacity-80");
-  panel.title = "Items your organization adds. None have been imported.";
+  attachTooltip(panel, "Items your organization adds. None have been imported.");
   const head = el("div", "flex items-center justify-between px-1.5 py-1 text-on-surface font-medium");
   const left = el("div", "flex items-center gap-2 min-w-0 flex-1 mr-1");
   left.appendChild(el("span", "material-symbols-outlined text-[15px] text-outline shrink-0", "extension"));

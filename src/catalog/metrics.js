@@ -10,14 +10,15 @@
  */
 
 import { el } from "../app/dom.js";
-import { KIND_ICON } from "./entry.js";
+import { ICONS } from "../app/icons.js";
+import { attachTooltip } from "../app/tooltip.js";
 
 const LEDGER = [
-  { key: "skill", label: "Skills", icon: KIND_ICON.skill, iconTone: "text-kind-skill", barTone: "bg-kind-skill" },
-  { key: "command", label: "Commands", icon: "terminal", iconTone: "text-ledger-command", barTone: "bg-ledger-command" },
-  { key: "agent", label: "Agents", icon: "smart_toy", iconTone: "text-ledger-agent", barTone: "bg-ledger-agent" },
-  { key: "mcp", label: "MCP Servers", icon: "dns", iconTone: "text-ledger-mcp", barTone: "bg-ledger-mcp" },
-  { key: "hook", label: "Hook Items", icon: "webhook", iconTone: "text-ledger-hook", barTone: "bg-ledger-hook", caption: "items, not events" },
+  { key: "skill", label: "Skills", icon: ICONS.kind.skill.icon, iconTone: "text-kind-skill", barTone: "bg-kind-skill" },
+  { key: "command", label: "Commands", icon: ICONS.kind.command.icon, iconTone: "text-ledger-command", barTone: "bg-ledger-command" },
+  { key: "agent", label: "Agents", icon: ICONS.kind.agent.icon, iconTone: "text-ledger-agent", barTone: "bg-ledger-agent" },
+  { key: "mcp", label: "MCP Servers", icon: ICONS.kind.mcp.icon, iconTone: "text-ledger-mcp", barTone: "bg-ledger-mcp" },
+  { key: "hook", label: "Hook Items", icon: ICONS.kind.hook.icon, iconTone: "text-ledger-hook", barTone: "bg-ledger-hook", caption: "items, not events" },
   { key: null, label: "Tokens", icon: "toll", iconTone: "text-kind-token", barTone: "bg-kind-token" },
 ];
 const UNKNOWN = "Unknown";
@@ -30,16 +31,18 @@ function tile(kind, model, onToggleKind) {
   button.dataset.metric = kind.key ?? "tokens";
   button.setAttribute("aria-pressed", String(active));
   if (kind.key === null) {
-    button.disabled = true;
+    // Greyed, not disabled: a disabled button leaves the tab order, and its tooltip with it.
     button.setAttribute("aria-disabled", "true");
-    button.title = "Tokens: unknown. No defined producer supplies token values.";
+    attachTooltip(button, "Tokens: unknown. No defined producer supplies token values.");
   } else {
-    button.title = `${count} ${kind.label.toLowerCase()} in this view (${model.total} entries in the same scope)${kind.key === "hook" ? ". Each counts one hook item, which may declare several events" : ""}.`;
+    attachTooltip(button, `${count} ${kind.label.toLowerCase()} in this view (${model.total} entries in the same scope)${kind.key === "hook" ? ". Each counts one hook item, which may declare several events" : ""}.`);
   }
 
   const head = el("div", "flex items-center justify-between gap-2 min-w-0");
   const name = el("span", "flex items-center gap-1.5 min-w-0");
-  name.appendChild(el("span", `material-symbols-outlined text-[14px] ${kind.iconTone}`, kind.icon));
+  const glyph = el("span", `material-symbols-outlined text-[14px] ${kind.iconTone}`, kind.icon);
+  glyph.setAttribute("aria-hidden", "true");
+  name.appendChild(glyph);
   name.appendChild(el("span", `text-[10px] uppercase font-medium tracking-[0.08em] truncate ${active ? "text-wb-title" : "text-outline"}`, kind.label));
   head.appendChild(name);
   head.appendChild(el("span", "text-[10px] font-mono tabular-nums shrink-0 text-outline", count === null ? UNKNOWN : `${count}`));

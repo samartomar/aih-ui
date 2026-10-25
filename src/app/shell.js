@@ -173,7 +173,7 @@ export function createShell(elements) {
   for (const slot of document.querySelectorAll('[data-gap-reason]')) {
     slot.replaceChildren(createGapIndicator({ label: slot.dataset.gapLabel ?? 'Not ready', reason: slot.dataset.gapReason }));
   }
-  for (const glyph of document.querySelectorAll('.material-symbols-outlined')) glyph.setAttribute('aria-hidden', 'true');
+  for (const glyph of document.querySelectorAll('.material-symbols-outlined')) if (!glyph.dataset.tooltip) glyph.setAttribute('aria-hidden', 'true');
   setInspectorOpen(false);
 
   // The catalog's Advanced section (owner decision 4) holds the kind tiles, the scopes, the Policy workspace links and

@@ -1,0 +1,77 @@
+{
+  "id": "organization-draft",
+  "schema": "urn:aihq:workbench:journey-record:organization-draft:1.0.0",
+  "required": true,
+  "entries": [
+    {
+      "id": "entry-8ee9b0207fbe1faf085ba39314f4f36a",
+      "item": {
+        "releaseSha256": "0ff699f240ac4c667c1891fe0f0a2629c60af67dfb1d9483405d2bbc45d6f124",
+        "itemId": "mattpocock.implement",
+        "itemSha256": "592840b886fcec3abec949a5c4bd3aa61eb02324aa0236e4cc3450c8dabb99b5"
+      },
+      "scope": "project",
+      "inputs": {
+        "agentDirectory": {
+          "fixed": ".claude"
+        }
+      },
+      "obligation": "required"
+    },
+    {
+      "id": "entry-0b38bca339db66d914c38ef14a1d87fb",
+      "item": {
+        "releaseSha256": "0ff699f240ac4c667c1891fe0f0a2629c60af67dfb1d9483405d2bbc45d6f124",
+        "itemId": "mattpocock.code-review",
+        "itemSha256": "6f23fe0ec120e931d54b9a6a411cb210775bf3e39b550b65fb5da3f1bb22463e"
+      },
+      "scope": "project",
+      "inputs": {},
+      "obligation": "prohibited"
+    },
+    {
+      "id": "entry-7ce37160b35938d52e83fc42c7f916bd",
+      "item": {
+        "releaseSha256": "0ff699f240ac4c667c1891fe0f0a2629c60af67dfb1d9483405d2bbc45d6f124",
+        "itemId": "mattpocock.tdd",
+        "itemSha256": "d74745cdb22b649b7ceda221c17fc2e077d3beb43a06fd9ab4a4c1b243bdae0d"
+      },
+      "scope": "user",
+      "inputs": {
+        "agentDirectory": {
+          "fixed": ".claude"
+        }
+      },
+      "obligation": "required"
+    },
+    {
+      "id": "entry-8d36eef2d7874252200d0a698daa3987",
+      "item": {
+        "releaseSha256": "0ff699f240ac4c667c1891fe0f0a2629c60af67dfb1d9483405d2bbc45d6f124",
+        "itemId": "mattpocock.grilling",
+        "itemSha256": "3b42918b2034af33e0cde693386b30fdd1256acab4c2374d3d3aa8060676f2fa"
+      },
+      "scope": "project",
+      "inputs": {
+        "agentDirectory": {
+          "fixed": ".claude"
+        }
+      },
+      "obligation": "recommended"
+    }
+  ],
+  "targets": [
+    {
+      "id": "target-0e236d87345d91dbda772d3816a9f9b8",
+      "scope": "project",
+      "client": "claude",
+      "repository": "github.com/fixture-org/app"
+    },
+    {
+      "id": "target-6a83c36d9fae40ad6deb7cedce67cc02",
+      "scope": "user",
+      "client": "claude"
+    }
+  ],
+  "unexpected": true
+}

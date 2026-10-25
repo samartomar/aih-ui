@@ -77,13 +77,16 @@ export async function runEvidenceStatesBrowser({ origin, output, playwrightModul
     assert.equal(/Not published/.test(await page.locator('#framework-matrix-tabs').innerText()), false, 'No tile claims a kind is unpublished.');
     scenarios.push('metrics-match-list', 'hook-items-not-events', 'tokens-unknown');
 
-    // b. With nothing supplied, every card says not supplied.
+    // b. With nothing supplied, every card says there is no scan record. The pill's words sit beside its scan icon.
     const noteCard = page.locator(`[data-card-id$="/${NOTE}"] [data-evidence-state]`);
+    const noteWords = noteCard.locator('[data-evidence-text]');
+    const noteIcon = async () => noteCard.locator('[data-icon]').getAttribute('data-icon');
     const otherCard = page.locator(`[data-card-id]:not([data-card-id$="/${NOTE}"]) [data-evidence-state]`).first();
     await noteCard.waitFor();
     assert.equal(await page.locator('#cards-grid [data-evidence-state]:not([data-evidence-state="not-supplied"])').count(), 0);
     // Missing evidence is a compact gap indicator whose accessible name is the state.
     assert.equal(await noteCard.getByRole('button', { name: 'Not supplied', exact: true }).count(), 1);
+    assert.equal(await noteIcon(), 'scan:not-scanned');
     assert.equal(await page.locator('#cards-grid').getByText('Not published', { exact: true }).count(), 0, 'No card slot claims evidence or tokens are unpublished.');
     await page.screenshot({ path: join(output, '01-not-supplied.png'), fullPage: true });
     scenarios.push('not-supplied');
@@ -115,19 +118,25 @@ export async function runEvidenceStatesBrowser({ origin, output, playwrightModul
       return text;
     };
     // d. A valid report of the note's exact files: the note matches, an unrelated item does not, and nothing is authenticated.
-    assert.match(await supply(files.valid, 'matched'), /Evidence matched[\s\S]*[1-9]\d* findings bound[\s\S]*Producer authentication is separate/);
-    assert.equal(await noteCard.innerText(), 'Matched');
+    // Until Scan publishes item summaries a match reads as the neutral scan line, never as Verified.
+    assert.match(await supply(files.valid, 'matched'), /Scanned, not verified \(unchecked\)[\s\S]*[1-9]\d* findings bound[\s\S]*Producer authentication is separate/);
+    assert.equal(await noteWords.innerText(), 'Scanned, not verified (unchecked)');
+    assert.equal(await noteIcon(), 'scan:not-verified');
     assert.match(await noteCard.getAttribute('title'), /unchecked; this is not an approval or execution authority/);
+    const pillWords = await page.locator('#cards-grid [data-evidence-text]').allInnerTexts();
+    assert.deepEqual(pillWords.filter(words => /\b(safe|clean|passed)\b/i.test(words) || /\bverified\b/i.test(words.replace(/not verified/gi, ''))), [], 'No evidence pill claims a positive scan result.');
     const otherState = await otherCard.getAttribute('data-evidence-state');
     assert.ok(['mismatched', 'unavailable'].includes(otherState), 'A note-only report cannot qualify unrelated content or its release baseline');
     scenarios.push('valid-matched', `unrelated-item-${otherState}`);
     // e. A report of changed files: mismatched, and nothing can be reviewed from it.
-    assert.match(await supply(files.mismatched, 'mismatched'), /Evidence mismatched[\s\S]*0 findings bound/);
-    assert.equal(await noteCard.innerText(), 'Mismatched');
+    assert.match(await supply(files.mismatched, 'mismatched'), /The scan offered covers other files[\s\S]*0 findings bound/);
+    assert.equal(await noteWords.innerText(), 'The scan offered covers other files');
+    assert.equal(await noteIcon(), 'scan:not-covered');
     scenarios.push('mismatched');
     // f. Bytes that are not a Scan document: invalid for every item.
-    assert.match(await supply(files.invalid, 'invalid'), /Evidence invalid[\s\S]*0 findings bound/);
-    assert.equal(await noteCard.innerText(), 'Invalid evidence');
+    assert.match(await supply(files.invalid, 'invalid'), /Scan record can't be read[\s\S]*0 findings bound/);
+    assert.equal(await noteWords.innerText(), "Scan record can't be read");
+    assert.equal(await noteIcon(), 'scan:unreadable');
     assert.equal(await page.locator('#cards-grid [data-evidence-state]:not([data-evidence-state="invalid"])').count(), 0);
     scenarios.push('invalid');
     // g. Forgetting the evidence returns every card to not supplied.

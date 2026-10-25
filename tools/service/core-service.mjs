@@ -13,12 +13,18 @@
  *
  * Where the work actually happens:
  *   core-targets.mjs       Core's supported AI client ids and labels
+ *   contract-check.mjs     the start-up contract check
  */
 const OPS = {
   /** Loaded only when asked for, so a Core that predates the export fails this one operation and says so. */
   async coreTargets() {
     const { coreTargets } = await import("./core-targets.mjs");
     return coreTargets();
+  },
+  /** The start-up contract check: Core's checkContracts over the installed declarations, or why it cannot run. */
+  async contractCheck() {
+    const { contractCheck } = await import("./contract-check.mjs");
+    return contractCheck();
   },
 };
 

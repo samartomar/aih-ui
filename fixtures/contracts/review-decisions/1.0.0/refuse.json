@@ -1,0 +1,51 @@
+{
+  "schema": "urn:aihq:workbench:review-decisions:1.0.0",
+  "records": [
+    {
+      "id": "maintenance-review",
+      "owner": {
+        "kind": "individual",
+        "id": "fixture-owner"
+      },
+      "actor": "fixture-reviewer",
+      "recordedAt": "2026-10-25T17:51:32.977Z",
+      "disposition": "false-alarm",
+      "reason": "Fixture note intentionally has no license declaration.",
+      "subject": {
+        "releaseSha256": "04cbd6a851d90e55de6fed7309892835b5117dfedfe9c0055b96b8947797d602",
+        "itemId": "consumer-proof.review-note",
+        "itemSha256": "229d4df79750dfbf0a8c93323ed80bfca10d059b722f53ba74efa8c416f6c9e3",
+        "recipeIdentity": "sha256:693a26134494c5692d0aa3e1655166a25ff150d246ba27e9043502858f082de5",
+        "materials": [
+          {
+            "id": "license",
+            "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+            "byteLength": 11357
+          },
+          {
+            "id": "note",
+            "sha256": "d2bdc2c527450e0cbf153c4017bd59fcf8d761af3eb8b6989720f54133d2c031",
+            "byteLength": 95
+          }
+        ]
+      },
+      "finding": {
+        "detectorId": "detector.aih-binding-gate",
+        "ruleId": "binding.scripts.present",
+        "findingId": "raw-occurrence-v1:23dfc9ab916f77bae06c974a82c8278db7caa7700a29d02697118b3384b5e7cc"
+      },
+      "evidence": {
+        "observationIdentity": "observation:{\"annexes\":[{\"byteLength\":2482,\"id\":\"annex.d186d9d98a7bc145b01b45e22f2b527385ef0e8c65fe53a42ebd1faefb3e9300\",\"mediaType\":\"application/sarif+json\",\"sha256\":\"95423ee9f2df8fb14b054ea39b67b3cbdbb310ae7ff3b867acd7371d591378c5\"}],\"id\":\"observation:sha256:9c62e5c0a65bc8c1d114759fcc04c83732cf74af2f3983358a9dfe31c532769d\"}",
+        "detectorIdentity": "detector:{\"adapterSha256\":\"cd06bd1edfd26c44ba41d969f1178c8d80fc20745cf89a0b7d09d1b1b958b0e2\",\"id\":\"detector.aih-binding-gate\",\"platform\":{\"architecture\":\"x64\",\"os\":\"linux\",\"relevantFactsSha256\":\"780222e0bd18fcab1dde8966ef6b6c58d8627ef6d9b94fb75907a185f2b7e53c\"},\"version\":\"1.0.0\"}",
+        "rulesIdentity": "sha256:c07e8982bb13d134cf12fd04000469eba06b8c807a9d6d2fbd44b11fa1d83841",
+        "configurationIdentity": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "profileIdentity": "profile:{\"id\":\"in-process-binding-gate-v1\",\"sha256\":\"5f9cb61a5aa9766f7c58e16dbddbff23321c706ba0f8ea919e9d284361239d8f\"}",
+        "scopeIdentity": "observation:sha256:9c62e5c0a65bc8c1d114759fcc04c83732cf74af2f3983358a9dfe31c532769d#input",
+        "coverageIdentity": "observation:sha256:9c62e5c0a65bc8c1d114759fcc04c83732cf74af2f3983358a9dfe31c532769d#coverage:{\"complete\":true,\"coveredPaths\":[\"release/materials/github.com/samartomar/aih-ui/4878543b94c81fbc836ca136150c22c9a9615bfb/tools/consumer/fixtures/review-note/LICENSE\",\"release/materials/github.com/samartomar/aih-ui/4878543b94c81fbc836ca136150c22c9a9615bfb/tools/consumer/fixtures/review-note/note.md\",\"release/recipes/consumer-proof.review-note.json\"],\"excludedPaths\":[],\"uncoveredPaths\":[]}"
+      },
+      "state": "current"
+    }
+  ],
+  "history": [],
+  "unexpected": true
+}

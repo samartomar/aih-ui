@@ -36,8 +36,9 @@ function readBody(request, limit) {
 /**
  * @param summary     provenance shown in the page's strip
  * @param settingsPath optional isolated test-store path; never an HTTP input
+ * @param contractCheck the promise of the start-up contract check (tools/server/contract-check-summary.mjs)
  */
-export function createApi({ summary, settingsPath }) {
+export function createApi({ summary, settingsPath, contractCheck }) {
   const settings = createSettingsStore({ coreTargets: summary?.coreTargets, settingsPath });
 
   const ROUTES = {
@@ -48,6 +49,8 @@ export function createApi({ summary, settingsPath }) {
     "POST /api/workbench-settings/clients": (body) => settings.updateClients(body),
     /** Provenance of what is actually installed. */
     "GET /api/packages": () => ({ ok: true, ...summary }),
+    /** The start-up contract check; it answers once the check the host started has finished. */
+    "GET /api/contract-check": async () => ({ ok: true, ...(await contractCheck) }),
   };
 
   return async function handleApi(request, response, pathname) {
