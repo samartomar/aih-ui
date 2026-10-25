@@ -116,3 +116,9 @@ test('the default catalog screen uses plain words: no policy, pins, artifacts, d
   assert.doesNotMatch(text, ENGINE_WORDS);
   assert.match(text, /Choose content for your AI tool/);
 });
+
+test('the glossary keeps the default-screen words and has no Catalog tool name entry', () => {
+  const glossary = readFileSync(new URL('../../GLOSSARY.md', import.meta.url), 'utf8');
+  assert.doesNotMatch(glossary, /\*\*Catalog tool name\*\*/);
+  for (const term of ['Project basics', 'Framework', 'Your sources']) assert.match(glossary, new RegExp(`\\*\\*${term}\\*\\*:`));
+});
