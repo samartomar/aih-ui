@@ -15,9 +15,10 @@ const $ = id => document.getElementById(id);
 const TONE_CLASS = {
   warning: 'bg-tertiary-container text-tertiary',
   neutral: 'bg-surface-container-highest text-on-surface-variant',
-  success: 'bg-secondary-container text-secondary',
+  info: 'bg-info-bg text-info',
 };
-const LINE_LABEL = { chosen: ['Chosen', 'success'], included: ['Included', 'neutral'], unknown: ['Unknown', 'warning'] };
+// A chosen line is information, not a confirmation: green stays for Verified and confirmed on disk.
+const LINE_LABEL = { chosen: ['Chosen', 'info'], included: ['Included', 'neutral'], unknown: ['Unknown', 'warning'] };
 const INTENT_SCHEMA = 'urn:aihq:workbench:saved-intent:3.0.0';
 const REVIEW_SCHEMA = 'urn:aihq:workbench:review-decisions:1.0.0';
 const DOWNLOAD_NAME = 'guided-setup.journey.json';
