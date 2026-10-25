@@ -734,9 +734,16 @@ reads and writes:
   workspace validators, and the migration that reopens the consumer pages'
   earlier saved intent 2.0.0 and setup intent 1.0.0);
 - the Core results it reads itself (`accepts`): `file-state-result` 1.1.0 and
-  `native-verification-result` 1.0.0, read by the friction adapter. The
-  Workbench publishes no reader for them, so the contract check reports those
-  checks as unavailable;
+  `native-verification-result` 1.0.0, read by the friction adapter
+  (`tools/consumer/friction.mjs`, used by `aih-ui/improvements`). A
+  native-verification result is read only once Core's own
+  `validateNativeVerificationResult` accepts it; one Core refuses is counted as
+  unread. That reader is exported as `aih-ui/stored-results`
+  `readNativeVerificationResult(value)` (the parsed result, returning Core's
+  `{ valid, diagnostics }`), and the start-up contract check runs it. Core
+  publishes no validator for file-state results, so the Workbench has no reader
+  of its own to offer for them: it reads them as before, and the contract check
+  reports that format's reader as missing;
 - the formats it writes for another package's reader (`produces`), each with
   the Workbench's own written example: execution policy 1.3.0 (Your setup),
   organization policy 1.1.0 (organization authoring) and Catalog producer

@@ -89,9 +89,14 @@ test('the contractCheck service operation runs the installed Core checkContracts
     if (produced.has(row.contractId)) assert.equal(row.status, 'passed', JSON.stringify(row));
     else assert.deepEqual([row.status, row.reason], ['unavailable', 'fixtures-missing'], JSON.stringify(row));
   }
-  // The Workbench publishes no reader for the Core results it accepts, so those checks cannot run; they never pass.
-  for (const row of summary.checks.filter(item => item.readerPackage === 'aih-ui')) assert.deepEqual([row.status, row.reason], ['unavailable', 'reader-missing'], JSON.stringify(row));
-  for (const row of summary.checks.filter(item => item.status === 'passed')) assert.equal(row.readerPackage, '@aihq/core', 'only a reader the Workbench can run passes');
+  // The Workbench reads native-verification results through its own public reader (aih-ui/stored-results, Core's validator);
+  // it has none for file-state results, which Core publishes no validator for, so those checks cannot run and never pass.
+  for (const row of summary.checks.filter(item => item.readerPackage === 'aih-ui')) {
+    if (row.contractId === 'urn:aihq:core:native-verification-result:1.0.0') assert.equal(row.status, 'passed', JSON.stringify(row));
+    else assert.deepEqual([row.contractId, row.status, row.reason], ['urn:aihq:core:file-state-result:1.1.0', 'unavailable', 'reader-missing'], JSON.stringify(row));
+  }
+  assert.ok(summary.checks.some(row => row.readerPackage === 'aih-ui' && row.contractId === 'urn:aihq:core:native-verification-result:1.0.0'), 'Core publishes a native-verification fixture the Workbench reads');
+  for (const row of summary.checks.filter(item => item.status === 'passed')) assert.ok(['@aihq/core', 'aih-ui'].includes(row.readerPackage), 'only a reader the Workbench can run passes');
 });
 
 // The Workbench's package-support declaration (package-support-1.1.json), checked where the packages are installed: valid by

@@ -129,6 +129,19 @@ export async function runVisualGroundworkBrowser({ origin, output, playwrightMod
       } else if (answer.checks.some(row => row.status === 'unavailable')) await expectNote(page, 'unavailable');
       else if (!answer.checks.length) await expectNote(page, 'empty');
       else assert.equal(await page.locator('#contract-check-note').count(), 0, 'Nothing is shown when every required check passed.');
+      // The Workbench's own reader (aih-ui/stored-results) runs for the Core native-verification fixtures; file-state results have no reader
+      // and the page names them as checks that cannot run, never as passed.
+      const workbenchRows = answer.checks.filter(row => row.readerPackage === 'aih-ui');
+      const tooltip = (await page.locator('#contract-check-note').getAttribute('data-tooltip').catch(() => null)) ?? '';
+      for (const row of workbenchRows) {
+        if (row.contractId === 'urn:aihq:core:native-verification-result:1.0.0') {
+          assert.equal(row.status, 'passed', JSON.stringify(row));
+          assert.equal(tooltip.includes('reads urn:aihq:core:native-verification-result:1.0.0 from @aihq/core'), false, 'The Workbench\'s own reader is not listed as missing.');
+        } else {
+          assert.deepEqual([row.contractId, row.status, row.reason], ['urn:aihq:core:file-state-result:1.1.0', 'unavailable', 'reader-missing']);
+          assert.ok(tooltip.includes('reads urn:aihq:core:file-state-result:1.1.0 from @aihq/core: the Workbench has no reader it can run for it.'), 'The page names the file-state check that cannot run.');
+        }
+      }
     }
     await page.screenshot({ path: join(output, `01-startup-${actual}.png`) });
 

@@ -375,6 +375,11 @@
       "nodeRange": ">=24.15.0 <25"
     },
     {
+      "export": "aih-ui/stored-results",
+      "runtime": "node",
+      "nodeRange": ">=24.15.0 <25"
+    },
+    {
       "export": "aih-ui/trials",
       "runtime": "node",
       "nodeRange": ">=24.15.0 <25"
