@@ -69,7 +69,7 @@ function refusal(result) {
 export function createInstallPanel({ client, el, button, onInstalled = () => {} }) {
   const node = el('section', 'p-4 rounded border-2 border-primary space-y-3'); node.id = 'install-panel'; node.hidden = true;
   const title = el('h3', 'text-base font-semibold text-on-surface', 'Install your setup into your project');
-  const where = el('p', 'font-mono text-[11px] text-outline break-all');
+  const where = el('p', 'font-mono text-[11px] text-outline break-all'); where.id = 'install-where';
   const items = el('ul', 'list-disc pl-5 space-y-0.5');
   const filesHeading = el('p', 'font-medium', 'Files that will be added');
   const files = el('ul', 'space-y-0.5 font-mono text-[11px]'); files.id = 'install-files';

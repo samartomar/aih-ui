@@ -76,7 +76,9 @@ export function createProjectFolderRow({ el, button, busy = () => false, onChang
       if (result.status !== 'ok') { message.textContent = `Can't use this folder: ${result.reason ?? result.error ?? 'the Workbench did not say why.'}`; return; }
       show({ project: result.project, source: result.source }); form.hidden = true; input.value = '';
       message.textContent = `Now using ${projectName(result.project)}. What this page had checked for the previous folder was discarded.`;
-      await onChanged(state);
+      // The host has switched; a failure from here on is the page's reload, not a refusal of the folder.
+      try { await onChanged(state); }
+      catch (error) { message.textContent = `Now using ${projectName(result.project)}, but this page could not check it again: ${error.message} Reload the page.`; }
     } catch (error) { message.textContent = `Can't use this folder: ${error.message}`; }
     finally { choosing = false; use.disabled = false; use.removeAttribute('aria-busy'); }
   }

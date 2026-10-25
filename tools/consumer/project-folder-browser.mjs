@@ -15,7 +15,7 @@ export async function runProjectFolderBrowser({ origin, output, playwrightModule
   // Install's preview is ready for `folder`: the panel names it as its target and offers Install. A folder change
   // re-checks after its message shows, so the old preview's target is not taken for the new one.
   async function previewsInto(folder) {
-    await page.waitForFunction(folder => document.querySelector('#install-panel p.font-mono')?.textContent === folder
+    await page.waitForFunction(folder => document.getElementById('install-where')?.textContent === folder
       && !document.getElementById('install-button').disabled, folder, { timeout: 120_000 });
   }
   const focused = () => page.evaluate(() => ({ id: document.activeElement?.id ?? '', text: document.activeElement?.textContent ?? '' }));
@@ -40,6 +40,7 @@ export async function runProjectFolderBrowser({ origin, output, playwrightModule
       }
       const destination = `Switch to ${theme} mode`;
       if (await page.getByRole('button', { name: destination, exact: true }).count()) await page.getByRole('button', { name: destination, exact: true }).click();
+      assert.equal(await page.evaluate(() => document.documentElement.dataset.mode), theme, `The page shows the ${theme} theme.`);
 
       // Your setup is reachable from the shell, and Back to catalog returns to it.
       const entry = page.locator('#your-setup');
