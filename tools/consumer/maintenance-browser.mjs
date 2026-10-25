@@ -12,6 +12,8 @@ import { openDraft } from './headless.mjs';
 import { intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { installedFamilies } from './installed-families.mjs';
+import { addFromCatalog, closePolicyDrawer, drawer, openPolicyDrawer, openPolicyFileActions, openPolicySection } from './policy-drawer.mjs';
+import { openPolicyWorkspace, openSetupAdvanced } from './advanced-browser.mjs';
 
 const NOTE = 'consumer-proof.review-note', PERSONAL = 'personal.skill.example', OPENED = 'Unresolved draft opened', REVIEW = 'maintenance-review';
 const encode = value => new TextEncoder().encode(value), decode = bytes => new TextDecoder().decode(bytes);
@@ -84,7 +86,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     return page;
   };
   const download = async (page, trigger, path) => { const event = page.waitForEvent('download'); await trigger(); await (await event).saveAs(path); return new Uint8Array(await readFile(path)); };
-  const saveDraft = (page, path) => download(page, () => page.locator('#policy-draft-save').click(), path);
+  const saveDraft = (page, path) => download(page, async () => { await openPolicyDrawer(page); await page.locator('#policy-draft-save').click(); }, path);
   const sameBytes = (a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)) === 0;
   const checkedText = page => page.locator('#policy-updates-checked').textContent();
   const checkedAt = text => /(\d{4}-\d\d-\d\dT[\d:.]+Z)/.exec(text)?.[1];
@@ -114,9 +116,10 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
         return JSON.stringify(policyOf(input).metadata?.['aih.workbench']?.roots) === JSON.stringify(policyOf(original).metadata?.['aih.workbench']?.roots);
       } catch { return false; }
     });
-    await page.locator('#nav-policy').click(); await page.locator('#policy-open').setInputFiles(path);
-    await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+    await openPolicyWorkspace(page); await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(path);
+    await drawer(page).getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await page.locator('#policy-draft-status').filter({ hasText: heading }).waitFor();
+    await openPolicySection(page, 'Available updates');
     await checked;
     await page.locator('#policy-updates-check:not([disabled])').waitFor();
     await waitSettled(page, null);
@@ -132,15 +135,14 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
   const draftRevision = async page => Number(/Draft revision (\d+)/.exec(await page.locator('#policy-draft-note').textContent())?.[1]);
   const choose = async (page, family, id) => {
     await page.locator('#nav-sources').click(); await page.locator('#browse-support').selectOption('all'); await page.locator('#browse-family').selectOption(family);
-    await page.getByRole('button', { name: `Choose ${id}`, exact: true }).click();
-    await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click();
+    await addFromCatalog(page, id);
   };
   // The evidence panel is the existing review flow's own: open it, then supply the original evidence bytes.
   const supplyEvidence = async page => {
-    await page.locator('#nav-policy').click();
+    await openPolicyWorkspace(page); await openSetupAdvanced(page);
     await page.locator('summary').filter({ hasText: 'Evidence review and reconsideration' }).click();
-    await page.getByLabel('Review evidence files', { exact: true }).setInputFiles(evidencePath);
-    await page.getByText('Original evidence bytes loaded').waitFor();
+    await drawer(page).getByLabel('Review evidence files', { exact: true }).setInputFiles(evidencePath);
+    await drawer(page).getByText('Original evidence bytes loaded').waitFor();
   };
   // The updates section sits below the policy steps; bring it to the top of the scrolled view before capturing.
   const shot = async (page, name) => {
@@ -159,7 +161,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     await choose(authoring, 'Personal', PERSONAL);
     await choose(authoring, 'Independent', NOTE);
     const policyPath = join(output, 'policy.downloaded.json');
-    const policyBytes = await download(authoring, () => authoring.locator('#policy-save').click(), policyPath);
+    const policyBytes = await download(authoring, async () => { await openPolicyDrawer(authoring); await openSetupAdvanced(authoring).then(() => authoring.locator('#policy-save').click()); }, policyPath);
     assert.deepEqual(JSON.parse(decode(policyBytes)).metadata['aih.workbench'].roots.map(root => root.itemId).sort(), [NOTE, PERSONAL].sort());
     scenarios.push('save-independent-choice');
 
@@ -364,18 +366,20 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     const resolvedAuthoring = await openPage();
     await choose(resolvedAuthoring, 'Independent', NOTE);
     await supplyEvidence(resolvedAuthoring);
-    await resolvedAuthoring.getByLabel('Evidence review subject', { exact: true }).selectOption({ label: NOTE });
-    await resolvedAuthoring.getByRole('button', { name: 'Inspect evidence', exact: true }).click();
+    await drawer(resolvedAuthoring).getByLabel('Evidence review subject', { exact: true }).selectOption({ label: NOTE });
+    await drawer(resolvedAuthoring).getByRole('button', { name: 'Inspect evidence', exact: true }).click();
     await resolvedAuthoring.getByText(/findings bound to the checked subject/).waitFor();
-    await resolvedAuthoring.getByLabel('Review decision ID', { exact: true }).fill(REVIEW);
-    await resolvedAuthoring.getByLabel('Review owner', { exact: true }).fill('fixture-owner');
-    await resolvedAuthoring.getByLabel('Reviewer', { exact: true }).fill('fixture-reviewer');
-    await resolvedAuthoring.getByLabel('Review disposition', { exact: true }).selectOption('false-alarm');
-    await resolvedAuthoring.getByLabel('Review reason', { exact: true }).fill('Fixture note intentionally has no license declaration.');
-    await resolvedAuthoring.getByRole('button', { name: 'Propose human review', exact: true }).click();
+    await drawer(resolvedAuthoring).getByLabel('Review decision ID', { exact: true }).fill(REVIEW);
+    await drawer(resolvedAuthoring).getByLabel('Review owner', { exact: true }).fill('fixture-owner');
+    await drawer(resolvedAuthoring).getByLabel('Reviewer', { exact: true }).fill('fixture-reviewer');
+    await drawer(resolvedAuthoring).getByLabel('Review disposition', { exact: true }).selectOption('false-alarm');
+    await drawer(resolvedAuthoring).getByLabel('Review reason', { exact: true }).fill('Fixture note intentionally has no license declaration.');
+    // A person chooses the checked finding they are reviewing; the first is the one bound to the fixture note.
+    await drawer(resolvedAuthoring).getByLabel('Checked finding', { exact: true }).selectOption('0');
+    await drawer(resolvedAuthoring).getByRole('button', { name: 'Propose human review', exact: true }).click();
     await resolvedAuthoring.locator('#policy-accept:not([disabled])').waitFor(); await resolvedAuthoring.locator('#policy-accept').click();
     const resolvedPath = join(output, 'policy.resolved.downloaded.json');
-    const resolvedBytes = await download(resolvedAuthoring, () => resolvedAuthoring.locator('#policy-save').click(), resolvedPath);
+    const resolvedBytes = await download(resolvedAuthoring, async () => { await openPolicyDrawer(resolvedAuthoring); await openSetupAdvanced(resolvedAuthoring).then(() => resolvedAuthoring.locator('#policy-save').click()); }, resolvedPath);
     const resolvedIntent = JSON.parse(decode(resolvedBytes)).metadata['aih.workbench'];
     assert.deepEqual(resolvedIntent.roots.map(root => root.itemId), [NOTE]);
     assert.deepEqual(resolvedIntent.reviews.records.map(record => [record.id, record.state]), [[REVIEW, 'current']]);
@@ -392,9 +396,10 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     const resolvedPage = await openPage();
     operations = []; categoriesSent = []; checkInputs = [];
     await supplyEvidence(resolvedPage);
-    await resolvedPage.locator('#policy-open').setInputFiles(resolvedPath);
-    await resolvedPage.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+    await openPolicyFileActions(resolvedPage); await resolvedPage.locator('#policy-open').setInputFiles(resolvedPath);
+    await drawer(resolvedPage).getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await resolvedPage.locator('#policy-status').filter({ hasText: 'Saved choices recovered' }).waitFor();
+    await openPolicySection(resolvedPage, 'Available updates');
     await waitSettled(resolvedPage, null);
     assert.equal(await resolvedPage.locator('#policy-draft').isHidden(), true, 'A resolved policy reopens as an ordinary policy, not a draft.');
     assert.equal(await resolvedPage.locator('#policy-updates').isVisible(), true);

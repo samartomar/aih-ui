@@ -41,32 +41,42 @@ process.env.AIH_BATCH_FIXTURE = batchFixturePath;
 const started = await createWorkbench({ consumerDir, runDir, summary, settingsPath: join(consumerDir, 'prototype-settings.json') });
 summary.entryCount = started.catalog.items.length; await writeFile(join(runDir, 'summary.json'), JSON.stringify(summary));
 const address = await listen(started.server, 0), origin = `http://127.0.0.1:${address.port}`;
+// Each journey's start time is logged, so a stage cut off by its time budget shows which journey was running.
+const began = Date.now(), starting = name => console.log(`[${((Date.now() - began) / 1000).toFixed(1)}s] Starting ${name}`);
 try {
   const foreign = await fetch(origin + '/api/authoring-new', { method: 'POST', headers: { origin: 'https://untrusted.example', 'content-type': 'application/json' }, body: '{}' });
   assert.equal(foreign.status, 403, 'The ordinary authoring adapter refuses a foreign origin.');
   const { runIntegratedBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/integrated-browser.mjs')));
-  await runIntegratedBrowser({ origin, output: join(consumerDir, 'prototype-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
+  starting('runIntegratedBrowser'); await runIntegratedBrowser({ origin, output: join(consumerDir, 'prototype-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
+  const { runRestoredSurfacesBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/restored-surfaces-browser.mjs')));
+  for (const theme of ['dark', 'light']) {
+    starting(`runRestoredSurfacesBrowser ${theme}`); await runRestoredSurfacesBrowser({ origin, output: join(consumerDir, `restored-surfaces-evidence-${theme}`), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, theme });
+  }
+  const { runSimplePathBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/simple-path-browser.mjs')));
+  for (const theme of ['dark', 'light']) {
+    starting(`runSimplePathBrowser ${theme}`); await runSimplePathBrowser({ origin, output: join(consumerDir, `simple-path-evidence-${theme}`), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, theme });
+  }
   const { runSourceFactsBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/source-facts-browser.mjs')));
-  await runSourceFactsBrowser({ origin, output: join(consumerDir, 'source-facts-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
+  starting('runSourceFactsBrowser'); await runSourceFactsBrowser({ origin, output: join(consumerDir, 'source-facts-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
   const { runUnresolvedDraftBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/unresolved-draft-browser.mjs')));
-  await runUnresolvedDraftBrowser({ origin, output: join(consumerDir, 'unresolved-draft-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
+  starting('runUnresolvedDraftBrowser'); await runUnresolvedDraftBrowser({ origin, output: join(consumerDir, 'unresolved-draft-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
   const { runMaintenanceBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/maintenance-browser.mjs')));
-  await runMaintenanceBrowser({ origin, output: join(consumerDir, 'maintenance-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, sourcePath: maintenanceSource });
+  starting('runMaintenanceBrowser'); await runMaintenanceBrowser({ origin, output: join(consumerDir, 'maintenance-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, sourcePath: maintenanceSource });
   const { runReviewIdentityBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/review-identity-browser.mjs')));
-  await runReviewIdentityBrowser({ origin, output: join(consumerDir, 'review-identity-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
+  starting('runReviewIdentityBrowser'); await runReviewIdentityBrowser({ origin, output: join(consumerDir, 'review-identity-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
   const { runEvidenceStatesBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/evidence-states-browser.mjs')));
-  await runEvidenceStatesBrowser({ origin, output: join(consumerDir, 'evidence-states-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
+  starting('runEvidenceStatesBrowser'); await runEvidenceStatesBrowser({ origin, output: join(consumerDir, 'evidence-states-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
   const { runImprovementsBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/improvements-browser.mjs')));
-  await runImprovementsBrowser({ origin, output: join(consumerDir, 'improvements-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, settingsPath: join(consumerDir, 'prototype-settings.json'), sourcePath: maintenanceSource, frictionPath });
+  starting('runImprovementsBrowser'); await runImprovementsBrowser({ origin, output: join(consumerDir, 'improvements-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, settingsPath: join(consumerDir, 'prototype-settings.json'), sourcePath: maintenanceSource, frictionPath });
   const { runTrialsBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/trials-browser.mjs')));
-  await runTrialsBrowser({ origin, output: join(consumerDir, 'trials-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, settingsPath: join(consumerDir, 'prototype-settings.json'), sourcePath: maintenanceSource });
+  starting('runTrialsBrowser'); await runTrialsBrowser({ origin, output: join(consumerDir, 'trials-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, settingsPath: join(consumerDir, 'prototype-settings.json'), sourcePath: maintenanceSource });
   const { runWorkspaceBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/workspace-browser.mjs')));
-  await runWorkspaceBrowser({ origin, output: join(consumerDir, 'workspace-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
+  starting('runWorkspaceBrowser'); await runWorkspaceBrowser({ origin, output: join(consumerDir, 'workspace-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
   const { runBatchBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/batch-browser.mjs')));
-  await runBatchBrowser({ origin, output: join(consumerDir, 'batch-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, fixturePath: batchFixturePath,
+  starting('runBatchBrowser'); await runBatchBrowser({ origin, output: join(consumerDir, 'batch-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, fixturePath: batchFixturePath,
     conflictFile: batch.conflictFile, procMarker: batch.procMarker, procCount: batch.procCount, userFiles: batch.userFiles });
   const { runReportPageBrowser } = await import(pathToFileURL(join(repo, 'tools/report/page-browser.mjs')));
-  await runReportPageBrowser({ origin, consumerDir, output: join(consumerDir, 'report-page-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
+  starting('runReportPageBrowser'); await runReportPageBrowser({ origin, consumerDir, output: join(consumerDir, 'report-page-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
 } finally { delete process.env.AIH_FRICTION_EVIDENCE; delete process.env.AIH_BATCH_FIXTURE; delete process.env.AIH_MAINTENANCE_SOURCE; await new Promise(resolve => started.server.close(resolve)); }
 
 // The normal application's startup must refuse an absent required family,

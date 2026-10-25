@@ -9,6 +9,7 @@ import { readInstalledRelease } from '@aihq/catalog/node';
 import { composeAuthoring, freshAuthoring } from './headless.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope } from './journey.mjs';
 import { organizationTargetId } from './organization-draft-record.mjs';
+import { drawer, openPolicyAdvanced, openPolicyFileActions } from './policy-drawer.mjs';
 
 const attacker = { provider: 'github', repository: { owner: 'attacker', name: 'redirect' }, path: 'evil.json', revision: { kind: 'branch', value: 'evil' } };
 const redirect = { organizationSource: attacker, source: attacker, repository: attacker.repository, path: attacker.path, revision: attacker.revision };
@@ -129,7 +130,10 @@ export async function runOrganizationAuthorBrowser({ page, output, fixture, refr
     await download(page, () => page.locator('#org-draft-save').click(), draftPath);
     await edit(page, () => page.locator('#org-draft-new').click());
     assert.equal((await readDraft(page)).entries.length, 0);
+    // The new empty draft counts as not downloaded, so Open asks before replacing it; the author confirms.
+    const replaceAsked = new Promise(resolve => page.once('dialog', dialog => { resolve(dialog.message()); void dialog.accept(); }));
     assert.match(await settle(page, () => page.locator('#org-draft-open').setInputFiles(draftPath)), /^Organization draft updated/);
+    assert.match(await replaceAsked, /Replace the current draft\?/);
     assert.deepEqual(await readDraft(page), before);
     assert.deepEqual(before.entries.map(entry => [entry.obligation, entry.badge]), [['required', 'Enforced'], ['prohibited', 'Enforced'], ['required', 'Enforced'], ['recommended', 'Advisory']]);
     // Old saved client facts stay visible and labelled; opening does not rewrite them.
@@ -216,14 +220,14 @@ export async function runOrganizationAuthorBrowser({ page, output, fixture, refr
     assert.equal((await page.locator('#authority-source-policy').textContent()).trim(), 'fixture-baseline');
     states.push('published');
     const policyPath = join(output, 'developer-policy.json'); await writeFile(policyPath, await developerPolicyBytes());
-    await page.locator('#policy-open').setInputFiles(policyPath);
-    await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+    await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(policyPath);
+    await drawer(page).getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await page.locator('#policy-status').filter({ hasText: 'Saved choices recovered' }).waitFor();
     const prepared = page.waitForResponse(response => response.url().endsWith('/api/authoring-prepare') && response.request().method() === 'POST');
-    await page.getByRole('button', { name: 'Prepare exact effects', exact: true }).click();
+    await openPolicyAdvanced(page); await drawer(page).getByRole('button', { name: 'Prepare exact effects', exact: true }).click();
     const review = await (await prepared).json();
     assert.equal(review.status, 'ready', JSON.stringify(review));
-    const apply = page.getByRole('button', { name: 'Approve and Apply reviewed effects', exact: true });
+    const apply = drawer(page).getByRole('button', { name: 'Approve and Apply reviewed effects', exact: true });
     await apply.and(page.locator(':not([disabled])')).waitFor();
     await page.locator('#authority-source-review[data-review="current"]').waitFor();
     for (const key of Object.keys(revisionB)) assert.equal(review.review.inputs.organization[key], revisionB[key], key);

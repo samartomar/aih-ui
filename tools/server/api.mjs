@@ -7,7 +7,7 @@ import { createSettingsStore } from "./settings.mjs";
 
 const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
 /** Local setup bodies are small; every other route keeps the general bound. */
-const MAX_BODY_BYTES = { "/api/workbench-settings": 16384, "/api/workbench-settings/update": 16384, "/api/workbench-settings/clients": 16384 };
+const MAX_BODY_BYTES = { "/api/workbench-settings": 16384, "/api/workbench-settings/update": 16384, "/api/workbench-settings/clients": 16384, "/api/workbench-settings/mode": 16384 };
 
 function readBody(request, limit) {
   return new Promise((resolveBody, rejectBody) => {
@@ -44,6 +44,7 @@ export function createApi({ summary, settingsPath }) {
     "GET /api/workbench-settings": () => settings.read(),
     "POST /api/workbench-settings": (body) => settings.create(body),
     "POST /api/workbench-settings/update": (body) => settings.update(body),
+    "POST /api/workbench-settings/mode": (body) => settings.switchMode(body),
     "POST /api/workbench-settings/clients": (body) => settings.updateClients(body),
     /** Provenance of what is actually installed. */
     "GET /api/packages": () => ({ ok: true, ...summary }),

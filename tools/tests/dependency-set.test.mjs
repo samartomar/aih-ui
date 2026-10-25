@@ -38,17 +38,23 @@ test('proposal renders dependency hooks and one acceptance publishes the whole c
   const nodes = new Map(), created = [];
   const element = tagName => {
     const node = { tagName, children: [], dataset: {}, listeners: {}, value: '', textContent: '', options: [],
-      classList: { remove() {}, toggle() {} }, getAttribute() { return null; }, setAttribute() {}, removeAttribute() {}, after() {},
-      addEventListener(name, listener) { this.listeners[name] = listener; },
-      append(...children) { this.children.push(...children); }, prepend(...children) { this.children.unshift(...children); },
+      classList: { remove() {}, toggle() {} }, getAttribute() { return null; }, setAttribute() {}, removeAttribute() {}, after() {}, before() {}, focus() { globalThis.document.activeElement = this; }, contains(target) { return target === this || this.children.some(child => child.contains?.(target)); },
+      closest(selector) { if (selector === 'details') { let ancestor = this.parentElement; while (ancestor) { if (ancestor.tagName === 'details') return ancestor; ancestor = ancestor.parentElement; } } return null; },
+      get childNodes() { return this.children; },
+      addEventListener(name, listener) { const prior = this.listeners[name]; this.listeners[name] = prior ? (...args) => { prior(...args); return listener(...args); } : listener; },
+      append(...children) { for (const child of children) { child.parentElement = this; this.children.push(child); } }, prepend(...children) { this.children.unshift(...children); },
       replaceChildren(...children) { this.children = children; }, get lastChild() { return this.children.at(-1); } };
     created.push(node); return node;
   };
-  const prior = { document: globalThis.document, fetch: globalThis.fetch, Option: globalThis.Option };
+  const prior = { document: globalThis.document, fetch: globalThis.fetch, Option: globalThis.Option, window: globalThis.window };
   t.after(() => { for (const [key, value] of Object.entries(prior)) { if (value === undefined) delete globalThis[key]; else globalThis[key] = value; } });
-  globalThis.document = { createElement: element, createTextNode: textContent => ({ textContent }),
-    getElementById(id) { if (!nodes.has(id)) nodes.set(id, element('div')); return nodes.get(id); }, querySelector() { return element('div'); } };
+  const media = { matches: false, addEventListener(name, callback) { this.change = callback; } };
+  globalThis.window = { addEventListener() {}, matchMedia: () => media };
+  const documentListeners = {};
+  globalThis.document = { body: element('body'), addEventListener(name, listener) { documentListeners[name] = listener; }, dispatchEvent(event) { documentListeners[event.type]?.(event); }, createElement: element, createTextNode: textContent => ({ textContent }),
+    getElementById(id) { if (!nodes.has(id)) nodes.set(id, element('div')); return nodes.get(id); }, querySelector(selector) { return selector === 'dialog[open]' ? null : element('div'); } };
   globalThis.Option = function(textContent, value) { return { textContent, value }; };
+  const metricWrapper = element('details'), metricStrip = globalThis.document.getElementById('framework-matrix-tabs'); metricWrapper.append(metricStrip);
   const root = ref('chosen'), dependency = ref('dependency');
   const initial = { roots: [], pins: [], origins: [] };
   const candidate = { intent: { ...initial, roots: [root], pins: [root, dependency] }, inclusions: [inclusion(root, root, [root]), inclusion(root, dependency)], policyBytes: [...new TextEncoder().encode('{"complete":true}')] };
@@ -56,14 +62,64 @@ test('proposal renders dependency hooks and one acceptance publishes the whole c
   const client = createAuthoringClient(); client.publish({ intent: initial, policyBytes: [...new TextEncoder().encode('{}')] });
   const workspace = createAuthoringWorkspace(client);
   workspace.present(await client.propose({ type: 'select', root }));
+  // Plain words on the default drawer (GLOSSARY.md); the engine words stay inside Advanced and the draft view.
+  const ancestors = node => { const ids = []; for (let at = node.parentElement; at; at = at.parentElement) ids.push(at.id); return ids; };
+  const plainWords = () => { const shown = created.filter(node => { const ids = ancestors(node); return ids.includes('policy-review-panel') && !ids.includes('setup-advanced') && !ids.includes('policy-draft') && node.id !== 'policy-draft'; });
+  for (const node of shown) assert.doesNotMatch(node.textContent ?? '', /(polic(y|ies)|pins?|pinned|artifacts?|explicit choices?|accepted choices?|prepare[ds]?|digests?|recipes?|envelopes?)/i, `default drawer text: ${node.textContent}`); };
+  plainWords();
   const dependencyNode = created.find(node => node.dataset.dependencyOf === root.itemId);
-  assert.match(dependencyNode.textContent, /Required dependency: dependency/);
-  assert.ok(created.some(node => /No separate dependency approval/.test(node.textContent)));
+  assert.match(dependencyNode.textContent, /Needed item: dependency/);
+  assert.ok(created.some(node => /Nothing else needs approving/.test(node.textContent)));
   assert.equal(client.intent.roots.length, 0);
   const accept = created.find(node => node.id === 'policy-accept');
-  assert.equal(accept.textContent, 'Accept choices with dependencies');
+  assert.equal(accept.textContent, 'Add to setup');
+  const reviewPanel = created.find(node => node.id === 'policy-review-panel');
+  assert.equal(reviewPanel.hidden, false, 'choosing opens review without navigation');
+  const discard = created.find(node => node.id === 'policy-discard'); discard.listeners.click();
+  assert.equal(client.candidate, undefined); assert.equal(client.intent.roots.length, 0);
+  workspace.present(await client.propose({ type: 'select', root }));
   accept.listeners.click();
+  assert.equal(reviewPanel.hidden, false, 'acceptance keeps the same review surface');
   assert.deepEqual(client.intent, candidate.intent);
   assert.deepEqual([...client.bytes], candidate.policyBytes);
   assert.equal(client.candidate, undefined);
+  assert.equal(created.find(node => node.id === 'policy-proposal-actions').hidden, true);
+  assert.equal(document.activeElement.id, 'policy-review-panel-title');
+  const reviewTrigger = document.getElementById('review-project-changes');
+  reviewTrigger.listeners.click(); assert.equal(reviewPanel.hidden, true);
+  client.reopen = async () => ({ status: 'refused', diagnostics: [{ message: 'Exact source unavailable' }] });
+  const check = created.find(node => node.id === 'check-project-policy');
+  assert.equal(check.closest('details')?.id, 'setup-advanced', "Check Policy sits in Your setup's Advanced section");
+  // Your setup's Advanced section holds the policy file, update, improvement, trial, workspace and authority controls.
+  const within = (id, container) => { for (let at = created.find(node => node.id === id)?.parentElement; at; at = at.parentElement) if (at.id === container) return true; return false; };
+  for (const id of ['policy-save', 'policy-file-actions', 'authority-source', 'policy-open'])
+    assert.ok(within(id, 'setup-advanced'), `${id} is inside Advanced`);
+  const advanced = created.find(node => node.id === 'setup-advanced');
+  const sections = advanced.children.filter(node => node.tagName === 'details').map(node => node.children[0]?.textContent);
+  for (const label of ['File actions: new, open and validate', 'Available updates', 'Improvement suggestions', 'Improvement trials', 'Workspace repositories', 'Sources and execution'])
+    assert.ok(sections.includes(label), `${label} is inside Advanced`);
+  assert.equal(reviewPanel.children.at(-1), advanced, 'Advanced is the last part of the drawer');
+  // #137: the default drawer is Project folder, Your choices, Install and Installed; Chosen items (configuration, skips,
+  // an open draft) and the Organization baseline moved into Advanced with their ids. A waiting proposal's Add to setup stays.
+  for (const id of ['policy-accept', 'setup-choices', 'install-panel', 'installed-panel', 'project-folder']) assert.equal(within(id, 'setup-advanced'), false, `${id} stays on the default drawer`);
+  for (const id of ['policy-roots', 'policy-draft', 'organization-author']) assert.ok(within(id, 'setup-advanced'), `${id} is inside Advanced`);
+  assert.deepEqual(reviewPanel.children.filter(node => ['project-folder', 'setup-choices', 'install-panel', 'installed-panel', 'setup-advanced'].includes(node.id)).map(node => node.id),
+    ['project-folder', 'setup-choices', 'install-panel', 'installed-panel', 'setup-advanced'], 'the default drawer is in this order');
+  plainWords();
+  await check.listeners.click();
+  assert.equal(reviewPanel.hidden, false, 'Check Policy opens visible results');
+  assert.match(created.find(node => node.id === 'policy-status').textContent, /Exact source unavailable/);
+  media.matches = true; media.change();
+  assert.equal(document.getElementById('main-content').inert, true);
+  assert.equal(document.getElementById('nav-rail').inert, true);
+  assert.equal(metricWrapper.inert, true, 'covered metric disclosure blocks pointer and focus through native inert');
+  documentListeners.focusin({ target: document.getElementById('nav-rail') });
+  assert.equal(document.activeElement.id, 'policy-review-panel-title', 'covered background cannot take focus');
+  documentListeners.focusin({ target: metricStrip });
+  assert.equal(document.activeElement.id, 'policy-review-panel-title', 'covered metric controls cannot take focus');
+  document.dispatchEvent(new CustomEvent('aih:inspector-open'));
+  assert.equal(reviewPanel.hidden, true);
+  assert.equal(document.getElementById('main-content').inert, false);
+  assert.equal(document.getElementById('nav-rail').inert, false);
+  assert.equal(metricWrapper.inert, false);
 });

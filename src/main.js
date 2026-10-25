@@ -33,38 +33,44 @@ async function main() {
   try {
     const policyWorkspace = createPolicyWorkspace();
     const authoring = createAuthoringClient();
-    const authoringWorkspace = createAuthoringWorkspace(authoring);
+    // Back to catalog: the drawer closes, then Sources & Catalogs shows (if another view was open) with focus on
+    // the card just chosen, or the search box.
+    const authoringWorkspace = createAuthoringWorkspace(authoring, { onBackToCatalog: () => { shell.showCatalog(); catalog.focusCatalog(); } });
     const evidenceReview = createEvidenceReview(authoring, result => authoringWorkspace.present(result));
 
     // Core's supported targets arrive with the preview summary the catalog
     // loads. Every control that offers a client reads that SAME list and keeps
     // no copy of its own.
-    const organization = createOrganization({ elements: organizationElements(), onEdit: () => onboarding.edit() });
+    const organization = createOrganization({ elements: organizationElements(), onEdit: section => onboarding.edit(section), onModeComplete: applySettings });
     const aiTools = createAiTools({
       elements: aiToolsElements(),
       onSelectionChange: async (clients) => {
         const result = await saveClients(clients);
         organization.setSettings(result.settings, result.location);
+        if (result.settings) authoringWorkspace.setSettings(result.settings);
       },
     });
 
+    function applySettings(settings, location) {
+      organization.setSettings(settings, location);
+      policyWorkspace.setSettings(settings);
+      authoringWorkspace.setSettings(settings);
+      void evidenceReview.setDefaultRecipient(settings.reviewer ?? null);
+      aiTools.setSelection(settings.clients);
+      catalog.setOrganizationName(settings.role === "admin" ? settings.organization?.name ?? null : null);
+    }
     const onboarding = createOnboarding({
       onCloseEdit: () => organization.open(),
-      onComplete: (settings, location) => {
-        organization.setSettings(settings, location);
-        policyWorkspace.setSettings(settings);
-        void evidenceReview.setDefaultRecipient(settings.reviewer ?? null);
-        aiTools.setSelection(settings.clients);
-        catalog.setOrganizationName(settings.role === "admin" ? settings.organization?.name ?? null : null);
-      },
+      onComplete: applySettings,
     });
 
     const catalog = createCatalog({
       authoring,
-      onProposal: result => {
-        authoringWorkspace.present(result);
-        document.getElementById('nav-policy').click();
-      },
+      subscribeSecurity: shell.subscribeSecurity,
+      onAdd: item => authoringWorkspace.add(item),
+      onRemove: item => authoringWorkspace.remove(item),
+      // Project basics opens the one workspace view.
+      onOpenWorkspace: () => authoringWorkspace.openWorkspace(),
       onSelectEntry: (entry) => {
         authoringWorkspace.select(entry);
         shell.setInspectorSelection(entry !== null);
@@ -75,6 +81,7 @@ async function main() {
       onSummary: (summary) => {
         const coreTargets = summary?.coreTargets ?? null;
         aiTools.setTargets(coreTargets);
+        organization.setTargets(coreTargets);
         onboarding.setTargets(coreTargets);
         authoringWorkspace.setTargets(coreTargets);
       },
@@ -82,8 +89,7 @@ async function main() {
 
     // Open setup immediately while the catalog and Core's published clients load.
     // Browser-local drafts never decide whether first-run setup is complete.
-    await authoring.start();
-    await Promise.all([onboarding.start(), catalog.start()]);
+    await Promise.all([authoring.start(), onboarding.start(), catalog.start()]);
   } catch (error) {
     shell.showError(error?.message ?? String(error));
   }

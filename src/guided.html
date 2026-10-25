@@ -7,15 +7,19 @@
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&amp;family=Geist+Mono:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/styles/tailwind.css">
 <link rel="stylesheet" href="/styles/tokens.css">
+<link rel="stylesheet" href="/styles/subpage.css">
+<link rel="stylesheet" href="/styles/status.css">
 <script src="/app/mode.js"></script>
 </head>
-<body class="bg-background font-body text-on-surface text-sm leading-normal antialiased">
-<header class="bg-wb-chrome border-b border-wb-border px-4 py-3 flex items-center justify-between">
-<h1 class="text-base font-semibold">Get started</h1>
+<body class="bg-background font-body text-on-surface wb-subpage leading-normal antialiased">
+<header class="wb-subpage-header">
+<a href="/" class="wb-subpage-brand" aria-label="aih Policy Workbench home">aih<span>Policy Workbench</span></a>
+<h1>Get started</h1>
 <a class="text-primary hover:underline" href="/" id="back-link">Back to the Workbench</a>
+<button type="button" data-mode-toggle class="wb-subpage-theme" aria-label="Switch to light mode">◐</button>
 </header>
 <main class="max-w-4xl mx-auto p-4 space-y-4">
-<p class="text-on-surface-variant">Pick what you want to do. Nothing is installed or changed from this page; saving only writes a setup file that you download.</p>
+<p class="text-on-surface-variant">Build a project setup draft from your goal. Your Workbench profile records your role and preferred AI clients; this separate draft describes choices for a project. Review and apply happen later in the Workbench.</p>
 
 <section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="entry-heading">
 <h2 class="font-semibold" id="entry-heading">What would you like to do?</h2>
@@ -51,6 +55,7 @@
 <section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="clients-heading">
 <h2 class="font-semibold" id="clients-heading">3. Your AI clients</h2>
 <p class="text-on-surface-variant">Tick the AI clients you use. Each one says where it came from.</p>
+<p class="text-on-surface-variant">Your selection determines which client adapters can be suggested. No client is selected as a default here. With several clients, each matching adapter is considered; the short starter list may not include every client. Review each adapter's target, Core support and installation facts separately.</p>
 <ul class="space-y-1" id="clients"></ul>
 <div class="flex flex-wrap items-center gap-3">
 <button class="px-3 py-1.5 rounded border border-wb-control-border hover:bg-surface-container disabled:opacity-50" id="detect-clients" type="button">Detect AI clients on this machine</button>
@@ -81,10 +86,11 @@
 </section>
 
 <section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="save-heading" id="save-section" hidden>
-<h2 class="font-semibold" id="save-heading">5. Save</h2>
+<h2 class="font-semibold" id="save-heading">5. Prepare your draft</h2>
 <div class="flex flex-wrap items-center gap-3">
-<button class="px-3 py-1.5 rounded bg-primary-container text-on-primary font-medium disabled:opacity-50" id="save" type="button">Save choices to a draft</button>
+<button class="px-3 py-1.5 rounded bg-primary-container text-on-primary font-medium disabled:opacity-50" id="save" type="button">Create draft from choices</button>
 <button class="px-3 py-1.5 rounded border border-wb-control-border hover:bg-surface-container" id="download" type="button" hidden>Download setup file</button>
+<button class="px-3 py-1.5 rounded bg-primary-container text-on-primary font-medium" id="continue-workbench" type="button" hidden>Continue in Workbench</button>
 </div>
 <p class="text-on-surface-variant" id="save-status" role="status" aria-live="polite"></p>
 <div class="space-y-2" id="saved" hidden>

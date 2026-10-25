@@ -21,9 +21,10 @@
  * from every displayed entry to its authoring asset identity.
  */
 
+import { createGapIndicator } from "../app/gap-indicator.js";
 import { el } from "../app/dom.js";
 import { sourcePresentation } from './source-facts.js';
-import { NOT_PUBLISHED } from "../app/absence.js";
+import { NOT_PUBLISHED, NOT_SUPPLIED } from "../app/absence.js";
 import { iconFor, iconSpan } from "../app/icons.js";
 import { attachTooltip } from "../app/tooltip.js";
 import { identity } from "./entry.js";
@@ -33,7 +34,7 @@ const AUTHORITY = "Producer authenticity is unchecked; this is not an approval o
 // summaries: nothing here can say Verified, and the icon (app/icons.js) keeps the status colour meanings.
 // `scan` is the scan state whose icon and words the pill borrows; "Not assessable" has no scan-line wording.
 export const EVIDENCE_STATE = {
-  "not-supplied": { scan: "not-scanned", text: "No scan record", title: () => "No scan record: no Scan report or artifact was supplied. Supply one in Scan Review to see this item's state." },
+  "not-supplied": { scan: "not-scanned", text: NOT_SUPPLIED, title: () => "No scan record: no Scan report or artifact was supplied. Supply one in Scan Review to see this item's state." },
   invalid: { scan: "unreadable", text: "Scan record can't be read", title: () => "Scan record can't be read: the supplied documents are not valid Scan reports or artifacts." },
   unsupported: { scan: "unreadable", text: "Scan record can't be read", title: () => "Scan record can't be read: the supplied report uses a version this Scan reader does not support." },
   unavailable: { scan: null, text: "Not assessable", title: () => "Not assessable: Scan could not assess this item against the supplied reports." },
@@ -61,7 +62,7 @@ function card(entry, selectedId, onSelect, model) {
   node.setAttribute("role", "button");
   node.setAttribute("aria-pressed", String(isSelected));
   // The exact identifier is always one hover away; the inspector shows it too.
-  node.title = id.entryId;
+  node.title = `Inspect ${title ?? id.name} · ${id.entryId}`;
 
   const top = el("div");
   const head = el("div", "flex items-start justify-between gap-2");
@@ -99,10 +100,16 @@ function card(entry, selectedId, onSelect, model) {
   const status = el("span", "px-1.5 py-0.5 rounded bg-wb-meta-bg border border-wb-border text-wb-meta font-mono font-medium flex items-center gap-1 min-w-0");
   status.dataset.evidenceState = evidence.state;
   status.appendChild(iconSpan("scan", shown.scan, { size: "text-[12px]", className: "shrink-0" }));
-  const words = el("span", "truncate", shown.text);
-  words.dataset.evidenceText = "";
-  status.appendChild(words);
-  attachTooltip(status, shown.title(evidence));
+  // Missing evidence stays a quiet gap indicator whose accessible name is the state; supplied states read as words.
+  if (evidence.state === 'not-supplied') {
+    status.className = 'text-outline font-mono flex items-center gap-1 shrink-0';
+    status.append(createGapIndicator({ label: shown.text, reason: shown.title(evidence) }));
+  } else {
+    const words = el("span", "truncate", shown.text);
+    words.dataset.evidenceText = "";
+    status.appendChild(words);
+    attachTooltip(status, shown.title(evidence));
+  }
   left.appendChild(status);
 
   const tokens = el("span", "px-1.5 py-0.5 rounded bg-wb-meta-bg border border-wb-border text-wb-meta font-mono hidden sm:inline-flex items-center gap-1 shrink-0");
@@ -122,13 +129,26 @@ function card(entry, selectedId, onSelect, model) {
   button.appendChild(el("div", "w-2.5 h-2.5 rounded-full bg-outline"));
   toggle.appendChild(button);
   if (entry.authoringItem) {
-    const chosen = model.intent?.roots.some(root => root.itemId === entry.authoringItem.id && root.releaseSha256 === entry.authoringItem.root.releaseSha256);
-    button.className = 'px-2 py-1 rounded bg-primary-container text-on-primary text-[10px] font-medium';
-    button.replaceChildren(); button.textContent = chosen ? 'Selected' : 'Choose';
-    button.setAttribute('aria-label', `Choose ${entry.authoringItem.id}`);
+    // Add puts the item and the items it needs into the setup in one step; refusals and anything to decide open the review instead.
+    // A chosen item's button is Remove (#144), which takes it back out the same way the panel's Remove from setup does.
+    const chosen = (model.acceptedRoots ?? model.intent?.roots ?? []).some(root => root.itemId === entry.authoringItem.id && root.releaseSha256 === entry.authoringItem.root.releaseSha256);
+    const label = chosen ? 'Remove' : 'Add', busy = chosen ? 'Removing…' : 'Adding…';
+    button.className = `px-2 py-1 rounded border text-[10px] font-medium ${chosen ? 'bg-primary-container text-on-primary border-primary hover:border-error' : 'border-wb-control-border text-on-surface-variant hover:text-primary hover:border-primary'}`;
+    button.replaceChildren(); button.textContent = label;
+    button.disabled = false;
+    button.setAttribute('aria-label', `${label} ${entry.authoringItem.id}`);
     button.removeAttribute('aria-disabled');
-    button.title = 'Review this proposed choice in your policy workspace before accepting it.';
-    button.addEventListener('click', event => { event.stopPropagation(); model.onChoose(entry.authoringItem); });
+    button.title = chosen ? `In your ${model.setupWord ?? 'setup'} with the items it needs. Remove takes it out; Undo puts it back.` : 'Add this item and the items it needs to your setup.';
+    // An Add or Remove still in flight keeps its busy label when the grid is redrawn meanwhile, so it cannot be used twice.
+    const pending = model.busy?.get(id.entryId);
+    if (pending) { button.textContent = pending; button.disabled = true; button.setAttribute('aria-busy', 'true'); }
+    button.addEventListener('click', async event => {
+      event.stopPropagation();
+      if (button.disabled) return;
+      button.disabled = true; button.textContent = busy; button.setAttribute('aria-busy', 'true');
+      try { await (chosen ? model.onRemove?.(entry.authoringItem, id.entryId) : model.onChoose?.(entry.authoringItem, id.entryId)); }
+      finally { button.disabled = false; button.textContent = label; button.removeAttribute('aria-busy'); }
+    });
   }
   foot.appendChild(toggle);
   node.appendChild(foot);
@@ -139,11 +159,13 @@ function card(entry, selectedId, onSelect, model) {
     select();
   });
   node.addEventListener("keydown", (event) => {
+    if (event.target !== node) return;
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       select();
     }
   });
+  for (const glyph of node.querySelectorAll(".material-symbols-outlined")) glyph.setAttribute("aria-hidden", "true");
   return node;
 }
 
@@ -160,6 +182,8 @@ export function createCards({ elements, onSelect }) {
       if (!model.entries.length) {
         const empty = el("div", "p-4 rounded border border-wb-border text-on-surface-variant text-[12px]", "No catalog entry matches this view. Published entries: ");
         empty.appendChild(el("span", "font-mono text-on-surface", String(model.total)));
+        const reset = el('button', 'block mt-3 border border-wb-border rounded px-3 py-1', 'Reset filters');
+        reset.type = 'button'; reset.addEventListener('click', model.onReset); empty.append(reset);
         elements.cardsGrid.appendChild(empty);
       } else {
         const nodes = model.entries.map((entry) => card(entry, model.selectedId, onSelect, model));
@@ -177,6 +201,13 @@ export function createCards({ elements, onSelect }) {
       elements.visibleCount.textContent = String(model.entries.length);
       elements.visibleCaption.textContent = model.entries.length === 1 ? "entry" : "entries";
       elements.visibleCaption.title = `Showing ${model.entries.length} of ${model.total} ${model.noun ?? "catalog entries"}.`;
+    },
+
+    /** Moves keyboard focus to the card for an entry, if the grid shows it; false when it does not. */
+    focus(entryId) {
+      const node = entryId == null ? undefined : [...elements.cardsGrid.children].find((child) => child.dataset?.cardId === entryId);
+      node?.focus();
+      return Boolean(node);
     },
 
     /**

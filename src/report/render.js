@@ -7,7 +7,7 @@ import { TEMPLATE } from './template.js';
 
 const DEFAULT_TITLE = 'AIH report';
 
-const TITLE_ANCHOR = '<title>AIH report — developer console (V9)</title>';
+const TITLE_ANCHOR = '<title>AIH report — saved snapshot</title>';
 const BRAND_ANCHOR = '<span id="brand-title">AIH report</span>';
 const BANNER_ANCHOR = '<!--aih:banner-->';
 const RADAR_ANCHOR = 'var RADAR={"labels":["Layering","Sharing","Wiring","Guardrails","Discover"],"values":[100,100,88,40,82]};';

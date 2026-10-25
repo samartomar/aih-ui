@@ -8,6 +8,8 @@ import { runScan, prepareArtifact } from '@aihq/scan/host';
 import { digestBytes } from './primitives.mjs';
 import { intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
+import { addFromCatalog, closePolicyDrawer, drawer } from './policy-drawer.mjs';
+import { openCatalogAdvanced, openScanReview } from './advanced-browser.mjs';
 
 const NOTE = 'consumer-proof.review-note';
 
@@ -58,6 +60,8 @@ export async function runEvidenceStatesBrowser({ origin, output, playwrightModul
     await page.locator('#browse-family').selectOption('');
 
     // a. Kind tiles count what the list shows in the same scope; tokens stay unknown.
+    // The tiles sit in the catalog's Advanced section; the kind pills are the default kind control.
+    await openCatalogAdvanced(page);
     const tile = kind => page.locator(`[data-metric="${kind}"]`);
     for (const kind of ['command', 'hook']) {
       const count = Number(await tile(kind).locator('.wb-metric-count').textContent());
@@ -80,31 +84,34 @@ export async function runEvidenceStatesBrowser({ origin, output, playwrightModul
     const otherCard = page.locator(`[data-card-id]:not([data-card-id$="/${NOTE}"]) [data-evidence-state]`).first();
     await noteCard.waitFor();
     assert.equal(await page.locator('#cards-grid [data-evidence-state]:not([data-evidence-state="not-supplied"])').count(), 0);
-    assert.equal(await noteWords.innerText(), 'No scan record');
+    // Missing evidence is a compact gap indicator whose accessible name is the state.
+    assert.equal(await noteCard.getByRole('button', { name: 'Not supplied', exact: true }).count(), 1);
     assert.equal(await noteIcon(), 'scan:not-scanned');
     assert.equal(await page.locator('#cards-grid').getByText('Not published', { exact: true }).count(), 0, 'No card slot claims evidence or tokens are unpublished.');
     await page.screenshot({ path: join(output, '01-not-supplied.png'), fullPage: true });
     scenarios.push('not-supplied');
 
     // c. Choose the note so the review panel can inspect it, then open Scan Review from the navigation.
-    await page.getByRole('button', { name: `Choose ${NOTE}`, exact: true }).click();
-    await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click();
-    await page.locator('#nav-scan-review').click();
+    await addFromCatalog(page, NOTE);
+    await openScanReview(page);
     await page.locator('#policy-workspace').waitFor({ state: 'visible' });
     assert.equal(await page.locator('#evidence-review').evaluate(node => node.open), true, 'Scan Review opens the supplied-evidence review.');
-    assert.equal(await page.getByLabel('Review evidence files', { exact: true }).evaluate(node => node === document.activeElement), true);
+    assert.equal(await drawer(page).getByLabel('Review evidence files', { exact: true }).evaluate(node => node === document.activeElement), true);
     scenarios.push('scan-review-opens-evidence-review');
 
     const supply = async (path, state) => {
-      await page.locator('#nav-scan-review').click();
-      await page.getByLabel('Review evidence files', { exact: true }).setInputFiles(path);
-      await page.getByText('Original evidence bytes loaded').waitFor();
-      await page.getByLabel('Evidence review subject', { exact: true }).selectOption({ label: NOTE });
-      await page.getByRole('button', { name: 'Inspect evidence', exact: true }).click();
+      await openScanReview(page);
+      await drawer(page).getByLabel('Review evidence files', { exact: true }).setInputFiles(path);
+      await drawer(page).getByText('Original evidence bytes loaded').waitFor();
+      await drawer(page).getByLabel('Evidence review subject', { exact: true }).selectOption({ label: NOTE });
+      await drawer(page).getByRole('button', { name: 'Inspect evidence', exact: true }).click();
       const status = page.locator(`#evidence-review [role="status"][data-evidence-state="${state}"]`);
       await status.waitFor();
       const text = await status.innerText();
-      await page.locator('#evidence-review').screenshot({ path: join(output, `review-${state}.png`) });
+      // The review sits in the drawer, which can be shorter than the review. An element capture beyond the viewport lets
+      // Chromium resize the page to the element's own narrow width, which folds the navigation as on a phone; the
+      // evidence is a viewport capture with the review's status in view instead.
+      await status.scrollIntoViewIfNeeded(); await page.screenshot({ path: join(output, `review-${state}.png`) });
       await page.locator('#nav-sources').click();
       await page.waitForFunction(([expected, note]) => document.querySelector(`[data-card-id$="/${note}"] [data-evidence-state]`)?.dataset.evidenceState === expected, [state, NOTE]);
       await page.screenshot({ path: join(output, `catalog-${state}.png`), fullPage: true });
@@ -133,9 +140,9 @@ export async function runEvidenceStatesBrowser({ origin, output, playwrightModul
     assert.equal(await page.locator('#cards-grid [data-evidence-state]:not([data-evidence-state="invalid"])').count(), 0);
     scenarios.push('invalid');
     // g. Forgetting the evidence returns every card to not supplied.
-    await page.locator('#nav-scan-review').click();
-    await page.getByRole('button', { name: 'Forget supplied evidence', exact: true }).click();
-    await page.getByText('Supplied evidence forgotten').waitFor();
+    await openScanReview(page);
+    await drawer(page).getByRole('button', { name: 'Forget supplied evidence', exact: true }).click();
+    await drawer(page).getByText('Supplied evidence forgotten').waitFor();
     await page.locator('#nav-sources').click();
     await page.waitForFunction(note => document.querySelector(`[data-card-id$="/${note}"] [data-evidence-state]`)?.dataset.evidenceState === 'not-supplied', NOTE);
     scenarios.push('forgotten-not-supplied');

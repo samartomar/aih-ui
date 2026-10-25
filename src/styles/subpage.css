@@ -1,0 +1,25 @@
+.wb-subpage { font-size: 14px; }
+.wb-subpage .text-xs, .wb-subpage .text-sm { font-size: 13px; }
+.wb-subpage input, .wb-subpage select, .wb-subpage textarea, .wb-subpage button { font-size: inherit; }
+.wb-subpage summary { cursor: pointer; }
+.wb-subpage details > summary { padding-block: 4px; }
+.wb-subpage :where(button, select, summary, a[href], input:not([type=checkbox]):not([type=radio])) { min-height: 32px; }
+.wb-subpage [hidden] { display: none !important; }
+.wb-subpage-header {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 12px 20px; background: var(--color-chrome); border-bottom: 1px solid var(--color-border);
+}
+.wb-subpage-brand { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 600; }
+.wb-subpage-brand span { font-size: 13px; font-weight: 500; color: var(--color-muted); }
+.wb-subpage-header h1 { font-size: 13px; font-weight: 600; }
+.wb-subpage-header #back-link { margin-left: auto; font-size: 13px; }
+.wb-subpage-theme { border: 1px solid var(--color-control-border); border-radius: 4px; padding: 3px 9px; font-size: 18px; }
+.wb-subpage :focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
+@media (max-width: 600px) {
+  .wb-subpage :where(button, select, summary, a[href], input:not([type=checkbox]):not([type=radio])) { min-height: 44px; }
+  .wb-subpage-header { gap: 10px; padding: 12px; }
+  .wb-subpage-brand span { display: none; }
+}
+@media (max-width: 760px) {
+  label:has(input:is([type=checkbox], [type=radio])) { min-height: 44px; display: flex; align-items: center; }
+}

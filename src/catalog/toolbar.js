@@ -19,6 +19,7 @@
  * scroll affordance and is removed once there is nothing left to scroll to.
  */
 
+import { createGapIndicator } from "../app/gap-indicator.js";
 import { el } from "../app/dom.js";
 import { NOT_PUBLISHED } from "../app/absence.js";
 import { sortedCounts } from "./selectors.js";
@@ -59,8 +60,9 @@ function summaryChip(icon, label, title) {
   const chip = el("span", "px-2 py-1 rounded bg-surface-container border border-wb-border text-outline flex items-center gap-1 shrink-0 whitespace-nowrap");
   chip.appendChild(el("span", "material-symbols-outlined text-[12px] text-outline", icon));
   chip.appendChild(el("span", "font-medium", label));
-  chip.appendChild(el("span", "text-outline", NOT_PUBLISHED));
+  chip.appendChild(createGapIndicator({ label: NOT_PUBLISHED, reason: title }));
   chip.title = title;
+  for (const glyph of chip.querySelectorAll(".material-symbols-outlined")) glyph.setAttribute("aria-hidden", "true");
   return chip;
 }
 
@@ -74,7 +76,7 @@ function kindPill(label, count, active, onClick, key = label) {
   if (key !== null) button.appendChild(iconSpan("kind", key, { size: "text-[12px]" }));
   button.appendChild(el("span", "", key === null ? label : `${label} (${count})`));
   const kind = key === null ? "All kinds" : iconFor("kind", key).label;
-  attachTooltip(button, `${kind}: ${count} items matching ${key === null ? "the current" : "this kind and the current"} source, category and search filters.`);
+  attachTooltip(button, `${kind}: ${count} items matching ${key === null ? "the current" : "this kind and the current"} family, source, search and target-support filters.`);
   button.addEventListener("click", onClick);
   return button;
 }
@@ -109,8 +111,8 @@ export function createToolbar({ elements, onQuery, onToggleKind, onSourceType, o
       // selected one; selecting it again changes nothing.
       elements.reviewFilters.replaceChildren(
         reviewPill("All", null, true, () => {}),
-        reviewPill("Needs Review", null, false, null),
-        reviewPill("Egress Out", null, false, null),
+        createGapIndicator({ label: "Needs Review not published", reason: UNAVAILABLE["Needs Review"] }),
+        createGapIndicator({ label: "Egress Out not published", reason: UNAVAILABLE["Egress Out"] }),
       );
       elements.reviewSummary.replaceChildren(
         summaryChip("pending_actions", "need review", UNAVAILABLE["Needs Review"]),
@@ -150,6 +152,7 @@ export function createToolbar({ elements, onQuery, onToggleKind, onSourceType, o
         }
         elements.sourceFilter.dataset.built = built;
       }
+      elements.sourceFilter.parentElement.hidden = model.sourceTypeCounts.size <= 1;
       elements.sourceFilter.value = model.view.sourceType ?? "";
       elements.sortSelect.value = model.view.sort;
       markPillOverflow();

@@ -11,7 +11,7 @@ import { SORT_KEYS, sourceScopes } from "./selectors.js";
 const SAVED_KEY = "aih-ui-sources-view";
 
 export function emptyView() {
-  return { query: "", kind: null, sourceType: null, sort: "name", source: null };
+  return { query: "", kind: null, sourceType: null, sort: "name", source: null, family: "", target: "", support: "all" };
 }
 
 export function saveView(view) {
@@ -44,6 +44,9 @@ export function restoreView(view, counts) {
   if (typeof saved.source === "string") {
     if (sourceScopes(counts).some((scope) => scope.filterValue === saved.source)) view.source = saved.source;
   }
+  if (typeof saved.family === 'string') view.family = saved.family;
+  if (typeof saved.target === 'string') view.target = saved.target;
+  if (['all', 'supported', 'unsupported', 'unknown'].includes(saved.support)) view.support = saved.support;
   if (SORT_KEYS.includes(saved.sort)) view.sort = saved.sort;
   return view;
 }

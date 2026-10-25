@@ -105,19 +105,26 @@ export async function smokeCandidate({ origin, identity, output, playwrightModul
       HTMLDialogElement.prototype.showModal = function () { if (this.id !== 'setup-dialog') return showModal.call(this); };
     });
     await dismissSetup();
-    const disclosure = page.locator('details').filter({ has: page.locator('summary').filter({ hasText: /^\s*provenance\s*$/i }) }).first();
+    // The strip's diagnostics disclosure, labelled Packages in the Workbench shell.
+    const disclosure = page.locator('#provenance-strip details').filter({ has: page.locator('summary').filter({ hasText: /^\s*packages\s*$/i }) }).first();
     let provenanceText = '';
     if (await disclosure.count()) {
       if (!await disclosure.evaluate(node => node.open)) await disclosure.locator('summary').first().click({ timeout: remaining() });
       provenanceText = await disclosure.textContent() ?? '';
-    } else noteMissing('details > summary: provenance');
+    } else noteMissing('#provenance-strip details > summary: Packages');
     mismatches.push(...compareRenderedIdentity(identity, { stripText: strip ? await strip.textContent() ?? '' : '', provenanceText }));
     await capture('02-readiness.png', () => go('/readiness.html'));
     await capture('03-guided.png', () => go('/guided.html'));
     async function policy() {
       await go('/'); await dismissSetup();
+      // Policy workspace and the authority, workspace, improvement and trial sections sit in Advanced sections (#115).
+      await page.evaluate(() => { const advanced = document.getElementById('catalog-advanced'); if (advanced) advanced.open = true; });
       const nav = await find('#nav-policy');
       if (nav) await nav.click({ timeout: remaining() });
+      await page.evaluate(() => {
+        if (document.getElementById('policy-review-panel')?.hidden) document.getElementById('your-setup')?.click();
+        for (const section of document.querySelectorAll('#setup-advanced, #setup-advanced details')) section.open = true;
+      });
     }
     async function scroll(selector, open = false) {
       const node = await find(selector);

@@ -1,5 +1,6 @@
 import { el } from './dom.js';
 import { evidenceView } from './evidence-view.js';
+import { fillBoundedOptions } from './bounded-options.js';
 
 export function createScanEvidence(client, { onReview } = {}) {
   const panel = el('section', 'min-w-0 max-w-full space-y-2 border border-wb-border rounded p-3');
@@ -7,13 +8,15 @@ export function createScanEvidence(client, { onReview } = {}) {
   panel.append(el('h3', 'font-medium', 'Latest, baseline and history'));
   panel.append(el('p', 'text-on-surface-variant', 'Evidence informs your choice. Authentication, content capture and detector coverage are separate facts. Viewing evidence keeps saved policies, reviews and prepared actions pinned.'));
   const target = el('select', 'w-full min-w-0 max-w-full bg-wb-input border border-wb-border rounded p-1'); target.setAttribute('aria-label', 'Scan content');
+  const search = el('input', 'w-full bg-wb-input border border-wb-border rounded p-2'); search.type = 'search'; search.placeholder = 'Search evidence subjects'; search.setAttribute('aria-label', 'Search evidence subjects');
+  const matches = el('p', 'text-on-surface-variant');
   const history = el('select', 'flex-1 min-w-0 max-w-full bg-wb-input border border-wb-border rounded p-1'); history.setAttribute('aria-label', 'Scan history');
   const scope = el('select', 'w-full min-w-0 max-w-full bg-wb-input border border-wb-border rounded p-1'); scope.setAttribute('aria-label', 'Scan requested scope');
   const supplied = el('input', 'min-w-0 max-w-full'); supplied.type = 'file'; supplied.multiple = true; supplied.setAttribute('aria-label', 'Evidence for latest view');
   const status = el('p', 'break-all'); status.setAttribute('role', 'status');
   const facts = el('div', 'space-y-2');
-  let result, historicalId, attempt = 0, suppliedBytes = [], requestedScope;
-  const button = (label, callback) => { const node = el('button', 'px-3 py-1 rounded border border-wb-border', label); node.type = 'button'; node.addEventListener('click', async () => { try { await callback(); } catch (error) { status.textContent = error.message; } }); return node; };
+  let result, historicalId, attempt = 0, suppliedBytes = [], requestedScope, checking = false;
+  const button = (label, callback) => { const node = el('button', 'px-3 py-1 rounded border border-wb-border', label); node.type = 'button'; node.addEventListener('click', async () => { if (node.disabled) return; node.disabled = true; node.setAttribute('aria-busy', 'true'); try { await callback(); } catch (error) { status.textContent = `${error.message} Check the configured source or supply evidence, then retry.`; } finally { node.disabled = false; node.removeAttribute('aria-busy'); } }); return node; };
   function render() {
     facts.replaceChildren(); history.replaceChildren(new Option('Latest matching', ''));
     if (!result) { status.textContent = 'Check configured sources or supply evidence in this review.'; return; }
@@ -90,12 +93,14 @@ export function createScanEvidence(client, { onReview } = {}) {
     detail('Source checks, refusals and conflicts', { checks: result.checks, failures: result.failures, conflicts: result.conflicts });
   }
   async function check() {
-    const current = ++attempt;
+    if (!target.value) { status.textContent = 'Choose an evidence subject before checking sources.'; return; }
+    const current = ++attempt; checking = true; panel.setAttribute('aria-busy', 'true'); status.textContent = 'Checking evidence sources…';
     try { const next = await client.request('scan-evidence', { target: target.value, evaluationTime: new Date().toISOString(), policyBytes: undefined, reviewEvidenceIds: undefined,
       ...(suppliedBytes.length ? { reviewEvidence: suppliedBytes.map(bytes => [...bytes]) } : {}), ...(requestedScope ? { selection: requestedScope } : {}) }); if (current !== attempt) return;
       if (next.status !== 'selected' && result?.status === 'selected') { status.textContent = `Check refused; last known view retained. ${JSON.stringify(next.diagnostics)}`; return; }
       result = next; render(); }
-    catch (error) { if (current === attempt) status.textContent = `Check failed; last known view retained. ${error.message}`; }
+    catch (error) { if (current === attempt) status.textContent = `Check failed; last known view retained. ${error.message} Check the source or supply evidence, then retry.`; }
+    finally { if (current === attempt) { checking = false; panel.removeAttribute('aria-busy'); } }
   }
   history.addEventListener('change', () => { historicalId = history.value || undefined; render(); });
   scope.addEventListener('change', () => { requestedScope = JSON.parse(scope.value); check(); });
@@ -115,16 +120,20 @@ export function createScanEvidence(client, { onReview } = {}) {
   acquisitionControls.append(supplied, button('Check Scan evidence', check));
   const historyControls = el('div', 'flex min-w-0 max-w-full flex-wrap items-center gap-2');
   historyControls.append(history, button('Latest', () => { historicalId = undefined; render(); }));
-  panel.append(target, acquisitionControls, scope, historyControls, status, facts);
+  panel.append(search, matches, target, acquisitionControls, scope, historyControls, status, facts);
+  const fillTargets = value => fillBoundedOptions({ select: target, entries: client.catalog?.items ?? [], query: search.value, value,
+    label: item => `${item.label ?? item.id} · ${item.family} · ${item.id}`, key: item => `${item.root.releaseSha256}/${item.id}`, message: matches, placeholder: 'Choose evidence subject' });
+  search.addEventListener('input', () => fillTargets());
   document.addEventListener('aih:scan-content', event => {
-    if (![...target.options].some(option => option.value === event.detail?.target)) return;
+    if (!(client.catalog?.items ?? []).some(item => `${item.root.releaseSha256}/${item.id}` === event.detail?.target)) return;
+    fillTargets(event.detail.target);
     target.value = event.detail.target;
     target.dispatchEvent(new Event('change'));
   });
   let catalog;
   client.subscribe(() => {
     if (catalog === client.catalog) return; catalog = client.catalog;
-    target.replaceChildren(...(catalog?.items ?? []).map(item => new Option(`${item.family} · ${item.id}`, `${item.root.releaseSha256}/${item.id}`)));
+    fillTargets();
     render();
   });
   render();

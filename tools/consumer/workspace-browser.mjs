@@ -16,6 +16,8 @@ import { composeAuthoring, freshAuthoring, openDraft } from './headless.mjs';
 import { stable, digestBytes } from './primitives.mjs';
 import { installedFamilies } from './installed-families.mjs';
 import { WORKSPACE_DECLARATION_RECORD_SCHEMA, LOCAL_BINDING_RECORD_SCHEMA } from './workspace-record.mjs';
+import { drawer, openPolicyDrawer, openPolicyFileActions, openPolicySection } from './policy-drawer.mjs';
+import { openPolicyWorkspace } from './advanced-browser.mjs';
 
 const decode = bytes => new TextDecoder().decode(bytes), encode = value => new TextEncoder().encode(value);
 const ROOT = 'mattpocock.implement';
@@ -137,9 +139,10 @@ export async function runWorkspaceBrowser({ origin, output, playwrightModule }) 
   };
   const openSaved = async (page, path) => {
     operations = [];
-    await page.locator('#nav-policy').click(); await page.locator('#policy-open').setInputFiles(path);
-    await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+    await openPolicyWorkspace(page); await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(path);
+    await drawer(page).getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await page.locator('#policy-draft-status').filter({ hasText: OPENED }).waitFor();
+    await openPolicySection(page, 'Workspace repositories');
     await page.waitForFunction(() => /Declare workspace|Workspace choice|revision|WORKSPACE_VERSION_UNSUPPORTED/.test(document.querySelector('#policy-repositories')?.textContent ?? ''));
     await idle(page);
     return [...operations];
@@ -156,11 +159,15 @@ export async function runWorkspaceBrowser({ origin, output, playwrightModule }) 
   };
   const noToken = async page => assert.ok(!(await page.locator('body').innerText()).includes(TOKEN), 'The credential is never shown.');
   const records = (envelopeBytes, schema) => JSON.parse(decode(envelopeBytes)).records.filter(record => record.schema === schema);
+  // Repository knowledge sits under a collapsed optional section; a person opens it before describing a member.
+  const FACT_LABELS = { responsibilities: 'What this repository owns', instructions: 'Agent instruction files', contracts: 'Shared interfaces or contracts' };
   const memberForm = async (page, member) => {
-    await input(page, 'Member id').fill(member.id); await input(page, 'Remote identity').fill(member.identity);
-    for (const field of ['responsibilities', 'instructions', 'contracts']) {
-      await select(page, `${field} status`).selectOption(member[field] ? 'known' : 'unresolved');
-      await input(page, `${field} (comma-separated)`).fill(member[field] ?? '');
+    await input(page, 'Repository key (required)').fill(member.id); await input(page, 'Repository identity (required)').fill(member.identity);
+    const facts = section(page).locator('details', { has: page.getByText('Aliases and repository knowledge (optional)', { exact: true }) });
+    if (!await facts.evaluate(node => node.open)) await facts.getByText('Aliases and repository knowledge (optional)', { exact: true }).click();
+    for (const [field, label] of Object.entries(FACT_LABELS)) {
+      await select(page, `${label} — knowledge`).selectOption(member[field] ? 'known' : 'unresolved');
+      await input(page, `${label} (comma-separated)`).fill(member[field] ?? '');
     }
   };
   const steps = {}, screenshots = [];
@@ -274,7 +281,7 @@ export async function runWorkspaceBrowser({ origin, output, playwrightModule }) 
 
     // 7. Save the draft, reopen it in a fresh page: members, relationship and bindings are back, unverified until Verify.
     const savedPath = join(output, 'workspace.draft.json');
-    const savedBytes = await download(first, () => first.locator('#policy-draft-save').click(), savedPath);
+    const savedBytes = await download(first, async () => { await openPolicyDrawer(first); await first.locator('#policy-draft-save').click(); }, savedPath);
     assert.equal(records(savedBytes, WORKSPACE_DECLARATION_RECORD_SCHEMA).length, 1);
     assert.equal(records(savedBytes, LOCAL_BINDING_RECORD_SCHEMA).length, 3, 'The local draft keeps its bindings.');
     assert.deepEqual(leaks(savedBytes).filter(leak => leak === TOKEN), [], 'The saved draft never holds the credential.');
@@ -338,7 +345,7 @@ export async function runWorkspaceBrowser({ origin, output, playwrightModule }) 
     assert.equal(await rows(reopened, 'ui').count(), 1, 'Exporting leaves the local bindings in the open draft.');
     screenshots.push(await shot(reopened, '13-exported-note.png'));
     // The local draft after the move still holds bindings; only it is used for the unsupported-version setup below.
-    const currentBytes = await download(reopened, () => reopened.locator('#policy-draft-save').click(), join(output, 'workspace-moved.draft.json'));
+    const currentBytes = await download(reopened, async () => { await openPolicyDrawer(reopened); await reopened.locator('#policy-draft-save').click(); }, join(output, 'workspace-moved.draft.json'));
     assert.equal(records(currentBytes, LOCAL_BINDING_RECORD_SCHEMA).length, 3);
 
     // 10. A declaration of a version this Workbench does not support opens read-only, and the page writes nothing.
@@ -359,7 +366,7 @@ export async function runWorkspaceBrowser({ origin, output, playwrightModule }) 
     await unsupportedPage.waitForTimeout(300);
     assert.deepEqual(operations.filter(operation => WORKSPACE_WRITES.concat(['workspace-plan', 'workspace-verify', 'workspace-export']).includes(operation)), [], 'The page made no workspace write request.');
     screenshots.push(await shot(unsupportedPage, '14-unsupported-read-only.png'), await shot(unsupportedPage, '14-unsupported-read-only-page.png', { whole: true }));
-    const keptBytes = await download(unsupportedPage, () => unsupportedPage.locator('#policy-draft-save').click(), join(output, 'unsupported-version.saved.json'));
+    const keptBytes = await download(unsupportedPage, async () => { await openPolicyDrawer(unsupportedPage); await unsupportedPage.locator('#policy-draft-save').click(); }, join(output, 'unsupported-version.saved.json'));
     // Saving adds a revision (as for any draft); the unsupported declaration and every binding are carried verbatim.
     assert.deepEqual(records(keptBytes, futureSchema), records(future, futureSchema), 'The unsupported record is carried unchanged.');
     assert.equal(records(keptBytes, futureSchema).length, 1); assert.equal(records(keptBytes, WORKSPACE_DECLARATION_RECORD_SCHEMA).length, 0);

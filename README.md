@@ -90,7 +90,7 @@ Git publishing and operator-host inputs that are still needed.
 
 Optional host configuration uses the existing `AIH_CONSUMER_PROJECT`,
 `AIH_CONSUMER_CONTROLS`, `AIH_ORGANIZATION_SOURCE` and `AIH_REVIEW_TRUST`
-environment inputs. Without a configured host, Prepare/Apply and managed removal
+environment inputs. `AIH_CONSUMER_PROJECT` is the default project folder; the review drawer's Project folder row can choose another for the server's lifetime. The host refuses a relative, missing or non-folder path, a drive or filesystem root, the account's and the server's home folders themselves (the account's own, `HOME`, `USERPROFILE`), and Core's state folder `<home>/.aih` and anything inside it, comparing real paths; folders inside a home folder are allowed. Install and Remove check the chosen folder again before each run. A switch is refused while Install or Remove is running and replaces the execution hosts, so nothing prepared for the old folder can be applied. Recent folders stay in this browser only. Without a project folder, Prepare/Apply and managed removal
 remain unavailable with an explanation. `AIH_UPDATE_SOURCE_CATALOG_ROOTS` configures the update source: an ordered list of at most 8 absolute paths of locally packed Catalog package roots, oldest first, separated by the platform path delimiter (`;` on Windows, `:` elsewhere). Each root is read only through the public `readInstalledRelease`, one export at a time: its `release.json` and the four family release exports, and nothing else under it; nothing is written and no scan runs. A root must carry all five release exports to be read, and counts as read only when all five are valid releases of the installed `@aihq/catalog` package; otherwise it is reported offline as unreadable, invalid or a different package, naming the first export that failed, with the time it was last read kept for the lifetime of the server. While some roots are offline, the updates the readable ones offer are still listed, but content is reported unknown ("some update sources could not be read"), never checked, and the page keeps earlier updates and their check time; the improvements check says the same. The page shows each source by position, never by path. Later entries are newer, which is this host's own declaration and not a Catalog or producer fact (local packs can share one package version), so the page words it as the order declared by this host's update source. A launcher passes the same list as `startConsumer({ updateSourceCatalogRoots })`; the owner-testing candidate sets it from its manifest's `updateSourceCatalogs`. More than 8 entries, an empty entry or a relative path fails at startup, and so does setting it together with `AIH_MAINTENANCE_SOURCE`. `AIH_MAINTENANCE_SOURCE` is a test fixture only: the path of a small JSON file naming note-fixture revisions to publish as newer revisions of the review note, shown as "Test fixture source — not a real update source". With neither set, the host has no update source and content updates are unknown, not checked. `AIH_UI_SETTINGS_PATH` selects an
 isolated local setup store for tests; HTTP inputs cannot choose that path.
 
@@ -589,7 +589,7 @@ Absence is worded by what is actually absent:
 - **Not supplied** — organization information. Organizations supply it; the catalog
   never will. The header scope is one of these.
 - **Not connected** — a page action or telemetry feed with no Core contract wired yet
-  (Review Changes, Check Policy, Publish, Policies & Publish, Audit Feed,
+  (Publish, Policies & Publish, Audit Feed,
   Compliance Matrix, whether an AI tool is installed or connected, Egress Guard).
 - **Unknown** — a value no defined producer supplies (token values).
 
@@ -876,6 +876,16 @@ Nothing is borrowed into an empty slot. The Catalog's own evidence statements ar
 the inspector's Security tab, labelled as statements; the source identity is in
 Upstream Provenance; exact ids and digests are behind one disclosure.
 
+For current Catalog items, Security loads a compact Scan evidence summary only
+while the inspector and Security tab are visible. Rapid selections keep one read
+in flight and replace queued selections; an older answer never paints over a
+newer item. Answers are snapshots at the displayed evaluation time. **Re-check
+sources** renews that time and clears the browser cache. Item capture, release
+baseline matching, producer authentication and source-wide findings remain
+separate. Full details and retained history stay available in Scan Review.
+The UI-owned host reuses package reads with exact input keys and bounded caches;
+it re-reads source bytes and records failed checks before reusing an answer.
+
 The card is titled with the item's published name, `subject.id`, as the design
 source titles it. With every source shown at once, the same name can appear more
 than once -- the same agent ships in several aih releases -- and the full entry id
@@ -906,7 +916,7 @@ cards matching the active filters. The other two keep their purpose but are unav
 
 The technical filters that ARE available -- kind, source type and sort -- are in the
 grid header, where the Workbench design puts its sort control.
-Kind counts include the current source, category and search filters before the
+Kind counts include the current family, source, search and target-support filters before the
 kind selection itself. Kinds with no matches stay visible and can be cleared.
 
 ### Four words for four kinds of absence
@@ -929,9 +939,9 @@ readable but those details do not select or approve a policy. Vibe does not requ
 enterprise details. No repository is read or verified by setup.
 
 Optional assistance requests (code review, codebase memory, workspace help,
-Headroom, Serena and context/token optimization) start selected in new setups.
-Each can be deselected, and **Skip all assistance** clears the six selections.
-This is a UI default for these six choices, not a package recommendation. Saved
+Headroom, Serena and context/token optimization) are deferred from first-run setup
+and start unselected. They can be edited from the workspace's **Optional assistance**
+section. **Keep current choices** advances without clearing selections. Saved
 choices, including an intentionally empty list, are restored exactly on edit.
 Each explains its proposed benefit and the consequence of skipping. All are
 recorded preferences only: integrations are not installed or connected, no code
@@ -954,8 +964,17 @@ with the full, copyable settings path returned by the server. **Update my Workbe
 information** opens a draft of the saved Admin organization details (when applicable),
 assistance choices and AI clients. Cancel (or Escape) discards the draft; **Save changes** validates
 and atomically replaces the same local file. Experience and enterprise role are
-fixed in both the edit UI and its server endpoint. To change either, delete the
-settings file at the displayed path and restart the Workbench. AI client choices
+fixed in that editor and its server endpoint. The separate **Mode** popup switches
+between Vibe coder, Enterprise Admin and Enterprise Developer. Its required fields
+change with the selection: Admin requires organization name, short ID, policy
+repository and contact emails; Vibe and Developer require no organization details.
+**Save mode** validates and atomically saves just those mode fields into the latest
+setup, preserving AI clients, assistance choices and reviewer identity. Cancel or
+Escape leaves the saved setup unchanged. Switching away from Admin clears its
+organization details from active setup. The browser remembers a valid Admin profile
+locally for a later switch; required details are validated again before saving.
+Mode changes update presentation only and grant no organization authority.
+AI client choices
 can also be updated from the AI tools control.
 
 The installed public packages do not expose an assistance-card contract for
@@ -989,6 +1008,13 @@ moves the operator's focus or state without their asking:
 - Setup uses native modal dialogs: the background is inert and keyboard focus
   stays inside. The first-run wizard keeps Escape from bypassing setup; the
   read-only saved setup view can be closed normally.
+- **Your setup (N)** in the header counts the chosen items of the current
+  setup and opens the review panel at Install (or the installed list when there
+  is nothing to install), with focus on that heading. **Back to catalog** in the
+  panel closes it and puts focus on the card just chosen, or on the search box.
+  Close and Escape return focus to the control that opened the panel.
+- The navigation rail folds on a phone-width window and comes back when the
+  window is wide again; a rail the person folded with its toggle stays folded.
 - A rail link to a screen with no contract yet is marked unavailable: it is
   followed nowhere and is not a tab stop. The Sources link is this page
   (`aria-current="page"`) and is not followed either.
@@ -1015,7 +1041,7 @@ them with lifecycle scripts disabled in a temporary consumer and prints the
 loopback URL and exact package hashes. Without `AIH_CONSUMER_PROJECT`, browsing,
 authoring, download and reopen work while Prepare/Apply stay unavailable. An
 explicit host-configured disposable target enables review and approval; the
-browser cannot supply target paths or material roots. `AIH_CONSUMER_CONTROLS`
+browser cannot supply material roots, and can change the project folder only through the host's checked choice above. `AIH_CONSUMER_CONTROLS`
 may name a host-owned controls JSON file. Use Node 24.15 through 24.x.
 
 The page saves ordinary execution policy JSON plus namespaced
@@ -1137,8 +1163,7 @@ node tools/check-page-contract.mjs
 Where the Workbench design showed a field the index does not publish, the page keeps the
 layout, shows **Not published**, **Not supplied** or **Not connected** as above, and
 disables the control. The current list:
-organization scope; Vibe/Enterprise and the AI tools counter; Review Changes count,
-Check Policy and Publish; token values (shown as **Unknown**);
+organization scope; Vibe/Enterprise and the AI tools counter; Publish; token values (shown as **Unknown**);
 allowed/active numerators and percentages; the source-policy posture segment;
 search-result egress classification; per-engine scanner telemetry and detector
 identities; network egress, execution sandbox and required secrets; the policy

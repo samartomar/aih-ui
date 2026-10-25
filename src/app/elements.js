@@ -9,8 +9,9 @@ export function shellElements() {
   const ids = [
     "nav-rail", "toggle-nav-btn", "inspector-rail", "toggle-inspector-btn", "close-inspector-btn",
     "pane-details", "pane-security", "pane-json", "catalog-error",
-    "nav-sources", "nav-policy", "catalog-scopes-section", "framework-matrix-tabs",
-    "catalog-workspace", "policy-workspace", "policy-workspace-title",
+    "nav-sources", "nav-policy", "nav-scan-review", "catalog-scopes-section", "framework-matrix-tabs",
+    "catalog-workspace", "policy-workspace", "policy-workspace-title", "catalog-kinds-disclosure",
+    "project-basics", "nav-project-basics", "project-basics-title",
   ];
   const found = collectIds(ids);
   found.tabButtons = [...document.querySelectorAll(".inspector-tab-btn")];
@@ -21,7 +22,7 @@ export function shellElements() {
 export function organizationElements() {
   const ids = [
     "org-modal-trigger", "org-trigger-label", "org-modal-overlay", "org-modal-title",
-    "close-org-modal-btn", "update-org-setup-btn", "org-setup-summary", "workbench-role", "workbench-experience",
+    "close-org-modal-btn", "update-org-setup-btn", "org-setup-summary", "workbench-role",
   ];
   return collectIds(ids);
 }

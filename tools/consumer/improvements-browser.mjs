@@ -18,6 +18,8 @@ import { noteFixture } from './note-fixture.mjs';
 import { frictionFixture } from './friction-fixture.mjs';
 import { IMPROVEMENT_SUGGESTION_SCHEMA, IMPROVEMENT_DISMISSAL_SCHEMA } from './improvements.mjs';
 import { UNKNOWNS, FRICTION_COVERAGE, IMPROVEMENT_RULES_VERSION } from './improvement-rules.mjs';
+import { drawer, openPolicyDrawer, openPolicyFileActions, openPolicySection } from './policy-drawer.mjs';
+import { openPolicyWorkspace } from './advanced-browser.mjs';
 
 const decode = bytes => new TextDecoder().decode(bytes);
 const ROOT = 'mattpocock.implement', CLIENTS = ['claude', 'codex'];
@@ -73,10 +75,18 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
     return page;
   };
   const download = async (page, trigger, path) => { const event = page.waitForEvent('download'); await trigger(); await (await event).saveAs(path); return new Uint8Array(await readFile(path)); };
-  const saveDraft = (page, path) => download(page, () => page.locator('#policy-draft-save').click(), path);
+  const saveDraft = (page, path) => download(page, async () => { await openPolicyDrawer(page); await page.locator('#policy-draft-save').click(); }, path);
   const section = page => page.locator('#policy-improvements');
-  const groupCards = (page, label) => section(page).locator('h4').filter({ hasText: new RegExp(`^${label}$`) }).locator('..').locator('[data-suggestion-id]');
-  const groupLabels = page => section(page).locator('h4').allInnerTexts();
+  // The leading suggestion has a heading; other groups are collapsed sections whose summary adds a count, as in "Dismissed (1)".
+  const groupHeadings = page => section(page).locator('h4, details > summary.font-medium');
+  const groupCards = (page, label) => groupHeadings(page).filter({ hasText: new RegExp(`^${label}( \\(\\d+\\))?$`) }).locator('..').locator('[data-suggestion-id]');
+  const groupLabels = async page => (await groupHeadings(page).allTextContents()).map(text => text.replace(/ \(\d+\)$/, ''));
+  // Each card keeps why it was suggested, its effects and evidence under a collapsed section; a person opens them to read.
+  const reveal = async scope => {
+    const closed = scope.locator('details:not([open]) > summary').filter({ visible: true });
+    for (let opened = 0; opened < 40 && await closed.count(); opened++) await closed.first().click();
+  };
+  const textOf = async locator => { await reveal(section(locator.page())); return locator.innerText(); };
   const improvementStatus = page => section(page).locator('p[role="status"]');
   // A check is settled when its response arrived and the section left "Checking improvements…".
   const settled = async (page, seen) => {
@@ -90,9 +100,10 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
   };
   const openSaved = async (page, path) => {
     const seen = checkResponses; operations = [];
-    await page.locator('#nav-policy').click(); await page.locator('#policy-open').setInputFiles(path);
-    await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+    await openPolicyWorkspace(page); await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(path);
+    await drawer(page).getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await page.locator('#policy-draft-status').filter({ hasText: OPENED }).waitFor();
+    await openPolicySection(page, 'Improvement suggestions');
     await settled(page, seen);
     return [...operations];
   };
@@ -136,18 +147,19 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
     assert.ok(steps.open.includes('improvements-check'));
     const initialFrictionCoverage = await first.locator('#policy-improvements-coverage').innerText();
     assert.ok(initialFrictionCoverage.includes(FRICTION_COVERAGE['history-unavailable']), 'Absent history is explicitly unavailable.');
-    assert.deepEqual(await groupLabels(first), ['Leading suggestion', 'Alternatives']);
+    assert.deepEqual(await groupLabels(first), ['Leading suggestion', 'Other suggestions']);
     assert.equal(await groupCards(first, 'Leading suggestion').count(), 1);
     const leading = groupCards(first, 'Leading suggestion').first();
     const tddId = await leading.getAttribute('data-suggestion-id');
-    const leadingText = await leading.innerText();
+    const leadingText = await textOf(leading);
     assert.match(leadingText, /Scope: project/); assert.match(leadingText, /Goal: add tests to my app/);
     assert.match(leadingText, /Your saved goal “add tests to my app” mentions “tests”\./);
     assert.match(leadingText, /^Adds \d+ files?, \d+ bytes in total, and needs \d+ other items?/m);
     assert.match(leadingText, /Applies in this project only/);
     for (const unknown of UNKNOWNS) assert.ok(leadingText.includes(unknown), `Unknown shown: ${unknown}`);
     assert.doesNotMatch(leadingText, /Shown again/);
-    const alternatives = await groupCards(first, 'Alternatives').allInnerTexts();
+    await reveal(section(first));
+    const alternatives = await groupCards(first, 'Other suggestions').allInnerTexts();
     assert.equal(alternatives.length, CLIENTS.length);
     for (const client of CLIENTS) {
       const card = alternatives.find(text => text.includes(`You use ${named(client)} (Workbench setup), but this policy does not give it the shared project instructions.`));
@@ -166,7 +178,7 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
     assert.equal(await textarea.evaluate(node => node.readOnly), true);
     assert.match(promptText, new RegExp(`Suggested by the AIH Workbench improvement rules ${IMPROVEMENT_RULES_VERSION.replaceAll('.', '\\.')}`));
     assert.match(promptText, /AI advice/);
-    assert.match(await leading.innerText(), /AI advice — paste this into an AI client you already use\. The Workbench sends nothing, runs nothing and calls no model\./);
+    assert.match(await textOf(leading), /AI advice — paste this into an AI client you already use\. The Workbench sends nothing, runs nothing and calls no model\./);
     const requestsBefore = requests.length, popupsBefore = popups.length;
     await leading.getByRole('button', { name: 'Copy prompt', exact: true }).click();
     await first.locator('#policy-draft-status').filter({ hasText: 'Prompt copied.' }).waitFor();
@@ -184,7 +196,7 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
     assert.deepEqual(steps.dismiss.filter(operation => !['improvements-record', 'improvements-check'].includes(operation)), []);
     assert.equal(await groupCards(first, 'Dismissed').count(), 1);
     assert.equal(await groupCards(first, 'Dismissed').first().getAttribute('data-suggestion-id'), tddId, 'Dismissing keeps the identity.');
-    assert.match(await groupCards(first, 'Dismissed').first().innerText(), /mentions “tests”/);
+    assert.match(await textOf(groupCards(first, 'Dismissed').first()), /mentions “tests”/);
     assert.ok(!(await groupLabels(first)).includes('Leading suggestion') || (await groupCards(first, 'Leading suggestion').evaluateAll((nodes, id) => nodes.every(node => node.dataset.suggestionId !== id), tddId)));
     screenshots.push(await shot(first, '3-dismissed.png'));
     const savedPath = join(output, 'dismissed.draft.json');
@@ -214,7 +226,7 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
     assert.equal(await groupCards(reopened, 'Dismissed').count(), 0);
     const again = groupCards(reopened, 'Leading suggestion').first();
     assert.equal(await again.getAttribute('data-suggestion-id'), tddId, 'Re-promotion keeps the identity.');
-    const againText = await again.innerText();
+    const againText = await textOf(again);
     assert.ok(againText.includes('Shown again: a new reason applies — You asked about “fewer regressions”, which mentions “regressions”.'), againText);
     screenshots.push(await shot(reopened, '5-repromoted.png'));
 
@@ -223,13 +235,14 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
     assert.ok(steps.dismissAgain.includes('improvements-record'));
     assert.equal(await groupCards(reopened, 'Dismissed').count(), 1);
     assert.equal(await groupCards(reopened, 'Dismissed').first().getAttribute('data-suggestion-id'), tddId);
+    await reveal(section(reopened));
     steps.showAgain = await act(reopened, () => groupCards(reopened, 'Dismissed').first().getByRole('button', { name: 'Show again', exact: true }).click());
     assert.ok(steps.showAgain.includes('improvements-record'));
     assert.deepEqual(steps.showAgain.filter(operation => !['improvements-record', 'improvements-check'].includes(operation)), []);
     assert.equal(await groupCards(reopened, 'Dismissed').count(), 0);
     const requested = groupCards(reopened, 'Leading suggestion').first();
     assert.equal(await requested.getAttribute('data-suggestion-id'), tddId);
-    assert.doesNotMatch(await requested.innerText(), /Shown again/);
+    assert.doesNotMatch(await textOf(requested), /Shown again/);
     assert.equal(await requested.getByRole('button', { name: 'Dismiss', exact: true }).count(), 1);
     screenshots.push(await shot(reopened, '6-shown-on-request.png'));
     const finalBytes = await saveDraft(reopened, join(output, 'shown-on-request.draft.json'));
@@ -275,7 +288,7 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
     assert.equal(await testPlan.count(), 1, 'The goal-relevant new note is suggested.');
     assert.equal(await style.count(), 0, 'The unrelated new note is never suggested.');
     const contentId = await testPlan.getAttribute('data-suggestion-id');
-    const contentText = await testPlan.innerText();
+    const contentText = await textOf(testPlan);
     const contentTriggers = await testPlan.locator('p').filter({ hasText: /is new in review-notes-catalog 1\.1\.0/ }).allInnerTexts();
     assert.equal(contentTriggers.length, 1);
     assert.match(contentText, /is new in review-notes-catalog 1\.1\.0/);
@@ -287,6 +300,7 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
     assert.match(expandedCoverage, /content[- ]changes?/i); assert.match(expandedCoverage, /\bchecked\b/i);
     assert.ok(expandedCoverage.includes(FRICTION_COVERAGE['history-unavailable']), 'The friction unknown names the unavailable history.');
 
+    await reveal(section(contentPage));
     steps.contentDismiss = await act(contentPage, () => testPlan.getByRole('button', { name: 'Dismiss', exact: true }).click());
     assert.ok(steps.contentDismiss.includes('improvements-record'));
     assert.deepEqual(steps.contentDismiss.filter(operation => !['improvements-record', 'improvements-check'].includes(operation)), []);
@@ -296,7 +310,7 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
     assert.equal(await dismissedContent.count(), 1);
     assert.equal(await testPlan.count(), 1, 'There is no duplicate active card after dismissal.');
     assert.equal(await dismissedContent.getAttribute('data-suggestion-id'), contentId);
-    const dismissedText = await dismissedContent.innerText();
+    const dismissedText = await textOf(dismissedContent);
     assert.deepEqual(await dismissedContent.locator('p').filter({ hasText: /is new in review-notes-catalog 1\.1\.0/ }).allInnerTexts(), contentTriggers, 'The exact content-change reason stays the same.');
     assert.match(dismissedText, /is new in review-notes-catalog 1\.1\.0/);
     assert.match(dismissedText, /your saved goal “add tests to my app”/i);
@@ -318,7 +332,7 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
     assert.deepEqual(steps.friction, ['improvements-check'], 'Checking friction only reads.');
     const frictionCard = section(reopened).locator('[data-suggestion-id]').filter({ hasText: /fixture evidence, not observed on this computer/ });
     assert.equal(await frictionCard.count(), 1, 'One suggestion names the controlled recurring friction.');
-    const frictionText = await frictionCard.innerText();
+    const frictionText = await textOf(frictionCard);
     assert.match(frictionText, /file[- ]state/i); assert.match(frictionText, /recurr/i);
     assert.match(frictionText, /fixture evidence, not observed on this computer/);
     const frictionCoverage = reopened.locator('#policy-improvements-coverage'), checkedFrictionCoverage = await frictionCoverage.innerText();

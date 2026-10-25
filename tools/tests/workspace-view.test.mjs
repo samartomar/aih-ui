@@ -191,8 +191,8 @@ test('declaration and relationship forms issue owner choices and show incomplete
   assert.match(textOf(built.node), /responsibilities: Unresolved/);
   await find(built, 'Mark relationships complete').listeners.click();
   assert.deepEqual(calls[1], { type: 'set-relationship-status', status: 'complete' });
-  await find(built, 'Add relationship').listeners.click();
-  assert.deepEqual(calls[2], { type: 'set-relationship', relationship: { from: 'api', to: 'api', kind: 'depends-on', provenance: { kind: 'owner' } } });
+  assert.equal(find(built, 'Add relationship'), undefined);
+  assert.match(textOf(built.node), /Add at least two repositories/);
 });
 
 test('a fresh bind or verify status survives later writes; an unsupported declaration offers no declare form', async () => {
@@ -232,12 +232,13 @@ test('Edit member fills every field and Save preserves confirmed aliases', async
   const built = view(client); await built.open();
   await find(built, 'Edit member').listeners.click();
   const fields = Object.fromEntries(elements(built.node).filter(n => n['aria-label']).map(n => [n['aria-label'], n.value]));
-  assert.equal(fields['Member id'], member.id); assert.equal(fields['Remote identity'], member.identity);
-  assert.equal(fields['Member label'], 'API');
-  assert.equal(fields['Aliases (comma-separated)'], member.aliases.join(', '));
+  assert.equal(fields['Repository key (required)'], member.id); assert.equal(fields['Repository identity (required)'], member.identity);
+  assert.equal(fields['Display name (optional)'], 'API');
+  assert.equal(fields['Confirmed repository aliases (comma-separated)'], member.aliases.join(', '));
+  const labels = { responsibilities: 'What this repository owns', instructions: 'Agent instruction files', contracts: 'Shared interfaces or contracts' };
   for (const [name, key] of Object.entries({ responsibilities: 'values', instructions: 'locations', contracts: 'references' })) {
-    assert.equal(fields[`${name} status`], 'known');
-    assert.equal(fields[`${name} (comma-separated)`], member[name][key].join(', '));
+    assert.equal(fields[`${labels[name]} — knowledge`], 'known');
+    assert.equal(fields[`${labels[name]} (comma-separated)`], member[name][key].join(', '));
   }
   await find(built, 'Save member').listeners.click();
   const { bindings, ...expected } = member;
@@ -332,4 +333,18 @@ test('reviewed batch navigation stays available while workspace controls are rea
   const pending = find(built, 'Save member').listeners.click();
   assert.ok(elements(built.node).find(node => node.id === 'workspace-batch-link'));
   finish(ok({ projection: editable })); await pending;
+});
+
+
+test('relationships require two repositories and different endpoints', async () => {
+  const { client } = clientFor();
+  const built = view(client); await built.open();
+  assert.equal(find(built, 'Add relationship'), undefined);
+  client.readWorkspace = async () => ok({ ...projection, members: [projection.members[0], { ...projection.members[0], id: 'ui' }] });
+  await built.open();
+  const from = elements(built.node).find(n => n['aria-label'] === 'From member');
+  const to = elements(built.node).find(n => n['aria-label'] === 'To member');
+  assert.equal(find(built, 'Add relationship').disabled, false);
+  to.value = from.value; to.listeners.change();
+  assert.equal(find(built, 'Add relationship').disabled, true);
 });

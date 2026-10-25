@@ -19,7 +19,7 @@ const extraFiles = Object.fromEntries(readdirSync(join(repo, 'tools/consumer'))
   .map(name => [`consumer/${name}`, join(repo, 'tools/consumer', name)]));
 // The backend worker callService runs inside the consumer.
 for (const asset of serviceAssets(repo)) if (asset.to.startsWith('service/')) extraFiles[asset.to] = join(repo, asset.from);
-for (const name of ['consumer.html', 'consumer.js', 'intent.html', 'intent.js', 'authoring.html', 'authoring.js', 'policy-file.js', 'app/claims-view.js']) extraFiles[`page/${name}`] = join(repo, 'src', name);
+for (const name of ['consumer.html', 'consumer.js', 'intent.html', 'intent.js', 'authoring.html', 'authoring.js', 'policy-file.js', 'app/dom.js', 'app/configuration-editor.js', 'app/claims-view.js']) extraFiles[`page/${name}`] = join(repo, 'src', name);
 for (const name of ['consumer.css', 'tokens.css']) extraFiles[`page/${name}`] = join(repo, 'src/styles', name);
 for (const name of readdirSync(join(repo, 'schemas'))) extraFiles[`schemas/${name}`] = join(repo, 'schemas', name);
 // npm run exports user allow-scripts as an environment option. npm rejects that
@@ -44,7 +44,7 @@ process.on('exit', () => {
 // The real-Core batch group has its own bounded budget: its serial Windows
 // filesystem work measured 115s before the final concurrent-consent regression.
 const testGroups = [
-  ['ordinary-families', 'authoring-page', 'authoring-v3', 'reviews', 'personal-folder', 'journey', 'readiness', 'readiness-host', 'claims', 'friction', 'authority-source', 'organization-author', 'guided-setup', 'core-targets', 'workspace'],
+  ['ordinary-families', 'authoring-page', 'authoring-v3', 'reviews', 'personal-folder', 'journey', 'readiness', 'readiness-host', 'claims', 'friction', 'authority-source', 'organization-author', 'guided-setup', 'core-targets', 'workspace', 'project-folder'],
   ['source-facts', 'scan-evidence', 'release-order', 'update-source', 'maintenance', 'improvements', 'trials'],
   ['batch'],
   ['intent-http', 'intent-page', 'organization', 'saved-intent', 'setup']
@@ -82,6 +82,16 @@ if (process.exitCode === 0) {
   process.stdout.write(integrated.stdout ?? ''); process.stderr.write(integrated.stderr ?? '');
   if (integrated.error) throw integrated.error;
   process.exitCode = integrated.status ?? 1;
+}
+if (process.exitCode === 0) {
+  // Its own budget: real Core install/removal does several serial filesystem rounds on Windows.
+  const installed = spawnSync(process.execPath, [join(repo, 'tools/check-installed-workbench.mjs'), output], {
+    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 360_000, env: isolated,
+  });
+  writeFileSync(join(output, 'installed-panel-check.log'), `${installed.stdout ?? ''}${installed.stderr ?? ''}`);
+  process.stdout.write(installed.stdout ?? ''); process.stderr.write(installed.stderr ?? '');
+  if (installed.error) throw installed.error;
+  process.exitCode = installed.status ?? 1;
 }
 if (process.exitCode === 0) {
   const authority = spawnSync(process.execPath, [join(repo, 'tools/check-authority-source.mjs'), output, join(output, 'authority-source-evidence')], {

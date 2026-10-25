@@ -244,3 +244,14 @@ test('an overhead row with one recorded side shows that side and says which side
   assert.match(text, /Maintenance: Baseline: not observed; trial: 100 bytes — not compared/);
   assert.match(text, /Setup: not observed/); assert.match(text, /Runtime\/context \(configured material size, not usage\): not observed/);
 });
+
+
+test('stale trial records have an in-place refresh action and required-criteria feedback', async () => {
+  const built = view(); await built.open(); built.plan(suggestion);
+  assert.match(textOf(built.node), /To propose this trial, add an acceptable outcome/);
+  assert.match(find(built, 'Propose trial').title, /non-negative value and unit/);
+  built.client.revision++; built.render();
+  assert.match(textOf(built.node), /Select Refresh trials/);
+  await find(built, 'Refresh trials').listeners.click();
+  assert.ok(find(built, 'Start'));
+});

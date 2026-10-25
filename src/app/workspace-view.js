@@ -56,6 +56,7 @@ export function createWorkspaceView({ client, el, button, showStatus, download =
   const status = el('p', 'text-on-surface-variant'); status.setAttribute('role', 'status');
   const body = el('div', 'space-y-2');
   node.append(el('h3', 'font-medium', 'Workspace'), status, body);
+  const refresh = button('Refresh workspace', () => open()); refresh.type = 'button'; node.append(refresh);
   let projection, checked, pending = false, recording = false, attempt = 0, unsupported = false, message = '';
   // Statuses observed in this page session (Verify, or the fresh observation a bind records); writes keep them.
   const folders = new Map(), plans = new Map(), statuses = new Map();
@@ -83,11 +84,18 @@ export function createWorkspaceView({ client, el, button, showStatus, download =
   // Form nodes survive pending renders, keeping typed values when a request fails.
   const declareForm = el('div', 'space-y-1'), memberForm = el('div', 'space-y-1');
   const declarationLabel = field(declareForm, 'Workspace label');
-  const memberFields = { id: field(memberForm, 'Member id'), identity: field(memberForm, 'Remote identity'), aliases: field(memberForm, 'Aliases (comma-separated)'), label: field(memberForm, 'Member label') };
+  memberForm.append(el('h4', 'font-medium', 'Add or edit a repository'), el('p', 'text-on-surface-variant', 'Give the repository a short key and its host/owner/name identity. Save it before linking a local checkout.'));
+  const memberFields = { id: field(memberForm, 'Repository key (required)'), label: field(memberForm, 'Display name (optional)'), identity: field(memberForm, 'Repository identity (required)') };
+  const extraFacts = el('details', 'space-y-1'); extraFacts.append(el('summary', 'text-primary cursor-pointer', 'Aliases and repository knowledge (optional)')); memberForm.append(extraFacts);
+  memberFields.aliases = field(extraFacts, 'Confirmed repository aliases (comma-separated)');
+  extraFacts.append(el('p', 'text-on-surface-variant', 'Aliases are other repository identities you have confirmed. Keep facts unresolved until you know them; choosing Known records the entries below.'));
+  memberFields.id.placeholder = 'api'; memberFields.label.placeholder = 'API service';
   memberFields.identity.placeholder = 'github.com/acme/api';
+  const factLabels = { responsibilities: 'What this repository owns', instructions: 'Agent instruction files', contracts: 'Shared interfaces or contracts' };
   for (const name of Object.keys(FIELDS)) {
-    memberFields[`${name}Status`] = field(memberForm, `${name} status`, ['unresolved', 'known']);
-    memberFields[name] = field(memberForm, `${name} (comma-separated)`);
+    const group = el('div', 'space-y-1'); extraFacts.append(group);
+    memberFields[`${name}Status`] = field(group, `${factLabels[name]} — knowledge`, ['unresolved', 'known']);
+    memberFields[name] = field(group, `${factLabels[name]} (comma-separated)`);
   }
   const values = fields => Object.fromEntries(Object.entries(fields).map(([key, control]) => [key, control.value]));
   function setFormDisabled(form) {
@@ -172,7 +180,7 @@ export function createWorkspaceView({ client, el, button, showStatus, download =
   }
   function render() {
     if (!recording && checked !== undefined && checked !== client.revision) { retire(); message = 'The open policy or its inputs changed; open the workspace again to refresh it.'; }
-    body.replaceChildren();
+    body.replaceChildren(); refresh.disabled = pending || unsupported || !available();
     if (!available()) {
       attempt++; pending = false; recording = false; retire(); checked = undefined;
       status.textContent = 'Open a draft or a saved policy to declare a workspace.'; return;
@@ -197,6 +205,7 @@ export function createWorkspaceView({ client, el, button, showStatus, download =
     }
     const saveMember = action('Save member', () => edit(memberOperation(values(memberFields))));
     body.append(memberForm, saveMember);
+    if (!(projection.members ?? []).length) text(body, 'No repositories declared. Add your first member above before describing relationships or binding a checkout.');
     for (const member of projection.members ?? []) body.append(memberCard(member));
     if (projection.detached?.length) {
       body.append(el('h4', 'font-medium', 'Bindings for removed members'));
@@ -205,13 +214,17 @@ export function createWorkspaceView({ client, el, button, showStatus, download =
     text(body, relationshipSummary(projection));
     const relationshipForm = el('div', 'space-y-1');
     const memberIds = (projection.members ?? []).map(member => member.id);
+    if (memberIds.length < 2) text(body, 'Add at least two repositories to describe a relationship between them. You can leave relationships unresolved.');
     const relationshipFields = {
       from: field(relationshipForm, 'From member', memberIds), to: field(relationshipForm, 'To member', memberIds, memberIds[1]),
       kind: field(relationshipForm, 'Relationship kind', ['depends-on', 'consumes-api', 'deploys', 'shares-contract']),
       provenanceKind: field(relationshipForm, 'Provenance kind', ['owner', 'contract', 'instruction']), ref: field(relationshipForm, 'Provenance reference (optional)'),
     };
-    relationshipForm.append(action('Add relationship', () => edit(relationshipOperation(values(relationshipFields)))));
-    body.append(relationshipForm);
+    const addRelationship = action('Add relationship', () => edit(relationshipOperation(values(relationshipFields))), () => locked() || memberIds.length < 2 || relationshipFields.from.value === relationshipFields.to.value);
+    const updateRelationship = () => { addRelationship.disabled = locked() || memberIds.length < 2 || relationshipFields.from.value === relationshipFields.to.value; addRelationship.title = addRelationship.disabled ? 'Choose two different repositories.' : ''; };
+    relationshipFields.from.addEventListener('change', updateRelationship); relationshipFields.to.addEventListener('change', updateRelationship);
+    relationshipForm.append(addRelationship);
+    if (memberIds.length >= 2) body.append(relationshipForm);
     for (const relationship of projection.relationships?.confirmed ?? []) {
       const row = el('div', 'space-y-1');
       text(row, `${relationship.from} → ${relationship.to}: ${relationship.kind}; ${relationship.provenance?.kind ?? 'Unknown provenance'}${relationship.provenance?.ref ? `: ${relationship.provenance.ref}` : ''}`);

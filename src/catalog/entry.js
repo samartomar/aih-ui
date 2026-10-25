@@ -1,3 +1,4 @@
+import { sourcePresentation } from "./source-facts.js";
 /*
  * Reading one published catalog entry.
  *
@@ -157,6 +158,8 @@ export function searchText(entry) {
   const id = identity(entry);
   const source = sourceIdentity(entry);
   return [
+    sourcePresentation(entry.authoringItem).name,
+    sourcePresentation(entry.authoringItem).description,
     id.entryId,
     id.subjectId,
     id.kind,

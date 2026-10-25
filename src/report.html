@@ -7,12 +7,16 @@
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&amp;family=Geist+Mono:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/styles/tailwind.css">
 <link rel="stylesheet" href="/styles/tokens.css">
+<link rel="stylesheet" href="/styles/subpage.css">
+<link rel="stylesheet" href="/styles/status.css">
 <script src="/app/mode.js"></script>
 </head>
-<body class="bg-background font-body text-on-surface text-sm leading-normal antialiased">
-<header class="bg-wb-chrome border-b border-wb-border px-4 py-3 flex items-center justify-between">
-<h1 class="text-base font-semibold">Report</h1>
+<body class="bg-background font-body text-on-surface wb-subpage leading-normal antialiased">
+<header class="wb-subpage-header">
+<a href="/" class="wb-subpage-brand" aria-label="aih Policy Workbench home">aih<span>Policy Workbench</span></a>
+<h1>Report</h1>
 <a class="text-primary hover:underline" href="readiness.html" id="back-link">Back to Check this machine</a>
+<button type="button" data-mode-toggle class="wb-subpage-theme" aria-label="Switch to light mode">◐</button>
 </header>
 <main class="max-w-4xl mx-auto p-4 space-y-4">
 <div id="report-staged" role="note" class="border border-wb-border rounded p-3 bg-surface-container-low text-tertiary space-y-1" hidden></div>
@@ -22,16 +26,16 @@
 <span class="text-on-surface-variant" id="report-status" role="status" aria-live="polite">Loading the report.</span>
 </div>
 
+<section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="report-actions-heading" id="report-actions"></section>
 <section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="report-score-heading" id="report-score"></section>
 <section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="report-repairs-heading" id="report-repairs"></section>
-<section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="report-actions-heading" id="report-actions"></section>
 <section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="report-claims-heading" id="report-claims"></section>
 <section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="report-context-heading" id="report-context"></section>
 <section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="report-observations-heading" id="report-observations"></section>
 
-<section class="bg-surface-card border border-wb-border rounded p-4 space-y-3" aria-labelledby="snapshot-heading" id="snapshot-report">
-<h2 class="font-semibold" id="snapshot-heading">Saved snapshot report (V9)</h2>
-<p class="text-on-surface-variant">Open a report snapshot saved by <code>@aihq/core/report</code>. Core validates it, then the Workbench draws it as the offline V9 page. The page shows only what the snapshot supplies and collects nothing.</p>
+<details class="bg-surface-card border border-wb-border rounded p-4 space-y-3" id="snapshot-report"><summary class="font-semibold">Open a saved report snapshot</summary>
+<h2 class="font-semibold" id="snapshot-heading">Saved snapshot report</h2>
+<p class="text-on-surface-variant">Open a report snapshot saved by Core. Core validates it, then the Workbench draws the offline report. The page shows only what the snapshot supplies and collects nothing.</p>
 <div class="flex flex-wrap items-center gap-3">
 <label class="text-on-surface-variant" for="snapshot-file">Snapshot file</label>
 <input class="text-xs" id="snapshot-file" type="file" accept=".json,application/json">
@@ -45,14 +49,14 @@
 </div>
 <p class="text-on-surface-variant" id="snapshot-status" role="status" aria-live="polite">No snapshot opened.</p>
 <p class="border border-tertiary rounded p-2 text-tertiary" id="snapshot-demo-note" role="note" hidden>Design sample: every number, name and command shown is invented for illustration. None of it comes from the snapshot you opened.</p>
-<iframe class="w-full h-[80vh] border border-wb-border rounded" id="snapshot-frame" title="Rendered V9 report" sandbox="allow-scripts" hidden></iframe>
-</section>
+<iframe class="w-full h-[80vh] border border-wb-border rounded" id="snapshot-frame" title="Saved report snapshot" sandbox="allow-scripts" hidden></iframe>
+ </details>
 
-<section class="bg-surface-card border border-wb-border rounded p-4 space-y-2" aria-labelledby="report-text-heading">
-<h2 class="font-semibold" id="report-text-heading">Headless rendering (read-only)</h2>
-<label class="block text-on-surface-variant" for="report-text">The same records and the same words as the panels above, as a headless caller prints them.</label>
+<details class="bg-surface-card border border-wb-border rounded p-4 space-y-2"><summary class="font-semibold">Technical report text</summary>
+<h2 class="font-semibold" id="report-text-heading">Plain text report (read-only)</h2>
+<label class="block text-on-surface-variant" for="report-text">The records and explanations from the panels above, ready to copy.</label>
 <textarea class="w-full h-64 bg-wb-input border border-wb-control-border rounded px-2 py-1 font-mono text-xs" id="report-text" readonly></textarea>
-</section>
+</details>
 </main>
 <script type="module" src="/report.js"></script>
 <script type="module" src="/report/snapshot-view.js"></script>
