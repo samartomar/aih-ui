@@ -6,7 +6,8 @@
  * export or a declaration exported by the package's `./contracts` module, at
  * its highest support version. Fixtures load through the producing package's
  * own exports. A reader is the accepting package's own public reader; the
- * Workbench supplies only the ones Core's README names for its own contracts.
+ * Workbench supplies the ones Core's README names for Core's contracts and its own
+ * (aih-ui/stored-results) for the Core results it reads.
  * A contract without one stays `unavailable` (`reader-missing`): a schema check
  * never stands in for a reader, and nothing the Workbench cannot run is
  * reported as passed. Each accepting package gets its own engine call, because
@@ -128,12 +129,20 @@ function outcome(result) {
   return result.valid ? { accepted: true } : typeof code === "string" ? { accepted: false, code } : { accepted: false };
 }
 
-function readersFor(name, ids, contracts) {
+// The Workbench's own public readers (aih-ui/stored-results), the ones its intake uses; read from the consumer's copy.
+const WORKBENCH_READERS = [
+  { contract: /^urn:aihq:core:native-verification-result:1\.0\.0$/, reader: "readNativeVerificationResult", form: "json" },
+  // Undefined with a Core that publishes no validateFileStateResult: the reader is then missing, never stood in for.
+  { contract: /^urn:aihq:core:file-state-result:1\.1\.0$/, reader: "readFileStateResult", form: "json" },
+];
+
+async function readersFor(name, ids, contracts) {
   const readers = {};
-  if (name !== "@aihq/core") return readers;
+  const table = name === "@aihq/core" ? CORE_READERS : name === "aih-ui" ? WORKBENCH_READERS : [];
+  const source = name === "aih-ui" ? await import("../consumer/stored-results.mjs") : contracts;
   for (const id of ids) {
-    const binding = CORE_READERS.find(item => item.contract.test(id));
-    const reader = binding && contracts[binding.reader];
+    const binding = table.find(item => item.contract.test(id));
+    const reader = binding && source[binding.reader];
     if (typeof reader !== "function") continue;
     readers[id] = binding.form === "text" ? bytes => outcome(reader(decode(bytes))) : bytes => outcome(reader(JSON.parse(decode(bytes))));
   }
@@ -157,7 +166,7 @@ export async function contractCheck() {
   const checks = [];
   for (const accepting of declarations) {
     const ids = accepting.contracts.filter(item => item.role !== "produces").map(item => item.id);
-    const result = await contracts.checkContracts({ declarations, readers: readersFor(accepting.package.name, ids, contracts), loadFixture });
+    const result = await contracts.checkContracts({ declarations, readers: await readersFor(accepting.package.name, ids, contracts), loadFixture });
     if (result.diagnostics?.length) return { state: "invalid", packages, diagnostics: result.diagnostics };
     for (const row of result.checks) if (row.readerPackage === accepting.package.name) checks.push(row);
   }

@@ -15,6 +15,7 @@
     "./schemas/journey-record-maintenance-disposition/1.0.0.json": "./schemas/journey-record-maintenance-disposition-1.0.0.json",
     "./schemas/journey-record-maintenance-check/1.0.0.json": "./schemas/journey-record-maintenance-check-1.0.0.json",
     "./improvements": "./tools/consumer/improvements.mjs",
+    "./stored-results": "./tools/consumer/stored-results.mjs",
     "./schemas/journey-record-improvement-suggestion/1.0.0.json": "./schemas/journey-record-improvement-suggestion-1.0.0.json",
     "./schemas/journey-record-improvement-dismissal/1.0.0.json": "./schemas/journey-record-improvement-dismissal-1.0.0.json",
     "./trials": "./tools/consumer/trials-entry.mjs",

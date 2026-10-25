@@ -4,6 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { CLAIMS_SCHEMA_1_1_0, CLAIMS_PROJECTION_SCHEMA_1_1_0, projectClaims, validateClaimSet } from '@aihq/core/report';
 import { validateNativeVerificationResult } from '@aihq/core/contracts';
 import { frictionRecurrence, FILE_STATE_SCHEMA, NATIVE_SCHEMA, FRICTION_PRODUCER } from './friction.mjs';
+import { nativeResult } from './native-result-fixture.mjs';
+import { fileStateReaderAvailable } from './stored-results.mjs';
 import { READINESS_RECORD_SCHEMA } from './claims.mjs';
 import { MAINTENANCE_CHECK_RECORD_SCHEMA } from './maintenance-record.mjs';
 
@@ -19,13 +21,8 @@ const fileState = targets => ({ schema: FILE_STATE_SCHEMA, package: { ...CORE },
   checks: [], notChecked: [], coverage: { comparedTargets: targets.length, unavailableTargets: 0, comparedChecks: 0, unavailableChecks: 0, notChecked: 0 }, diagnostics: [],
   limits: { budgetMs: 1000, elapsedMs: 1, targetBytes: 0, materialBytes: 0 } });
 const files = (...outcomes) => fileState(outcomes.map(outcome => ({ outcome })));
-// A schema-valid failed result; a verified one is the same shape with the other verdict (a real proof carries two full sessions, which this adapter never reads).
-const native = (verdict, client = 'claude') => ({ schema: NATIVE_SCHEMA, package: { ...CORE }, status: verdict === 'unverified' ? 'incomplete' : 'complete', verdict, proofScope: 'test-configuration', admission: 'admitted',
-  client: { id: client, observedVersion: null }, adapter: null, platform: { os: 'win32', arch: 'x64', osRelease: '10.0', execution: 'native' }, content: null, sessions: [],
-  stages: [{ id: 'fixture-integrity', session: null, outcome: verdict === 'verified' ? 'passed' : 'failed', reason: verdict === 'verified' ? 'observed' : 'fixture-bytes-mismatch', evidence: { kind: 'none' } }],
-  security: { sandbox: { level: 'not-started', mechanism: null, reason: 'none' }, hostSecretIsolation: { outcome: 'unavailable', reason: 'none' } }, authority: 'not-evaluated', survivingProcesses: [],
-  cleanup: { processes: 'not-created', files: 'not-created', retainedCell: null }, diagnostics: [],
-  limits: { budgetMs: 1000, elapsedMs: 1, sessionsStarted: 0, stagesCompleted: 1, observedBytes: 0, telemetryEvents: 0, rpcMessages: 0, evidenceTruncated: false } });
+// Core-valid results (native-result-fixture.mjs); the adapter reads only a result Core's validator accepts.
+const native = (verdict, client = 'claude') => nativeResult(verdict, client);
 const readiness = (id, items) => ({ schema: READINESS_RECORD_SCHEMA, kind: 'machine-check', id, sha256: sha(id.length), capturedAt: T[0], check: { status: 'complete', items } });
 const probe = (outcome, extra = {}) => ({ kind: 'check', id: 'on-path', target: 'git', outcome, reason: outcome, ...extra });
 const entry = (id, at, result, extra = {}) => ({ id, capturedAt: at, result, ...extra });
@@ -59,7 +56,11 @@ test('a capture folds to one outcome per selection: any changed or absent target
   assert.deepEqual(outcome(folded({ outcome: 'absent' }, { outcome: 'match' })), ['failed']);
   assert.deepEqual(outcome(folded({ outcome: 'match' }, { outcome: 'match' })), ['passed']);
   assert.deepEqual(outcome(folded({ outcome: 'match' }, { outcome: 'unavailable', reason: 'target-unreadable' })), ['unknown', 'target-unreadable']);
-  assert.deepEqual(outcome(folded({ outcome: 'unavailable', reason: 'C:\\Users\\a\\b' })), ['unknown', 'unavailable']);
+  // A free-text reason is never carried into a claim: Core's own validator refuses the result (it is unread), and with a Core that publishes
+  // no file-state validator the adapter keeps only the generic code.
+  const freeText = run([entry('cap-1', T[0], fileState([{ outcome: 'unavailable', reason: 'C:\\Users\\a\\b' }]))]);
+  if (fileStateReaderAvailable) assert.deepEqual([freeText.claimSet.claims.length, freeText.unread], [0, 1], 'Core refuses the result, so it is unread');
+  else assert.deepEqual(outcome(freeText.claimSet.claims), ['unknown', 'unavailable']);
   assert.equal(folded({ outcome: 'unavailable' })[0].value, undefined);
   // Targets of another selection, and a result with no target of this one, make no claim.
   assert.equal(folded({ selection: 'catalog-other', outcome: 'changed' }).length, 0);
@@ -76,7 +77,10 @@ test('a capture folds to one outcome per selection: any changed or absent target
 });
 
 test('native verification results are claims on the client in its environment; an unidentified client makes none', () => {
-  assert.equal(validateNativeVerificationResult(native('failed')).valid, true);
+  for (const verdict of ['failed', 'verified', 'unverified']) assert.equal(validateNativeVerificationResult(native(verdict)).valid, true, verdict);
+  // A result Core's own validator refuses is not read: it makes no claim and counts as unread.
+  const refused = run([entry('nv-0', T[0], { ...native('failed'), sessions: 'not a list' })], [clientTie]);
+  assert.deepEqual([refused.claimSet.claims.length, refused.unread], [0, 1]);
   const evidence = [entry('nv-1', T[0], native('failed')), entry('nv-2', T[1], native('verified')), entry('nv-3', T[2], native('failed'))];
   const { claimSet, results } = run(evidence, [clientTie]);
   assert.deepEqual(claimSet.claims.map(c => [c.subject, c.measure, c.value.amount, c.scope]), [0, 1, 2].map(i => [{ kind: 'client', id: 'claude@win32-native' }, 'condition:native-use', ['failed', 'passed', 'failed'][i], { kind: 'machine', targets: ['claude@win32-native'] }]));
@@ -85,7 +89,7 @@ test('native verification results are claims on the client in its environment; a
   assert.deepEqual([unknown.length, unknown[0].kind, unknown[0].unknownReason, unknown[0].value], [1, 'unknown', 'unverified', undefined]);
   assert.equal(run([entry('nv-1', T[0], native('failed', null))], [clientTie]).claimSet.claims.length, 0);
   assert.equal(run([entry('nv-1', T[0], native('failed', 'codex'))], [clientTie]).claimSet.claims.length, 0);
-  const wsl = { ...native('failed'), platform: { os: 'linux', arch: 'x64', osRelease: '6.1', execution: 'wsl2' } };
+  const wsl = nativeResult('failed', 'claude', { os: 'linux', arch: 'x64', osRelease: '6.1', execution: 'wsl2' });
   assert.equal(run([entry('nv-1', T[0], wsl)], [clientTie]).claimSet.claims[0].subject.id, 'claude@linux-wsl2');
 });
 

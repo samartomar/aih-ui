@@ -4,11 +4,13 @@
 // answer, not recomputed here. It collects nothing and reads no clock, network or file: callers pass the results they already hold.
 //
 // Rules: a claim never carries a machine-local path or free text from a result (reasons are Core codes); an untied subject is never
-// requested; a result of any other schema is counted as unread, never an error; unknown is never a value, and missing history is never zero.
+// requested; a result of any other schema, or a file-state or native-verification result Core's own validator refuses, is counted as
+// unread, never an error; unknown is never a value, and missing history is never zero.
 import { CLAIMS_SCHEMA_1_1_0, projectClaims, validateClaimSet } from '@aihq/core/report';
 import { READINESS_RECORD_SCHEMA, fingerprint } from './claims.mjs';
 import { only, object, hash } from './primitives.mjs';
 import { isUtcTimestamp, MAINTENANCE_CHECK_RECORD_SCHEMA } from './maintenance-record.mjs';
+import { fileStateReaderAvailable, readFileStateResult, readNativeVerificationResult } from './stored-results.mjs';
 
 // File-state results name the selection behind each target (`selectionIds`, from 1.1.0); a 1.0.0 result does not, so it ties nothing and is counted as unread.
 export const FILE_STATE_SCHEMA = 'urn:aihq:core:file-state-result:1.1.0';
@@ -98,8 +100,10 @@ function readinessReadings(record, ties) {
 // each save replaces it), so it is a known record that makes no claim, not an unread one.
 // undefined when this module does not read the result.
 function readingsOf(result, ties) {
-  if (result.schema === FILE_STATE_SCHEMA) return fileStateReadings(result, ties);
-  if (result.schema === NATIVE_SCHEMA) return nativeReadings(result, ties);
+  // A file-state result Core's own validator refuses is not read; a Core without that validator leaves it read unchecked (stored-results.mjs).
+  if (result.schema === FILE_STATE_SCHEMA) return !fileStateReaderAvailable || readFileStateResult(result).valid ? fileStateReadings(result, ties) : undefined;
+  // A native-verification result Core's own validator refuses is not read (stored-results.mjs); it counts as unread.
+  if (result.schema === NATIVE_SCHEMA) return readNativeVerificationResult(result).valid ? nativeReadings(result, ties) : undefined;
   if (result.schema === READINESS_RECORD_SCHEMA && (result.kind === 'machine-check' || result.kind === 'repair')) return readinessReadings(result, ties);
   if (result.schema === MAINTENANCE_CHECK_RECORD_SCHEMA) return [];
   return undefined;

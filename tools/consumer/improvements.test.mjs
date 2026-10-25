@@ -16,6 +16,7 @@ import { noteFixture } from './note-fixture.mjs';
 import { createMixedService } from './mixed-service.mjs';
 import { nativeClientIds, targets as harnessTargets } from '@aihq/core/harness';
 import { suggestionRevision, suggestionProblem } from './improvement-record.mjs';
+import { nativeResult } from './native-result-fixture.mjs';
 import { CONFLICTS_UNKNOWN, suggestImprovements, lead, classifyImprovement, improvementPrompt, releaseRelation, unorderedSources, GOAL_RULES, UNKNOWNS, FRICTION_COVERAGE, FRICTION_UNREADABLE, FIXTURE_LABEL, FRICTION_RULE, IMPROVEMENT_RULES_VERSION, MAX_ALTERNATIVES } from './improvement-rules.mjs';
 import { frictionRecurrence } from './friction.mjs';
 import { catalogClosures, catalogComparison } from './improvement-closures.mjs';
@@ -1118,8 +1119,8 @@ test('checking, dismissing and building the prompt never touch the network or a 
 });
 
 test('the improvement modules import only the allowed seams and contain no network, process or random calls', async () => {
-  const allowed = [/^\.\/primitives\.mjs$/, /^\.\/journey\.mjs$/, /^\.\/headless\.mjs$/, /^\.\/intent-shape\.mjs$/, /^\.\/maintenance-record\.mjs$/, /^\.\/improvement-[a-z]+\.mjs$/, /^\.\/client-identity\.mjs$/, /^\.\/trial-record\.mjs$/, /^\.\/release-order\.mjs$/, /^\.\/friction\.mjs$/, /^\.\/executable-ties\.mjs$/, /^\.\/claims\.mjs$/, /^@aihq\/catalog\/reader$/, /^@aihq\/core\/report$/, /^@aihq\/core\/contracts$/];
-  for (const name of ['improvement-record.mjs', 'improvement-rules.mjs', 'improvement-closures.mjs', 'improvements.mjs', 'friction.mjs']) {
+  const allowed = [/^\.\/primitives\.mjs$/, /^\.\/journey\.mjs$/, /^\.\/headless\.mjs$/, /^\.\/intent-shape\.mjs$/, /^\.\/maintenance-record\.mjs$/, /^\.\/improvement-[a-z]+\.mjs$/, /^\.\/client-identity\.mjs$/, /^\.\/trial-record\.mjs$/, /^\.\/release-order\.mjs$/, /^\.\/friction\.mjs$/, /^\.\/stored-results\.mjs$/, /^\.\/executable-ties\.mjs$/, /^\.\/claims\.mjs$/, /^@aihq\/catalog\/reader$/, /^@aihq\/core\/report$/, /^@aihq\/core\/contracts$/];
+  for (const name of ['improvement-record.mjs', 'improvement-rules.mjs', 'improvement-closures.mjs', 'improvements.mjs', 'friction.mjs', 'stored-results.mjs']) {
     const source = await readFile(new URL(`./${name}`, import.meta.url), 'utf8');
     const specifiers = [...source.matchAll(/^(?:import|export)\b[^;]*?\bfrom\s+'([^']+)'/gm)].map(match => match[1]);
     assert.ok(specifiers.length > 0, name);
@@ -1393,8 +1394,8 @@ test('supplied evidence is validated like the other check inputs', async () => {
 
 test('ties: a selected client adapter and a pulled-in dependency are tied; an item the draft no longer selects is not', async () => {
   const s = await frictionScenario({ rootIds: ['mattpocock.implement', 'aihq.client.claude'] });
-  const native = verdict => ({ schema: 'urn:aihq:core:native-verification-result:1.0.0', package: { name: '@aihq/core', version: '1.0.0-dev.37' }, status: 'complete', verdict, client: { id: 'claude', observedVersion: null },
-    platform: { os: 'win32', arch: 'x64', osRelease: '10.0', execution: 'native' } });
+  // Core-valid results: the friction adapter reads only a result Core's own validator accepts.
+  const native = verdict => nativeResult(verdict);
   const clientHistory = ['failed', 'verified', 'failed'].map((verdict, index) => ({ id: `native-${index + 1}`, capturedAt: DAYS[index], result: native(verdict) }));
   const viaClient = await check(s, s.envelopeBytes, { evidence: clientHistory }), client = frictionOf(viaClient.leading);
   assert.equal(viaClient.leading.change.itemId, DIAGNOSING); assert.equal(client.key, 'friction:native-use@claude@win32-native');
