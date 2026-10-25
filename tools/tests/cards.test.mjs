@@ -41,7 +41,7 @@ test("skill cards use the shared skill icon and preserve full description text f
   const nodes = descendants(node);
   const icon = nodes.find(e => e.className.includes("material-symbols-outlined"));
   assert.equal(ICONS.kind.skill.icon, "auto_awesome");
-  assert.equal(icon.attributes["aria-hidden"], "true");
+  assert.equal(icon.dataset.tooltip, "Kind: Skill", "the kind icon carries its words, so it is not hidden as decoration");
   assert.equal(icon.title, "Kind: Skill");
   assert.equal(icon.textContent, ICONS.kind.skill.icon);
   assert.match(icon.className, new RegExp(ICONS.kind.skill.tone));

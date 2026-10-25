@@ -79,14 +79,19 @@ async function declarationOf(name) {
       for (const key of Object.keys(module)) if (isDeclaration(module[key])) found.push({ from: `${name}/contracts#${key}`, value: module[key] });
     }
     found = found.filter(item => isDeclaration(item.value));
-    const foreign = found.find(item => item.value.package?.name !== name || item.value.package?.version !== manifest.version);
-    if (foreign) return { name, status: "mismatched", from: foreign.from, reason: `it names ${foreign.value.package?.name} ${foreign.value.package?.version}, not the installed ${name} ${manifest.version}` };
   } catch (error) {
     return { name, status: "unreadable", reason: error?.message ?? String(error) };
   }
   if (!found.length) return { name, status: "missing" };
-  const [best] = found.sort((a, b) => newer(supportVersion(b.value), supportVersion(a.value)));
-  return { name, status: "found", from: best.from, declaration: JSON.parse(JSON.stringify(best.value)) };
+  // Only the highest support version is used: its copies must name the installed package and agree with each other.
+  const highest = found.map(item => supportVersion(item.value)).sort(newer).at(-1);
+  const selected = found.filter(item => newer(supportVersion(item.value), highest) === 0);
+  const version = installed(name).manifest.version;
+  const foreign = selected.find(item => item.value.package?.name !== name || item.value.package?.version !== version);
+  if (foreign) return { name, status: "mismatched", from: foreign.from, reason: `it names ${foreign.value.package?.name} ${foreign.value.package?.version}, not the installed ${name} ${version}` };
+  const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
+  if (selected.some(item => JSON.stringify(canonical(item.value)) !== JSON.stringify(canonical(selected[0].value)))) return { name, status: "mismatched", from: selected.map(item => item.from).join(", "), reason: "its copies of the same support version differ" };
+  return { name, status: "found", from: selected.map(item => item.from).join(", "), declaration: JSON.parse(JSON.stringify(selected[0].value)) };
 }
 
 function extraInput() {
