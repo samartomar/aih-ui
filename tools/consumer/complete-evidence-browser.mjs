@@ -9,6 +9,8 @@ import { installedFamilies } from './installed-families.mjs';
 import { createScanEvidenceHost } from './scan-evidence-host.mjs';
 import { authenticateEvidence } from '@aihq/core';
 import { readInstalledRelease } from '@aihq/catalog/node';
+import { addFromCatalog } from './policy-drawer.mjs';
+import { openSetupAdvanced, openFileActions } from './advanced-browser.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 export async function runCompleteEvidenceBrowser({ plan, output, playwrightModule, authoringModule }) {
@@ -81,8 +83,7 @@ export async function runCompleteEvidenceBrowser({ plan, output, playwrightModul
     for (const family of families) assert.equal(facts.find(value => value.family === family.family)?.sourceFacts?.description.state, 'authored', `${family.family} compares its authored purpose`);
     await page.locator('#browse-family').selectOption(plan.family);
     await page.locator(`[data-card-id="${inventory.release.sha256}/${item.id}"]`).click();
-    await page.getByRole('button', { name: `Choose ${item.id}`, exact: true }).click();
-    await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click();
+    await addFromCatalog(page, item.id);
     await page.locator('#nav-sources').click();
     await page.locator(`[data-card-id="${inventory.release.sha256}/${item.id}"]`).click();
     await page.locator('#tab-security').click();
@@ -106,18 +107,18 @@ export async function runCompleteEvidenceBrowser({ plan, output, playwrightModul
     await page.getByLabel('Review reason', { exact: true }).fill('Demonstration record against original genuine evidence; this is not a safety approval or an owner judgment.');
     await page.getByRole('button', { name: 'Propose human review', exact: true }).click();
     await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click();
-    const reviewed = await download('reviewed-policy.json', () => page.locator('#policy-save').click());
+    const reviewed = await download('reviewed-policy.json', () => openSetupAdvanced(page).then(() => page.locator('#policy-save').click()));
     const document = JSON.parse(new TextDecoder().decode(reviewed));
     assert.equal(document.metadata['aih.workbench'].reviews.records.length, 1);
     // An explicit policy edit, before preparation/discovery, associates exact optional S1 evidence.
     document.evidence = [{ schema: 'urn:aihq:scan:evidence-association:1.0.0', scanId: plan.baseline.scanId, location: { kind: 'file', path: plan.baseline.path } }];
     const pinned = join(output, 'explicit-optional-evidence-policy.json'); await writeFile(pinned, JSON.stringify(document, null, 2) + '\n');
     await page.locator('#policy-open').setInputFiles(pinned);
-    await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+    await openFileActions(page).then(() => page.getByRole('button', { name: 'Validate and reopen', exact: true }).click());
     await page.locator('#policy-status').filter({ hasText: 'Saved choices recovered' }).waitFor();
-    const before = await download('before-policy.json', () => page.locator('#policy-save').click());
+    const before = await download('before-policy.json', () => openSetupAdvanced(page).then(() => page.locator('#policy-save').click()));
     const preparationEvent = page.waitForResponse(value => value.url().endsWith('/api/authoring-prepare'));
-    await page.getByRole('button', { name: 'Prepare exact effects', exact: true }).click();
+    await openSetupAdvanced(page, 'Sources and execution').then(() => page.getByRole('button', { name: 'Prepare exact effects', exact: true }).click());
     const preparation = await (await preparationEvent).json();
     assert.equal(preparation.status, 'ready', JSON.stringify(preparation));
     assert.ok(preparation.sessionId); assert.ok(preparation.review.reviewDigest);
@@ -139,7 +140,7 @@ export async function runCompleteEvidenceBrowser({ plan, output, playwrightModul
     await panel.getByRole('status').filter({ hasText: plan.later.scanId }).waitFor();
     await page.screenshot({ path: join(output, '03-last-known.png'), fullPage: true });
     await copyFile(plan.later.path, plan.discoveryPath); await check(plan.later.scanId);
-    const after = await download('after-policy.json', () => page.locator('#policy-save').click());
+    const after = await download('after-policy.json', () => openSetupAdvanced(page).then(() => page.locator('#policy-save').click()));
     assert.deepEqual(after, before);
     assert.equal(await held.textContent(), beforeHeld);
     assert.equal(await page.getByRole('button', { name: 'Approve and Apply reviewed effects', exact: true }).isEnabled(), true);

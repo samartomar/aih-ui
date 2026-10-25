@@ -11,8 +11,12 @@ import { authorityFromResult, changeSummary, compareRevision, reviewFreshness, r
 import { isJourneyEnvelope, importLimitError } from './authoring-client.js';
 import { dependencyRows } from './dependency-set.js';
 import { createInstallPanel } from './install-panel.js';
+import { addItem, addedMessage, chosenRoot, removeItem, undoAdd } from './one-click-add.js';
+import { createAddedNotice } from './added-notice.js';
 import { createInstalledPanel } from './installed-panel.js';
 import { createProjectFolderRow } from './project-folder.js';
+import { createSetupChoices } from './setup-choices.js';
+import { rememberOpen } from './advanced.js';
 
 const buttonClass = 'px-3 py-1.5 rounded bg-surface-container text-on-surface border border-wb-border hover:bg-surface-container-high';
 function button(label, action, primary = false) {
@@ -43,13 +47,13 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   const controls = el('div', 'flex flex-wrap gap-2'); start.after(controls);
   const roots = el('div', 'space-y-2'); choices.after(roots);
   const proposal = el('div', 'space-y-2'); proposal.id = 'policy-proposal'; proposal.setAttribute('role', 'status'); review.after(proposal);
-  const status = el('p', 'text-on-surface-variant'); status.id = 'policy-status'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite'); controls.after(status);
+  const status = el('p', 'wb-status-area text-on-surface-variant'); status.id = 'policy-status'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite'); controls.after(status);
   const file = el('input'); file.type = 'file'; file.accept = 'application/json,.json'; file.id = 'policy-open'; file.setAttribute('aria-label', 'Open saved project policy');
   const accepted = el('div', 'space-y-2'); accepted.id = 'policy-roots'; roots.append(accepted);
-  const accept = button('Accept choices with dependencies', () => {
+  const accept = button('Add to setup', () => {
     client.accept();
     showStatus(client.draft ? 'Draft change accepted. Save the draft to keep it; compile a resolved scope to produce an executable policy.'
-      : client.catalog?.executionAvailable ? 'Changes accepted. Install them into your project below.' : 'Changes accepted. Review your policy and save the exact artifact.');
+      : client.catalog?.executionAvailable ? 'Your setup is updated. Install it into your project folder below.' : 'Your setup is updated. Download it from Advanced to keep it.');
     if (!installPanel.node.hidden) installPanel.node.scrollIntoView({ block: 'nearest' });
   }, true);
   accept.id = 'policy-accept'; accept.disabled = true;
@@ -62,13 +66,9 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   const originalDownload = button('Download original artifact', () => original && download(original, 'policy.original.json'));
   originalDownload.disabled = true;
   const goToPolicy = () => reviewPanel.open();
-  for (const id of ['review-project-changes', 'check-project-policy']) {
-    const action = document.getElementById(id); action.classList.remove('opacity-50', 'cursor-not-allowed');
-  }
-  document.getElementById('review-project-changes').replaceChildren(document.createTextNode('Review Changes'));
-
-  const check = document.getElementById('check-project-policy');
+  // Check Policy moved from the header into the drawer's Advanced section; it keeps its id and behaviour.
   let checking = false;
+  const check = button('Check Policy', () => {}); check.id = 'check-project-policy'; check.title = 'Validate the current project policy and its exact sources';
   check.addEventListener('click', safe(async () => {
     if (checking) return;
     if (client.candidate && !window.confirm('Discard the current proposal and validate the accepted choices again?')) return;
@@ -85,10 +85,16 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   copy.addEventListener('click', safe(async () => { if (!client.bytes.length || checking) return; await navigator.clipboard.writeText(new TextDecoder().decode(client.bytes)); copy.textContent = 'Copied'; }));
   jsonDownload.addEventListener('click', () => { if (!client.bytes.length || checking) return; download(client.bytes, client.draft && !client.compiled ? 'policy.original.json' : 'policy.json'); client.markDownloaded(); });
   const stage = document.getElementById('apply-staging-btn');
-  stage.textContent = 'Choose'; stage.title = 'Review this item and its dependencies before accepting it.';
-  // With a draft open the client routes this through the draft edit, not the policy proposal.
-  stage.addEventListener('click', safe(async () => { if (!selectedItem || stage.dataset.busy) return; stage.dataset.busy = 'true'; stage.setAttribute('aria-busy', 'true'); stage.textContent = 'Reviewing choice…'; stage.disabled = true; try { present(await client.propose({ type: 'select', root: selectedItem.root })); goToPolicy(); } finally { delete stage.dataset.busy; stage.removeAttribute('aria-busy'); stage.textContent = 'Choose'; render(); } }));
-  const reset = document.getElementById('reset-item-btn'); reset.textContent = 'Remove project choice'; reset.title = 'Review removing this explicit project root; shared required dependencies remain owned by the composition validator.';
+  stage.textContent = 'Add'; stage.title = 'Add this item and the items it needs to your setup.';
+  // The inspector's Add is the card's Add, and for a chosen item its Remove (#144). With a draft open the client routes
+  // either through the draft edit.
+  stage.addEventListener('click', safe(async () => {
+    if (!selectedItem || stage.dataset.busy) return;
+    const removing = Boolean(chosenRoot(client, selectedItem));
+    stage.dataset.busy = 'true'; stage.setAttribute('aria-busy', 'true'); stage.textContent = removing ? 'Removing…' : 'Adding…'; stage.disabled = true;
+    try { await (removing ? remove(selectedItem) : add(selectedItem)); } finally { delete stage.dataset.busy; stage.removeAttribute('aria-busy'); render(); }
+  }));
+  const reset = document.getElementById('reset-item-btn'); reset.textContent = 'Take out of setup'; reset.title = 'Review removing this explicit project root; shared required dependencies remain owned by the composition validator.';
   reset.addEventListener('click', safe(async () => {
     const root = (client.draft?.roots ?? client.intent?.roots)?.find(root => root.itemId === selectedItem?.id && root.releaseSha256 === selectedItem?.root.releaseSha256);
     if (root) { present(await client.propose({ type: 'remove-root', root: client.draft ? refOf(root) : root, keep: [] })); goToPolicy(); }
@@ -132,6 +138,16 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     try { await client.loadCatalog(); } finally { installPanel.recheck(); await installedPanel.refresh(); }
   } });
   void folderRow.refresh();
+  // Your choices (#137): one line per chosen item, its needs folded, and Remove from setup through the same
+  // remove-root proposal and acceptance as Undo after Add.
+  let installedFor;
+  const choicesView = createSetupChoices({ client, el, button, onRemove: async (root, name) => {
+    const outcome = await undoAdd(client, root).catch(thrown);
+    if (outcome.status === 'superseded') return;
+    diagnostics.textContent = JSON.stringify(outcome.result, null, 2);
+    if (outcome.status !== 'removed') return openReview(outcome, `${name} is still in your ${setupWord()}.`, `Removing ${name} is not done yet. Read what the check reported, then Update setup or Cancel.`);
+    showStatus(`Removed ${name} from your ${setupWord()}. Files already installed stay in the project folder until you Remove them under Installed in this project.`);
+  } });
   document.addEventListener('aih:policy-review-open', () => { void folderRow.refresh(); void installedPanel.refresh(); });
   review.after(button('Open policy choices and review', () => reviewPanel.open(), true));
   const pageContext = el('p', 'text-on-surface-variant'); choices.after(pageContext);
@@ -393,13 +409,61 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
       const row = el('div', 'space-y-1');
       row.append(el('p', 'font-mono text-[10px]', label(root)));
       for (const { item } of dependencies) {
-        const dependency = el('p', 'pl-3 font-mono text-[10px] text-on-surface-variant', `Required dependency: ${item.itemId} · ${item.scope}`);
+        const dependency = el('p', 'pl-3 font-mono text-[10px] text-on-surface-variant', `Needed item: ${item.itemId} · ${item.scope}`);
         dependency.dataset.dependencyOf = root.itemId; row.append(dependency);
       }
-      if (!dependencies.length) row.append(el('p', 'pl-3 text-[10px] text-outline', 'No required dependencies.'));
+      if (!dependencies.length) row.append(el('p', 'pl-3 text-[10px] text-outline', 'Needs no other items.'));
       proposed.append(row);
     }
-    proposed.append(el('p', 'text-on-surface-variant', 'Accepting approves each item together with its displayed required dependencies in one step. No separate dependency approval is needed. This does not authorize host execution.'));
+    proposed.append(el('p', 'text-on-surface-variant', 'Add to setup adds each item together with the items it needs, shown above, in one step. Nothing else needs approving. It installs nothing: Install does that.'));
+  }
+  // One-click Add (owner decision 6): a clean proposal is accepted at once and confirmed with Undo, and the person keeps
+  // browsing. A refusal, or a proposal the host returned with diagnostics, opens the review with its reasons instead.
+  const notice = createAddedNotice({ el, button });
+  const setupWord = () => client.draft ? 'draft' : 'setup';
+  const thrown = error => ({ status: 'refused', result: { status: 'refused', diagnostics: [{ message: error.message }] } });
+  function openReview(outcome, refusedText, reviewText) {
+    notice.hide(); present(outcome.result);
+    if (outcome.status === 'refused') { showStatus(`${refusedText} ${failure(outcome.result)}`); reviewPanel.open(); }
+    else showStatus(`${reviewText} ${failure(outcome.result)}`);
+  }
+  async function add(item) {
+    const name = item.label ?? item.id;
+    const outcome = await addItem(client, item).catch(thrown);
+    if (outcome.status === 'superseded') return;
+    diagnostics.textContent = JSON.stringify(outcome.result, null, 2);
+    if (outcome.status !== 'added') return openReview(outcome, `Nothing was added: ${name} was refused.`, `${name} is not added yet. Read what the check reported, then Add to setup or Cancel.`);
+    const text = addedMessage({ name, needed: outcome.needed, draft: outcome.draft });
+    showStatus(text);
+    notice.show({ text, onUndo: () => undo(name, outcome.root) });
+  }
+  async function undo(name, root) {
+    const outcome = await undoAdd(client, root).catch(thrown);
+    if (outcome.status === 'superseded') return;
+    diagnostics.textContent = JSON.stringify(outcome.result, null, 2);
+    if (outcome.status !== 'removed') return openReview(outcome, `Undo did not change your ${setupWord()}.`, `Undo for ${name} is not done yet. Read what the check reported, then Update setup or Cancel.`);
+    const text = `Undone: ${name} is no longer in your ${setupWord()}.`;
+    showStatus(text); notice.show({ text });
+  }
+  // Remove on a chosen item's card or the inspector (#144): the same removal as Remove from setup, confirmed with Undo,
+  // which adds the same root back through the one-click Add.
+  async function remove(item) {
+    const name = item.label ?? item.id;
+    const outcome = await removeItem(client, item).catch(thrown);
+    if (outcome.status === 'superseded') return;
+    diagnostics.textContent = JSON.stringify(outcome.result, null, 2);
+    if (outcome.status !== 'removed') return openReview(outcome, `${name} is still in your ${setupWord()}.`, `Removing ${name} is not done yet. Read what the check reported, then Update setup or Cancel.`);
+    const text = `Removed ${name} from your ${setupWord()}.`;
+    showStatus(text);
+    notice.show({ text, onUndo: () => addBack(name, { ...item, root: { ...item.root, configuration: outcome.root.configuration ?? {} } }) });
+  }
+  async function addBack(name, item) {
+    const outcome = await addItem(client, item).catch(thrown);
+    if (outcome.status === 'superseded') return;
+    diagnostics.textContent = JSON.stringify(outcome.result, null, 2);
+    if (outcome.status !== 'added') return openReview(outcome, `Undo did not change your ${setupWord()}: ${name} was refused.`, `Undo for ${name} is not done yet. Read what the check reported, then Add to setup or Cancel.`);
+    const text = `Undone: ${name} is back in your ${setupWord()}.`;
+    showStatus(text); notice.show({ text });
   }
   function present(result) {
     diagnostics.textContent = JSON.stringify(result, null, 2);
@@ -414,9 +478,9 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
       appendDependencySets(candidate.roots, candidate.roots.flatMap(root => (root.dependencies ?? []).map(item => ({ root, item }))), root => `${root.itemId} — ${root.status}`);
       showStatus('Review the proposed draft change, then accept. Your current draft is retained until acceptance.');
     } else if (candidate) {
-      proposed.append(el('p', 'font-medium', `Proposed policy: ${candidate.intent.roots.length} explicit choices; ${candidate.intent.pins.length} pinned items including dependencies.`));
+      proposed.append(el('p', 'font-medium', `Your setup would have ${candidate.intent.roots.length} chosen ${candidate.intent.roots.length === 1 ? 'item' : 'items'}, ${candidate.intent.pins.length} in all with the items they need.`));
       appendDependencySets(candidate.intent.roots, candidate.inclusions, root => root.itemId);
-      showStatus('Review the proposed choices and dependencies, then accept. Your current saved artifact is retained until acceptance.');
+      showStatus('Check what would change and the items it needs, then Add to setup or Cancel. Your setup stays as it is until you do.');
     }
     render(); if (client.candidate) reviewPanel.open();
   }
@@ -431,23 +495,26 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     const jsonKind = !client.bytes.length ? 'Policy JSON unavailable' : draft && !client.compiled ? 'Original retained policy JSON' : client.compiled ? 'Current compiled policy JSON' : 'Current project policy JSON';
     jsonHeading.textContent = jsonKind;
     jsonDescription.textContent = !client.bytes.length ? 'Load or create a policy before copying or downloading JSON.'
-      : draft && !client.compiled ? 'These exact original policy bytes are retained inside your working draft. They do not include accepted draft edits. Download draft in Review Changes to keep the complete working draft.'
-      : client.compiled ? 'These are the exact executable policy bytes compiled from the draft. The working draft is separate and can be downloaded from Review Changes.'
+      : draft && !client.compiled ? 'These exact original policy bytes are retained inside your working draft. They do not include accepted draft edits. Download draft in Your setup to keep the complete working draft.'
+      : client.compiled ? 'These are the exact executable policy bytes compiled from the draft. The working draft is separate and can be downloaded from Your setup.'
       : 'These are the complete current project policy bytes. Proposed changes appear here only after acceptance.';
     for (const action of [copy, jsonDownload]) { action.disabled = checking || !client.bytes.length; action.setAttribute('aria-disabled', String(action.disabled)); action.classList.toggle('cursor-not-allowed', action.disabled); }
     copy.title = `Copy ${jsonKind.toLowerCase()}`; jsonDownload.title = `Download ${jsonKind.toLowerCase()}`;
     jsonDownload.textContent = draft && !client.compiled ? 'Download original policy' : 'Download policy';
-    stage.disabled = !selectedItem || (!intent && !draft); reset.disabled = !current.some(root => root.itemId === selectedItem?.id && root.releaseSha256 === selectedItem?.root.releaseSha256);
+    const selectedChosen = current.some(root => root.itemId === selectedItem?.id && root.releaseSha256 === selectedItem?.root.releaseSha256);
+    if (!stage.dataset.busy) stage.textContent = selectedChosen ? 'Remove' : 'Add';
+    stage.title = selectedChosen ? `Take this item out of your ${draft ? 'draft' : 'setup'}. Undo puts it back.` : 'Add this item and the items it needs to your setup.';
+    stage.disabled = Boolean(stage.dataset.busy) || !selectedItem || (!intent && !draft); reset.disabled = !selectedChosen;
     for (const action of [stage, reset]) { action.setAttribute('aria-disabled', String(action.disabled)); action.classList.toggle('opacity-50', action.disabled); action.classList.toggle('cursor-not-allowed', action.disabled); }
     const persistentContext = document.getElementById('policy-current-context');
     const contextSummary = document.getElementById('policy-context-summary');
-    if (contextSummary) contextSummary.textContent = `${draft ? 'Draft' : 'Policy'} · ${client.candidate ? 'Proposal' : client.dirty ? 'Unsaved' : `${current.length} choices`}`;
-    if (persistentContext) persistentContext.textContent = `${draft ? 'Working draft' : 'Project policy'} · ${current.length} accepted choices${client.candidate ? ' · Proposal awaiting acceptance' : ''}${client.dirty ? ' · Changes not downloaded' : ' · No undownloaded accepted changes'}${client.recoveryAvailable === false ? ' · Browser recovery unavailable' : ''}`;
+    if (contextSummary) contextSummary.textContent = `${draft ? 'Draft' : 'Setup'} · ${client.candidate ? 'Waiting to add' : client.dirty ? 'Unsaved' : `${current.length} chosen`}`;
+    if (persistentContext) persistentContext.textContent = `${draft ? 'Working draft' : 'Your setup'} · ${current.length} chosen ${current.length === 1 ? 'item' : 'items'}${client.candidate ? ' · A change is waiting in Your setup' : ''}${client.dirty ? ' · Changes not downloaded' : ' · No changes waiting to download'}${client.recoveryAvailable === false ? ' · Browser recovery unavailable' : ''}`;
     pageContext.textContent = `${draft ? 'Working draft' : 'Current project policy'}: ${current.length} accepted choices${client.dirty ? ' · Changes not downloaded' : ''}${client.startupSource === 'recovery' ? ' · Recovered from this browser session' : ''}. Open policy choices and review to edit, download or reopen an artifact.`;
     summary.textContent = draft ? (intent
       ? `Current executable policy: compiled from the draft · ${intent.roots.length} explicit choices · ${intent.pins.length} exact pins including dependencies. The draft envelope is kept separately and is not executable.`
       : 'Current artifact: draft (journey envelope, not executable). Your original policy bytes are retained inside it. Compile a resolved scope to produce an executable policy.')
-      : intent ? `Current artifact: local project policy · ${intent.roots.length} explicit choices · ${intent.pins.length} exact pins including dependencies. This artifact establishes no organization authority.` : 'Imported artifact awaits exact-source validation. Saving and editing resume after successful reopen.';
+      : intent ? `Your setup on this machine: ${intent.roots.length} chosen ${intent.roots.length === 1 ? 'item' : 'items'}, ${intent.pins.length} in all with the items they need. It carries no organization authority.` : 'The opened file is waiting for its exact sources to be checked. Saving and editing resume after Validate and reopen in Advanced.';
     accepted.replaceChildren();
     for (const root of draft ? [] : intent?.roots ?? []) {
       const item = client.catalog?.items.find(item => item.id === root.itemId && item.root.releaseSha256 === root.releaseSha256);
@@ -455,14 +522,18 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
       row.append(el('p', 'font-medium', item?.label ?? root.itemId), el('p', 'font-mono text-[10px] text-outline', `${item?.family ?? 'Saved source'} · ${root.scope} · ${root.itemId}`));
       row.append(createConfigurationEditor({ configuration: root.configuration, inputs: item?.inputs, label: root.itemId, button,
         review: async value => { try { present(await client.propose({ type: 'select', root: { ...root, configuration: value } })); } catch (error) { showStatus(error.message); } } }));
-      row.append(button(`Remove ${root.itemId}`, safe(async () => present(await client.propose({ type: 'remove-root', root, keep: [] })))));
+      row.append(button(`Take ${root.itemId} out of setup`, safe(async () => present(await client.propose({ type: 'remove-root', root, keep: [] })))));
       accepted.append(row);
     }
     for (const suggestion of draft ? [] : optional) {
       const exclusion = { originId: intent?.origins.find(origin => origin.kind === 'direct')?.id ?? intent?.origins[0]?.id, ...suggestion.to };
       accepted.append(button(`${suggestion.skipped ? 'Clear skip' : 'Skip optional'} ${suggestion.to.itemId}`, safe(async () => present(await client.propose({ type: suggestion.skipped ? 'unskip' : 'skip', exclusion })))));
     }
-    renderDraft(); reviewPanel.render(); installPanel.render(); for (const view of [updates, improvements, trials, workspace]) if (view.node.parentElement.open) view.render();
+    renderDraft(); reviewPanel.render(); choicesView.render(); installPanel.render();
+    // Whether an installed item is in your setup follows the setup, so the list is read again when the setup changes (#137).
+    const setupKey = JSON.stringify((client.draft?.roots ?? client.intent?.roots ?? []).map(root => [root.releaseSha256, root.itemId, root.scope]));
+    if (setupKey !== installedFor) { installedFor = setupKey; if (!reviewPanel.node.hidden) void installedPanel.refresh(); }
+    for (const view of [updates, improvements, trials, workspace]) if (view.node.parentElement.open) view.render();
     host.textContent = draft && !intent ? 'Prepare and Apply are unavailable: this draft is not an executable policy. Compile a resolved scope first; the compiled policy is then reviewed with the exact host effects.'
       : client.catalog?.executionAvailable
       ? 'Execution host connected. Prepare and Apply require target review; Enterprise also requires current organization authority.'
@@ -482,7 +553,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
       binding.value = selected && [...binding.options].some(option => option.value === selected) ? selected : binding.options.length === 2 ? binding.options[1].value : '';
     } catch { /* Original malformed bytes stay available for diagnostics. */ }
     render(); syncSource();
-    if (client.startupSource === 'handoff' && !handoffAnnounced) { handoffAnnounced = true; reviewPanel.open(); showStatus(client.draft || client.intent ? 'Your guided choices are open. Review the accepted choices below, then download the policy or draft.' : 'Your guided artifact was transferred, but exact-source validation needs attention. Original bytes are retained.'); }
+    if (client.startupSource === 'handoff' && !handoffAnnounced) { handoffAnnounced = true; reviewPanel.open(); showStatus(client.draft || client.intent ? 'Your guided choices are open. Check the chosen items below, then Install them, or download them from Advanced.' : 'Your guided choices were transferred, but their exact sources need checking. The original file is kept.'); }
   });
   const folder = document.getElementById('personal-folder'), folderResult = document.getElementById('personal-result');
   folder.addEventListener('change', async () => {
@@ -522,13 +593,23 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     finally { snapshot.disabled = false; snapshot.value = ''; }
   });
   intake.append(snapshot, intakeStatus);
-  const tools = el('details', 'policy-advanced rounded border border-wb-border p-3'); tools.append(el('summary', 'cursor-pointer font-medium', 'Advanced: sources and execution'), exact, reconcile, host, source, execution, intake);
+  const tools = el('details', 'policy-advanced rounded border border-wb-border p-3'); tools.append(el('summary', 'cursor-pointer font-medium', 'Sources and execution'), exact, reconcile, host, source, execution, intake);
   tools.addEventListener('toggle', () => { if (tools.open) syncSource(); });
-  const currentChoices = el('section', 'space-y-2'); currentChoices.append(el('h3', 'font-medium', 'Accepted choices'), roots, draftSection);
+  const currentChoices = el('section', 'space-y-2'); currentChoices.append(el('h3', 'font-medium', 'Chosen items'), roots, draftSection);
   const fileActions = el('details', 'policy-advanced rounded border border-wb-border p-3'); fileActions.id = 'policy-file-actions'; fileActions.append(el('summary', 'cursor-pointer font-medium', 'File actions: new, open and validate'), controls);
-  reviewPanel.node.append(folderRow.node, installPanel.node, installedPanel.node, currentChoices, save, fileActions);
-  for (const view of [updates, improvements, trials, workspace]) reviewPanel.node.append(view.node.parentElement);
-  reviewPanel.node.append(organizationAuthor.node, tools);
+  // One Advanced section at the bottom of the drawer (owner decision 4). Placement only: every control keeps its id,
+  // code, routes and saved formats. Evidence review joins it from evidence-review.js.
+  const advanced = el('details', 'setup-advanced rounded border border-wb-border px-3 py-1 space-y-3'); advanced.id = 'setup-advanced';
+  advanced.append(el('summary', 'cursor-pointer font-medium', 'Advanced'));
+  const policyActions = el('div', 'flex flex-wrap gap-2'); policyActions.append(check, save);
+  // Chosen items (configuration, skips, an open draft and its compile) and the Organization baseline moved here
+  // from the default panel (#137). Placement only: every control keeps its id and behaviour.
+  advanced.append(currentChoices, policyActions, fileActions);
+  for (const view of [updates, improvements, trials, workspace]) advanced.append(view.node.parentElement);
+  advanced.append(tools, organizationAuthor.node);
+  rememberOpen(advanced, 'setup');
+  // The default panel (#137): Project folder, Your choices, Install, Installed in this project; then Advanced, closed.
+  reviewPanel.node.append(folderRow.node, choicesView.node, installPanel.node, installedPanel.node, advanced);
   organizationAuthor.node.hidden = true;
   const setRole = settings => {
     organizationAuthor.node.hidden = settings?.role !== 'admin';
@@ -539,5 +620,13 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   function setTargets(coreTargets) {
     improvements.setTargets(coreTargets); organizationAuthor.setTargets(coreTargets);
   }
-  return { present, setSettings: setRole, select(entry) { selectedItem = entry?.authoringItem; render(); }, setTargets };
+  // Project basics reaches the same workspace view in its Advanced home: Your setup opens with Advanced and the
+  // workspace open, and focus moves to it.
+  function openWorkspace() {
+    const disclosure = workspace.node.parentElement;
+    reviewPanel.open(); advanced.open = true; disclosure.open = true;
+    const summary = disclosure.querySelector(':scope > summary');
+    summary.scrollIntoView({ block: 'start' }); summary.focus({ preventScroll: true });
+  }
+  return { present, add, remove, openWorkspace, setSettings: setRole, select(entry) { selectedItem = entry?.authoringItem; render(); }, setTargets };
 }

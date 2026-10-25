@@ -1,9 +1,18 @@
-.policy-review-panel { position: fixed; z-index: 45; inset: calc(var(--workbench-top, 5.5rem) + .5rem) 1rem 1rem auto; width: min(38rem, calc(100vw - 2rem)); overflow-y: auto; padding: 1.25rem; border: 1px solid var(--color-border); border-radius: .75rem; background: var(--color-panel); color: var(--color-text); box-shadow: var(--card-highlight); }
+.policy-review-panel { position: fixed; z-index: 45; inset: calc(var(--workbench-top, 5.5rem) + .5rem) 1rem 1rem auto; width: min(38rem, calc(100vw - 2rem)); overflow-y: auto; padding: 1rem 1.25rem; border: 1px solid var(--color-border); border-radius: .75rem; background: var(--color-panel); color: var(--color-text); box-shadow: var(--card-highlight); }
 .policy-review-panel[hidden] { display: none; }
-.policy-review-panel > * + * { margin-top: .85rem; }
-.policy-review-close { position: absolute; right: 1rem; top: .6rem; }
+.policy-review-panel > * + * { margin-top: .6rem; }
 .policy-review-panel h3 { scroll-margin-top: 3.5rem; }
-/* Back to catalog stays in reach wherever the panel is scrolled, such as at Install. */
-.policy-review-back { position: sticky; top: 0; z-index: 1; display: block; width: max-content; background: var(--color-panel); box-shadow: var(--shadow-xs); }
+/* The title row with Back to catalog stays in reach wherever the panel is scrolled, such as at Install. */
+.policy-review-head { position: sticky; top: -1rem; z-index: 1; margin: -1rem -1.25rem 0; padding: 1rem 1.25rem .25rem; background: var(--color-panel); }
+.policy-review-head h2 { line-height: 1.3; }
+/* Secondary lines of the default panel, smaller so a three-item setup fits one screen (#137). */
+.policy-review-context, .policy-review-panel .wb-install-hook-note, .policy-review-panel .setup-choice-needs { font-size: .75rem; line-height: 1.35; }
+/* An empty status line keeps its place for announcements but adds no gap. */
+.policy-review-panel section > [role=status]:empty { margin-top: 0; }
+/* A long status message stays in a fixed-height area that scrolls, so it never pushes Your setup past one screen (#144). */
+.policy-review-panel .wb-status-area { max-height: 4.1em; overflow-y: auto; overflow-wrap: anywhere; }
+/* Install's file count opens the file list on its own line. */
+.policy-review-panel .install-details[open] { flex-basis: 100%; }
+.policy-review-back { display: block; flex-shrink: 0; width: max-content; background: var(--color-panel); box-shadow: var(--shadow-xs); }
 
 @media (max-width: 700px) { .policy-review-panel { inset: var(--workbench-top, 5.5rem) 0 0; width: 100%; border-radius: 0; } }

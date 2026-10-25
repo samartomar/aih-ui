@@ -19,13 +19,17 @@ import { publishedClients } from "../app/core-targets.js";
 import { inventoryCounts, scopeTotal, selectedScope, visibleEntries, sourceScopes } from "./selectors.js";
 import { emptyView, restoreView, saveView } from "./view-state.js";
 import { el, text } from "../app/dom.js";
+import { createProjectBasics, projectFileEntries } from "./project-basics.js";
 
 /**
  * @param onSelectEntry    called with the entry when the selection changes
  * @param onReselectEntry  called when the selected card is activated again
  * @param onSummary        called with the preview summary once it has loaded
+ * @param onAdd            called with the catalog item when its card's Add is used; resolves when the Add has settled
+ * @param onRemove         called with a chosen catalog item when its card's Remove is used (#144); resolves when it has settled
+ * @param onOpenWorkspace  called when Project basics opens the workspace
  */
-export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () => {}, onSummary, subscribeSecurity, onProposal = () => {} }) {
+export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () => {}, onSummary, subscribeSecurity, onAdd = async () => {}, onRemove = async () => {}, onOpenWorkspace = () => {} }) {
   const elements = catalogElements();
   const state = {
     entries: [],
@@ -33,13 +37,15 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     counts: inventoryCounts([]),
     view: emptyView(),
     selectedId: null,
-    // The card whose own Choose button was used last; Back to catalog returns to it (else to the selected card).
+    // The card whose own Add button was used last; Back to catalog returns to it (else to the selected card).
     chosenId: null,
     // entryId -> { state, scanId } from the host's read of the supplied Scan evidence; empty means not supplied.
     evidence: new Map(),
     // The organization's own name, when the user has saved one. It labels the
     // organization's additions row; nothing here reads or invents it.
     organizationName: null,
+    // entryId -> 'Adding…' or 'Removing…' while a card's Add or Remove is in flight (the grid is redrawn meanwhile).
+    busy: new Map(),
   };
   let restoredView = false;
 
@@ -84,6 +90,10 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     changeView({ family: family.value, source: row?.filterValue ?? null, sourceType: null });
   });
   target.addEventListener('change', () => changeView({ target: target.value }));
+  // Project basics shows in place of the cards.
+  const projectBasics = createProjectBasics({ elements: elements.projectBasics, onSelect: (entryId) => select(entryId), onOpenWorkspace });
+  const basicsOpen = () => !elements.projectBasics.section.hidden;
+  const focusCard = (entryId) => basicsOpen() ? projectBasics.focus(entryId) : cards.focus(entryId);
   support.addEventListener('change', () => changeView({ support: support.value }));
   const resetFilters = () => { Object.assign(state.view, emptyView()); toolbar.setQuery(''); changeView({ target: target.options[0]?.value ?? '' }); };
   document.getElementById('catalog-reset-filters').addEventListener('click', resetFilters);
@@ -108,13 +118,22 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       selectedId: state.selectedId,
       intent: authoring.intent,
       acceptedRoots: authoring.draft?.roots ?? authoring.intent?.roots ?? [],
-      acceptedLabel: authoring.draft ? "In draft" : "In policy",
+      setupWord: authoring.draft ? "draft" : "setup",
       evidence: state.evidence,
       onReset: resetFilters,
+      busy: state.busy,
       onChoose: async (item, entryId) => {
         state.chosenId = entryId ?? null;
-        try { onProposal(await authoring.propose({ type: 'select', root: item.root })); }
-        catch (error) { onProposal({ status: 'refused', diagnostics: [{ message: error.message }] }); }
+        state.busy.set(entryId, 'Adding…');
+        try { await onAdd(item); } finally { state.busy.delete(entryId); render(); }
+        // A clean Add rebuilds the grid without opening the review; keyboard focus returns to the card.
+        if (document.activeElement === document.body || !document.activeElement?.isConnected) focusCard(state.chosenId);
+      },
+      onRemove: async (item, entryId) => {
+        state.chosenId = entryId ?? null;
+        state.busy.set(entryId, 'Removing…');
+        try { await onRemove(item); } finally { state.busy.delete(entryId); render(); }
+        if (document.activeElement === document.body || !document.activeElement?.isConnected) focusCard(state.chosenId);
       },
     };
   }
@@ -174,6 +193,9 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     });
     elements.cards.cardsGrid.setAttribute('aria-busy', 'false');
     cards.render(cardsView);
+    // Project files are offered whatever the filters and the tool: they apply to every tool.
+    const files = projectFileEntries(state.entries);
+    projectBasics.render({ ...cardsView, entries: files, total: files.length, noun: 'project files' });
     details.render(detailsModel(selectedEntry()));
   }
 
@@ -214,6 +236,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     // The two cards concerned are updated in place. The grid is not rebuilt,
     // so the card the operator activated keeps keyboard focus.
     cards.setSelected(previous, entryId);
+    projectBasics.setSelected(previous, entryId);
     details.render(detailsModel(entry));
     onSelectEntry(entry);
   }
@@ -257,7 +280,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
 
     /** Back to the catalog: focus the card just chosen (or the selected one) if shown, otherwise the search box. */
     focusCatalog() {
-      if (!cards.focus(state.chosenId ?? state.selectedId)) elements.toolbar.search.focus();
+      if (!focusCard(state.chosenId ?? state.selectedId)) (basicsOpen() ? document.getElementById('project-basics-title') : elements.toolbar.search).focus();
     },
 
     /** The organization name the user saved, or null. Re-renders the rail. */

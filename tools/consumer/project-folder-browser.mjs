@@ -3,6 +3,8 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
 import { basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { addFromCatalog, closePolicyDrawer } from './policy-drawer.mjs';
+import { openSetupAdvanced } from './advanced-browser.mjs';
 
 // The project folder and the "Your setup" entry, on the running page with real packed packages. `project` is the
 // host's configured default; `other` is a second disposable folder the journey types in. Both themes are walked; each
@@ -61,11 +63,11 @@ export async function runProjectFolderBrowser({ origin, output, playwrightModule
 
       await page.locator('#browse-family').selectOption('Extensions');
       await page.locator('#catalog-search').fill('grill-me');
-      await page.getByRole('button', { name: 'Choose extensions.matt.grill-me', exact: true }).click();
-      await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click();
+      // One-click Add puts it in the setup; Your setup then prepares Install into the folder.
+      await addFromCatalog(page, 'extensions.matt.grill-me');
+      await entry.click(); await page.locator('#policy-review-panel').waitFor();
       await previewsInto(project);
-      await page.locator('.policy-review-close').click();
-      await page.locator('#policy-review-panel').waitFor({ state: 'hidden' });
+      await closePolicyDrawer(page);
       await page.locator('#your-setup').filter({ hasText: 'Your setup (1)' }).waitFor();
       await entry.click();
       await page.locator('#policy-review-panel').waitFor();
@@ -91,7 +93,7 @@ export async function runProjectFolderBrowser({ origin, output, playwrightModule
       await page.screenshot({ path: join(output, `${theme}-switched.png`), fullPage: true });
 
       // Recent folders stay in this browser: the saved policy does not carry them.
-      const download = page.waitForEvent('download'); await page.locator('#policy-save').click();
+      const download = page.waitForEvent('download'); await openSetupAdvanced(page); await page.locator('#policy-save').click();
       const saved = join(output, `${theme}-policy.json`); await (await download).saveAs(saved);
       const bytes = await readFile(saved, 'utf8');
       for (const path of [project, other]) assert.ok(!bytes.includes(path), 'The saved policy never contains a project folder.');

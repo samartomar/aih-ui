@@ -128,7 +128,9 @@ export function createModePicker({ onComplete }) {
     if (saving) return;
     sequence += 1;
     e.workbenchModeDialog.close();
-    e.workbenchModeTrigger.focus();
+    // Change mode… is an item of the closed Settings menu, so focus goes back to the Settings button.
+    const settings = e.workbenchModeTrigger.closest?.("#workspace-actions") ? document.getElementById("org-modal-trigger") : null;
+    (settings ?? e.workbenchModeTrigger).focus();
   }
   e.workbenchModeTrigger.addEventListener("click", () => { void open(); });
   e.workbenchModeCancel.addEventListener("click", close);

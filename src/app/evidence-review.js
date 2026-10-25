@@ -151,10 +151,12 @@ export function createEvidenceReview(client, onProposal) {
     if (!judgments.length) history.append(el('li', '', 'No human review decisions recorded. Supply evidence to review a pinned selection.'));
   });
   fillSubjects();
-  (document.getElementById('policy-review-panel') ?? document.querySelector('#policy-workspace > .p-4')).append(panel);
+  // Evidence review lives in Your setup's Advanced section (owner decision 4), or on the policy screen of a page without one.
+  (document.getElementById('setup-advanced') ?? document.getElementById('policy-review-panel') ?? document.querySelector('#policy-workspace > .p-4')).append(panel);
   // Scan Review is this supplied-evidence review: it opens the panel, and nothing is scanned or fetched.
   const activate = () => {
     if (document.getElementById('policy-review-panel')?.hidden) document.getElementById('review-project-changes').click();
+    const holder = panel.parentElement?.closest?.('details'); if (holder) holder.open = true;
     panel.open = true; panel.scrollIntoView({ block: 'start' }); file.focus({ preventScroll: true });
   };
   document.addEventListener('aih:view-changed', event => { if (event.detail?.view === 'review') activate(); });

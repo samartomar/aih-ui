@@ -67,9 +67,10 @@ async function main() {
     const catalog = createCatalog({
       authoring,
       subscribeSecurity: shell.subscribeSecurity,
-      onProposal: result => {
-        authoringWorkspace.present(result);
-      },
+      onAdd: item => authoringWorkspace.add(item),
+      onRemove: item => authoringWorkspace.remove(item),
+      // Project basics opens the one workspace view.
+      onOpenWorkspace: () => authoringWorkspace.openWorkspace(),
       onSelectEntry: (entry) => {
         authoringWorkspace.select(entry);
         shell.setInspectorSelection(entry !== null);

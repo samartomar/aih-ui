@@ -1,4 +1,5 @@
 import { createGapIndicator } from "./gap-indicator.js";
+import { rememberOpen } from "./advanced.js";
 /*
  * The application shell: the collapsible rails, the inspector tabs and the
  * error banner.
@@ -39,7 +40,9 @@ export function createShell(elements) {
   new ResizeObserver(measureHeader).observe(subheader);
   measureHeader();
   const securityListeners = new Set();
-  const securityVisible = () => currentView === "catalog" && currentTab === "security" && hasInspectorSelection && !elements.inspectorRail.classList.contains("w-0");
+  // Project basics shows in place of the cards; its project files open in the same inspector.
+  const browsing = () => currentView === "catalog" || currentView === "basics";
+  const securityVisible = () => browsing() && currentTab === "security" && hasInspectorSelection && !elements.inspectorRail.classList.contains("w-0");
   const notifySecurity = () => { for (const listener of securityListeners) listener(securityVisible()); };
   const panes = {
     details: elements.paneDetails,
@@ -70,7 +73,7 @@ export function createShell(elements) {
 
   function toggleNav() {
     navFoldedForWidth = false;
-    if (currentView === "catalog" && window.innerWidth <= 760 && elements.navRail.classList.contains("w-0") && !elements.inspectorRail.classList.contains("w-0")) {
+    if (browsing() && window.innerWidth <= 760 && elements.navRail.classList.contains("w-0") && !elements.inspectorRail.classList.contains("w-0")) {
       toggleInspector();
     }
     const collapsed = elements.navRail.classList.toggle("w-0");
@@ -99,7 +102,7 @@ export function createShell(elements) {
     elements.inspectorRail.classList.toggle("w-0", collapsed);
     elements.inspectorRail.classList.toggle("w-[var(--inspector-width)]", !collapsed);
     elements.inspectorRail.classList.toggle("border-l-0", collapsed);
-    const visible = !collapsed && currentView === "catalog";
+    const visible = !collapsed && browsing();
     elements.inspectorRail.inert = !visible;
     elements.inspectorRail.setAttribute("aria-hidden", String(!visible));
     elements.toggleInspectorBtn.setAttribute("aria-expanded", String(visible));
@@ -112,7 +115,7 @@ export function createShell(elements) {
   }
 
   function toggleInspector() {
-    if (!hasInspectorSelection || currentView !== "catalog") return;
+    if (!hasInspectorSelection || !browsing()) return;
     if (window.innerWidth <= 760 && elements.inspectorRail.classList.contains("w-0")) foldNavForWidth();
     setInspectorOpen(elements.inspectorRail.classList.contains("w-0"));
   }
@@ -128,24 +131,27 @@ export function createShell(elements) {
     else node.removeAttribute("aria-current");
   }
 
-  /** The view the address names: policy or review, otherwise the catalog. */
+  /** The view the address names: policy, review or Project basics, otherwise the catalog. */
   function viewFromHash() {
     const named = location.hash.slice(1);
-    return ['policy', 'review'].includes(named) ? named : 'catalog';
+    return ['policy', 'review', 'basics'].includes(named) ? named : 'catalog';
   }
 
   function setView(view, updateHash = true) {
     if (updateHash && location.hash !== `#${view}`) location.hash = view;
     const policy = view === "policy" || view === "review";
-    currentView = policy ? view : "catalog";
-    elements.catalogWorkspace.hidden = policy;
+    const basics = view === "basics";
+    currentView = policy || basics ? view : "catalog";
+    elements.catalogWorkspace.hidden = policy || basics;
+    if (elements.projectBasics) elements.projectBasics.hidden = !basics;
     elements.policyWorkspace.hidden = !policy;
     elements.frameworkMatrixTabs.hidden = policy;
     elements.catalogKindsDisclosure.hidden = policy;
     elements.catalogScopesSection.hidden = policy;
     elements.inspectorRail.hidden = policy;
     elements.toggleInspectorBtn.hidden = policy;
-    activeNavigation(elements.navSources, !policy);
+    activeNavigation(elements.navSources, !policy && !basics);
+    if (elements.navProjectBasics) activeNavigation(elements.navProjectBasics, basics);
     activeNavigation(elements.navPolicy, view === "policy");
     activeNavigation(elements.navScanReview, view === "review");
     if (policy) {
@@ -159,6 +165,7 @@ export function createShell(elements) {
     if (window.innerWidth <= 760) foldNavForWidth();
     notifySecurity();
     if (policy) elements.policyWorkspaceTitle.focus();
+    else if (basics) elements.projectBasicsTitle?.focus();
     else elements.catalogWorkspace.querySelector("h1")?.focus();
     document.dispatchEvent(new CustomEvent('aih:view-changed', { detail: { view: currentView } }));
   }
@@ -169,12 +176,25 @@ export function createShell(elements) {
   for (const glyph of document.querySelectorAll('.material-symbols-outlined')) glyph.setAttribute('aria-hidden', 'true');
   setInspectorOpen(false);
 
+  // The catalog's Advanced section (owner decision 4) holds the kind tiles, the scopes, the Policy workspace links and
+  // Scan Review. The inspector's Policy JSON tab belongs to it too: the tab shows only while Advanced is open.
+  const advanced = document.getElementById("catalog-advanced");
+  const jsonTab = elements.tabButtons.find(button => button.dataset.tab === "json");
+  function syncJsonTab() {
+    if (!jsonTab) return;
+    jsonTab.hidden = !advanced?.open;
+    if (jsonTab.hidden && currentTab === "json") switchTab("details");
+  }
+  if (advanced) { rememberOpen(advanced, "catalog"); advanced.addEventListener("toggle", syncJsonTab); }
+  syncJsonTab();
+
   elements.toggleNavBtn.addEventListener("click", toggleNav);
   elements.toggleInspectorBtn.addEventListener("click", toggleInspector);
   elements.closeInspectorBtn.addEventListener("click", toggleInspector);
   elements.navSources.addEventListener("click", event => { event.preventDefault(); setView("catalog"); });
   elements.navPolicy.addEventListener("click", () => setView("policy"));
   elements.navScanReview.addEventListener("click", () => setView("review"));
+  elements.navProjectBasics?.addEventListener("click", event => { event.preventDefault(); setView("basics"); });
   document.addEventListener('aih:policy-review-open', () => setInspectorOpen(false));
   // A view this page already switched to (a click updates the address too) is not switched again.
   window.addEventListener('hashchange', () => {
@@ -183,7 +203,7 @@ export function createShell(elements) {
   });
   if (location.hash) setView(viewFromHash(), false);
   document.addEventListener('keydown', event => {
-    if (elements.inspectorRail.classList.contains('w-0') || currentView !== 'catalog' || document.querySelector('dialog[open]')) return;
+    if (elements.inspectorRail.classList.contains('w-0') || !browsing() || document.querySelector('dialog[open]')) return;
     if (event.key === 'Escape') { event.preventDefault(); setInspectorOpen(false); return; }
     if (event.key !== 'Tab' || !overlayMedia.matches) return;
     const stops = [...elements.inspectorRail.querySelectorAll('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex="0"]')].filter(node => node.getClientRects().length);
@@ -212,7 +232,7 @@ export function createShell(elements) {
       const step = { ArrowRight: 1, ArrowLeft: -1, Home: -Infinity, End: Infinity }[event.key];
       if (step === undefined) return;
       event.preventDefault();
-      const tabs = elements.tabButtons;
+      const tabs = elements.tabButtons.filter(tab => !tab.hidden);
       const here = tabs.indexOf(button);
       const there = step === -Infinity ? 0 : step === Infinity ? tabs.length - 1 : (here + step + tabs.length) % tabs.length;
       switchTab(tabs[there].dataset.tab);
@@ -231,7 +251,8 @@ export function createShell(elements) {
 
   return {
     /** Shows Sources & Catalogs if another view is showing; on the catalog already, nothing moves. */
-    showCatalog() { if (currentView !== "catalog") setView("catalog"); },
+    /** Back to browsing: from another view to the catalog; the cards or Project basics, whichever showed, stay. */
+    showCatalog() { if (!browsing()) setView("catalog"); },
     subscribeSecurity(listener) { securityListeners.add(listener); listener(securityVisible()); return () => securityListeners.delete(listener); },
     /** Selection availability comes from Catalog; an empty rail cannot open. */
     setInspectorSelection(selected) {
@@ -240,11 +261,11 @@ export function createShell(elements) {
       elements.toggleInspectorBtn.disabled = !selected;
       elements.toggleInspectorBtn.title = selected ? "Show or hide entry inspector" : "Select a card to open the inspector";
       elements.toggleInspectorBtn.setAttribute("aria-disabled", String(!selected));
-      if (selected && currentView === "catalog" && elements.inspectorRail.classList.contains("w-0")) toggleInspector();
+      if (selected && browsing() && elements.inspectorRail.classList.contains("w-0")) toggleInspector();
     },
     /** Called when a selection needs the inspector visible. Already-open stays open. */
     openInspector() {
-      if (currentView === "catalog" && elements.inspectorRail.classList.contains("w-0")) toggleInspector();
+      if (browsing() && elements.inspectorRail.classList.contains("w-0")) toggleInspector();
     },
     showError(message) {
       elements.catalogError.textContent = message;

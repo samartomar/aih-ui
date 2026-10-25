@@ -87,23 +87,51 @@ test("each supplied evidence state renders its own text, and matched is not auth
   assert.match(pill(renderCard(t, "Described", { state: "matched", scanId: "scan-1" }).node).title, /scan-1.*unchecked; this is not an approval or execution authority/);
 });
 
-test("keyboard activation on Choose does not inspect its parent card", t => {
+test("keyboard activation on Add does not inspect its parent card", t => {
   const { node, selections } = renderCard(t, 'Described');
-  const choose = descendants(node).find(node => node.textContent === 'Choose');
+  const choose = descendants(node).find(node => node.textContent === 'Add');
   assert.ok(choose);
   for (const key of ['Enter', ' ']) node.listeners.keydown({ key, target: choose, preventDefault() { assert.fail('Parent must not cancel child keyboard input'); } });
   assert.deepEqual(selections, []);
 });
 
-test("accepted draft roots stay chosen even without executable intent roots", t => {
+test("accepted draft roots stay chosen even without executable intent roots, and offer Remove from the draft", t => {
   const { node } = renderCard(t, 'Described', undefined, {
-    intent: { roots: [] }, acceptedRoots: [{ itemId: 'fixture', releaseSha256: 'a'.repeat(64) }], acceptedLabel: 'In draft',
+    intent: { roots: [] }, acceptedRoots: [{ itemId: 'fixture', releaseSha256: 'a'.repeat(64) }], acceptedLabel: 'In draft', setupWord: 'draft',
   });
-  const choice = descendants(node).find(node => node.textContent === 'In draft');
+  const choice = descendants(node).find(node => node.textContent === 'Remove');
   assert.ok(choice);
-  assert.equal(choice.disabled, true);
-  assert.equal(choice.attributes['aria-label'], 'In draft fixture');
-  assert.equal(descendants(node).some(node => node.textContent === 'Choose'), false);
+  assert.equal(choice.disabled, false);
+  assert.equal(choice.attributes['aria-label'], 'Remove fixture');
+  assert.match(choice.title, /draft/);
+  assert.equal(descendants(node).some(node => node.textContent === 'Add'), false);
+});
+
+test("a card's Add reads Adding… while it adds", async t => {
+  let finish;
+  const { node } = renderCard(t, 'Described', undefined, { onChoose: () => new Promise(resolve => { finish = resolve; }) });
+  const add = descendants(node).find(node => node.textContent === 'Add');
+  assert.equal(add.attributes['aria-label'], 'Add fixture');
+  const pending = add.listeners.click({ stopPropagation() {} });
+  assert.equal(add.textContent, 'Adding…'); assert.equal(add.disabled, true); assert.equal(add.attributes['aria-busy'], 'true');
+  finish(); await pending;
+  assert.equal(add.textContent, 'Add'); assert.equal(add.attributes['aria-busy'], undefined);
+});
+
+test("a chosen item's card offers Remove (#144), reads Removing… while it removes, and keeps its card from being inspected", async t => {
+  let finish; const removed = [];
+  const { node, selections } = renderCard(t, 'Described', undefined, { acceptedRoots: [{ itemId: 'fixture', releaseSha256: 'a'.repeat(64) }],
+    onRemove: (item, entryId) => { removed.push([item.id, entryId]); return new Promise(resolve => { finish = resolve; }); } });
+  const remove = descendants(node).find(node => node.textContent === 'Remove');
+  assert.ok(remove); assert.equal(remove.disabled, false); assert.equal(remove.attributes['aria-label'], 'Remove fixture');
+  assert.match(remove.title, /setup/);
+  const pending = remove.listeners.click({ stopPropagation() {} });
+  assert.equal(remove.textContent, 'Removing…'); assert.equal(remove.disabled, true); assert.equal(remove.attributes['aria-busy'], 'true');
+  finish(); await pending;
+  assert.deepEqual(removed, [['fixture', 'fixture.skill']]);
+  assert.deepEqual(selections, [], 'Remove does not inspect the card');
+  assert.equal(remove.attributes['aria-busy'], undefined);
+  assert.equal(descendants(node).some(node => node.textContent === 'Added'), false, 'no disabled Added state any more');
 });
 
 test("returning to the catalog focuses the chosen card when the grid shows it, and reports when it does not", t => {
@@ -119,4 +147,14 @@ test("returning to the catalog focuses the chosen card when the grid shows it, a
   assert.equal(focused.dataset.cardId, "b.skill");
   assert.equal(cards.focus("not-shown.skill"), false);
   assert.equal(cards.focus(null), false);
+});
+
+test("an Add or Remove still in flight keeps its busy label when the grid is redrawn meanwhile (#144)", t => {
+  let called = false;
+  const { node } = renderCard(t, 'Described', undefined, { acceptedRoots: [{ itemId: 'fixture', releaseSha256: 'a'.repeat(64) }], busy: new Map([['fixture.skill', 'Removing…']]),
+    onRemove: () => { called = true; } });
+  const busy = descendants(node).find(node => node.textContent === 'Removing…');
+  assert.ok(busy); assert.equal(busy.disabled, true); assert.equal(busy.attributes['aria-busy'], 'true');
+  busy.listeners.click({ stopPropagation() {} });
+  assert.equal(called, false);
 });

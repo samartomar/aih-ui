@@ -15,7 +15,8 @@ import { DRAFT_RECORD_SCHEMA } from './journey.mjs';
 import { IMPROVEMENT_SUGGESTION_SCHEMA, IMPROVEMENT_DISMISSAL_SCHEMA } from './improvements.mjs';
 import { TRIAL_SCHEMA, DIMENSION_LABELS } from './trials.mjs';
 import { RESTORATION_STATUSES } from './trial-record.mjs';
-import { drawer, openPolicyFileActions, openPolicySection } from './policy-drawer.mjs';
+import { drawer, openPolicyDrawer, openPolicyFileActions, openPolicySection } from './policy-drawer.mjs';
+import { openPolicyWorkspace } from './advanced-browser.mjs';
 
 const decode = bytes => new TextDecoder().decode(bytes);
 const ROOT = 'mattpocock.implement', UNRELATED = 'aihq.project-context', SKIPPED = 'mattpocock.wait-what', SUGGESTED = 'mattpocock.tdd', CLIENTS = ['claude', 'codex'];
@@ -88,7 +89,7 @@ export async function runTrialsBrowser({ origin, output, playwrightModule, setti
   const suggestionsSettled = async page => suggestions(page).locator('p[role="status"]').filter({ hasText: /^Checked / }).waitFor();
   const openSaved = async (page, path) => {
     operations = [];
-    await page.locator('#nav-policy').click(); await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(path);
+    await openPolicyWorkspace(page); await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(path);
     await drawer(page).getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await page.locator('#policy-draft-status').filter({ hasText: OPENED }).waitFor();
     // Reopening used to run every check; a person now opens each section, so the update check whose note the save records runs too.
@@ -282,7 +283,7 @@ export async function runTrialsBrowser({ origin, output, playwrightModule, setti
 
     // The saved draft gained exactly the one chosen root; everything else in the intent is as it was imported.
     const savedPath = join(output, 'trials.draft.json');
-    const savedBytes = await download(first, () => first.locator('#policy-draft-save').click(), savedPath);
+    const savedBytes = await download(first, async () => { await openPolicyDrawer(first); await first.locator('#policy-draft-save').click(); }, savedPath);
     const after = draftOf(savedBytes);
     const added = after.roots.filter(root => !before.roots.some(old => old.itemId === root.itemId && old.releaseSha256 === root.releaseSha256 && old.scope === root.scope));
     assert.equal(added.length, 1, 'Exactly one root was added.');

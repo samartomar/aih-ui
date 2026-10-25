@@ -587,7 +587,7 @@ Absence is worded by what is actually absent:
 - **Not supplied** — organization information. Organizations supply it; the catalog
   never will. The header scope is one of these.
 - **Not connected** — a page action or telemetry feed with no Core contract wired yet
-  (Review Changes, Check Policy, Publish, Policies & Publish, Audit Feed,
+  (Publish, Policies & Publish, Audit Feed,
   Compliance Matrix, whether an AI tool is installed or connected, Egress Guard).
 - **Unknown** — a value no defined producer supplies (token values).
 
@@ -1128,8 +1128,7 @@ node tools/check-page-contract.mjs
 Where the Workbench design showed a field the index does not publish, the page keeps the
 layout, shows **Not published**, **Not supplied** or **Not connected** as above, and
 disables the control. The current list:
-organization scope; Vibe/Enterprise and the AI tools counter; Review Changes count,
-Check Policy and Publish; token values (shown as **Unknown**);
+organization scope; Vibe/Enterprise and the AI tools counter; Publish; token values (shown as **Unknown**);
 allowed/active numerators and percentages; the source-policy posture segment;
 search-result egress classification; per-engine scanner telemetry and detector
 identities; network egress, execution sandbox and required secrets; the policy

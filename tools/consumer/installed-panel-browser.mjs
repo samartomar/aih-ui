@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { closePolicyDrawer, openPolicyDrawer, openPolicyFileActions } from './policy-drawer.mjs';
+import { addFromCatalog, closePolicyDrawer, openPolicyDrawer, openPolicyFileActions } from './policy-drawer.mjs';
+import { openPolicyWorkspace, openSetupAdvanced } from './advanced-browser.mjs';
 
 // Real packed packages and a disposable host project. Every mutation goes through the running page's
 // ordinary reviewed Core path; no mocked inventory, preparation, Apply or browser client state.
@@ -32,8 +33,8 @@ export async function runInstalledPanelBrowser({ origin, output, playwrightModul
       page = await open(context, theme);
       await page.locator('#browse-family').selectOption('Extensions');
       await page.locator('#catalog-search').fill('grill-me');
-      await page.getByRole('button', { name: 'Choose extensions.matt.grill-me', exact: true }).click();
-      await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click();
+      // One-click Add puts it in the setup with the items it needs; Install and the installed list are in Your setup.
+      await addFromCatalog(page, 'extensions.matt.grill-me'); await openPolicyDrawer(page);
       await page.locator('#installed-note').filter({ hasText: 'Nothing from Workbench is installed' }).waitFor();
       await page.locator('#install-button:not([disabled])').waitFor();
       assert.ok(await page.locator('#install-files').getByText(/SKILL.md/).count());
@@ -42,14 +43,14 @@ export async function runInstalledPanelBrowser({ origin, output, playwrightModul
       const group = page.locator('[data-installed-item="extensions.matt.grill-me"]');
       await group.waitFor(); assert.match(await group.innerText(), /it needs:.*grilling/);
       await page.screenshot({ path: join(output, `${theme}-installed.png`), fullPage: true });
-      const download = page.waitForEvent('download'); await page.locator('#policy-save').click();
+      const download = page.waitForEvent('download'); await openSetupAdvanced(page); await page.locator('#policy-save').click();
       const saved = join(output, `${theme}-policy.json`); await (await download).saveAs(saved);
       // The normal journey proves a fresh reopen. Cancellation keeps the original Install outcome,
       // so it also catches an old data-outcome=installed surviving a partially applied Remove.
       const reopened = cancelAfterFirst ? context : await browser.newContext({ viewport: { width: 1440, height: 1000 } });
       if (!cancelAfterFirst) {
         await context.close();
-        page = await open(reopened, theme); await page.locator('#nav-policy').click();
+        page = await open(reopened, theme); await openPolicyWorkspace(page);
         await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(saved);
         await page.locator('#policy-review-panel').getByRole('button', { name: 'Validate and reopen', exact: true }).click();
         await page.locator('#policy-status').filter({ hasText: 'Saved choices recovered from exact source snapshots' }).waitFor();

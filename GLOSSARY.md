@@ -8,6 +8,18 @@ The words the Workbench uses with a person choosing, installing and removing AI 
 An AI client the person uses, such as Claude Code or Codex, chosen in the header from the clients Core lists.
 _Avoid_: client (on default screens), harness, native client
 
+**Framework**:
+A named collection of content released together, such as AIH-Extensions, ECC, Anthropic or Superpowers; the left panel lists the frameworks and one is always open.
+_Avoid_: family (on default screens), release, catalog, category
+
+**Project basics**:
+What applies to the project whichever framework is chosen: tool support, project files and the workspace. It has its own place and is never part of a framework.
+_Avoid_: shared selection, cross-cutting, adapter, harness
+
+**Your sources**:
+Content a person or organization brings from outside the installed frameworks, such as a folder on this machine; it sits apart from the frameworks.
+_Avoid_: personal content, bring your own, BYO, independent, custom catalog
+
 **Content**:
 A Catalog item a person can choose, such as a skill or a command.
 _Avoid_: recipe, selection, item (on default screens)

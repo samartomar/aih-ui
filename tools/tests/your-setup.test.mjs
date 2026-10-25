@@ -24,7 +24,7 @@ test('the entry names what it opens in the Workbench words', () => {
 
 // A small DOM: enough for the review drawer to build itself, open, close and move focus.
 function fakeNode(tag, registry) {
-  const node = { tag, children: [], attributes: {}, listeners: {}, dataset: {}, hidden: false, textContent: '', className: '', parentElement: null,
+  const node = { tag, children: [], attributes: {}, listeners: {}, dataset: {}, hidden: false, textContent: '', className: '', parentElement: null, get childNodes() { return this.children; },
     append(...children) { for (const child of children) { if (typeof child === 'object') { child.parentElement = this; this.children.push(child); } } },
     prepend(...children) { this.append(...children); }, after() {}, replaceChildren(...children) { this.children = []; this.append(...children); },
     replaceWith() {}, setAttribute(key, value) { this.attributes[key] = String(value); }, getAttribute(key) { return this.attributes[key]; }, removeAttribute(key) { delete this.attributes[key]; },
@@ -59,7 +59,8 @@ function drawer(t, { roots = [{ itemId: 'grill-me' }], width = 1280, heading = t
   return { registry, client, review, entry, install, events, docListeners, backs, subscribers,
     async load() {
       const { createPolicyReview } = await import('../../src/app/policy-review.js');
-      const panel = createPolicyReview({ client, accept: make('button'), proposed: make('div'), status: make('p'),
+      const accept = make('button'); accept.id = 'policy-accept';
+      const panel = createPolicyReview({ client, accept, proposed: make('div'), status: make('p'),
         setupHeading: () => heading ? install : null, onBack: () => backs.push('back') });
       panel.node.append(install);
       return panel;
@@ -98,24 +99,53 @@ test('with nothing to install yet, "Your setup" opens the drawer at its title', 
   assert.equal(h.registry.document.activeElement.id, 'policy-review-panel-title');
 });
 
-test('Back to catalog closes the drawer and hands focus back to the catalog; Close and Escape return focus to what opened it', async t => {
+test("Back to catalog is the drawer's one way out: there is no separate Close, and Escape still closes it", async t => {
   const h = drawer(t); const panel = await h.load();
   const back = h.registry.ids.get('policy-back-to-catalog');
   assert.equal(back.textContent, 'Back to catalog');
-  h.review.click(); assert.equal(panel.node.hidden, false);
+  assert.equal(panel.node.children.some(child => child.textContent === 'Close'), false, 'Close is merged into Back to catalog');
+  h.entry.click(); assert.equal(panel.node.hidden, false);
   back.click();
   assert.equal(panel.node.hidden, true);
   assert.deepEqual(h.backs, ['back']);
   assert.equal(h.entry.attributes['aria-expanded'], 'false'); assert.equal(h.review.attributes['aria-expanded'], 'false');
-  // Close returns focus to the control that opened the drawer.
-  h.entry.click(); panel.node.children.find(child => child.textContent === 'Close').click();
+  // Escape returns focus to Your setup, the control that opened the drawer, without leaving for the catalog.
+  h.entry.click(); for (const fn of h.docListeners.keydown) fn({ key: 'Escape' });
   assert.equal(panel.node.hidden, true); assert.equal(h.registry.document.activeElement, h.entry);
-  h.review.click(); for (const fn of h.docListeners.keydown) fn({ key: 'Escape' });
-  assert.equal(panel.node.hidden, true); assert.equal(h.registry.document.activeElement, h.review);
-  assert.deepEqual(h.backs, ['back'], 'Close and Escape do not leave for the catalog');
+  // The hidden Review Changes alias still opens the drawer; it has no place on screen, so focus goes back to Your setup.
+  h.review.click(); assert.equal(panel.node.hidden, false);
+  for (const fn of h.docListeners.keydown) fn({ key: 'Escape' });
+  assert.equal(panel.node.hidden, true); assert.equal(h.registry.document.activeElement, h.entry);
+  assert.deepEqual(h.backs, ['back'], 'Escape does not leave for the catalog');
+});
+
+test('Your setup opens at a pending addition when one waits, instead of at Install', async t => {
+  const h = drawer(t); const panel = await h.load();
+  h.client.bytes = new Uint8Array(); h.client.candidate = { intent: { roots: [{ itemId: 'grill-me' }, { itemId: 'other' }] } };
+  h.entry.click();
+  assert.equal(panel.node.hidden, false);
+  assert.equal(h.registry.document.activeElement.id, 'policy-review-panel-title', 'focus is on the drawer title, above the addition');
+});
+
+test('the drawer names its parts in plain words', async t => {
+  const h = drawer(t); const panel = await h.load();
+  assert.equal(h.registry.ids.get('policy-review-panel-title').textContent, 'Your setup');
+  assert.equal(h.registry.ids.get('policy-discard').textContent, 'Cancel');
 });
 
 test('the drawer still works on a page without the "Your setup" entry', async t => {
   const h = drawer(t, { withEntry: false }); const panel = await h.load();
   h.review.click(); assert.equal(panel.node.hidden, false);
+});
+
+test('the accept button says Add to setup for an addition and Update setup for a removal', async t => {
+  const h = drawer(t); await h.load();
+  const accept = h.registry.ids.get('policy-accept');
+  h.client.bytes = new Uint8Array();
+  h.client.candidate = { intent: { roots: [{ itemId: 'grill-me' }, { itemId: 'other' }] } };
+  h.entry.click();
+  assert.equal(accept.textContent, 'Add to setup');
+  h.client.candidate = { intent: { roots: [] } };
+  for (const fn of h.subscribers) fn();
+  assert.equal(accept.textContent, 'Update setup');
 });

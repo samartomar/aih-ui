@@ -11,7 +11,8 @@ import { readAuthoring } from './headless.mjs';
 import { intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
 import { installedFamilies } from './installed-families.mjs';
-import { closePolicyDrawer, drawer, openPolicyDrawer, openPolicyFileActions } from './policy-drawer.mjs';
+import { addFromCatalog, closePolicyDrawer, drawer, openPolicyDrawer, openPolicyFileActions } from './policy-drawer.mjs';
+import { openPolicyWorkspace, openSetupAdvanced } from './advanced-browser.mjs';
 
 const NOTE = 'consumer-proof.review-note', ME = 'fixture-me', TEAM = 'fixture-team', SENTINEL = 'settings-only-sentinel';
 const encode = value => new TextEncoder().encode(value), decode = bytes => new TextDecoder().decode(bytes);
@@ -58,11 +59,10 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
   const download = async (page, trigger, path) => { const event = page.waitForEvent('download'); await trigger(); await (await event).saveAs(path); return new Uint8Array(await readFile(path)); };
   const choose = async (page, family, id) => {
     await page.locator('#nav-sources').click(); await page.locator('#browse-support').selectOption('all'); await page.locator('#browse-family').selectOption(family);
-    await closePolicyDrawer(page); await page.getByRole('button', { name: `Choose ${id}`, exact: true }).click();
-    await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click();
+    await addFromCatalog(page, id);
   };
   const openPanel = async page => {
-    await page.locator('#nav-policy').click(); await openPolicyDrawer(page);
+    await openPolicyWorkspace(page); await openSetupAdvanced(page);
     const summary = page.locator('summary').filter({ hasText: 'Evidence review and reconsideration' });
     if (!await summary.evaluate(node => node.parentElement.open)) await summary.click();
   };
@@ -100,7 +100,7 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
   };
   const origins = async page => Object.fromEntries(await page.locator('#review-judgments li[data-record-id]').evaluateAll(rows => rows.map(row => [row.dataset.recordId, row.dataset.origin])));
   const summaryOf = page => page.locator('#review-judgments-summary').textContent();
-  // The header's workspace trigger opens its actions menu; Workspace settings opens the saved setup.
+  // The header's Settings button opens its menu; Workspace settings opens the saved setup.
   const openWorkspaceSettings = async page => {
     await page.locator('#org-modal-trigger').click();
     await page.locator('#workspace-actions').getByRole('button', { name: 'Workspace settings', exact: true }).click();
@@ -145,7 +145,7 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
     await record(author, { id: 'review-team', kind: 'organization', owner: TEAM, actor: 'fixture-reviewer' });
     await author.locator('#review-judgments li[data-record-id="review-team"]').waitFor();
     const policyPath = join(output, 'policy.reviewed.downloaded.json');
-    const policyBytes = await download(author, () => author.locator('#policy-save').click(), policyPath);
+    const policyBytes = await download(author, async () => { await openPolicyDrawer(author); await openSetupAdvanced(author).then(() => author.locator('#policy-save').click()); }, policyPath);
     assert.deepEqual(await origins(author), { 'review-me': 'imported', 'review-team': 'imported' });
     assert.match(await summaryOf(author), /^0 of your decisions; 2 imported/);
     assert.equal(await drawer(author).getByLabel('Your reviewer identity', { exact: true }).inputValue(), '');
@@ -200,10 +200,10 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
     assert.deepEqual(await origins(exporting), { 'review-me': 'imported', 'review-team': 'imported' });
     assert.match(await summaryOf(exporting), /^0 of your decisions; 2 imported/);
     assert.equal(await drawer(exporting).getByLabel('Your reviewer identity', { exact: true }).inputValue(), SENTINEL);
-    await choose(exporting, 'Catalog', 'mattpocock.grilling');
+    await choose(exporting, 'Catalog', 'mattpocock.grilling'); await openPolicyDrawer(exporting);
     await exporting.locator('#review-judgments li[data-record-id]').first().waitFor();
     const editedPath = join(output, 'policy.edited.downloaded.json');
-    const editedBytes = await download(exporting, () => exporting.locator('#policy-save').click(), editedPath);
+    const editedBytes = await download(exporting, async () => { await openPolicyDrawer(exporting); await openSetupAdvanced(exporting).then(() => exporting.locator('#policy-save').click()); }, editedPath);
     assert.notEqual(decode(editedBytes), decode(policyBytes), 'An ordinary edit changed the saved policy.');
     for (const [name, bytes] of [['reopened policy', policyBytes], ['edited policy', editedBytes]]) assert.equal(decode(bytes).includes(SENTINEL), false, `${name} must not contain the setup identity.`);
     assert.equal((await exporting.locator('#policy-bytes').textContent()).includes(SENTINEL), false);

@@ -121,19 +121,25 @@ function card(entry, selectedId, onSelect, model) {
   button.appendChild(el("div", "w-2.5 h-2.5 rounded-full bg-outline"));
   toggle.appendChild(button);
   if (entry.authoringItem) {
-    const chosenLabel = model.acceptedLabel ?? 'In policy';
+    // Add puts the item and the items it needs into the setup in one step; refusals and anything to decide open the review instead.
+    // A chosen item's button is Remove (#144), which takes it back out the same way the panel's Remove from setup does.
     const chosen = (model.acceptedRoots ?? model.intent?.roots ?? []).some(root => root.itemId === entry.authoringItem.id && root.releaseSha256 === entry.authoringItem.root.releaseSha256);
-    button.className = `px-2 py-1 rounded border text-[10px] font-medium ${chosen ? 'bg-primary-container text-on-primary border-primary' : 'border-wb-control-border text-on-surface-variant hover:text-primary hover:border-primary'}`;
-    button.replaceChildren(); button.textContent = chosen ? chosenLabel : 'Choose';
-    button.disabled = Boolean(chosen);
-    button.setAttribute('aria-label', `${chosen ? chosenLabel : 'Choose'} ${entry.authoringItem.id}`);
+    const label = chosen ? 'Remove' : 'Add', busy = chosen ? 'Removing…' : 'Adding…';
+    button.className = `px-2 py-1 rounded border text-[10px] font-medium ${chosen ? 'bg-primary-container text-on-primary border-primary hover:border-error' : 'border-wb-control-border text-on-surface-variant hover:text-primary hover:border-primary'}`;
+    button.replaceChildren(); button.textContent = label;
+    button.disabled = false;
+    button.setAttribute('aria-label', `${label} ${entry.authoringItem.id}`);
     button.removeAttribute('aria-disabled');
-    button.title = 'Review this choice in the panel before accepting it.';
+    button.title = chosen ? `In your ${model.setupWord ?? 'setup'} with the items it needs. Remove takes it out; Undo puts it back.` : 'Add this item and the items it needs to your setup.';
+    // An Add or Remove still in flight keeps its busy label when the grid is redrawn meanwhile, so it cannot be used twice.
+    const pending = model.busy?.get(id.entryId);
+    if (pending) { button.textContent = pending; button.disabled = true; button.setAttribute('aria-busy', 'true'); }
     button.addEventListener('click', async event => {
       event.stopPropagation();
-      button.disabled = true; button.textContent = 'Reviewing…'; button.setAttribute('aria-busy', 'true');
-      try { await model.onChoose(entry.authoringItem, id.entryId); }
-      finally { button.disabled = Boolean(chosen); button.textContent = chosen ? chosenLabel : 'Choose'; button.removeAttribute('aria-busy'); }
+      if (button.disabled) return;
+      button.disabled = true; button.textContent = busy; button.setAttribute('aria-busy', 'true');
+      try { await (chosen ? model.onRemove?.(entry.authoringItem, id.entryId) : model.onChoose?.(entry.authoringItem, id.entryId)); }
+      finally { button.disabled = false; button.textContent = label; button.removeAttribute('aria-busy'); }
     });
   }
   foot.appendChild(toggle);
