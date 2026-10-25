@@ -64,6 +64,9 @@ export async function runRestoredSurfacesBrowser({ origin, output, playwrightMod
       await security.getByText(label, { exact: true }).scrollIntoViewIfNeeded();
       assert.ok(await security.getByText(label, { exact: true }).isVisible(), `The policy choice "${label}" is shown.`);
     }
+    // The Policy JSON tab belongs to the catalog's Advanced section: it shows only while that is open.
+    const advanced = page.locator('#catalog-advanced');
+    if (!await advanced.evaluate(node => node.open)) await advanced.locator(':scope > summary').click();
     await page.locator('#tab-json').click();
     const delta = page.getByText('Staged Policy Delta', { exact: true });
     await delta.scrollIntoViewIfNeeded();
