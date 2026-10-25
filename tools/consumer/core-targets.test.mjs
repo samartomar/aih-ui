@@ -89,11 +89,18 @@ test('the contractCheck service operation runs the installed Core checkContracts
     if (produced.has(row.contractId)) assert.equal(row.status, 'passed', JSON.stringify(row));
     else assert.deepEqual([row.status, row.reason], ['unavailable', 'fixtures-missing'], JSON.stringify(row));
   }
-  // The Workbench reads native-verification results through its own public reader (aih-ui/stored-results, Core's validator);
-  // it has none for file-state results, which Core publishes no validator for, so those checks cannot run and never pass.
+  // The Workbench reads Core results through its own public readers (aih-ui/stored-results, Core's validators). With a Core that
+  // publishes no file-state validator there is no file-state reader, so those checks cannot run and never pass.
+  const fileStateReader = typeof contracts.validateFileStateResult === 'function';
   for (const row of summary.checks.filter(item => item.readerPackage === 'aih-ui')) {
-    if (row.contractId === 'urn:aihq:core:native-verification-result:1.0.0') assert.equal(row.status, 'passed', JSON.stringify(row));
+    if (row.contractId === 'urn:aihq:core:native-verification-result:1.0.0' || fileStateReader) assert.equal(row.status, 'passed', JSON.stringify(row));
     else assert.deepEqual([row.contractId, row.status, row.reason], ['urn:aihq:core:file-state-result:1.1.0', 'unavailable', 'reader-missing'], JSON.stringify(row));
+  }
+  // With Core's file-state validator, both file-state fixtures Core publishes are read by the Workbench's own reader.
+  // Every fixture Core publishes for a result the Workbench reads is checked against the Workbench's reader, accept and refuse alike.
+  for (const id of ['urn:aihq:core:native-verification-result:1.0.0', ...(fileStateReader ? ['urn:aihq:core:file-state-result:1.1.0'] : [])]) {
+    const published = (contracts.contractSupport.contracts.find(item => item.id === id)?.fixtures ?? []).map(item => item.export).sort();
+    assert.deepEqual(summary.checks.filter(row => row.readerPackage === 'aih-ui' && row.contractId === id).map(row => row.fixtureExport).sort(), published, id);
   }
   assert.ok(summary.checks.some(row => row.readerPackage === 'aih-ui' && row.contractId === 'urn:aihq:core:native-verification-result:1.0.0'), 'Core publishes a native-verification fixture the Workbench reads');
   for (const row of summary.checks.filter(item => item.status === 'passed')) assert.ok(['@aihq/core', 'aih-ui'].includes(row.readerPackage), 'only a reader the Workbench can run passes');

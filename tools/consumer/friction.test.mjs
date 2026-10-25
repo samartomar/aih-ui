@@ -5,6 +5,7 @@ import { CLAIMS_SCHEMA_1_1_0, CLAIMS_PROJECTION_SCHEMA_1_1_0, projectClaims, val
 import { validateNativeVerificationResult } from '@aihq/core/contracts';
 import { frictionRecurrence, FILE_STATE_SCHEMA, NATIVE_SCHEMA, FRICTION_PRODUCER } from './friction.mjs';
 import { nativeResult } from './native-result-fixture.mjs';
+import { fileStateReaderAvailable } from './stored-results.mjs';
 import { READINESS_RECORD_SCHEMA } from './claims.mjs';
 import { MAINTENANCE_CHECK_RECORD_SCHEMA } from './maintenance-record.mjs';
 
@@ -55,7 +56,9 @@ test('a capture folds to one outcome per selection: any changed or absent target
   assert.deepEqual(outcome(folded({ outcome: 'absent' }, { outcome: 'match' })), ['failed']);
   assert.deepEqual(outcome(folded({ outcome: 'match' }, { outcome: 'match' })), ['passed']);
   assert.deepEqual(outcome(folded({ outcome: 'match' }, { outcome: 'unavailable', reason: 'target-unreadable' })), ['unknown', 'target-unreadable']);
-  assert.deepEqual(outcome(folded({ outcome: 'unavailable', reason: 'C:\\Users\\a\\b' })), ['unknown', 'unavailable']);
+  // A free-text reason is never carried into a claim: Core's own validator refuses the result (it is unread), and with a Core that publishes
+  // no file-state validator the adapter keeps only the generic code.
+  assert.deepEqual(outcome(folded({ outcome: 'unavailable', reason: 'C:\\Users\\a\\b' })), fileStateReaderAvailable ? 0 : ['unknown', 'unavailable']);
   assert.equal(folded({ outcome: 'unavailable' })[0].value, undefined);
   // Targets of another selection, and a result with no target of this one, make no claim.
   assert.equal(folded({ selection: 'catalog-other', outcome: 'changed' }).length, 0);

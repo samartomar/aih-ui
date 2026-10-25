@@ -58,8 +58,11 @@ try {
   }
   // The visual groundwork and the start-up contract-check message, in both themes, against this host's own answer.
   const { runVisualGroundworkBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/visual-groundwork-browser.mjs')));
+  // The Workbench's readers the installed Core lets it run (aih-ui/stored-results): those checks must pass on the page.
+  const { fileStateReaderAvailable } = await import(pathToFileURL(join(consumerDir, 'consumer/stored-results.mjs')));
+  const readers = ['urn:aihq:core:native-verification-result:1.0.0', ...(fileStateReaderAvailable ? ['urn:aihq:core:file-state-result:1.1.0'] : [])];
   for (const theme of ['dark', 'light']) {
-    starting(`runVisualGroundworkBrowser ${theme}`); await runVisualGroundworkBrowser({ origin, output: join(consumerDir, `visual-groundwork-evidence-${theme}`), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, theme });
+    starting(`runVisualGroundworkBrowser ${theme}`); await runVisualGroundworkBrowser({ origin, output: join(consumerDir, `visual-groundwork-evidence-${theme}`), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, theme, readers });
   }
   // With a Core that publishes checkContracts, a second host is given a newer writer's declaration that Core refuses, so
   // "can't read" is shown through Core's real engine. A Core without it has no engine to refuse anything.
@@ -70,7 +73,7 @@ try {
     try {
       const refusedOrigin = `http://127.0.0.1:${(await listen(refused.server, 0)).port}`;
       for (const theme of ['dark', 'light']) {
-        starting(`runVisualGroundworkBrowser refused ${theme}`); await runVisualGroundworkBrowser({ origin: refusedOrigin, output: join(consumerDir, `visual-groundwork-refused-evidence-${theme}`), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, theme, actual: 'refused' });
+        starting(`runVisualGroundworkBrowser refused ${theme}`); await runVisualGroundworkBrowser({ origin: refusedOrigin, output: join(consumerDir, `visual-groundwork-refused-evidence-${theme}`), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, theme, actual: 'refused', readers });
       }
     } finally { delete process.env.AIH_CONTRACT_CHECK_EXTRA; await new Promise(resolve => refused.server.close(resolve)); }
   } else console.log(`The installed Core publishes no checkContracts (${engine.state ?? engine.error}); the real-engine "can't read" journey needs one.`);

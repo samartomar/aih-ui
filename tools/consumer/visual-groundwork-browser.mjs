@@ -105,7 +105,7 @@ async function expectNote(page, state, words) {
   return note;
 }
 
-export async function runVisualGroundworkBrowser({ origin, output, playwrightModule, theme = 'dark', actual = 'host', item = 'extensions.matt.grill-me' }) {
+export async function runVisualGroundworkBrowser({ origin, output, playwrightModule, theme = 'dark', actual = 'host', readers = [], item = 'extensions.matt.grill-me' }) {
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true });
@@ -129,17 +129,19 @@ export async function runVisualGroundworkBrowser({ origin, output, playwrightMod
       } else if (answer.checks.some(row => row.status === 'unavailable')) await expectNote(page, 'unavailable');
       else if (!answer.checks.length) await expectNote(page, 'empty');
       else assert.equal(await page.locator('#contract-check-note').count(), 0, 'Nothing is shown when every required check passed.');
-      // The Workbench's own reader (aih-ui/stored-results) runs for the Core native-verification fixtures; file-state results have no reader
-      // and the page names them as checks that cannot run, never as passed.
-      const workbenchRows = answer.checks.filter(row => row.readerPackage === 'aih-ui');
+      // The Workbench's own readers (aih-ui/stored-results) run for every Core result fixture they have a validator for; a row without one is
+      // named on the page as a check that cannot run, never as passed. `readers` says which the host's Core must let the Workbench run.
       const tooltip = (await page.locator('#contract-check-note').getAttribute('data-tooltip').catch(() => null)) ?? '';
+      const workbenchRows = answer.checks.filter(row => row.readerPackage === 'aih-ui');
+      for (const id of readers) assert.ok(workbenchRows.some(row => row.contractId === id), `The host checked the Workbench's reader for ${id}.`);
       for (const row of workbenchRows) {
-        if (row.contractId === 'urn:aihq:core:native-verification-result:1.0.0') {
-          assert.equal(row.status, 'passed', JSON.stringify(row));
-          assert.equal(tooltip.includes('reads urn:aihq:core:native-verification-result:1.0.0 from @aihq/core'), false, 'The Workbench\'s own reader is not listed as missing.');
+        const listed = tooltip.includes(`reads ${row.contractId} from ${row.fixturePackage}`);
+        if (readers.includes(row.contractId) || row.contractId === 'urn:aihq:core:native-verification-result:1.0.0') assert.equal(row.status, 'passed', JSON.stringify(row));
+        if (row.status === 'passed') {
+          assert.equal(listed, false, `The Workbench's own reader for ${row.contractId} is not listed as missing.`);
         } else {
           assert.deepEqual([row.contractId, row.status, row.reason], ['urn:aihq:core:file-state-result:1.1.0', 'unavailable', 'reader-missing']);
-          assert.ok(tooltip.includes('reads urn:aihq:core:file-state-result:1.1.0 from @aihq/core: the Workbench has no reader it can run for it.'), 'The page names the file-state check that cannot run.');
+          assert.ok(tooltip.includes(`reads ${row.contractId} from @aihq/core: the Workbench has no reader it can run for it.`), 'The page names the file-state check that cannot run.');
         }
       }
     }

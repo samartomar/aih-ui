@@ -735,15 +735,17 @@ reads and writes:
   earlier saved intent 2.0.0 and setup intent 1.0.0);
 - the Core results it reads itself (`accepts`): `file-state-result` 1.1.0 and
   `native-verification-result` 1.0.0, read by the friction adapter
-  (`tools/consumer/friction.mjs`, used by `aih-ui/improvements`). A
-  native-verification result is read only once Core's own
-  `validateNativeVerificationResult` accepts it; one Core refuses is counted as
-  unread. That reader is exported as `aih-ui/stored-results`
-  `readNativeVerificationResult(value)` (the parsed result, returning Core's
-  `{ valid, diagnostics }`), and the start-up contract check runs it. Core
-  publishes no validator for file-state results, so the Workbench has no reader
-  of its own to offer for them: it reads them as before, and the contract check
-  reports that format's reader as missing;
+  (`tools/consumer/friction.mjs`, used by `aih-ui/improvements`). A result is
+  read only once Core's own validator accepts it (`validateFileStateResult`,
+  `validateNativeVerificationResult`); one Core refuses is counted as unread.
+  Those readers are exported as `aih-ui/stored-results`
+  `readFileStateResult(value)` and `readNativeVerificationResult(value)` (the
+  parsed result, returning Core's `{ valid, schema?, diagnostics }` unchanged),
+  and the start-up contract check runs them against every fixture Core
+  publishes for the two formats. With a Core that publishes no
+  `validateFileStateResult`, `fileStateReaderAvailable` is false,
+  `readFileStateResult` throws, file-state results are read unchecked as before,
+  and the contract check reports that reader as missing, never passed;
 - the formats it writes for another package's reader (`produces`), each with
   the Workbench's own written example: execution policy 1.3.0 (Your setup),
   organization policy 1.1.0 (organization authoring) and Catalog producer
