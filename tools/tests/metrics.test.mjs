@@ -29,7 +29,7 @@ test("command and hook tiles count the listed scope; tokens are unknown, not pub
   assert.equal(tiles.command.disabled, undefined);
   tiles.hook.listeners.click(); tiles.command.listeners.click();
   assert.deepEqual(toggled, ["hook", "command"]);
-  assert.equal(tiles.tokens.disabled, true);
+  assert.equal(tiles.tokens.disabled, undefined, "greyed, not disabled, so its tooltip stays reachable by keyboard");
   assert.ok(texts(tiles.tokens).includes("Unknown"));
   for (const tile of container.children) assert.equal(texts(tile).includes("Not published"), false);
 });

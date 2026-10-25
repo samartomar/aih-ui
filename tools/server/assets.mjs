@@ -54,6 +54,20 @@ export function pageAssets(repoRoot) {
   return served.map((relative) => ({ from: posix.join("src", relative), to: relative }));
 }
 
+/**
+ * The Workbench's own package-support declaration, its manifest (for its export map) and the fixtures it
+ * exports, as the start-up contract check reads them inside the consumer (tools/service/contract-check.mjs).
+ */
+function workbenchSupport(repoRoot) {
+  return [
+    { from: "package.json", to: "workbench/package.json" },
+    { from: "package-support-1.1.json", to: "workbench/package-support-1.1.json" },
+    ...walk(join(repoRoot, "fixtures", "contracts"), new Set([".json"])).map(relative => ({
+      from: posix.join("fixtures/contracts", relative), to: posix.join("workbench/fixtures/contracts", relative),
+    })),
+  ];
+}
+
 /** Every backend module, as { from, to } inside the consumer. */
 export function serviceAssets(repoRoot) {
   const served = walk(join(repoRoot, "tools", "service"), SERVICE);
@@ -65,7 +79,7 @@ export function serviceAssets(repoRoot) {
     to: posix.join("service", relative),
   })), ...walk(join(repoRoot, "tools", "consumer"), null).map(relative => ({
     from: posix.join("tools/consumer", relative), to: posix.join("consumer", relative),
-  }))];
+  })), ...workbenchSupport(repoRoot)];
 }
 
 /** Fails before anything is built if a listed asset is not a readable file. */

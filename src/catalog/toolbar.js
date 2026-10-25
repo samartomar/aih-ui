@@ -49,9 +49,9 @@ function reviewPill(label, count, active, onClick) {
   if (available) {
     button.addEventListener("click", onClick);
   } else {
-    button.disabled = true;
+    // Greyed, not disabled, so its reason stays reachable by keyboard; it has no action.
     button.setAttribute("aria-disabled", "true");
-    button.title = UNAVAILABLE[label];
+    attachTooltip(button, UNAVAILABLE[label]);
   }
   return button;
 }
@@ -61,6 +61,7 @@ function summaryChip(icon, label, title) {
   chip.appendChild(el("span", "material-symbols-outlined text-[12px] text-outline", icon));
   chip.appendChild(el("span", "font-medium", label));
   chip.appendChild(createGapIndicator({ label: NOT_PUBLISHED, reason: title }));
+  // The gap indicator is the chip's keyboard and touch way to the reason; hover keeps the title.
   chip.title = title;
   for (const glyph of chip.querySelectorAll(".material-symbols-outlined")) glyph.setAttribute("aria-hidden", "true");
   return chip;

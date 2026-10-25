@@ -56,6 +56,11 @@ try {
   for (const theme of ['dark', 'light']) {
     starting(`runSimplePathBrowser ${theme}`); await runSimplePathBrowser({ origin, output: join(consumerDir, `simple-path-evidence-${theme}`), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, theme });
   }
+  // The visual groundwork and the start-up contract-check message, in both themes, against this host's own answer.
+  const { runVisualGroundworkBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/visual-groundwork-browser.mjs')));
+  for (const theme of ['dark', 'light']) {
+    starting(`runVisualGroundworkBrowser ${theme}`); await runVisualGroundworkBrowser({ origin, output: join(consumerDir, `visual-groundwork-evidence-${theme}`), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, theme });
+  }
   const { runSourceFactsBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/source-facts-browser.mjs')));
   starting('runSourceFactsBrowser'); await runSourceFactsBrowser({ origin, output: join(consumerDir, 'source-facts-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
   const { runUnresolvedDraftBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/unresolved-draft-browser.mjs')));

@@ -22,6 +22,7 @@ import { el, text } from "./dom.js";
 import { NOT_PUBLISHED } from "./absence.js";
 import { clientNodes, publishedClients } from "./core-targets.js";
 import { createGapIndicator } from "./gap-indicator.js";
+import { attachTooltip } from "./tooltip.js";
 
 /** @param elements { aiToolsTrigger, aiToolsCount, aiToolsPop, aiToolsList, aiToolsNote } */
 export function createAiTools({ elements, onSelectionChange }) {
@@ -51,8 +52,8 @@ export function createAiTools({ elements, onSelectionChange }) {
     if (supported === null) {
       elements.aiToolsTrigger.classList.add("wb-header-muted");
       elements.aiToolsCount.textContent = loading ? "Loading…" : "—";
-      elements.aiToolsTrigger.title =
-        loading ? "Loading available AI tools…" : `AI tools: ${NOT_PUBLISHED}. ${unavailableReason ?? "The installed @aihq/core lists no supported targets."}`;
+      attachTooltip(elements.aiToolsTrigger,
+        loading ? "Loading available AI tools…" : `AI tools: ${NOT_PUBLISHED}. ${unavailableReason ?? "The installed @aihq/core lists no supported targets."}`);
       if (loading) note("Loading available AI tools…");
       else elements.aiToolsList.append(createGapIndicator({ label: NOT_PUBLISHED, reason: unavailableReason ?? "The installed Core package does not publish a supported tools list." }));
       return;
@@ -61,9 +62,9 @@ export function createAiTools({ elements, onSelectionChange }) {
     const chosen = supported.filter((target) => selected.includes(target));
     elements.aiToolsCount.textContent = `${chosen.length}/${supported.length}`;
     elements.aiToolsTrigger.classList.toggle("wb-header-muted", chosen.length === 0);
-    elements.aiToolsTrigger.title =
+    attachTooltip(elements.aiToolsTrigger,
       `${supported.length} AI clients @aihq/core supports as targets; ${chosen.length} selected in this workspace's local setup. ` +
-      "Installed or connected: not checked.";
+      "Installed or connected: not checked.");
 
     for (const target of supported) {
       const row = el("label", "flex items-center gap-2 px-1.5 py-1 rounded hover:bg-surface-container cursor-pointer text-on-surface");

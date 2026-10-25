@@ -23,6 +23,7 @@ import { NOT_CONNECTED, NOT_PUBLISHED, NOT_SUPPLIED } from "../app/absence.js";
 import { describeScope, sourceScopes } from "./selectors.js";
 import { iconSpan } from "../app/icons.js";
 import { attachTooltip } from "../app/tooltip.js";
+import { contractCheckNote, contractCheckView } from "../app/contract-check.js";
 
 const PACKAGE_ORDER = ["@aihq/core", "@aihq/scan", "@aihq/catalog"];
 const GITHUB_REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
@@ -36,23 +37,10 @@ function dot(separator = STATUS_SEPARATOR) {
   return el("span", "text-outline", separator);
 }
 
-/* The start-up contract check, worded as the Workbench reads contract words it.
-   Only a Core without `checkContracts` has wording today; it is information, once,
-   in the strip, and blocks nothing. */
-export const CONTRACT_CHECK_ABSENT = "This Core can't check contracts yet.";
-
-export function contractCheckNote(contractCheck) {
-  if (contractCheck?.state !== "absent") return null;
-  const note = el("span", "px-1.5 py-0.2 rounded bg-info-bg text-info font-mono text-[10px] shrink-0 inline-flex items-center gap-1");
-  note.id = "contract-check-note";
-  note.setAttribute("role", "note");
-  note.appendChild(iconSpan("state", "info", { size: "text-[12px]" }));
-  note.appendChild(el("span", "", CONTRACT_CHECK_ABSENT));
-  attachTooltip(note, `${CONTRACT_CHECK_ABSENT} The installed @aihq/core publishes no checkContracts, so the Workbench cannot ask whether each package can read the contracts the others write. Nothing is blocked; everything keeps working as before.`);
-  return note;
-}
-
 export function createProvenance({ elements }) {
+  // The start-up contract check arrives on its own; until then it reads as loading.
+  let contractCheck;
+  let lastModel = null;
   function packagesInOrder(summary) {
     const installed = new Map(
       (summary.packages ?? []).map((pkg) => [text(pkg?.packageName) ?? `@aihq/${text(pkg?.name)}`, pkg]),
@@ -65,27 +53,28 @@ export function createProvenance({ elements }) {
     strip.replaceChildren();
     const summary = model.summary ?? {};
 
-    strip.appendChild(el("span", "material-symbols-outlined text-[14px] text-primary shrink-0", "account_tree"));
+    strip.appendChild(attachTooltip(iconSpan("state", "provenance", { size: "text-[14px]", className: "shrink-0" }), "Where it came from: the packages this Workbench installed, with their versions and the checkpoints they were packed from."));
     packagesInOrder(summary).forEach(({ name, pkg }, position) => {
       if (position > 0) strip.appendChild(dot(STRIP_SEPARATOR));
       const group = el("span", "flex items-center gap-1 shrink-0");
       const label = el("span", "text-on-surface font-medium", `${name} `);
       const version = text(pkg?.version);
       label.appendChild(el("span", "text-outline", version ?? NOT_PUBLISHED));
-      label.title = version === null
+      attachTooltip(label, version === null
         ? `${name}: no installed version was recorded`
-        : `${name} ${version}, as npm recorded installing it in this preview`;
+        : `${name} ${version}, as npm recorded installing it in this preview`);
       group.appendChild(label);
       const commit = text(pkg?.commit);
       if (commit !== null && /^[0-9a-f]{7,40}$/.test(commit)) {
         const chip = el("span", "px-1.5 py-0.5 rounded bg-surface-container-high/80 text-metadata-revision font-mono text-[10px]", commit.slice(0, 7));
-        chip.title = `Local package packed from checkpoint ${commit}. Not a registry release.`;
+        attachTooltip(chip, `Local package packed from checkpoint ${commit}. Not a registry release.`);
         group.appendChild(chip);
       }
       strip.appendChild(group);
     });
-    strip.appendChild(el("span", "px-1.5 py-0.2 rounded bg-surface-container text-outline font-mono text-[10px] shrink-0", "read-only-mirror"));
-    const contractNote = contractCheckNote(summary.contractCheck);
+    strip.appendChild(attachTooltip(el("span", "px-1.5 py-0.2 rounded bg-surface-container text-outline font-mono text-[10px] shrink-0", "read-only-mirror"),
+      "Read-only mirror: this Workbench reads the installed packages and never changes them."));
+    const contractNote = contractCheckNote(contractCheckView(contractCheck));
     if (contractNote) strip.appendChild(contractNote);
     strip.appendChild(diagnostics(model));
   }
@@ -123,13 +112,9 @@ export function createProvenance({ elements }) {
         ? `${targets.targets.length} from ${targets.source}`
         : `${NOT_PUBLISHED}: ${text(targets.reason) ?? "no target list"}`,
     );
-    const check = summary.contractCheck ?? {};
-    line(
-      "contract check",
-      check.state === "absent" ? CONTRACT_CHECK_ABSENT
-        : check.state === "available" ? `checkContracts published by ${text(check.entry) ?? "@aihq/core"}; not run by this Workbench yet`
-        : `Not checked: ${text(check.reason) ?? "this host did not inspect it"}`,
-    );
+    const check = contractCheckView(contractCheck);
+    line("contract check", check.words);
+    for (const detail of check.detail) line("", detail);
 
     // A package packed on this machine, not a registry release. Say which.
     for (const { name, pkg } of packagesInOrder(summary)) {
@@ -157,13 +142,13 @@ export function createProvenance({ elements }) {
     const scope = model.scope === null ? null : describeScope(model.scope);
     const sources = sourceScopes(model.counts).length;
     elements.mastheadName.textContent = scope === null ? "All published sources" : scope.name;
-    elements.mastheadName.title = scope === null
+    attachTooltip(elements.mastheadName, scope === null
       ? `Every current source the installed index publishes (${sources})`
-      : `Source identity published by Catalog: ${scope.name}`;
+      : `Source identity published by Catalog: ${scope.name}`);
     // A revision, a version or a content release - whichever the selected
     // source actually publishes - and never a stand-in for one.
     elements.mastheadVersion.textContent = scope === null ? `${sources} sources` : scope.badge ?? NOT_PUBLISHED;
-    elements.mastheadVersion.title = scope === null ? "Number of current published sources" : scope.badgeTitle ?? NOT_PUBLISHED;
+    attachTooltip(elements.mastheadVersion, scope === null ? "Number of current published sources" : scope.badgeTitle ?? NOT_PUBLISHED);
   }
 
   /** One fact of the status line: a muted label and its value. */
@@ -210,7 +195,7 @@ export function createProvenance({ elements }) {
     const enabled = el("span", "px-2 py-0.5 rounded bg-surface-container border border-wb-border text-outline font-medium flex items-center gap-1.5 text-[10.5px]");
     enabled.appendChild(el("span", "w-1.5 h-1.5 rounded-full bg-outline"));
     enabled.appendChild(document.createTextNode(`ENABLED · ${NOT_CONNECTED}`));
-    enabled.title = `Whether this source is enabled is organization and Core state. ${NOT_CONNECTED}: nothing supplies it yet.`;
+    attachTooltip(enabled, `Whether this source is enabled is organization and Core state. ${NOT_CONNECTED}: nothing supplies it yet.`);
     line.appendChild(enabled);
 
     if (model.scope === null) {
@@ -239,9 +224,15 @@ export function createProvenance({ elements }) {
   return {
     /** @param model { summary, total, scopeTotal, scope, counts } */
     render(model) {
+      lastModel = model;
       renderMasthead(model);
       renderStatus(model);
       renderStrip(model);
+    },
+    /** The host's start-up contract-check answer; the strip and its detail re-render with it. */
+    setContractCheck(answer) {
+      contractCheck = answer;
+      if (lastModel) renderStrip(lastModel);
     },
   };
 }

@@ -1,0 +1,271 @@
+{
+  "schema": "urn:aihq:workbench:saved-intent:3.0.0",
+  "origins": [
+    {
+      "id": "direct",
+      "kind": "direct"
+    }
+  ],
+  "roots": [
+    {
+      "releaseSha256": "0ff699f240ac4c667c1891fe0f0a2629c60af67dfb1d9483405d2bbc45d6f124",
+      "itemId": "mattpocock.implement",
+      "itemSha256": "592840b886fcec3abec949a5c4bd3aa61eb02324aa0236e4cc3450c8dabb99b5",
+      "scope": "project",
+      "configuration": {},
+      "originIds": [
+        "direct"
+      ],
+      "reason": "guided-setup rules 1.0.0: goal.build. Goal: add tests to my app. Project: JavaScript."
+    },
+    {
+      "releaseSha256": "04cbd6a851d90e55de6fed7309892835b5117dfedfe9c0055b96b8947797d602",
+      "itemId": "consumer-proof.review-note",
+      "itemSha256": "229d4df79750dfbf0a8c93323ed80bfca10d059b722f53ba74efa8c416f6c9e3",
+      "scope": "project",
+      "configuration": {},
+      "originIds": [
+        "direct"
+      ]
+    }
+  ],
+  "exclusions": [],
+  "pins": [
+    {
+      "releaseSha256": "04cbd6a851d90e55de6fed7309892835b5117dfedfe9c0055b96b8947797d602",
+      "itemId": "consumer-proof.review-note",
+      "itemSha256": "229d4df79750dfbf0a8c93323ed80bfca10d059b722f53ba74efa8c416f6c9e3",
+      "recipe": {
+        "byteLength": 1278,
+        "id": "consumer-proof.review-note",
+        "path": "release/recipes/consumer-proof.review-note.json",
+        "schema": "urn:aihq:core:recipe:1.0.0",
+        "sha256": "86be8c15ccc8ad84a27270f939144c726835f9f96bb962ee8ae66bf96b2fbdf2"
+      },
+      "materials": [
+        {
+          "byteLength": 11357,
+          "id": "license",
+          "path": "release/materials/github.com/samartomar/aih-ui/4878543b94c81fbc836ca136150c22c9a9615bfb/tools/consumer/fixtures/review-note/LICENSE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        },
+        {
+          "byteLength": 95,
+          "id": "note",
+          "path": "release/materials/github.com/samartomar/aih-ui/4878543b94c81fbc836ca136150c22c9a9615bfb/tools/consumer/fixtures/review-note/note.md",
+          "sha256": "d2bdc2c527450e0cbf153c4017bd59fcf8d761af3eb8b6989720f54133d2c031"
+        }
+      ]
+    },
+    {
+      "releaseSha256": "0ff699f240ac4c667c1891fe0f0a2629c60af67dfb1d9483405d2bbc45d6f124",
+      "itemId": "mattpocock.code-review",
+      "itemSha256": "6f23fe0ec120e931d54b9a6a411cb210775bf3e39b550b65fb5da3f1bb22463e",
+      "recipe": {
+        "byteLength": 1976,
+        "id": "mattpocock.code-review",
+        "path": "release/recipes/mattpocock.code-review.json",
+        "schema": "urn:aihq:core:recipe:1.0.0",
+        "sha256": "f28cde6fc0c900839671aa1dd9281c82dc94281d5f211554eb47aa16592da00d"
+      },
+      "materials": [
+        {
+          "byteLength": 1068,
+          "id": "license",
+          "path": "release/materials/github.com/mattpocock/skills/d81f3a183412e71a5b1e84ca21bc1a35eea03a60/LICENSE",
+          "sha256": "0e7ac423bf2c6e223b7c5b156f8cf72da49d748e56a1641402c31f22ad07dbb5"
+        },
+        {
+          "byteLength": 6589,
+          "id": "skill",
+          "path": "release/materials/github.com/mattpocock/skills/d81f3a183412e71a5b1e84ca21bc1a35eea03a60/skills/engineering/code-review/SKILL.md",
+          "sha256": "47f4e52c21694def9c7c11cbfbf891ca35eac7a93e395797515be3c8a409ae50"
+        }
+      ]
+    },
+    {
+      "releaseSha256": "0ff699f240ac4c667c1891fe0f0a2629c60af67dfb1d9483405d2bbc45d6f124",
+      "itemId": "mattpocock.domain-modeling",
+      "itemSha256": "40a776e2407356f85cc8aab288e227f9fde5f35528173fd74702fe6c3435116c",
+      "recipe": {
+        "byteLength": 4248,
+        "id": "mattpocock.domain-modeling",
+        "path": "release/recipes/mattpocock.domain-modeling.json",
+        "schema": "urn:aihq:core:recipe:1.0.0",
+        "sha256": "17ee412dbe34843b2d4f90038daf2cd626f07e2181e941c5a507361895d04cb7"
+      },
+      "materials": [
+        {
+          "byteLength": 1068,
+          "id": "license",
+          "path": "release/materials/github.com/mattpocock/skills/d81f3a183412e71a5b1e84ca21bc1a35eea03a60/LICENSE",
+          "sha256": "0e7ac423bf2c6e223b7c5b156f8cf72da49d748e56a1641402c31f22ad07dbb5"
+        },
+        {
+          "byteLength": 3346,
+          "id": "skill",
+          "path": "release/materials/github.com/mattpocock/skills/d81f3a183412e71a5b1e84ca21bc1a35eea03a60/skills/engineering/domain-modeling/SKILL.md",
+          "sha256": "7b925d7b1e341a2eeae33ad68a8a8c0ab889a38ddd22a7598e4c240e5a7556a3"
+        },
+        {
+          "byteLength": 2733,
+          "id": "support-05019617e15828b4dbd7c42ba64467b126da7d9809ef1c8e37a4c2a035b538ea",
+          "path": "release/materials/github.com/mattpocock/skills/d81f3a183412e71a5b1e84ca21bc1a35eea03a60/skills/engineering/domain-modeling/ADR-FORMAT.md",
+          "sha256": "944c92aa790e8fbdc9199640b170979abb8a34ba8d0fe18c2a01a63bce140ca0"
+        },
+        {
+          "byteLength": 2300,
+          "id": "support-1556c7e11d6891560685de507e344c4199cf2dd0a86ecb3d34a1acc9df76b3cf",
+          "path": "release/materials/github.com/mattpocock/skills/d81f3a183412e71a5b1e84ca21bc1a35eea03a60/skills/engineering/domain-modeling/GLOSSARY-FORMAT.md",
+          "sha256": "21dcc40cdec8e151a829b98ab1517c1867bc444e3665134a98c6983411996801"
+        }
+      ]
+    },
+    {
+      "releaseSha256": "0ff699f240ac4c667c1891fe0f0a2629c60af67dfb1d9483405d2bbc45d6f124",
+      "itemId": "mattpocock.grill-with-docs",
+      "itemSha256": "06f84330044a443bb8862980aee50b4f6b644ca3ebafe69f1f6da6856d8bbed0",
+      "recipe": {
+        "byteLength": 2003,
+        "id": "mattpocock.grill-with-docs",
+        "path": "release/recipes/mattpocock.grill-with-docs.json",
+        "schema": "urn:aihq:core:recipe:1.0.0",
+        "sha256": "157f607f7af9f7373eb4d675f24fe64d00519a138d079ad549e062872076022a"
+      },
+      "materials": [
+        {
+          "byteLength": 1068,
+          "id": "license",
+          "path": "release/materials/github.com/mattpocock/skills/d81f3a183412e71a5b1e84ca21bc1a35eea03a60/LICENSE",
+          "sha256": "0e7ac423bf2c6e223b7c5b156f8cf72da49d748e56a1641402c31f22ad07dbb5"
+        },
+        {
+          "byteLength": 247,
+          "id": "skill",
+          "path": "release/materials/github.com/mattpocock/skills/d81f3a183412e71a5b1e84ca21bc1a35eea03a60/skills/engineering/grill-with-docs/SKILL.md",
+          "sha256": "7de372c13488f1ee96cc11cd8907b56b6809cc93eef776eeddd37de6b6cbe3fe"
+        }
+      ]
+    },
+    {
+      "releaseSha256": "0ff699f240ac4c667c1891fe0f0a2629c60af67dfb1d9483405d2bbc45d6f124",
+      "itemId": "mattpocock.grilling",
+      "itemSha256": "3b42918b2034af33e0cde693386b30fdd1256acab4c2374d3d3aa8060676f2fa",
+      "recipe": {
+        "byteLength": 1955,
+        "id": "mattpocock.grilling",
+        "path": "release/recipes/mattpocock.grilling.json",
+        "schema": "urn:aihq:core:recipe:1.0.0",
+        "sha256": "1d9f4862cfa3fea5d7a6a7eca62c28f2fd5669d3af6e98468dacfc03b7fac7f7"
+      },
+      "materials": [
+        {
+          "byteLength": 1068,
+          "id": "license",
+          "path": "release/materials/github.com/mattpocock/skills/d81f3a183412e71a5b1e84ca21bc1a35eea03a60/LICENSE",
+          "sha256": "0e7ac423bf2c6e223b7c5b156f8cf72da49d748e56a1641402c31f22ad07dbb5"
+        },
+        {
+          "byteLength": 1987,
+          "id": "skill",
+          "path": "release/materials/github.com/mattpocock/skills/d81f3a183412e71a5b1e84ca21bc1a35eea03a60/skills/productivity/grilling/SKILL.md",
+          "sha256": "10ff989e7498b23b5acb49d5048f11dcd906757d2f79c5cdf8a00001381296f2"
+        }
+      ]
+    },
+    {
+      "releaseSha256": "0ff699f240ac4c667c1891fe0f0a2629c60af67dfb1d9483405d2bbc45d6f124",
+      "itemId": "mattpocock.implement",
+      "itemSha256": "592840b886fcec3abec949a5c4bd3aa61eb02324aa0236e4cc3450c8dabb99b5",
+      "recipe": {
+        "byteLength": 1961,
+        "id": "mattpocock.implement",
+        "path": "release/recipes/mattpocock.implement.json",
+        "schema": "urn:aihq:core:recipe:1.0.0",
+        "sha256": "dc2b5589eee214770df336d11292c43b9480d1b98e04b27beff132b9d5b77bad"
+      },
+      "materials": [
+        {
+          "byteLength": 1068,
+          "id": "license",
+          "path": "release/materials/github.com/mattpocock/skills/d81f3a183412e71a5b1e84ca21bc1a35eea03a60/LICENSE",
+          "sha256": "0e7ac423bf2c6e223b7c5b156f8cf72da49d748e56a1641402c31f22ad07dbb5"
+        },
+        {
+          "byteLength": 433,
+          "id": "skill",
+          "path": "release/materials/github.com/mattpocock/skills/d81f3a183412e71a5b1e84ca21bc1a35eea03a60/skills/engineering/implement/SKILL.md",
+          "sha256": "6d3fd9e83b8f36e5213854779db49b256a457a7ebb4a503e53fa7dcff696adc3"
+        }
+      ]
+    }
+  ],
+  "provenance": [
+    {
+      "releaseSha256": "0ff699f240ac4c667c1891fe0f0a2629c60af67dfb1d9483405d2bbc45d6f124",
+      "package": {
+        "name": "@aihq/catalog",
+        "version": "0.1.0"
+      },
+      "sources": [
+        {
+          "id": "aihq-project-context",
+          "origin": {
+            "kind": "authored"
+          }
+        },
+        {
+          "id": "mattpocock-skills-d81f3a183412",
+          "origin": {
+            "kind": "git",
+            "repository": "https://github.com/mattpocock/skills",
+            "revision": "d81f3a183412e71a5b1e84ca21bc1a35eea03a60"
+          }
+        }
+      ],
+      "materialSource": {
+        "kind": "local",
+        "input": "maintained"
+      }
+    },
+    {
+      "releaseSha256": "04cbd6a851d90e55de6fed7309892835b5117dfedfe9c0055b96b8947797d602",
+      "package": {
+        "name": "review-notes-catalog",
+        "version": "1.0.0"
+      },
+      "sources": [
+        {
+          "id": "notes",
+          "origin": {
+            "kind": "git",
+            "repository": "https://github.com/samartomar/aih-ui",
+            "revision": "4878543b94c81fbc836ca136150c22c9a9615bfb"
+          }
+        }
+      ],
+      "materialSource": {
+        "kind": "local",
+        "input": "notes"
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "notes",
+      "kind": "local",
+      "locator": {
+        "input": "notes"
+      },
+      "resolvedIdentity": {
+        "sha256": "c2906cbdec2cd5a5fcaac87bc228d0f12f22de8a1623d51bb1d75b1e2910d748"
+      },
+      "releaseSha256": "04cbd6a851d90e55de6fed7309892835b5117dfedfe9c0055b96b8947797d602"
+    }
+  ],
+  "reviews": {
+    "schema": "urn:aihq:workbench:review-decisions:1.0.0",
+    "records": [],
+    "history": []
+  }
+}

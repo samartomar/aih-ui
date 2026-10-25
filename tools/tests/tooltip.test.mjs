@@ -68,7 +68,7 @@ test("an icon-only control gets its label, and another description it already ha
   assert.match(button.getAttribute("aria-describedby"), /^own-help wb-tip-\d+$/);
 });
 
-test("keyboard focus and touch show the same words in one bubble; blur, Escape and pointer exit hide it", (t) => {
+test("keyboard focus and touch show the same words in one bubble; blur, Escape and pointer exit hide it, except a tap's own exit", (t) => {
   const doc = fakeDocument(); withDocument(t, doc);
   const button = doc.body.appendChild(doc.createElement("button"));
   attachTooltip(button, "Hook: 7 items");
@@ -87,7 +87,10 @@ test("keyboard focus and touch show the same words in one bubble; blur, Escape a
   button.dispatch("pointerdown", { pointerType: "touch" });
   assert.equal(bubble(doc).hidden, false);
   button.dispatch("mouseleave");
+  assert.equal(bubble(doc).hidden, false, "a tap's own pointer exit (the tap may redraw what it touched) leaves the words up");
+  button.dispatch("keydown", { key: "Escape" });
   assert.equal(bubble(doc).hidden, true);
+  button.focusVisible = true;
   button.dispatch("focus"); button.dispatch("blur");
   assert.equal(bubble(doc).hidden, true);
   assert.equal(button.listeners.focus.length, 1, "attaching again does not stack listeners");

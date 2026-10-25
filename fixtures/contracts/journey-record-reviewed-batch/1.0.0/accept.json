@@ -1,0 +1,139 @@
+{
+  "id": "batch-a2f9308de9a5ceb5c63d324d2343847c",
+  "schema": "urn:aihq:workbench:journey-record:reviewed-batch:1.0.0",
+  "required": false,
+  "recordedAt": "2026-10-25T17:52:41.590Z",
+  "categories": [
+    "client"
+  ],
+  "continuation": "continue-independent",
+  "scopes": [
+    {
+      "id": "scope-a",
+      "role": "existing",
+      "client": "claude",
+      "target": {
+        "kind": "project",
+        "root": "/work/example/home-a"
+      }
+    },
+    {
+      "id": "scope-b",
+      "role": "added",
+      "client": "codex",
+      "target": {
+        "kind": "project",
+        "root": "/work/example/home-b"
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "shared",
+      "kind": "material",
+      "sha256": "ee2cdd371a8f43cd8ca1e48d99e0a92173cf066ae23fc35a649da6fab063003e",
+      "byteLength": 12
+    }
+  ],
+  "actions": [
+    {
+      "id": "b-core",
+      "scope": "scope-b",
+      "category": "client",
+      "selection": {
+        "id": "b-core",
+        "sha256": "0084ce3a04fb9b8eb1c0248b4591c4d67fa9933259d383a6da76ce28473bbf7b"
+      },
+      "inputs": [
+        "shared"
+      ],
+      "requires": []
+    },
+    {
+      "id": "b-dependent",
+      "scope": "scope-b",
+      "category": "client",
+      "selection": {
+        "id": "b-dependent",
+        "sha256": "f12ca75d64b7bd69b285eebd6bd29ea1cb41f1a9d1c668248e59fb147acc7a72"
+      },
+      "inputs": [
+        "shared"
+      ],
+      "requires": [
+        "b-core"
+      ]
+    },
+    {
+      "id": "a-extra",
+      "scope": "scope-a",
+      "category": "client",
+      "selection": {
+        "id": "a-extra",
+        "sha256": "b131cb5b2c2468e378b547b452e3b2103f6bf5e6ed67d0715b440a6565fdf452"
+      },
+      "inputs": [
+        "shared"
+      ],
+      "requires": []
+    },
+    {
+      "id": "b-proc",
+      "scope": "scope-b",
+      "category": "client",
+      "selection": {
+        "id": "b-proc",
+        "sha256": "d6e229fa964e4e605c5615ea6b49e81494187da9bc1885f1d2c22604ffa6cebc"
+      },
+      "inputs": [],
+      "requires": []
+    }
+  ],
+  "checks": [
+    {
+      "id": "check-0e27a9d396460dbf0bf3ce4e6d11bd36",
+      "kind": "unrelated-state",
+      "subject": "scope-b"
+    },
+    {
+      "id": "check-2fc54d55874a1f765da06ea9b459e87a",
+      "kind": "conflict",
+      "subject": "scope-b"
+    },
+    {
+      "id": "check-42488b62ab98939e202675c59af514c2",
+      "kind": "unrelated-state",
+      "subject": "scope-a"
+    },
+    {
+      "id": "check-4a8cf62d7b03669653351965fd653e6f",
+      "kind": "core-review",
+      "subject": "b-proc"
+    },
+    {
+      "id": "check-5e89205353be48f4c2da5fd393572666",
+      "kind": "core-review",
+      "subject": "b-core"
+    },
+    {
+      "id": "check-65de57da88230e40f178c30c9f1596aa",
+      "kind": "conflict",
+      "subject": "scope-a"
+    },
+    {
+      "id": "check-9ab42720152214426574b4e98c454b5e",
+      "kind": "core-review",
+      "subject": "a-extra"
+    },
+    {
+      "id": "check-c56b11076f40c28e92de84b787c34cbe",
+      "kind": "core-review",
+      "subject": "b-dependent"
+    },
+    {
+      "id": "check-e25fba04ecc4336cfbdcf2ca69472c41",
+      "kind": "shared-input",
+      "subject": "shared"
+    }
+  ]
+}

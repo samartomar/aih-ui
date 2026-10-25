@@ -14,6 +14,12 @@
  *
  * An icon-only control gets its accessible name with { label }.
  *
+ * Keyboard focus is how a keyboard user reaches the text, so an element that
+ * cannot take focus (an icon, a pill, a count) is put in the tab order. A
+ * decorative icon that carries a tooltip is no longer decorative: it becomes an
+ * image named by its words. A greyed control stays focusable: callers mark it
+ * aria-disabled rather than disabled, which would take it out of the tab order.
+ *
  * Outside a page (no document.body, as in the offline unit tests' minimal DOM)
  * only the title and label are set.
  */
@@ -26,6 +32,11 @@ const PRUNE_AT = 256;
 let sequence = 0;
 const nodesByText = new Map();
 let touchTimer = null;
+// The element a touch showed the bubble for: its own blur or mouseleave (a tap selects a card and redraws it) leaves
+// the bubble up until the touch timer ends.
+let touchOwner = null;
+// The element the bubble shows words for; only its own exit hides them.
+let shownFor = null;
 
 function page() {
   return typeof document !== "undefined" && document.body && typeof document.getElementById === "function" ? document : null;
@@ -86,6 +97,7 @@ function show(element) {
   const node = bubble(doc);
   node.textContent = text;
   node.hidden = false;
+  shownFor = element;
   const rect = typeof element.getBoundingClientRect === "function" ? element.getBoundingClientRect() : null;
   if (!rect) return;
   const width = node.offsetWidth || 0;
@@ -105,21 +117,37 @@ function hide() {
   if (node) node.hidden = true;
 }
 
+const FOCUSABLE = new Set(["A", "BUTTON", "INPUT", "SELECT", "TEXTAREA", "SUMMARY"]);
+
+/* Put the element where the keyboard reaches it, and give a decorative icon its words. */
+function reachable(element, wording) {
+  if (typeof element.setAttribute !== "function") return;
+  const tag = String(element.tagName ?? "").toUpperCase();
+  if (!FOCUSABLE.has(tag) && element.getAttribute?.("tabindex") === null && element.tabIndex !== 0) element.setAttribute("tabindex", "0");
+  if (element.getAttribute?.("aria-hidden") === "true") {
+    element.removeAttribute?.("aria-hidden");
+    element.setAttribute("role", "img");
+    if (!element.getAttribute?.("aria-label")) element.setAttribute("aria-label", wording);
+  }
+}
+
 function listen(element) {
   if (element.dataset.tooltipBound === "true") return;
   element.dataset.tooltipBound = "true";
   element.addEventListener("focus", () => {
     // Keyboard focus only: a mouse click already had the hover tooltip.
-    if (typeof element.matches !== "function" || element.matches(":focus-visible")) show(element);
+    if (typeof element.matches !== "function" || element.matches(":focus-visible")) { touchOwner = null; show(element); }
   });
-  element.addEventListener("blur", hide);
-  element.addEventListener("mouseleave", hide);
-  element.addEventListener("keydown", (event) => { if (event.key === "Escape") hide(); });
+  const leave = () => { if (element === shownFor && element !== touchOwner) hide(); };
+  element.addEventListener("blur", leave);
+  element.addEventListener("mouseleave", leave);
+  element.addEventListener("keydown", (event) => { if (event.key === "Escape") { touchOwner = null; hide(); } });
   element.addEventListener("pointerdown", (event) => {
     if (event.pointerType !== "touch") return;
     show(element);
+    touchOwner = element;
     clearTimeout(touchTimer);
-    touchTimer = setTimeout(hide, TOUCH_MS);
+    touchTimer = setTimeout(() => { touchOwner = null; hide(); }, TOUCH_MS);
   });
 }
 
@@ -135,6 +163,7 @@ export function attachTooltip(element, text, { label } = {}) {
   if (!wording) return element;
   element.title = wording;
   if (element.dataset) element.dataset.tooltip = wording;
+  reachable(element, wording);
   const doc = page();
   if (!doc) return element;
   const id = descriptionId(doc, wording);
@@ -142,4 +171,9 @@ export function attachTooltip(element, text, { label } = {}) {
   element.setAttribute("aria-describedby", [...others, id].join(" "));
   listen(element);
   return element;
+}
+
+/** The page's own markup names its tooltips with data-tip; each gets the same helper. */
+export function attachStaticTooltips(root) {
+  for (const node of root.querySelectorAll("[data-tip]")) attachTooltip(node, node.dataset.tip);
 }

@@ -1,0 +1,10 @@
+{
+  "id": "dismissal-c1b573b23fcf4259d5076ff689566223",
+  "schema": "urn:aihq:workbench:journey-record:improvement-dismissal:1.0.0",
+  "required": false,
+  "suggestion": {
+    "id": "suggestion-f66e3a9ee22e5a6eb6166fd7df272086",
+    "revision": "e1f0818f9980afee6bde4c3e730816f3d3b3438c5ccf20d70aacdcc549e29075"
+  },
+  "recordedAt": "2026-10-25T17:52:07.533Z"
+}

@@ -520,6 +520,7 @@ src/
     elements.js         the shell's own element ids
     dom.js              el / text / collectIds, shared by both features
     absence.js          Not published / Not supplied / Not connected
+    contract-check.js   the start-up contract-check message in each of its states
     icons.js            one icon, colour class and words per contract value (kinds, tool fit, scan states, states)
     tooltip.js          the one tooltip helper: title, aria-describedby, focus and touch bubble
     workbench.css       interaction-specific presentation rules
@@ -689,24 +690,62 @@ reads `<selected> of <supported>`. Supported, selected and connected are kept ap
 
 The Workbench design's `3 of 11` was sample data and is not restored as state.
 
-The strip also carries the start-up contract check, once and as information
-only. The preview asks the installed Core whether `@aihq/core/contracts` or
-`@aihq/core` exports `checkContracts` (the service's `contractCheck`
-operation; nothing is called) and records it as the summary's `contractCheck`.
-Every Core so far has none, so the strip reads "This Core can't check
-contracts yet." and nothing is blocked. A Core that publishes it is listed in
-the provenance detail; running it waits for its published result format.
+The strip also carries the start-up contract-check message, as information
+that blocks nothing. At start-up the host runs the installed Core's
+`checkContracts` (`@aihq/core/contracts`) over the package-support declarations
+the installed packages publish (a `./package-support*.json` export or a
+declaration in their `./contracts` module, the highest support version), the
+Workbench's own included (`tools/service/contract-check.mjs`, the service's
+`contractCheck` operation, answered at `GET /api/contract-check`). Fixtures load
+through the producing package's own exports. A reader is the accepting
+package's own public reader: the Workbench runs only the Core readers Core's
+README names (`validateRecipe`, `parsePolicy`, `parseOrganizationPolicy`,
+`validateOrganizationTarget`, `validatePackageSupport`); a contract without one
+stays unavailable (`reader-missing`), never passed. The message
+(`src/app/contract-check.js`) reads:
 
-`fixtures/package-support/aih-ui.json` is the Workbench's own package-support
-declaration in the shape of Core's published
-`@aihq/core/schemas/package-support/1.0.0.json`: each schema this package
-exports (read and written, `both`), the two Core results it reads today
-(`file-state-result` 1.1.0 and `native-verification-result` 1.0.0) and its
-entries with their runtime. `fixtures/package-support/reads.json` lists, by the
-short names of the Workbench reads contract, the contracts the new screens will
-read; none is read yet. `tools/tests/package-support.test.mjs` checks both
-against the export map, and the installed-Core check compares the declaration
-with Core's schema.
+- **Checking contracts…** while the answer is on its way (loading);
+- **No contract checks apply.** when no package reads a contract another one
+  publishes fixtures for (empty);
+- **This Core can't check contracts yet.** for a Core without `checkContracts`,
+  or **N contract checks can't run.** when a reader or fixture is missing
+  (unavailable);
+- **{package} {version} can't read {contract}; update {package}.** when a
+  package refuses a fixture it should read;
+- **The contract check failed.** when the check itself could not run (failed).
+
+When every required check passed nothing is shown; the Packages detail lists
+every line. `tools/consumer/fixtures/contract-check/states/` holds one answer per
+state for the running-page check, and `refused.json` a declaration of a newer
+writer that the installed Core refuses, so the "can't read" message can be shown
+through Core's real engine (the test-only host input `AIH_CONTRACT_CHECK_EXTRA`).
+
+`package-support-1.1.json`, exported as `aih-ui/package-support-1.1.json`, is
+the Workbench's package-support declaration in Core's published
+`urn:aihq:package-support:1.1.0` format. It names what the Workbench actually
+reads and writes:
+
+- each format this package exports a schema for, which it writes and reopens
+  (`both`), with an accepted and a refused fixture read by the Workbench's own
+  reader (journey envelope, records written into an envelope and read back,
+  workspace validators);
+- the Core results it reads itself (`accepts`): `file-state-result` 1.1.0 and
+  `native-verification-result` 1.0.0, read by the friction adapter. The
+  Workbench publishes no reader for them, so the contract check reports those
+  checks as unavailable;
+- the formats it writes for another package's reader (`produces`), each with
+  the Workbench's own written example: execution policy 1.3.0 (Your setup),
+  organization policy 1.1.0 (organization authoring) and Catalog producer
+  declaration 3.1.0 (a personal folder).
+
+Formats another package reads for the Workbench (Catalog releases, Scan reports,
+Core's prepared work and run results) are that package's to declare. The
+fixtures are exported under `aih-ui/fixtures/*` from `fixtures/contracts/`, taken
+from documents the Workbench wrote in its own browser journeys, with machine
+paths replaced by example paths. `tools/tests/package-support.test.mjs` checks
+the declaration against the export map and reads each own-format fixture; the
+installed-Core check validates it with Core's `validatePackageSupport` when Core
+has one.
 
 A client adapter is tied to its client by the `clientId` Catalog release format 1.4 puts on
 the item, never by its item id. Three facts stay apart wherever an adapter is shown
@@ -895,13 +934,21 @@ repetition.
 Kind icons and accents come from one map, `src/app/icons.js`, keyed by the
 contract's kinds (skill `auto_awesome`, rule `rule`, command `terminal`, agent
 `smart_toy`, hook `bolt`, MCP server `hub`, document `description`); today's
-Catalog value `mcp` shares the MCP server icon, and any other value gets a
-neutral icon with its own name. The same map holds the tool-fit, scan-state and
-install-state icons the later screens use. The hook accent is orange, and green
-stays reserved for Verified and confirmed on disk. Cards, kind pills, metric
-tiles and the inspector header use it; `src/app/tooltip.js` gives each icon,
-pill and tile its tooltip (`title` for hover, an `aria-describedby`
-description, and a bubble on keyboard focus and touch).
+Catalog value `mcp` shares the MCP server icon. The other kinds today's Catalog
+reports (instruction, client adapter, client entry pointer, framework, template,
+notice, project context) each keep their own icon and name in the neutral tone,
+never another kind's, and any other value gets a neutral icon with its own name.
+The same map holds the tool-fit, scan-state and install-state icons the later
+screens use. The hook accent is orange, and green stays reserved for Verified
+and confirmed on disk. Cards, kind pills, metric tiles and the inspector header
+use it; `src/app/tooltip.js` gives each icon, badge, count, pill and greyed item
+its tooltip (`title` for hover, an `aria-describedby` description, and a bubble
+on keyboard focus and touch). An element that cannot take focus is put in the
+tab order, a decorative icon with words becomes an image named by them, and a
+greyed control is `aria-disabled` rather than `disabled`, so its reason stays
+reachable. The page's own markup names its tooltips with `data-tip`. A missing
+value keeps its gap indicator (`src/app/gap-indicator.js`), which is its own
+keyboard and touch control.
 
 ### The toolbar keeps the Workbench design's task
 

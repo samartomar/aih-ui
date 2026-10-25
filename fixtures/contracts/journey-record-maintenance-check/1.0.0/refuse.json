@@ -1,0 +1,25 @@
+{
+  "id": "maintenance-check",
+  "schema": "urn:aihq:workbench:journey-record:maintenance-check:1.0.0",
+  "required": false,
+  "checkedAt": "2026-10-25T17:51:20.321Z",
+  "categories": [
+    {
+      "category": "content",
+      "state": "checked"
+    },
+    {
+      "category": "software",
+      "state": "not-selected"
+    },
+    {
+      "category": "client",
+      "state": "not-selected"
+    },
+    {
+      "category": "environment",
+      "state": "not-selected"
+    }
+  ],
+  "unexpected": true
+}

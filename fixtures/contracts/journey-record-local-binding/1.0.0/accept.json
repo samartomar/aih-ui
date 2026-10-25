@@ -1,0 +1,42 @@
+{
+  "id": "binding-c3ba9af903c0ea51a8fd617838c1efaf",
+  "schema": "urn:aihq:workbench:journey-record:local-binding:1.0.0",
+  "required": false,
+  "workspace": {
+    "id": "workspace-5c36592dfe5dad91a6b1d8860c3b9e60",
+    "revision": "206a81271cde1ac925ba7dc252a034ef1b0576c5eacacfca51e34942ff763fa5"
+  },
+  "member": {
+    "id": "api",
+    "identity": "github.com/acme/api"
+  },
+  "checkout": {
+    "root": "/work/example/api-wt"
+  },
+  "observed": {
+    "repository": "github.com/acme/api",
+    "remotes": [
+      {
+        "name": "origin",
+        "identity": "github.com/acme/api"
+      }
+    ],
+    "revision": "96bcf07e246ab52770767641b39a9d09b67b14ef",
+    "branch": "linked",
+    "worktree": {
+      "kind": "linked",
+      "gitDirSha256": "8049d5106443fcf34b4fa492a95fb7841268a662acd624c957cf468d243b9067"
+    },
+    "workingState": {
+      "clean": true,
+      "sha256": "0c839224d6ceab6e615a3ffe535c70566fccd81c91a8bceda6b0237d29a071e3"
+    }
+  },
+  "verification": {
+    "result": "confirmed",
+    "reasons": [
+      "additional-checkout"
+    ],
+    "verifiedAt": "2026-10-25T17:52:31.672Z"
+  }
+}

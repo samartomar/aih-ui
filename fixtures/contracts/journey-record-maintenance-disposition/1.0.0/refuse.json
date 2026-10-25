@@ -1,0 +1,22 @@
+{
+  "id": "disposition-6e2febd026add301ff492c6a06330d34",
+  "schema": "urn:aihq:workbench:journey-record:maintenance-disposition:1.0.0",
+  "required": false,
+  "category": "content",
+  "subject": {
+    "kind": "selection",
+    "releaseSha256": "04cbd6a851d90e55de6fed7309892835b5117dfedfe9c0055b96b8947797d602",
+    "itemId": "consumer-proof.review-note",
+    "itemSha256": "229d4df79750dfbf0a8c93323ed80bfca10d059b722f53ba74efa8c416f6c9e3"
+  },
+  "scope": "project",
+  "candidate": {
+    "kind": "content-revision",
+    "releaseSha256": "ab4e72e54e902ccd42891b56fc4d4fa40c37e6f7675ecb97652b0be39ad1293b",
+    "itemId": "consumer-proof.review-note",
+    "itemSha256": "bafd7d5c0214ea47f3620616e711a5f41dbe2f048931f1e25dd1ae207d5c63f6"
+  },
+  "disposition": "skip",
+  "recordedAt": "2026-10-25T17:51:20.738Z",
+  "unexpected": true
+}

@@ -71,41 +71,38 @@ test('setup accepts a client from the published list and refuses one outside it'
   assert.equal(inside.status, 200);
 });
 
-// The start-up contract check reports exactly what the installed Core publishes, and runs nothing.
-test('the contractCheck service operation says whether the installed Core publishes checkContracts', async () => {
+// The start-up contract check: Core's own engine over the installed declarations, or "absent" for a Core without one.
+test('the contractCheck service operation runs the installed Core checkContracts, or reports that Core has none', async () => {
   const { contractCheckSummary } = await load('tools/server/contract-check-summary.mjs');
   const contracts = await import('@aihq/core/contracts');
-  const root = await import('@aihq/core');
-  const published = typeof contracts.checkContracts === 'function' || typeof root.checkContracts === 'function';
-  const answer = callService(consumerDir, { op: 'contractCheck' });
-  assert.equal(answer.ok, true, JSON.stringify(answer));
-  assert.equal(contractCheckSummary(answer).state, published ? 'available' : 'absent');
+  const summary = contractCheckSummary(callService(consumerDir, { op: 'contractCheck' }));
+  if (typeof contracts.checkContracts !== 'function') { assert.deepEqual(summary, { state: 'absent' }); return; }
+  assert.equal(summary.state, 'ran', JSON.stringify(summary).slice(0, 500));
+  assert.deepEqual(summary.packages.find(item => item.name === 'aih-ui'), { name: 'aih-ui', status: 'found', version: '0.0.0', schema: 'urn:aihq:package-support:1.1.0', from: 'aih-ui/package-support-1.1.json' });
+  // Core reads what the Workbench writes for it, from the Workbench's own exported fixtures.
+  const ofWorkbench = summary.checks.filter(row => row.fixturePackage === 'aih-ui');
+  assert.ok(ofWorkbench.some(row => row.contractId === 'urn:aihq:core:execution-policy:1.3.0' && row.readerPackage === '@aihq/core'), JSON.stringify(ofWorkbench));
+  for (const row of ofWorkbench.filter(item => item.readerPackage === '@aihq/core')) assert.equal(row.status, 'passed', JSON.stringify(row));
+  // The Workbench publishes no reader for the Core results it accepts, so those checks cannot run; they never pass.
+  for (const row of summary.checks.filter(item => item.readerPackage === 'aih-ui')) assert.deepEqual([row.status, row.reason], ['unavailable', 'reader-missing'], JSON.stringify(row));
+  for (const row of summary.checks.filter(item => item.status === 'passed')) assert.equal(row.readerPackage, '@aihq/core', 'only a reader the Workbench can run passes');
 });
 
-// The Workbench's package-support declaration has the shape Core's published schema gives it, and every
-// contract it accepts from Core names a schema the installed Core exports.
-test('the Workbench package-support fixture matches the installed Core package-support schema', async () => {
+// The Workbench's package-support declaration is valid by Core's own validator, when this Core has one, and every
+// contract it names from Core names a schema the installed Core exports with that id.
+test('the Workbench package-support declaration is valid for the installed Core', async () => {
   const { readFileSync } = await import('node:fs');
   const { createRequire } = await import('node:module');
   const require = createRequire(join(consumerDir, 'package.json'));
-  const schema = JSON.parse(readFileSync(require.resolve('@aihq/core/schemas/package-support/1.0.0.json'), 'utf8'));
-  const declared = JSON.parse(readFileSync(join(repo, 'fixtures/package-support/aih-ui.json'), 'utf8'));
-  assert.equal(declared.schema, schema.properties.schema.const);
-  assert.deepEqual(Object.keys(declared).sort(), Object.keys(schema.properties).sort());
-  for (const key of schema.required) assert.ok(Object.hasOwn(declared, key), key);
-  assert.deepEqual(Object.keys(declared.package).sort(), [...schema.properties.package.required].sort());
-  const contract = schema.properties.contracts.items;
-  for (const record of declared.contracts) {
-    assert.deepEqual(Object.keys(record).sort(), [...contract.required].sort(), JSON.stringify(record));
-    assert.ok(contract.properties.role.enum.includes(record.role), record.id);
-    if (record.schemaExport.startsWith('@aihq/core/')) {
-      const exported = JSON.parse(readFileSync(require.resolve(record.schemaExport), 'utf8'));
-      assert.equal(exported.$id, record.id, record.schemaExport);
-    }
+  const declared = JSON.parse(readFileSync(join(repo, 'package-support-1.1.json'), 'utf8'));
+  const contracts = await import('@aihq/core/contracts');
+  if (typeof contracts.validatePackageSupport === 'function') {
+    const checked = contracts.validatePackageSupport(declared);
+    assert.equal(checked.valid, true, JSON.stringify(checked.diagnostics));
   }
-  const shapes = schema.properties.entries.items.oneOf;
-  for (const entry of declared.entries) {
-    const matches = shapes.filter(shape => Object.keys(entry).sort().join() === [...shape.required].sort().join() && shape.properties.runtime.const === entry.runtime);
-    assert.equal(matches.length, 1, JSON.stringify(entry));
+  for (const record of declared.contracts.filter(item => item.schemaExport.startsWith('@aihq/'))) {
+    let path;
+    try { path = require.resolve(record.schemaExport); } catch { path = fileURLToPath(import.meta.resolve(record.schemaExport)); }
+    assert.equal(JSON.parse(readFileSync(path, 'utf8')).$id, record.id, record.schemaExport);
   }
 });

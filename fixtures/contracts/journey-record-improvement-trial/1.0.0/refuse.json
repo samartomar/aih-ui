@@ -1,0 +1,166 @@
+{
+  "id": "trial-2ea0560bac2402cbaa4e1f40ad02cd2b",
+  "schema": "urn:aihq:workbench:journey-record:improvement-trial:1.0.0",
+  "required": false,
+  "revision": "d74ee6354754727e06a421605fc566ece6e82f6820dad467395da8967171c89e",
+  "suggestion": {
+    "id": "suggestion-f66e3a9ee22e5a6eb6166fd7df272086",
+    "revision": "e1f0818f9980afee6bde4c3e730816f3d3b3438c5ccf20d70aacdcc549e29075"
+  },
+  "change": {
+    "kind": "add-item",
+    "itemId": "mattpocock.tdd",
+    "releaseSha256": "0ff699f240ac4c667c1891fe0f0a2629c60af67dfb1d9483405d2bbc45d6f124",
+    "itemSha256": "d74745cdb22b649b7ceda221c17fc2e077d3beb43a06fd9ab4a4c1b243bdae0d"
+  },
+  "scope": "project",
+  "baseline": {
+    "savedIntentSha256": "8f22098452ac5258e7d653f15b64165a11e278d617f25b1f0fabe5f9cbb4dd3c",
+    "draftSha256": "05ae587e3b77b0eae754cd3368906a7b3f269ed418e275213517528ba70ba479"
+  },
+  "task": "Add tests to a small module of the app.",
+  "quality": {
+    "outcome": "The new tests catch a seeded regression.",
+    "checks": [
+      {
+        "id": "check-1",
+        "text": "A seeded regression fails a test."
+      },
+      {
+        "id": "check-2",
+        "text": "The tests pass on the unchanged module."
+      }
+    ]
+  },
+  "conditions": "Same task, same client, same repository state.",
+  "bounds": [
+    {
+      "id": "bound-1",
+      "label": "Time box",
+      "value": 2,
+      "unit": "hours",
+      "enforcement": {
+        "kind": "advisory"
+      }
+    },
+    {
+      "id": "bound-2",
+      "label": "Spending",
+      "value": 5,
+      "unit": "USD",
+      "enforcement": {
+        "kind": "advisory"
+      }
+    }
+  ],
+  "unknowns": [
+    "Model or service spending: no cost source is connected, so it is unknown."
+  ],
+  "state": "stopped",
+  "proposedAt": "2026-10-25T17:52:19.185Z",
+  "observations": [
+    {
+      "option": "trial",
+      "target": {
+        "check": "check-1"
+      },
+      "kind": "measured",
+      "value": {
+        "amount": "passed",
+        "unit": "outcome"
+      },
+      "source": "person",
+      "id": "obs-a224612a226ff9ff9b2a369b",
+      "recordedAt": "2026-10-25T17:52:19.734Z"
+    },
+    {
+      "option": "trial",
+      "target": {
+        "check": "check-2"
+      },
+      "kind": "measured",
+      "value": {
+        "amount": "failed",
+        "unit": "outcome"
+      },
+      "source": "person",
+      "id": "obs-26ee7e12872d100c7d671fe0",
+      "recordedAt": "2026-10-25T17:52:19.967Z"
+    },
+    {
+      "option": "baseline",
+      "target": {
+        "dimension": "setup"
+      },
+      "kind": "declared",
+      "value": {
+        "amount": 10,
+        "unit": "minutes"
+      },
+      "source": "person",
+      "id": "obs-c58f9bbcb000569d53e61044",
+      "recordedAt": "2026-10-25T17:52:20.197Z"
+    },
+    {
+      "option": "trial",
+      "target": {
+        "dimension": "setup"
+      },
+      "kind": "declared",
+      "value": {
+        "amount": 15,
+        "unit": "minutes"
+      },
+      "source": "person",
+      "id": "obs-daf6a4a96a9a5debe2c3a25d",
+      "recordedAt": "2026-10-25T17:52:20.452Z"
+    },
+    {
+      "option": "baseline",
+      "target": {
+        "dimension": "runtime-context"
+      },
+      "source": "host",
+      "kind": "measured",
+      "value": {
+        "amount": 24009,
+        "unit": "bytes"
+      },
+      "id": "obs-a1b692f1d2023587fe455be0",
+      "recordedAt": "2026-10-25T17:52:20.631Z"
+    },
+    {
+      "option": "trial",
+      "target": {
+        "dimension": "runtime-context"
+      },
+      "source": "host",
+      "kind": "measured",
+      "value": {
+        "amount": 36362,
+        "unit": "bytes"
+      },
+      "id": "obs-1ac2e8483406523942be1caf",
+      "recordedAt": "2026-10-25T17:52:20.631Z"
+    }
+  ],
+  "startedAt": "2026-10-25T17:52:19.491Z",
+  "narrower": {
+    "qualification": "Useful for small modules only.",
+    "acceptedAt": "2026-10-25T17:52:20.945Z"
+  },
+  "decidedAt": "2026-10-25T17:52:21.169Z",
+  "evidence": {
+    "outcome": "no-qualifying-improvement",
+    "evaluatedAt": "2026-10-25T17:52:21.169Z"
+  },
+  "reason": "The second check failed.",
+  "restoration": {
+    "status": "completed",
+    "effects": [
+      "The notes file was left in place."
+    ],
+    "recordedAt": "2026-10-25T17:52:21.679Z"
+  },
+  "unexpected": true
+}

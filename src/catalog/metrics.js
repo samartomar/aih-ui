@@ -31,7 +31,7 @@ function tile(kind, model, onToggleKind) {
   button.dataset.metric = kind.key ?? "tokens";
   button.setAttribute("aria-pressed", String(active));
   if (kind.key === null) {
-    button.disabled = true;
+    // Greyed, not disabled: a disabled button leaves the tab order, and its tooltip with it.
     button.setAttribute("aria-disabled", "true");
     attachTooltip(button, "Tokens: unknown. No defined producer supplies token values.");
   } else {

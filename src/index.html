@@ -25,7 +25,7 @@
 <!-- App Identity -->
 <div class="flex items-center gap-2 pr-1">
 <div class="w-5 h-5 rounded bg-primary-container flex items-center justify-center shadow-sm">
-<span class="material-symbols-outlined text-on-primary text-[14px]" aria-hidden="true">shield_with_house</span>
+<span class="material-symbols-outlined text-on-primary text-[14px]" aria-hidden="true" data-tip="aih Policy Workbench: choose, install and remove content for your AI tool.">shield_with_house</span>
 </div>
 <span class="font-medium text-[11px] tracking-tight text-on-surface">aih Policy</span>
 <span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-medium" id="workbench-role">Local</span>
@@ -57,7 +57,7 @@
 <span id="publish-project-policy" data-gap-reason="Git publishing is not connected. Save the project policy in Policy workspace, then review and publish through your Git workflow." data-gap-label="Publish not connected"></span>
 <!-- Settings: the workspace menu and the mode in one menu, with Check this machine and Get started. -->
 <div class="relative workspace-menu-container">
-<button class="wb-header-control" type="button" id="org-modal-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="workspace-actions" title="Settings: workspace, mode, this machine and getting started">
+<button class="wb-header-control" type="button" id="org-modal-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="workspace-actions" data-tip="Settings: workspace, mode, this machine and getting started">
 <span class="material-symbols-outlined text-[14px]" aria-hidden="true">settings</span>
 <span>Settings</span>
 <span class="wb-header-chevron" aria-hidden="true">▾</span>
@@ -73,7 +73,7 @@
 <!-- Theme Toggle Button: ONE icon naming the destination theme. mode.js owns
      the theme state and sets this icon's text and the button's label; the
      colour follows the same html.dark class, so nothing else can disagree. -->
-<button aria-label="Switch to light mode" class="p-1 rounded bg-surface-container-low hover:bg-surface-container border border-wb-border text-on-surface-variant hover:text-on-surface transition-colors flex items-center justify-center cursor-pointer shadow-xs mr-0.5" id="theme-toggle-btn" type="button" data-mode-toggle>
+<button aria-label="Switch to light mode" class="p-1 rounded bg-surface-container-low hover:bg-surface-container border border-wb-border text-on-surface-variant hover:text-on-surface transition-colors flex items-center justify-center cursor-pointer shadow-xs mr-0.5" id="theme-toggle-btn" type="button" data-mode-toggle data-tip="Switch between the dark and light themes.">
 <span class="material-symbols-outlined text-[15px] text-primary dark:text-metadata-emphasis" id="theme-icon" aria-hidden="true">light_mode</span>
 </button>
 
@@ -106,10 +106,10 @@
 <div class="space-y-1">
 <div class="px-2 py-0.5 text-[10px] font-mono tracking-wider text-outline uppercase font-medium flex items-center justify-between">
 <span class="">WORKBENCH</span>
-<span class="material-symbols-outlined text-[12px] text-outline" aria-hidden="true">tune</span>
+<span class="material-symbols-outlined text-[12px] text-outline" aria-hidden="true" data-tip="Workbench views: where you are in the Workbench.">tune</span>
 </div>
 <nav class="space-y-0.5 text-[11px]">
-<a class="flex items-center justify-between px-2 py-1 rounded bg-surface-container text-primary font-medium" href="#catalog" id="nav-sources" aria-current="page">
+<a class="flex items-center justify-between px-2 py-1 rounded bg-surface-container text-primary font-medium" href="#catalog" id="nav-sources" aria-current="page" data-tip="Sources and catalogs: the installed content you can choose from, with how many items it lists.">
 <span class="flex items-center gap-1.5">
 <span class="material-symbols-outlined text-[14px]" aria-hidden="true">inventory_2</span>
 <span class="">Sources &amp; Catalogs</span>
@@ -120,7 +120,7 @@
 </div>
 <!-- PROJECT BASICS: what applies to the project whichever content is chosen, in its own place in the left panel. -->
 <nav class="pt-1 border-t border-wb-border text-[11px]" aria-label="Project basics">
-<a class="flex items-center justify-between px-2 py-1 rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface" href="#basics" id="nav-project-basics" title="Tool support, project files and the workspace: they apply whichever framework you choose.">
+<a class="flex items-center justify-between px-2 py-1 rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface" href="#basics" id="nav-project-basics" data-tip="Tool support, project files and the workspace: they apply whichever framework you choose.">
 <span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[14px]" aria-hidden="true">foundation</span><span>Project basics</span></span>
 </a>
 </nav>
@@ -186,10 +186,10 @@
 <details id="catalog-advanced" class="catalog-advanced"><summary class="cursor-pointer text-on-surface-variant hover:text-on-surface font-medium">Advanced</summary>
 <div class="catalog-advanced-body space-y-3 pt-2">
 <nav class="flex flex-wrap items-center gap-2" aria-label="Advanced views">
-<button class="inline-flex items-center gap-2 px-2 py-1 rounded border border-wb-border text-on-surface-variant hover:bg-surface-container hover:text-on-surface" id="nav-policy" type="button" aria-controls="policy-workspace">
+<button class="inline-flex items-center gap-2 px-2 py-1 rounded border border-wb-border text-on-surface-variant hover:bg-surface-container hover:text-on-surface" id="nav-policy" type="button" aria-controls="policy-workspace" data-tip="Policy workspace: the engine view of the policy behind your setup.">
 <span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[14px] text-outline" aria-hidden="true">policy</span><span>Policy workspace</span></span>
 </button>
-<button class="inline-flex items-center gap-2 px-2 py-1 rounded border border-wb-border text-on-surface-variant hover:bg-surface-container hover:text-on-surface" id="nav-scan-review" type="button" aria-controls="evidence-review" title="Review Scan evidence you supply. No organization scan queue is connected and no scanner runs from this page.">
+<button class="inline-flex items-center gap-2 px-2 py-1 rounded border border-wb-border text-on-surface-variant hover:bg-surface-container hover:text-on-surface" id="nav-scan-review" type="button" aria-controls="evidence-review" data-tip="Review Scan evidence you supply. No organization scan queue is connected and no scanner runs from this page.">
 <span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[14px] text-outline" aria-hidden="true">security_update_good</span><span>Scan Review</span></span>
 <span class="font-mono text-[10px] text-outline">Supplied evidence</span>
 </button>
@@ -206,7 +206,7 @@
 <div class="space-y-1 w-60 max-w-full" id="catalog-scopes-section">
 <div class="px-2 py-0.5 text-[10px] font-mono tracking-wider text-outline uppercase font-medium flex items-center justify-between">
 <span class="">CATALOG SCOPES</span>
-<span class="material-symbols-outlined text-[12px] text-outline" aria-hidden="true">account_tree</span>
+<span class="material-symbols-outlined text-[12px] text-outline" aria-hidden="true" data-tip="Catalog scopes: one row per published source identity.">account_tree</span>
 </div>
 <div class="space-y-0.5 text-[11px]" id="rail-scope-list"></div>
 </div>
@@ -216,7 +216,7 @@
 <div class="border-b border-wb-border bg-wb-subhead shrink-0" id="workbench-toolbar">
 <div class="toolbar-search-row flex flex-wrap items-center gap-3">
 <div class="toolbar-search flex items-center gap-2 min-w-0">
-<label class="w-8 h-8 rounded border border-wb-border bg-wb-input hover:bg-surface-container text-outline hover:text-on-surface flex items-center justify-center shrink-0 transition-colors cursor-pointer" for="catalog-search" title="Search published identities">
+<label class="w-8 h-8 rounded border border-wb-border bg-wb-input hover:bg-surface-container text-outline hover:text-on-surface flex items-center justify-center shrink-0 transition-colors cursor-pointer" for="catalog-search" data-tip="Search published identities">
 <span class="material-symbols-outlined text-[15px]" aria-hidden="true">search</span>
 </label>
 <input class="flex-1 min-w-0 h-8 px-2 py-1 rounded bg-wb-input border border-wb-control-border text-on-surface text-[11.5px] font-mono placeholder:text-outline focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" id="catalog-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search names, descriptions or identifiers" title="Search entry id, subject id, repository, package, path, commit or revision" aria-label="Search published entry and source identities">
@@ -334,7 +334,7 @@
 <span>Policy JSON</span>
 </button>
 </div>
-<button class="shrink-0 p-1 rounded hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors" id="close-inspector-btn" title="Close inspector" aria-label="Close inspector" type="button">
+<button class="shrink-0 p-1 rounded hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors" id="close-inspector-btn" data-tip="Close inspector" aria-label="Close inspector" type="button">
 <span class="material-symbols-outlined text-[16px]" aria-hidden="true">chevron_right</span>
 </button>
 </div>
@@ -353,7 +353,7 @@
 <div class="p-2 rounded bg-surface-container-low border border-wb-border font-mono text-[10px] space-y-1 text-on-surface-variant" id="details-source"></div>
 </details>
 <details class="group/ids pt-1" id="details-disclosure">
-<summary class="cursor-pointer list-none flex items-center gap-1 text-[10px] font-mono uppercase tracking-wider text-outline hover:text-on-surface select-none">
+<summary class="cursor-pointer list-none flex items-center gap-1 text-[10px] font-mono uppercase tracking-wider text-outline hover:text-on-surface select-none" data-tip="Show or hide the item's identity and file references.">
 <span class="material-symbols-outlined text-[13px] transition-transform group-open/ids:rotate-90" aria-hidden="true">chevron_right</span>
 <span>Identity and file references</span>
 </summary>

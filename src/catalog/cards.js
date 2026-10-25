@@ -79,7 +79,7 @@ function card(entry, selectedId, onSelect, model) {
     `px-1.5 py-0.5 rounded bg-wb-meta-bg border border-wb-border text-[8.5px] font-mono text-wb-meta${badge.value ? " uppercase" : ""}`,
     badge.text,
   );
-  category.title = badge.title;
+  attachTooltip(category, badge.title ?? badge.text);
   badges.appendChild(category);
   head.appendChild(badges);
   top.appendChild(head);
@@ -115,7 +115,7 @@ function card(entry, selectedId, onSelect, model) {
   const tokens = el("span", "px-1.5 py-0.5 rounded bg-wb-meta-bg border border-wb-border text-wb-meta font-mono hidden sm:inline-flex items-center gap-1 shrink-0");
   tokens.appendChild(el("span", "material-symbols-outlined text-[13px] text-kind-token", "toll"));
   tokens.appendChild(el("span", "", "Unknown"));
-  tokens.title = "Tokens: unknown. No defined producer supplies token values for this item.";
+  attachTooltip(tokens, "Tokens: unknown. No defined producer supplies token values for this item.");
   left.appendChild(tokens);
   foot.appendChild(left);
 

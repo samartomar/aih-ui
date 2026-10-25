@@ -13,6 +13,7 @@ import { createDetails } from "./details.js";
 import { createMetrics } from "./metrics.js";
 import { createNavigation } from "./navigation.js";
 import { createProvenance } from "./provenance.js";
+import { loadContractCheck } from "../app/contract-check.js";
 import { createToolbar } from "./toolbar.js";
 import { projectItems, capabilityFacts, declaredTargets, supportedEntries } from "./authoring-model.js";
 import { publishedClients } from "../app/core-targets.js";
@@ -244,6 +245,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   return {
     async start() {
       state.summary = await (await fetch('./summary.json', { cache: 'no-store' })).json();
+      // The start-up contract check answers on its own time; the strip reads "Checking contracts…" meanwhile.
+      loadContractCheck().then(answer => provenance.setContractCheck(answer));
       onSummary?.(state.summary);
       const refresh = () => {
         if (!authoring.catalog) return;

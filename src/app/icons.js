@@ -21,8 +21,9 @@ import { el } from "./dom.js";
 const NEUTRAL = "text-outline";
 
 /* Content kinds (Catalog release `kind`). `mcp` is the value today's installed
-   Catalog reports for an MCP server; the contracts call it `mcp-server`. Other
-   kinds today's Catalog reports are not contract kinds and get the neutral icon. */
+   Catalog reports for an MCP server; the contracts call it `mcp-server`. The
+   other kinds today's Catalog reports are not contract kinds: each keeps its own
+   icon and its own name, in the neutral tone, and is never shown as another kind. */
 const KIND = {
   skill: { icon: "auto_awesome", tone: "text-kind-skill", label: "Skill" },
   rule: { icon: "rule", tone: "text-kind-rule", label: "Rule" },
@@ -32,6 +33,13 @@ const KIND = {
   "mcp-server": { icon: "hub", tone: "text-kind-mcp", label: "MCP server" },
   mcp: { icon: "hub", tone: "text-kind-mcp", label: "MCP server" },
   document: { icon: "description", tone: "text-kind-document", label: "Document" },
+  instruction: { icon: "integration_instructions", tone: "text-on-surface-variant", label: "Instruction" },
+  "client-adapter": { icon: "settings_input_component", tone: "text-on-surface-variant", label: "Client adapter" },
+  "client-entry-pointer": { icon: "login", tone: "text-on-surface-variant", label: "Client entry pointer" },
+  framework: { icon: "widgets", tone: "text-on-surface-variant", label: "Framework" },
+  template: { icon: "file_copy", tone: "text-on-surface-variant", label: "Template" },
+  notice: { icon: "campaign", tone: "text-on-surface-variant", label: "Notice" },
+  "project-context": { icon: "folder_special", tone: "text-on-surface-variant", label: "Project context" },
 };
 
 /* How far "works in your tool" was proven (Core compatibility `support`). */

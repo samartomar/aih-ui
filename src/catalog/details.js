@@ -35,6 +35,7 @@ import {
 } from "../app/absence.js";
 import { identity, sourceDetailRows, sourceIdentity, statementsOf } from "./entry.js";
 import { iconFor } from "../app/icons.js";
+import { attachTooltip } from "../app/tooltip.js";
 import { scopeCountOf } from "./selectors.js";
 
 /* These Catalog inspector slots have no verified per-entry scan input. */
@@ -115,10 +116,9 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
     elements.inspectorName.textContent = "";
     elements.inspectorName.title = "";
     elements.inspectorKind.removeAttribute("aria-label");
-    delete elements.inspectorKind.dataset.label;
     elements.detailsDesc.textContent = NOT_PUBLISHED;
     capability(elements.detailsCapabilities, "Network Egress", "wifi", "tertiary", NOT_PUBLISHED);
-    capability(elements.detailsCapabilities, "Execution Sandbox", "terminal", "secondary", NOT_PUBLISHED);
+    capability(elements.detailsCapabilities, "Execution Sandbox", "terminal", "outline", NOT_PUBLISHED);
     capability(elements.detailsCapabilities, "Required Secrets", "vpn_key", "outline", NOT_PUBLISHED);
     row(elements.detailsSource, "Origin", null);
     row(elements.detailsIdentity, "Entry id", null);
@@ -176,7 +176,7 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
         const source = sourcePresentation(item);
         elements.inspectorName.textContent = source.name;
         elements.inspectorKind.setAttribute('aria-label', `Kind: ${item.kind}`);
-        elements.inspectorKind.dataset.label = `Kind: ${item.kind}`;
+        attachTooltip(elements.inspectorKind, `Kind: ${iconFor('kind', item.kind).label}`);
         showKindIcon(item.kind);
         elements.detailsDesc.replaceChildren();
         if (source.description.length > 320) {
@@ -257,7 +257,7 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
       elements.inspectorName.textContent = id.name;
       elements.inspectorName.title = id.entryId;
       elements.inspectorKind.setAttribute("aria-label", `Kind: ${id.kind}`);
-      elements.inspectorKind.dataset.label = `Kind: ${id.kind}`;
+      attachTooltip(elements.inspectorKind, `Kind: ${iconFor('kind', id.kind).label}`);
       showKindIcon(id.kind);
 
       // --------------------------------------------------------- Overview
@@ -276,7 +276,7 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
         egress === NOT_DECLARED ? emptyNote : "Declared by the index",
       );
       capability(
-        elements.detailsCapabilities, "Execution Sandbox", "terminal", "secondary", NOT_PUBLISHED,
+        elements.detailsCapabilities, "Execution Sandbox", "terminal", "outline", NOT_PUBLISHED,
         "The index carries no execution sandbox field.",
       );
       capability(

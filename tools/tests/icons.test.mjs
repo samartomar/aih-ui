@@ -52,14 +52,15 @@ test("green is reserved for Verified and confirmed on disk; works and Verified a
 
 test("today's Catalog MCP kind shares the MCP server icon; other values fall back to a neutral icon without throwing", () => {
   assert.equal(iconFor("kind", "mcp").icon, iconFor("kind", "mcp-server").icon);
-  for (const [group, value] of [["kind", "instruction"], ["kind", undefined], ["scan", null], ["fit", 7], ["state", { an: "object" }], ["nope", "skill"], [undefined, undefined]]) {
+  for (const [group, value] of [["kind", "playbook"], ["kind", undefined], ["scan", null], ["fit", 7], ["state", { an: "object" }], ["nope", "skill"], [undefined, undefined]]) {
     const shown = iconFor(group, value);
     assert.equal(shown.known, false, `${String(group)}:${String(value)}`);
     assert.equal(shown.tone, "text-outline");
     assert.ok(shown.icon.length > 0);
     assert.ok(shown.label.length > 0);
   }
-  assert.equal(iconFor("kind", "instruction").label, "instruction", "an unknown value keeps its own words, never a guessed kind");
+  assert.equal(iconFor("kind", "playbook").label, "playbook", "an unknown value keeps its own words, never a guessed kind");
+  assert.equal(iconFor("kind", "instruction").label, "Instruction", "a kind today's Catalog reports keeps its own name, never another kind's");
   assert.equal(iconFor("scan", "__proto__").known, false);
 });
 
