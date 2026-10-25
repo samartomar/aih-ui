@@ -58,7 +58,9 @@ test('a capture folds to one outcome per selection: any changed or absent target
   assert.deepEqual(outcome(folded({ outcome: 'match' }, { outcome: 'unavailable', reason: 'target-unreadable' })), ['unknown', 'target-unreadable']);
   // A free-text reason is never carried into a claim: Core's own validator refuses the result (it is unread), and with a Core that publishes
   // no file-state validator the adapter keeps only the generic code.
-  assert.deepEqual(outcome(folded({ outcome: 'unavailable', reason: 'C:\\Users\\a\\b' })), fileStateReaderAvailable ? 0 : ['unknown', 'unavailable']);
+  const freeText = run([entry('cap-1', T[0], fileState([{ outcome: 'unavailable', reason: 'C:\\Users\\a\\b' }]))]);
+  if (fileStateReaderAvailable) assert.deepEqual([freeText.claimSet.claims.length, freeText.unread], [0, 1], 'Core refuses the result, so it is unread');
+  else assert.deepEqual(outcome(freeText.claimSet.claims), ['unknown', 'unavailable']);
   assert.equal(folded({ outcome: 'unavailable' })[0].value, undefined);
   // Targets of another selection, and a result with no target of this one, make no claim.
   assert.equal(folded({ selection: 'catalog-other', outcome: 'changed' }).length, 0);

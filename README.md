@@ -744,7 +744,7 @@ reads and writes:
   and the start-up contract check runs them against every fixture Core
   publishes for the two formats. With a Core that publishes no
   `validateFileStateResult`, `fileStateReaderAvailable` is false,
-  `readFileStateResult` throws, file-state results are read unchecked as before,
+  `readFileStateResult` is undefined, file-state results are read unchecked as before,
   and the contract check reports that reader as missing, never passed;
 - the formats it writes for another package's reader (`produces`), each with
   the Workbench's own written example: execution policy 1.3.0 (Your setup),

@@ -5,8 +5,9 @@
 // and each reader returns Core's result unchanged, `{ valid, schema?, diagnostics }`.
 // - native-verification-result 1.0.0: Core's `validateNativeVerificationResult`.
 // - file-state-result 1.1.0: Core's `validateFileStateResult`. A Core that does not publish it leaves the Workbench nothing
-//   to check file-state results with: `fileStateReaderAvailable` is false, `readFileStateResult` throws, and friction.mjs
-//   reads them as it always did, unchecked.
+//   to check file-state results with: `fileStateReaderAvailable` is false, `readFileStateResult` is undefined (so any caller,
+//   the contract check included, finds no reader rather than one that fails), and friction.mjs reads them as it always did,
+//   unchecked.
 import * as coreContracts from '@aihq/core/contracts';
 
 export const NATIVE_VERIFICATION_RESULT_SCHEMA = 'urn:aihq:core:native-verification-result:1.0.0';
@@ -24,11 +25,8 @@ export function readNativeVerificationResult(value) {
 }
 
 /**
- * Reads one stored file-state result (the parsed JSON value) as the Workbench reads it.
- * @returns Core's own validation, `{ valid, schema?, diagnostics }`; anything not valid is not read.
- * @throws when the installed Core publishes no `validateFileStateResult`.
+ * Reads one stored file-state result (the parsed JSON value) as the Workbench reads it: Core's own validation,
+ * `{ valid, schema?, diagnostics }`; anything not valid is not read. Undefined when the installed Core publishes no
+ * `validateFileStateResult`.
  */
-export function readFileStateResult(value) {
-  if (!fileStateReaderAvailable) throw new TypeError('The installed @aihq/core publishes no validateFileStateResult, so a file-state result cannot be checked.');
-  return coreContracts.validateFileStateResult(value);
-}
+export const readFileStateResult = fileStateReaderAvailable ? value => coreContracts.validateFileStateResult(value) : undefined;

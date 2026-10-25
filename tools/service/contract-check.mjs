@@ -132,8 +132,8 @@ function outcome(result) {
 // The Workbench's own public readers (aih-ui/stored-results), the ones its intake uses; read from the consumer's copy.
 const WORKBENCH_READERS = [
   { contract: /^urn:aihq:core:native-verification-result:1\.0\.0$/, reader: "readNativeVerificationResult", form: "json" },
-  // Only with a Core that publishes validateFileStateResult; otherwise the reader is missing, never stood in for.
-  { contract: /^urn:aihq:core:file-state-result:1\.1\.0$/, reader: "readFileStateResult", form: "json", when: "fileStateReaderAvailable" },
+  // Undefined with a Core that publishes no validateFileStateResult: the reader is then missing, never stood in for.
+  { contract: /^urn:aihq:core:file-state-result:1\.1\.0$/, reader: "readFileStateResult", form: "json" },
 ];
 
 async function readersFor(name, ids, contracts) {
@@ -141,7 +141,7 @@ async function readersFor(name, ids, contracts) {
   const table = name === "@aihq/core" ? CORE_READERS : name === "aih-ui" ? WORKBENCH_READERS : [];
   const source = name === "aih-ui" ? await import("../consumer/stored-results.mjs") : contracts;
   for (const id of ids) {
-    const binding = table.find(item => item.contract.test(id) && (!item.when || source[item.when] === true));
+    const binding = table.find(item => item.contract.test(id));
     const reader = binding && source[binding.reader];
     if (typeof reader !== "function") continue;
     readers[id] = binding.form === "text" ? bytes => outcome(reader(decode(bytes))) : bytes => outcome(reader(JSON.parse(decode(bytes))));
