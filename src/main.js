@@ -33,7 +33,9 @@ async function main() {
   try {
     const policyWorkspace = createPolicyWorkspace();
     const authoring = createAuthoringClient();
-    const authoringWorkspace = createAuthoringWorkspace(authoring);
+    // Back to catalog: the drawer closes, then Sources & Catalogs shows (if another view was open) with focus on
+    // the card just chosen, or the search box.
+    const authoringWorkspace = createAuthoringWorkspace(authoring, { onBackToCatalog: () => { shell.showCatalog(); catalog.focusCatalog(); } });
     const evidenceReview = createEvidenceReview(authoring, result => authoringWorkspace.present(result));
 
     // Core's supported targets arrive with the preview summary the catalog

@@ -6,6 +6,7 @@ import { pageAssets } from './server/assets.mjs';
 import { createWorkbench } from './server/workbench.mjs';
 import { listen } from './server/static.mjs';
 import { runInstalledPanelBrowser } from './consumer/installed-panel-browser.mjs';
+import { runProjectFolderBrowser } from './consumer/project-folder-browser.mjs';
 
 // Runs after the ordinary integrated check has assembled the packed consumer and page. Only this
 // server gets a disposable execution target; the existing unconfigured-host journeys stay as they are.
@@ -27,4 +28,7 @@ try {
   await runInstalledPanelBrowser({ origin: `http://127.0.0.1:${address.port}`, output: join(consumerDir, cancelAfterFirst ? 'removal-cancel-evidence' : 'installed-panel-evidence'),
     // One complete removal and one partial cancellation in CI; --cancel repeats the regression in both themes.
     playwrightModule: import.meta.resolve('playwright'), cancellationThemes: cancelAfterFirst ? ['dark', 'light'] : ['light'] });
+  // The project folder and Your setup entry: typed, refused and recent folders, against the same disposable default.
+  if (!cancelAfterFirst) await runProjectFolderBrowser({ origin: `http://127.0.0.1:${address.port}`, output: join(consumerDir, 'project-folder-evidence'),
+    playwrightModule: import.meta.resolve('playwright'), project, other: `${project}-other` });
 } finally { await new Promise(resolve => workbench.server.close(resolve)); }

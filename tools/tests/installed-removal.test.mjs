@@ -145,3 +145,13 @@ test('a removal counts only when every operation was applied and verified', () =
   assert.equal(removalOutcome({ completion: 'complete', operations: [op('applied', 'passed')] }, files).state, 'failed');
   assert.equal(removalOutcome(undefined, files).state, 'failed');
 });
+
+test('in a later round a needed item still waiting names only what is still to be removed', async () => {
+  const { request } = fakeHost({ members: { ...members(), 'm-notices': ['n'], 'm-kiro': ['k'] }, requires: { 'm-grill-me': ['m-grilling'], 'm-grilling': ['m-notices'], 'm-kiro': ['m-notices'] } });
+  const preview = await previewRemoval({ entries: [entry('grill-me'), entry('grilling'), entry('notices')], request, mode: 'vibe' });
+  assert.match(preview.steps[2].message, /after grill-me and grilling are removed/);
+  const first = await confirmRemoval({ preview, request, mode: 'vibe' });
+  assert.deepEqual(first.next.steps.map(step => [step.entry.name, step.state]), [['grilling', 'ready'], ['notices', 'after']]);
+  assert.match(first.next.steps[1].message, /after grilling is removed/);
+  assert.doesNotMatch(first.next.steps[1].message, /grill-me/, 'grill-me is already gone');
+});

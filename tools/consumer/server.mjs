@@ -8,6 +8,7 @@ import { readInstalledRelease } from '@aihq/catalog/node';
 import { listItems } from '@aihq/catalog/reader';
 import { parsePolicy } from '@aihq/core/contracts';
 import { createHost } from './host.mjs';
+import { createProjectFolder, shared } from './project-folder.mjs';
 import { readAuthoritySource } from './authority-source.mjs';
 import { editSetup, reopenSetup, reviewSetupUpdate } from './setup.mjs';
 import { presentReport, readScanBytes } from './report-view.mjs';
@@ -21,7 +22,8 @@ import { createCatalogUpdateSource } from './update-source.mjs';
 import { inspectorSummary } from './scan-evidence.mjs';
 import { createScanEvidenceHost } from './scan-evidence-host.mjs';
 
-export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, updateSourceCatalogRoots, evidenceSources, evidenceDetectorIds, port = 0 } = {}) {
+export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, updateSourceCatalogRoots, evidenceSources, evidenceDetectorIds, port = 0, createExecutionHost = createHost } = {}) {
+  // `createExecutionHost` is createHost; tests pass one that holds Install work while they act.
   // The fixture is a test source; a host names one update source, so both together would be ambiguous.
   if (updateSourceCatalogRoots !== undefined && maintenanceSource) throw new Error('Configure one update source: Catalog package roots or the test fixture, not both.');
   const installed = await readInstalledRelease({
@@ -31,7 +33,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   const { release, source: materialSource, materialRoots } = installed;
   const previous = previousCatalogRoot ? await readInstalledRelease({ root: previousCatalogRoot, sourceInput: 'catalog' }) : null;
   if (previous && !previous.valid) throw new Error(JSON.stringify(previous.diagnostics));
-  const legacyHost = projectRoot ? createHost({ projectRoot, materialRoots, organizationSource, controls }) : null;
+  let legacyHost = projectRoot ? createExecutionHost({ projectRoot, materialRoots, organizationSource, controls }) : null;
   const intentService = createIntentService();
   const catalogRoot = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
   const descriptors = new Map();
@@ -53,29 +55,55 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   if (updateSource) maintenanceSource = () => updateSource.read();
   const mixedService = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, historicalInventories, maintenanceSource, frictionEvidence, observeCheckout });
   const authoringRoots = { maintained: catalogRoot };
-  if (projectRoot) {
-    const staging = await mkdtemp(join(tmpdir(), 'aih-authoring-materials-'));
-    for (const inventory of mixedService.inventories.filter(entry => !Object.hasOwn(authoringRoots, entry.materialSource.input))) {
+  // Startup inventories are staged once, when the first project folder is known. Concurrent callers share the one run,
+  // and the roots are published only once every file is written; a failed run is retried by the next caller.
+  const stageAuthoringRoots = shared(async () => {
+    const staging = await mkdtemp(join(tmpdir(), 'aih-authoring-materials-')), staged = {};
+    for (const inventory of mixedService.inventories.filter(entry => !Object.hasOwn(authoringRoots, entry.materialSource.input) && !Object.hasOwn(staged, entry.materialSource.input))) {
       const input = inventory.materialSource.input;
       // Only host-selected startup inventories acquire execution bindings.
-      const directory = join(staging, `source-${Object.keys(authoringRoots).length}`);
-      authoringRoots[input] = directory;
+      const directory = join(staging, `source-${Object.keys(authoringRoots).length + Object.keys(staged).length}`);
       for (const material of inventory.materials) {
         const path = resolve(directory, material.path);
         if (!path.startsWith(directory + sep)) throw new Error('Material path escapes host staging.');
         await mkdir(dirname(path), { recursive: true }); await writeFile(path, material.bytes);
       }
+      staged[input] = directory;
     }
-  }
-  const host = projectRoot ? createHost({ projectRoot, materialRoots: authoringRoots, organizationSource,
+    Object.assign(authoringRoots, staged);
+  });
+  if (projectRoot) await stageAuthoringRoots();
+  const hostFor = project => project ? createExecutionHost({ projectRoot: project, materialRoots: authoringRoots, organizationSource,
     recipeMaterials: mixedService.inventories.flatMap(i => i.materials ?? []), controls }) : null;
+  let host = hostFor(projectRoot);
   // Client tokens exist only in the live page. No cookie, saved intent or imported
   // snapshot restores a client's inventory, material grants or prepared handles.
   const clients = new Map(), clientStages = new Set();
+  const clientHost = client => folder.project ? createExecutionHost({ projectRoot: folder.project, materialRoots: client.roots, organizationSource, recipeMaterials: client.recipeMaterials, controls }) : null;
+  // Session ids prepared for an earlier project folder, so applying one is refused by name. Bounded; older ones read as lost.
+  const retired = new Set();
+  const retire = old => { for (const id of old?.heldSessions() ?? []) { retired.add(id); if (retired.size > 1024) retired.delete(retired.values().next().value); } };
+  // The ordinary page's project folder. A switch replaces every execution host, discarding all prepared sessions;
+  // personal-folder grants and their staged material roots are kept, since they are about content, not the project.
+  const folder = createProjectFolder({ initial: projectRoot, beforeChange: stageAuthoringRoots, onChange: project => {
+    retire(legacyHost); retire(host);
+    legacyHost = createExecutionHost({ projectRoot: project, materialRoots, organizationSource, controls }); host = hostFor(project);
+    for (const client of clients.values()) {
+      for (const [input, root] of Object.entries(authoringRoots)) if (!Object.hasOwn(client.roots, input)) client.roots[input] = root;
+      if (client.recipeMaterials) { retire(client.host); client.host = clientHost(client); }
+    }
+  } });
+  // Called inside folder.run: the chosen folder is checked again right before Install or Remove uses it.
+  const folderMoved = async () => { const moved = await folder.verify(); return moved && { status: 'refused', diagnostics: [{ code: 'FOLDER_CHANGED', reason: 'folder-changed',
+    message: `The project folder cannot be used now: ${moved.reason} Nothing was written. Choose the folder again.` }] }; };
+  const folderChanged = () => ({ status: 'rejected', reason: 'folder-changed', diagnostics: [{ code: 'FOLDER_CHANGED', reason: 'folder-changed',
+    message: 'The project folder changed after this was checked, so it was discarded and nothing was written. Check the list and install again.' }] });
   const scanEvidence = createScanEvidenceHost({ sources: evidenceSources, packageRoot: catalogRoot, trust: reviewTrust, detectorIds: evidenceDetectorIds });
+  // Requests without a client token read the host's execution host when they use it, never a copy taken earlier.
+  const anonymous = { mixed: mixedService, get host() { return host; }, scanEvidence };
   async function clientFor(request) {
     const id = request.headers['x-aih-client'];
-    if (id === undefined) return { mixed: mixedService, host, scanEvidence };
+    if (id === undefined) return anonymous;
     if (typeof id !== 'string' || !/^[A-Za-z0-9-]{8,80}$/.test(id)) throw new Error('Invalid authoring client token.');
     const now = Date.now();
     for (const [key, value] of clients) if (now - value.usedAt > 3_600_000) {
@@ -90,7 +118,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
       client.ready = (async () => {
         client.mixed = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, historicalInventories, maintenanceSource, frictionEvidence, observeCheckout });
         client.recipeMaterials = client.mixed.inventories.flatMap(i => i.materials ?? []);
-        client.host = projectRoot ? createHost({ projectRoot, materialRoots: client.roots, organizationSource, recipeMaterials: client.recipeMaterials, controls }) : null;
+        client.host = clientHost(client);
       })();
     }
     const client = clients.get(id); await client.ready; client.usedAt = now; return client;
@@ -128,6 +156,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
         const query = new URL(request.url, origin).searchParams;
         return send(response, 200, intentService.catalog(query.get('inventory') ?? 'journey', query.get('stage') ?? 'current'));
       }
+      if (request.method === 'GET' && pathname === '/api/authoring-project') return send(response, 200, folder.read());
       if (request.method === 'GET' && pathname === '/api/authoring-catalog') {
         const client = await clientFor(request);
         return send(response, 200, { ...client.mixed.catalog(), executionAvailable: !!client.host,
@@ -146,8 +175,12 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
       let body;
       try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
       catch { return send(response, 400, { error: 'invalid-json' }); }
+      if (pathname === '/api/authoring-project') {
+        const result = await folder.choose(body.path);
+        return send(response, result.status === 'busy' ? 409 : 200, result);
+      }
       if (pathname.startsWith('/api/authoring-')) {
-        const client = await clientFor(request), mixedService = client.mixed, host = client.host;
+        const client = await clientFor(request), mixedService = client.mixed;
         const operation = pathname.slice('/api/authoring-'.length);
         if (operation === 'scan-evidence-detail') return send(response, 200, client.scanEvidence.detail(body.scanId));
         if (body.reviewEvidenceIds !== undefined) {
@@ -172,7 +205,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
           if (result.status !== 'ok') return send(response, 200, result);
           const inventory = result.value, input = inventory.materialSource.input;
           const grantId = randomUUID();
-          if (projectRoot && !client.grants.has(inventory.release.sha256)) {
+          if (!client.grants.has(inventory.release.sha256)) {
             const directory = await mkdtemp(join(tmpdir(), 'aih-personal-grant-'));
             clientStages.add(directory); client.stages.push(directory);
             for (const material of inventory.materials) {
@@ -183,7 +216,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
             client.roots[input] = directory;
             client.recipeMaterials.push(...inventory.materials);
             // A binding/context change discards prior approvals in this client.
-            client.host = createHost({ projectRoot, materialRoots: client.roots, organizationSource, recipeMaterials: client.recipeMaterials, controls });
+            client.host = clientHost(client);
           }
           mixedService.addInventory(inventory); client.grants.set(inventory.release.sha256, grantId);
           return send(response, 200, { status: 'ok', diagnostics: [], value: { input: inventory.input, grantId, itemIds: inventory.release.items.map(item => item.id),
@@ -192,20 +225,27 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
         // Host-configured source and controls only; the request body is ignored and needs no project root.
         if (operation === 'authority-source') return send(response, 200, await readAuthoritySource({ organizationSource, controls }));
         if (['authority', 'prepare', 'apply', 'managed', 'remove'].includes(operation)) {
-          if (!host) return send(response, 409, { status: 'unavailable', diagnostics: [{ code: 'HOST_UNAVAILABLE', message: 'No execution target configured by host.' }] });
-          const policyText = new TextDecoder().decode(Uint8Array.from(body.policyBytes ?? []));
-          if (operation === 'prepare' && historicalOnly.size) {
-            const checked = await mixedService.run('read', { policyBytes: body.policyBytes });
-            if (checked.status === 'ok' && checked.value.editing === 'available' && checked.value.intent.pins.some(pin => historicalOnly.has(pin.releaseSha256))) {
-              return send(response, 200, { status: 'refused', diagnostics: [{ code: 'HISTORICAL_SOURCE_UPDATE_REQUIRED', message: 'This policy includes historical Catalog content. Review and explicitly accept its source update before preparing against the current installed package. Your saved policy is unchanged.' }] });
+          if (!client.host) return send(response, 409, { status: 'unavailable', diagnostics: [{ code: 'HOST_UNAVAILABLE', message: 'No project folder is set. Choose one to install or remove.' }] });
+          if (operation === 'apply' && retired.has(body.sessionId)) return send(response, 200, folderChanged());
+          // Install and Remove hold the current folder until they finish; the host is read once they hold it.
+          const work = ['prepare', 'apply', 'remove'].includes(operation) ? folder.run : action => action();
+          return send(response, 200, await work(async () => {
+            const moved = operation === 'prepare' || operation === 'apply' || operation === 'remove' ? await folderMoved() : undefined;
+            if (moved) return moved;
+            const policyText = new TextDecoder().decode(Uint8Array.from(body.policyBytes ?? []));
+            if (operation === 'prepare' && historicalOnly.size) {
+              const checked = await mixedService.run('read', { policyBytes: body.policyBytes });
+              if (checked.status === 'ok' && checked.value.editing === 'available' && checked.value.intent.pins.some(pin => historicalOnly.has(pin.releaseSha256))) {
+                return { status: 'refused', diagnostics: [{ code: 'HISTORICAL_SOURCE_UPDATE_REQUIRED', message: 'This policy includes historical Catalog content. Review and explicitly accept its source update before preparing against the current installed package. Your saved policy is unchanged.' }] };
+              }
             }
-          }
-          const result = operation === 'authority' ? await host.inspectAuthority({ policyText })
-            : operation === 'prepare' ? await host.prepareSession({ policyText, resolutions: body.resolutions })
-            : operation === 'apply' ? await host.applyApproved({ sessionId: body.sessionId, reviewDigest: body.reviewDigest })
-            : operation === 'managed' ? await host.managedInventory()
-            : await host.prepareRemovalSession({ managementId: body.managementId, scope: body.scope, mode: body.mode });
-          return send(response, 200, result);
+            const host = client.host;
+            return operation === 'authority' ? await host.inspectAuthority({ policyText })
+              : operation === 'prepare' ? await host.prepareSession({ policyText, resolutions: body.resolutions })
+              : operation === 'apply' ? await host.applyApproved({ sessionId: body.sessionId, reviewDigest: body.reviewDigest })
+              : operation === 'managed' ? await host.managedInventory()
+              : await host.prepareRemovalSession({ managementId: body.managementId, scope: body.scope, mode: body.mode });
+          }));
         }
         const result = pathname === '/api/authoring-inspect-review' && reviewTrust
           ? await inspectAuthenticatedReviewEvidence({ evidenceBytes: Uint8Array.from((Number.isSafeInteger(body.evidenceIndex) ? body.reviewEvidence?.[body.evidenceIndex] : body.evidenceBytes) ?? []), inventory: mixedService.inventories.find(entry => entry.release.sha256 === body.target?.releaseSha256), itemId: body.target?.itemId, trust: reviewTrust })
@@ -237,9 +277,10 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
             return send(response, 400, { error: 'Imported recipe source is not the host-configured Catalog source.' });
           }
         }
-        return send(response, 200, await legacyHost.prepareSession({ policyText: body.policyText }));
+        return send(response, 200, await folder.run(async () => await folderMoved() ?? legacyHost.prepareSession({ policyText: body.policyText })));
       }
-      if (pathname === '/api/apply') return send(response, 200, await legacyHost.applyApproved({ sessionId: body.sessionId, reviewDigest: body.reviewDigest }));
+      if (pathname === '/api/apply') return send(response, 200, retired.has(body.sessionId) ? folderChanged()
+        : await folder.run(async () => await folderMoved() ?? legacyHost.applyApproved({ sessionId: body.sessionId, reviewDigest: body.reviewDigest })));
       return send(response, 404, { error: 'not-found' });
     } catch (error) { send(response, 400, { error: error.message }); }
   });
