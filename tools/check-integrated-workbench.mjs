@@ -49,7 +49,9 @@ try {
   const { runIntegratedBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/integrated-browser.mjs')));
   starting('runIntegratedBrowser'); await runIntegratedBrowser({ origin, output: join(consumerDir, 'prototype-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
   const { runRestoredSurfacesBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/restored-surfaces-browser.mjs')));
-  starting('runRestoredSurfacesBrowser'); await runRestoredSurfacesBrowser({ origin, output: join(consumerDir, 'restored-surfaces-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
+  for (const theme of ['dark', 'light']) {
+    starting(`runRestoredSurfacesBrowser ${theme}`); await runRestoredSurfacesBrowser({ origin, output: join(consumerDir, `restored-surfaces-evidence-${theme}`), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, theme });
+  }
   const { runSourceFactsBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/source-facts-browser.mjs')));
   starting('runSourceFactsBrowser'); await runSourceFactsBrowser({ origin, output: join(consumerDir, 'source-facts-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
   const { runUnresolvedDraftBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/unresolved-draft-browser.mjs')));
