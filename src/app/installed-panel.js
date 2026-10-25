@@ -4,12 +4,13 @@
 
 import { groupInstalled } from './installed-list.js';
 import { cancelRemoval, confirmRemoval, previewRemoval } from './installed-removal.js';
+import { compact } from './compact.js';
 
 export function createInstalledPanel({ client, el, button, onRemoved = () => {}, onInventory = () => {} }) {
-  const node = el('section', 'p-4 rounded border border-wb-border bg-surface-container-low space-y-3'); node.id = 'installed-panel'; node.hidden = true;
-  const title = el('h3', 'text-base font-semibold text-on-surface', 'Installed in this project');
+  const node = el('section', 'p-3 rounded border border-wb-border bg-surface-container-low space-y-2'); node.id = 'installed-panel'; node.hidden = true;
+  const title = el('h3', 'text-sm font-semibold text-on-surface', 'Installed in this project');
   const note = el('p', 'text-on-surface-variant'); note.id = 'installed-note'; note.setAttribute('role', 'status'); note.setAttribute('aria-live', 'polite');
-  const list = el('ul', 'space-y-3'); list.id = 'installed-list';
+  const list = el('ul', 'space-y-1'); list.id = 'installed-list';
   const message = el('p', 'text-on-surface'); message.id = 'installed-message'; message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
   node.append(title, note, list, message);
 
@@ -60,7 +61,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
         el('p', 'text-on-surface-variant', preview.note), actions);
       area.hidden = false;
     }
-    const remove = button('Remove', async () => {
+    const remove = compact(button('Remove', async () => {
       if (removing) return;
       // The setup's own mode, forwarded as the advanced Review removal does; Core refuses what it does not accept.
       const mode = policyDocument()?.mode;
@@ -72,7 +73,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
         message.textContent = preview.canConfirm ? 'Nothing has been removed yet. Check the files, then confirm.' : 'Remove cannot go ahead. Nothing was removed.';
       } catch (error) { message.textContent = `Remove did not start: ${error.message}`; }
       finally { removing = false; remove.disabled = false; remove.removeAttribute('aria-busy'); }
-    });
+    }), 'ml-auto');
     return { remove, area };
   }
 
@@ -82,19 +83,22 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
     note.textContent = view.partial ? 'This list may be incomplete: Core could not read everything installed in this project.' : '';
     if (!view.groups.length && !view.others.length) { note.textContent = [note.textContent, 'Nothing from Workbench is installed in this project.'].filter(Boolean).join(' '); return; }
     for (const group of view.groups) {
-      const row = el('li', 'p-2 rounded border border-wb-border space-y-1'); row.dataset.installedItem = group.itemId;
+      const row = el('li', 'space-y-1'); row.dataset.installedItem = group.itemId; row.title = group.managementId;
       const { remove, area } = removeControl(group.removes, group.kept);
       const head = el('div', 'flex flex-wrap items-center gap-2'); head.append(el('span', 'font-medium', group.name));
       if (group.needed.length) head.append(el('span', 'text-on-surface-variant', `+ ${group.needed.length} it needs: ${group.needed.map(item => item.name).join(', ')}`));
       head.append(remove); row.append(head, area); list.append(row);
     }
     if (view.others.length) {
-      const others = el('li', 'space-y-1'); others.append(el('p', 'font-medium text-on-surface-variant', 'Other installed items'));
+      // Named apart only when chosen items are listed above them.
+      const others = el('li', 'space-y-1'); if (view.groups.length) others.append(el('p', 'text-[11px] font-medium text-on-surface-variant', 'Other installed items'));
       for (const item of view.others) {
-        const row = el('div', 'p-2 rounded border border-wb-border space-y-1'); row.dataset.installedOther = item.managementId;
+        const row = el('div', 'space-y-1'); row.dataset.installedOther = item.managementId;
         const { remove, area } = removeControl([item]);
-        const head = el('div', 'flex flex-wrap items-center gap-2'); head.append(el('span', 'font-mono text-[11px] break-all', item.name));
-        if (!item.inSetup) head.append(el('span', 'text-on-surface-variant', 'not in your current setup'));
+        // The full installed id stays in the tooltip (#137).
+        const name = el('span', 'font-medium break-all', item.name); name.title = item.managementId;
+        const head = el('div', 'flex flex-wrap items-center gap-2'); head.append(name);
+        if (!item.inSetup) head.append(el('span', 'text-on-surface-variant', 'Not in your setup'));
         head.append(remove); row.append(head, area); others.append(row);
       }
       list.append(others);

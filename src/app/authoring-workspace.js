@@ -15,6 +15,7 @@ import { addItem, addedMessage, undoAdd } from './one-click-add.js';
 import { createAddedNotice } from './added-notice.js';
 import { createInstalledPanel } from './installed-panel.js';
 import { createProjectFolderRow } from './project-folder.js';
+import { createSetupChoices } from './setup-choices.js';
 import { rememberOpen } from './advanced.js';
 
 const buttonClass = 'px-3 py-1.5 rounded bg-surface-container text-on-surface border border-wb-border hover:bg-surface-container-high';
@@ -131,6 +132,16 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     try { await client.loadCatalog(); } finally { installPanel.recheck(); await installedPanel.refresh(); }
   } });
   void folderRow.refresh();
+  // Your choices (#137): one line per chosen item, its needs folded, and Remove from setup through the same
+  // remove-root proposal and acceptance as Undo after Add.
+  let installedFor;
+  const choicesView = createSetupChoices({ client, el, button, onRemove: async (root, name) => {
+    const outcome = await undoAdd(client, root).catch(thrown);
+    if (outcome.status === 'superseded') return;
+    diagnostics.textContent = JSON.stringify(outcome.result, null, 2);
+    if (outcome.status !== 'removed') return openReview(outcome, `${name} is still in your ${setupWord()}.`, `Removing ${name} is not done yet. Read what the check reported, then Update setup or Cancel.`);
+    showStatus(`Removed ${name} from your ${setupWord()}. Files already installed stay in the project folder until you Remove them under Installed in this project.`);
+  } });
   document.addEventListener('aih:policy-review-open', () => { void folderRow.refresh(); void installedPanel.refresh(); });
   review.after(button('Open policy choices and review', () => reviewPanel.open(), true));
   const pageContext = el('p', 'text-on-surface-variant'); choices.after(pageContext);
@@ -491,7 +502,11 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
       const exclusion = { originId: intent?.origins.find(origin => origin.kind === 'direct')?.id ?? intent?.origins[0]?.id, ...suggestion.to };
       accepted.append(button(`${suggestion.skipped ? 'Clear skip' : 'Skip optional'} ${suggestion.to.itemId}`, safe(async () => present(await client.propose({ type: suggestion.skipped ? 'unskip' : 'skip', exclusion })))));
     }
-    renderDraft(); reviewPanel.render(); installPanel.render(); for (const view of [updates, improvements, trials, workspace]) if (view.node.parentElement.open) view.render();
+    renderDraft(); reviewPanel.render(); choicesView.render(); installPanel.render();
+    // Whether an installed item is in your setup follows the setup, so the list is read again when the setup changes (#137).
+    const setupKey = JSON.stringify((client.draft?.roots ?? client.intent?.roots ?? []).map(root => [root.releaseSha256, root.itemId, root.scope]));
+    if (setupKey !== installedFor) { installedFor = setupKey; if (!reviewPanel.node.hidden) void installedPanel.refresh(); }
+    for (const view of [updates, improvements, trials, workspace]) if (view.node.parentElement.open) view.render();
     host.textContent = draft && !intent ? 'Prepare and Apply are unavailable: this draft is not an executable policy. Compile a resolved scope first; the compiled policy is then reviewed with the exact host effects.'
       : client.catalog?.executionAvailable
       ? 'Execution host connected. Prepare and Apply require target review; Enterprise also requires current organization authority.'
@@ -557,14 +572,17 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   const fileActions = el('details', 'policy-advanced rounded border border-wb-border p-3'); fileActions.id = 'policy-file-actions'; fileActions.append(el('summary', 'cursor-pointer font-medium', 'File actions: new, open and validate'), controls);
   // One Advanced section at the bottom of the drawer (owner decision 4). Placement only: every control keeps its id,
   // code, routes and saved formats. Evidence review joins it from evidence-review.js.
-  const advanced = el('details', 'setup-advanced rounded border border-wb-border p-3 space-y-3'); advanced.id = 'setup-advanced';
+  const advanced = el('details', 'setup-advanced rounded border border-wb-border px-3 py-1 space-y-3'); advanced.id = 'setup-advanced';
   advanced.append(el('summary', 'cursor-pointer font-medium', 'Advanced'));
   const policyActions = el('div', 'flex flex-wrap gap-2'); policyActions.append(check, save);
-  advanced.append(policyActions, fileActions);
+  // Chosen items (configuration, skips, an open draft and its compile) and the Organization baseline moved here
+  // from the default panel (#137). Placement only: every control keeps its id and behaviour.
+  advanced.append(currentChoices, policyActions, fileActions);
   for (const view of [updates, improvements, trials, workspace]) advanced.append(view.node.parentElement);
-  advanced.append(tools);
+  advanced.append(tools, organizationAuthor.node);
   rememberOpen(advanced, 'setup');
-  reviewPanel.node.append(folderRow.node, installPanel.node, installedPanel.node, currentChoices, organizationAuthor.node, advanced);
+  // The default panel (#137): Project folder, Your choices, Install, Installed in this project; then Advanced, closed.
+  reviewPanel.node.append(folderRow.node, choicesView.node, installPanel.node, installedPanel.node, advanced);
   organizationAuthor.node.hidden = true;
   const setRole = settings => {
     organizationAuthor.node.hidden = settings?.role !== 'admin';

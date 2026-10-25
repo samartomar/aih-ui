@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { installOutcome, projectName, relativeTarget, skillHints } from '../../src/app/install-panel.js';
+import { installOutcome, installSummary, projectName, relativeTarget, skillHints } from '../../src/app/install-panel.js';
 import { effectsFingerprint, installFiles } from '../../src/app/host-review.js';
 
 const project = 'C:\\Temp\\proof\\sample-js-app';
@@ -96,14 +96,18 @@ test('files in place are not called installed unless Core lists the whole setup 
   const unknown = installSummary(rows);
   assert.equal(unknown.heading, 'All 3 files are already in place');
   assert.match(unknown.message, /^All 3 files are already in place\./);
-  assert.doesNotMatch(`${unknown.heading} ${unknown.message}`, /installed|will be changed|Nothing has been installed yet/i);
+  assert.doesNotMatch(`${unknown.heading} ${unknown.message}`, /installed|will change|Nothing has been installed yet/i);
   assert.doesNotMatch(installSummary(rows, { managed: false }).message, /installed/i);
   assert.match(installSummary(rows, { managed: true }).message, /^Already installed: all 3 files are in place\./);
   const some = installSummary([placed('a'), { action: 'Add', path: 'b' }, { action: 'Add', path: 'c' }], { managed: true });
-  assert.equal(some.heading, '2 files will be changed (1 already in place)');
+  assert.equal(some.heading, '2 files will change (1 already in place)');
   assert.match(some.message, /Not fully installed: 1 of 3 files are already in place\./);
   const none = installSummary([{ action: 'Add', path: 'a' }]);
-  assert.equal(none.heading, '1 file will be changed');
+  assert.equal(none.heading, '1 file will change');
   assert.equal(none.message, 'Nothing has been installed yet.');
   assert.equal(installSummary([]).heading, 'Nothing to change');
+});
+
+test('the Install line counts the files that will change', () => {
+  assert.equal(installSummary([{ action: 'Add', path: 'a' }, { action: 'Add', path: 'b' }]).heading, '2 files will change');
 });

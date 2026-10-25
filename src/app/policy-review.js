@@ -16,14 +16,17 @@ export function createPolicyReview({ client, accept, proposed, status, setupHead
   const node = el('aside', 'policy-review-panel'); node.id = 'policy-review-panel'; node.hidden = true;
   node.setAttribute('aria-labelledby', 'policy-review-panel-title');
   const title = el('h2', 'font-semibold', 'Your setup'); title.id = 'policy-review-panel-title'; title.tabIndex = -1;
-  const context = el('p', 'text-on-surface-variant');
+  const context = el('p', 'text-on-surface-variant policy-review-context');
   const changes = el('div', 'space-y-2');
   const back = el('button', 'policy-review-back px-3 py-1.5 rounded border border-wb-border text-on-surface hover:bg-surface-container', 'Back to catalog'); back.type = 'button'; back.id = 'policy-back-to-catalog';
   back.title = 'Close Your setup and return to the catalog to choose more content. Escape also closes it.';
   const discard = el('button', 'px-3 py-1.5 rounded border border-wb-border', 'Cancel'); discard.type = 'button'; discard.id = 'policy-discard';
   const actions = el('div', 'flex flex-wrap gap-2'); actions.append(accept, discard);
   actions.id = 'policy-proposal-actions';
-  node.append(title, back, context, status, changes, proposed, actions);
+  // Title and Back to catalog share one sticky row (#137).
+  const head = el('div', 'policy-review-head flex items-start justify-between gap-2'), heading = el('div', 'min-w-0');
+  heading.append(title, context); head.append(heading, back);
+  node.append(head, status, changes, proposed, actions);
   document.body.append(node);
   const triggers = [trigger, entry].filter(Boolean);
   for (const control of triggers) { control.setAttribute('aria-controls', node.id); control.setAttribute('aria-expanded', 'false'); }
@@ -88,6 +91,8 @@ export function createPolicyReview({ client, accept, proposed, status, setupHead
     const next = client.candidate?.roots ?? client.candidate?.intent?.roots;
     context.textContent = `${client.draft ? 'Working draft' : 'Setup'} · ${current.length} chosen ${current.length === 1 ? 'item' : 'items'}${client.dirty ? ' · Changes not downloaded' : ''}${client.startupSource === 'recovery' ? ' · Recovered from this browser session' : ''}${client.recoveryAvailable === false ? ' · Session recovery unavailable: download before leaving.' : ''}`;
     changes.replaceChildren(); actions.hidden = !client.candidate; discard.disabled = !client.candidate; accept.disabled = !client.candidate;
+    // Only a change waiting to be added shows here; with none, Your choices below says what is in the setup (#137).
+    changes.hidden = !next;
     if (!next) { accept.textContent = 'Add to setup'; changes.append(el('p', '', 'Nothing is waiting to be added. Add content from the catalog.')); return; }
     const key = root => JSON.stringify([root.releaseSha256, root.itemId, root.scope]);
     const prior = new Map(current.map(root => [key(root), root])), after = new Map(next.map(root => [key(root), root]));

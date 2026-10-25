@@ -3,6 +3,7 @@
 // asks. Recent folders are a per-viewer convenience kept in this browser, never exported or sent anywhere else.
 
 import { projectName } from './install-panel.js';
+import { compact } from './compact.js';
 
 const RECENT_KEY = 'wb-recent-project-folders', RECENT_LIMIT = 5;
 // Windows paths compare without case and either slash; others exactly.
@@ -33,23 +34,25 @@ const storage = () => { try { return globalThis.localStorage; } catch { return u
  * so the page can discard what it prepared for the old one and check the new one.
  */
 export function createProjectFolderRow({ el, button, busy = () => false, onChanged = () => {} }) {
-  const node = el('section', 'p-3 rounded border border-wb-border bg-surface-container-low space-y-2'); node.id = 'project-folder'; node.hidden = true;
-  const head = el('div', 'flex flex-wrap items-baseline gap-2');
+  const node = el('section', 'px-3 py-2 rounded border border-wb-border bg-surface-container-low space-y-2'); node.id = 'project-folder'; node.hidden = true;
+  const head = el('div', 'flex flex-wrap items-center gap-2');
   const label = el('h3', 'text-sm font-semibold text-on-surface', 'Project folder');
   const name = el('span', 'font-medium text-on-surface'); name.id = 'project-folder-name';
   const change = button('Change folder', () => { form.hidden = !form.hidden; if (!form.hidden) { renderRecent(); input.focus(); } }); change.id = 'project-folder-change';
+  compact(change, 'ml-auto');
   head.append(label, name, change);
   const path = el('p', 'font-mono text-[11px] text-outline break-all'); path.id = 'project-folder-path';
   const note = el('p', 'text-on-surface-variant'); note.id = 'project-folder-note';
+  // The full path and note sit with the folder field (#137): the default panel shows the name and Change.
   const form = el('div', 'space-y-2'); form.hidden = true;
   const field = el('label', 'block text-on-surface-variant space-y-1', 'Full path of the folder');
   const input = el('input', 'block w-full bg-wb-input border border-wb-border rounded p-1 font-mono text-[11px]'); input.type = 'text'; input.id = 'project-folder-input'; input.spellcheck = false;
   field.append(input);
   const use = button('Use this folder', () => void choose(input.value.trim()), true); use.id = 'project-folder-use';
   const recent = el('div', 'flex flex-wrap items-center gap-2'); recent.id = 'project-folder-recent';
-  form.append(field, use, recent);
+  form.append(path, note, field, use, recent);
   const message = el('p', 'text-on-surface'); message.id = 'project-folder-message'; message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
-  node.append(head, path, note, form, message);
+  node.append(head, form, message);
   input.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); use.click(); } });
 
   let state, choosing = false;
@@ -60,7 +63,7 @@ export function createProjectFolderRow({ el, button, busy = () => false, onChang
   }
   function show(value) {
     state = value; const summary = folderSummary(state);
-    name.textContent = summary.name; path.textContent = summary.path; note.textContent = summary.note;
+    name.textContent = summary.name; name.title = [summary.path, summary.note].filter(Boolean).join(' · '); path.textContent = summary.path; note.textContent = summary.note;
     if (state?.project) saveRecent(storage(), rememberFolder(readRecent(storage()), state.project));
     if (!state?.project) form.hidden = false;
     renderRecent();
