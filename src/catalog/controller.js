@@ -26,9 +26,10 @@ import { createProjectBasics, projectFileEntries } from "./project-basics.js";
  * @param onReselectEntry  called when the selected card is activated again
  * @param onSummary        called with the preview summary once it has loaded
  * @param onAdd            called with the catalog item when its card's Add is used; resolves when the Add has settled
+ * @param onRemove         called with a chosen catalog item when its card's Remove is used (#144); resolves when it has settled
  * @param onOpenWorkspace  called when Project basics opens the workspace
  */
-export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () => {}, onSummary, subscribeSecurity, onAdd = async () => {}, onOpenWorkspace = () => {} }) {
+export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () => {}, onSummary, subscribeSecurity, onAdd = async () => {}, onRemove = async () => {}, onOpenWorkspace = () => {} }) {
   const elements = catalogElements();
   const state = {
     entries: [],
@@ -43,6 +44,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     // The organization's own name, when the user has saved one. It labels the
     // organization's additions row; nothing here reads or invents it.
     organizationName: null,
+    // entryId -> 'Adding…' or 'Removing…' while a card's Add or Remove is in flight (the grid is redrawn meanwhile).
+    busy: new Map(),
   };
   let restoredView = false;
 
@@ -115,13 +118,21 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       selectedId: state.selectedId,
       intent: authoring.intent,
       acceptedRoots: authoring.draft?.roots ?? authoring.intent?.roots ?? [],
-      acceptedLabel: authoring.draft ? "In draft" : "Added",
+      setupWord: authoring.draft ? "draft" : "setup",
       evidence: state.evidence,
       onReset: resetFilters,
+      busy: state.busy,
       onChoose: async (item, entryId) => {
         state.chosenId = entryId ?? null;
-        await onAdd(item);
+        state.busy.set(entryId, 'Adding…');
+        try { await onAdd(item); } finally { state.busy.delete(entryId); render(); }
         // A clean Add rebuilds the grid without opening the review; keyboard focus returns to the card.
+        if (document.activeElement === document.body || !document.activeElement?.isConnected) focusCard(state.chosenId);
+      },
+      onRemove: async (item, entryId) => {
+        state.chosenId = entryId ?? null;
+        state.busy.set(entryId, 'Removing…');
+        try { await onRemove(item); } finally { state.busy.delete(entryId); render(); }
         if (document.activeElement === document.body || !document.activeElement?.isConnected) focusCard(state.chosenId);
       },
     };

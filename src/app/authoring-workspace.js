@@ -11,7 +11,7 @@ import { authorityFromResult, changeSummary, compareRevision, reviewFreshness, r
 import { isJourneyEnvelope, importLimitError } from './authoring-client.js';
 import { dependencyRows } from './dependency-set.js';
 import { createInstallPanel } from './install-panel.js';
-import { addItem, addedMessage, undoAdd } from './one-click-add.js';
+import { addItem, addedMessage, chosenRoot, removeItem, undoAdd } from './one-click-add.js';
 import { createAddedNotice } from './added-notice.js';
 import { createInstalledPanel } from './installed-panel.js';
 import { createProjectFolderRow } from './project-folder.js';
@@ -47,7 +47,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   const controls = el('div', 'flex flex-wrap gap-2'); start.after(controls);
   const roots = el('div', 'space-y-2'); choices.after(roots);
   const proposal = el('div', 'space-y-2'); proposal.id = 'policy-proposal'; proposal.setAttribute('role', 'status'); review.after(proposal);
-  const status = el('p', 'text-on-surface-variant'); status.id = 'policy-status'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite'); controls.after(status);
+  const status = el('p', 'wb-status-area text-on-surface-variant'); status.id = 'policy-status'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite'); controls.after(status);
   const file = el('input'); file.type = 'file'; file.accept = 'application/json,.json'; file.id = 'policy-open'; file.setAttribute('aria-label', 'Open saved project policy');
   const accepted = el('div', 'space-y-2'); accepted.id = 'policy-roots'; roots.append(accepted);
   const accept = button('Add to setup', () => {
@@ -86,8 +86,14 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   jsonDownload.addEventListener('click', () => { if (!client.bytes.length || checking) return; download(client.bytes, client.draft && !client.compiled ? 'policy.original.json' : 'policy.json'); client.markDownloaded(); });
   const stage = document.getElementById('apply-staging-btn');
   stage.textContent = 'Add'; stage.title = 'Add this item and the items it needs to your setup.';
-  // The inspector's Add is the card's Add. With a draft open the client routes it through the draft edit.
-  stage.addEventListener('click', safe(async () => { if (!selectedItem || stage.dataset.busy) return; stage.dataset.busy = 'true'; stage.setAttribute('aria-busy', 'true'); stage.textContent = 'Adding…'; stage.disabled = true; try { await add(selectedItem); } finally { delete stage.dataset.busy; stage.removeAttribute('aria-busy'); render(); } }));
+  // The inspector's Add is the card's Add, and for a chosen item its Remove (#144). With a draft open the client routes
+  // either through the draft edit.
+  stage.addEventListener('click', safe(async () => {
+    if (!selectedItem || stage.dataset.busy) return;
+    const removing = Boolean(chosenRoot(client, selectedItem));
+    stage.dataset.busy = 'true'; stage.setAttribute('aria-busy', 'true'); stage.textContent = removing ? 'Removing…' : 'Adding…'; stage.disabled = true;
+    try { await (removing ? remove(selectedItem) : add(selectedItem)); } finally { delete stage.dataset.busy; stage.removeAttribute('aria-busy'); render(); }
+  }));
   const reset = document.getElementById('reset-item-btn'); reset.textContent = 'Take out of setup'; reset.title = 'Review removing this explicit project root; shared required dependencies remain owned by the composition validator.';
   reset.addEventListener('click', safe(async () => {
     const root = (client.draft?.roots ?? client.intent?.roots)?.find(root => root.itemId === selectedItem?.id && root.releaseSha256 === selectedItem?.root.releaseSha256);
@@ -439,6 +445,26 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     const text = `Undone: ${name} is no longer in your ${setupWord()}.`;
     showStatus(text); notice.show({ text });
   }
+  // Remove on a chosen item's card or the inspector (#144): the same removal as Remove from setup, confirmed with Undo,
+  // which adds the same root back through the one-click Add.
+  async function remove(item) {
+    const name = item.label ?? item.id;
+    const outcome = await removeItem(client, item).catch(thrown);
+    if (outcome.status === 'superseded') return;
+    diagnostics.textContent = JSON.stringify(outcome.result, null, 2);
+    if (outcome.status !== 'removed') return openReview(outcome, `${name} is still in your ${setupWord()}.`, `Removing ${name} is not done yet. Read what the check reported, then Update setup or Cancel.`);
+    const text = `Removed ${name} from your ${setupWord()}.`;
+    showStatus(text);
+    notice.show({ text, onUndo: () => addBack(name, { ...item, root: { ...item.root, configuration: outcome.root.configuration ?? {} } }) });
+  }
+  async function addBack(name, item) {
+    const outcome = await addItem(client, item).catch(thrown);
+    if (outcome.status === 'superseded') return;
+    diagnostics.textContent = JSON.stringify(outcome.result, null, 2);
+    if (outcome.status !== 'added') return openReview(outcome, `Undo did not change your ${setupWord()}: ${name} was refused.`, `Undo for ${name} is not done yet. Read what the check reported, then Add to setup or Cancel.`);
+    const text = `Undone: ${name} is back in your ${setupWord()}.`;
+    showStatus(text); notice.show({ text });
+  }
   function present(result) {
     diagnostics.textContent = JSON.stringify(result, null, 2);
     if (result.status !== 'ok') { showStatus(failure(result)); return; }
@@ -476,8 +502,9 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     copy.title = `Copy ${jsonKind.toLowerCase()}`; jsonDownload.title = `Download ${jsonKind.toLowerCase()}`;
     jsonDownload.textContent = draft && !client.compiled ? 'Download original policy' : 'Download policy';
     const selectedChosen = current.some(root => root.itemId === selectedItem?.id && root.releaseSha256 === selectedItem?.root.releaseSha256);
-    if (!stage.dataset.busy) stage.textContent = selectedChosen ? (draft ? 'In draft' : 'Added') : 'Add';
-    stage.disabled = Boolean(stage.dataset.busy) || !selectedItem || (!intent && !draft) || selectedChosen; reset.disabled = !selectedChosen;
+    if (!stage.dataset.busy) stage.textContent = selectedChosen ? 'Remove' : 'Add';
+    stage.title = selectedChosen ? `Take this item out of your ${draft ? 'draft' : 'setup'}. Undo puts it back.` : 'Add this item and the items it needs to your setup.';
+    stage.disabled = Boolean(stage.dataset.busy) || !selectedItem || (!intent && !draft); reset.disabled = !selectedChosen;
     for (const action of [stage, reset]) { action.setAttribute('aria-disabled', String(action.disabled)); action.classList.toggle('opacity-50', action.disabled); action.classList.toggle('cursor-not-allowed', action.disabled); }
     const persistentContext = document.getElementById('policy-current-context');
     const contextSummary = document.getElementById('policy-context-summary');
@@ -601,5 +628,5 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     const summary = disclosure.querySelector(':scope > summary');
     summary.scrollIntoView({ block: 'start' }); summary.focus({ preventScroll: true });
   }
-  return { present, add, openWorkspace, setSettings: setRole, select(entry) { selectedItem = entry?.authoringItem; render(); }, setTargets };
+  return { present, add, remove, openWorkspace, setSettings: setRole, select(entry) { selectedItem = entry?.authoringItem; render(); }, setTargets };
 }

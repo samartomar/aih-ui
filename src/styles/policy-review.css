@@ -9,6 +9,8 @@
 .policy-review-context, .policy-review-panel .wb-install-hook-note, .policy-review-panel .setup-choice-needs { font-size: .75rem; line-height: 1.35; }
 /* An empty status line keeps its place for announcements but adds no gap. */
 .policy-review-panel section > [role=status]:empty { margin-top: 0; }
+/* A long status message stays in a fixed-height area that scrolls, so it never pushes Your setup past one screen (#144). */
+.policy-review-panel .wb-status-area { max-height: 4.1em; overflow-y: auto; overflow-wrap: anywhere; }
 /* Install's file count opens the file list on its own line. */
 .policy-review-panel .install-details[open] { flex-basis: 100%; }
 .policy-review-back { display: block; flex-shrink: 0; width: max-content; background: var(--color-panel); box-shadow: var(--shadow-xs); }

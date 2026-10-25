@@ -70,3 +70,19 @@ export async function undoAdd(client, chosen) {
   client.accept();
   return { status: 'removed', result };
 }
+
+/** The root in the setup (or the open draft) for a catalog item, by its id and release, or undefined when it is not chosen. */
+export function chosenRoot(client, item) {
+  return (client.draft?.roots ?? client.intent?.roots ?? []).find(root => root.itemId === item?.id && root.releaseSha256 === item?.root?.releaseSha256);
+}
+
+/**
+ * Remove on a chosen item's card (#144): the same remove-root proposal and acceptance as Undo after Add and the panel's
+ * Remove from setup. A removal is `removed` with the root taken out (its configuration kept, so Undo can add it back).
+ */
+export async function removeItem(client, item) {
+  const root = chosenRoot(client, item);
+  if (!root) return { status: 'refused', result: { status: 'refused', diagnostics: [{ code: 'INPUT_INVALID', message: `${item?.id} is no longer in your setup.` }] } };
+  const outcome = await undoAdd(client, root);
+  return outcome.status === 'removed' ? { ...outcome, root } : outcome;
+}
