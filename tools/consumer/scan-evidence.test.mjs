@@ -181,6 +181,10 @@ test('unsupported report schema remains explicit in source diagnostics without a
     const path=join(root,'report.json');await writeFile(path,JSON.stringify({schema:'urn:aihq:scan:report:9.0.0'}));
     const host=createScanEvidenceHost({sources:[{id:'configured',path,format:'report'}]});
     const result=await host.check(await scanFixture());assert.equal(result.status,'selected');
-    const diagnostic=result.checks.find(value=>value.sourceId==='configured').diagnostics[0];assert.equal(diagnostic.code,'unsupported-report');assert.match(diagnostic.detail,/9\.0\.0/);assert.ok(!diagnostic.detail.includes(root));
+    const check=result.checks.find(value=>value.sourceId==='configured');assert.equal(check.status,'failed');
+    const diagnostic=check.diagnostics[0];assert.equal(diagnostic.code,'unsupported-format');
+    assert.equal(diagnostic.path,'$.schema');assert.equal(diagnostic.encountered,'urn:aihq:scan:report:9.0.0');
+    assert.deepEqual(diagnostic.supported,['urn:aihq:scan:report:1.0.0','urn:aihq:scan:report:2.0.0']);
+    assert.match(diagnostic.detail,/Unsupported format/);assert.ok(!JSON.stringify(check).includes(root));
   } finally {await rm(root,{recursive:true});}
 });
