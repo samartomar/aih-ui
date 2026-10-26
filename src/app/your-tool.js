@@ -50,7 +50,11 @@ export function createYourTool({ elements, onChange = () => {} }) {
     if (inspection === undefined) return { key: "checking", words: "Checking this machine with Core's inspection…" };
     if (inspection.state !== "inspected") return { key: "inspection-failed", words: `Core's inspection didn't run: ${inspection.reason ?? "no reason was given"}.` };
     const found = inspection.tools.find((row) => row.id === tool.id);
-    if (!found) return { key: "not-reported", words: `Core's inspection doesn't report ${tool.label ?? tool.id}.` };
+    if (!found) {
+      // A cancelled or invalid inspection reports no tools at all; say so on the row, not only in the note.
+      const ran = !inspection.status || ["complete", "incomplete"].includes(inspection.status) ? "" : ` (the inspection was ${inspection.status})`;
+      return { key: "not-reported", words: `Core's inspection doesn't report ${tool.label ?? tool.id}${ran}.` };
+    }
     const shown = iconFor("tool", found.state);
     const named = found.label && found.label !== tool.label ? ` (as ${found.label})` : "";
     const details = inspection.observations.filter((row) => row.target === tool.id && row.detail).map((row) => row.detail);
@@ -59,7 +63,8 @@ export function createYourTool({ elements, onChange = () => {} }) {
 
   function refusalWords(tool) {
     const reason = tool.refusal?.reason;
-    return reason ? `Can't be chosen: Core hasn't observed it working (${reason}).` : "Can't be chosen: Core's listTools() does not offer it, and Core gave no reason.";
+    if (reason === "tool-not-observed") return `Can't be chosen: Core hasn't observed it working (${reason}).`;
+    return reason ? `Can't be chosen: Core refuses it (${reason}).` : "Can't be chosen: Core's listTools() does not offer it, and Core gave no reason.";
   }
 
   function choose(tool) {
@@ -153,6 +158,16 @@ export function createYourTool({ elements, onChange = () => {} }) {
   }
 
   elements.yourToolTrigger.addEventListener("click", () => setOpen(!isOpen()));
+  // Arrow keys move between the tools, as in a radio group; Tab still reaches each one, greyed ones included.
+  elements.yourToolList.addEventListener("keydown", (event) => {
+    const step = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[event.key];
+    if (!step) return;
+    const buttons = [...elements.yourToolList.querySelectorAll("button")];
+    const at = buttons.indexOf(document.activeElement);
+    if (at < 0) return;
+    event.preventDefault();
+    buttons[(at + step + buttons.length) % buttons.length].focus();
+  });
   document.addEventListener("click", (event) => {
     if (!isOpen()) return;
     if (elements.yourToolPop.contains(event.target) || elements.yourToolTrigger.contains(event.target)) return;

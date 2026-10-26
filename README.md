@@ -692,6 +692,10 @@ the host through public exports (`tools/service/tools.mjs`, `GET /api/tools` and
   (`network: 'off'`), matched by registry id, in the same words as the client
   checks below. A tool the inspection does not report says so. Finding a tool is
   never shown as proof that it loads content, and none of these icons is green.
+  Opening the page runs that inspection once per host: it starts the local
+  version commands Core declares, and nothing else. Its answer is kept until the
+  host restarts, so a repair made from Check this machine shows here after a
+  restart.
 
 The page keeps no tool names, so a reinstalled Core changes the list with no UI
 edit. The choice is a per-viewer convenience: only its tool id is kept in this
@@ -709,6 +713,11 @@ fact. They are chosen in first-run setup and changed from Settings (**Edit AI
 tools**), and they are not Your tool. The earlier header **AI tools** chip that
 also edited them is replaced by Your tool; its module stays until the dormant-code
 retirement.
+
+The catalog's **Catalog target** filter -- the client names a catalog declares,
+which the Support filter reads -- works as before from the catalog's Advanced
+section, so the default page shows one tool control. Nothing yet reads Your tool
+to choose cards; that waits for the cards to read tool fit.
 
 The strip also carries the start-up contract-check message, as information
 that blocks nothing. At start-up the host runs the installed Core's

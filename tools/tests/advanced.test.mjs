@@ -58,13 +58,13 @@ function ancestry(html) {
 const page = ancestry(readFileSync(new URL('../../src/index.html', import.meta.url), 'utf8'));
 const inside = (id, container) => { assert.ok(page.has(id), `${id} is on the page`); return page.get(id).includes(container); };
 
-test('the catalog Advanced section holds the kind tiles, the catalog scopes, the Policy workspace links and Scan Review', () => {
-  for (const id of ['framework-matrix-tabs', 'catalog-scopes-section', 'rail-scope-list', 'nav-policy', 'catalog-open-policy-workspace', 'nav-scan-review'])
+test('the catalog Advanced section holds the kind tiles, the catalog scopes, the Policy workspace links, Scan Review and the catalog target', () => {
+  for (const id of ['framework-matrix-tabs', 'catalog-scopes-section', 'rail-scope-list', 'nav-policy', 'catalog-open-policy-workspace', 'nav-scan-review', 'browse-target'])
     assert.ok(inside(id, 'catalog-advanced'), `${id} is inside the catalog Advanced section`);
 });
 
-test('the default catalog keeps the search, the kind pills, the tool line and the cards outside Advanced', () => {
-  for (const id of ['catalog-search', 'kind-filters', 'browse-target', 'cards-grid', 'review-filters', 'your-setup', 'your-tool-trigger', 'theme-toggle-btn', 'nav-sources'])
+test('the default catalog keeps the search, the kind pills, Your tool and the cards outside Advanced', () => {
+  for (const id of ['catalog-search', 'kind-filters', 'cards-grid', 'review-filters', 'your-setup', 'your-tool-trigger', 'theme-toggle-btn', 'nav-sources'])
     assert.equal(inside(id, 'catalog-advanced'), false, `${id} stays on the default screen`);
 });
 

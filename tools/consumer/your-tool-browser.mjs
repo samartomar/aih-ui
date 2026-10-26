@@ -9,7 +9,8 @@ import { listTools } from '@aihq/core/harness';
 // other tool stays listed and greyed with Core's refusal reason. Each ready icon is the tool's state in the host's Core
 // inspect answer. The choice survives a restart of the host, there is one tool control, every row's tooltip is
 // reachable by keyboard focus and touch, and its words meet 4.5:1 in the theme shown. The empty, loading, unavailable
-// and failed states come from fixtures (fixtures/your-tool) served in place of the host's answer.
+// and failed states, and the icons' checking and failed states, come from fixtures (fixtures/your-tool) served in place of
+// the host's answers.
 const here = dirname(fileURLToPath(import.meta.url));
 const STATES = join(here, 'fixtures', 'your-tool');
 const KEY = 'wb-your-tool';
@@ -18,10 +19,11 @@ const luminance = ([r, g, b]) => { const [x, y, z] = [r, g, b].map(v => v / 255)
 const contrast = (a, b) => { const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 const rgb = value => { const found = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(value.trim()); assert.ok(found, `a colour: ${value}`); return found.slice(1).map(Number); };
 
-async function openPage(context, origin, theme, { route } = {}) {
+async function openPage(context, origin, theme, { route, inspectionRoute } = {}) {
   const page = await context.newPage();
   page.setDefaultTimeout(30_000);
   if (route) await page.route('**/api/tools', route);
+  if (inspectionRoute) await page.route('**/api/tool-inspection', inspectionRoute);
   await page.goto(origin + '/');
   await page.locator('#browse-family option[value="Extensions"]').waitFor({ state: 'attached' });
   if (await page.locator('#setup-dialog').isVisible()) {
@@ -67,8 +69,13 @@ export async function runYourToolBrowser({ origin, output, playwrightModule, the
     page.on('pageerror', error => errors.push(error.message));
     const inspection = await (await page.request.get(origin + '/api/tool-inspection')).json();
     assert.equal(inspection.state, 'inspected', JSON.stringify(inspection).slice(0, 300));
-    assert.equal(await page.locator('#your-tool-trigger, #ai-tools-trigger').count(), 1, 'There is one tool control on the page.');
-    assert.equal(await page.locator('[role="radiogroup"]').count(), 1, 'There is one tool list on the page.');
+    // One tool control: no other visible choice on the default page names a registry tool by id, alias or label.
+    const names = all.flatMap(tool => [tool.id, tool.label, ...tool.aliases]);
+    const elsewhere = await page.evaluate(names => [...document.querySelectorAll('option, input[type="checkbox"], input[type="radio"], [role="radio"], [role="option"], [role="menuitemradio"]')]
+      .filter(node => !node.closest('#your-tool-list') && (node.closest('select') ?? node).checkVisibility({ visibilityProperty: true }))
+      .filter(node => [node.value, node.dataset?.target, node.textContent?.trim()].some(value => value && names.includes(value)))
+      .map(node => `${node.outerHTML.slice(0, 80)} in #${node.closest('[id]')?.id ?? '?'}`), names);
+    assert.deepEqual(elsewhere, [], 'There is one tool control on the page.');
     await open(page);
     // The icons settle once the inspection has answered.
     await page.locator('#your-tool-list [data-icon="tool:checking"]').first().waitFor({ state: 'detached' });
@@ -110,6 +117,12 @@ export async function runYourToolBrowser({ origin, output, playwrightModule, the
     await page.keyboard.press('Enter');
     await page.locator('#your-tool-pop').waitFor();
     assert.equal(await page.locator(`#your-tool-list > button[data-tool="${first.id}"]`).evaluate(node => node === document.activeElement), true, 'Opening focuses Your tool.');
+    // Arrow keys move between tools, as in a radio group.
+    const at = all.findIndex(tool => tool.id === first.id);
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await page.evaluate(() => document.activeElement?.dataset.tool), all[(at + 1) % all.length].id, 'ArrowDown moves to the next tool.');
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await page.evaluate(() => document.activeElement?.dataset.tool), first.id, 'ArrowUp moves back.');
     const greyed = page.locator(`#your-tool-list > button[data-tool="${unobserved.id}"]`);
     for (let step = 0; step < all.length && !(await greyed.evaluate(node => node === document.activeElement)); step++) await page.keyboard.press('Tab');
     assert.equal(await greyed.evaluate(node => node === document.activeElement), true, 'The keyboard reaches a greyed tool.');
@@ -174,6 +187,29 @@ export async function runYourToolBrowser({ origin, output, playwrightModule, the
       await expect(page, state, name, words);
       await stateContext.close();
     }
+    // The ready icons' own states: checking while Core's inspection is held, failed from a fixture.
+    let releaseInspection;
+    const inspectionHeld = new Promise(resolve => { releaseInspection = resolve; });
+    const checkingContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    page = await openPage(checkingContext, origin, theme, { inspectionRoute: async route => { await inspectionHeld; await route.continue(); } });
+    await page.locator('#your-tool-trigger[data-your-tool="listed"]').waitFor();
+    await open(page);
+    assert.equal(await page.locator('#your-tool-list [data-icon="tool:checking"]').count(), all.length, 'Every icon reads checking while the inspection runs.');
+    assert.match(await page.locator('#your-tool-note').innerText(), /Checking this machine with Core's inspection…/);
+    await page.screenshot({ path: join(output, `06-your-tool-icons-checking-${theme}.png`) });
+    releaseInspection();
+    await page.locator('#your-tool-list [data-icon="tool:checking"]').first().waitFor({ state: 'detached' });
+    await checkingContext.close();
+    const failedContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    page = await openPage(failedContext, origin, theme, { inspectionRoute: fixture('inspection-failed') });
+    page.on('pageerror', error => errors.push(error.message));
+    await open(page);
+    await page.locator('#your-tool-list [data-icon="tool:inspection-failed"]').first().waitFor();
+    assert.equal(await page.locator('#your-tool-list [data-icon="tool:inspection-failed"]').count(), all.length, 'Every icon reads failed when the inspection failed.');
+    assert.match(await rows(page).first().getAttribute('data-tooltip'), /Core's inspection didn't run: core service did not answer within 120s\./);
+    assert.equal(await page.locator('#your-tool-list > button:not([aria-disabled])').count(), observed.size, 'A failed inspection leaves the observed tools choosable.');
+    await page.screenshot({ path: join(output, `06-your-tool-icons-failed-${theme}.png`) });
+    await failedContext.close();
     assert.deepEqual(errors, [], 'The page raised no errors.');
   } finally { await browser.close(); }
 }

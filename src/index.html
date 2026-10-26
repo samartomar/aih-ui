@@ -185,6 +185,12 @@
      Placement only: each keeps its id, code and behaviour. Closed for a new viewer; app/advanced.js remembers it. -->
 <details id="catalog-advanced" class="catalog-advanced"><summary class="cursor-pointer text-on-surface-variant hover:text-on-surface font-medium">Advanced</summary>
 <div class="catalog-advanced-body space-y-3 pt-2">
+<!-- The catalog's declared target clients, in the Catalog's own names; the Support filter reads it. Your tool in the
+     header is the one tool control, so this catalog filter is kept here, working as before, until cards read tool fit. -->
+<div class="flex flex-wrap items-center gap-2 text-[11px]">
+<label>Catalog target <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-target" aria-label="Browse target"></select></label>
+<span class="text-on-surface-variant">The client names this catalog declares, used by the Support filter. Not Your tool.</span>
+</div>
 <nav class="flex flex-wrap items-center gap-2" aria-label="Advanced views">
 <button class="inline-flex items-center gap-2 px-2 py-1 rounded border border-wb-border text-on-surface-variant hover:bg-surface-container hover:text-on-surface" id="nav-policy" type="button" aria-controls="policy-workspace" data-tip="Policy workspace: the engine view of the policy behind your setup.">
 <span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[14px] text-outline" aria-hidden="true">policy</span><span>Policy workspace</span></span>
@@ -253,7 +259,6 @@
 <div id="category-context" aria-live="polite"></div>
 <details id="catalog-filter-disclosure" open><summary>Catalog filters and personal content</summary><div class="flex flex-wrap gap-2 mb-3 text-[11px]" id="authoring-browse">
 <label>Family <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-family" aria-label="Content family"></select></label>
-<label>Target <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-target" aria-label="Browse target"></select></label>
 <label>Support <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-support" aria-label="Target support"><option value="supported">With supported facts</option><option value="all">Full inventory</option><option value="unsupported">With unsupported facts</option><option value="unknown">With unknown facts</option></select></label>
 <label class="cursor-pointer rounded border border-wb-border p-1">Choose personal folder <input id="personal-folder" type="file" webkitdirectory multiple aria-label="Choose personal folder"></label>
 <label>Folder binding <select class="bg-wb-input border border-wb-border rounded p-1" id="personal-binding" aria-label="Personal folder binding"><option value="">Add new personal content</option></select></label>
