@@ -16,6 +16,8 @@ export function checkRealHome(layout, realHome) {
   try { record = JSON.parse(readFileSync(layout.realHomeGuard, 'utf8')); }
   catch { return { checked: false, unchanged: null, counts: null, message: 'No real-home snapshot was recorded, so the real account home was not checked.' }; }
   if (!Array.isArray(record?.snapshot?.entries)) throw refusal('CANDIDATE_GUARD_INVALID', `${layout.realHomeGuard} is not a real-home snapshot.`);
+  if (record.descriptor === undefined) return { checked: false, unchanged: null, counts: null,
+    message: "This older snapshot has no published Core location descriptor, so the real account home was not checked. Start the candidate again to record a new baseline." };
   const before = { ...record.snapshot, entries: new Map(record.snapshot.entries) };
   const counts = compareCoreHome(before, snapshotCoreHome(realHome ?? record.home, record.descriptor));
   return { checked: true, unchanged: counts.unchanged, counts, message: counts.unchanged ? 'unchanged' : describeCoreHomeChange(counts) };

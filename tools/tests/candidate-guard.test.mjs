@@ -54,6 +54,13 @@ test('the snapshot round-trips through its file, including a home with no Core d
   assert.equal(file.home, home);
   assert.ok(Array.isArray(file.snapshot.entries) && file.snapshot.entries.length >= 1);
   assert.equal(checkRealHome(layout).unchanged, true, 'the recorded home is used when none is named');
+  // A retained pre-location snapshot stays readable and is never silently replaced.
+  const legacy = { ...file }; delete legacy.descriptor;
+  const legacyBytes = JSON.stringify(legacy); writeFileSync(layout.realHomeGuard, legacyBytes);
+  const unchecked = checkRealHome(layout, home);
+  assert.equal(unchecked.checked, false); assert.equal(unchecked.unchanged, null);
+  assert.match(unchecked.message, /older snapshot.*not checked/);
+  assert.equal(readFileSync(layout.realHomeGuard, 'utf8'), legacyBytes);
   rmSync(join(home, 'fixture-state'), { recursive: true });
   recordRealHome(layout, home, descriptor);
   assert.equal(checkRealHome(layout, home).unchanged, true);
