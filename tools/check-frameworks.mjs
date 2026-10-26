@@ -1,5 +1,7 @@
 // Focused running-page acceptance using installed packed public packages. No module-level assertions.
 import { readFile, writeFile, mkdir, copyFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { homeEnvironment } from './consumer/home-environment.mjs';
 import { createHash } from 'node:crypto';
 import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -11,6 +13,13 @@ import { coreTargetsSummary } from './server/core-targets-summary.mjs';
 import { callService } from './server/service-client.mjs';
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..'), consumerDir = resolve(process.argv[2]), output = resolve(process.argv[3]);
 const artifacts = JSON.parse(await readFile(process.argv[4], 'utf8'));
+const account = homedir();
+const browserCache = process.platform === 'win32' ? (process.env.LOCALAPPDATA ?? join(account, 'AppData', 'Local')) : process.platform === 'darwin' ? join(account, 'Library', 'Caches') : (process.env.XDG_CACHE_HOME ?? join(account, '.cache'));
+process.env.PLAYWRIGHT_BROWSERS_PATH ??= join(browserCache, 'ms-playwright');
+const temporary = join(output, 'tmp'); await mkdir(temporary, { recursive: true });
+Object.assign(process.env, homeEnvironment(join(output, 'home')), { TMPDIR: temporary, TMP: temporary, TEMP: temporary });
+// Browsing and saved intent only: this proof does not acquire an execution target.
+delete process.env.AIH_CONSUMER_PROJECT;
 for (const artifact of Object.values(artifacts)) if (createHash('sha256').update(await readFile(artifact.tarball)).digest('hex') !== artifact.sha256) throw new Error('Pinned package archive differs from its recorded identity.');
 const runDir = join(output, 'page'); await buildCss(repo);
 for (const [assets, destination] of [[pageAssets(repo), runDir], [serviceAssets(repo), consumerDir]]) for (const asset of assets) {

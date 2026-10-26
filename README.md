@@ -86,7 +86,8 @@ per-item platform observations, not successful execution; the tooltip says
 guessed zero. First-step guidance points to tool selection and framework browsing.
 
 `node tools/check-frameworks.mjs <installed-consumer> <new-output-directory> <artifact-manifest.json>`
-runs the focused page proof (append case names for affected-only checks; `restart`
+runs the focused page proof in a disposable account home and temporary directory,
+without an execution target (append case names for affected-only checks; `restart`
 uses saved policies from `ready` in the same output directory). The manifest maps `core`, `catalog` and `scan` to
 `{ tarball, sha256, commit }` from pinned packed-public inputs. The proof uses real
 prepared content plus separate public release/index fixtures; its synthetic index
