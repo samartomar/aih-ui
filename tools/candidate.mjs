@@ -20,7 +20,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertCandidateDir, claimDataDir, ensureLayout, resetDataDir } from './candidate/data-dir.mjs';
-import { checkRealHome, recordRealHome } from './candidate/guard.mjs';
+import { checkRealHome } from './candidate/guard.mjs';
 import { DEFAULT_PORT, candidateLayout } from './candidate/layout.mjs';
 import { absoluteManifest, candidateIdentity, readManifest, verifyManifest } from './candidate/manifest.mjs';
 import { assertPortAvailable } from './candidate/port.mjs';
@@ -89,7 +89,6 @@ async function start({ manifest, data, port, smoke }) {
   claimDataDir(layout.root);
   ensureLayout(layout);
   if (manifest) writeFileSync(layout.manifest, `${JSON.stringify(absoluteManifest(read), null, 2)}\n`);
-  recordRealHome(layout, homedir());
   // The candidate is reproducible from its manifest: no AIH_* host setting from this shell reaches it, Core's records land in its own home and its temporary files in its own directory.
   const pid = spawnServer({ layout, port, env: serverEnvironment(layout) });
   out(`starting the candidate (process ${pid}); installing the packages can take a few minutes. Stop it at any time with: node tools/candidate.mjs stop`);

@@ -8,9 +8,9 @@ import { checkProjectFolder, createProjectFolder, shared } from '../consumer/pro
 async function layout() {
   const base = await realpath(await mkdtemp(join(tmpdir(), 'project-folder-')));
   const home = join(base, 'home'), envHome = join(base, 'env-home'), project = join(home, 'code', 'app');
-  for (const directory of [project, envHome, join(home, '.aih', 'core')]) await mkdir(directory, { recursive: true });
+  for (const directory of [project, envHome, join(home, 'fixture-state', 'core-records')]) await mkdir(directory, { recursive: true });
   await writeFile(join(base, 'notes.txt'), 'x');
-  return { base, home, envHome, project, options: { home, env: { HOME: envHome } }, done: () => rm(base, { recursive: true, force: true }) };
+  return { base, home, envHome, project, options: { home, env: { HOME: envHome }, coreState: { resolveStateLocation: () => ({ root: join(home, 'fixture-state', 'core-records') }), stateLocation: { root: { base: 'userHome', segments: ['fixture-state', 'core-records'] } } } }, done: () => rm(base, { recursive: true, force: true }) };
 }
 
 test('accepts an existing folder and names its real path', async () => {
@@ -32,8 +32,8 @@ test('refuses each unsafe path with a plain reason', async () => {
     assert.match(await reason(parse(fixture.base).root), /whole drive/);
     assert.match(await reason(fixture.home), /home folder/);
     assert.match(await reason(fixture.envHome), /home folder/);
-    assert.match(await reason(join(fixture.home, '.aih')), /Core keeps its own records/);
-    assert.match(await reason(join(fixture.home, '.aih', 'core')), /Core keeps its own records/);
+    assert.match(await reason(join(fixture.home, 'fixture-state', 'core-records')), /Core keeps its own records/);
+    assert.equal((await checkProjectFolder(join(fixture.home, 'fixture-state'), fixture.options)).status, 'ok', 'The parent of the published root is not itself Core state.');
     for (const path of ['', 'code/app', fixture.home]) assert.equal((await checkProjectFolder(path, fixture.options)).status, 'refused');
   } finally { await fixture.done(); }
 });
@@ -41,10 +41,10 @@ test('refuses each unsafe path with a plain reason', async () => {
 test('refuses the account\'s own home even when the environment names a different one', async () => {
   const fixture = await layout(), account = join(fixture.base, 'account');
   try {
-    await mkdir(join(account, '.aih'), { recursive: true });
+    await mkdir(join(account, 'fixture-state', 'core-records'), { recursive: true });
     const options = { ...fixture.options, accountHome: account };
     assert.match((await checkProjectFolder(account, options)).reason, /home folder/);
-    assert.match((await checkProjectFolder(join(account, '.aih'), options)).reason, /Core keeps its own records/);
+    assert.match((await checkProjectFolder(join(account, 'fixture-state', 'core-records'), options)).reason, /Core keeps its own records/);
     assert.equal((await checkProjectFolder(fixture.project, options)).status, 'ok');
   } finally { await fixture.done(); }
 });

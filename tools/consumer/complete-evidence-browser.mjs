@@ -1,3 +1,4 @@
+import { chooseCatalogFamily, chooseCatalogSupport } from './policy-drawer.mjs';
 // Complete-candidate acceptance, through the ordinary page and public installed contracts.
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile, copyFile } from 'node:fs/promises';
@@ -67,9 +68,9 @@ export async function runCompleteEvidenceBrowser({ plan, output, playwrightModul
     await page.goto(plan.origin + '/');
     await page.locator('#browse-family option[value="ECC"]').waitFor({ state: 'attached' });
     assert.equal(await page.locator('#setup-dialog').isVisible(), false, 'Existing actual local setup must survive upgrade');
-    await page.locator('#browse-support').selectOption('all');
+    await chooseCatalogSupport(page, 'all');
     for (const family of allInventories) {
-      await page.locator('#browse-family').selectOption(family.family);
+      await chooseCatalogFamily(page, family.family);
       const authored = family.release.items.find(value => value.metadata?.sourceFacts?.description.state === 'authored');
       const card = authored ? page.locator(`[data-card-id="${family.release.sha256}/${authored.id}"]`) : page.locator('#cards-grid [data-card-id]').first(); await card.click();
       const key = await card.getAttribute('data-card-id'), selected = family.release.items.find(value => `${family.release.sha256}/${value.id}` === key);
@@ -81,7 +82,7 @@ export async function runCompleteEvidenceBrowser({ plan, output, playwrightModul
       facts.push({ family: family.family, key, sourceFacts: selected.metadata?.sourceFacts ?? null, releaseSha256: family.release.sha256 });
     }
     for (const family of families) assert.equal(facts.find(value => value.family === family.family)?.sourceFacts?.description.state, 'authored', `${family.family} compares its authored purpose`);
-    await page.locator('#browse-family').selectOption(plan.family);
+    await chooseCatalogFamily(page, plan.family);
     await page.locator(`[data-card-id="${inventory.release.sha256}/${item.id}"]`).click();
     await addFromCatalog(page, item.id);
     await page.locator('#nav-sources').click();

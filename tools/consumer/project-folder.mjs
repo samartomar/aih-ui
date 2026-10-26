@@ -4,7 +4,9 @@
 // execution hosts, so nothing prepared for the old folder can be applied in the new one.
 import { realpath, stat } from 'node:fs/promises';
 import { homedir, userInfo } from 'node:os';
-import { isAbsolute, join, parse, sep } from 'node:path';
+import { isAbsolute, parse, sep } from 'node:path';
+
+import { readCoreState, stateRootForHome, loadCoreState } from './core-state-location.mjs';
 
 const refused = reason => ({ status: 'refused', reason });
 const comparable = path => process.platform === 'win32' ? path.toLowerCase() : path;
@@ -14,7 +16,7 @@ const accountHomeDir = () => { try { return userInfo().homedir; } catch { return
 const realOrSame = async path => { try { return await realpath(path); } catch { return path; } };
 
 /** Whether `path` may be the project folder: { status: 'ok', project } with its real path, or { status: 'refused', reason }. */
-export async function checkProjectFolder(path, { env = process.env, home = homedir(), accountHome = accountHomeDir() } = {}) {
+export async function checkProjectFolder(path, { env = process.env, home = homedir(), accountHome = accountHomeDir(), coreState } = {}) {
   if (typeof path !== 'string' || !path.trim()) return refused('Type the full path of a folder.');
   if (!isAbsolute(path)) return refused('Use the full path of the folder, starting from the drive or /.');
   let project, folder;
@@ -25,7 +27,14 @@ export async function checkProjectFolder(path, { env = process.env, home = homed
   for (const value of new Set([home, accountHome, env.HOME, env.USERPROFILE].filter(value => typeof value === 'string' && value))) {
     const own = await realOrSame(value);
     if (target === comparable(own)) return refused('Your home folder cannot be the project folder. Choose a project inside it.');
-    const state = comparable(await realOrSame(join(own, '.aih')));
+  }
+  coreState ??= await loadCoreState();
+  const location = readCoreState(coreState);
+  if (location.status !== 'available') return refused(location.reason);
+  const homes = new Set([home, accountHome, env.HOME, env.USERPROFILE].filter(value => typeof value === 'string' && isAbsolute(value)));
+  const roots = [location.root, ...[...homes].map(value => stateRootForHome(value, location.descriptor))];
+  for (const root of roots) {
+    const state = comparable(await realOrSame(root));
     if (target === state || target.startsWith(state + sep)) return refused('Core keeps its own records in this folder, so it cannot be the project folder.');
   }
   return { status: 'ok', project };
@@ -47,7 +56,10 @@ export function createProjectFolder({ initial, onChange, beforeChange = async ()
   let current = initial ? { project: initial, source: 'host-default' } : { project: null, source: 'none' }, running = 0;
   return {
     get project() { return current.project; },
-    read: () => ({ ...current }),
+    read: () => {
+      const location = options?.coreState && readCoreState(options.coreState);
+      return { ...current, ...(location?.status === 'unavailable' ? { stateLocation: location } : {}) };
+    },
     /** Called inside `run`: a chosen folder must still be the same real folder and still pass the checks. */
     async verify() {
       if (current.source !== 'chosen') return undefined;

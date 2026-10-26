@@ -7,12 +7,15 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { snapshotCoreHome, compareCoreHome, describeCoreHomeChange } from '../core-home-guard.mjs';
+import { snapshotCoreHome as snapshot, compareCoreHome, describeCoreHomeChange } from '../core-home-guard.mjs';
+
+const descriptor = { base: 'userHome', segments: ['fixture-state', 'records'] };
+const snapshotCoreHome = home => snapshot(home, descriptor);
 
 function fixture(t, create = true) {
   const home = mkdtempSync(join(tmpdir(), 'aih-ui-core-guard-'));
   t.after(() => rmSync(home, { recursive: true, force: true }));
-  const root = join(home, '.aih', 'core');
+  const root = join(home, 'fixture-state', 'records');
   if (create) mkdirSync(root, { recursive: true });
   return { home, root };
 }
@@ -82,9 +85,9 @@ test('description discloses counts only', t => {
   const result = compareCoreHome(before, snapshotCoreHome(home));
   assert.deepEqual(result, counts(1));
   assert.equal(describeCoreHomeChange(result),
-    "The real account home's .aih/core changed or could not be read: 1 added, 0 removed, 0 changed, 0 unreadable.");
+    "The real account home's Core state changed or could not be read: 1 added, 0 removed, 0 changed, 0 unreadable.");
   assert.equal(describeCoreHomeChange(counts(3, 2, 1, 4)),
-    "The real account home's .aih/core changed or could not be read: 3 added, 2 removed, 1 changed, 4 unreadable.");
+    "The real account home's Core state changed or could not be read: 3 added, 2 removed, 1 changed, 4 unreadable.");
 });
 
 test('links inside are not traversed, but a linked root is walked', { skip: process.platform === 'win32' }, t => {
@@ -111,7 +114,7 @@ test('a re-pointed or unresolvable linked root is never unchanged', { skip: proc
   const { home, root } = fixture(t, false);
   const first = join(home, 'first'), second = join(home, 'second'), locked = join(home, 'locked');
   for (const dir of [first, second, join(locked, 'core')]) mkdirSync(dir, { recursive: true });
-  mkdirSync(join(home, '.aih'));
+  mkdirSync(join(home, 'fixture-state'));
   symlinkSync(first, root);
   const before = snapshotCoreHome(home);
   rmSync(root);
@@ -129,7 +132,7 @@ test('a re-pointed or unresolvable linked root is never unchanged', { skip: proc
 });
 
 test('a root that is both unresolved and unreadable is one unreadable path', () => {
-  const unresolved = { root: '/home/a/.aih/core', exists: true, target: null, entries: new Map([['', 'unreadable']]) };
+  const unresolved = { root: '/home/a/Core state', exists: true, target: null, entries: new Map([['', 'unreadable']]) };
   assert.deepEqual(compareCoreHome(unresolved, unresolved), counts(0, 0, 0, 1));
   assert.deepEqual(compareCoreHome(unresolved, { ...unresolved, entries: new Map() }), counts(0, 1, 0, 1));
 });

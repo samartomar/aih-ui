@@ -86,6 +86,8 @@ async function main() {
     await Promise.all([authoring.start(), onboarding.start(), catalog.start(), yourTool.start()]);
   } catch (error) {
     shell.showError(error?.message ?? String(error));
+    const families = document.getElementById('framework-navigation');
+    if (families && !families.querySelector('button')) families.textContent = 'Content families unavailable. See the source error.';
   }
 }
 

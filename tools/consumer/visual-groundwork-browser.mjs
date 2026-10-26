@@ -1,3 +1,4 @@
+import { chooseCatalogFamily } from './policy-drawer.mjs';
 import assert from 'node:assert/strict';
 import { readFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -56,7 +57,8 @@ async function tabTo(page, before, target) {
 async function auditIcons(page, where) {
   const found = await page.evaluate(() => {
     const visible = node => node.checkVisibility({ visibilityProperty: true, contentVisibilityAuto: true });
-    const reachable = node => (node.tabIndex >= 0 && !node.disabled) || node.closest('.gap-indicator');
+    const reachable = node => (node.tabIndex >= 0 && !node.disabled) || node.closest('.gap-indicator')
+      || (node.matches('[role=tab][tabindex="-1"]') && node.closest('[role=tablist]')?.querySelector('[role=tab][tabindex="0"]'));
     const icons = [...document.querySelectorAll('.material-symbols-outlined')].filter(visible);
     const untipped = icons.filter(node => !node.closest('[data-tooltip],.gap-indicator') && !node.parentElement?.querySelector(':scope > .gap-indicator')).map(node => `${node.textContent.trim()} in #${node.closest('[id]')?.id ?? '?'}`);
     const unreachable = [...document.querySelectorAll('[data-tooltip]')].filter(visible).filter(node => !reachable(node)).map(node => node.outerHTML.slice(0, 100));
@@ -99,6 +101,8 @@ async function scanWords(locator) {
 const positive = text => text.replace(/not verified/gi, '').split('\n').filter(line => POSITIVE.test(line));
 
 async function expectNote(page, state, words) {
+  const packages = page.locator('#package-disclosure');
+  if (!await packages.evaluate(node => node.open)) await packages.locator('summary').click();
   const note = page.locator(`#contract-check-note[data-contract-check="${state}"]`);
   await note.waitFor();
   if (words) assert.equal(await note.locator('span').last().innerText(), words);
@@ -152,8 +156,8 @@ export async function runVisualGroundworkBrowser({ origin, output, playwrightMod
     const card = page.locator('[data-card-id]').first();
     const kindIcon = card.locator('[data-icon^="kind:"]').first();
     await tabTo(page, card, kindIcon);
-    const mirror = page.locator('[data-tooltip^="Read-only mirror"]');
-    if (await page.locator('#contract-check-note').count()) await tabTo(page, mirror, page.locator('#contract-check-note'));
+    const packages = page.locator('#package-disclosure > summary');
+    if (await page.locator('#contract-check-note').count()) await tabTo(page, packages, page.locator('#contract-check-note'));
     // Behind Advanced, the greyed token tile keeps its reason reachable by keyboard.
     await page.locator('#catalog-advanced > summary').click();
     const tokens = page.locator('[data-metric="tokens"]');
@@ -189,11 +193,18 @@ export async function runVisualGroundworkBrowser({ origin, output, playwrightMod
     // ------------------------------------------------------------- neutral scan words: catalog, inspector, drawer
     assert.deepEqual(positive(await scanWords(page.locator('#cards-grid'))), [], 'catalog: no positive scan word');
     await card.click();
+    await page.locator('#tab-details').focus();
+    for (const id of ['tab-security', 'tab-json', 'tab-details']) {
+      await page.keyboard.press('ArrowRight');
+      assert.equal(await page.evaluate(() => document.activeElement.id), id, 'Arrow keys reach every inspector tab.');
+      await bubble(page).waitFor({ state: 'visible' });
+      assert.equal(await bubble(page).innerText(), await page.locator(`#${id}`).getAttribute('data-tooltip'));
+    }
     await page.locator('#tab-security').click();
     await page.locator('#pane-security').waitFor();
     assert.deepEqual(positive(await scanWords(page.locator('#inspector-rail'))), [], 'inspector: no positive scan word');
     const inspectorIcons = await auditIcons(page, 'inspector');
-    await page.locator('#browse-family').selectOption('Extensions');
+    await chooseCatalogFamily(page, 'Extensions');
     await page.locator('#catalog-search').fill(item.split('.').at(-1));
     await page.getByRole('button', { name: `Add ${item}`, exact: true }).click();
     await page.locator('#added-notice-message').filter({ hasText: /^Added / }).waitFor();
@@ -244,7 +255,7 @@ export async function runVisualGroundworkBrowser({ origin, output, playwrightMod
       const [color, background] = await note.evaluate(node => [getComputedStyle(node).color, getComputedStyle(node).backgroundColor]);
       tones[state] = contrast(rgb(color), rgb(background));
       assert.ok(tones[state] >= 4.5, `${theme} ${state} message: ${tones[state].toFixed(2)}:1`);
-      await tabTo(page, page.locator('[data-tooltip^="Read-only mirror"]'), note);
+      await tabTo(page, page.locator('#package-disclosure > summary'), note);
       await page.screenshot({ path: join(output, `05-state-${fixture}.png`) });
       await context.close();
     }

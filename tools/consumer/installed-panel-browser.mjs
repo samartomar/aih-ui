@@ -1,3 +1,4 @@
+import { chooseCatalogFamily } from './policy-drawer.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -31,7 +32,7 @@ export async function runInstalledPanelBrowser({ origin, output, playwrightModul
       const cancelAfterFirst = cancellationThemes.includes(theme);
       const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 1000 } });
       page = await open(context, theme);
-      await page.locator('#browse-family').selectOption('Extensions');
+      await chooseCatalogFamily(page, 'Extensions');
       await page.locator('#catalog-search').fill('grill-me');
       // One-click Add puts it in the setup with the items it needs; Install and the installed list are in Your setup.
       await addFromCatalog(page, 'extensions.matt.grill-me'); await openPolicyDrawer(page);

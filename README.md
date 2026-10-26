@@ -90,7 +90,7 @@ Git publishing and operator-host inputs that are still needed.
 
 Optional host configuration uses the existing `AIH_CONSUMER_PROJECT`,
 `AIH_CONSUMER_CONTROLS`, `AIH_ORGANIZATION_SOURCE` and `AIH_REVIEW_TRUST`
-environment inputs. `AIH_CONSUMER_PROJECT` is the default project folder; the review drawer's Project folder row can choose another for the server's lifetime. The host refuses a relative, missing or non-folder path, a drive or filesystem root, the account's and the server's home folders themselves (the account's own, `HOME`, `USERPROFILE`), and Core's state folder `<home>/.aih` and anything inside it, comparing real paths; folders inside a home folder are allowed. Install and Remove check the chosen folder again before each run. A switch is refused while Install or Remove is running and replaces the execution hosts, so nothing prepared for the old folder can be applied. Recent folders stay in this browser only. Without a project folder, Prepare/Apply and managed removal
+environment inputs. `AIH_CONSUMER_PROJECT` is the default project folder; the review drawer's Project folder row can choose another for the server's lifetime. The host refuses a relative, missing or non-folder path, a drive or filesystem root, the account's and the server's home folders themselves (the account's own, `HOME`, `USERPROFILE`), and Core's published state root and anything inside it, comparing real paths; folders inside a home folder are allowed. Install and Remove check the chosen folder again before each run. A switch is refused while Install or Remove is running and replaces the execution hosts, so nothing prepared for the old folder can be applied. Recent folders stay in this browser only. Without a project folder, Prepare/Apply and managed removal
 remain unavailable with an explanation. `AIH_UPDATE_SOURCE_CATALOG_ROOTS` configures the update source: an ordered list of at most 8 absolute paths of locally packed Catalog package roots, oldest first, separated by the platform path delimiter (`;` on Windows, `:` elsewhere). Each root is read only through the public `readInstalledRelease`, one export at a time: its `release.json` and the four family release exports, and nothing else under it except, as described next, its `package.json`; nothing is written and no scan runs. The frozen default `./release.json` is optional: a root whose package does not declare it is read from its four family releases. Only when the reader refuses the default as not exported is the root's `package.json` read, and only to see whether its export map names `./release.json`; a declared default the reader refuses stays offline as before. Such a root still counts as online, and its source line names the first family release it read. A root counts as read only when every release it exports of those five is a valid release of the installed `@aihq/catalog` package, and the four family exports are always required; otherwise it is reported offline as unreadable, invalid or a different package, naming the first export that failed, with the time it was last read kept for the lifetime of the server. While some roots are offline, the updates the readable ones offer are still listed, but content is reported unknown ("some update sources could not be read"), never checked, and the page keeps earlier updates and their check time; the improvements check says the same. The page shows each source by position, never by path. Later entries are newer, which is this host's own declaration and not a Catalog or producer fact (local packs can share one package version), so the page words it as the order declared by this host's update source. A launcher passes the same list as `startConsumer({ updateSourceCatalogRoots })`; the owner-testing candidate sets it from its manifest's `updateSourceCatalogs`. More than 8 entries, an empty entry or a relative path fails at startup, and so does setting it together with `AIH_MAINTENANCE_SOURCE`. `AIH_MAINTENANCE_SOURCE` is a test fixture only: the path of a small JSON file naming note-fixture revisions to publish as newer revisions of the review note, shown as "Test fixture source — not a real update source". With neither set, the host has no update source and content updates are unknown, not checked. `AIH_UI_SETTINGS_PATH` selects an
 isolated local setup store for tests; HTTP inputs cannot choose that path.
 
@@ -120,6 +120,20 @@ For the separate 1,800-inventory / 300-selected **functional** proof with actual
 material bytes, installed public validators and an actual browser download/fresh
 import, use [functional composition capacity](docs/functional-scale.md). Its
 synthetic recipes remain execution-disabled; it sets no latency target or item cap.
+
+The project-folder check reads Core's public `resolveStateLocation()` and the
+`stateLocation.root` descriptor from `@aihq/core/contracts`. It refuses the
+published state root and folders inside it, including resolved links, and uses
+the descriptor for the other home folders already protected by the check. If
+Core cannot publish a usable location, the existing folder row explains why
+it cannot check a new project folder. The location is information only; the
+Workbench never writes Core records itself.
+
+`node tools/check-state-location.mjs <installed-consumer> [evidence-directory]`
+exercises the ordinary running page with host-only relocated and unavailable
+location fixtures, in both themes. `check:workbench` runs this journey too.
+The fixture overrides only the external location reader, not Core's storage
+semantics; install and inventory still use the installed public Core APIs.
 
 ## Owner-testing candidate
 
@@ -312,8 +326,7 @@ every command.
   manifest; a sample that could not be made leaves its host input unset, so the
   page shows its own "not configured" state. Start prints the URL, the candidate
   identity (each package's version, SHA-256 and commit) and the data directory.
-  It then opens the page headless and checks that the package strip and the
-  provenance disclosure show the same identity as the manifest; a mismatch is
+  It then opens the page headless and checks that the Packages disclosure shows the same identity as the manifest; a mismatch is
   reported and start exits non-zero, leaving the server running. `--no-smoke`
   skips that check. Its screenshots of each journey's start page are kept in
   `logs/checks/`. Start without `--manifest` restarts the candidate already
@@ -347,7 +360,7 @@ Data persists across stop and start until reset.
 
 | Path | Purpose |
 | --- | --- |
-| `home/` | The candidate's account home. Core keeps its records in `home/.aih/core`. |
+| `home/` | The candidate's account home. Core's public descriptor locates its records beneath that home. |
 | `config/` | Host configuration: settings, organization source, maintenance source, readiness repairs, batch host. |
 | `samples/` | Sample projects, repositories and fixtures, each with a `SAMPLE.md`. |
 | `samples/repositories/sample-web/.claude`, `sample-api/.codex` | The two controlled client configuration folders, inside the two sample checkouts. |
@@ -357,7 +370,7 @@ Data persists across stop and start until reset.
 | `run/` | The installed consumer and served page, rebuilt by every start. |
 
 The real account home is never used. Start and stop each compare a metadata
-listing of the real home's `.aih/core` against the listing taken at start and
+listing of the real home's published Core state location against the listing taken before sample creation and
 print any change; nothing is deleted.
 
 ### Sample data
@@ -666,16 +679,31 @@ Selecting a row scopes the grid, the "All Items" count and the masthead to that
 source; selecting it again shows every source. The organization's own additions
 come last and read **Not supplied** until something is actually imported.
 
-### The package strip and the header's Your tool
+The compact layout uses `--type-source-heading`, `--type-card-title` and
+`--type-card-description` from `tokens.css`; component rules contain no independent heading/card type scale.
 
-The strip under the header is the Workbench design's compact line:
-`@aihq/core <version> • @aihq/scan <version> • @aihq/catalog <version>`. Each
-version is the one npm recorded installing in the throwaway consumer
+### Packages and the header's Your tool
+
+The primary header keeps tool choice, Your setup, Settings and theme together.
+The secondary line shows setup status and a keyboard- and touch-accessible
+**Packages** disclosure. It retains each installed package's version, exact
+archive digest and full source checkpoint, the read-only mirror information,
+index metadata and the honest contract-check result. Unavailable checks remain
+unavailable; they are never promoted to passes by the layout.
+
+Installed versions are the ones npm recorded in the throwaway consumer
 (`node_modules/.package-lock.json`), cross-checked against the installed manifest
-and the exact tarball -- never parsed from a filename and never taken from the
-index's own package block. These are local packages that can share a released
-version number, so each also shows its short checkpoint. Hashes, full commits, raw
-entry counts, the collection view and index admission are behind "provenance".
+and exact archive, never inferred from a filename or the index's package block.
+Normal browsing keeps search and compact kind controls directly above the cards.
+Secondary filters, personal folder intake/bindings, sort, review gaps and technical
+source details remain keyboard-accessible through the collapsed **Filters & your
+sources** disclosure. The left rail is the primary family navigation; its controls
+use the same installed inventory and filters as the catalog. Counts describe listed items, not observed tool support. Gap information controls
+use local SVG strokes in the current theme colour, independent of Unicode glyph
+coverage and remote fonts. Starting
+sets, native tool-fit claims and grouped set actions appear only when their
+owning screen reads the required published contract; presentation does not
+supply those semantics.
 
 **Your tool** in the header is the one AI tool the person works in, and the only
 tool control on the page. Every fact on it comes from the installed Core, read by
@@ -1173,8 +1201,8 @@ node tools/preview.mjs
 
 `aih-policy-workbench.html` is the retiring standalone snapshot. Opening it as a
 local file does not install or read these tarballs. The live `src/` page is the
-HTTP preview; its package strip reports the installed versions and its
-provenance disclosure reports the exact tarball hashes. The Catalog inventory
+HTTP preview; its Packages disclosure reports the installed versions and
+exact archive hashes. The Catalog inventory
 line counts the entries of the Catalog releases the page reads.
 
 ```

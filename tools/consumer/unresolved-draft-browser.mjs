@@ -1,3 +1,4 @@
+import { chooseCatalogFamily, chooseCatalogSupport } from './policy-drawer.mjs';
 // Ordinary Workbench journey: an unresolved draft is opened, edited, saved as a journey
 // envelope, reopened in a fresh page and compiled for its resolved choices only.
 import assert from 'node:assert/strict';
@@ -41,7 +42,7 @@ export async function runUnresolvedDraftBrowser({ origin, output, playwrightModu
     return page;
   };
   const choose = async (page, family, id) => {
-    await page.locator('#nav-sources').click(); await page.locator('#browse-support').selectOption('all'); await page.locator('#browse-family').selectOption(family);
+    await page.locator('#nav-sources').click(); await chooseCatalogSupport(page, 'all'); await chooseCatalogFamily(page, family);
     await addFromCatalog(page, id);
   };
   const download = async (page, trigger, path) => { const event = page.waitForEvent('download'); await trigger(); await (await event).saveAs(path); return new Uint8Array(await readFile(path)); };

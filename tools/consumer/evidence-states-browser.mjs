@@ -1,3 +1,4 @@
+import { chooseCatalogFamily, chooseCatalogSupport } from './policy-drawer.mjs';
 // Ordinary Workbench journey: catalog metrics count the listed inventory, Scan Review opens the supplied-evidence review,
 // and each item's evidence state follows the supplied Scan documents (not supplied, valid and matched, mismatched,
 // invalid) through the host's public Scan read and coverage. Nothing here scans from the page or records a judgment.
@@ -56,8 +57,8 @@ export async function runEvidenceStatesBrowser({ origin, output, playwrightModul
     await page.goto(origin + '/');
     await page.locator('#browse-family option[value="Catalog"]').waitFor({ state: 'attached' });
     assert.equal(await page.locator('#setup-dialog').isVisible(), false, 'This journey runs against a Workbench whose setup already exists.');
-    await page.locator('#browse-support').selectOption('all');
-    await page.locator('#browse-family').selectOption('');
+    await chooseCatalogSupport(page, 'all');
+    await chooseCatalogFamily(page, '');
 
     // a. Kind tiles count what the list shows in the same scope; tokens stay unknown.
     // The tiles sit in the catalog's Advanced section; the kind pills are the default kind control.

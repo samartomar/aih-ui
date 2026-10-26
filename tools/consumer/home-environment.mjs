@@ -1,5 +1,5 @@
 // One disposable account home as environment variables, in the layout of readiness-fixture.mjs. Core keeps its
-// ownership records, recovery manifests, snapshots and run history under the current account's `~/.aih/core`, so a
+// ownership records, recovery manifests, snapshots and run history under the current account's published state location, so a
 // process that runs Core against fixtures is given this instead of the developer's real home.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';

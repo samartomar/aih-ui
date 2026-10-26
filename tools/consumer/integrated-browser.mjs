@@ -1,3 +1,4 @@
+import { chooseCatalogFamily, chooseCatalogSupport, setPersonalFolder } from './policy-drawer.mjs';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -43,21 +44,21 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     assert.deepEqual((await policy(page)).metadata['aih.workbench'].roots, []);
     for (const family of ['Extensions', 'ECC', 'Superpowers', 'Anthropic']) assert.equal(await page.locator(`#browse-family option[value="${family}"]`).count(), 1);
     assert.equal(await page.locator('iframe').count(), 0); assert.equal(new URL(page.url()).pathname, '/');
-    await page.locator('#browse-family').selectOption('Extensions'); await page.locator('#catalog-search').fill('matt');
+    await chooseCatalogFamily(page, 'Extensions'); await page.locator('#catalog-search').fill('matt');
     assert.ok(await page.getByRole('button', { name: 'Add extensions.matt.ask-matt', exact: true }).isVisible());
     await page.locator('#catalog-search').fill('');
     await openCatalogAdvanced(page); await page.locator('#rail-scope-list button').filter({ hasText: 'Extensions' }).first().click();
-    await page.locator('#browse-family').selectOption('ECC');
+    await chooseCatalogFamily(page, 'ECC');
     assert.ok(await page.getByRole('button', { name: 'Add ecc.skill.accessibility', exact: true }).isVisible(), 'Changing families clears the alternate rail filter.');
-    await page.locator('#browse-family').selectOption('Extensions');
+    await chooseCatalogFamily(page, 'Extensions');
     const before = await page.locator('#policy-bytes').textContent();
-    await page.locator('#browse-support').selectOption('unknown'); assert.match(await page.locator('#support-counts').textContent(), /with unknown facts/);
-    await page.locator('#browse-support').selectOption('all'); assert.equal(await page.locator('#policy-bytes').textContent(), before);
-    await page.locator('#personal-folder').setInputFiles(invalid);
+    await chooseCatalogSupport(page, 'unknown'); assert.match(await page.locator('#support-counts').textContent(), /with unknown facts/);
+    await chooseCatalogSupport(page, 'all'); assert.equal(await page.locator('#policy-bytes').textContent(), before);
+    await setPersonalFolder(page, invalid);
     await page.locator('#personal-result').filter({ hasText: 'LOCAL_FOLDER_INVALID' }).waitFor();
-    await page.locator('#personal-folder').setInputFiles(folder);
+    await setPersonalFolder(page, folder);
     await page.locator('#personal-result').filter({ hasText: 'Folder validated' }).waitFor();
-    await page.locator('#browse-family').selectOption('Personal');
+    await chooseCatalogFamily(page, 'Personal');
     assert.equal(await page.locator('#cards-grid [data-card-id]').count(), 1);
     await page.locator('#cards-grid [data-card-id]').click();
     assert.match(await page.locator('#details-source').textContent(), /Local folder explicitly selected/);
@@ -66,7 +67,7 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     await page.screenshot({ path: join(output, 'personal-inspector.png'), fullPage: true });
     const selections = [['Personal', 'personal.skill.example'], ['Extensions', 'extensions.matt.ask-matt'], ['ECC', 'ecc.skill.accessibility'], ['Superpowers', 'superpowers.skill.brainstorming'], ['Anthropic', 'anthropic.skill.academy-guide']];
     for (const [family, id] of selections) {
-      await page.locator('#nav-sources').click(); await page.locator('#browse-family').selectOption(family);
+      await page.locator('#nav-sources').click(); await chooseCatalogFamily(page, family);
       await addFromCatalog(page, id);
       await closePolicyDrawer(page);
     }

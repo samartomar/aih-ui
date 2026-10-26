@@ -1,6 +1,6 @@
 // Child-process entry for the reviewed-batch host. The parent server forks this with a disposable account home in its
 // environment, because Core keeps ownership records, recovery manifests, snapshots and run history under the current
-// account's `~/.aih/core`. It talks to the parent only over Node IPC: { id, op, body } in, { id, result } out, where a
+// account's published state location. It talks to the parent only over Node IPC: { id, op, body } in, { id, result } out, where a
 // failure is a result of its own ({ status: 'error', diagnostics }). Envelope bytes cross as base64, since the IPC channel
 // is JSON. Nothing here is built from a request, and the child never writes the envelope file: the parent is its one writer. To
 // record each attempt at a process (its first, or a Run again) before the process runs, `persist` asks the parent over the same

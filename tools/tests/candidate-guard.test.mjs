@@ -7,55 +7,64 @@ import { join } from 'node:path';
 import { checkRealHome, recordRealHome } from '../candidate/guard.mjs';
 import { candidateLayout } from '../candidate/layout.mjs';
 
+const descriptor = { base: 'userHome', segments: ['fixture-state', 'records'] };
+
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'aih-ui-candidate-guard-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const layout = candidateLayout(join(root, 'data')), home = join(root, 'real-home');
   mkdirSync(layout.state, { recursive: true });
-  mkdirSync(join(home, '.aih', 'core', 'records'), { recursive: true });
-  writeFileSync(join(home, '.aih', 'core', 'records', 'existing.json'), '{}');
+  mkdirSync(join(home, 'fixture-state', 'records', 'records'), { recursive: true });
+  writeFileSync(join(home, 'fixture-state', 'records', 'records', 'existing.json'), '{}');
   return { layout, home };
 }
 
 test('a home left alone is unchanged', t => {
   const { layout, home } = fixture(t);
-  recordRealHome(layout, home);
+  recordRealHome(layout, home, descriptor);
   const result = checkRealHome(layout, home);
   assert.deepEqual(result, { checked: true, unchanged: true, counts: { unchanged: true, added: 0, removed: 0, changed: 0, unreadable: 0 }, message: 'unchanged' });
 });
 
-test('a file added under .aih/core is reported, with the counts', t => {
+test('a file added under Core state is reported, with the counts', t => {
   const { layout, home } = fixture(t);
-  recordRealHome(layout, home);
-  writeFileSync(join(home, '.aih', 'core', 'records', 'added.json'), '{}');
+  recordRealHome(layout, home, descriptor);
+  writeFileSync(join(home, 'fixture-state', 'records', 'records', 'added.json'), '{}');
   const result = checkRealHome(layout, home);
   assert.equal(result.unchanged, false);
   assert.equal(result.counts.added, 1);
   // The directory that gained the file counts as changed too.
-  assert.match(result.message, /\.aih\/core changed.*1 added, 0 removed, \d+ changed, 0 unreadable/);
+  assert.match(result.message, /Core state changed.*1 added, 0 removed, \d+ changed, 0 unreadable/);
 });
 
 test('a removed or changed record is reported too', t => {
   const { layout, home } = fixture(t);
-  recordRealHome(layout, home);
-  writeFileSync(join(home, '.aih', 'core', 'records', 'existing.json'), '{"changed":true}');
+  recordRealHome(layout, home, descriptor);
+  writeFileSync(join(home, 'fixture-state', 'records', 'records', 'existing.json'), '{"changed":true}');
   assert.equal(checkRealHome(layout, home).counts.changed, 1);
-  rmSync(join(home, '.aih', 'core', 'records', 'existing.json'));
+  rmSync(join(home, 'fixture-state', 'records', 'records', 'existing.json'));
   assert.equal(checkRealHome(layout, home).counts.removed, 1);
 });
 
 test('the snapshot round-trips through its file, including a home with no Core directory', t => {
   const { layout, home } = fixture(t);
-  const recorded = recordRealHome(layout, home);
+  const recorded = recordRealHome(layout, home, descriptor);
   assert.equal(recorded.exists, true);
   const file = JSON.parse(readFileSync(layout.realHomeGuard, 'utf8'));
   assert.equal(file.home, home);
   assert.ok(Array.isArray(file.snapshot.entries) && file.snapshot.entries.length >= 1);
   assert.equal(checkRealHome(layout).unchanged, true, 'the recorded home is used when none is named');
-  rmSync(join(home, '.aih'), { recursive: true });
-  recordRealHome(layout, home);
+  // A retained pre-location snapshot stays readable and is never silently replaced.
+  const legacy = { ...file }; delete legacy.descriptor;
+  const legacyBytes = JSON.stringify(legacy); writeFileSync(layout.realHomeGuard, legacyBytes);
+  const unchecked = checkRealHome(layout, home);
+  assert.equal(unchecked.checked, false); assert.equal(unchecked.unchanged, null);
+  assert.match(unchecked.message, /older snapshot.*not checked/);
+  assert.equal(readFileSync(layout.realHomeGuard, 'utf8'), legacyBytes);
+  rmSync(join(home, 'fixture-state'), { recursive: true });
+  recordRealHome(layout, home, descriptor);
   assert.equal(checkRealHome(layout, home).unchanged, true);
-  mkdirSync(join(home, '.aih', 'core'), { recursive: true });
+  mkdirSync(join(home, 'fixture-state', 'records'), { recursive: true });
   assert.equal(checkRealHome(layout, home).unchanged, false);
 });
 

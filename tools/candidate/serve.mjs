@@ -21,11 +21,12 @@
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, userInfo } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { homeEnvironment } from '../consumer/home-environment.mjs';
 import { startPreview } from '../preview.mjs';
+import { recordRealHome } from './guard.mjs';
 import { candidateLayout } from './layout.mjs';
 import { candidateIdentity, readManifest, verifyManifest } from './manifest.mjs';
 import { readServerRecord } from './process.mjs';
@@ -98,6 +99,10 @@ async function main() {
       port: seedOnly ? 1 : port, runDir: layout.run, installedConsumerDir, settingsPath: layout.settings, log: say,
       // Host configuration is read when the Workbench is created, so the samples and the environment exist before that.
       async beforeServe({ consumerDir }) {
+        // Installation runs no lifecycle scripts. Record the published location before the first Core operation.
+        const { loadCoreState } = await import(pathToFileURL(join(consumerDir, 'consumer/core-state-location.mjs')).href);
+        const { stateLocation } = await loadCoreState();
+        recordRealHome(layout, userInfo().homedir, stateLocation?.root);
         if (packages.previousCatalog) process.env.AIH_CONSUMER_PREVIOUS_CATALOG = extractPackage(packages.previousCatalog.tarball, join(layout.run, 'previous-catalog'));
         // The update source: each tarball unpacked in the manifest's order (oldest first), listed to the Workbench as its Catalog roots.
         // The maintenance fixture is a test source and is never combined with it.

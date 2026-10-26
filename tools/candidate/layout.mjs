@@ -21,7 +21,7 @@ export function candidateLayout(dataDir) {
     manifest: join(root, 'manifest.json'),
     // Rebuilt by every start: the installed consumer and the served page.
     run: join(root, 'run'),
-    // The candidate's account home: Core keeps its records under home/.aih/core.
+    // The candidate's account home: Core keeps its records under its published state location.
     home: join(root, 'home'),
     config,
     settings: join(config, 'settings.json'),

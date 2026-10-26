@@ -57,3 +57,25 @@ export async function addFromCatalog(page, id) {
   if (await review.isVisible()) await review.click();
   else await page.locator('#added-notice-dismiss').click();
 }
+
+// Secondary browsing tools are deliberately closed in the normal catalog view.
+export async function openCatalogFilters(page) {
+  await closePolicyDrawer(page);
+  const section = page.locator('#catalog-filter-disclosure');
+  if (!await section.evaluate(node => node.open)) await section.locator('> summary').click();
+}
+export async function chooseCatalogFamily(page, value) {
+  await closePolicyDrawer(page);
+  const rail = page.locator('#nav-rail');
+  if (await rail.evaluate(node => node.classList.contains('w-0'))) await page.locator('#toggle-nav-btn').click();
+  await page.locator('#framework-navigation button[data-family=' + JSON.stringify(value) + ']').click();
+}
+export async function chooseCatalogSupport(page, value) {
+  await openCatalogFilters(page);
+  await page.locator('#browse-support').selectOption(value);
+  await page.locator('#catalog-filter-disclosure > summary').click();
+}
+export async function setPersonalFolder(page, files) {
+  await openCatalogFilters(page);
+  await page.locator('#personal-folder').setInputFiles(files);
+}

@@ -35,9 +35,11 @@ const isolated = { ...process.env, ...homeEnvironment(join(output, 'account-home
   PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH ?? join(realCache, 'ms-playwright') };
 // Listing metadata only, never contents: the run fails if the real home's Core records change. It runs on exit, so a
 // stage that throws (a timeout, say) is still checked.
-const realCoreBefore = snapshotCoreHome(homedir());
+const { loadCoreState } = await import(pathToFileURL(join(output, 'consumer/core-state-location.mjs')).href);
+const { stateLocation } = await loadCoreState();
+const realCoreBefore = snapshotCoreHome(homedir(), stateLocation?.root);
 process.on('exit', () => {
-  const realCoreChange = compareCoreHome(realCoreBefore, snapshotCoreHome(homedir()));
+  const realCoreChange = compareCoreHome(realCoreBefore, snapshotCoreHome(homedir(), stateLocation?.root));
   if (!realCoreChange.unchanged) { console.error(describeCoreHomeChange(realCoreChange)); process.exitCode = 1; }
 });
 // The reviewed-batch suite alone takes about as long as all the others together, so it runs as its own group.
@@ -95,6 +97,13 @@ if (process.exitCode === 0) {
   process.stdout.write(installed.stdout ?? ''); process.stderr.write(installed.stderr ?? '');
   if (installed.error) throw installed.error;
   process.exitCode = installed.status ?? 1;
+}
+if (process.exitCode === 0) {
+  const location = spawnSync(process.execPath, [join(repo, 'tools/check-state-location.mjs'), output], { cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 180_000, env: isolated });
+  writeFileSync(join(output, 'state-location-check.log'), `${location.stdout ?? ''}${location.stderr ?? ''}`);
+  process.stdout.write(location.stdout ?? ''); process.stderr.write(location.stderr ?? '');
+  if (location.error) throw location.error;
+  process.exitCode = location.status ?? 1;
 }
 if (process.exitCode === 0) {
   const authority = spawnSync(process.execPath, [join(repo, 'tools/check-authority-source.mjs'), output, join(output, 'authority-source-evidence')], {

@@ -7,6 +7,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { listItems } from '@aihq/catalog/reader';
 import { parsePolicy } from '@aihq/core/contracts';
+import * as coreContracts from '@aihq/core/contracts';
+import * as core from '@aihq/core';
 import { createHost } from './host.mjs';
 import { createProjectFolder, shared } from './project-folder.mjs';
 import { readAuthoritySource } from './authority-source.mjs';
@@ -22,7 +24,7 @@ import { createCatalogUpdateSource } from './update-source.mjs';
 import { inspectorSummary } from './scan-evidence.mjs';
 import { createScanEvidenceHost } from './scan-evidence-host.mjs';
 
-export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, updateSourceCatalogRoots, evidenceSources, evidenceDetectorIds, port = 0, createExecutionHost = createHost } = {}) {
+export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, updateSourceCatalogRoots, evidenceSources, evidenceDetectorIds, port = 0, createExecutionHost = createHost, coreState = { resolveStateLocation: core.resolveStateLocation, stateLocation: coreContracts.stateLocation } } = {}) {
   // `createExecutionHost` is createHost; tests pass one that holds Install work while they act.
   // The fixture is a test source; a host names one update source, so both together would be ambiguous.
   if (updateSourceCatalogRoots !== undefined && maintenanceSource) throw new Error('Configure one update source: Catalog package roots or the test fixture, not both.');
@@ -85,7 +87,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   const retire = old => { for (const id of old?.heldSessions() ?? []) { retired.add(id); if (retired.size > 1024) retired.delete(retired.values().next().value); } };
   // The ordinary page's project folder. A switch replaces every execution host, discarding all prepared sessions;
   // personal-folder grants and their staged material roots are kept, since they are about content, not the project.
-  const folder = createProjectFolder({ initial: projectRoot, beforeChange: stageAuthoringRoots, onChange: project => {
+  const folder = createProjectFolder({ initial: projectRoot, options: { coreState }, beforeChange: stageAuthoringRoots, onChange: project => {
     retire(legacyHost); retire(host);
     legacyHost = createExecutionHost({ projectRoot: project, materialRoots, organizationSource, controls }); host = hostFor(project);
     for (const client of clients.values()) {

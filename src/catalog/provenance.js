@@ -2,12 +2,10 @@
  * What this page is reading: the package strip, the masthead and the source
  * status line.
  *
- * The strip is the design source's compact line: the three packages this
- * preview actually installed, each with the version npm recorded installing
- * and, because these are local packages that can share a released version
- * number, its short checkpoint. Hashes, full commits, the index's own package
- * block and raw entry counts are diagnostic detail and open in place behind
- * "provenance".
+ * The Packages disclosure preserves the installed package versions, checkpoints,
+ * mirror mode and truthful contract checks without crowding the task header.
+ * Full versions, archive hashes and the index metadata are diagnostic detail
+ * available by keyboard and touch in that disclosure.
  *
  * The masthead names the SELECTED SOURCE, as the design source's masthead names
  * its framework, and the status line under the Source Policy control carries
@@ -30,7 +28,6 @@ const GITHUB_REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
 /* The design source's separators: the package strip uses a bullet, the
    source status line a middle dot. */
-const STRIP_SEPARATOR = "•";
 const STATUS_SEPARATOR = "·";
 
 function dot(separator = STATUS_SEPARATOR) {
@@ -50,45 +47,32 @@ export function createProvenance({ elements }) {
 
   function renderStrip(model) {
     const strip = elements.provenanceStrip;
-    strip.replaceChildren();
-    const summary = model.summary ?? {};
-
-    strip.appendChild(attachTooltip(iconSpan("state", "provenance", { size: "text-[14px]", className: "shrink-0" }), "Where it came from: the packages this Workbench installed, with their versions and the checkpoints they were packed from."));
-    packagesInOrder(summary).forEach(({ name, pkg }, position) => {
-      if (position > 0) strip.appendChild(dot(STRIP_SEPARATOR));
-      const group = el("span", "flex items-center gap-1 shrink-0");
-      const label = el("span", "text-on-surface font-medium", `${name} `);
-      const version = text(pkg?.version);
-      label.appendChild(el("span", "text-outline", version ?? NOT_PUBLISHED));
-      attachTooltip(label, version === null
-        ? `${name}: no installed version was recorded`
-        : `${name} ${version}, as npm recorded installing it in this preview`);
-      group.appendChild(label);
-      const commit = text(pkg?.commit);
-      if (commit !== null && /^[0-9a-f]{7,40}$/.test(commit)) {
-        const chip = el("span", "px-1.5 py-0.5 rounded bg-surface-container-high/80 text-metadata-revision font-mono text-[10px]", commit.slice(0, 7));
-        attachTooltip(chip, `Local package packed from checkpoint ${commit}. Not a registry release.`);
-        group.appendChild(chip);
-      }
-      strip.appendChild(group);
-    });
-    strip.appendChild(attachTooltip(el("span", "px-1.5 py-0.2 rounded bg-surface-container text-outline font-mono text-[10px] shrink-0", "read-only-mirror"),
-      "Read-only mirror: this Workbench reads the installed packages and never changes them."));
-    const contractNote = contractCheckNote(contractCheckView(contractCheck));
-    if (contractNote) strip.appendChild(contractNote);
-    strip.appendChild(diagnostics(model));
+    const previous = strip.querySelector('details');
+    const wasOpen = previous?.open ?? false;
+    const hadFocus = previous?.contains(document.activeElement) ?? false;
+    const disclosure = diagnostics(model);
+    disclosure.open = wasOpen;
+    strip.replaceChildren(disclosure);
+    if (hadFocus) disclosure.querySelector('summary').focus();
   }
 
   /** Everything diagnostic, behind one disclosure. */
   function diagnostics(model) {
     const summary = model.summary ?? {};
     const indexPkg = summary.indexPackage ?? {};
-    const details = el("details", "relative shrink-0");
+    const details = el("details", "package-disclosure relative shrink-0");
+    details.id = "package-disclosure";
     const summaryNode = el("summary", "cursor-pointer list-none px-1.5 py-0.2 rounded bg-surface-container hover:bg-surface-container-high text-outline hover:text-on-surface font-mono text-[10px] select-none", "Packages");
-    summaryNode.title = "Package hashes, commits and index metadata";
+    const checkView = contractCheckView(contractCheck);
+    attachTooltip(summaryNode, `Installed package versions, hashes and checkpoints. ${checkView.words}`);
+    summaryNode.setAttribute('aria-label', `Packages. ${checkView.words}`);
+    if (checkView.state !== 'passed') summaryNode.appendChild(iconSpan('state', 'info', { size: 'text-[12px]' }));
+    details.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && details.open) { event.stopPropagation(); details.open = false; summaryNode.focus(); }
+    });
     details.appendChild(summaryNode);
 
-    const panel = el("div", "absolute left-0 top-[18px] z-40 w-[460px] max-w-[90vw] max-h-[70vh] overflow-y-auto p-2 rounded bg-surface-container-lowest border border-wb-border shadow-panel space-y-1 text-[10px] font-mono select-text");
+    const panel = el("div", "package-panel absolute left-0 top-[18px] z-40 w-[460px] max-w-[90vw] max-h-[70vh] overflow-y-auto p-2 rounded bg-surface-container-lowest border border-wb-border shadow-panel space-y-1 text-[10px] font-mono select-text");
     const line = (label, value, tone) => {
       const node = el("div", "flex items-start justify-between gap-2");
       node.appendChild(el("span", "text-outline shrink-0", label));
@@ -98,10 +82,13 @@ export function createProvenance({ elements }) {
     const heading = (value) =>
       panel.appendChild(el("div", "pt-1 mt-1 border-t border-wb-border text-on-surface font-medium", value));
 
+    line("mode", "read-only-mirror");
+    const contractNote = contractCheckNote(checkView);
+    if (contractNote) panel.appendChild(contractNote);
     line("index format", `${text(summary.format) ?? NOT_PUBLISHED} v${text(summary.version) ?? NOT_PUBLISHED}`);
     line("index sha256", text(summary.indexSha256) ?? NOT_PUBLISHED);
     line("index entries", String(summary.entryCount ?? NOT_PUBLISHED));
-    line("current inventory", String(model.total));
+    line("current inventory", String(model.total ?? NOT_PUBLISHED));
     line("organization admission", text(summary.organizationAdmission) ?? NOT_PUBLISHED, "text-tertiary");
 
     heading("Core targets");
@@ -125,7 +112,7 @@ export function createProvenance({ elements }) {
       }
       line("version", text(pkg.version) ?? NOT_PUBLISHED);
       line("tarball", text(pkg.tarball) ?? NOT_PUBLISHED);
-      line("sha256", text(pkg.sha256) ?? NOT_PUBLISHED, "text-metadata-revision");
+      line("sha256", text(pkg.sha256) ?? NOT_PUBLISHED);
       line("commit", text(pkg.commit) ?? NOT_PUBLISHED);
       line("built from", text(pkg.source) ?? NOT_PUBLISHED, "text-outline");
     }
@@ -222,6 +209,11 @@ export function createProvenance({ elements }) {
   }
 
   return {
+    /** Package diagnostics are available even while the catalog itself is loading or unavailable. */
+    setSummary(summary) {
+      lastModel = { ...lastModel, summary };
+      renderStrip(lastModel);
+    },
     /** @param model { summary, total, scopeTotal, scope, counts } */
     render(model) {
       lastModel = model;

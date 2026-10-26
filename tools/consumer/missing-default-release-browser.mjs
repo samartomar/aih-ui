@@ -1,3 +1,4 @@
+import { chooseCatalogFamily } from './policy-drawer.mjs';
 import assert from 'node:assert/strict';
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
@@ -76,7 +77,7 @@ export async function runMissingDefaultReleaseBrowser({ origin, baselineOrigin, 
     await page.screenshot({ path: join(output, `missing-default-release-catalog-${theme}.png`) });
 
     // A setup to check, then Available updates, which checks the host's update source when it opens.
-    await page.locator('#browse-family').selectOption('Extensions');
+    await chooseCatalogFamily(page, 'Extensions');
     await page.locator('#catalog-search').fill(item.split('.').at(-1));
     await page.getByRole('button', { name: `Add ${item}`, exact: true }).click();
     await page.locator('#added-notice-message').filter({ hasText: /^Added / }).waitFor();
