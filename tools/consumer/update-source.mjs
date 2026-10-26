@@ -1,12 +1,16 @@
 // The host's update source: an ordered list of locally packed Catalog package roots, oldest first. Each root is read only
 // through the public release reader, one export at a time; nothing else under it is read, nothing is written, no scan runs.
 // What is read is a candidate list for the maintenance check, and the position order is the host's declaration of newer.
+// The frozen default ./release.json is optional: a root whose package does not export it is read from its family releases.
 import { isAbsolute } from 'node:path';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { declareReleaseOrder, MAX_ORDERED_SOURCES } from './release-order.mjs';
 import { FAMILY_RELEASE_EXPORTS } from './installed-families.mjs';
 export const UPDATE_SOURCE_KIND = 'catalog-roots';
-export const UPDATE_SOURCE_RELEASE_EXPORTS = ['./release.json', ...FAMILY_RELEASE_EXPORTS];
+export const UPDATE_SOURCE_DEFAULT_RELEASE = './release.json';
+export const UPDATE_SOURCE_RELEASE_EXPORTS = [UPDATE_SOURCE_DEFAULT_RELEASE, ...FAMILY_RELEASE_EXPORTS];
+// The reader's own answer that the package exports no such release; any other refusal of the default stays offline.
+const notExported = read => read?.valid === false && read.diagnostics?.some(diagnostic => diagnostic.reason === 'invalid-export');
 // The configured roots, or a thrown error that says what to fix. The paths themselves are never echoed.
 export function validateCatalogRoots(roots) {
   if (!Array.isArray(roots) || !roots.length) throw new Error('Supply the update source as a list of one or more absolute Catalog package roots.');
@@ -22,17 +26,19 @@ export function createCatalogUpdateSource({ roots, installedPackage, readRelease
   if (typeof installedPackage?.name !== 'string') throw new Error('Supply the installed Catalog package.');
   const lastRead = new Map();
   // One root: every export valid and from the installed package, else the first reason it is offline and the export that failed.
+  // A default release the package does not export is skipped; the root is then read from its other exports.
   async function readRoot(root) {
     const entries = [];
     for (const release of releaseExports) {
       let read;
       try { read = await readRelease({ root, release, sourceInput: 'maintained' }); }
       catch { return { reason: 'unreadable', export: release }; }
+      if (release === UPDATE_SOURCE_DEFAULT_RELEASE && notExported(read)) continue;
       if (!read?.valid || !read.release) return { reason: 'invalid', export: release };
       if (read.release.package?.name !== installedPackage.name) return { reason: 'package-mismatch', export: release };
       entries.push({ release: read.release, materialSource: read.source });
     }
-    return { entries };
+    return entries.length ? { entries } : { reason: 'invalid', export: UPDATE_SOURCE_DEFAULT_RELEASE };
   }
   return {
     async read() {
