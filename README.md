@@ -679,6 +679,9 @@ Selecting a row scopes the grid, the "All Items" count and the masthead to that
 source; selecting it again shows every source. The organization's own additions
 come last and read **Not supplied** until something is actually imported.
 
+The compact layout uses `--type-source-heading`, `--type-card-title` and
+`--type-card-description` from `tokens.css`; component rules contain no independent heading/card type scale.
+
 ### Packages and the header's Your tool
 
 The primary header keeps tool choice, Your setup, Settings and theme together.

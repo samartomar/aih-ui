@@ -30,7 +30,7 @@ body:has(#main-content) #nav-rail:not(.w-0) { width: 236px; }
 #framework-navigation button[aria-pressed=true] { color: var(--color-primary); background: var(--color-subtle); box-shadow: inset 2px 0 var(--color-primary); }
 .catalog-source-note { font-size: 11px; color: var(--color-muted); }
 .catalog-source-note > summary { min-height: 22px !important; cursor: pointer; }
-#catalog-workspace .wb-source-heading { font-size: 20px; }
+#catalog-workspace .wb-source-heading { font-size: var(--type-source-heading); }
 #catalog-workspace { padding-inline: 20px; }
 #workbench-toolbar { padding-inline: 20px; background: var(--color-canvas); }
 #cards-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 12px !important; }
@@ -42,8 +42,8 @@ body:has(#main-content) #nav-rail:not(.w-0) { width: 236px; }
 #cards-grid [data-kind=hook] { border-left-color: var(--color-kind-hook); }
 #cards-grid [data-kind=mcp] { border-left-color: var(--color-kind-mcp); }
 #cards-grid [data-kind=document] { border-left-color: var(--color-kind-document); }
-.wb-card-title { font-size: 14px !important; }
-.wb-card-description { min-height: 2.8em; line-height: 1.45; font-size: 13px !important; }
+.wb-card-title { font-size: var(--type-card-title) !important; }
+.wb-card-description { min-height: 2.8em; line-height: 1.45; font-size: var(--type-card-description) !important; }
 .card-action { margin-left: auto; flex-shrink: 0; }
 .card-action button { padding: 4px 10px; font-size: 12px !important; }
 #cards-grid [data-card-id] > div:last-child { border-top: 0; }
