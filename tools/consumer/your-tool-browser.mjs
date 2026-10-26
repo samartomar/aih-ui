@@ -24,7 +24,8 @@ async function openPage(context, origin, theme, { route, inspectionRoute } = {})
   page.setDefaultTimeout(30_000);
   if (route) await page.route('**/api/tools', route);
   if (inspectionRoute) await page.route('**/api/tool-inspection', inspectionRoute);
-  await page.goto(origin + '/');
+  // The page's web-font stylesheets come from the network; each step below waits for its own elements instead of `load`.
+  await page.goto(origin + '/', { waitUntil: 'domcontentloaded' });
   await page.locator('#browse-family option[value="Extensions"]').waitFor({ state: 'attached' });
   if (await page.locator('#setup-dialog').isVisible()) {
     await page.getByRole('radio', { name: /Vibe coder/ }).check();
