@@ -1,3 +1,4 @@
+import { chooseCatalogSupport } from './policy-drawer.mjs';
 import assert from 'node:assert/strict';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -22,7 +23,7 @@ export async function runReferenceLayoutBrowser({origin,output,playwrightModule,
       const summary=packages.locator('summary');await summary.focus();await page.keyboard.press('Enter');await page.locator('.package-panel').waitFor();
       for(const name of ['@aihq/core','@aihq/catalog','@aihq/scan','read-only-mirror'])assert.ok((await packages.innerText()).includes(name));
       await page.screenshot({animations:'disabled',path:join(output,`${theme}-packages.png`)});await page.keyboard.press('Escape');assert.equal(await packages.evaluate(n=>n.open),false);
-      await page.locator('#browse-support').selectOption('all');await page.locator('#framework-navigation button[data-family="ECC"]').click();
+      await chooseCatalogSupport(page, 'all');await page.locator('#framework-navigation button[data-family="ECC"]').click();
       assert.equal(await page.locator('.wb-source-heading').innerText(),'ECC');assert.equal(await page.locator('#browse-family').inputValue(),'ECC');
       await page.screenshot({animations:'disabled',path:join(output,`${theme}-ecc.png`)});
       const grid=await page.locator('#cards-grid').evaluate(n=>getComputedStyle(n).gridTemplateColumns.split(' ').length);assert.equal(grid,2,'Desktop uses two card columns');

@@ -1,3 +1,4 @@
+import { chooseCatalogFamily, chooseCatalogSupport } from './policy-drawer.mjs';
 // Ordinary Workbench journey: available updates for a saved choice are checked on open and on Check now,
 // each exact revision keeps its own keep/skip/defer choice inside the saved envelope, and the check only reads.
 import assert from 'node:assert/strict';
@@ -134,7 +135,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
   const shownChoices = async page => (await page.locator('#policy-draft-roots > div').evaluateAll(rows => rows.map(row => [row.dataset.itemId, row.dataset.status]))).sort();
   const draftRevision = async page => Number(/Draft revision (\d+)/.exec(await page.locator('#policy-draft-note').textContent())?.[1]);
   const choose = async (page, family, id) => {
-    await page.locator('#nav-sources').click(); await page.locator('#browse-support').selectOption('all'); await page.locator('#browse-family').selectOption(family);
+    await page.locator('#nav-sources').click(); await chooseCatalogSupport(page, 'all'); await chooseCatalogFamily(page, family);
     await addFromCatalog(page, id);
   };
   // The evidence panel is the existing review flow's own: open it, then supply the original evidence bytes.

@@ -1,3 +1,4 @@
+import { chooseCatalogFamily, chooseCatalogSupport } from './policy-drawer.mjs';
 // Ordinary Workbench journey: the optional reviewing identity saved in setup becomes the default for "Reviewing as",
 // a session choice still wins, it is never written into a policy or draft, and clearing it returns every judgment to imported.
 import assert from 'node:assert/strict';
@@ -58,7 +59,7 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
   };
   const download = async (page, trigger, path) => { const event = page.waitForEvent('download'); await trigger(); await (await event).saveAs(path); return new Uint8Array(await readFile(path)); };
   const choose = async (page, family, id) => {
-    await page.locator('#nav-sources').click(); await page.locator('#browse-support').selectOption('all'); await page.locator('#browse-family').selectOption(family);
+    await page.locator('#nav-sources').click(); await chooseCatalogSupport(page, 'all'); await chooseCatalogFamily(page, family);
     await addFromCatalog(page, id);
   };
   const openPanel = async page => {

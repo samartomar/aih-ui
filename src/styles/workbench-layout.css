@@ -89,3 +89,33 @@ body:has(#main-content) :focus-visible { outline: 2px solid var(--color-primary)
   .wb-status-line #policy-context-disclosure { flex: 1; }
   .wb-status-line > div:first-child { gap: 6px; }
 }
+/* Ordinary browsing keeps secondary source tools out of the card flow. */
+#catalog-workspace > .catalog-heading-row {
+  display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+  padding: 12px 20px !important; gap: 12px !important; border-bottom: 1px solid var(--color-border);
+  background: var(--color-canvas);
+}
+.catalog-heading-tools { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+.catalog-heading-tools > details { position: relative; }
+.catalog-heading-tools > details > summary { color: var(--color-muted); cursor: pointer; font-size: 12px; }
+.catalog-secondary-panel, .catalog-heading-tools .catalog-advanced-body {
+  position: absolute; z-index: 42; right: 0; top: calc(100% + 8px);
+  width: min(640px, calc(100vw - 32px)); max-height: 65vh; overflow: auto;
+  padding: 16px; border: 1px solid var(--color-border); border-radius: 6px;
+  background: var(--color-panel); box-shadow: var(--panel-shadow);
+}
+.catalog-secondary-panel > * + * { margin-top: 14px; }
+.browse-primary-controls { display: flex; align-items: center; gap: 12px; padding-block: 10px; }
+.browse-primary-controls .toolbar-search { flex: 1 1 220px; }
+.browse-primary-controls .toolbar-kinds { flex: 0 1 auto; max-width: 62%; }
+.browse-primary-controls #kind-filters { gap: 5px; }
+.browse-primary-controls #kind-filters button { padding: 4px 7px; min-height: 32px; }
+.catalog-entry-tally, #category-context { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.gap-indicator-icon { display: block; flex: 0 0 16px; }
+@media (max-width: 760px) {
+  #catalog-workspace > .catalog-heading-row { align-items: flex-start; flex-wrap: wrap; padding: 10px 12px !important; }
+  .catalog-heading-tools { flex-wrap: wrap; gap: 12px; }
+  .catalog-secondary-panel, .catalog-heading-tools .catalog-advanced-body { position: fixed; top: var(--workbench-top); left: 8px; right: 8px; width: auto; max-height: calc(100dvh - var(--workbench-top) - 16px); }
+  .browse-primary-controls { flex-wrap: wrap; gap: 8px; }
+  .browse-primary-controls .toolbar-search, .browse-primary-controls .toolbar-kinds { flex-basis: 100%; max-width: 100%; }
+}

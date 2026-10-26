@@ -1,3 +1,4 @@
+import { chooseCatalogFamily } from './policy-drawer.mjs';
 import assert from 'node:assert/strict';
 import { readFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -203,7 +204,7 @@ export async function runVisualGroundworkBrowser({ origin, output, playwrightMod
     await page.locator('#pane-security').waitFor();
     assert.deepEqual(positive(await scanWords(page.locator('#inspector-rail'))), [], 'inspector: no positive scan word');
     const inspectorIcons = await auditIcons(page, 'inspector');
-    await page.locator('#browse-family').selectOption('Extensions');
+    await chooseCatalogFamily(page, 'Extensions');
     await page.locator('#catalog-search').fill(item.split('.').at(-1));
     await page.getByRole('button', { name: `Add ${item}`, exact: true }).click();
     await page.locator('#added-notice-message').filter({ hasText: /^Added / }).waitFor();

@@ -67,6 +67,8 @@ try {
   const { runReferenceLayoutBrowser, runFamilyStatesBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/reference-layout-browser.mjs')));
   starting('runReferenceLayoutBrowser'); await runReferenceLayoutBrowser({ origin, output: join(consumerDir, 'reference-layout-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
   starting('runFamilyStatesBrowser'); await runFamilyStatesBrowser({ origin, output: join(consumerDir, 'family-states-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
+  const { runBrowsingLayoutBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/browsing-layout-browser.mjs')));
+  starting('runBrowsingLayoutBrowser'); await runBrowsingLayoutBrowser({ origin, output: join(consumerDir, 'browsing-layout-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
   // With a Core that publishes checkContracts, a second host is given a newer writer's declaration that Core refuses, so
   // "can't read" is shown through Core's real engine. A Core without it has no engine to refuse anything.
   const engine = callService(consumerDir, { op: 'contractCheck' });

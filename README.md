@@ -694,8 +694,13 @@ unavailable; they are never promoted to passes by the layout.
 Installed versions are the ones npm recorded in the throwaway consumer
 (`node_modules/.package-lock.json`), cross-checked against the installed manifest
 and exact archive, never inferred from a filename or the index's package block.
-The left rail's family controls use the same installed inventory and filters as
-the catalog. Counts describe listed items, not observed tool support. Starting
+Normal browsing keeps search and compact kind controls directly above the cards.
+Secondary filters, personal folder intake/bindings, sort, review gaps and technical
+source details remain keyboard-accessible through the collapsed **Filters & your
+sources** disclosure. The left rail is the primary family navigation; its controls
+use the same installed inventory and filters as the catalog. Counts describe listed items, not observed tool support. Gap information controls
+use local SVG strokes in the current theme colour, independent of Unicode glyph
+coverage and remote fonts. Starting
 sets, native tool-fit claims and grouped set actions appear only when their
 owning screen reads the required published contract; presentation does not
 supply those semantics.

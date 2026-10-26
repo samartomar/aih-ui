@@ -1,3 +1,4 @@
+import { openCatalogFilters } from './policy-drawer.mjs';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -43,6 +44,7 @@ export async function runRestoredSurfacesBrowser({ origin, output, playwrightMod
     for (const commit of commits) assert.ok(await strip.getByText(commit, { exact: true }).isVisible(), `The provenance strip shows full commit ${commit}.`);
 
     await page.keyboard.press('Escape');
+    await openCatalogFilters(page);
     await page.locator('.catalog-source-note > summary').click();
     assert.match(await page.locator('#masthead-status').textContent(), /ENABLED · Not connected/, 'The masthead keeps its connection chip.');
     assert.ok(await page.locator('.catalog-source-note > summary').isVisible(), 'The Catalog index label is shown.');
@@ -55,6 +57,8 @@ export async function runRestoredSurfacesBrowser({ origin, output, playwrightMod
     await signals.locator('> summary').click();
     assert.ok(await signals.locator('#review-summary').isVisible(), 'Opening Signals shows the review summary.');
     await signals.locator('> summary').click();
+    await page.locator('#catalog-filter-disclosure > summary').focus();
+    await page.keyboard.press('Escape');
 
     await page.locator('#cards-grid [data-card-id]').first().click();
     const details = page.locator('#pane-details');

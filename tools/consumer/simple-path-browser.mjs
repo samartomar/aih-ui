@@ -1,3 +1,4 @@
+import { chooseCatalogFamily } from './policy-drawer.mjs';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -48,7 +49,7 @@ export async function runSimplePathBrowser({ origin, output, playwrightModule, t
     assert.equal(await page.locator('#nav-policy').isVisible(), false, 'Policy workspace waits behind Advanced.');
 
     // Add in one click: the item and the items it needs are in the setup, with no Accept step and the drawer closed.
-    await page.locator('#browse-family').selectOption('Extensions');
+    await chooseCatalogFamily(page, 'Extensions');
     await page.locator('#catalog-search').fill(item.split('.').at(-1));
     await page.getByRole('button', { name: `Add ${item}`, exact: true }).click();
     const added = page.locator('#added-notice-message').filter({ hasText: /^Added / });

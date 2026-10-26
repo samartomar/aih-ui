@@ -75,8 +75,9 @@ function kindPill(label, count, active, onClick, key = label) {
   button.setAttribute("aria-pressed", String(active));
   // The kind's own icon and accent from the shared map; "All" names no kind.
   if (key !== null) button.appendChild(iconSpan("kind", key, { size: "text-[12px]" }));
-  button.appendChild(el("span", "", key === null ? label : `${label} (${count})`));
+  button.appendChild(el("span", "", key === null ? `All ${count}` : String(count)));
   const kind = key === null ? "All kinds" : iconFor("kind", key).label;
+  button.setAttribute("aria-label", `${kind}: ${count} items`);
   attachTooltip(button, `${kind}: ${count} items matching ${key === null ? "the current" : "this kind and the current"} family, source, search and target-support filters.`);
   button.addEventListener("click", onClick);
   return button;

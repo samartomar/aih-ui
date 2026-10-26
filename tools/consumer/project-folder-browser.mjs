@@ -1,3 +1,4 @@
+import { chooseCatalogFamily } from './policy-drawer.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { userInfo } from 'node:os';
@@ -61,7 +62,7 @@ export async function runProjectFolderBrowser({ origin, output, playwrightModule
       await page.locator('#policy-review-panel').waitFor({ state: 'hidden' });
       assert.equal((await focused()).id, 'catalog-search', 'Back to catalog focuses the search box when nothing was chosen.');
 
-      await page.locator('#browse-family').selectOption('Extensions');
+      await chooseCatalogFamily(page, 'Extensions');
       await page.locator('#catalog-search').fill('grill-me');
       // One-click Add puts it in the setup; Your setup then prepares Install into the folder.
       await addFromCatalog(page, 'extensions.matt.grill-me');

@@ -108,6 +108,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       button.addEventListener('click', () => {
         family.value = option.value;
         family.dispatchEvent(new Event('change'));
+        filterDisclosure.open = false;
+        document.getElementById("catalog-advanced").open = false;
       });
       frameworkNavigation.appendChild(button);
       if (focusedFamily === option.value) button.focus();
@@ -122,7 +124,13 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   const resetFilters = () => { Object.assign(state.view, emptyView()); toolbar.setQuery(''); changeView({ target: target.options[0]?.value ?? '' }); };
   document.getElementById('catalog-reset-filters').addEventListener('click', resetFilters);
   const filterDisclosure = document.getElementById('catalog-filter-disclosure');
-  if (window.innerWidth <= 760) filterDisclosure.open = false;
+  filterDisclosure.open = false;
+  const advancedDisclosure = document.getElementById('catalog-advanced');
+  filterDisclosure.addEventListener('toggle', () => { if (filterDisclosure.open) advancedDisclosure.open = false; });
+  advancedDisclosure.addEventListener('toggle', () => { if (advancedDisclosure.open) filterDisclosure.open = false; });
+  filterDisclosure.addEventListener("keydown", event => {
+    if (event.key === "Escape" && filterDisclosure.open) { event.stopPropagation(); filterDisclosure.open = false; filterDisclosure.querySelector("summary").focus(); }
+  });
 
   function browseEntries(view = state.view) {
     return visibleEntries(state.entries, view)
