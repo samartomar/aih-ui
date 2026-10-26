@@ -1,4 +1,4 @@
-import { chooseCatalogFamily, chooseCatalogSupport } from './policy-drawer.mjs';
+import { chooseCatalogFamily, chooseCatalogSupport, setPersonalFolder } from './policy-drawer.mjs';
 // Ordinary Workbench journey: an unresolved draft is opened, edited, saved as a journey
 // envelope, reopened in a fresh page and compiled for its resolved choices only.
 import assert from 'node:assert/strict';
@@ -51,7 +51,7 @@ export async function runUnresolvedDraftBrowser({ origin, output, playwrightModu
   try {
     // Context A: choose a personal skill and a maintained item with a dependency, then save the policy.
     const authoring = await openPage();
-    await authoring.locator('#personal-folder').setInputFiles(folder);
+    await setPersonalFolder(authoring, folder);
     await authoring.locator('#personal-result').filter({ hasText: 'Folder validated' }).waitFor();
     await choose(authoring, 'Personal', PERSONAL);
     await choose(authoring, 'Catalog', MAINTAINED[0]);

@@ -47,9 +47,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
     return { ...descriptor, bytes: new Uint8Array(await readFile(path)) };
   }));
   const frameworkCatalog = await readFrameworkSources(frameworkSources);
-  const legacyFamilies = await installedFamilies();
-  frameworkCatalog.sources.push(...legacyFamilies.failures);
-  const familyInventories = [...legacyFamilies, ...frameworkCatalog.inventories];
+  const familyInventories = [...await installedFamilies(), ...frameworkCatalog.inventories];
   // Explicit previous-package history participates in exact saved-pin reads,
   // never in the current browse inventory. Preserve the logical input saved
   // before upgrade; historical execution is guarded separately below.

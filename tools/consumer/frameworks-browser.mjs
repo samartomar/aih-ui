@@ -47,7 +47,7 @@ export async function runFrameworksBrowser({ origin, output, playwrightModule, s
         assert.deepEqual(provenance.materialSource.internalContent.status,expected.prepared.status);
         assert.equal(provenance.materialSource.internalContent.archiveSha256,expected.prepared.archiveSha256);
         assert.equal(provenance.materialSource.internalContent.provenance.inventorySha256,expected.prepared.provenance.inventorySha256);
-        await page.reload();await page.locator('#your-setup').click();await page.locator('#policy-internal-content').waitFor();
+        await page.reload();await page.locator('#framework-navigation [aria-pressed="true"]').waitFor();assert.equal(await internal.getAttribute('aria-pressed'),'true','Exact saved framework selection is restored');await page.locator('#your-setup').click();await page.locator('#policy-internal-content').waitFor();
         assert.match(await page.locator('#policy-internal-content').innerText(),/Internal content/);
         await page.keyboard.press('Escape');
       }
@@ -55,11 +55,20 @@ export async function runFrameworksBrowser({ origin, output, playwrightModule, s
         const release=rail.locator('[data-framework^="release:"]');await release.waitFor();assert.match(await release.innerText(),new RegExp(expected.release.framework.name));
         assert.match(await rail.innerText(),/not verified \(unsigned\)/);await release.click();
         assert.equal(await page.locator('.wb-source-heading').innerText(),expected.release.framework.name);
+        assert.equal(await release.getAttribute('aria-pressed'),'true');
+        if(scenario==='ready') {
+          await page.locator('#catalog-filter-disclosure > summary').click();await page.locator('#browse-family').selectOption('');
+          assert.equal(await rail.locator('[aria-pressed="true"]').count(),0,'Changing the secondary family filter clears the rail selection');
+          await page.locator('#catalog-filters-close').click();await internal.click();
+          await page.locator('#catalog-filter-disclosure > summary').click();await page.locator('#catalog-reset-filters').click();
+          assert.equal(await rail.locator('[aria-pressed="true"]').count(),0,'Reset clears the rail selection');await page.locator('#catalog-filters-close').click();
+        }
       }
       if(['failed','missing'].includes(scenario))assert.match(await rail.innerText(),/failed|unavailable/i);
       if(scenario==='conflicting'){assert.match(await rail.innerText(),/conflict/i);assert.equal(await rail.locator('[data-framework*="framework-alpha"]').count(),0,'Conflicting framework is withheld');assert.match(await rail.locator('[data-framework^="release:"] .framework-count').innerText(),/unavailable/);}
       if(scenario==='releaseFailed')assert.match(await rail.locator('[data-framework^="release:"] .framework-count').innerText(),/failed/);
       if(['empty','unavailable'].includes(scenario))assert.match(await rail.innerText(),/No frameworks available/);
+      if(scenario==='readerUnavailable'){assert.match(await rail.innerText(),/Internal content unavailable/);assert.equal(await internal.count(),0);}
       if(scenario==='internalFailed'){assert.match(await rail.innerText(),/Internal content source failed/);assert.equal(await internal.count(),0);}
       assert.ok(await page.locator('#framework-first-step').isVisible());
       await page.screenshot({animations:'disabled',path:join(output,`${theme}-rail.png`)});

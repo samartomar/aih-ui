@@ -17,15 +17,16 @@ for (const [assets, destination] of [[pageAssets(repo), runDir], [serviceAssets(
   const path = join(destination, asset.to); await mkdir(dirname(path), { recursive: true }); await copyFile(join(repo, asset.from), path);
 }
 const load = name => import(pathToFileURL(join(consumerDir, 'consumer', name)).href);
-const { frameworkFixtures } = await load('framework-fixtures.mjs');
+const selectedCases = process.argv.slice(5);
+const unavailableOnly = selectedCases.length === 1 && selectedCases[0] === 'readerUnavailable';
+const frameworkFixtures = unavailableOnly ? undefined : (await load('framework-fixtures.mjs')).frameworkFixtures;
 const { runFrameworksBrowser, runFrameworkLoadingBrowser, runFrameworkReopenBrowser } = await load('frameworks-browser.mjs');
-const fixture = await frameworkFixtures(join(output, 'fixtures'), artifacts.catalog);
+const fixture = unavailableOnly ? { scenarios: { readerUnavailable: { fixture: true, prepared: [{}] } }, expected: {} } : await frameworkFixtures(join(output, 'fixtures'), artifacts.catalog);
 await writeFile(join(output, 'fixture-expectations.json'), JSON.stringify(fixture.expected, null, 2));
 const summary = { packages: await Promise.all(Object.entries(artifacts).map(async ([name, value]) => ({name,packageName:`@aihq/${name}`,version:JSON.parse(await readFile(join(consumerDir,`node_modules/@aihq/${name}/package.json`),'utf8')).version,...value}))), coreTargets: coreTargetsSummary(callService(consumerDir, {op:'coreTargets'})) };
 const config = join(output, 'sources.json'); process.env.AIH_FRAMEWORK_SOURCES = config;
 const outcomes = [];
-const selectedCases = process.argv.slice(5);
-for (const [scenario, configuration] of [...Object.entries(fixture.scenarios), ['restart', fixture.scenarios.ready]].filter(([name]) => !selectedCases.length || selectedCases.includes(name))) {
+for (const [scenario, configuration] of [...Object.entries(fixture.scenarios), ...(!unavailableOnly ? [['restart', fixture.scenarios.ready]] : [])].filter(([name]) => !selectedCases.length || selectedCases.includes(name))) {
   await writeFile(config, JSON.stringify(configuration));
   const started = await createWorkbench({ consumerDir, runDir, summary, settingsPath: join(output, 'settings.json') });
   summary.entryCount = started.catalog.items.length; await writeFile(join(runDir,'summary.json'), JSON.stringify(summary));

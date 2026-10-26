@@ -1,6 +1,7 @@
 import { el } from '../app/dom.js';
 import { attachTooltip } from '../app/tooltip.js';
 import { iconSpan } from '../app/icons.js';
+import { sourceFilterValue } from './selectors.js';
 // Names, availability and observations are public reader results projected by the host.
 export function createFrameworkNavigation({ container, onChoose, onFirstStep }) {
   let catalog, tool, selected;
@@ -13,7 +14,7 @@ export function createFrameworkNavigation({ container, onChoose, onFirstStep }) 
       if (source.kind === 'internal' && source.state === 'read') continue;
       const disclosure = el('details', 'framework-source-note');
       const conflicting = source.diagnostics?.some(value => value.code === 'conflict');
-      const label = source.kind === 'internal' ? 'Internal content source failed' : conflicting ? 'Conflicting index · not verified' : source.state === 'failed' ? 'Release index failed' : source.state === 'unavailable' ? 'Release index unavailable' : 'Release index · not verified (unsigned)';
+      const label = source.kind === 'internal' ? (source.state === 'unavailable' ? 'Internal content unavailable' : 'Internal content source failed') : conflicting ? 'Conflicting index · not verified' : source.state === 'failed' ? 'Release index failed' : source.state === 'unavailable' ? 'Release index unavailable' : 'Release index · not verified (unsigned)';
       const summary = el('summary', '', label);
       disclosure.dataset.sourceState = source.state;
       attachTooltip(summary, source.message);
@@ -48,5 +49,10 @@ export function createFrameworkNavigation({ container, onChoose, onFirstStep }) 
   const landing = document.getElementById('framework-first-step');
   landing?.addEventListener('click', () => onFirstStep());
   render();
-  return { setCatalog(value) { catalog = value; render(); }, setTool(value) { tool = value; render(); } };
+  return { setCatalog(value, view) {
+    catalog = value;
+    const current = value?.frameworks?.find(framework => view?.family === framework.name && view?.source === sourceFilterValue('family', framework.name, framework.sha256));
+    selected = current ? `${current.kind}:${current.id}:${current.sha256}` : undefined;
+    render();
+  }, setTool(value) { tool = value; render(); } };
 }

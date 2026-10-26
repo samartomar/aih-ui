@@ -178,7 +178,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     if (!restoredView) return;
     state.counts = inventoryCounts(state.entries);
     family.value = state.view.family;
-    frameworks.setCatalog(authoring.catalog);
+    frameworks.setCatalog(authoring.catalog, state.view);
     document.querySelector(".wb-source-heading").textContent = state.view.family || "Choose content for your AI tool";
     target.value = state.view.target;
     support.value = state.view.support;

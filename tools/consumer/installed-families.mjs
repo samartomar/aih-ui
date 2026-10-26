@@ -24,8 +24,5 @@ export async function installedReleaseInventory({ root, releaseExport = './relea
   return { release: installed.release, materialSource: installed.source, materials };
 }
 export async function installedFamilies({ root = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'))), sourceInput = 'maintained' } = {}) {
-  const results = await Promise.allSettled(families.map(async ([family, releaseExport]) => ({ family, ...await installedReleaseInventory({ root, releaseExport, sourceInput }) })));
-  const inventories = results.filter(result => result.status === 'fulfilled').map(result => result.value);
-  inventories.failures = results.flatMap((result, index) => result.status === 'rejected' ? [{ state: 'failed', message: `Installed content source ${index + 1} failed. Other sources remain available.` }] : []);
-  return inventories;
+  return Promise.all(families.map(async ([family, releaseExport]) => ({ family, ...await installedReleaseInventory({ root, releaseExport, sourceInput }) })));
 }
