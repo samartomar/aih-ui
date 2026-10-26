@@ -199,7 +199,7 @@ body:has(#added-notice:not([hidden])) #cards-grid { padding-bottom: 10rem; }
 #cards-grid [data-card-id] > div:last-child > div:first-child > span:nth-child(2) {
   display: inline-flex !important;
 }
-#cards-grid [data-card-id][data-shared-category="true"] > div:first-child > div:first-child > div:last-child {
+#cards-grid [data-card-id][data-shared-category="true"] .card-family {
   position: absolute !important;
   width: 1px;
   height: 1px;

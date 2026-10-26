@@ -19,6 +19,7 @@ import { projectItems, capabilityFacts, declaredTargets, supportedEntries } from
 import { publishedClients } from "../app/core-targets.js";
 import { inventoryCounts, scopeTotal, selectedScope, visibleEntries, sourceScopes } from "./selectors.js";
 import { emptyView, restoreView, saveView } from "./view-state.js";
+import { attachTooltip } from "../app/tooltip.js";
 import { el, text } from "../app/dom.js";
 import { createProjectBasics, projectFileEntries } from "./project-basics.js";
 
@@ -57,6 +58,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   };
 
   const provenance = createProvenance({ elements: elements.provenance });
+  provenance.setSummary({});
   const metrics = createMetrics({
     container: elements.metrics.container,
     onToggleKind: (kind) => changeView({ kind: state.view.kind === kind ? null : kind }),
@@ -90,6 +92,27 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     const row = sourceScopes(state.counts).find(row => row.source.release === family.value);
     changeView({ family: family.value, source: row?.filterValue ?? null, sourceType: null });
   });
+  const frameworkNavigation = document.getElementById('framework-navigation');
+  function renderFrameworkNavigation() {
+    const options = [...family.options];
+    const focusedFamily = frameworkNavigation.contains(document.activeElement) ? document.activeElement.dataset.family : undefined;
+    frameworkNavigation.replaceChildren();
+    if (options.length < 2) { frameworkNavigation.textContent = 'No content families listed'; return; }
+    for (const option of options) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = option.value ? option.textContent : 'All content';
+      button.dataset.family = option.value;
+      button.setAttribute('aria-pressed', String(option.value === state.view.family));
+      attachTooltip(button, option.value ? `Browse installed ${option.value} content. Counts describe listed items, not observed tool support.` : 'Browse all installed content families');
+      button.addEventListener('click', () => {
+        family.value = option.value;
+        family.dispatchEvent(new Event('change'));
+      });
+      frameworkNavigation.appendChild(button);
+      if (focusedFamily === option.value) button.focus();
+    }
+  }
   target.addEventListener('change', () => changeView({ target: target.value }));
   // Project basics shows in place of the cards.
   const projectBasics = createProjectBasics({ elements: elements.projectBasics, onSelect: (entryId) => select(entryId), onOpenWorkspace });
@@ -161,6 +184,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     if (!restoredView) return;
     state.counts = inventoryCounts(state.entries);
     family.value = state.view.family;
+    renderFrameworkNavigation();
+    document.querySelector(".wb-source-heading").textContent = state.view.family || "Choose content for your AI tool";
     target.value = state.view.target;
     support.value = state.view.support;
     const total = state.entries.length;
@@ -245,6 +270,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   return {
     async start() {
       state.summary = await (await fetch('./summary.json', { cache: 'no-store' })).json();
+      provenance.setSummary(state.summary);
       // The start-up contract check answers on its own time; the strip reads "Checking contracts…" meanwhile.
       loadContractCheck().then(answer => provenance.setContractCheck(answer));
       onSummary?.(state.summary);

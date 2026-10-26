@@ -3,8 +3,8 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-// Asserts, on the running page: the provenance strip's package and version labels, commit chips and read-only mirror
-// badge; the masthead connection chip; the "Catalog index" and "Organization source policy" labels; the inspector's
+// Asserts, on the running page: Packages preserves versions, full commits, archive digests and read-only mirror
+// information; the masthead connection chip; the "Catalog index" and "Organization source policy" labels; the inspector's
 // "Upstream provenance" heading, its three disabled policy-choice radios and "Staged policy delta"; the "Telemetry"
 // heading; and the review "Signals" disclosure. None of these may be removed without the maintainer's approval.
 // requireCommitChips: the served packages must record Git commits (a manifest candidate), so the chips are checked.
@@ -32,15 +32,20 @@ export async function runRestoredSurfacesBrowser({ origin, output, playwrightMod
     if (await page.getByRole('button', { name: destination, exact: true }).count()) await page.getByRole('button', { name: destination, exact: true }).click();
 
     const strip = page.locator('#provenance-strip');
+    await strip.locator('summary').click();
     await strip.getByText('read-only-mirror', { exact: true }).waitFor();
     for (const pkg of summary.packages) {
       const name = `@aihq/${pkg.name}`;
-      assert.ok(await strip.getByText(`${name} ${pkg.version}`, { exact: true }).isVisible(), `The provenance strip names ${name} ${pkg.version}.`);
+      assert.ok(await strip.getByText(name, { exact: true }).isVisible(), `Packages names ${name}.`);
+      assert.ok(await strip.getByText(pkg.version, { exact: true }).count(), `Packages preserves installed version ${pkg.version}.`);
+      assert.ok(await strip.getByText(pkg.sha256, { exact: true }).isVisible(), `Packages preserves ${name}'s archive digest.`);
     }
-    for (const commit of commits) assert.ok(await strip.getByText(commit.slice(0, 7), { exact: true }).isVisible(), `The provenance strip shows commit ${commit.slice(0, 7)}.`);
+    for (const commit of commits) assert.ok(await strip.getByText(commit, { exact: true }).isVisible(), `The provenance strip shows full commit ${commit}.`);
 
+    await page.keyboard.press('Escape');
+    await page.locator('.catalog-source-note > summary').click();
     assert.match(await page.locator('#masthead-status').textContent(), /ENABLED · Not connected/, 'The masthead keeps its connection chip.');
-    assert.ok(await page.getByText('CATALOG INDEX · READ-ONLY MIRROR', { exact: true }).isVisible(), 'The Catalog index label is shown.');
+    assert.ok(await page.locator('.catalog-source-note > summary').isVisible(), 'The Catalog index label is shown.');
     await page.locator('.source-policy-details > summary').click();
     assert.ok(await page.getByText('Organization Source Policy:', { exact: true }).isVisible(), 'The Organization source policy label is shown.');
     assert.ok(await page.getByText('TELEMETRY', { exact: true }).isVisible(), 'The Telemetry heading is shown.');

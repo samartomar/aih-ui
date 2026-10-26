@@ -326,8 +326,7 @@ every command.
   manifest; a sample that could not be made leaves its host input unset, so the
   page shows its own "not configured" state. Start prints the URL, the candidate
   identity (each package's version, SHA-256 and commit) and the data directory.
-  It then opens the page headless and checks that the package strip and the
-  provenance disclosure show the same identity as the manifest; a mismatch is
+  It then opens the page headless and checks that the Packages disclosure shows the same identity as the manifest; a mismatch is
   reported and start exits non-zero, leaving the server running. `--no-smoke`
   skips that check. Its screenshots of each journey's start page are kept in
   `logs/checks/`. Start without `--manifest` restarts the candidate already
@@ -680,16 +679,23 @@ Selecting a row scopes the grid, the "All Items" count and the masthead to that
 source; selecting it again shows every source. The organization's own additions
 come last and read **Not supplied** until something is actually imported.
 
-### The package strip and the header's Your tool
+### Packages and the header's Your tool
 
-The strip under the header is the Workbench design's compact line:
-`@aihq/core <version> • @aihq/scan <version> • @aihq/catalog <version>`. Each
-version is the one npm recorded installing in the throwaway consumer
+The primary header keeps tool choice, Your setup, Settings and theme together.
+The secondary line shows setup status and a keyboard- and touch-accessible
+**Packages** disclosure. It retains each installed package's version, exact
+archive digest and full source checkpoint, the read-only mirror information,
+index metadata and the honest contract-check result. Unavailable checks remain
+unavailable; they are never promoted to passes by the layout.
+
+Installed versions are the ones npm recorded in the throwaway consumer
 (`node_modules/.package-lock.json`), cross-checked against the installed manifest
-and the exact tarball -- never parsed from a filename and never taken from the
-index's own package block. These are local packages that can share a released
-version number, so each also shows its short checkpoint. Hashes, full commits, raw
-entry counts, the collection view and index admission are behind "provenance".
+and exact archive, never inferred from a filename or the index's package block.
+The left rail's family controls use the same installed inventory and filters as
+the catalog. Counts describe listed items, not observed tool support. Starting
+sets, native tool-fit claims and grouped set actions appear only when their
+owning screen reads the required published contract; presentation does not
+supply those semantics.
 
 **Your tool** in the header is the one AI tool the person works in, and the only
 tool control on the page. Every fact on it comes from the installed Core, read by
@@ -1187,8 +1193,8 @@ node tools/preview.mjs
 
 `aih-policy-workbench.html` is the retiring standalone snapshot. Opening it as a
 local file does not install or read these tarballs. The live `src/` page is the
-HTTP preview; its package strip reports the installed versions and its
-provenance disclosure reports the exact tarball hashes. The Catalog inventory
+HTTP preview; its Packages disclosure reports the installed versions and
+exact archive hashes. The Catalog inventory
 line counts the entries of the Catalog releases the page reads.
 
 ```

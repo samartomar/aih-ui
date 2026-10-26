@@ -55,6 +55,7 @@ function card(entry, selectedId, onSelect, model) {
 
   const node = el("div", "wb-card group rounded border p-3 flex flex-col justify-between cursor-pointer");
   node.dataset.cardId = id.entryId;
+  node.dataset.kind = id.kind;
   node.dataset.categoryLabel = badge.text;
   node.dataset.categoryExplanation = badge.title ?? badge.text;
   node.dataset.categorySource = badge.source;
@@ -73,7 +74,7 @@ function card(entry, selectedId, onSelect, model) {
   // The item's label from the installed release; otherwise its id.
   name.appendChild(el("span", "wb-card-title text-wb-body font-mono font-medium text-wb-title tracking-tight truncate", title ?? id.name));
   head.appendChild(name);
-  const badges = el("div", "flex items-center gap-1 shrink-0");
+  const badges = el("div", "card-family flex items-center gap-1 shrink-0");
   const category = el(
     "span",
     `px-1.5 py-0.5 rounded bg-wb-meta-bg border border-wb-border text-[8.5px] font-mono text-wb-meta${badge.value ? " uppercase" : ""}`,
@@ -119,7 +120,7 @@ function card(entry, selectedId, onSelect, model) {
   left.appendChild(tokens);
   foot.appendChild(left);
 
-  const toggle = el("div", "flex items-center gap-1.5");
+  const toggle = el("div", "card-action flex items-center gap-1.5");
   const button = el("button", "toggle-switch w-6 h-3.5 rounded-full bg-surface-container-highest p-0.5 flex items-center opacity-50 cursor-not-allowed", undefined);
   button.type = "button";
   button.disabled = !entry.authoringItem;
@@ -150,7 +151,7 @@ function card(entry, selectedId, onSelect, model) {
       finally { button.disabled = false; button.textContent = label; button.removeAttribute('aria-busy'); }
     });
   }
-  foot.appendChild(toggle);
+  head.appendChild(toggle);
   node.appendChild(foot);
 
   const select = () => onSelect(id.entryId);

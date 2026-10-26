@@ -1,0 +1,91 @@
+/* Compact task hierarchy. Package diagnostics remain available in Packages;
+   all values and operations continue to come from the existing screen models. */
+body.wb-page:has(#main-content) > header {
+  min-height: 56px; padding: 8px 14px; gap: 8px; flex-wrap: nowrap;
+}
+body:has(#main-content) > header > div { flex-wrap: nowrap; }
+body:has(#main-content) > header .wb-header-control { min-height: 34px; padding: 5px 9px; }
+body:has(#main-content) > header span { font-size: 13px; }
+body:has(#main-content) > header #workbench-role { font-size: 10px; }
+body:has(#main-content) > header #your-setup { min-height: 34px; padding: 5px 12px; }
+body:has(#main-content) > .wb-status-line {
+  min-height: 36px; padding: 2px 14px; flex-wrap: nowrap; gap: 12px;
+  background: var(--color-chrome);
+}
+.wb-status-line > div:first-child { flex: 1; min-width: 0; }
+#policy-current-context { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+#policy-context-disclosure { flex: 0 1 auto; overflow: hidden; }
+body:has(#main-content) #policy-context-disclosure > summary { display: none; }
+#provenance-strip { flex: 0 0 auto; }
+.package-disclosure > summary { display: flex; align-items: center; gap: 5px; min-height: 26px !important; font-size: 11px; background: transparent; border: 1px solid var(--color-border); }
+.package-panel { top: calc(100% + 6px); padding: 14px; font-size: 12px; width: min(520px, calc(100vw - 28px)); }
+.package-panel > div { padding-block: 3px; }
+.package-panel #contract-check-note { white-space: normal; flex-wrap: wrap; }
+body:has(#main-content) #nav-rail:not(.w-0) { width: 236px; }
+.framework-navigation { padding-top: 12px; border-top: 1px solid var(--color-border); }
+.framework-navigation-title { margin: 0 8px 6px; color: var(--color-muted); font-size: 11px !important; text-transform: uppercase; letter-spacing: .07em; }
+#framework-navigation { display: grid; gap: 2px; }
+#framework-navigation button { text-align: left; padding: 7px 10px; border-radius: 5px; color: var(--color-text); font-size: 13px; }
+#framework-navigation button:hover { background: var(--color-hover); }
+#framework-navigation button[aria-pressed=true] { color: var(--color-primary); background: var(--color-subtle); box-shadow: inset 2px 0 var(--color-primary); }
+.catalog-source-note { font-size: 11px; color: var(--color-muted); }
+.catalog-source-note > summary { min-height: 22px !important; cursor: pointer; }
+#catalog-workspace .wb-source-heading { font-size: 20px; }
+#catalog-workspace { padding-inline: 20px; }
+#workbench-toolbar { padding-inline: 20px; background: var(--color-canvas); }
+#cards-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 12px !important; }
+#cards-grid [data-card-id] { padding: 12px !important; border-left-width: 3px; }
+#cards-grid [data-kind=skill] { border-left-color: var(--color-kind-skill); }
+#cards-grid [data-kind=rule] { border-left-color: var(--color-kind-rule); }
+#cards-grid [data-kind=command] { border-left-color: var(--color-kind-command); }
+#cards-grid [data-kind=agent] { border-left-color: var(--color-kind-agent); }
+#cards-grid [data-kind=hook] { border-left-color: var(--color-kind-hook); }
+#cards-grid [data-kind=mcp] { border-left-color: var(--color-kind-mcp); }
+#cards-grid [data-kind=document] { border-left-color: var(--color-kind-document); }
+.wb-card-title { font-size: 14px !important; }
+.wb-card-description { min-height: 2.8em; line-height: 1.45; font-size: 13px !important; }
+.card-action { margin-left: auto; flex-shrink: 0; }
+.card-action button { padding: 4px 10px; font-size: 12px !important; }
+#cards-grid [data-card-id] > div:last-child { border-top: 0; }
+#cards-grid [data-card-id] > div:last-child > div:first-child { flex-wrap: wrap; gap: 6px; }
+#inspector-rail:not(.w-0) { width: 400px; background: var(--color-panel); }
+.inspector-header { flex-wrap: nowrap; align-items: center; }
+.inspector-header > div:first-child { flex: 1; min-width: 0; }
+.inspector-tabs { order: initial; width: auto; flex-shrink: 0; }
+.inspector-tabs > button { flex: 0 0 30px; width: 30px; padding: 0; }
+.inspector-content { padding: 16px; }
+.policy-review-panel { inset: var(--workbench-top, 92px) 0 0 auto; width: min(920px, calc(100vw - 236px)); border-radius: 0; padding: 16px 20px; box-shadow: var(--panel-shadow); }
+.policy-review-head { top: -16px; margin: -16px -20px 0; padding: 16px 20px 12px; border-bottom: 1px solid var(--color-border); }
+.policy-review-panel #installed-list > li { padding: 12px; margin-top: 8px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-card); }
+.policy-review-panel section { background: var(--color-panel); }
+body:has(#main-content) :focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+@media (max-width: 1100px) {
+  .package-panel { position: fixed; top: var(--workbench-top, 92px); left: 14px; }
+  .policy-review-panel { width: min(760px, calc(100vw - 32px)); }
+}
+@media (max-width: 760px) {
+  body.wb-page:has(#main-content) > header { flex-wrap: wrap; padding: 8px; }
+  body:has(#main-content) > header > div:first-child { width: 100%; justify-content: space-between; }
+  body:has(#main-content) > header > div:last-child { width: 100%; justify-content: flex-end; }
+  body:has(#main-content) > .wb-status-line { display: flex; padding: 4px 8px; }
+  body:has(#main-content) #policy-context-disclosure > p { position: static; padding: 0; width: auto; border: 0; box-shadow: none; background: transparent; }
+  .wb-status-line #provenance-strip { display: block; }
+  #cards-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  #catalog-workspace { padding-inline: 12px; }
+  #workbench-toolbar { padding-inline: 12px; }
+  .policy-review-panel { inset: var(--workbench-top, 140px) 0 0; width: 100%; padding-inline: 12px; }
+  .policy-review-head { margin-inline: -12px; padding-inline: 12px; }
+  #framework-navigation button { min-height: 44px; }
+}
+/* Keep existing source controls compact while their separate contract views remain supported. */
+#authoring-browse { align-items: center; padding-block: 6px; gap: 8px; }
+#authoring-browse > label { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+#authoring-browse input[type=file] { width: 200px; max-width: 100%; font-size: 12px; }
+#authoring-browse #support-counts, #authoring-browse #personal-result { font-family: var(--font); font-size: 11px; line-height: 1.45; }
+@media (max-width: 760px) { #authoring-browse > label { flex-wrap: wrap; } }
+@media (max-width: 760px) {
+  body:has(#main-content) > header .wb-header-control,
+  body:has(#main-content) > header #your-setup { min-height: 44px; }
+  .wb-status-line #policy-context-disclosure { flex: 1; }
+  .wb-status-line > div:first-child { gap: 6px; }
+}

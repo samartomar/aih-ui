@@ -17,6 +17,7 @@
 <link rel="stylesheet" href="styles/policy-review.css">
 <link rel="stylesheet" href="styles/onboarding.css">
 <link rel="stylesheet" href="app/workbench.css">
+<link rel="stylesheet" href="styles/workbench-layout.css">
 </head>
 <body class="wb-page bg-background font-body text-on-surface leading-normal antialiased select-none">
 <!-- TOP HEADER (Compact, fixed 44px) -->
@@ -54,7 +55,7 @@
      Install / Installed. Review Changes is merged into it; its id stays on a hidden alias that opens the drawer at the top. -->
 <button class="flex items-center gap-1.5 px-2 py-1 rounded border border-primary text-primary text-[12px] font-medium hover:bg-surface-container" id="your-setup" type="button" title="Open the Project folder, Install and installed items for your setup.">Your setup</button>
 <button id="review-project-changes" type="button" hidden aria-hidden="true" tabindex="-1">Your setup</button>
-<span id="publish-project-policy" data-gap-reason="Git publishing is not connected. Save the project policy in Policy workspace, then review and publish through your Git workflow." data-gap-label="Publish not connected"></span>
+
 <!-- Settings: the workspace menu and the mode in one menu, with Check this machine and Get started. -->
 <div class="relative workspace-menu-container">
 <button class="wb-header-control" type="button" id="org-modal-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="workspace-actions" data-tip="Settings: workspace, mode, this machine and getting started">
@@ -67,6 +68,7 @@
 <button class="workspace-action" type="button" id="workbench-mode-trigger" aria-haspopup="dialog" aria-controls="workbench-mode-dialog" title="Change Workbench mode">Change mode…</button>
 <a class="workspace-action" href="readiness.html" id="nav-readiness">Check this machine</a>
 <a class="workspace-action" href="guided.html" id="nav-guided">Get started</a>
+<span id="publish-project-policy" data-gap-reason="Git publishing is not connected. Save the project policy in Policy workspace, then review and publish through your Git workflow." data-gap-label="Publish not connected"></span>
 </div>
 </div>
 <div class="h-3.5 w-px bg-surface-container-high mx-0.5"></div>
@@ -79,8 +81,8 @@
 
 </div>
 </header>
-<!-- WORKBENCH SUB-HEADER (Provenance & Panel Sliders) -->
-<div class="h-8 bg-surface-container-lowest/90 border-b border-wb-border px-3 flex items-center justify-between text-[11px] shrink-0">
+<!-- Setup status and accessible package diagnostics. -->
+<div class="wb-status-line h-8 bg-surface-container-lowest/90 border-b border-wb-border px-3 flex items-center justify-between text-[11px] shrink-0">
 <div class="flex items-center gap-2 min-w-0">
 <details id="policy-context-disclosure" open><summary id="policy-context-summary">Your setup</summary><p id="policy-current-context" role="status">Loading your setup…</p></details>
 <div class="flex items-center gap-2 font-mono text-[11px] text-on-surface-variant min-w-0" id="provenance-strip">
@@ -118,6 +120,10 @@
 </a>
 </nav>
 </div>
+<nav class="framework-navigation" aria-label="Content families">
+<p class="framework-navigation-title">Frameworks</p>
+<div id="framework-navigation" aria-live="polite">Loading content families…</div>
+</nav>
 <!-- PROJECT BASICS: what applies to the project whichever content is chosen, in its own place in the left panel. -->
 <nav class="pt-1 border-t border-wb-border text-[11px]" aria-label="Project basics">
 <a class="flex items-center justify-between px-2 py-1 rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface" href="#basics" id="nav-project-basics" data-tip="Tool support, project files and the workspace: they apply whichever framework you choose.">
@@ -160,7 +166,13 @@
 <div class="px-5 pt-4 pb-3 border-b border-wb-border bg-wb-subhead flex flex-col gap-2 shrink-0">
 <div class="flex items-center justify-between flex-wrap gap-2">
 <div>
-<div class="text-[10px] font-mono tracking-wider uppercase text-outline font-medium mb-0.5">CATALOG INDEX · READ-ONLY MIRROR</div>
+<details class="catalog-source-note"><summary>Catalog index</summary><p>Read-only mirror of the installed public packages. Full identities and contract-check results are in Packages.</p><p class="flex flex-wrap items-baseline gap-2 text-on-surface-variant" aria-label="Current catalog source">
+<span class="text-outline">Catalog source:</span>
+<span class="min-w-0 break-words" id="masthead-name">Loading sources…</span>
+<span class="text-outline" aria-hidden="true">·</span>
+<span class="text-outline" id="masthead-version"></span>
+</p>
+<div class="flex flex-wrap items-center gap-2 text-[11px] font-mono text-outline pt-0.5" id="masthead-status"></div></details>
 <h1 class="wb-source-heading text-wb-heading font-semibold text-wb-title tracking-tight" tabindex="-1">Choose content for your AI tool</h1>
 <p class="text-on-surface-variant">Add what you want, then install it from Your setup.</p>
 </div>
@@ -174,13 +186,7 @@
 </div></details>
 </div>
 <p class="text-on-surface-variant">Select a card for its details. Add puts it in Your setup with the items it needs.</p>
-<p class="flex flex-wrap items-baseline gap-2 text-on-surface-variant" aria-label="Current catalog source">
-<span class="text-outline">Catalog source:</span>
-<span class="min-w-0 break-words" id="masthead-name">Loading sources…</span>
-<span class="text-outline" aria-hidden="true">·</span>
-<span class="text-outline" id="masthead-version"></span>
-</p>
-<div class="flex flex-wrap items-center gap-2 text-[11px] font-mono text-outline pt-0.5" id="masthead-status"></div>
+
 <!-- Advanced (owner decision 4): the kind tiles, the catalog scopes, the Policy workspace links and Scan Review.
      Placement only: each keeps its id, code and behaviour. Closed for a new viewer; app/advanced.js remembers it. -->
 <details id="catalog-advanced" class="catalog-advanced"><summary class="cursor-pointer text-on-surface-variant hover:text-on-surface font-medium">Advanced</summary>
@@ -333,10 +339,10 @@
 <span class="min-w-0 font-mono font-medium text-wb-title text-[11px] tracking-tight" id="inspector-name"></span>
 </div>
 <div class="inspector-tabs inline-flex items-center shrink-0 bg-transparent" role="tablist" aria-label="Entry inspector">
-<button class="inspector-tab-btn rounded transition-colors text-primary" data-tab="details" type="button" role="tab" id="tab-details" aria-label="Details" title="Details" aria-controls="pane-details" aria-selected="true" tabindex="0"><span>Details</span></button>
-<button class="inspector-tab-btn rounded transition-colors text-on-surface-variant hover:text-on-surface" data-tab="security" type="button" role="tab" id="tab-security" aria-label="Evidence" title="Evidence for this item" aria-controls="pane-security" aria-selected="false" tabindex="-1"><span>Evidence</span></button>
-<button class="inspector-tab-btn rounded transition-colors text-on-surface-variant hover:text-on-surface" data-tab="json" type="button" role="tab" id="tab-json" aria-label="Policy JSON" title="Current policy JSON" aria-controls="pane-json" aria-selected="false" tabindex="-1">
-<span>Policy JSON</span>
+<button class="inspector-tab-btn rounded transition-colors text-primary" data-tab="details" type="button" role="tab" id="tab-details" aria-label="Details" title="Details" aria-controls="pane-details" aria-selected="true" tabindex="0" data-tip="Details for this item"><span class="material-symbols-outlined" aria-hidden="true">info</span></button>
+<button class="inspector-tab-btn rounded transition-colors text-on-surface-variant hover:text-on-surface" data-tab="security" type="button" role="tab" id="tab-security" aria-label="Evidence" title="Evidence for this item" aria-controls="pane-security" aria-selected="false" tabindex="-1" data-tip="Scan evidence for this item"><span class="material-symbols-outlined" aria-hidden="true">shield</span></button>
+<button class="inspector-tab-btn rounded transition-colors text-on-surface-variant hover:text-on-surface" data-tab="json" type="button" role="tab" id="tab-json" aria-label="Policy JSON" title="Current policy JSON" data-tip="Current policy JSON" aria-controls="pane-json" aria-selected="false" tabindex="-1">
+<span class="material-symbols-outlined" aria-hidden="true">data_object</span>
 </button>
 </div>
 <button class="shrink-0 p-1 rounded hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors" id="close-inspector-btn" data-tip="Close inspector" aria-label="Close inspector" type="button">

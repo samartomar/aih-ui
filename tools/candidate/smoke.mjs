@@ -106,7 +106,7 @@ export async function smokeCandidate({ origin, identity, output, playwrightModul
     });
     await dismissSetup();
     // The strip's diagnostics disclosure, labelled Packages in the Workbench shell.
-    const disclosure = page.locator('#provenance-strip details').filter({ has: page.locator('summary').filter({ hasText: /^\s*packages\s*$/i }) }).first();
+    const disclosure = page.locator('#provenance-strip details').filter({ has: page.locator('summary').filter({ hasText: /^\s*packages\b/i }) }).first();
     let provenanceText = '';
     if (await disclosure.count()) {
       if (!await disclosure.evaluate(node => node.open)) await disclosure.locator('summary').first().click({ timeout: remaining() });

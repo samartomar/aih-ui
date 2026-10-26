@@ -25,7 +25,7 @@ export function createShell(elements) {
   const background = [elements.catalogWorkspace, elements.navRail, elements.catalogKindsDisclosure, document.querySelector("body > header"), document.querySelector("body > header").nextElementSibling];
   elements.catalogKindsDisclosure.open = window.innerWidth > 760;
   const contextDisclosure = document.getElementById('policy-context-disclosure');
-  contextDisclosure.open = window.innerWidth > 760;
+  contextDisclosure.open = true;
   function syncOverlay(open) {
     const modal = open && overlayMedia.matches;
     for (const node of background) node.inert = modal;
@@ -215,7 +215,7 @@ export function createShell(elements) {
   const narrowNav = window.matchMedia("(max-width: 760px)");
   function fitRails() {
     elements.catalogKindsDisclosure.open = !narrowNav.matches;
-    contextDisclosure.open = !narrowNav.matches;
+    contextDisclosure.open = true;
     if (narrowInspector.matches && !elements.inspectorRail.classList.contains("w-0")) toggleInspector();
     if (narrowNav.matches) foldNavForWidth();
     else if (navFoldedForWidth && elements.navRail.classList.contains("w-0")) toggleNav();
