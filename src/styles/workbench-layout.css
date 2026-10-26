@@ -105,6 +105,8 @@ body:has(#main-content) :focus-visible { outline: 2px solid var(--color-primary)
   background: var(--color-panel); box-shadow: var(--panel-shadow);
 }
 .catalog-secondary-panel > * + * { margin-top: 14px; }
+.catalog-secondary-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+#catalog-filters-close, #catalog-advanced-close { min-height: 44px; flex-shrink: 0; }
 .browse-primary-controls { display: flex; align-items: center; gap: 12px; padding-block: 10px; }
 .browse-primary-controls .toolbar-search { flex: 1 1 220px; }
 .browse-primary-controls .toolbar-kinds { flex: 0 1 auto; max-width: 62%; }

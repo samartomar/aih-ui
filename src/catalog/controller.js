@@ -126,11 +126,13 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   const filterDisclosure = document.getElementById('catalog-filter-disclosure');
   filterDisclosure.open = false;
   const advancedDisclosure = document.getElementById('catalog-advanced');
+  for (const [disclosure, button] of [[filterDisclosure, "catalog-filters-close"], [advancedDisclosure, "catalog-advanced-close"]]) {
+    const close = () => { disclosure.open = false; disclosure.querySelector("summary").focus(); };
+    document.getElementById(button).addEventListener("click", close);
+    disclosure.addEventListener("keydown", event => { if (event.key === "Escape" && disclosure.open) { event.stopPropagation(); close(); } });
+  }
   filterDisclosure.addEventListener('toggle', () => { if (filterDisclosure.open) advancedDisclosure.open = false; });
   advancedDisclosure.addEventListener('toggle', () => { if (advancedDisclosure.open) filterDisclosure.open = false; });
-  filterDisclosure.addEventListener("keydown", event => {
-    if (event.key === "Escape" && filterDisclosure.open) { event.stopPropagation(); filterDisclosure.open = false; filterDisclosure.querySelector("summary").focus(); }
-  });
 
   function browseEntries(view = state.view) {
     return visibleEntries(state.entries, view)
