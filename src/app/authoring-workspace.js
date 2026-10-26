@@ -133,7 +133,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   // "Your setup" lands on Install, or on the installed list when there is nothing to install.
   const setupHeading = () => [installPanel, installedPanel].find(panel => !panel.node.hidden)?.heading ?? null;
   const reviewPanel = createPolicyReview({ client, accept, proposed, status, setupHeading, onBack: onBackToCatalog });
-  reviewPanel.node.querySelector('.policy-review-head').after(internalNotice);
+  reviewPanel.head.after(internalNotice);
   const installPanel = createInstallPanel({ client, el, button, onInstalled: () => void installedPanel.refresh() });
   const installedPanel = createInstalledPanel({ client, el, button, onRemoved: () => installPanel.recheck(), onInventory: view => installPanel.setManaged(view?.setupInstalled) });
   // Changing the folder discards what this page prepared for the old one, then checks the new one.
