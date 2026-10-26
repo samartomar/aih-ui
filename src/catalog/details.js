@@ -222,7 +222,12 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
         }
         row(elements.detailsSource, 'Content family', item.family);
         row(elements.detailsSource, 'Package', `${item.package.name}@${item.package.version}`);
-        row(elements.detailsSource, 'Provenance', item.family === 'Personal' ? 'Local folder explicitly selected in this page session; no GitHub provenance inferred.' : 'Published installed release; upstream origins retained below.');
+        row(elements.detailsSource, 'Provenance', item.internalContent ? 'Internal prepared content; not verified, baseline unbound, unauthenticated, non-production.' : item.family === 'Personal' ? 'Local folder explicitly selected in this page session; no GitHub provenance inferred.' : 'Published installed release; upstream origins retained below.');
+        if (item.internalContent) {
+          const exact = el('details'); exact.id = 'internal-content-identity';
+          exact.append(el('summary', '', 'Exact internal content identity'), el('pre', 'whitespace-pre-wrap break-words', JSON.stringify(item.internalContent, null, 2)));
+          elements.detailsSource.append(exact);
+        }
         for (const fact of capabilityFacts(item, target)) {
           const node = el('p', 'p-2 rounded border border-wb-border text-[11px]', `${fact.support} · ${fact.capability} · ${fact.surface} — ${fact.reason ?? 'No producer reason supplied.'}`);
           elements.detailsCapabilities.append(node);

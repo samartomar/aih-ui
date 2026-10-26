@@ -121,3 +121,9 @@ body:has(#main-content) :focus-visible { outline: 2px solid var(--color-primary)
   .browse-primary-controls { flex-wrap: wrap; gap: 8px; }
   .browse-primary-controls .toolbar-search, .browse-primary-controls .toolbar-kinds { flex-basis: 100%; max-width: 100%; }
 }
+.framework-choice { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.framework-choice .framework-count { margin-left: auto; font-size: 11px; color: var(--color-muted); }
+.framework-internal { flex-basis: 100%; font-size: 11px; color: var(--color-muted); }
+.framework-source-note { margin: 6px 8px; font-size: 11px; color: var(--color-muted); overflow-wrap: anywhere; }
+.framework-landing { padding: 8px 0; color: var(--color-muted); font-size: 12px; }
+.framework-landing button { color: var(--color-primary); text-decoration: underline; }

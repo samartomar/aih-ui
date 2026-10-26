@@ -9,6 +9,7 @@ import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJo
 // The ./authoring entry: these names and the operations below. inspectReviewEvidence builds the review identities from Scan's readContentCoverage.
 export { inspectReviewEvidence } from './review-bindings.mjs';
 export { AUTHORING_SCHEMA, REVIEW_SCHEMA, freshAuthoring } from './intent-shape.mjs';
+const pinMaterials = item => item.materials.map(material => material.path ? material : ({ id: material.id, path: material.packagePath, sha256: material.sha256, byteLength: material.byteLength }));
 const sorted = values => [...values].sort((a, b) => stable(a) < stable(b) ? -1 : stable(a) > stable(b) ? 1 : 0);
 function inventoryIndex(inventories) {
   if (!Array.isArray(inventories) || inventories.length > 32) throw new Error('Supply at most 32 exact checked inventories.');
@@ -67,13 +68,13 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
     selections.push({ ...prior, id: prior?.id ?? selection.id, managementId, scope: selection.scope, configuration: configured.selection.configuration,
       ...(base?.mode === 'enterprise' ? { organizationSelectionId: [...organizationIds][0] ?? prior?.organizationSelectionId ?? managementId } : {}),
       requires: [], recipe: configured.selection.recipe });
-    pins.set(pinKey(selection.item), { releaseSha256: entry.release.sha256, itemId: item.id, itemSha256: item.itemSha256, recipe: item.recipe, materials: item.materials });
+    pins.set(pinKey(selection.item), { releaseSha256: entry.release.sha256, itemId: item.id, itemSha256: item.itemSha256, recipe: item.recipe, materials: pinMaterials(item) });
     sourceIds.add(entry.release.sha256);
   }
   const validation = validateSelectionSet({ releases: index.releases, selections: resolved.selections.map((s, i) => ({ ...s, id: selections[i].id })) });
   if (!validation.valid) return refuse('INPUT_INVALID', '/selections', 'Catalog refused the resolved set.', undefined, { owner: 'catalog', diagnostics: validation.diagnostics });
   for (const selection of selections) selection.requires = validation.requiresBySelectionId[selection.id];
-  const provenance = inventories.filter(e => sourceIds.has(e.release.sha256)).map(e => ({ releaseSha256: e.release.sha256, package: e.release.package, sources: e.release.sources, materialSource: e.materialSource }));
+  const provenance = inventories.filter(e => sourceIds.has(e.release.sha256)).map(e => ({ releaseSha256: e.release.sha256, package: e.release.package, sources: e.release.sources, materialSource: { ...e.materialSource, ...(e.internalContent ? { internalContent: e.internalContent } : {}) } }));
   const inputs = inventories.filter(e => sourceIds.has(e.release.sha256) && e.input).map(e => e.input);
   const next = { ...structuredClone(intent), pins: sorted([...pins.values()]), provenance: sorted(provenance), inputs: sorted(inputs) };
   if (!checkIntentShape(next)) return refuse('FIELD_SEMANTICS_UNSUPPORTED', '/metadata/aih.workbench', 'Captured authoring state violates the supported shape.');
@@ -665,14 +666,14 @@ export async function editDraft({ envelopeBytes, inventories, operation, reviewE
   if (after.undeterminedRoots.size) for (const pin of record.intent.pins) reached.add(pinKey(pin));
   const pins = [...reached].flatMap(key => {
     const existing = record.intent.pins.find(p => pinKey(p) === key), found = index.items.get(key);
-    return existing ? [existing] : found ? [{ releaseSha256: found.entry.release.sha256, itemId: found.item.id, itemSha256: found.item.itemSha256, recipe: found.item.recipe, materials: found.item.materials }] : [];
+    return existing ? [existing] : found ? [{ releaseSha256: found.entry.release.sha256, itemId: found.item.id, itemSha256: found.item.itemSha256, recipe: found.item.recipe, materials: pinMaterials(found.item) }] : [];
   });
   const releases = new Set([...pins.map(p => p.releaseSha256), ...intent.exclusions.map(e => e.releaseSha256), ...intent.origins.filter(o => o.kind === 'template').map(o => o.releaseSha256)]);
   const entryOf = sha => inventories.find(e => e.release.sha256 === sha);
   intent.pins = sorted(pins);
   intent.provenance = sorted([...releases].flatMap(sha => {
     const existing = record.intent.provenance.find(p => p.releaseSha256 === sha), entry = entryOf(sha);
-    return existing ? [existing] : entry ? [{ releaseSha256: sha, package: entry.release.package, sources: entry.release.sources, materialSource: entry.materialSource }] : [];
+    return existing ? [existing] : entry ? [{ releaseSha256: sha, package: entry.release.package, sources: entry.release.sources, materialSource: { ...entry.materialSource, ...(entry.internalContent ? { internalContent: entry.internalContent } : {}) } }] : [];
   }));
   intent.inputs = sorted([...releases].flatMap(sha => {
     const existing = record.intent.inputs.find(i => i.releaseSha256 === sha), entry = entryOf(sha);

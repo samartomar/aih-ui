@@ -77,6 +77,7 @@ export async function createAuthoringAdapter(consumerDir, { frictionEvidence, co
   const evidence = process.env.AIH_FRICTION_EVIDENCE ? await fileFrictionEvidence(consumerDir, process.env.AIH_FRICTION_EVIDENCE) : frictionEvidence;
   const host = await startConsumer({ coreState, projectRoot: process.env.AIH_CONSUMER_PROJECT,
     controls: await selectedJson('AIH_CONSUMER_CONTROLS'),
+    frameworkSources: await selectedJson('AIH_FRAMEWORK_SOURCES'),
     organizationSource: await selectedJson('AIH_ORGANIZATION_SOURCE'),
     reviewTrust: await selectedJson('AIH_REVIEW_TRUST'),
     evidenceSources: await selectedJson('AIH_SCAN_EVIDENCE_SOURCES'),

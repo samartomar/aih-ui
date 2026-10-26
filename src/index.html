@@ -122,12 +122,12 @@
 </div>
 <nav class="framework-navigation" aria-label="Content families">
 <p class="framework-navigation-title">Frameworks</p>
-<div id="framework-navigation" aria-live="polite">Loading content families…</div>
+<div id="framework-navigation" aria-live="polite">Loading frameworks and observed counts…</div>
 </nav>
 <!-- PROJECT BASICS: what applies to the project whichever content is chosen, in its own place in the left panel. -->
-<nav class="pt-1 border-t border-wb-border text-[11px]" aria-label="Project basics">
+<nav class="pt-1 border-t border-wb-border text-[11px]" aria-label="Project tools and workspace">
 <a class="flex items-center justify-between px-2 py-1 rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface" href="#basics" id="nav-project-basics" data-tip="Tool support, project files and the workspace: they apply whichever framework you choose.">
-<span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[14px]" aria-hidden="true">foundation</span><span>Project basics</span></span>
+<span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[14px]" aria-hidden="true">foundation</span><span>Project tools &amp; workspace</span></span>
 </a>
 </nav>
 <div class="space-y-1 pt-1 border-t border-wb-border">
@@ -163,6 +163,7 @@
 <div class="flex-1 flex w-full overflow-hidden relative" id="workspace-split-row">
 <main class="flex-1 flex flex-col min-w-0 bg-background overflow-hidden" id="main-content">
 <div class="flex-1 flex flex-col overflow-y-auto min-w-0 bg-wb-center" id="catalog-workspace">
+<p class="framework-landing">Start here: <button type="button" id="framework-first-step">Choose your tool</button>, then choose a framework and add content. Review and install from Your setup.</p>
 <div class="catalog-heading-row"><div><h1 class="wb-source-heading text-wb-heading font-semibold text-wb-title tracking-tight" tabindex="-1">Choose content for your AI tool</h1><p class="text-on-surface-variant">Add content, then install it from Your setup.</p></div><div class="catalog-heading-tools"><details id="catalog-filter-disclosure"><summary>Filters &amp; your sources</summary><div class="catalog-secondary-panel"><div class="catalog-secondary-heading"><strong>Filters &amp; your sources</strong><button id="catalog-filters-close" type="button" class="wb-header-control">Close filters</button></div><div class="flex flex-wrap gap-2 mb-3 text-[11px]" id="authoring-browse">
 <label>Family <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-family" aria-label="Content family"></select></label>
 <label>Support <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-support" aria-label="Target support"><option value="supported">With supported facts</option><option value="all">Full inventory</option><option value="unsupported">With unsupported facts</option><option value="unknown">With unknown facts</option></select></label>
@@ -259,7 +260,7 @@
 <section class="flex-1 overflow-y-auto bg-wb-center" id="project-basics" aria-labelledby="project-basics-title" hidden>
 <div class="max-w-5xl p-5 space-y-4">
 <div>
-<h1 class="text-wb-heading font-semibold text-wb-title tracking-tight" id="project-basics-title" tabindex="-1">Project basics</h1>
+<h1 class="text-wb-heading font-semibold text-wb-title tracking-tight" id="project-basics-title" tabindex="-1">Project tools &amp; workspace</h1>
 <p class="text-on-surface-variant mt-1">What applies to this project whichever framework you choose. None of it is listed in a framework.</p>
 </div>
 <section class="p-4 rounded border border-wb-border bg-surface-container-low space-y-2" id="project-basics-tools" aria-labelledby="project-basics-tools-title">

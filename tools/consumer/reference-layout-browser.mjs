@@ -1,4 +1,4 @@
-import { chooseCatalogSupport } from './policy-drawer.mjs';
+import { chooseCatalogFamily, chooseCatalogSupport } from './policy-drawer.mjs';
 import assert from 'node:assert/strict';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -23,12 +23,12 @@ export async function runReferenceLayoutBrowser({origin,output,playwrightModule,
       const summary=packages.locator('summary');await summary.focus();await page.keyboard.press('Enter');await page.locator('.package-panel').waitFor();
       for(const name of ['@aihq/core','@aihq/catalog','@aihq/scan','read-only-mirror'])assert.ok((await packages.innerText()).includes(name));
       await page.screenshot({animations:'disabled',path:join(output,`${theme}-packages.png`)});await page.keyboard.press('Escape');assert.equal(await packages.evaluate(n=>n.open),false);
-      await chooseCatalogSupport(page, 'all');await page.locator('#framework-navigation button[data-family="ECC"]').click();
+      await chooseCatalogSupport(page, 'all');await chooseCatalogFamily(page, 'ECC');
       assert.equal(await page.locator('.wb-source-heading').innerText(),'ECC');assert.equal(await page.locator('#browse-family').inputValue(),'ECC');
       await page.screenshot({animations:'disabled',path:join(output,`${theme}-ecc.png`)});
       const grid=await page.locator('#cards-grid').evaluate(n=>getComputedStyle(n).gridTemplateColumns.split(' ').length);assert.equal(grid,2,'Desktop uses two card columns');
       await page.locator('#catalog-search').fill('zzzzui155emptyf3c9e7aabbbb');await page.getByText('No catalog entry matches this view.',{exact:false}).waitFor();assert.equal(await page.locator('#cards-grid [data-card-id]').count(),0);await page.screenshot({animations:'disabled',path:join(output,`${theme}-empty.png`)});await page.locator('#catalog-search').fill('');
-      await page.locator('#framework-navigation button[data-family="Extensions"]').click();await page.locator('#catalog-search').fill('grill-me');await page.locator('#cards-grid [data-card-id]').first().click();await page.locator('#inspector-rail:not(.w-0)').waitFor();await page.waitForFunction(()=>document.getElementById('inspector-rail').getBoundingClientRect().width>=390);
+      await chooseCatalogFamily(page, 'Extensions');await page.locator('#catalog-search').fill('grill-me');await page.locator('#cards-grid [data-card-id]').first().click();await page.locator('#inspector-rail:not(.w-0)').waitFor();await page.waitForFunction(()=>document.getElementById('inspector-rail').getBoundingClientRect().width>=390);
       await page.screenshot({animations:'disabled',path:join(output,`${theme}-inspector.png`)});
       await addFromCatalog(page,'extensions.matt.grill-me');await page.locator('#your-setup').click();await page.locator('#policy-review-panel').waitFor();
       const choose=async value=>{if(!await page.locator('#project-folder-input').isVisible())await page.locator('#project-folder-change').click();await page.locator('#project-folder-input').fill(value);await page.locator('#project-folder-use').click();await page.locator('#project-folder-message').filter({hasNotText:/^Checking the folder…$/}).waitFor();return page.locator('#project-folder-message').innerText();};
@@ -57,7 +57,7 @@ export async function runFamilyStatesBrowser({origin,output,playwrightModule}) {
       return route.fulfill({response,json:state==='empty'?{...body,items:[]}:body});
     });
     await page.goto(origin+'/');const toggle=page.getByRole('button',{name:`Switch to ${theme} mode`,exact:true});if(await toggle.count())await toggle.click();
-    const expected=state==='loading'?'Loading content families…':state==='empty'?'No content families listed':'Content families unavailable. See the source error.';
+    const expected=state==='loading'?'Loading frameworks and observed counts…':state==='empty'?'No frameworks available from the configured sources.':'Content families unavailable. See the source error.';
     await page.locator('#framework-navigation').filter({hasText:expected}).waitFor();
     const packages=page.locator('#package-disclosure');await packages.locator('summary').click();await packages.getByText('@aihq/catalog',{exact:true}).waitFor();
     await page.screenshot({animations:'disabled',path:join(output,`${theme}-${state}.png`)});

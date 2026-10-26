@@ -6,7 +6,7 @@
  * the installed index, so a control and the grid can never disagree.
  */
 
-import { SORT_KEYS, sourceScopes } from "./selectors.js";
+import { SORT_KEYS, sourceScopes, FILTER_SEPARATOR } from "./selectors.js";
 
 const SAVED_KEY = "aih-ui-sources-view";
 
@@ -42,7 +42,9 @@ export function restoreView(view, counts) {
     view.sourceType = saved.sourceType;
   }
   if (typeof saved.source === "string") {
-    if (sourceScopes(counts).some((scope) => scope.filterValue === saved.source)) view.source = saved.source;
+    const [type, identity, revision] = saved.source.split(FILTER_SEPARATOR);
+    const group = counts.sourceIdentities.get(type)?.get(identity);
+    if (sourceScopes(counts).some((scope) => scope.filterValue === saved.source) || (revision && group?.revisions.has(revision))) view.source = saved.source;
   }
   if (typeof saved.family === 'string') view.family = saved.family;
   if (typeof saved.target === 'string') view.target = saved.target;

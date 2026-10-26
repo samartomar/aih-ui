@@ -14,7 +14,7 @@ const encode = value => new TextEncoder().encode(value);
 const bytesOf = value => Array.isArray(value) ? Uint8Array.from(value) : undefined;
 const WORKSPACE_OPERATIONS = ['workspace-read', 'workspace-edit', 'workspace-plan', 'workspace-bind', 'workspace-unbind', 'workspace-verify', 'workspace-export'];
 // `observeCheckout(root)` is the host's read of one local checkout (see ./workspace-host.mjs); a service made without one cannot inspect folders.
-export async function createMixedService(maintained, { suppliedInventories, familyInventories = [], historicalInventories = [], maintenanceSource, frictionEvidence, observeCheckout } = {}) {
+export async function createMixedService(maintained, { suppliedInventories, familyInventories = [], frameworkCatalog, historicalInventories = [], maintenanceSource, frictionEvidence, observeCheckout } = {}) {
   async function supplied(snapshot, id = 'notes') {
     const input = { id, kind: 'local', locator: { input: id }, resolvedIdentity: { sha256: await digestBytes(snapshot.declarationBytes) } };
     const result = await intakeDeclaration({ input, ...snapshot, materialSource: { kind: 'local', input: id } });
@@ -82,8 +82,9 @@ export async function createMixedService(maintained, { suppliedInventories, fami
       if (!all.some(entry => entry.release.sha256 === inventory.release.sha256)) all.push(inventory);
       if (!current.some(entry => entry.release.sha256 === inventory.release.sha256)) current.push(inventory);
     },
-    catalog() { return { executionAvailable: false, description: 'Installed Catalog families and independently authored review-note. Template is an authored demonstration. Family grouping preserves upstream origins and exact identities.',
+    catalog() { return { frameworkFixture: frameworkCatalog?.fixture === true, frameworks: frameworkCatalog?.frameworks ?? [], frameworkSources: frameworkCatalog?.sources ?? [], executionAvailable: false, description: 'Installed Catalog families and independently authored review-note. Template is an authored demonstration. Family grouping preserves upstream origins and exact identities.',
       items: current.flatMap(entry => entry.release.items.map(item => ({ ...item, root: root(entry, item), package: entry.release.package,
+        ...(entry.internalContent ? { internalContent: entry.internalContent } : {}),
         family: entry.family ?? (entry === maintained ? 'Catalog' : 'Independent'),
         sources: entry.release.sources.filter(source => item.sourceIds.includes(source.id)) }))),
       templates: notes.templates.map(t => ({ ...t, releaseSha256: notes.release.sha256 })) }; },

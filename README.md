@@ -36,6 +36,63 @@ The Policy Workbench user interface for AIH, built as an independent application
 
 An outside developer can build this UI from public package interfaces. The policy artifacts it saves are consumed by `@aihq/core` without the UI; local onboarding settings are owned only by this UI. Updating only `@aihq/catalog` brings compatible new content without changing core.
 
+## Framework sources
+
+The framework rail reads release availability and published names through Catalog's
+public `readReleaseIndex`, then reads each host-acquired release with the admitted
+SHA-256. Unsigned indexes say **not verified**. Failed, offline and conflicting
+sources keep their diagnostics; an unavailable release never receives an invented
+item count. Other valid sources remain browsable. The frozen unnamed default and
+historical presentation groups remain available under **Filters & your sources**;
+they do not establish framework availability.
+
+`AIH_FRAMEWORK_SOURCES` names a host-owned JSON file. It accepts up to 16 `indexes`
+and 16 `prepared` selections. `indexStatePath` names an absolute host-owned JSON
+state store; index reads require it and atomically retain the public reader's complete
+per-source rollback and TUF state across restarts. An unreadable state store fails
+closed for indexes while internal sources remain independent. Paths are absolute, chosen by the host, and never
+accepted from browser requests or saved policies. An index selection contains
+`sourceId`, `path` (the exact index bytes), independently chosen `trust` and
+`authorizedFrameworks`, plus optional `releases`: `{ sha256, path, root }` entries
+for exact locally acquired release documents and their installed material roots.
+No network discovery or trust selection happens in the Workbench. A selected TUF
+root without public cryptographic verification remains withheld; this file cannot
+supply a serialized verification grant. Restart reads the configured bytes again.
+
+For internal local-package use, a prepared selection contains `root` (the installed
+Catalog package), `frameworkId`, `archivePath`, `archiveSha256`, and optional
+`expectedContentSha256`. Catalog's public `readInstalledPreparedContent` checks the
+content, inventory and members. The host binds the discovered content digest with
+a second pinned read, checks the exact archive hash, and compares its content and
+inventory bytes to the installed reader result. Names and items come from that
+result. No prepared selection becomes a release-index entry or gains a baseline.
+It stays **Internal · not verified**, unbound, unauthenticated and non-production.
+
+The existing open `materialSource` provenance object in saved intent retains an
+`internalContent` member containing the reader's exact `status`, `provenance` and
+`archiveSha256`. This is descriptive source metadata only: configuration and Core
+execution still receive the ordinary public material source. Reopen compares that
+exact metadata with the host-selected source; another archive or unavailable source
+requires explicit reconciliation and never silently replaces the saved choice.
+Your setup and the inspector keep the internal status and full identity inspectable.
+No machine path is added to portable metadata.
+
+Observed counts use Harness static `checkCompatibility` over the actual loaded
+items for the header's chosen tool and this host's OS/architecture. They count
+per-item platform observations, not successful execution; the tooltip says
+**observed, not works**. Missing or refused compatibility is unavailable, never a
+guessed zero. First-step guidance points to tool selection and framework browsing.
+
+`node tools/check-frameworks.mjs <installed-consumer> <new-output-directory> <artifact-manifest.json>`
+runs the focused page proof (append case names for affected-only checks; `restart`
+uses saved policies from `ready` in the same output directory). The manifest maps `core`, `catalog` and `scan` to
+`{ tarball, sha256, commit }` from pinned packed-public inputs. The proof uses real
+prepared content plus separate public release/index fixtures; its synthetic index
+bindings are test data, never production release evidence. It retains both-theme
+screenshots, source states and expected public compatibility results. The ordinary
+`check:workbench` suite remains required. These checks do not establish human
+acceptance, production Catalog availability, or release readiness.
+
 ## Latest Scan evidence
 
 The ordinary Policy workspace's Scan Review has a separate **Latest, baseline and history** view. `aih-ui/scan-evidence` exposes the same `selectContentEvidence` application projection to headless consumers. Scan's public `selectAssessments` owns matching, creation-date ordering, ties, future dates and refusal diagnostics; the Workbench does not rank by producer trust or arrival. Catalog's checked baseline inventory and `baseline.scope` supply exact package-relative coordinates. Item capture and detector coverage are read separately: an inventory match alone demonstrates no item coverage. Different requested scopes have an explicit selector. Without a release baseline the initial comparison requests the exact item's descriptor paths; other available scopes can be chosen explicitly.

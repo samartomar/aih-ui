@@ -45,7 +45,7 @@ async function main() {
     const organization = createOrganization({ elements: organizationElements(), onEdit: section => onboarding.edit(section), onModeComplete: applySettings });
     // Your tool reads Core's tool registry and inspection itself; it is not the workspace setup's AI clients, which
     // stay in Settings (Edit AI tools).
-    const yourTool = createYourTool({ elements: yourToolElements() });
+    const yourTool = createYourTool({ elements: yourToolElements(), onChange: tool => catalog.setTool(tool) });
 
     function applySettings(settings, location) {
       organization.setSettings(settings, location);
@@ -84,6 +84,7 @@ async function main() {
     // Open setup immediately while the catalog and Core's published clients load.
     // Browser-local drafts never decide whether first-run setup is complete.
     await Promise.all([authoring.start(), onboarding.start(), catalog.start(), yourTool.start()]);
+    catalog.setTool(yourTool.current());
   } catch (error) {
     shell.showError(error?.message ?? String(error));
     const families = document.getElementById('framework-navigation');
