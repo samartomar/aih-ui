@@ -37,8 +37,9 @@ function readBody(request, limit) {
  * @param summary     provenance shown in the page's strip
  * @param settingsPath optional isolated test-store path; never an HTTP input
  * @param contractCheck the promise of the start-up contract check (tools/server/contract-check-summary.mjs)
+ * @param tools, toolInspection the header's Your tool answers, each started on first request (tools/server/tools-summary.mjs)
  */
-export function createApi({ summary, settingsPath, contractCheck }) {
+export function createApi({ summary, settingsPath, contractCheck, tools, toolInspection }) {
   const settings = createSettingsStore({ coreTargets: summary?.coreTargets, settingsPath });
 
   const ROUTES = {
@@ -51,6 +52,9 @@ export function createApi({ summary, settingsPath, contractCheck }) {
     "GET /api/packages": () => ({ ok: true, ...summary }),
     /** The start-up contract check; it answers once the check the host started has finished. */
     "GET /api/contract-check": async () => ({ ok: true, ...(await contractCheck) }),
+    /** Your tool: Harness listTools, and each tool's state from Core's offline inspection. */
+    "GET /api/tools": async () => ({ ok: true, ...(await tools()) }),
+    "GET /api/tool-inspection": async () => ({ ok: true, ...(await toolInspection()) }),
   };
 
   return async function handleApi(request, response, pathname) {

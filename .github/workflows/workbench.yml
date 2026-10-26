@@ -10,7 +10,7 @@ jobs:
   ordinary-families:
     # Playwright 1.56.1 has no Chromium for ubuntu-latest (Ubuntu 26.04); keep a supported image.
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: samartomar/aih-core
-          ref: b61c88a6b0a4536d7da71aa0a3306a74ddb7d950
+          ref: b2e1fea8f7865f5a8b3b8531ee8588fe7b2df9ac
           path: .ci/core
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

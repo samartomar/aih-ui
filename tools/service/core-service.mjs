@@ -13,6 +13,7 @@
  *
  * Where the work actually happens:
  *   core-targets.mjs       Core's supported AI client ids and labels
+ *   tools.mjs              the header's tool list (Harness listTools) and its inspection
  *   contract-check.mjs     the start-up contract check
  */
 const OPS = {
@@ -20,6 +21,16 @@ const OPS = {
   async coreTargets() {
     const { coreTargets } = await import("./core-targets.mjs");
     return coreTargets();
+  },
+  /** The header's tool list: Harness listTools with each unobserved tool's refusal, or why Core does not publish it. */
+  async tools() {
+    const { tools } = await import("./tools.mjs");
+    return tools();
+  },
+  /** Each tool's existence/run state from Core's offline inspection. */
+  async toolInspection() {
+    const { toolInspection } = await import("./tools.mjs");
+    return toolInspection();
   },
   /** The start-up contract check: Core's checkContracts over the installed declarations, or why it cannot run. */
   async contractCheck() {

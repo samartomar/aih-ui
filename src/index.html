@@ -31,20 +31,20 @@
 <span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-medium" id="workbench-role">Local</span>
 </div>
 <div class="h-3.5 w-px bg-surface-container-high mx-0.5"></div>
-<!-- AI Tools: the AI clients @aihq/core supports as targets, and the user's
-     selection as a draft. Supported, selected and connected are kept apart:
-     nothing here checks that a tool is installed or connected. -->
+<!-- Your tool: the one AI tool the person works in. The list is Harness listTools({ includeUnobserved: true });
+     a tool Core has not observed stays listed and greyed with Core's reason. Each icon is the tool's state from
+     Core's offline inspect. The choice is kept in this browser only (src/app/your-tool.js). -->
 <div class="relative">
-<button class="wb-header-control" type="button" id="ai-tools-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="ai-tools-pop">
-<span class="material-symbols-outlined text-[14px]" aria-hidden="true">bolt</span>
-<span class="font-mono" id="ai-tools-count">Loading…</span>
-<span>Tools</span>
+<button class="wb-header-control" type="button" id="your-tool-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="your-tool-pop">
+<span class="flex items-center" id="your-tool-icon"></span>
+<span class="wb-header-muted">Your tool:</span>
+<span class="font-medium" id="your-tool-name">Loading…</span>
 <span class="wb-header-chevron" aria-hidden="true">▾</span>
 </button>
-<div class="hidden absolute left-0 top-7 w-64 p-2 rounded bg-surface-container-lowest border border-wb-border shadow-panel space-y-1 text-[11.5px] z-50" id="ai-tools-pop" role="group" aria-label="AI tools">
-<div class="px-1 pb-1 text-[10px] font-mono uppercase tracking-wider text-outline font-medium">Set up for</div>
-<div class="space-y-0.5 max-h-[360px] overflow-y-auto" id="ai-tools-list"></div>
-<div class="px-1 pt-1 space-y-0.5 text-[10px] text-outline leading-snug border-t border-wb-border" id="ai-tools-note"></div>
+<div class="absolute left-0 top-7 w-72 p-2 rounded bg-surface-container-lowest border border-wb-border shadow-panel space-y-1 text-[11.5px] z-50" id="your-tool-pop" hidden>
+<div class="px-1 pb-1 text-[10px] font-mono uppercase tracking-wider text-on-surface-variant font-medium" id="your-tool-heading">Your tool</div>
+<div class="space-y-0.5" id="your-tool-list" role="radiogroup" aria-labelledby="your-tool-heading"></div>
+<div class="px-1 pt-1 space-y-0.5 text-[10px] text-on-surface-variant leading-snug border-t border-wb-border" id="your-tool-note"></div>
 </div>
 </div>
 </div>
@@ -185,6 +185,12 @@
      Placement only: each keeps its id, code and behaviour. Closed for a new viewer; app/advanced.js remembers it. -->
 <details id="catalog-advanced" class="catalog-advanced"><summary class="cursor-pointer text-on-surface-variant hover:text-on-surface font-medium">Advanced</summary>
 <div class="catalog-advanced-body space-y-3 pt-2">
+<!-- The catalog's declared target clients, in the Catalog's own names; the Support filter reads it. Your tool in the
+     header is the one tool control, so this catalog filter is kept here, working as before, until cards read tool fit. -->
+<div class="flex flex-wrap items-center gap-2 text-[11px]">
+<label>Catalog target <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-target" aria-label="Browse target"></select></label>
+<span class="text-on-surface-variant">The client names this catalog declares, used by the Support filter. Not Your tool.</span>
+</div>
 <nav class="flex flex-wrap items-center gap-2" aria-label="Advanced views">
 <button class="inline-flex items-center gap-2 px-2 py-1 rounded border border-wb-border text-on-surface-variant hover:bg-surface-container hover:text-on-surface" id="nav-policy" type="button" aria-controls="policy-workspace" data-tip="Policy workspace: the engine view of the policy behind your setup.">
 <span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[14px] text-outline" aria-hidden="true">policy</span><span>Policy workspace</span></span>
@@ -253,7 +259,6 @@
 <div id="category-context" aria-live="polite"></div>
 <details id="catalog-filter-disclosure" open><summary>Catalog filters and personal content</summary><div class="flex flex-wrap gap-2 mb-3 text-[11px]" id="authoring-browse">
 <label>Family <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-family" aria-label="Content family"></select></label>
-<label>Target <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-target" aria-label="Browse target"></select></label>
 <label>Support <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-support" aria-label="Target support"><option value="supported">With supported facts</option><option value="all">Full inventory</option><option value="unsupported">With unsupported facts</option><option value="unknown">With unknown facts</option></select></label>
 <label class="cursor-pointer rounded border border-wb-border p-1">Choose personal folder <input id="personal-folder" type="file" webkitdirectory multiple aria-label="Choose personal folder"></label>
 <label>Folder binding <select class="bg-wb-input border border-wb-border rounded p-1" id="personal-binding" aria-label="Personal folder binding"><option value="">Add new personal content</option></select></label>

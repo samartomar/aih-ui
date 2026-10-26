@@ -86,7 +86,23 @@ const STATE = {
   info: { icon: "info", tone: "text-info", label: "Information" },
 };
 
-export const ICONS = Object.freeze({ kind: KIND, fit: FIT, scan: SCAN, state: STATE });
+/* A tool's existence/run state (Core `inspect` tools[].state, the diagnostic
+   schema's enum: "existence/run state, not a health score"), plus the header's
+   own reading states. None is green: finding a tool is information, not proof
+   it loads content. */
+const TOOL = {
+  runnable: { icon: "terminal", tone: "text-info", label: "Found on this machine" },
+  binary: { icon: "download_done", tone: "text-info", label: "Found, but not run" },
+  broken: { icon: "report", tone: "text-tertiary", label: "Found, but its check failed" },
+  "config-only": { icon: "settings", tone: "text-on-surface-variant", label: "Only its configuration was found" },
+  absent: { icon: "do_not_disturb_on", tone: "text-on-surface-variant", label: "The last check didn't find it" },
+  "not-reported": { icon: "help", tone: "text-on-surface-variant", label: "Core's inspection doesn't report it" },
+  checking: { icon: "hourglass_top", tone: "text-on-surface-variant", label: "Checking this machine…" },
+  none: { icon: "handyman", tone: "text-on-surface-variant", label: "No tool chosen" },
+  "inspection-failed": { icon: "error", tone: "text-error", label: "Core's inspection didn't run" },
+};
+
+export const ICONS = Object.freeze({ kind: KIND, fit: FIT, scan: SCAN, state: STATE, tool: TOOL });
 
 /* The neutral icon for a value a group does not name. */
 const FALLBACK = {
@@ -94,6 +110,7 @@ const FALLBACK = {
   fit: { icon: "radio_button_unchecked", tone: NEUTRAL },
   scan: { icon: "radio_button_unchecked", tone: NEUTRAL },
   state: { icon: "radio_button_unchecked", tone: NEUTRAL },
+  tool: { icon: "radio_button_unchecked", tone: NEUTRAL },
 };
 
 /**

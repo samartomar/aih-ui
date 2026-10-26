@@ -27,7 +27,7 @@ export function organizationElements() {
   return collectIds(ids);
 }
 
-/** The header's AI tools control and its popup. */
-export function aiToolsElements() {
-  return collectIds(["ai-tools-trigger", "ai-tools-count", "ai-tools-pop", "ai-tools-list", "ai-tools-note"]);
+/** The header's Your tool control and its popup. */
+export function yourToolElements() {
+  return collectIds(["your-tool-trigger", "your-tool-icon", "your-tool-name", "your-tool-pop", "your-tool-list", "your-tool-note"]);
 }

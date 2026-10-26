@@ -77,6 +77,22 @@ try {
       }
     } finally { delete process.env.AIH_CONTRACT_CHECK_EXTRA; await new Promise(resolve => refused.server.close(resolve)); }
   } else console.log(`The installed Core publishes no checkContracts (${engine.state ?? engine.error}); the real-engine "can't read" journey needs one.`);
+  // V1 header Your tool: its own host, so the case can restart it on the same address (the browser keeps the choice per
+  // origin) without disturbing the other journeys. Each theme starts from a fresh setup file and a fresh browser.
+  const { runYourToolBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/your-tool-browser.mjs')));
+  for (const theme of ['dark', 'light']) {
+    const settingsPath = join(consumerDir, `your-tool-settings-${theme}.json`);
+    let host = await createWorkbench({ consumerDir, runDir, summary, settingsPath });
+    const { port } = await listen(host.server, 0);
+    const restart = async () => {
+      await new Promise(resolve => host.server.close(resolve));
+      host = await createWorkbench({ consumerDir, runDir, summary, settingsPath });
+      await listen(host.server, port);
+    };
+    try {
+      starting(`runYourToolBrowser ${theme}`); await runYourToolBrowser({ origin: `http://127.0.0.1:${port}`, output: join(consumerDir, `your-tool-evidence-${theme}`), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, theme, restart });
+    } finally { await new Promise(resolve => host.server.close(resolve)); }
+  }
   // V0b missing default release: a second host whose update source lists the installed Catalog root and a copy without
   // the default ./release.json. One update source per host, so the maintenance fixture is withheld while it starts.
   const { missingDefaultReleaseRoot, runMissingDefaultReleaseBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/missing-default-release-browser.mjs')));
