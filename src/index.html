@@ -31,20 +31,20 @@
 <span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-medium" id="workbench-role">Local</span>
 </div>
 <div class="h-3.5 w-px bg-surface-container-high mx-0.5"></div>
-<!-- AI Tools: the AI clients @aihq/core supports as targets, and the user's
-     selection as a draft. Supported, selected and connected are kept apart:
-     nothing here checks that a tool is installed or connected. -->
+<!-- Your tool: the one AI tool the person works in. The list is Harness listTools({ includeUnobserved: true });
+     a tool Core has not observed stays listed and greyed with Core's reason. Each icon is the tool's state from
+     Core's offline inspect. The choice is kept in this browser only (src/app/your-tool.js). -->
 <div class="relative">
-<button class="wb-header-control" type="button" id="ai-tools-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="ai-tools-pop">
-<span class="material-symbols-outlined text-[14px]" aria-hidden="true">bolt</span>
-<span class="font-mono" id="ai-tools-count">Loading…</span>
-<span>Tools</span>
+<button class="wb-header-control" type="button" id="your-tool-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="your-tool-pop">
+<span class="flex items-center" id="your-tool-icon"></span>
+<span class="wb-header-muted">Your tool:</span>
+<span class="font-medium" id="your-tool-name">Loading…</span>
 <span class="wb-header-chevron" aria-hidden="true">▾</span>
 </button>
-<div class="hidden absolute left-0 top-7 w-64 p-2 rounded bg-surface-container-lowest border border-wb-border shadow-panel space-y-1 text-[11.5px] z-50" id="ai-tools-pop" role="group" aria-label="AI tools">
-<div class="px-1 pb-1 text-[10px] font-mono uppercase tracking-wider text-outline font-medium">Set up for</div>
-<div class="space-y-0.5 max-h-[360px] overflow-y-auto" id="ai-tools-list"></div>
-<div class="px-1 pt-1 space-y-0.5 text-[10px] text-outline leading-snug border-t border-wb-border" id="ai-tools-note"></div>
+<div class="absolute left-0 top-7 w-72 p-2 rounded bg-surface-container-lowest border border-wb-border shadow-panel space-y-1 text-[11.5px] z-50" id="your-tool-pop" hidden>
+<div class="px-1 pb-1 text-[10px] font-mono uppercase tracking-wider text-on-surface-variant font-medium" id="your-tool-heading">Your tool</div>
+<div class="space-y-0.5" id="your-tool-list" role="radiogroup" aria-labelledby="your-tool-heading"></div>
+<div class="px-1 pt-1 space-y-0.5 text-[10px] text-on-surface-variant leading-snug border-t border-wb-border" id="your-tool-note"></div>
 </div>
 </div>
 </div>

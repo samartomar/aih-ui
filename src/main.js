@@ -5,7 +5,7 @@
  * no state and renders nothing itself:
  *
  *   app/        the shell - rails, inspector tabs, the error banner, the theme
- *               settling, first-run setup and the AI tools control
+ *               settling, first-run setup and the header's Your tool control
  *   catalog/    Sources & Catalogs: it presents published catalog data only
  *
  * The features do not know about each other. The catalog reports a selection;
@@ -13,8 +13,8 @@
  */
 
 import { createShell } from "./app/shell.js";
-import { aiToolsElements, organizationElements, shellElements } from "./app/elements.js";
-import { createAiTools } from "./app/ai-tools.js";
+import { organizationElements, shellElements, yourToolElements } from "./app/elements.js";
+import { createYourTool } from "./app/your-tool.js";
 import { createOrganization } from "./app/organization.js";
 import { createTheme } from "./app/theme.js";
 import { createOnboarding } from "./app/onboarding.js";
@@ -22,7 +22,6 @@ import { createPolicyWorkspace } from "./app/policy-workspace.js";
 import { createAuthoringClient } from './app/authoring-client.js';
 import { createAuthoringWorkspace } from './app/authoring-workspace.js';
 import { createEvidenceReview } from './app/evidence-review.js';
-import { saveClients } from "./app/settings-client.js";
 import { createCatalog } from "./catalog/controller.js";
 import { attachStaticTooltips } from "./app/tooltip.js";
 
@@ -44,21 +43,15 @@ async function main() {
     // loads. Every control that offers a client reads that SAME list and keeps
     // no copy of its own.
     const organization = createOrganization({ elements: organizationElements(), onEdit: section => onboarding.edit(section), onModeComplete: applySettings });
-    const aiTools = createAiTools({
-      elements: aiToolsElements(),
-      onSelectionChange: async (clients) => {
-        const result = await saveClients(clients);
-        organization.setSettings(result.settings, result.location);
-        if (result.settings) authoringWorkspace.setSettings(result.settings);
-      },
-    });
+    // Your tool reads Core's tool registry and inspection itself; it is not the workspace setup's AI clients, which
+    // stay in Settings (Edit AI tools).
+    const yourTool = createYourTool({ elements: yourToolElements() });
 
     function applySettings(settings, location) {
       organization.setSettings(settings, location);
       policyWorkspace.setSettings(settings);
       authoringWorkspace.setSettings(settings);
       void evidenceReview.setDefaultRecipient(settings.reviewer ?? null);
-      aiTools.setSelection(settings.clients);
       catalog.setOrganizationName(settings.role === "admin" ? settings.organization?.name ?? null : null);
     }
     const onboarding = createOnboarding({
@@ -82,7 +75,6 @@ async function main() {
       onReselectEntry: () => shell.openInspector(),
       onSummary: (summary) => {
         const coreTargets = summary?.coreTargets ?? null;
-        aiTools.setTargets(coreTargets);
         organization.setTargets(coreTargets);
         onboarding.setTargets(coreTargets);
         authoringWorkspace.setTargets(coreTargets);
@@ -91,7 +83,7 @@ async function main() {
 
     // Open setup immediately while the catalog and Core's published clients load.
     // Browser-local drafts never decide whether first-run setup is complete.
-    await Promise.all([authoring.start(), onboarding.start(), catalog.start()]);
+    await Promise.all([authoring.start(), onboarding.start(), catalog.start(), yourTool.start()]);
   } catch (error) {
     shell.showError(error?.message ?? String(error));
   }

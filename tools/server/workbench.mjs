@@ -6,6 +6,7 @@ import { createReportAdapter } from './report.mjs';
 import { createStaticServer } from './static.mjs';
 import { callServiceAsync } from './service-client.mjs';
 import { contractCheckSummary } from './contract-check-summary.mjs';
+import { toolInspectionSummary, toolsSummary } from './tools-summary.mjs';
 
 // The ordinary preview and its regression share this composition boundary.
 export async function createWorkbench({ consumerDir, runDir, summary, settingsPath }) {
@@ -17,7 +18,11 @@ export async function createWorkbench({ consumerDir, runDir, summary, settingsPa
   const report = createReportAdapter(consumerDir);
   // Started now and answered when done, so the page can show it loading; it never delays the server.
   const contractCheck = callServiceAsync(consumerDir, { op: 'contractCheck' }).then(contractCheckSummary);
-  const existingApi = createApi({ summary, settingsPath, contractCheck });
+  // Asked for when the page first loads and kept for this host's life: a restart reads Core again.
+  const once = make => { let answer; return () => (answer ??= make()); };
+  const tools = once(() => callServiceAsync(consumerDir, { op: 'tools' }).then(toolsSummary));
+  const toolInspection = once(() => callServiceAsync(consumerDir, { op: 'toolInspection' }).then(toolInspectionSummary));
+  const existingApi = createApi({ summary, settingsPath, contractCheck, tools, toolInspection });
   const server = createStaticServer(runDir, async (request, response, pathname) => {
     try { return await batch.handle(request, response, pathname) || await readiness.handle(request, response, pathname) || await report.handle(request, response, pathname) || await authoring.handle(request, response, pathname) || await existingApi(request, response, pathname); }
     catch (error) {

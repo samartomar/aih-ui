@@ -1,0 +1,1 @@
+{ "ok": true, "state": "unavailable", "reason": "The installed @aihq/core/harness does not export listTools." }

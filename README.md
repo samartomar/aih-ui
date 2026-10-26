@@ -666,7 +666,7 @@ Selecting a row scopes the grid, the "All Items" count and the masthead to that
 source; selecting it again shows every source. The organization's own additions
 come last and read **Not supplied** until something is actually imported.
 
-### The package strip and the AI tools control
+### The package strip and the header's Your tool
 
 The strip under the header is the Workbench design's compact line:
 `@aihq/core <version> • @aihq/scan <version> • @aihq/catalog <version>`. Each
@@ -677,18 +677,38 @@ index's own package block. These are local packages that can share a released
 version number, so each also shows its short checkpoint. Hashes, full commits, raw
 entry counts, the collection view and index admission are behind "provenance".
 
-The AI tools control lists the AI clients `@aihq/core` supports as targets, from its
-public `nativeClientIds` (exported by `@aihq/core/harness`), read by the backend from
-the installed package, with the display labels Harness publishes for those ids. The
-list's order is Core's, not a ranking. The page keeps no list of its own, so
-reinstalling a different Core changes the list and the version with no UI edit. It
-reads `<selected> of <supported>`. Supported, selected and connected are kept apart:
+**Your tool** in the header is the one AI tool the person works in, and the only
+tool control on the page. Every fact on it comes from the installed Core, read by
+the host through public exports (`tools/service/tools.mjs`, `GET /api/tools` and
+`GET /api/tool-inspection`):
 
-- supported is Core's list;
-- selected is the user's explicit choice, saved in the workspace setup file -- not a policy;
-- installed or connected reads *not checked*: nothing here checks a tool.
+- the list is Harness `listTools({ includeUnobserved: true })` from
+  `@aihq/core/harness`, in registry order, with Harness's labels and surfaces;
+- a tool can be chosen only when `listTools()` also offers it (an observed
+  binding). Every other tool, IDEs included, stays listed and greyed, and its
+  tooltip gives the refusal Core's `selectTool` returns for it (today
+  `tool-not-observed`);
+- each tool's icon is its existence/run state from Core's offline `inspect`
+  (`network: 'off'`), matched by registry id, in the same words as the client
+  checks below. A tool the inspection does not report says so. Finding a tool is
+  never shown as proof that it loads content, and none of these icons is green.
 
-The Workbench design's `3 of 11` was sample data and is not restored as state.
+The page keeps no tool names, so a reinstalled Core changes the list with no UI
+edit. The choice is a per-viewer convenience: only its tool id is kept in this
+browser's local storage, so it survives a restart of the Workbench, and it is not
+a policy. A saved tool the installed Core no longer offers is named and not
+chosen. The control has a loading, an empty (Core lists no tools), an unavailable
+(the installed Core does not export `listTools`) and a failed state; each tooltip
+is reachable by keyboard focus and by touch. The running-page case
+`tools/consumer/your-tool-browser.mjs` checks them against the packed Core, with
+fixtures for the states (`tools/consumer/fixtures/your-tool`).
+
+The workspace setup's **AI clients** -- the clients `@aihq/core` lists in its
+public `nativeClientIds`, saved in the workspace setup file -- are a different
+fact. They are chosen in first-run setup and changed from Settings (**Edit AI
+tools**), and they are not Your tool. The earlier header **AI tools** chip that
+also edited them is replaced by Your tool; its module stays until the dormant-code
+retirement.
 
 The strip also carries the start-up contract-check message, as information
 that blocks nothing. At start-up the host runs the installed Core's
@@ -1037,7 +1057,7 @@ organization details from active setup. The browser remembers a valid Admin prof
 locally for a later switch; required details are validated again before saving.
 Mode changes update presentation only and grant no organization authority.
 AI client choices
-can also be updated from the AI tools control.
+can also be updated from Settings (**Edit AI tools**).
 
 The installed public packages do not expose an assistance-card contract for
 recommendations, links or recipes: Core's `CAPABILITIES` is a CLI command inventory;
@@ -1184,8 +1204,8 @@ the preview reads by default, point it at a checkout that has it:
 CORE_REPO=<core checkout> CATALOG_REPO=<catalog checkout> node tools/preview.mjs
 ```
 
-A Core without `nativeClientIds` leaves the AI tools control reading **Not
-published**.
+A Core without `nativeClientIds` leaves the AI client choices reading **Not
+published**; a Core without `listTools` leaves Your tool reading **Not published**.
 
 A checkout another worker is mid-change is never built and never packed. Its
 committed checkpoint is extracted with `git archive` into a workspace outside

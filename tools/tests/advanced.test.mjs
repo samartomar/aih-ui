@@ -64,7 +64,7 @@ test('the catalog Advanced section holds the kind tiles, the catalog scopes, the
 });
 
 test('the default catalog keeps the search, the kind pills, the tool line and the cards outside Advanced', () => {
-  for (const id of ['catalog-search', 'kind-filters', 'browse-target', 'cards-grid', 'review-filters', 'your-setup', 'ai-tools-trigger', 'theme-toggle-btn', 'nav-sources'])
+  for (const id of ['catalog-search', 'kind-filters', 'browse-target', 'cards-grid', 'review-filters', 'your-setup', 'your-tool-trigger', 'theme-toggle-btn', 'nav-sources'])
     assert.equal(inside(id, 'catalog-advanced'), false, `${id} stays on the default screen`);
 });
 

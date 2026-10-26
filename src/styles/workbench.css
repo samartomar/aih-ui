@@ -47,6 +47,18 @@
 }
 .wb-header-muted, .wb-header-chevron { color: var(--color-on-surface-variant); }
 .wb-header-chevron { font-size: 12px; }
+/* Your tool: one row per registry tool. A tool Core has not observed stays listed, greyed by its words (not by
+   opacity, which would drop its contrast), and focusable so its reason is reachable. */
+.your-tool-option {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 4px 6px; border-radius: 4px;
+  color: var(--color-on-surface); text-align: left; cursor: pointer;
+}
+.your-tool-option:hover, .your-tool-option:focus-visible { background: var(--color-surface-container); }
+.your-tool-option[aria-checked="true"] { background: var(--color-surface-container-high); box-shadow: inset 2px 0 0 var(--color-primary); }
+.your-tool-option[aria-disabled="true"] { cursor: not-allowed; color: var(--color-on-surface-variant); }
+.your-tool-option-words { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+.your-tool-option-reason, .your-tool-option-surface { font-size: 10px; color: var(--color-on-surface-variant); }
+.your-tool-option-surface { font-family: var(--font-mono, monospace); }
 .wb-card {
   background-color: var(--color-card);
   background-image: var(--card-surface);
@@ -316,7 +328,7 @@ body:has(#added-notice:not([hidden])) #cards-grid { padding-bottom: 10rem; }
     flex: 1 1 auto;
     min-height: 0;
   }
-  #ai-tools-pop { position: fixed !important; top: 42px; left: 8px; z-index: 60; }
+  #your-tool-pop { position: fixed !important; top: 42px; left: 8px; z-index: 60; }
   #nav-rail:not(.w-0) {
     position: absolute;
     top: 0;
@@ -415,15 +427,15 @@ body:has(#main-content) [hidden] { display: none !important; }
 body:has(#main-content) > header + div { height: auto; min-height: 40px; flex-wrap: wrap; gap: 6px; padding-block: 5px; }
 body:has(#main-content) > header + div > div:first-child { flex-wrap: wrap; }
 .setup-field-error { line-height: 1.5; }
-body:has(#main-content) :where(.setup-choice, #ai-tools-list > label) { min-height: 44px; }
-#ai-tools-list { max-height: min(360px, 50vh); overflow-y: auto; }
-#ai-tools-pop { max-height: calc(100dvh - var(--workbench-top, 100px) - 12px); overflow-y: auto; }
+body:has(#main-content) :where(.setup-choice, #your-tool-list > button) { min-height: 44px; }
+#your-tool-list { max-height: min(420px, 55vh); overflow-y: auto; }
+#your-tool-pop { max-height: calc(100dvh - var(--workbench-top, 100px) - 12px); overflow-y: auto; }
 .inspector-description-more > summary { cursor: pointer; color: var(--color-primary); }
 #catalog-kinds-disclosure > summary, #policy-context-disclosure > summary { display: none; }
 #policy-context-disclosure { min-width: 0; }
 @media (max-width: 760px) {
   .workspace-actions { position: fixed; top: var(--workbench-top, 100px); right: 8px; }
-  #ai-tools-pop { top: var(--workbench-top, 100px); }
+  #your-tool-pop { top: var(--workbench-top, 100px); }
   #provenance-strip > span { display: none; }
   #catalog-kinds-disclosure > summary, #policy-context-disclosure > summary { display: flex; align-items: center; min-height: 44px; cursor: pointer; }
   #catalog-kinds-disclosure > summary::before, #policy-context-disclosure > summary::before { content: '▸'; margin-right: 6px; }

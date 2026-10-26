@@ -1,5 +1,9 @@
 /*
- * The header's AI tools control: which AI clients to set up for.
+ * The header's former AI tools control: which AI clients to set up for.
+ *
+ * Dormant: the header's Your tool (src/app/your-tool.js) replaced it, and the
+ * workspace setup's AI clients are edited from Settings (Edit AI tools). The
+ * module and its offline test stay until the dormant-code retirement.
  *
  * Three different facts, kept apart:
  *
