@@ -65,7 +65,9 @@ Catalog package), `frameworkId`, `archivePath`, `archiveSha256`, and optional
 content, inventory and members. The host binds the discovered content digest with
 a second pinned read, checks the exact archive hash, and compares its content and
 inventory bytes to the installed reader result. Names and items come from that
-result. No prepared selection becomes a release-index entry or gains a baseline.
+result. The host reads single and per-tool recipe descriptors as published, without choosing
+a tool-specific variant. Catalog retains configuration and delivery-choice refusals.
+No prepared selection becomes a release-index entry or gains a baseline.
 It stays **Internal · not verified**, unbound, unauthenticated and non-production.
 
 The existing open `materialSource` provenance object in saved intent retains an

@@ -13,7 +13,7 @@ const bounded = async (path, limit) => {
 };
 async function materials(root, release) {
   const descriptors = new Map();
-  for (const item of release.items) for (const descriptor of [item.recipe, ...item.materials]) {
+  for (const item of release.items) for (const descriptor of [...(item.recipe ? [item.recipe] : Object.values(item.recipes ?? {})), ...item.materials]) {
     const path = descriptor.path ?? descriptor.packagePath;
     descriptors.set(path, { ...descriptor, path });
   }
@@ -29,7 +29,7 @@ async function materials(root, release) {
 function observation(release) {
   return (harness.listTools?.() ?? []).map(tool => {
     try {
-      const result = harness.checkCompatibility({ tool: tool.id, platform: { os: process.platform, arch: process.arch },
+      const result = harness.checkCompatibility({ tool: tool.id, platform: { os: ({ win32: 'windows', darwin: 'macos' })[process.platform] ?? process.platform, arch: process.arch },
         binding: harness.toolBindings?.find(value => value.tool === tool.id), items: release.items.map(item => ({ item })) });
       return { tool: tool.id, label: tool.label, ...result, count: result.status === 'checked' ? result.items.filter(item => item.observedOn !== null && item.observedOn !== undefined).length : null };
     } catch { return { tool: tool.id, label: tool.label, status: 'failed', count: null }; }

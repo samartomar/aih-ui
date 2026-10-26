@@ -3,6 +3,7 @@
 
 /** The catalog page's Advanced section: kind tiles, catalog scopes, Policy workspace links and Scan Review. */
 export async function openCatalogAdvanced(page) {
+  if (await page.locator('#policy-review-panel').isVisible()) await page.locator('#policy-back-to-catalog').click();
   const advanced = page.locator('#catalog-advanced');
   if (!await advanced.isVisible()) await page.locator('#nav-sources').click();
   if (!await advanced.evaluate(node => node.open)) await advanced.locator(':scope > summary').click();

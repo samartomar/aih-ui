@@ -17,7 +17,7 @@ export async function runFrameworksBrowser({ origin, output, playwrightModule, s
       const toggle=page.getByRole('button',{name:`Switch to ${theme} mode`,exact:true});if(await toggle.count())await toggle.click();
       const rail=page.locator('#framework-navigation');
       assert.match(await rail.innerText(),/Test fixture sources — not production data/);
-      const internal=rail.locator('[data-framework^="internal:"]');
+      const internal=expected.prepared ? rail.locator('[data-framework='+JSON.stringify(`internal:${expected.prepared.framework.id}:${expected.prepared.sha256}`)+']') : rail.locator('[data-framework^="internal:"]');
       if(['ready','failed','missing','conflicting','releaseFailed'].includes(scenario)) {
         await internal.waitFor();assert.match(await internal.innerText(),/Internal · not verified/);
         await internal.click();assert.equal(await page.locator('.wb-source-heading').innerText(),expected.prepared.framework.name);
@@ -33,6 +33,8 @@ export async function runFrameworksBrowser({ origin, output, playwrightModule, s
         await page.screenshot({animations:'disabled',path:join(output,`${theme}-internal.png`)});
       }
       if(scenario==='ready') {
+        const additional=rail.locator('[data-framework='+JSON.stringify(`internal:${expected.additional.framework.id}:${expected.additional.sha256}`)+']');
+        await additional.click();assert.equal(await page.locator('#cards-grid [data-card-id]').count(),expected.additional.items,'Public per-tool recipe descriptors remain browsable without selecting a recipe variant');await internal.click();
         await page.keyboard.press('Escape');
         await addFromCatalog(page,expected.prepared.items[0].id);
         await page.locator('#your-setup').click();
