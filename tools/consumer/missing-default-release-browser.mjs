@@ -5,12 +5,13 @@ import { fileURLToPath } from 'node:url';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { installedFamilies } from './installed-families.mjs';
 import { openPolicySection } from './policy-drawer.mjs';
+import { UPDATE_SOURCE_DEFAULT_RELEASE as DEFAULT_RELEASE } from './update-source.mjs';
 
 // V0b missing default release, on the running page. The host's update source lists the installed Catalog package root and
 // a copy of it whose package no longer exports the frozen default ./release.json. Both roots read online, and the page
 // shows the same frameworks and the same installed content as a host with no update source configured.
 
-const DEFAULT_RELEASE = './release.json';
+const escaped = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const installedRoot = () => dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
 
 // Test setup, never a Workbench action: copies the installed packed Catalog to `directory` and removes the default release
@@ -29,7 +30,7 @@ export async function missingDefaultReleaseRoot(directory) {
   return root;
 }
 
-// `baselineOrigin` serves the same packages with no update source; `origin` is the host whose update source lists
+// `baselineOrigin` serves the same packages with the maintenance test fixture as its source; `origin` is the host whose update source lists
 // [installed root, fixtureRoot], oldest first.
 export async function runMissingDefaultReleaseBrowser({ origin, baselineOrigin, output, playwrightModule, fixtureRoot, theme = 'dark', item = 'extensions.matt.grill-me' }) {
   const { chromium } = await import(playwrightModule);
@@ -89,9 +90,9 @@ export async function runMissingDefaultReleaseBrowser({ origin, baselineOrigin, 
     assert.equal(lines.length, 3, JSON.stringify(lines));
     assert.match(lines[0], /^Update source: 2 Catalog package roots configured by this host\./);
     // The root with a default release behaves as before: it is read, and it names that release.
-    assert.match(lines[1], new RegExp(`^Source 1: ${installedDefault.release.package.name} ${installedDefault.release.package.version} · release ${installedDefault.release.sha256} — read `));
+    assert.match(lines[1], new RegExp(`^${escaped(`Source 1: ${installedDefault.release.package.name} ${installedDefault.release.package.version} · release ${installedDefault.release.sha256} — read `)}`));
     // The root without one is online too, read from its family releases.
-    assert.match(lines[2], new RegExp(`^Source 2: ${installedDefault.release.package.name} ${installedDefault.release.package.version} · release ${firstFamily} — read `));
+    assert.match(lines[2], new RegExp(`^${escaped(`Source 2: ${installedDefault.release.package.name} ${installedDefault.release.package.version} · release ${firstFamily} — read `)}`));
     assert.equal(lines.some(line => /offline/.test(line)), false, 'No configured root is offline.');
     assert.deepEqual(await page.locator('#policy-updates-categories p').allInnerTexts(), ['Content: checked', 'Software: not selected', 'Client: not selected', 'Environment: not selected']);
     await page.locator('#policy-updates').screenshot({ path: join(output, `missing-default-release-updates-${theme}.png`) });
