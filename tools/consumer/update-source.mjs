@@ -1,12 +1,25 @@
 // The host's update source: an ordered list of locally packed Catalog package roots, oldest first. Each root is read only
-// through the public release reader, one export at a time; nothing else under it is read, nothing is written, no scan runs.
+// through the public release reader, one export at a time; nothing else under it is read (save the one case below), nothing is
+// written, no scan runs.
 // What is read is a candidate list for the maintenance check, and the position order is the host's declaration of newer.
-import { isAbsolute } from 'node:path';
+// The frozen default ./release.json is optional: a root whose package does not declare it is read from its family releases.
+// Only then is the root's package.json read, and only for whether its export map names the default release.
+import { readFile } from 'node:fs/promises';
+import { isAbsolute, join } from 'node:path';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { declareReleaseOrder, MAX_ORDERED_SOURCES } from './release-order.mjs';
 import { FAMILY_RELEASE_EXPORTS } from './installed-families.mjs';
 export const UPDATE_SOURCE_KIND = 'catalog-roots';
-export const UPDATE_SOURCE_RELEASE_EXPORTS = ['./release.json', ...FAMILY_RELEASE_EXPORTS];
+export const UPDATE_SOURCE_DEFAULT_RELEASE = './release.json';
+export const UPDATE_SOURCE_RELEASE_EXPORTS = [UPDATE_SOURCE_DEFAULT_RELEASE, ...FAMILY_RELEASE_EXPORTS];
+// The reader refuses the default as not exported at a safe path, and the package's export map does not name it at all. A
+// declared default the reader refuses (unsafe, missing, broken), or a package.json that can't be read, stays offline.
+async function defaultNotDeclared(root, read) {
+  if (read?.valid !== false || !read.diagnostics?.some(diagnostic => diagnostic.reason === 'invalid-export')) return false;
+  let exports;
+  try { ({ exports } = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'))); } catch { return false; }
+  return exports !== null && typeof exports === 'object' && !Array.isArray(exports) && !Object.hasOwn(exports, UPDATE_SOURCE_DEFAULT_RELEASE);
+}
 // The configured roots, or a thrown error that says what to fix. The paths themselves are never echoed.
 export function validateCatalogRoots(roots) {
   if (!Array.isArray(roots) || !roots.length) throw new Error('Supply the update source as a list of one or more absolute Catalog package roots.');
@@ -22,17 +35,19 @@ export function createCatalogUpdateSource({ roots, installedPackage, readRelease
   if (typeof installedPackage?.name !== 'string') throw new Error('Supply the installed Catalog package.');
   const lastRead = new Map();
   // One root: every export valid and from the installed package, else the first reason it is offline and the export that failed.
+  // A default release the package does not declare is skipped; the root is then read from its other exports.
   async function readRoot(root) {
     const entries = [];
     for (const release of releaseExports) {
       let read;
       try { read = await readRelease({ root, release, sourceInput: 'maintained' }); }
       catch { return { reason: 'unreadable', export: release }; }
+      if (release === UPDATE_SOURCE_DEFAULT_RELEASE && await defaultNotDeclared(root, read)) continue;
       if (!read?.valid || !read.release) return { reason: 'invalid', export: release };
       if (read.release.package?.name !== installedPackage.name) return { reason: 'package-mismatch', export: release };
       entries.push({ release: read.release, materialSource: read.source });
     }
-    return { entries };
+    return entries.length ? { entries } : { reason: 'invalid', export: UPDATE_SOURCE_DEFAULT_RELEASE };
   }
   return {
     async read() {

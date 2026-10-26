@@ -1,5 +1,5 @@
 import { copyFile, mkdir, readFile, writeFile, rename } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -77,6 +77,21 @@ try {
       }
     } finally { delete process.env.AIH_CONTRACT_CHECK_EXTRA; await new Promise(resolve => refused.server.close(resolve)); }
   } else console.log(`The installed Core publishes no checkContracts (${engine.state ?? engine.error}); the real-engine "can't read" journey needs one.`);
+  // V0b missing default release: a second host whose update source lists the installed Catalog root and a copy without
+  // the default ./release.json. One update source per host, so the maintenance fixture is withheld while it starts.
+  const { missingDefaultReleaseRoot, runMissingDefaultReleaseBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/missing-default-release-browser.mjs')));
+  const fixtureRoot = await missingDefaultReleaseRoot(join(consumerDir, 'missing-default-release-catalog'));
+  const catalogRoot = dirname(createRequire(join(consumerDir, 'package.json')).resolve('@aihq/catalog/package.json'));
+  process.env.AIH_UPDATE_SOURCE_CATALOG_ROOTS = [catalogRoot, fixtureRoot].join(delimiter); delete process.env.AIH_MAINTENANCE_SOURCE;
+  let missingDefault;
+  try { missingDefault = await createWorkbench({ consumerDir, runDir, summary, settingsPath: join(consumerDir, 'missing-default-release-settings.json') }); }
+  finally { delete process.env.AIH_UPDATE_SOURCE_CATALOG_ROOTS; process.env.AIH_MAINTENANCE_SOURCE = maintenanceSource; }
+  try {
+    const missingOrigin = `http://127.0.0.1:${(await listen(missingDefault.server, 0)).port}`;
+    for (const theme of ['dark', 'light']) {
+      starting(`runMissingDefaultReleaseBrowser ${theme}`); await runMissingDefaultReleaseBrowser({ origin: missingOrigin, baselineOrigin: origin, output: join(consumerDir, `missing-default-release-evidence-${theme}`), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, fixtureRoot, theme });
+    }
+  } finally { await new Promise(resolve => missingDefault.server.close(resolve)); }
   const { runSourceFactsBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/source-facts-browser.mjs')));
   starting('runSourceFactsBrowser'); await runSourceFactsBrowser({ origin, output: join(consumerDir, 'source-facts-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
   const { runUnresolvedDraftBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/unresolved-draft-browser.mjs')));
