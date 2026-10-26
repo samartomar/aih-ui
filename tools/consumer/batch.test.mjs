@@ -1,3 +1,4 @@
+import * as coreLocation from '@aihq/core';
 import test, { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir, mkdir, writeFile, mkdtemp } from 'node:fs/promises';
@@ -15,7 +16,7 @@ import { batchFixture } from './batch-fixture.mjs';
 import { homeEnvironment } from './home-environment.mjs';
 import { replaceEnvelope, revisionOf } from './envelope-file.mjs';
 
-// Core keeps ownership records, recovery manifests, snapshots and run history under the current account's `~/.aih/core`, even
+// Core keeps ownership records, recovery manifests, snapshots and run history under the current account's its published state location, even
 // with logging off. It resolves the account home with os.homedir() whenever it is used (not at import), so pointing this
 // test process (node --test gives each file its own) at a disposable home before the first Core call keeps every record here.
 // Callers hand batch.mjs Core's policy reader, as the host does.
@@ -250,7 +251,7 @@ describe('reviewed batch against Core', () => {
     const f = await batchFixture(await scratch(), { applyEarlier: false }), small = await slim(f);
     const report = await hostOf(f).runBatch({ ...small, approve: { batchId: small.batchId } });
     assert.equal(report.status, 'ok', JSON.stringify(report.diagnostics));
-    const core = await readdir(join(FIXTURE_HOME, '.aih', 'core'));
+    const core = await readdir(coreLocation.resolveStateLocation().root);
     assert.ok(core.length > 0, `Core wrote its records under the fixture home: ${core.join(', ')}`);
   });
 

@@ -1,9 +1,10 @@
 // Workbench checks must leave the real account's Core records untouched.
 import { lstatSync, readdirSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
+import { stateRootForHome } from './consumer/core-state-location.mjs';
 
-export function snapshotCoreHome(home) {
-  const root = join(home, '.aih', 'core');
+export function snapshotCoreHome(home, descriptor) {
+  const root = stateRootForHome(home, descriptor);
   const entries = new Map();
   let exists = true;
 
@@ -35,7 +36,7 @@ export function snapshotCoreHome(home) {
     for (const name of names) walk(join(path, name), relative ? `${relative}/${name}` : name);
   }
 
-  // A linked `.aih/core` is still the home Core writes to, so the walk starts at its target, which is recorded too.
+  // A linked Core state root is still the home Core writes to, so the walk starts at its target, which is recorded too.
   // Links inside are not followed. A target that cannot be resolved leaves `target` null: the listing is incomplete.
   let target = root;
   try { target = realpathSync(root); } catch (error) { if (!['ENOENT', 'ENOTDIR'].includes(error.code)) target = null; }
@@ -66,5 +67,5 @@ export function compareCoreHome(before, after) {
 }
 
 export function describeCoreHomeChange({ added, removed, changed, unreadable }) {
-  return `The real account home's .aih/core changed or could not be read: ${added} added, ${removed} removed, ${changed} changed, ${unreadable} unreadable.`;
+  return `The real account home's Core state changed or could not be read: ${added} added, ${removed} removed, ${changed} changed, ${unreadable} unreadable.`;
 }

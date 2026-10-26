@@ -63,9 +63,9 @@ export function createProjectFolderRow({ el, button, busy = () => false, onChang
   }
   function show(value) {
     state = value; const summary = folderSummary(state);
-    name.textContent = summary.name; name.title = [summary.path, summary.note].filter(Boolean).join(' · '); path.textContent = summary.path; note.textContent = summary.note;
+    name.textContent = summary.name; name.title = [summary.path, summary.note].filter(Boolean).join(' · '); path.textContent = summary.path; note.textContent = state?.stateLocation?.reason ?? summary.note;
     if (state?.project) saveRecent(storage(), rememberFolder(readRecent(storage()), state.project));
-    if (!state?.project) form.hidden = false;
+    if (!state?.project || state?.stateLocation?.status === 'unavailable') form.hidden = false;
     renderRecent();
   }
   async function choose(value) {

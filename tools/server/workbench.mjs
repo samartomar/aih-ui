@@ -9,11 +9,11 @@ import { contractCheckSummary } from './contract-check-summary.mjs';
 import { toolInspectionSummary, toolsSummary } from './tools-summary.mjs';
 
 // The ordinary preview and its regression share this composition boundary.
-export async function createWorkbench({ consumerDir, runDir, summary, settingsPath }) {
+export async function createWorkbench({ consumerDir, runDir, summary, settingsPath, coreState }) {
   // The readiness journal is the friction input for what the person ran here. The readiness adapter is created first because the authoring host's journal provider closes over it
   // and reads it afresh on each improvements check; its child is forked lazily, on the first readiness request.
   const readiness = createReadinessAdapter(consumerDir);
-  const authoring = await createAuthoringAdapter(consumerDir, { frictionEvidence: await journalFrictionEvidence(consumerDir, () => readiness.records()) });
+  const authoring = await createAuthoringAdapter(consumerDir, { coreState, frictionEvidence: await journalFrictionEvidence(consumerDir, () => readiness.records()) });
   const batch = createBatchAdapter(consumerDir);
   const report = createReportAdapter(consumerDir);
   // Started now and answered when done, so the page can show it loading; it never delays the server.

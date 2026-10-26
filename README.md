@@ -121,6 +121,20 @@ material bytes, installed public validators and an actual browser download/fresh
 import, use [functional composition capacity](docs/functional-scale.md). Its
 synthetic recipes remain execution-disabled; it sets no latency target or item cap.
 
+The project-folder check reads Core's public `resolveStateLocation()` and the
+`stateLocation.root` descriptor from `@aihq/core/contracts`. It refuses the
+published state root and folders inside it, including resolved links, and uses
+the descriptor for the other home folders already protected by the check. If
+Core cannot publish a usable location, the existing folder row explains why
+it cannot check a new project folder. The location is information only; the
+Workbench never writes Core records itself.
+
+`node tools/check-state-location.mjs <installed-consumer> [evidence-directory]`
+exercises the ordinary running page with host-only relocated and unavailable
+location fixtures, in both themes. `check:workbench` runs this journey too.
+The fixture overrides only the external location reader, not Core's storage
+semantics; install and inventory still use the installed public Core APIs.
+
 ## Owner-testing candidate
 
 `tools/candidate.mjs` runs one integrated Workbench candidate from exact packed
@@ -347,7 +361,7 @@ Data persists across stop and start until reset.
 
 | Path | Purpose |
 | --- | --- |
-| `home/` | The candidate's account home. Core keeps its records in `home/.aih/core`. |
+| `home/` | The candidate's account home. Core's public descriptor locates its records beneath that home. |
 | `config/` | Host configuration: settings, organization source, maintenance source, readiness repairs, batch host. |
 | `samples/` | Sample projects, repositories and fixtures, each with a `SAMPLE.md`. |
 | `samples/repositories/sample-web/.claude`, `sample-api/.codex` | The two controlled client configuration folders, inside the two sample checkouts. |
@@ -357,7 +371,7 @@ Data persists across stop and start until reset.
 | `run/` | The installed consumer and served page, rebuilt by every start. |
 
 The real account home is never used. Start and stop each compare a metadata
-listing of the real home's `.aih/core` against the listing taken at start and
+listing of the real home's published Core state location against the listing taken before sample creation and
 print any change; nothing is deleted.
 
 ### Sample data

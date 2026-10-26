@@ -1,3 +1,4 @@
+import { resolveStateLocation } from '@aihq/core';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readdir, realpath, rm } from 'node:fs/promises';
@@ -67,8 +68,8 @@ test('a preparation made in folder A cannot be applied after switching to B, and
 }));
 
 test('the page sees each refusal in words and the folder stays as it was', () => withConsumer(async ({ call, get, folderA, home }) => {
-  await mkdir(join(home, '.aih', 'core'), { recursive: true });
-  for (const [path, reason] of [['relative/path', /full path/], [join(folderA, 'missing'), /does not exist/], [home, /home folder/], [join(home, '.aih', 'core'), /Core keeps its own records/]]) {
+  await mkdir(resolveStateLocation().root, { recursive: true });
+  for (const [path, reason] of [['relative/path', /full path/], [join(folderA, 'missing'), /does not exist/], [home, /home folder/], [resolveStateLocation().root, /Core keeps its own records/]]) {
     const result = await call('project', { path });
     assert.equal(result.status, 'refused'); assert.match(result.reason, reason);
   }
