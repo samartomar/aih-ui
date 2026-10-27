@@ -179,9 +179,10 @@ export async function runOptionalHookBrowser({ origin, output, playwrightModule,
     const catalog = await (await context.request.get(origin + '/api/authoring-catalog')).json();
     const fixture = catalog.frameworks.find(row => row.kind === 'fixture' && row.reason?.startsWith('Selection-only public golden') && row.sets?.length);
     const alternate = catalog.frameworks.find(row => row.reason?.startsWith('Distinct checked TEST version'));
-    assert.equal(alternate.id, fixture.id); assert.notEqual(alternate.sha256, fixture.sha256);
-    await page.locator(`[data-framework="fixture:${alternate.id}:${alternate.sha256}"]`).click(); await page.locator('#browse-all-items').check();
-    const unrelated = page.locator('#cards-grid [data-kind="skill"] button[aria-label^="Add "]:not(:disabled)').first(); const unrelatedId = (await unrelated.getAttribute('aria-label')).slice(4);
+    assert.equal(alternate.id, fixture.id); assert.notEqual(alternate.sha256, fixture.sha256); assert.notEqual(alternate.version, fixture.version);
+    const independent = catalog.frameworks.find(row => row.reason?.startsWith('Independent checked framework'));
+    await page.locator(`[data-framework="fixture:${independent.id}:${independent.sha256}"]`).click(); await page.locator('#browse-all-items').check();
+    const unrelated = page.locator('#cards-grid button[aria-label^="Add "]:not(:disabled)').first(); const unrelatedId = (await unrelated.getAttribute('aria-label')).slice(4);
     await unrelated.click(); await page.getByRole('button', { name: `Remove ${unrelatedId}`, exact: true }).waitFor();
     if (await page.locator('#added-notice-dismiss').isVisible()) await page.locator('#added-notice-dismiss').click();
     const set = fixture.sets.find(set => set.members.some(member => member.optional));
@@ -199,7 +200,7 @@ export async function runOptionalHookBrowser({ origin, output, playwrightModule,
     await page.waitForFunction(() => document.getElementById('framework-guidance').textContent.includes('Chosen sets added'));
     const policy = await save(page, join(output, `${theme}-excluded-hook.json`)); const intent = policy.metadata['aih.workbench'];
     assert.ok(intent.exclusions.some(value => value.itemId === member.item.itemId && value.releaseSha256 === fixture.sha256), 'An exclusion binds the exact selected set release, not the first framework version');
-    assert.ok(intent.roots.some(root => root.releaseSha256 === alternate.sha256 && root.itemId === unrelatedId), 'The other version’s unrelated choice remains');
+    assert.ok(intent.roots.some(root => root.releaseSha256 === independent.sha256 && root.itemId === unrelatedId), 'The unrelated framework choice remains while two versions of another framework are admitted');
     assert.ok(!intent.pins.some(value => value.itemId === member.item.itemId));
     assert.ok(setChoices(policy).some(choice => choice.request.members.some(value => value.item.itemId === member.item.itemId && value.include === false)));
     await page.screenshot({ path: join(output, `${theme}-optional-hook-fixture.png`) }); await context.close();

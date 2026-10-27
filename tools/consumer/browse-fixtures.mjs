@@ -29,5 +29,9 @@ export async function optionalHookFixture() {
   const alternate = readReleaseContent(alternateBytes, { expectedSha256: sha256(alternateBytes) });
   if (!alternate.valid) throw new Error('Public alternate framework content refused.');
   inventories.unshift({ release: alternate.release, family: alternate.release.framework.name, materialSource: { kind: 'local', input: 'fixture-other-version' }, materials: [], fixture: 'Distinct checked TEST version of the same framework; generated selection-only fixture, not a production release, no execution.' });
+  const independentBytes = await bytes('@aihq/catalog/release-project-basics.content.json');
+  const independent = readReleaseContent(independentBytes, { expectedSha256: sha256(independentBytes) });
+  if (!independent.valid) throw new Error('Public independent framework content refused.');
+  inventories.push({ release: independent.release, family: independent.release.framework.name, materialSource: { kind: 'local', input: 'fixture-independent-choice' }, materials: [], fixture: 'Independent checked framework for unrelated-choice fixture; no execution.' });
   return inventories;
 }
