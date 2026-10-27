@@ -78,7 +78,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     const inspectedItem = inspect ? selectedEntry()?.authoringItem : undefined;
     const itemId = inspectedItem && framework && inspectedItem.root.releaseSha256 === framework.sha256 ? inspectedItem.id : undefined;
     const key = JSON.stringify([contentKey, inspect, itemId]);
-    const factsOnly = inspect && contentKey === browseContentKey;
+    const factsOnly = inspect && contentKey === browseContentKey && ['read', 'refused'].includes(browseResult?.status);
     if (key === browseKey) return;
     browseKey = key; browseContentKey = contentKey; const attempt = ++browseAttempt; if (!factsOnly) browseResult = undefined;
     if (!framework) return;
