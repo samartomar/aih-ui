@@ -24,9 +24,15 @@ Object.assign(process.env, homeEnvironment(join(output, 'home')), { TMPDIR: temp
 delete process.env.AIH_CONSUMER_PROJECT;
 for (const artifact of Object.values(artifacts)) if (createHash('sha256').update(await readFile(artifact.tarball)).digest('hex') !== artifact.sha256) throw new Error('Pinned package archive differs from its recorded identity.');
 const installed = Object.fromEntries(Object.entries(artifacts).map(([name, entry]) => [name, verifyInstalledArchive(entry, join(consumerDir, 'node_modules', name === 'ui' ? 'aih-ui' : `@aihq/${name}`))]));
+const startedHead = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim();
+const copied = [];
 const runDir = join(output, 'page'); await buildCss(repo);
 for (const [assets, destination] of [[pageAssets(repo), runDir], [serviceAssets(repo), consumerDir]]) for (const asset of assets) {
   const path = join(destination, asset.to); await mkdir(dirname(path), { recursive: true }); await copyFile(join(repo, asset.from), path);
+  const digest = value => createHash('sha256').update(value).digest('hex');
+  const sha256 = digest(await readFile(join(repo, asset.from)));
+  if (digest(await readFile(path)) !== sha256) throw new Error('Copied page/backend differs from the source snapshot.');
+  copied.push({ path: asset.from, sha256 });
 }
 const load = name => import(pathToFileURL(join(consumerDir, 'consumer', name)).href);
 const selectedCases = process.argv.slice(5);
@@ -61,4 +67,6 @@ for (const [scenario, configuration] of [...Object.entries(fixture.scenarios), .
   } finally { await new Promise(done=>started.server.close(done)); if (scenario === 'facts' && priorSettings) await writeFile(settingsPath, priorSettings); }
 }
 const source = { head: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(), dirty: execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }).trim().length > 0, pageFiles: await Promise.all(pageAssets(repo).map(async asset => ({ path: asset.from, sha256: createHash('sha256').update(await readFile(join(repo, asset.from))).digest('hex') }))) };
+if (source.head !== startedHead || (await Promise.all(copied.map(async file => createHash('sha256').update(await readFile(join(repo, file.path))).digest('hex') === file.sha256))).some(same => !same)) throw new Error('Source changed during the running-page proof; receipt withheld.');
+source.copiedFiles = copied;
 await writeFile(join(output,'result.json'),JSON.stringify({status:'passed',source,artifacts,installed,outcomes,humanAcceptance:'pending'},null,2));
