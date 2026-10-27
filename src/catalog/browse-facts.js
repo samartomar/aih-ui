@@ -42,7 +42,10 @@ export function renderBrowseFacts(item, browse, tool, { detailed = false } = {})
   if (policy) node.append(badge('state', 'policy', policy.status === 'ok' ? `Organization policy · ${policy.value.enforced.admitted ? 'advisory preview' : 'blocked'}` : 'Organization policy unavailable', JSON.stringify(policy)));
   node.append(badge('state', 'info', 'Plugin route not published', 'This installed Harness compatibility contract has no plugin-route field. No route is inferred from Catalog hints.'));
   if (detailed) {
-    const host = el('p', 'browse-host-facts', browse?.host?.status === 'unavailable' ? browse.host.reason : `Host inspection: ${browse?.host?.status ?? 'unchecked'}. No client was launched.`);
+    const observedHost = browse?.host;
+    const version = observedHost?.installedVersion;
+    const hostWords = version?.state === 'known' ? `Tool version ${version.version}, read from local files.` : `Tool version unchecked: ${version?.reason ?? observedHost?.reason ?? observedHost?.status ?? 'not inspected'}.`;
+    const host = el('p', 'browse-host-facts', `${hostWords} No client was launched. Host reads do not prove successful use.`);
     node.append(host);
     const observations = browse?.observations?.find(value => value.itemId === item.id)?.observations;
     if (observations?.length) {
