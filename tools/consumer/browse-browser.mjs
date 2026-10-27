@@ -287,9 +287,9 @@ export async function runSetActionAccessBrowser({ origin, output, playwrightModu
   try { for (const theme of ['dark', 'light']) {
     const context = await browser.newContext({ hasTouch: true }); const page = await context.newPage(); await enter(page, origin, theme, { hasTool: false }); await framework(page, expected.additional);
     let edits = 0; page.on('request', request => { if (/authoring-(?:draft-edit|edit)$/.test(new URL(request.url()).pathname)) edits++; });
-    const add = page.locator('[data-add-sets]'); assert.equal(await add.isDisabled(), false); assert.equal(await add.getAttribute('aria-disabled'), 'true');
+    const add = page.locator('[data-add-sets]'); assert.equal(await add.evaluate(node => node.disabled), false, 'ARIA unavailable keeps native keyboard focus'); assert.equal(await add.getAttribute('aria-disabled'), 'true');
     await page.keyboard.press('Tab'); await add.focus(); await page.locator('#wb-tooltip:not([hidden])').waitFor(); assert.match(await page.locator('#wb-tooltip').innerText(), /Choose your tool/);
-    await add.tap(); assert.equal(await page.locator('#wb-tooltip').isVisible(), true); await add.click(); assert.equal(edits, 0, 'A focusable unavailable action grants no edit');
+    await page.keyboard.press('Space'); await add.tap({ force: true }); assert.equal(await page.locator('#wb-tooltip').isVisible(), true); assert.equal(edits, 0, 'A focusable unavailable action grants no edit');
     await page.screenshot({ path: join(output, `${theme}-choose-tool-explanation.png`) }); await context.close();
   } await writeFile(join(output, 'result.json'), JSON.stringify({ status: 'passed', humanAcceptance: 'pending' })); } finally { await browser.close(); }
 }

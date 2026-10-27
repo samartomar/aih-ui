@@ -177,6 +177,7 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
         elements.detectorFindingDetail.removeAttribute('title');
         const item = entry.authoringItem;
         const source = sourcePresentation(item);
+        if (item.role) {
         const existing = document.getElementById('inspector-browse-facts'); if (existing) existing.remove();
         const context = el('section', 'inspector-browse-facts'); context.id = 'inspector-browse-facts';
         const authored = el('div', 'inspector-row'); authored.append(el('strong', '', 'Where it came from'), el('p', '', item.source ?? 'Authorship not published.'));
@@ -193,6 +194,7 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
         const start = el('div', 'inspector-row'); start.append(el('strong', '', 'How it starts'), el('p', '', item.payload?.invocation ?? 'Activation not published.')); context.append(start);
         const files = el('details'); files.append(el('summary', '', 'Files'), el('pre', 'browse-json', item.materials.map(value => value.relPath ?? value.path ?? value.packagePath).join('\n'))); context.append(files);
         elements.detailsDesc.after(context);
+        }
         elements.inspectorName.textContent = source.name;
         elements.inspectorKind.setAttribute('aria-label', `Kind: ${item.kind}`);
         attachTooltip(elements.inspectorKind, `Kind: ${iconFor('kind', item.kind).label}`);
