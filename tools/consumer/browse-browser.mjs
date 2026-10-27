@@ -181,7 +181,7 @@ export async function runOptionalHookBrowser({ origin, output, playwrightModule,
     const alternate = catalog.frameworks.find(row => row.reason?.startsWith('Distinct checked version'));
     assert.equal(alternate.id, fixture.id); assert.notEqual(alternate.sha256, fixture.sha256);
     await page.locator(`[data-framework="fixture:${alternate.id}:${alternate.sha256}"]`).click(); await page.locator('#browse-all-items').check();
-    const unrelated = page.locator('#cards-grid button[aria-label^="Add "]:not(:disabled)').first(); const unrelatedId = (await unrelated.getAttribute('aria-label')).slice(4);
+    const unrelated = page.locator('#cards-grid [data-kind="skill"] button[aria-label^="Add "]:not(:disabled)').first(); const unrelatedId = (await unrelated.getAttribute('aria-label')).slice(4);
     await unrelated.click(); await page.getByRole('button', { name: `Remove ${unrelatedId}`, exact: true }).waitFor();
     if (await page.locator('#added-notice-dismiss').isVisible()) await page.locator('#added-notice-dismiss').click();
     const set = fixture.sets.find(set => set.members.some(member => member.optional));
