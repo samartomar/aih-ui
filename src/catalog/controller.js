@@ -373,7 +373,9 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
           const sources = authoring.draft?.intent?.provenance ?? authoring.intent?.provenance ?? policy.metadata?.['aih.workbench']?.provenance;
           const record = { version: 1, choices: (sources ?? []).flatMap(source => source.materialSource?.workbenchSetChoices?.choices ?? []) };
           const roots = authoring.draft?.intent?.roots ?? authoring.intent?.roots ?? policy.metadata?.['aih.workbench']?.roots ?? [];
-          const identity = JSON.stringify([record, roots]);
+          const savedOriginIds = new Set(record.choices.map(choice => choice.originId));
+          const configuredRoots = roots.filter(root => root.originIds.some(id => savedOriginIds.has(id)) && Object.keys(root.configuration).length);
+          const identity = JSON.stringify([record, configuredRoots.map(({ releaseSha256, itemId, scope, configuration }) => ({ releaseSha256, itemId, scope, configuration }))]);
           if (record?.version === 1 && identity !== restoredChoiceBytes) {
             restoredChoiceBytes = identity;
             savedSetSources.clear();

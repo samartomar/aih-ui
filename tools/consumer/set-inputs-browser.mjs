@@ -51,6 +51,21 @@ export async function runSetInputsBrowser({ origin, output, playwrightModule, ex
     const unrelated = expected.prepared.items[0].id;
     await page.getByRole('button', { name: `Add ${unrelated}`, exact: true }).click();
     await page.getByRole('button', { name: `Remove ${unrelated}`, exact: true }).waitFor();
+    await chooseFramework(expected.additional);
+    const acceptedSets = page.waitForResponse(response => /authoring-(?:draft-edit|edit)$/.test(response.url()));
+    await page.locator('[data-add-sets]').click(); assert.equal((await (await acceptedSets).json()).status, 'ok');
+    await page.locator('#framework-guidance').filter({ hasText: 'Chosen sets added' }).waitFor();
+    const setId = await page.locator('[data-set-id][aria-pressed="true"]').first().getAttribute('data-set-id');
+    await page.locator(`[data-set-id="${setId}"]`).click();
+    await chooseFramework(expected.prepared);
+    await page.getByRole('button', { name: `Remove ${unrelated}`, exact: true }).click();
+    await page.getByRole('button', { name: `Add ${unrelated}`, exact: true }).waitFor();
+    await chooseFramework(expected.additional);
+    assert.equal(await page.locator(`[data-set-id="${setId}"]`).getAttribute('aria-pressed'), 'false', 'An unrelated accepted root edit preserves in-progress set choices');
+    await page.locator(`[data-set-id="${setId}"]`).click();
+    await chooseFramework(expected.prepared);
+    await page.getByRole('button', { name: `Add ${unrelated}`, exact: true }).click();
+    await page.getByRole('button', { name: `Remove ${unrelated}`, exact: true }).waitFor();
     const before = await download(page, join(output, `${theme}-before.json`));
     await chooseFramework(expected.ecc);
     // Pick the actual declared option set, without changing producer choices.
