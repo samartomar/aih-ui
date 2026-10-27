@@ -76,7 +76,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   function saveBrowsing() { try { sessionStorage.setItem('aih-ui-set-browsing', JSON.stringify([...choices].map(([key, { requests, allItems }]) => [key, { requests, allItems }]))); } catch { state.browsingStorageUnavailable = true; } }
   try { for (const [key, value] of JSON.parse(sessionStorage.getItem('aih-ui-set-browsing') ?? '[]')) if (Array.isArray(value.requests)) choices.set(key, value); } catch { choices.clear(); }
   async function readBrowse(framework, choice, inspect = false) {
-    const contentKey = JSON.stringify([framework?.sha256, chosenTool?.id, choice.requests, choice.configurations, enterprise, authoring.evidenceRevision]);
+    const contentKey = JSON.stringify([framework?.sha256, chosenTool?.id, choice.requests, choice.configurations ?? [], enterprise, authoring.evidenceRevision]);
     const inspectedItem = inspect ? selectedEntry()?.authoringItem : undefined;
     const itemId = inspectedItem && framework && inspectedItem.root.releaseSha256 === framework.sha256 ? inspectedItem.id : undefined;
     const key = JSON.stringify([contentKey, inspect, itemId]);
