@@ -40,7 +40,9 @@ const unavailableOnly = selectedCases.length === 1 && selectedCases[0] === 'read
 const frameworkFixtures = unavailableOnly ? undefined : (await load('framework-fixtures.mjs')).frameworkFixtures;
 const { runBrowseBrowser, runBrowseReopenBrowser, runOptionalHookBrowser, runBrowseFactsBrowser, runSetActionAccessBrowser, runEvidenceRefreshBrowser, runPluginRoutesBrowser, runRefusedSetFactsBrowser } = await load('browse-browser.mjs');
 const { runFrameworksBrowser, runFrameworkLoadingBrowser, runFrameworkReopenBrowser } = await load('frameworks-browser.mjs');
+const { runSetInputsBrowser } = await load('set-inputs-browser.mjs');
 const fixture = unavailableOnly ? { scenarios: { readerUnavailable: { fixture: true, prepared: [{}] } }, expected: {} } : await frameworkFixtures(join(output, 'fixtures'), artifacts.catalog);
+for (const name of ['callerInputs', 'callerInputRestart']) if (selectedCases.includes(name)) fixture.scenarios[name] = fixture.scenarios.browse;
 await writeFile(join(output, 'fixture-expectations.json'), JSON.stringify(fixture.expected, null, 2));
 const summary = { packages: await Promise.all(Object.entries(artifacts).map(async ([name, value]) => ({name,packageName:`@aihq/${name}`,version:JSON.parse(await readFile(join(consumerDir,`node_modules/@aihq/${name}/package.json`),'utf8')).version,...value}))), coreTargets: coreTargetsSummary(callService(consumerDir, {op:'coreTargets'})) };
 const config = join(output, 'sources.json'); process.env.AIH_FRAMEWORK_SOURCES = config;
@@ -56,6 +58,10 @@ for (const [scenario, configuration] of [...Object.entries(fixture.scenarios), .
   const origin = `http://127.0.0.1:${(await listen(started.server,0)).port}`;
   try {
     console.log(`Framework page: ${scenario}`);
+    if (scenario === 'callerInputs' || scenario === 'callerInputRestart') {
+      const inputs = process.env.AIH_TEST_SET_INPUTS ? JSON.parse(await readFile(process.env.AIH_TEST_SET_INPUTS, 'utf8')) : undefined;
+      outcomes.push(await runSetInputsBrowser({ origin, output: join(output, scenario), savedDirectory: scenario === 'callerInputRestart' ? join(output, 'callerInputs') : undefined, inputs, expected: fixture.expected, playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href })); continue;
+    }
     if(scenario==='eccFacts') { await runRefusedSetFactsBrowser({origin,output:join(output,'eccFacts'),expected:fixture.expected,playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
     if(scenario==='routes') { await runPluginRoutesBrowser({origin,output:join(output,'routes'),expected:fixture.expected,playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
     if(scenario==='setAccess') { await runSetActionAccessBrowser({origin,output:join(output,'setAccess'),expected:fixture.expected,playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }

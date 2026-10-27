@@ -1,6 +1,7 @@
 import { el } from '../app/dom.js';
 import { iconSpan } from '../app/icons.js';
 import { attachTooltip } from '../app/tooltip.js';
+import { createConfigurationEditor } from '../app/configuration-editor.js';
 // UI state only. All membership/option expansion is returned by Catalog.
 export function createStartingSets({ container, onChange, onAdd }) {
   let shownFramework;
@@ -10,9 +11,9 @@ export function createStartingSets({ container, onChange, onAdd }) {
     attachTooltip(node, `${set.description ?? set.name} · ${set.offer}. Exact set ${set.setSha256}.`);
     node.addEventListener('click', () => update(set.id)); return node;
   }
-  return { render({ framework, requests, result, allItems, items, frameworks = [], hasTool, saved = false }) {
+  return { render({ framework, requests, configurations = [], result, allItems, items, frameworks = [], hasTool, saved = false }) {
     const same = shownFramework === framework?.sha256;
-    const open = same ? { more: container.querySelector('.more-sets')?.open, members: container.querySelector('.set-members')?.open } : {};
+    const open = same ? { more: container.querySelector('.more-sets')?.open, members: container.querySelector('.set-members')?.open, inputs: container.querySelector('.set-inputs')?.open } : {};
     const active = container.contains(document.activeElement) ? document.activeElement : null;
     const focus = active?.dataset?.setId ? ['data-set-id', active.dataset.setId] : active?.dataset?.option ? ['data-option', active.dataset.option] : active?.dataset?.member ? ['data-member', active.dataset.member] : null;
     shownFramework = framework?.sha256;
@@ -74,6 +75,23 @@ export function createStartingSets({ container, onChange, onAdd }) {
     container.append(controls);
     if (result?.resolution?.status === 'refused') {
       const refusal = el('details', 'set-refusal'); refusal.append(el('summary', '', 'Set choice details'), el('pre', 'browse-json', JSON.stringify(result.resolution.diagnostics, null, 2))); container.append(refusal);
+    }
+    // Catalog names missing inputs; the UI never expands a set or invents defaults.
+    const needed = new Set();
+    const collect = diagnostics => { for (const value of diagnostics ?? []) { if (value.reason === 'input-required' && typeof value.itemId === 'string') needed.add(value.itemId); collect(value.details?.diagnostics); } };
+    collect(result?.resolution?.diagnostics);
+    const configurable = items.filter(item => item.root.releaseSha256 === framework.sha256 && Object.keys(item.inputs ?? {}).length && (needed.has(item.id) || configurations.some(root => root.itemId === item.id && root.releaseSha256 === framework.sha256)));
+    if (requests.length && configurable.length) {
+      const panel = el('details', 'set-inputs space-y-2'); panel.open = Boolean(open.inputs);
+      panel.append(el('summary', '', 'Required inputs for chosen sets'), el('p', 'set-note', 'Supply your own declared inputs. These values are saved with the set only after Add chosen sets and Save. Paths are not checked on disk here; no tool or service runs.'));
+      for (const item of configurable) {
+        const root = configurations.find(root => root.itemId === item.id && root.releaseSha256 === item.root.releaseSha256);
+        const editor = createConfigurationEditor({ configuration: root?.configuration ?? {}, inputs: item.inputs, label: item.id,
+          button: (label, action) => { const node = el('button', 'set-choice', label); node.type = 'button'; node.addEventListener('click', action); return node; },
+          review: configuration => onChange(requests, allItems, [...configurations.filter(value => value !== root), { releaseSha256: item.root.releaseSha256, itemId: item.id, scope: requests[0].release.scope, configuration }]) });
+        editor.dataset.configurationItem = item.id; editor.open = true; panel.append(editor);
+      }
+      container.append(panel);
     }
     if (requests.length) {
       const members = el('details', 'set-members'); members.append(el('summary', '', 'Members & separate hook choices'));

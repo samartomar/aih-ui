@@ -61,9 +61,10 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     if (typeof prior?.name === 'string' && typeof prior.source === 'string') state.lastFramework = prior;
   } catch { state.lastFramework = null; }
   const choices = new Map();
-  const startingSets = createStartingSets({ container: document.getElementById('starting-sets'), onChange: (requests, allItems) => {
+  const startingSets = createStartingSets({ container: document.getElementById('starting-sets'), onChange: (requests, allItems, configurations) => {
     const framework = currentFramework(); if (!framework) return;
-    choices.set(framework.sha256, { requests, allItems }); saveBrowsing(); render();
+    const prior = browseChoice(framework);
+    choices.set(framework.sha256, { requests, allItems, configurations: configurations ?? prior.configurations }); saveBrowsing(); render();
   }, onAdd: requests => addSets(requests) });
   function currentFramework() { return authoring.catalog?.frameworks?.find(framework => sourceFilterValue('family', framework.name, framework.sha256) === state.view.source); }
   function browseChoice(framework) {
@@ -71,10 +72,11 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     if (!choices.has(framework.sha256)) choices.set(framework.sha256, { requests: (framework.sets ?? []).filter(set => set.offer === 'pre-ticked').map(set => ({ release: { releaseSha256: framework.sha256, scope: 'project' }, setId: set.id, setSha256: set.setSha256, options: {}, members: [] })), allItems: !(framework.sets?.length) });
     return choices.get(framework.sha256);
   }
-  function saveBrowsing() { try { sessionStorage.setItem('aih-ui-set-browsing', JSON.stringify([...choices])); } catch { state.browsingStorageUnavailable = true; } }
+  // Input values belong in explicitly saved intent, not the browsing cache.
+  function saveBrowsing() { try { sessionStorage.setItem('aih-ui-set-browsing', JSON.stringify([...choices].map(([key, { requests, allItems }]) => [key, { requests, allItems }]))); } catch { state.browsingStorageUnavailable = true; } }
   try { for (const [key, value] of JSON.parse(sessionStorage.getItem('aih-ui-set-browsing') ?? '[]')) if (Array.isArray(value.requests)) choices.set(key, value); } catch { choices.clear(); }
   async function readBrowse(framework, choice, inspect = false) {
-    const contentKey = JSON.stringify([framework?.sha256, chosenTool?.id, choice.requests, enterprise, authoring.evidenceRevision]);
+    const contentKey = JSON.stringify([framework?.sha256, chosenTool?.id, choice.requests, choice.configurations, enterprise, authoring.evidenceRevision]);
     const inspectedItem = inspect ? selectedEntry()?.authoringItem : undefined;
     const itemId = inspectedItem && framework && inspectedItem.root.releaseSha256 === framework.sha256 ? inspectedItem.id : undefined;
     const key = JSON.stringify([contentKey, inspect, itemId]);
@@ -82,13 +84,13 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     if (key === browseKey) return;
     browseKey = key; browseContentKey = contentKey; const attempt = ++browseAttempt; if (!factsOnly) browseResult = undefined;
     if (!framework) return;
-    try { const result = await authoring.request('browse-content', { releaseSha256: framework.sha256, tool: chosenTool?.id, sets: choice.requests, inspect, itemId, enterprise, policyBytes: undefined });
+    try { const result = await authoring.request('browse-content', { releaseSha256: framework.sha256, tool: chosenTool?.id, sets: choice.requests, configurations: choice.configurations, inspect, itemId, enterprise, policyBytes: undefined });
       if (attempt !== browseAttempt) return; browseResult = result;
     } catch { if (attempt !== browseAttempt) return; browseResult = { status: 'failed', reason: 'Could not read this source’s sets or tool fit. Your choices are unchanged.' }; }
     if (factsOnly) { cards.updateFacts(cardsModel()); details.render(detailsModel(selectedEntry())); } else render();
   }
   async function addSets(requests) {
-    const result = await authoring.propose({ type: 'select-sets', sets: requests, releaseSha256: currentFramework()?.sha256, tool: chosenTool?.id });
+    const result = await authoring.propose({ type: 'select-sets', sets: requests, configurations: browseChoice(currentFramework()).configurations, releaseSha256: currentFramework()?.sha256, tool: chosenTool?.id });
     if (result.status === 'ok' && authoring.candidate && !result.diagnostics?.length) authoring.accept();
     const guidance = document.getElementById('framework-guidance');
     guidance.textContent = result.status === 'ok' ? 'Chosen sets added. Review Your setup; save to keep the exact options and origins.' : (result.diagnostics?.map(value => value.message).join(' ') || 'The selected sets could not be added.');
@@ -370,14 +372,18 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
           state.savedChoiceProblem = null;
           const sources = authoring.draft?.intent?.provenance ?? authoring.intent?.provenance ?? policy.metadata?.['aih.workbench']?.provenance;
           const record = { version: 1, choices: (sources ?? []).flatMap(source => source.materialSource?.workbenchSetChoices?.choices ?? []) };
-          const identity = JSON.stringify(record);
+          const roots = authoring.draft?.intent?.roots ?? authoring.intent?.roots ?? policy.metadata?.['aih.workbench']?.roots ?? [];
+          const identity = JSON.stringify([record, roots]);
           if (record?.version === 1 && identity !== restoredChoiceBytes) {
             restoredChoiceBytes = identity;
             savedSetSources.clear();
             for (const choice of record.choices) savedSetSources.add(choice.request.release.releaseSha256);
             for (const framework of authoring.catalog.frameworks ?? []) {
               const requests = record.choices.filter(choice => choice.request.release.releaseSha256 === framework.sha256).map(choice => choice.request);
-              if (requests.length) choices.set(framework.sha256, { requests, allItems: false });
+              const originIds = record.choices.filter(choice => choice.request.release.releaseSha256 === framework.sha256).map(choice => choice.originId);
+              const configurations = roots.filter(root => root.originIds.some(id => originIds.includes(id)) && Object.keys(root.configuration).length)
+                .map(({ releaseSha256, itemId, scope, configuration }) => ({ releaseSha256, itemId, scope, configuration }));
+              if (requests.length) choices.set(framework.sha256, { requests, configurations, allItems: false });
             }
           }
         } catch { state.savedChoiceProblem = 'Saved set context could not be read. Existing choices are unchanged.'; }

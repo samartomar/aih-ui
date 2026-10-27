@@ -3,13 +3,14 @@ import * as harness from '@aihq/core/harness';
 import * as runtime from '@aihq/core/harness/runtime';
 import { resolveSelections } from '@aihq/catalog/reader';
 import { recipeClient } from './selected-recipe.mjs';
+import { resolveConfiguredSets } from './set-choices.mjs';
 const platform = () => ({ os: ({ win32: 'windows', darwin: 'macos' })[process.platform] ?? process.platform, arch: process.arch });
-export async function browseContent(inventories, { tool, releaseSha256, sets = [], inspect = false, itemId }, project, summarize) {
+export async function browseContent(inventories, { tool, releaseSha256, sets = [], configurations = [], inspect = false, itemId }, project, summarize) {
   const inventory = inventories.find(entry => entry.release.sha256 === releaseSha256);
   if (!inventory) return { status: 'unavailable', reason: 'This exact source is unavailable. Your saved choices are unchanged.' };
   const release = inventory.release;
   const releases = Object.fromEntries(inventories.map(entry => [entry.release.sha256, entry.release]));
-  const resolution = resolveSelections({ releases, roots: [], skips: [], sets });
+  const resolution = resolveConfiguredSets({ releases, configurations, sets });
   const selections = resolution.value?.selections ?? []; // A refused set does not invalidate its source's item facts.
   if (typeof harness.selectTool !== 'function' || typeof harness.checkCompatibility !== 'function') return { status: 'unavailable', reason: 'This Core does not publish selected-tool compatibility.', resolution };
   const selected = harness.selectTool(tool);

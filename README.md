@@ -85,6 +85,17 @@ per-item platform observations, not successful execution; the tooltip says
 **observed, not works**. Missing or refused compatibility is unavailable, never a
 guessed zero. First-step guidance points to tool selection and framework browsing.
 
+When Catalog refuses a chosen set for missing declared inputs, **Required inputs
+for chosen sets** reuses the ordinary configuration editor. Values are explicit
+qualified selection roots supplied to public `resolveSelections`; Catalog still
+expands the sets and validates configuration. Remembered values do not select an
+excluded or unrelated item. Ambiguous missing-item identities remain refused.
+Accepted values persist in the existing saved roots and are revalidated with
+recorded set origins on reopen. The browsing cache stores no configuration values.
+Paths are caller supplied: the page does not infer them, inspect their contents,
+acquire tools or run services. Descriptions and validation come from the public
+input contract; a successful configuration check is not runtime readiness.
+
 `node tools/check-frameworks.mjs <installed-consumer> <new-output-directory> <artifact-manifest.json>`
 runs the focused page proof in a disposable account home and temporary directory,
 without an execution target (append case names for affected-only checks; `restart`
@@ -95,6 +106,12 @@ bindings are test data, never production release evidence. It retains both-theme
 screenshots, source states and expected public compatibility results. The ordinary
 `check:workbench` suite remains required. These checks do not establish human
 acceptance, production Catalog availability, or release readiness.
+The affected `callerInputs` / `callerInputRestart` cases exercise required set
+inputs. `AIH_TEST_SET_INPUTS` may name a host-selected JSON file of actual
+task-local input values for the positive case; it is a test-runner input only.
+Without it, collection and missing-input refusal are checked and positive
+acceptance is explicitly incomplete. No host paths or executable defaults are
+invented by the fixture.
 
 ## Latest Scan evidence
 

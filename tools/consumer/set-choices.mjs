@@ -7,10 +7,31 @@ import { pinSelectedRecipes } from './selected-recipe.mjs';
 export const SET_CHOICES_KEY = 'workbenchSetChoices';
 export const setChoicesOf = intent => (intent?.provenance ?? []).flatMap(source => source.materialSource?.[SET_CHOICES_KEY]?.choices ?? []);
 export const setChoiceSources = intent => (intent?.provenance ?? []).filter(source => source.materialSource?.[SET_CHOICES_KEY]?.choices?.length).map(source => source.releaseSha256);
-export function selectSetChoices({ intent, inventories, sets, tool, releaseSha256 }) {
+// Ask Catalog which configured roots belong to these choices. Do not expand sets
+// here, or let a remembered input make an excluded/unrelated item a new choice.
+export function resolveConfiguredSets({ releases, sets, configurations = [] }) {
+  const initial = resolveSelections({ releases, roots: [], skips: [], sets });
+  if (!Array.isArray(configurations)) return resolveSelections({ releases, roots: configurations, skips: [], sets });
+  const needed = new Set();
+  if (initial.status === 'ok') for (const selection of initial.value.selections) needed.add(`${selection.item.releaseSha256}/${selection.item.itemId}/${selection.scope}`);
+  else {
+    const collect = diagnostics => { for (const diagnostic of diagnostics ?? []) {
+      if (diagnostic.reason === 'input-required' && typeof diagnostic.itemId === 'string') {
+        const matches = Object.entries(releases).filter(([, release]) => release.items.some(item => item.id === diagnostic.itemId));
+        if (matches.length === 1) for (const scope of ['project', 'user']) needed.add(`${matches[0][0]}/${diagnostic.itemId}/${scope}`);
+      }
+      collect(diagnostic.details?.diagnostics);
+    } };
+    collect(initial.diagnostics);
+  }
+  const roots = configurations.filter(root => needed.has(`${root?.releaseSha256}/${root?.itemId}/${root?.scope}`));
+  return roots.length ? resolveSelections({ releases, roots, skips: [], sets }) : initial;
+}
+export function selectSetChoices({ intent, inventories, sets, tool, releaseSha256, configurations }) {
   if (!Array.isArray(sets) || sets.length > 128) throw new Error('Supply at most 128 exact set choices.');
   const releases = Object.fromEntries(inventories.map(entry => [entry.release.sha256, entry.release]));
-  const resolved = resolveSelections({ releases, roots: [], skips: [], sets });
+  const roots = configurations ?? intent.roots.filter(root => Object.keys(root.configuration).length).map(({ releaseSha256, itemId, scope, configuration }) => ({ releaseSha256, itemId, scope, configuration }));
+  const resolved = resolveConfiguredSets({ releases, configurations: roots, sets });
   if (resolved.status !== 'ok') return resolved;
   const previous = setChoicesOf(intent);
   const affected = new Set([...sets.map(request => request.release.releaseSha256), ...(releaseSha256 ? [releaseSha256] : [])]);
@@ -74,7 +95,9 @@ export function checkRecordedSetChoices(intent, inventories) {
     const entry = inventories.find(entry => entry.release.sha256 === choice.request.release?.releaseSha256);
     if (!entry) continue; // Existing unresolved-source handling keeps its exact bytes and other choices.
     const releases = Object.fromEntries(inventories.map(entry => [entry.release.sha256, entry.release]));
-    const read = resolveSelections({ releases, roots: [], skips: [], sets: [choice.request] });
+    const roots = intent.roots.filter(root => root.originIds.includes(choice.originId) && Object.keys(root.configuration).length)
+      .map(({ releaseSha256, itemId, scope, configuration }) => ({ releaseSha256, itemId, scope, configuration }));
+    const read = resolveConfiguredSets({ releases, configurations: roots, sets: [choice.request] });
     if (read.status !== 'ok') { if (read.diagnostics?.every(diagnostic => ['RELEASE_UNAVAILABLE', 'ITEM_UNAVAILABLE'].includes(diagnostic.code))) continue; return 'Catalog refused the saved exact set choice.'; }
     const actual = read.value.selections.filter(selection => selection.origins.some(origin => origin.reasonIncluded === 'in-set' && origin.set.framework === entry.release.framework.id && origin.set.setId === choice.request.setId))
       .map(selection => ({ item: selection.item, scope: selection.scope, origins: selection.origins.filter(origin => origin.reasonIncluded === 'in-set' && origin.set.framework === entry.release.framework.id && origin.set.setId === choice.request.setId) }));

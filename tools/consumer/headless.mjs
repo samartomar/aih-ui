@@ -214,7 +214,7 @@ export async function editAuthoring({ policyBytes, inventories, operation, revie
   const intent = structuredClone(original.value.intent), before = intent.roots;
   if (operation?.type === 'select-sets') {
     try {
-      const selected = selectSetChoices({ intent, policy: original.value.policy, inventories, sets: operation.sets, tool: operation.tool, releaseSha256: operation.releaseSha256 });
+      const selected = selectSetChoices({ intent, policy: original.value.policy, inventories, sets: operation.sets, tool: operation.tool, releaseSha256: operation.releaseSha256, configurations: operation.configurations });
       if (selected.status !== 'ok') return { ...selected, originalBytes: policyBytes.slice() };
       return buildReviewed({ intent: selected.value.intent, inventories, base: original.value.policy, originalBytes: policyBytes, reviewEvidence, comparisons, recipient });
     } catch (error) { return refuse('INPUT_INVALID', '/operation/sets', error.message, policyBytes); }
@@ -609,7 +609,7 @@ export async function editDraft({ envelopeBytes, inventories, operation, reviewE
     configuration: structuredClone(value.configuration ?? {}), originIds: prior?.originIds ?? ['direct'], ...(prior?.reason !== undefined ? { reason: prior.reason } : {}) });
   try {
     if (operation.type === 'select-sets') {
-      const selected = selectSetChoices({ intent, policy, inventories, sets: operation.sets, tool: operation.tool, releaseSha256: operation.releaseSha256 });
+      const selected = selectSetChoices({ intent, policy, inventories, sets: operation.sets, tool: operation.tool, releaseSha256: operation.releaseSha256, configurations: operation.configurations });
       if (selected.status !== 'ok') return unchanged(selected);
     } else if (operation.type === 'remove-root') {
       if (!isRef(operation.root)) return fail('INPUT_INVALID', '/operation/root', 'Supply {releaseSha256,itemId,scope}.');
