@@ -251,7 +251,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     document.getElementById('framework-guidance').textContent = chosenTool ? 'Choose content below. Add it to Your setup, then review your choices.' : 'Choose your tool in the header, then explore the framework below.';
     const choice = browseChoice(selectedFramework);
     readBrowse(selectedFramework, choice, Boolean(state.selectedId));
-    startingSets.render({ framework: selectedFramework, ...choice, result: browseResult, hasTool: Boolean(chosenTool), saved: savedSetSources.has(selectedFramework?.sha256), items: authoring.catalog?.items ?? [] });
+    startingSets.render({ framework: selectedFramework, frameworks: authoring.catalog?.frameworks, ...choice, result: browseResult, hasTool: Boolean(chosenTool), saved: savedSetSources.has(selectedFramework?.sha256), items: authoring.catalog?.items ?? [] });
     let quiet = document.getElementById('browse-unsupported');
     if (!quiet) { quiet = el('details', 'browse-unsupported'); quiet.id = 'browse-unsupported'; elements.cards.cardsGrid.before(quiet); }
     const blocked = browseEntries().filter(unusable); quiet.hidden = !blocked.length;

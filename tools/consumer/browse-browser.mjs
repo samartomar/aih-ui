@@ -163,7 +163,7 @@ export async function runBrowseReopenBrowser({ origin, output, savedDirectory, p
   } await writeFile(join(output, 'result.json'), JSON.stringify({ status: 'passed', humanAcceptance: 'pending' })); }
   finally { await browser.close(); }
 }
-export async function runOptionalHookBrowser({ origin, output, playwrightModule, savedDirectory }) {
+export async function runOptionalHookBrowser({ origin, output, playwrightModule, savedDirectory, crossFramework = false }) {
   await mkdir(output, { recursive: true }); const { chromium } = await import(playwrightModule); const browser = await chromium.launch({ headless: true });
   try { for (const theme of ['dark', 'light']) {
     const context = await browser.newContext({ viewport: { width: 1280, height: 800 } }); await context.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
@@ -178,9 +178,9 @@ export async function runOptionalHookBrowser({ origin, output, playwrightModule,
     }
     assert.match(await page.locator('#framework-navigation').innerText(), /Test fixture sources/);
     const catalog = await (await context.request.get(origin + '/api/authoring-catalog')).json();
-    const fixture = catalog.frameworks.find(row => row.kind === 'fixture' && row.reason?.startsWith('Selection-only public golden') && row.sets?.length);
+    const fixture = catalog.frameworks.find(row => row.kind === 'fixture' && row.reason?.startsWith(crossFramework ? 'Cross-framework optional-hook' : 'Selection-only public golden') && row.sets?.length);
     const alternate = catalog.frameworks.find(row => row.reason?.startsWith('Distinct checked TEST version'));
-    assert.equal(alternate.id, fixture.id); assert.notEqual(alternate.sha256, fixture.sha256); assert.notEqual(alternate.version, fixture.version);
+    if (!crossFramework) { assert.equal(alternate.id, fixture.id); assert.notEqual(alternate.sha256, fixture.sha256); assert.notEqual(alternate.version, fixture.version); }
     const independent = catalog.frameworks.find(row => row.reason?.startsWith('Independent checked framework'));
     await page.locator(`[data-framework="fixture:${independent.id}:${independent.sha256}"]`).click(); await page.locator('#browse-all-items').check();
     const unrelated = page.locator('#cards-grid button[aria-label^="Add "]:not(:disabled)').first(); const unrelatedId = (await unrelated.getAttribute('aria-label')).slice(4);
@@ -192,17 +192,37 @@ export async function runOptionalHookBrowser({ origin, output, playwrightModule,
     const details = page.locator('#starting-sets .set-members'); await details.locator('> summary').click();
     const tick = details.locator(`input[data-member="${member.item.itemId}"]`);
     assert.equal(await tick.isChecked(), false, 'The published optional hook starts unticked');
+    const includedReply = page.waitForResponse(response => response.url().endsWith('/api/authoring-browse-content') && response.request().postDataJSON().sets?.some(request => request.members?.some(value => value.item.itemId === member.item.itemId && value.include)));
     await tick.check().catch(async error => { await page.screenshot({ path: join(output, `${theme}-hook-failed.png`) }); await writeFile(join(output, `${theme}-hook-failed.html`), await page.content()); throw error; }); await page.waitForFunction(id => document.querySelector(`input[data-member="${id}"]`)?.checked, member.item.itemId);
-    await page.locator('#starting-sets .set-note').filter({ hasText: 'refused' }).waitFor();
+    const includedResult = await (await includedReply).json(); assert.equal(includedResult.status, 'refused');
+    assert.ok(includedResult.diagnostics.length, 'The public resolver refuses the unconfigured hook');
     await tick.uncheck();
+    if (crossFramework) {
+      const runtime = set.members.find(value => value.optional && value.item.itemId !== member.item.itemId);
+      const runtimeTick = details.locator(`input[data-member="${runtime.item.itemId}"]`);
+      await runtimeTick.check(); await page.waitForFunction(id => document.querySelector(`input[data-member="${id}"]`)?.checked, runtime.item.itemId);
+      await runtimeTick.uncheck();
+    }
     const added = page.waitForResponse(response => /authoring-(?:draft-edit|edit)$/.test(response.url()));
     await page.locator('[data-add-sets]').click();
     const addedValue = await (await added).json(); if (addedValue.status !== 'ok') await writeFile(join(output, `${theme}-hook-set-refused.json`), JSON.stringify(addedValue, null, 2)); assert.equal(addedValue.status, 'ok', JSON.stringify(addedValue.diagnostics));
     await page.waitForFunction(() => document.getElementById('framework-guidance').textContent.includes('Chosen sets added'));
     const policy = await save(page, join(output, `${theme}-excluded-hook.json`)); const intent = policy.metadata['aih.workbench'];
-    assert.ok(intent.exclusions.some(value => value.itemId === member.item.itemId && value.releaseSha256 === fixture.sha256), 'An exclusion binds the exact selected set release, not the first framework version');
+    if (crossFramework) assert.ok(!intent.exclusions.some(value => value.itemId === member.item.itemId), 'The public saved request owns the cross-framework exclusion without an invented generic identity');
+    else assert.ok(intent.exclusions.some(value => value.itemId === member.item.itemId && value.releaseSha256 === fixture.sha256), 'An exclusion binds the exact selected set release, not the first framework version');
     assert.ok(intent.roots.some(root => root.releaseSha256 === independent.sha256 && root.itemId === unrelatedId), 'The unrelated framework choice remains while two versions of another framework are admitted');
     assert.ok(!intent.pins.some(value => value.itemId === member.item.itemId));
+    if (crossFramework) {
+      const hookFramework = catalog.frameworks.find(row => row.kind === 'fixture' && row.reason?.startsWith('Selection-only public golden'));
+      const hook = catalog.items.find(item => item.id === member.item.itemId && item.root.releaseSha256 === hookFramework.sha256);
+      assert.ok(hook, 'The exact public hook fixture is admitted');
+      const response = await page.evaluate(async ({ policyText, root }) => (await fetch('/api/authoring-edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ policyBytes: [...new TextEncoder().encode(policyText)], operation: { type: 'select', root } }) })).json(), { policyText: JSON.stringify(policy), root: { ...hook.root, configuration: { hookCommand: 'echo selection-only-no-execution' } } });
+      assert.equal(response.status, 'refused');
+      assert.ok(response.diagnostics.some(value => value.code === 'REQUIRED_EXCLUDED'), JSON.stringify(response.diagnostics));
+      const unchanged = await save(page, join(output, `${theme}-after-refused-hook.json`));
+      assert.deepEqual(unchanged, policy, 'Refused root requiring the excluded cross-framework runtime leaves saved choices unchanged');
+    }
+
     assert.ok(setChoices(policy).some(choice => choice.request.members.some(value => value.item.itemId === member.item.itemId && value.include === false)));
     await page.screenshot({ path: join(output, `${theme}-optional-hook-fixture.png`) }); await context.close();
   } await writeFile(join(output, 'result.json'), JSON.stringify({ status: 'passed', scope: 'Separate public Catalog optional-hook fixture; not an ECC hook, installation or native run', humanAcceptance: 'pending' })); }

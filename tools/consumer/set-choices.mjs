@@ -41,17 +41,10 @@ export function selectSetChoices({ intent, inventories, sets, tool, releaseSha25
     // Keep exact exclusions beside the set that authored them, even if no hook
     // is selected. The public request remains the authority for expansion.
     for (const member of request.members ?? []) if (!member.include) {
-      let exact = { releaseSha256: request.release.releaseSha256, itemId: member.item.itemId };
-      if (member.item.framework !== release.framework.id) {
-        // Ask Catalog to bind the declared cross-framework member. Never choose
-        // a release by framework name or inventory order.
-        const included = resolveSelections({ releases, roots: [], skips: [], sets: [{ ...request, members: request.members.map(value => value === member ? { ...value, include: true } : value) }] });
-        if (included.status !== 'ok') throw new Error(`Catalog could not bind the excluded cross-framework member: ${included.diagnostics.map(value => value.message).join(' ')}`);
-        const boundMembers = included.value.selections.filter(selection => selection.item.itemId === member.item.itemId && releases[selection.item.releaseSha256].framework.id === member.item.framework && selection.origins.some(origin => origin.reasonIncluded === 'in-set' && origin.set.framework === release.framework.id && origin.set.setId === request.setId && origin.set.setSha256 === request.setSha256));
-        if (boundMembers.length !== 1) throw new Error('Catalog did not return one exact identity for the excluded cross-framework member.');
-        exact = boundMembers[0].item;
-      }
-      intent.exclusions.push({ originId, releaseSha256: exact.releaseSha256, itemId: exact.itemId, scope: request.release.scope });
+      // Cross-framework exclusions stay qualified in the exact saved request.
+      // Catalog enforces them together with configured roots during composition;
+      // an excluded member need never configure successfully or gain a guessed pin.
+      if (member.item.framework === release.framework.id) intent.exclusions.push({ originId, releaseSha256: request.release.releaseSha256, itemId: member.item.itemId, scope: request.release.scope });
     }
     choices.push({ originId, request, tool, origins });
   }

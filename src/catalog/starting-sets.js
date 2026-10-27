@@ -10,7 +10,7 @@ export function createStartingSets({ container, onChange, onAdd }) {
     attachTooltip(node, `${set.description ?? set.name} · ${set.offer}. Exact set ${set.setSha256}.`);
     node.addEventListener('click', () => update(set.id)); return node;
   }
-  return { render({ framework, requests, result, allItems, items, hasTool, saved = false }) {
+  return { render({ framework, requests, result, allItems, items, frameworks = [], hasTool, saved = false }) {
     const same = shownFramework === framework?.sha256;
     const open = same ? { more: container.querySelector('.more-sets')?.open, members: container.querySelector('.set-members')?.open } : {};
     const active = container.contains(document.activeElement) ? document.activeElement : null;
@@ -79,7 +79,7 @@ export function createStartingSets({ container, onChange, onAdd }) {
         const item = items.find(item => item.id === entry.item.itemId && item.root.releaseSha256 === entry.item.releaseSha256); if (!item || item.role === 'supporting') continue;
         const label = el('label', `set-member${item.kind === 'hook' ? ' set-hook' : ''}`); const tick = el('input'); tick.type = 'checkbox'; tick.checked = true; tick.dataset.member = item.id;
         // Catalog owns refusal of excluding required members; never infer it here.
-        tick.addEventListener('change', () => change(requests.map(request => entry.origins.some(origin => origin.set?.setId === request.setId && origin.set.framework === framework.id) ? ({ ...request, members: [...(request.members ?? []).filter(value => value.item.itemId !== item.id), { item: { framework: framework.id, itemId: item.id }, include: tick.checked }] }) : request)));
+        tick.addEventListener('change', () => change(requests.map(request => entry.origins.some(origin => origin.set?.setId === request.setId && origin.set.framework === framework.id) ? ({ ...request, members: [...(request.members ?? []).filter(value => value.item.itemId !== item.id), { item: { framework: frameworks.find(value => value.sha256 === entry.item.releaseSha256)?.id ?? framework.id, itemId: item.id }, include: tick.checked }] }) : request)));
         if (!entry.origins.some(origin => origin.reasonIncluded === 'in-set')) { tick.disabled = true; attachTooltip(label, 'Included because another chosen member requires it. The exact reasons remain in Your setup.'); }
         label.append(tick, iconSpan('kind', item.kind), document.createTextNode(item.name ?? item.label)); attachTooltip(label, JSON.stringify(entry.origins)); members.append(label);
       }
@@ -87,7 +87,7 @@ export function createStartingSets({ container, onChange, onAdd }) {
         const item = items.find(item => item.id === member.item.itemId); if (!item) continue;
         const override = (request.members ?? []).find(value => value.item.itemId === member.item.itemId);
         const label = el('label', `set-member${item.kind === 'hook' ? ' set-hook' : ''}`); const tick = el('input'); tick.type = 'checkbox'; tick.checked = override?.include ?? false; tick.dataset.member = item.id;
-        tick.addEventListener('change', () => change(requests.map(value => value !== request ? value : { ...value, members: [...(value.members ?? []).filter(value => value.item.itemId !== member.item.itemId), { item: member.item, include: tick.checked }] })));
+        tick.addEventListener('change', () => change(requests.map(value => value !== request ? value : { ...value, members: [...(value.members ?? []).filter(value => value.item.itemId !== member.item.itemId), { item: { framework: member.item.framework, itemId: member.item.itemId }, include: tick.checked }] })));
         label.append(tick, iconSpan('kind', item.kind), document.createTextNode(item.name ?? item.label)); attachTooltip(label, 'Optional member declared by this set. Catalog resolves inclusion; hooks remain separate choices. A refused choice stays reachable so you can undo it.'); members.append(label);
       }
       container.append(members);

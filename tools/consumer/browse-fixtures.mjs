@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { stable } from './primitives.mjs';
 import { readReleaseContent, readReleaseSets } from '@aihq/catalog/reader';
+import { compileReleaseSets } from '@aihq/catalog/producer';
 const bytes = specifier => readFile(fileURLToPath(import.meta.resolve(specifier)));
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 export async function optionalHookFixture() {
@@ -18,6 +19,22 @@ export async function optionalHookFixture() {
       const checked = readReleaseSets(sets, { expectedSha256: sha256(sets), release });
       if (checked.valid !== true) throw new Error(`Public optional-hook set fixture refused: ${JSON.stringify(checked.diagnostics)}`);
       release = checked.value?.release ?? checked.release;
+    }
+    if (name === 'extensions') {
+      const parent = inventories[0].release;
+      const hook = parent.items.find(item => item.kind === 'hook');
+      const runtime = parent.items.find(item => item.id === hook.dependencies.requires[0].itemId);
+      const ordinary = release.items.find(item => item.id === 'extensions.skill.security-and-hardening');
+      const built = compileReleaseSets({ release, sets: [{ id: 'cross-hook', name: 'Cross-framework hook fixture', description: 'Selection-only cross-framework configurable hook exclusion.', offer: 'pre-ticked', members: [
+        { item: { framework: release.framework.id, itemId: ordinary.id }, optional: false, defaultOn: true },
+        { item: { framework: parent.framework.id, itemId: hook.id, releaseVersion: parent.framework.version, contentSha256: hook.contentSha256, behaviourSha256: hook.behaviourSha256 }, optional: true, defaultOn: false },
+        { item: { framework: parent.framework.id, itemId: runtime.id, releaseVersion: parent.framework.version, contentSha256: runtime.contentSha256, behaviourSha256: runtime.behaviourSha256 }, optional: true, defaultOn: false }
+      ] }] });
+      if (built.status !== 'ok') throw new Error(`Cross-hook fixture compilation refused: ${JSON.stringify(built)}`);
+      const checked = readReleaseSets(built.value.bytes, { expectedSha256: built.value.sha256, release });
+      if (!checked.valid) throw new Error(`Cross-hook fixture reader refused: ${JSON.stringify(checked.diagnostics)}`);
+      inventories.push({ release: checked.release ?? checked.value.release, family: release.framework.name, materialSource: { kind: 'local', input: 'fixture-cross-hook' }, materials: [], fixture: 'Cross-framework optional-hook selection-only fixture; no execution or production release.' });
+      continue;
     }
     inventories.push({ release, family: release.framework.name, materialSource: { kind: 'local', input: `fixture-${name}` }, materials: [], fixture: 'Selection-only public golden specimen. Material acquisition, Prepare and execution are not part of this fixture.' });
   }

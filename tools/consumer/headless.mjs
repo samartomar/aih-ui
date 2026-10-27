@@ -48,6 +48,7 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
     if (stable(entry.input) !== stable(input)) return refuse('SOURCE_IDENTITY_MISMATCH', '/inputs', 'Acquired input identity differs from the saved snapshot.');
   }
   const resolution = resolveSelections({ releases: index.releases,
+    sets: setChoicesOf(intent).map(choice => choice.request),
     roots: intent.roots.map(({ releaseSha256, itemId, scope, configuration }) => ({ releaseSha256, itemId, scope, configuration })),
     skips: intent.exclusions.map(({ releaseSha256, itemId, scope }) => ({ releaseSha256, itemId, scope })) });
   if (resolution.status !== 'ok') return resolution;
