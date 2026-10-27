@@ -179,7 +179,7 @@ The application declares `@aihq/core` 1.0.0-dev.37, `@aihq/catalog` 0.1.0 and `@
 
 For the saved-intent local proof, set `CORE_TGZ`, `CATALOG_TGZ` and `SCAN_TGZ`
 to reviewed archives, then run `node tools/saved-intent-proof.mjs <output-directory> --serve`
-with Node 24.15–24.x. It installs into an isolated consumer, runs the focused tests,
+with Node 26.12.1–26.x for the current reviewed producer archives. It installs into an isolated consumer, runs the focused tests,
 writes policies and measurements beneath that output directory, and serves
 `http://127.0.0.1:4821/intent` (override with `AIH_CONSUMER_PORT`). The ordinary `/`
 page still uses installed Catalog content and the public execution host when configured.
@@ -1240,7 +1240,7 @@ loopback URL and exact package hashes. Without `AIH_CONSUMER_PROJECT`, browsing,
 authoring, download and reopen work while Prepare/Apply stay unavailable. An
 explicit host-configured disposable target enables review and approval; the
 browser cannot supply material roots, and can change the project folder only through the host's checked choice above. `AIH_CONSUMER_CONTROLS`
-may name a host-owned controls JSON file. Use Node 24.15 through 24.x.
+may name a host-owned controls JSON file. The current reviewed producer archives require Node 26.12.1 through 26.x for this mixed-package host. This host requirement does not broaden the per-entry support declaration above.
 
 The page saves ordinary execution policy JSON plus namespaced
 `aih.workbench` metadata describing exact source identity, explicit roots and
