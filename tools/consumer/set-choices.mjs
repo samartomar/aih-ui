@@ -25,7 +25,14 @@ export function resolveConfiguredSets({ releases, sets, configurations = [] }) {
     collect(initial.diagnostics);
   }
   const roots = configurations.filter(root => needed.has(`${root?.releaseSha256}/${root?.itemId}/${root?.scope}`));
-  return roots.length ? resolveSelections({ releases, roots, skips: [], sets }) : initial;
+  const configured = roots.length ? resolveSelections({ releases, roots, skips: [], sets }) : initial;
+  if (configured.status !== 'ok') return configured;
+  // Required inputs may have hidden the rest of the expansion on the first read.
+  // Once Catalog supplies the full membership, preserve explicit optional values
+  // too. Only its selected identities may receive remembered configuration.
+  const selected = new Set(configured.value.selections.map(selection => `${selection.item.releaseSha256}/${selection.item.itemId}/${selection.scope}`));
+  const complete = configurations.filter(root => selected.has(`${root?.releaseSha256}/${root?.itemId}/${root?.scope}`));
+  return complete.length ? resolveSelections({ releases, roots: complete, skips: [], sets }) : configured;
 }
 export function selectSetChoices({ intent, inventories, sets, tool, releaseSha256, configurations }) {
   if (!Array.isArray(sets) || sets.length > 128) throw new Error('Supply at most 128 exact set choices.');
