@@ -197,6 +197,7 @@ export function createYourTool({ elements, onChange = () => {} }) {
     async start() {
       list = await read("/api/tools");
       render();
+      onChange(list?.state === "published" ? list.tools.find(tool => tool.id === chosen && tool.observed) ?? null : null);
       if (list.state !== "published" || list.tools.length === 0) return;
       inspection = await read("/api/tool-inspection");
       render();

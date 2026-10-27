@@ -107,9 +107,9 @@ export async function readFrameworkSources(configuration) {
         throw new Error('Conflicting source identities.');
       }
       inventories.push(inventory);
-      frameworks.push({ id: read.release.framework.id, name: read.release.framework.name, version: read.release.framework.version, sha256: read.release.sha256, kind: 'internal', state: 'ready', internalContent, observations: observation(read.release) });
+      frameworks.push({ id: read.release.framework.id, name: read.release.framework.name, version: read.release.framework.version, description: read.release.framework.description, sha256: read.release.sha256, kind: 'internal', state: 'ready', internalContent, observations: observation(read.release) });
       sources.push({ kind: 'internal', state: 'read', message: `Internal content: ${read.release.framework.name}. Not verified; baseline unbound, unauthenticated, non-production.` });
     } catch { sources.push({ kind: 'internal', state: 'failed', message: 'Internal content source failed its package, content or inventory checks.' }); }
   }
-  return { inventories, frameworks, sources, fixture: configuration.fixture === true };
+  return { inventories, frameworks, sources, hostPlatform: { os: process.platform, arch: process.arch }, fixture: configuration.fixture === true };
 }

@@ -127,3 +127,9 @@ body:has(#main-content) :focus-visible { outline: 2px solid var(--color-primary)
 .framework-source-note { margin: 6px 8px; font-size: 11px; color: var(--color-muted); overflow-wrap: anywhere; }
 .framework-landing { padding: 8px 0; color: var(--color-muted); font-size: 12px; }
 .framework-landing button { color: var(--color-primary); text-decoration: underline; }
+
+/* Framework context stays compact above author-declared starting sets. */
+.framework-landing { display: flex; gap: 8px; align-items: baseline; padding: 8px 20px !important; font-size: 12px; }
+.framework-landing[data-step=choose-content] #framework-first-step { font-weight: var(--fw-medium); }
+.framework-context { display: flex; flex-wrap: wrap; gap: 6px 10px; color: var(--color-muted); font-size: 12px; line-height: 1.45; max-width: 75ch; }
+.framework-version { font-family: var(--font-mono); }

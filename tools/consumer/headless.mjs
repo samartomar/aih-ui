@@ -1,4 +1,5 @@
 // Supported consumer boundary. No host acquisition or execution authority.
+import { configurePinned, pinSelectedRecipes, recipeDescriptor } from './selected-recipe.mjs';
 import { parsePolicy } from '@aihq/core/contracts';
 import { isCheckedRelease, listItems, configureItem, resolveSelections, validateSelectionSet, compareReleases } from '@aihq/catalog/reader';
 import { checkIntentShape, checkReview, rootKey, pinKey, managementIdOf, AUTHORING_SCHEMA, REVIEW_SCHEMA } from './intent-shape.mjs';
@@ -55,7 +56,7 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
   const selections = [], pins = new Map(), sourceIds = new Set([...intent.exclusions.map(r => r.releaseSha256), ...intent.origins.filter(o => o.kind === 'template').map(o => o.releaseSha256)]);
   for (const selection of resolved.selections) {
     const found = index.items.get(pinKey(selection.item)), { entry, item } = found;
-    const configured = configureItem({ release: entry.release, itemId: item.id, configuration: selection.configuration, materialSource: entry.materialSource });
+    const configured = configurePinned(entry, item, selection.configuration, intent.pins);
     if (!configured.valid) return refuse('INPUT_INVALID', '/roots/configuration', 'Catalog refused item configuration.', undefined, { owner: 'catalog', diagnostics: configured.diagnostics });
     const prior = base?.selections.find(s => s.scope === selection.scope && stable(s.recipe) === stable(configured.selection.recipe));
     // An organization's root provenance identifies that exact selection only.
@@ -68,7 +69,7 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
     selections.push({ ...prior, id: prior?.id ?? selection.id, managementId, scope: selection.scope, configuration: configured.selection.configuration,
       ...(base?.mode === 'enterprise' ? { organizationSelectionId: [...organizationIds][0] ?? prior?.organizationSelectionId ?? managementId } : {}),
       requires: [], recipe: configured.selection.recipe });
-    pins.set(pinKey(selection.item), { releaseSha256: entry.release.sha256, itemId: item.id, itemSha256: item.itemSha256, recipe: item.recipe, materials: pinMaterials(item) });
+    pins.set(pinKey(selection.item), { releaseSha256: entry.release.sha256, itemId: item.id, itemSha256: item.itemSha256, recipe: item.recipe ?? recipeDescriptor(Object.values(item.recipes).find(recipe => recipe.sha256 === configured.selection.recipe.reference.sha256)), materials: pinMaterials(item) });
     sourceIds.add(entry.release.sha256);
   }
   const validation = validateSelectionSet({ releases: index.releases, selections: resolved.selections.map((s, i) => ({ ...s, id: selections[i].id })) });
@@ -212,6 +213,7 @@ export async function editAuthoring({ policyBytes, inventories, operation, revie
   };
   try {
     if (operation.type === 'select') {
+      if (operation.tool) pinSelectedRecipes(intent, inventories, operation.root, operation.tool);
       if (!intent.origins.some(o => o.id === 'direct')) intent.origins.push({ id: 'direct', kind: 'direct' });
       const prior = intent.roots.find(r => rootKey(r) === rootKey(operation.root));
       if (prior?.originIds.length === 1 && prior.originIds[0] === 'direct') prior.configuration = structuredClone(operation.root.configuration);
@@ -327,14 +329,14 @@ function reach(graph, start) {
   return seen;
 }
 // What ordinary authoring would decide about one choice: its required closure, or Catalog's refusal.
-function liveClosure(index, root, skips) {
+function liveClosure(index, root, skips, pins) {
   const resolved = resolveSelections({ releases: index.releases, roots: [{ releaseSha256: root.releaseSha256, itemId: root.itemId, scope: root.scope, configuration: root.configuration }], skips });
   if (resolved.status !== 'ok') return { diagnostics: resolved.diagnostics };
   const refusal = (path, message, diagnostics) => ({ diagnostics: [{ code: 'INPUT_INVALID', path, message, details: { owner: 'catalog', diagnostics } }] });
   for (const selection of resolved.value.selections) {
     const found = index.items.get(pinKey(selection.item));
     if (!found) continue;
-    const configured = configureItem({ release: found.entry.release, itemId: found.item.id, configuration: selection.configuration, materialSource: found.entry.materialSource });
+    const configured = configurePinned(found.entry, found.item, selection.configuration, pins);
     if (!configured.valid) return refusal('/roots/configuration', 'Catalog refused item configuration.', configured.diagnostics);
   }
   const validation = validateSelectionSet({ releases: index.releases, selections: resolved.value.selections });
@@ -390,7 +392,7 @@ function analyzeDraft({ intent, policy, inventories, live = true }) {
     // only evidence of what it needs. A root is never treated as resolved while that is unknown. An
     // unknown closure is an availability gap only when required content is missing from the supplied
     // inventories; any other refusal is a contradiction and keeps Catalog's own diagnostics.
-    const evidence = live && complete ? liveClosure(index, root, skips) : undefined;
+    const evidence = live && complete ? liveClosure(index, root, skips, intent.pins) : undefined;
     if (evidence?.closure) for (const node of evidence.closure) nodes.add(node);
     else if (evidence) {
       complete = false; undeterminedRoots.add(key);
@@ -574,7 +576,8 @@ export async function editDraft({ envelopeBytes, inventories, operation, reviewE
     if (root.itemSha256 !== undefined && root.itemSha256 !== found.item.itemSha256) return fail('SOURCE_IDENTITY_MISMATCH', '/operation/root/itemSha256', 'Supplied item identity differs from the checked item.');
     const resolution = resolveSelections({ releases: index.releases, roots: [{ releaseSha256: root.releaseSha256, itemId: root.itemId, scope: root.scope, configuration: root.configuration }], skips: before.skips });
     if (resolution.status !== 'ok') return unchanged(resolution);
-    const configured = configureItem({ release: found.entry.release, itemId: found.item.id, configuration: root.configuration, materialSource: found.entry.materialSource });
+    if (operation.tool) pinSelectedRecipes(intent, inventories, root, operation.tool);
+    const configured = configurePinned(found.entry, found.item, root.configuration, intent.pins);
     if (!configured.valid) return fail('INPUT_INVALID', '/operation/root/configuration', 'Catalog refused item configuration.', { owner: 'catalog', diagnostics: configured.diagnostics });
     return { found };
   };

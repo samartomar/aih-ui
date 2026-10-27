@@ -50,7 +50,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     // entryId -> 'Adding…' or 'Removing…' while a card's Add or Remove is in flight (the grid is redrawn meanwhile).
     busy: new Map(),
   };
-  let restoredView = false;
+  let restoredView = false, chosenTool = null;
 
   const changeView = (patch) => {
     Object.assign(state.view, patch);
@@ -96,8 +96,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   const frameworkNavigation = document.getElementById('framework-navigation');
   const frameworks = createFrameworkNavigation({ container: frameworkNavigation, onFirstStep: () => document.getElementById('your-tool-trigger').click(), onChoose: framework => {
     const entry = state.entries.find(entry => entry.authoringItem.root.releaseSha256 === framework.sha256);
-    changeView({ family: entry?.authoringItem.family ?? framework.name, source: sourceFilterValue('family', framework.name, framework.sha256), sourceType: null, query: '', kind: null });
-    toolbar.setQuery('');
+    changeView({ family: entry?.authoringItem.family ?? framework.name, source: sourceFilterValue('family', framework.name, framework.sha256), sourceType: null, kind: null });
   } });
   target.addEventListener('change', () => changeView({ target: target.value }));
   // Project basics shows in place of the cards.
@@ -105,7 +104,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   const basicsOpen = () => !elements.projectBasics.section.hidden;
   const focusCard = (entryId) => basicsOpen() ? projectBasics.focus(entryId) : cards.focus(entryId);
   support.addEventListener('change', () => changeView({ support: support.value }));
-  const resetFilters = () => { Object.assign(state.view, emptyView()); toolbar.setQuery(''); changeView({ target: target.options[0]?.value ?? '' }); };
+  const resetFilters = () => { const { family, source } = state.view; Object.assign(state.view, emptyView(), { family, source }); toolbar.setQuery(''); changeView({ target: target.options[0]?.value ?? '' }); };
   document.getElementById('catalog-reset-filters').addEventListener('click', resetFilters);
   const filterDisclosure = document.getElementById('catalog-filter-disclosure');
   filterDisclosure.open = false;
@@ -143,7 +142,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       onChoose: async (item, entryId) => {
         state.chosenId = entryId ?? null;
         state.busy.set(entryId, 'Adding…');
-        try { await onAdd(item); } finally { state.busy.delete(entryId); render(); }
+        try { await onAdd({ ...item, selectedTool: chosenTool?.id }); } finally { state.busy.delete(entryId); render(); }
         // A clean Add rebuilds the grid without opening the review; keyboard focus returns to the card.
         if (document.activeElement === document.body || !document.activeElement?.isConnected) focusCard(state.chosenId);
       },
@@ -178,7 +177,22 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     if (!restoredView) return;
     state.counts = inventoryCounts(state.entries);
     family.value = state.view.family;
+    const available = authoring.catalog?.frameworks?.filter(framework => framework.state === 'ready') ?? [];
+    const current = available.find(framework => sourceFilterValue('family', framework.name, framework.sha256) === state.view.source);
+    const selectedFramework = current ?? available[0];
+    if (!current && selectedFramework) { state.view.family = selectedFramework.name; state.view.source = sourceFilterValue('family', selectedFramework.name, selectedFramework.sha256); saveView(state.view); }
+    family.value = state.view.family;
     frameworks.setCatalog(authoring.catalog, state.view);
+    const guidance = document.querySelector('.framework-landing');
+    guidance.dataset.step = chosenTool ? 'choose-content' : 'choose-tool';
+    document.getElementById('framework-first-step').textContent = chosenTool ? `Browsing for ${chosenTool.label}` : 'Choose your tool';
+    document.getElementById('framework-guidance').textContent = chosenTool ? 'Choose content below. Add it to Your setup, then review your choices.' : 'Choose your tool in the header, then explore the framework below.';
+    const context = document.getElementById('framework-context');
+    context.replaceChildren();
+    if (selectedFramework) {
+      context.append(el('span', 'framework-version', selectedFramework.version || 'Version not published'), el('span', '', selectedFramework.description || 'Framework description not published.'));
+      context.append(el('span', 'framework-internal', selectedFramework.kind === 'internal' ? 'Internal · not verified' : 'Release source · not verified'));
+    }
     document.querySelector(".wb-source-heading").textContent = state.view.family || "Choose content for your AI tool";
     target.value = state.view.target;
     support.value = state.view.support;
@@ -262,7 +276,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   }
 
   return {
-    setTool: tool => frameworks.setTool(tool),
+    setTool: tool => { chosenTool = tool; frameworks.setTool(tool); render(); },
     async start() {
       state.summary = await (await fetch('./summary.json', { cache: 'no-store' })).json();
       provenance.setSummary(state.summary);

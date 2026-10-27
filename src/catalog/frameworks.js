@@ -20,7 +20,7 @@ export function createFrameworkNavigation({ container, onChoose, onFirstStep }) 
       attachTooltip(summary, source.message);
       disclosure.append(summary, el('p', '', source.message)); container.append(disclosure);
     }
-    const scope = el('p', 'framework-source-note', tool ? `Observed in ${tool.label} on this platform` : 'Choose your tool to read observed counts.');
+    const scope = el('p', 'framework-source-note', tool ? `Observed in ${tool.label} on ${catalog.hostPlatform?.os ?? "unknown OS"} ${catalog.hostPlatform?.arch ?? "unknown architecture"}` : 'Choose your tool to read observed counts.');
     attachTooltip(scope, 'Harness static observations for the loaded items on this OS and architecture, not proof that an item works in this project.'); container.append(scope);
     const frameworks = catalog.frameworks ?? [];
     if (!frameworks.length) container.append(el('p', '', 'No frameworks available from the configured sources. Existing content is in Filters & your sources.'));
