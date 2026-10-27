@@ -52,6 +52,7 @@ async function main() {
       policyWorkspace.setSettings(settings);
       authoringWorkspace.setSettings(settings);
       void evidenceReview.setDefaultRecipient(settings.reviewer ?? null);
+      catalog.setMode(settings);
       catalog.setOrganizationName(settings.role === "admin" ? settings.organization?.name ?? null : null);
     }
     const onboarding = createOnboarding({

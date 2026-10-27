@@ -51,3 +51,16 @@ _Avoid_: managed selection, custody
 **Remove**:
 Taking a chosen item's files, and those of its needed items that nothing else installed still needs, out of the project folder; the setup's choices are unchanged.
 _Avoid_: uninstall, cleanup, managed removal (on default screens)
+
+
+**Starting set**:
+A producer-declared group of content, with exact membership, options and origins
+resolved by Catalog. An optional hook stays a separate choice.
+
+**Observed**:
+Harness has a published compatibility observation for the selected tool and
+platform. This does not prove successful use on the current host.
+
+**Unconfirmed fit**:
+The public compatibility result has no observation for the selected tool and
+platform. This differs from unsupported fit and from unknown host facts.

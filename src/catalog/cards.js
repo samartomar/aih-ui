@@ -21,6 +21,7 @@
  * from every displayed entry to its authoring asset identity.
  */
 
+import { renderBrowseFacts, itemBrowseFacts } from './browse-facts.js';
 import { createGapIndicator } from "../app/gap-indicator.js";
 import { el } from "../app/dom.js";
 import { sourcePresentation } from './source-facts.js';
@@ -45,6 +46,7 @@ const NOT_SUPPLIED_EVIDENCE = { state: "not-supplied" };
 
 const NO_FAMILY = { text: NOT_PUBLISHED, value: false, title: "Content family: not published for this entry.", source: "Content family" };
 
+const chosenInSetup = (model, item) => (model.acceptedRoots ?? model.intent?.roots ?? []).some(root => root.itemId === item.id && root.releaseSha256 === item.root.releaseSha256);
 function card(entry, selectedId, onSelect, model) {
   const id = identity(entry);
   const source = entry.authoringItem ? sourcePresentation(entry.authoringItem) : null;
@@ -152,6 +154,17 @@ function card(entry, selectedId, onSelect, model) {
     });
   }
   head.appendChild(toggle);
+  if (entry.authoringItem?.role) {
+    foot.replaceChildren(renderBrowseFacts(entry.authoringItem, model.browse, model.tool));
+    const namespace = el('span', 'card-namespace', entry.authoringItem.id);
+    attachTooltip(namespace, `Namespaced Catalog identity: ${entry.authoringItem.id}`); top.append(namespace);
+    const facts = itemBrowseFacts(entry.authoringItem, model.browse, model.tool);
+    if (!chosenInSetup(model, entry.authoringItem) && ((facts.recipe && !facts.recipe.available) || (entry.authoringItem.recipes && !model.tool))) {
+      button.setAttribute('aria-disabled', 'true');
+      button.disabled = true;
+      attachTooltip(toggle, facts.recipe?.reason ?? 'Choose your tool in the header before adding per-tool content.');
+    }
+  }
   node.appendChild(foot);
 
   const select = () => onSelect(id.entryId);
@@ -203,6 +216,15 @@ export function createCards({ elements, onSelect }) {
       elements.visibleCount.textContent = String(model.entries.length);
       elements.visibleCaption.textContent = model.entries.length === 1 ? "entry" : "entries";
       elements.visibleCaption.title = `Showing ${model.entries.length} of ${model.total} ${model.noun ?? "catalog entries"}.`;
+    },
+
+    updateFacts(model) {
+      for (const entry of model.entries) {
+        if (!entry.authoringItem?.role) continue;
+        const node = elements.cardsGrid.querySelector(`[data-card-id="${CSS.escape(entry.entryId)}"]`);
+        const facts = node?.querySelector('.browse-facts');
+        if (facts) facts.replaceWith(renderBrowseFacts(entry.authoringItem, model.browse, model.tool));
+      }
     },
 
     /** Moves keyboard focus to the card for an entry, if the grid shows it; false when it does not. */

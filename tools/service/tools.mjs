@@ -38,18 +38,14 @@ export function tools() {
   };
 }
 
-// Inspection runs local version commands; a short budget keeps the header from waiting on a slow machine.
-const BUDGET_MS = 30_000;
+// Header observations read local files only. Check this machine retains its own explicit diagnostic action.
 
 export async function toolInspection() {
-  const { inspect } = await import("@aihq/core");
-  const result = await inspect({ network: "off" }, { budgetMs: BUDGET_MS });
-  return {
-    status: result.status,
-    package: result.package,
-    // A tool's `config` trace is a home-relative path; the header does not need it, so it never leaves the host.
-    tools: (result.tools ?? []).map(entry => ({ id: entry.id, label: entry.label, state: entry.state, selection: entry.selection })),
-    observations: (result.observations ?? []).map(entry => ({ id: entry.id, target: entry.target, detail: entry.detail })),
-    diagnostics: (result.diagnostics ?? []).map(entry => ({ code: entry.code, reason: entry.reason, message: entry.message })),
-  };
+  const { inspectToolHost } = await import('@aihq/core/harness/runtime');
+  const observations = [];
+  for (const tool of harness.listTools()) {
+    try { observations.push({ id: tool.id, host: await inspectToolHost({ tool: tool.id, project: process.env.AIH_CONSUMER_PROJECT ?? process.cwd(), items: [] }, { budgetMs: 3000 }) }); }
+    catch { observations.push({ id: tool.id, host: { status: 'failed' } }); }
+  }
+  return { state: 'inspected', method: 'read-only-host', status: 'complete', tools: observations, observations: [], diagnostics: [] };
 }

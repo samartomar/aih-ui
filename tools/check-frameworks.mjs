@@ -1,4 +1,6 @@
 // Focused running-page acceptance using installed packed public packages. No module-level assertions.
+import { execFileSync } from 'node:child_process';
+import { verifyInstalledArchive } from './candidate/upgrade.mjs';
 import { readFile, writeFile, mkdir, copyFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { homeEnvironment } from './consumer/home-environment.mjs';
@@ -21,6 +23,7 @@ Object.assign(process.env, homeEnvironment(join(output, 'home')), { TMPDIR: temp
 // Browsing and saved intent only: this proof does not acquire an execution target.
 delete process.env.AIH_CONSUMER_PROJECT;
 for (const artifact of Object.values(artifacts)) if (createHash('sha256').update(await readFile(artifact.tarball)).digest('hex') !== artifact.sha256) throw new Error('Pinned package archive differs from its recorded identity.');
+const installed = Object.fromEntries(Object.entries(artifacts).map(([name, entry]) => [name, verifyInstalledArchive(entry, join(consumerDir, 'node_modules', name === 'ui' ? 'aih-ui' : `@aihq/${name}`))]));
 const runDir = join(output, 'page'); await buildCss(repo);
 for (const [assets, destination] of [[pageAssets(repo), runDir], [serviceAssets(repo), consumerDir]]) for (const asset of assets) {
   const path = join(destination, asset.to); await mkdir(dirname(path), { recursive: true }); await copyFile(join(repo, asset.from), path);
@@ -29,22 +32,33 @@ const load = name => import(pathToFileURL(join(consumerDir, 'consumer', name)).h
 const selectedCases = process.argv.slice(5);
 const unavailableOnly = selectedCases.length === 1 && selectedCases[0] === 'readerUnavailable';
 const frameworkFixtures = unavailableOnly ? undefined : (await load('framework-fixtures.mjs')).frameworkFixtures;
+const { runBrowseBrowser, runBrowseReopenBrowser, runOptionalHookBrowser, runBrowseFactsBrowser } = await load('browse-browser.mjs');
 const { runFrameworksBrowser, runFrameworkLoadingBrowser, runFrameworkReopenBrowser } = await load('frameworks-browser.mjs');
 const fixture = unavailableOnly ? { scenarios: { readerUnavailable: { fixture: true, prepared: [{}] } }, expected: {} } : await frameworkFixtures(join(output, 'fixtures'), artifacts.catalog);
 await writeFile(join(output, 'fixture-expectations.json'), JSON.stringify(fixture.expected, null, 2));
 const summary = { packages: await Promise.all(Object.entries(artifacts).map(async ([name, value]) => ({name,packageName:`@aihq/${name}`,version:JSON.parse(await readFile(join(consumerDir,`node_modules/@aihq/${name}/package.json`),'utf8')).version,...value}))), coreTargets: coreTargetsSummary(callService(consumerDir, {op:'coreTargets'})) };
 const config = join(output, 'sources.json'); process.env.AIH_FRAMEWORK_SOURCES = config;
 const outcomes = [];
-for (const [scenario, configuration] of [...Object.entries(fixture.scenarios), ...(!unavailableOnly ? [['restart', fixture.scenarios.ready]] : [])].filter(([name]) => !selectedCases.length || selectedCases.includes(name))) {
+for (const [scenario, configuration] of [...Object.entries(fixture.scenarios), ...(!unavailableOnly ? [['restart', fixture.scenarios.ready], ['browseRestart', fixture.scenarios.browse], ['hookRestart', fixture.scenarios.hook]] : [])].filter(([name]) => !selectedCases.length || selectedCases.includes(name))) {
   await writeFile(config, JSON.stringify(configuration));
-  const started = await createWorkbench({ consumerDir, runDir, summary, settingsPath: join(output, 'settings.json') });
+  const frameworkFixtureInventories = ['hook', 'hookRestart'].includes(scenario) ? await (await load('browse-fixtures.mjs')).optionalHookFixture() : undefined;
+  const settingsPath = join(output, 'settings.json');
+  const priorSettings = scenario === 'facts' ? await readFile(settingsPath).catch(() => undefined) : undefined;
+  if (scenario === 'facts') await writeFile(settingsPath, JSON.stringify({ format: 'aih-ui-settings', version: 1, experience: 'enterprise', role: 'developer', organization: null, capabilities: [], clients: [] }));
+  const started = await createWorkbench({ consumerDir, runDir, summary, settingsPath: join(output, 'settings.json'), frameworkFixtureInventories });
   summary.entryCount = started.catalog.items.length; await writeFile(join(runDir,'summary.json'), JSON.stringify(summary));
   const origin = `http://127.0.0.1:${(await listen(started.server,0)).port}`;
   try {
     console.log(`Framework page: ${scenario}`);
+    if(scenario==='facts') { await runBrowseFactsBrowser({origin,output:join(output,'facts'),expected:fixture.expected,specimens:await (await load('browse-summary-fixtures.mjs')).summaryFixtures(),playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
+    if(scenario==='browse') { await runBrowseBrowser({origin,output:join(output,'browse'),expected:fixture.expected,playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
+    if(scenario==='browseRestart') { await runBrowseReopenBrowser({origin,output:join(output,'browseRestart'),savedDirectory:join(output,'browse'),expected:fixture.expected,playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
+    if(scenario==='hookRestart') { await runOptionalHookBrowser({origin,output:join(output,'hookRestart'),savedDirectory:join(output,'hook'),playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
+    if(scenario==='hook') { await runOptionalHookBrowser({origin,output:join(output,'hook'),playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
     if(scenario==='ready')await runFrameworkLoadingBrowser({origin,output:join(output,'loading'),playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});
     if(scenario==='restart') {await runFrameworkReopenBrowser({origin,output:join(output,'restart'),savedDirectory:join(output,'ready'),expected:fixture.expected,playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue;}
     outcomes.push(await runFrameworksBrowser({origin, output:join(output,scenario),playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href,scenario,expected:fixture.expected}));
-  } finally { await new Promise(done=>started.server.close(done)); }
+  } finally { await new Promise(done=>started.server.close(done)); if (scenario === 'facts' && priorSettings) await writeFile(settingsPath, priorSettings); }
 }
-await writeFile(join(output,'result.json'),JSON.stringify({status:'passed',artifacts,outcomes,humanAcceptance:'pending'},null,2));
+const source = { head: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(), dirty: execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }).trim().length > 0, pageFiles: await Promise.all(pageAssets(repo).map(async asset => ({ path: asset.from, sha256: createHash('sha256').update(await readFile(join(repo, asset.from))).digest('hex') }))) };
+await writeFile(join(output,'result.json'),JSON.stringify({status:'passed',source,artifacts,installed,outcomes,humanAcceptance:'pending'},null,2));

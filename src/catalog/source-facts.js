@@ -1,6 +1,7 @@
 // Presentation only: Catalog owns profile interpretation and field provenance.
 export function sourcePresentation(item = {}) {
   const facts = item.metadata?.sourceFacts;
+  if (item.role && typeof item.name === 'string') return { name: item.name, description: item.description || 'Description not published.', facts: facts ?? null };
   const prose = (value, fallback) => typeof value === 'string' && value.trim() ? value : fallback;
   const field = value => value && (value.state === 'authored' ? typeof value.value === 'string'
     : ['absent', 'invalid'].includes(value.state) && typeof value.required === 'boolean') && typeof value.locator === 'string';

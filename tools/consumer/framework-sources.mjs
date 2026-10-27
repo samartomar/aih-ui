@@ -26,7 +26,7 @@ async function materials(root, release) {
   }));
 }
 // Preserve every public per-item result; only observedOn on the current platform contributes to the count.
-function observation(release) {
+export function observation(release) {
   return (harness.listTools?.() ?? []).map(tool => {
     try {
       const result = harness.checkCompatibility({ tool: tool.id, platform: { os: ({ win32: 'windows', darwin: 'macos' })[process.platform] ?? process.platform, arch: process.arch },
@@ -76,7 +76,7 @@ export async function readFrameworkSources(configuration) {
         if (!checked.valid) throw new Error(JSON.stringify(checked.diagnostics));
         if (checked.release.framework?.id !== entry.frameworkId || checked.release.framework?.name !== entry.name || checked.release.framework?.version !== entry.version) throw new Error('Index and release framework identities disagree.');
         const inventory = { release: checked.release, family: entry.name, materialSource: { kind: 'local', input: `indexed-${entry.sha256.slice(0,24)}` }, materials: await materials(location.root, checked.release) };
-        inventories.push(inventory); row.state = 'ready'; row.observations = observation(checked.release);
+        inventories.push(inventory); Object.assign(row, { sources: checked.release.sources, description: checked.release.framework.description, sets: checked.release.sets ?? [] }); row.state = 'ready'; row.observations = observation(checked.release);
       } catch { row.state = 'failed'; row.reason = 'Release failed its exact identity or member checks.'; }
     }
   } else sources.push({ state: 'unavailable', message: 'Release index unavailable: no source configured.' });
@@ -107,7 +107,7 @@ export async function readFrameworkSources(configuration) {
         throw new Error('Conflicting source identities.');
       }
       inventories.push(inventory);
-      frameworks.push({ id: read.release.framework.id, name: read.release.framework.name, version: read.release.framework.version, description: read.release.framework.description, sha256: read.release.sha256, kind: 'internal', state: 'ready', internalContent, observations: observation(read.release) });
+      frameworks.push({ id: read.release.framework.id, name: read.release.framework.name, version: read.release.framework.version, description: read.release.framework.description, sources: read.release.sources, sets: read.release.sets ?? [], sha256: read.release.sha256, kind: 'internal', state: 'ready', internalContent, observations: observation(read.release) });
       sources.push({ kind: 'internal', state: 'read', message: `Internal content: ${read.release.framework.name}. Not verified; baseline unbound, unauthenticated, non-production.` });
     } catch { sources.push({ kind: 'internal', state: 'failed', message: 'Internal content source failed its package, content or inventory checks.' }); }
   }

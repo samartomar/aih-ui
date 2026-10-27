@@ -1,11 +1,13 @@
 // Explicit local-file acquisition. Paths and trust come only from host configuration.
+import { createHash } from 'node:crypto';
+import { stable } from './primitives.mjs';
 import { open } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { authenticateEvidence } from '@aihq/core';
 import { acquireBaselineArtifact } from '@aihq/catalog/node';
-import { isCheckedRelease } from '@aihq/catalog/reader';
-import { readSummary, maxAssessmentBytes, maxAssessments } from '@aihq/scan/read';
+import { isCheckedRelease, itemEvidenceDescriptor } from '@aihq/catalog/reader';
+import { readSummary, maxAssessmentBytes, maxAssessments, summariseItem } from '@aihq/scan/read';
 import { createEvidenceCache, evidenceDigest, evidenceKey } from './evidence-cache.mjs';
 import { selectContentEvidence } from './scan-evidence.mjs';
 
@@ -37,7 +39,7 @@ export function createScanEvidenceHost({ sources = [], packageRoot, trust, detec
       const entry = [...retained.entries()].find(([key]) => key.includes(`/${scanId}/`))?.[1];
       return entry ? { status: 'read', scanId, format: entry.format, bytes: [...entry.bytes] } : { status: 'unavailable', scanId };
     },
-    async check({ inventory, itemId, supplied = [], evaluationTime, selection }) {
+    async check({ inventory, itemId, supplied = [], evaluationTime, selection, withSummary = false }) {
       if (!isCheckedRelease(inventory?.release)) return { status: 'invalid', diagnostics: [{ code: 'CHECKED_RELEASE_REQUIRED', detail: 'Supply a checked Catalog release.' }] };
       if (typeof evaluationTime !== 'string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(evaluationTime) || !Number.isFinite(Date.parse(evaluationTime)) || new Date(evaluationTime).toISOString() !== evaluationTime) return { status: 'invalid', diagnostics: [{ code: 'invalid-time', detail: 'Supply an explicit valid UTC evaluation time with milliseconds.' }] };
       const assessments = [], checks = [], sourceIds = [];
@@ -85,7 +87,21 @@ export function createScanEvidenceHost({ sources = [], packageRoot, trust, detec
       const key = 'answer/' + evidenceKey({ release: inventory?.release?.sha256, itemId, identities, sourceIds, checks, evaluationTime, selection, detectorIds });
       const reused = cache.has(key);
       const result = await cache.read(key, () => selectContentEvidence({ inventory, itemId, assessments, sourceIds, checks, evaluationTime, selection, detectorIds, cache, identities }));
-      return { ...result, acquisitionCost: { reused, attemptedBytes, retainedBytes, retainedAcquisitions: retained.size,
+      let itemSummary;
+      if (withSummary) {
+        const descriptor = itemEvidenceDescriptor(inventory.release, { itemId });
+        if (descriptor.valid) {
+          // A presentation policy checks every requested detector, permits no
+          // suppression and leaves unclassified severities unavailable.
+          const severityProfile = { schema: 'urn:aihq:scan:severity-profile:1.0.0', id: 'workbench-display', version: '1.0.0', rules: [] };
+          const evidencePolicy = { schema: 'urn:aihq:scan:evidence-policy:1.0.0', id: 'workbench-display', version: '1.0.0', requiredDetectors: [], suppressions: [],
+            severityProfile: { id: severityProfile.id, sha256: createHash('sha256').update(stable(severityProfile)).digest('hex') } };
+          const authentication = assessments.find(value => value.authentication?.scanId === result.selectedScanId)?.authentication ?? { status: 'skipped' };
+          itemSummary = await summariseItem({ assessmentsInput: { assessments, checks, context: { sourceIds, selection: selection ?? { paths: descriptor.descriptor.materials.map(material => material.path).sort(), excludedPaths: [] } } },
+            item: descriptor.descriptor, evidencePolicy, severityProfile, authentication, trustStatus: (trust.keys?.length || trust.publishers?.length) ? 'available' : 'unavailable', evaluationTime });
+        } else itemSummary = { status: 'unavailable', diagnostics: descriptor.diagnostics };
+      }
+      return { ...result, ...(itemSummary ? { itemSummary } : {}), acquisitionCost: { reused, attemptedBytes, retainedBytes, retainedAcquisitions: retained.size,
         acquisitionMs: acquired - started, selectionMs: performance.now() - acquired } };
     }
   };

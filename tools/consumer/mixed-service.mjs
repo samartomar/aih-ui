@@ -156,7 +156,12 @@ export async function createMixedService(maintained, { suppliedInventories, fami
       if (operation === 'compose') return composeAuthoring({ basePolicyBytes: policyBytes, intent: body.intent, inventories: all, ...reviewContext });
       if (operation === 'edit') return editAuthoring({ policyBytes, inventories: all, operation: body.operation, ...reviewContext });
       if (operation === 'reconcile') return reconcileAuthoring({ savedPolicyBytes: policyBytes, inventories: all, candidateInventories: candidates(body.candidateMode), ...reviewContext });
-      if (operation === 'inspect-review') return inspectReviewEvidence({ evidenceBytes, inventory: all.find(entry => entry.release.sha256 === body.target?.releaseSha256), itemId: body.target?.itemId });
+      if (operation === 'inspect-review') {
+        const read = policyBytes ? await readAuthoring({ policyBytes, inventories: all }) : null;
+        const intent = read?.value?.intent;
+        const pin = intent?.pins.find(pin => pin.releaseSha256 === body.target?.releaseSha256 && pin.itemId === body.target?.itemId);
+        return inspectReviewEvidence({ evidenceBytes, inventory: all.find(entry => entry.release.sha256 === body.target?.releaseSha256), itemId: body.target?.itemId, recipe: pin?.recipe, configuration: intent?.roots.find(root => root.releaseSha256 === body.target?.releaseSha256 && root.itemId === body.target?.itemId)?.configuration });
+      }
       // Per-item evidence state for the catalog cards: read only, from the supplied evidence documents.
       if (operation === 'evidence-states') return describeEvidenceStates({ reviewEvidence, inventories: all, subjects: body.subjects, evaluationTime: new Date().toISOString() });
       if (operation === 'record-review') return recordReview({ policyBytes, inventories: all, evidenceBytes, target: body.target, finding: body.finding, decision: body.decision, ...reviewContext });

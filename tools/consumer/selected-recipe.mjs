@@ -1,12 +1,14 @@
 // Catalog selects recipes. Harness's declared registry aliases bridge only exact
 // public client names; there is no Workbench tool-name table or fuzzy matching.
-import { selectTool } from '@aihq/core/harness';
+import * as harness from '@aihq/core/harness';
 import { configureItem, resolveSelections } from '@aihq/catalog/reader';
+import { stable } from './primitives.mjs';
 import { pinKey } from './intent-shape.mjs';
 export const recipeDescriptor = ({ id, path, sha256, byteLength, schema }) => ({ id, path, sha256, byteLength, schema });
 export function recipeClient(item, tool) {
   if (!item.recipes) return { available: true };
-  const selected = selectTool(tool);
+  if (typeof harness.selectTool !== 'function') return { available: false, reason: 'This Core does not publish selected-tool identity.' };
+  const selected = harness.selectTool(tool);
   if (selected.status !== 'selected') return { available: false, reason: 'Choose an observed tool before adding this item.' };
   const names = new Set([selected.tool.id, ...selected.tool.aliases]);
   const matches = Object.keys(item.recipes).filter(name => names.has(name));
@@ -16,8 +18,16 @@ export function recipeClient(item, tool) {
 export function configurePinned(entry, item, configuration, pins) {
   const descriptor = pins?.find(pin => pin.releaseSha256 === entry.release.sha256 && pin.itemId === item.id)?.recipe;
   const clients = Object.entries(item.recipes ?? {}).filter(([, recipe]) => recipe.sha256 === descriptor?.sha256 && recipe.path === descriptor?.path);
-  return configureItem({ release: entry.release, itemId: item.id, configuration, materialSource: entry.materialSource,
-    ...(clients.length === 1 ? { clientId: clients[0][0] } : {}) });
+  const configure = clientId => configureItem({ release: entry.release, itemId: item.id, configuration, materialSource: entry.materialSource, ...(clientId ? { clientId } : {}) });
+  if (clients.length === 1) return configure(clients[0][0]);
+  if (clients.length > 1) {
+    // Some supporting items publish the exact same recipe for several clients.
+    // Catalog must confirm identical selections before a descriptor can stand
+    // for those aliases; order must never choose between different semantics.
+    const checked = clients.map(([clientId]) => configure(clientId));
+    if (checked.every(value => value.valid && stable(value.selection) === stable(checked[0].selection))) return checked[0];
+  }
+  return configure();
 }
 export function pinSelectedRecipes(intent, inventories, root, tool) {
   const releases = Object.fromEntries(inventories.map(entry => [entry.release.sha256, entry.release]));

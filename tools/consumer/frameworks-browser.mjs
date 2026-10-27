@@ -34,7 +34,7 @@ export async function runFrameworksBrowser({ origin, output, playwrightModule, s
       }
       if(scenario==='ready') {
         const additional=rail.locator('[data-framework='+JSON.stringify(`internal:${expected.additional.framework.id}:${expected.additional.sha256}`)+']');
-        await additional.click();assert.equal(await page.locator('#cards-grid [data-card-id]').count(),expected.additional.items,'Public per-tool recipe descriptors remain browsable without selecting a recipe variant');await internal.click();
+        await additional.click();await page.waitForFunction(count=>document.querySelectorAll('#cards-grid [data-card-id]').length===count,expected.additional.defaults);assert.equal(await page.locator('#cards-grid [data-card-id]').count(),expected.additional.defaults,'The set-first grid uses public resolved choosable members');await page.locator('#browse-all-items').check();assert.equal(await page.locator('#cards-grid [data-card-id]').count(),expected.additional.choosable,'All items keeps support material in comes with');await internal.click();
         await page.keyboard.press('Escape');
         await addFromCatalog(page,expected.prepared.items[0].id);
         await page.locator('#your-setup').click();
@@ -60,10 +60,10 @@ export async function runFrameworksBrowser({ origin, output, playwrightModule, s
         assert.equal(await release.getAttribute('aria-pressed'),'true');
         if(scenario==='ready') {
           await page.locator('#catalog-filter-disclosure > summary').click();await page.locator('#browse-family').selectOption('');
-          assert.equal(await rail.locator('[aria-pressed="true"]').count(),0,'Changing the secondary family filter clears the rail selection');
+          assert.equal(await internal.getAttribute('aria-pressed'),'true','Clearing secondary filters preserves a valid framework context');
           await page.locator('#catalog-filters-close').click();await internal.click();
           await page.locator('#catalog-filter-disclosure > summary').click();await page.locator('#catalog-reset-filters').click();
-          assert.equal(await rail.locator('[aria-pressed="true"]').count(),0,'Reset clears the rail selection');await page.locator('#catalog-filters-close').click();
+          assert.equal(await internal.getAttribute('aria-pressed'),'true','Normal reset preserves the current framework context');await page.locator('#catalog-filters-close').click();
         }
       }
       if(['failed','missing'].includes(scenario))assert.match(await rail.innerText(),/failed|unavailable/i);
@@ -72,7 +72,7 @@ export async function runFrameworksBrowser({ origin, output, playwrightModule, s
       if(['empty','unavailable'].includes(scenario))assert.match(await rail.innerText(),/No frameworks available/);
       if(scenario==='readerUnavailable'){assert.match(await rail.innerText(),/Internal content unavailable/);assert.equal(await internal.count(),0);}
       if(scenario==='internalFailed'){assert.match(await rail.innerText(),/Internal content source failed/);assert.equal(await internal.count(),0);}
-      assert.ok(await page.locator('#framework-first-step').isVisible());
+      assert.ok(await page.locator('#framework-guidance').isVisible(), 'State-aware first-step guidance remains visible');
       await page.screenshot({animations:'disabled',path:join(output,`${theme}-rail.png`)});
       const contrast = await page.locator('.framework-source-note, .framework-count, .framework-internal, .framework-landing').evaluateAll(nodes => {
         const rgb = text => text.match(/[\d.]+/g).slice(0,3).map(Number).map(value => { const s=value/255;return s<=.04045?s/12.92:((s+.055)/1.055)**2.4; });
@@ -93,7 +93,7 @@ export async function runFrameworkLoadingBrowser({origin,output,playwrightModule
     await page.route('**/api/authoring-catalog',async route=>{const response=await route.fetch();await held;try{await route.fulfill({response});}catch { /* The fixture page may close while its held response resumes. */ }});
     await page.goto(origin+'/');const toggle=page.getByRole('button',{name:`Switch to ${theme} mode`,exact:true});if(await toggle.count())await toggle.last().click();
     await page.locator('#framework-navigation').filter({hasText:'Loading frameworks and observed counts…'}).waitFor();
-    assert.ok(await page.locator('#framework-first-step').isVisible());await page.screenshot({path:join(output,`${theme}-loading.png`)});release();await page.close();
+    assert.ok(await page.locator('#framework-guidance').isVisible(), 'State-aware first-step guidance remains visible');await page.screenshot({path:join(output,`${theme}-loading.png`)});release();await page.close();
   }}finally{await browser.close();}
 }
 

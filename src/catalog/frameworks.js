@@ -34,6 +34,7 @@ export function createFrameworkNavigation({ container, onChoose, onFirstStep }) 
       const observation = framework.observations?.find(value => value.tool === tool?.id);
       const count = framework.state !== 'ready' ? framework.state : !tool ? 'Choose your tool' : observation?.status !== 'checked' ? 'Count unavailable' : `${observation.count} observed`;
       button.append(iconSpan('kind', 'framework'), name, el('span', 'framework-count', count));
+      if (framework.kind === 'fixture') button.append(el('span', 'framework-internal', 'Test content · not production'));
       if (framework.kind === 'internal') button.append(el('span', 'framework-internal', 'Internal · not verified'));
       const words = `${framework.name} ${framework.version}. ${framework.kind === 'internal' ? 'Internal content; baseline unbound, unauthenticated, non-production. ' : ''}${framework.reason ?? ''} ${tool ? `${count} in ${tool.label} on this platform. Static observations, not “works”; each item still needs its own host checks.` : 'Choose your tool in the header to read observed counts. Counts are observed, not “works”.'}`;
       attachTooltip(button, words);
