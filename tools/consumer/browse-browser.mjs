@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
+import { openSetupAdvanced } from './advanced-browser.mjs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { openPolicyAdvanced, openPolicyFileActions, openSourceDetails, closePolicyDrawer, openPolicySection } from './policy-drawer.mjs';
+import { openPolicyAdvanced, openPolicyFileActions, openSourceDetails, closePolicyDrawer } from './policy-drawer.mjs';
 async function enter(page, origin, theme, { hasTool = true } = {}) {
   await page.goto(origin + '/');
   await page.locator('#framework-navigation [data-framework]').first().waitFor();
@@ -306,13 +307,13 @@ export async function runEvidenceRefreshBrowser({ origin, output, playwrightModu
     });
     const page = await context.newPage(); page.setDefaultTimeout(30000); await enter(page, origin, theme); await framework(page, expected.additional); await page.locator('#catalog-search').fill('grill-me');
     const card = page.locator(`[data-card-id="${expected.additional.sha256}/${expected.additional.grill.id}"]`); await card.locator('[data-fact=scan][data-state=verified]').waitFor();
-    await openPolicySection(page, 'Evidence review and reconsideration');
+    await openSetupAdvanced(page, 'Evidence review and reconsideration');
     const changed = page.waitForResponse(response => response.url().endsWith('/api/authoring-browse-content') && response.request().postDataJSON().reviewEvidence?.length);
     await page.getByLabel('Review evidence files', { exact: true }).setInputFiles({ name: 'public-other-content-report.json', mimeType: 'application/json', buffer: Buffer.from(positive.evidenceBytes) });
     const changedValue = await (await changed).json(); const changedSummary = changedValue.scans.find(value => value.itemId === expected.additional.grill.id).summary;
     assert.notEqual(changedSummary.state, 'verified', 'The actual backend never inherits controlled fixture authentication');
     await closePolicyDrawer(page); await card.locator(`[data-fact=scan][data-state="${changedSummary.state}"]`).waitFor(); assert.equal(await card.locator('[data-state=verified]').count(), 0, 'Changing supplied evidence invalidates the visible positive summary');
-    await openPolicySection(page, 'Evidence review and reconsideration');
+    await openSetupAdvanced(page, 'Evidence review and reconsideration');
     const latest = page.getByRole('region', { name: 'Latest Scan evidence', exact: true });
     await latest.getByLabel('Search evidence subjects', { exact: true }).fill('grill-me'); await latest.getByLabel('Scan content', { exact: true }).selectOption(`${expected.additional.sha256}/${expected.additional.grill.id}`);
     const history = latest.getByLabel('Scan history', { exact: true }); await history.locator('option[value^="scan:sha256:"]').first().waitFor({ state: 'attached' }); const scanId = await history.locator('option[value^="scan:sha256:"]').first().getAttribute('value'); await history.selectOption(scanId);
