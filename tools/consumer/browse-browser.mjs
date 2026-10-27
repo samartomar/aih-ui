@@ -417,3 +417,27 @@ export async function runPluginRoutesBrowser({ origin, output, expected, playwri
   } assert.deepEqual(errors, []); await writeFile(join(output, 'result.json'), JSON.stringify({ status: 'passed', outcomes, errors, sourceRoutes: expected.routes.nativeRoutes, publicRefusal: expected.routes.refusal, scope: 'Public packed consumer and ordinary page; unavailable/refusal are controlled presentation fixtures; no installation, activation or native use', humanAcceptance: 'pending' }, null, 2)); }
   finally { await browser.close(); }
 }
+
+export async function runRefusedSetFactsBrowser({ origin, output, expected, playwrightModule }) {
+  await mkdir(output, { recursive: true }); const { chromium } = await import(playwrightModule); const browser = await chromium.launch({ headless: true });
+  const outcomes = [];
+  try { for (const theme of ['dark', 'light']) {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 800 } }); await context.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
+    const page = await context.newPage(); page.setDefaultTimeout(30000); await enter(page, origin, theme); await framework(page, expected.ecc);
+    const result = await (await context.request.post(origin + '/api/authoring-browse-content', { headers: { origin }, data: { releaseSha256: expected.ecc.sha256, tool: 'claude', sets: expected.ecc.requests } })).json();
+    assert.equal(result.status, 'refused'); assert.deepEqual(result.diagnostics, expected.ecc.resolution.diagnostics);
+    assert.ok(result.compatibility?.items.length, 'A refused set must not erase independent item compatibility');
+    assert.deepEqual(result.resolution.diagnostics, expected.ecc.resolution.diagnostics);
+    assert.deepEqual(result.compatibility.pluginRoutes, expected.ecc.pluginRoutes); assert.ok(result.scans.length);
+    assert.equal(result.compatibility.sets.length, 0, 'No successful fit is invented for a refused set');
+    await page.locator('#browse-all-items').check(); const state = expected.ecc.pluginRoutes[0].state;
+    await page.locator(`#cards-grid [data-plugin-routes="${state}"]`).first().waitFor();
+    assert.match(await page.locator('#starting-sets').innerText(), /refused.*All items/i);
+    await page.screenshot({ path: join(output, theme + '-all-items.png') });
+    await page.locator('#cards-grid [data-card-id]').first().locator('.wb-card-title').click(); await page.locator(`#inspector-browse-facts [data-plugin-routes="${state}"]`).waitFor();
+    await page.screenshot({ path: join(output, theme + '-details.png') });
+    await writeFile(join(output, theme + '-public-result.json'), JSON.stringify({ status: result.status, resolution: result.resolution, pluginRoutes: result.compatibility.pluginRoutes, items: result.compatibility.items.length, scans: result.scans.length, host: result.host }, null, 2));
+    outcomes.push({ theme, set: 'refused', itemFacts: 'available', routeState: state }); await context.close();
+  } await writeFile(join(output, 'result.json'), JSON.stringify({ status: 'passed', outcomes, scope: 'Refusal remains non-executable; independent item facts remain browsable.', humanAcceptance: 'pending' }, null, 2)); }
+  finally { await browser.close(); }
+}

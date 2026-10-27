@@ -10,11 +10,11 @@ export async function browseContent(inventories, { tool, releaseSha256, sets = [
   const release = inventory.release;
   const releases = Object.fromEntries(inventories.map(entry => [entry.release.sha256, entry.release]));
   const resolution = resolveSelections({ releases, roots: [], skips: [], sets });
-  if (resolution.status !== 'ok') return resolution;
+  const selections = resolution.value?.selections ?? []; // A refused set does not invalidate its source's item facts.
   if (typeof harness.selectTool !== 'function' || typeof harness.checkCompatibility !== 'function') return { status: 'unavailable', reason: 'This Core does not publish selected-tool compatibility.', resolution };
   const selected = harness.selectTool(tool);
   if (selected.status !== 'selected') return { status: 'unavailable', reason: 'Choose your tool to check its fit.', resolution };
-  const setOrigins = item => resolution.value.selections.find(selection => selection.item.releaseSha256 === release.sha256 && selection.item.itemId === item.id)?.origins?.filter(origin => origin.set).map(origin => origin.set) ?? [];
+  const setOrigins = item => selections.find(selection => selection.item.releaseSha256 === release.sha256 && selection.item.itemId === item.id)?.origins?.filter(origin => origin.set).map(origin => origin.set) ?? [];
   const binding = harness.toolBindings.find(binding => binding.tool === selected.tool.id);
   const fallbackOf = item => release.items.find(candidate => candidate.id === item.fallback?.itemId);
   const members = release.items.map(item => ({ item, sets: setOrigins(item), ...(item.fallback ? { fallback: fallbackOf(item) } : {}) }));
@@ -25,7 +25,7 @@ export async function browseContent(inventories, { tool, releaseSha256, sets = [
     const common = { tool: selected.tool.id, platform: platform(), binding,
       nativeRoutes: release.nativeRoutes === undefined ? [] : [{ framework: release.framework.id, lines: release.nativeRoutes }] };
     const checks = members.map(({ item, fallback }) => harness.checkCompatibility({ ...common, items: [{ item, ...(fallback ? { fallback } : {}) }] }));
-    const chosen = members.filter(member => resolution.value.selections.some(selection => selection.item.releaseSha256 === release.sha256 && selection.item.itemId === member.item.id));
+    const chosen = members.filter(member => selections.some(selection => selection.item.releaseSha256 === release.sha256 && selection.item.itemId === member.item.id));
     const setCheck = harness.checkCompatibility({ ...common, items: chosen });
     compatibility = { items: checks.flatMap(result => result.items ?? []), sets: setCheck.sets ?? [], pluginRoutes: checks[0]?.pluginRoutes ?? setCheck.pluginRoutes, checks: checks.filter(result => result.status !== 'checked'), setCheck };
   } catch { return { status: 'failed', reason: 'Compatibility could not be checked.', resolution, platform: platform() }; }
@@ -44,6 +44,6 @@ export async function browseContent(inventories, { tool, releaseSha256, sets = [
     const result = await summarize(inventory, item.id);
     scans.push({ itemId: item.id, ...result.itemSummary });
   }
-  return { status: 'read', observations: release.items.map(item => ({ itemId: item.id, observations: binding?.layouts[item.kind]?.observations ?? [] })), scans, dependencies, tool: selected.tool, platform: platform(), compatibility, host, resolution,
+  return { status: resolution.status === 'ok' ? 'read' : 'refused', ...(resolution.status === 'ok' ? {} : { diagnostics: resolution.diagnostics }), observations: release.items.map(item => ({ itemId: item.id, observations: binding?.layouts[item.kind]?.observations ?? [] })), scans, dependencies, tool: selected.tool, platform: platform(), compatibility, host, resolution,
     recipes: release.items.map(item => ({ itemId: item.id, ...recipeClient(item, tool) })) };
 }

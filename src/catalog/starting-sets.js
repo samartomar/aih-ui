@@ -70,8 +70,11 @@ export function createStartingSets({ container, onChange, onAdd }) {
     if (result?.status === 'read') {
       const fit = result.compatibility?.sets ?? [];
       for (const value of fit) { const badge = el('span', 'browse-fact', `${value.set?.setId ?? value.setId ?? 'Set'} · ${value.members.native} observed · ${value.members.unconfirmed} unconfirmed · ${value.members.none} unavailable`); badge.append(iconSpan('state', 'info')); attachTooltip(badge, JSON.stringify(value)); controls.append(badge); }
-    } else controls.append(el('span', 'set-note', result?.reason ?? (result?.diagnostics?.map(value => value.message).join(' ') || 'Reading set membership and tool fit…')));
+    } else controls.append(el('span', 'set-note', result?.status === 'refused' ? 'Set choices refused. All items remains available; adjust choices before adding.' : result?.reason ?? (result?.diagnostics?.map(value => value.message).join(' ') || 'Reading set membership and tool fit…')));
     container.append(controls);
+    if (result?.resolution?.status === 'refused') {
+      const refusal = el('details', 'set-refusal'); refusal.append(el('summary', '', 'Set choice details'), el('pre', 'browse-json', JSON.stringify(result.resolution.diagnostics, null, 2))); container.append(refusal);
+    }
     if (requests.length) {
       const members = el('details', 'set-members'); members.append(el('summary', '', 'Members & separate hook choices'));
       const selected = result?.resolution?.value?.selections ?? [];

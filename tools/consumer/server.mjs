@@ -205,7 +205,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
         }
         if (operation === 'browse-content') {
           const result = await browseContent(mixedService.inventories, body, folder.project, (inventory, itemId) => client.scanEvidence.check({ inventory, itemId, supplied: (body.reviewEvidence ?? []).map(bytes => Uint8Array.from(bytes)), evaluationTime: new Date().toISOString(), withSummary: true }));
-          if (body.enterprise === true && result.status === 'read') {
+          if (body.enterprise === true && result.compatibility) {
             const inventory = mixedService.inventories.find(entry => entry.release.sha256 === body.releaseSha256);
             const source = organizationSource ? await readOrganization({ organizationSource, controls }) : {};
             result.policy = await browsePolicy(inventory, body.tool, source.organization);

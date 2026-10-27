@@ -1388,7 +1388,12 @@ from producer declarations; selection and custody are separate facts. The host p
 routes are display-only upstream plugin-manager guidance; AIH never runs them or
 infers installation or activation. `not-listed` is an empty line, not a claim that
 upstream has no route. `not-supplied`, an unavailable older contract, loading and
-a refused route check remain distinct. No tool-name map is supplied by Workbench. Enterprise organization badges use Core's advisory preview over the
+a refused route check remain distinct. No tool-name map is supplied by Workbench.
+A refused set keeps its public diagnostics and remains unavailable to Add, while
+All items and Details still read independent compatibility, routes and evidence.
+Caller-owned required configuration is never fabricated to make a set resolve.
+Use each pinned producer package's declared Node engine range; current
+route-capable Core builds require Node 26.12.1–26.x. Enterprise organization badges use Core's advisory preview over the
 host-configured organization source and grant no authority.
 
 Scan badges use public `summariseItem`. The presentation policy checks all

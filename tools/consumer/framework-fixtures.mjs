@@ -52,9 +52,9 @@ export async function frameworkFixtures(directory, catalogArtifact) {
   const selected = members(ecc.release, requests);
   // Keep current public input refusals visible without blocking unrelated source/route cases.
   // The browser proof records this as incomplete, never as a successful language choice.
-  const fit = checkCompatibility({ tool: 'claude', platform: { os: ({ win32: 'windows', darwin: 'macos' })[process.platform] ?? process.platform, arch: process.arch }, binding: toolBindings.find(binding => binding.tool === 'claude'), items: ecc.release.items.map(item => ({ item })) });
+  const fit = checkCompatibility({ nativeRoutes: ecc.release.nativeRoutes === undefined ? [] : [{ framework: ecc.release.framework.id, lines: ecc.release.nativeRoutes }], tool: 'claude', platform: { os: ({ win32: 'windows', darwin: 'macos' })[process.platform] ?? process.platform, arch: process.arch }, binding: toolBindings.find(binding => binding.tool === 'claude'), items: ecc.release.items.map(item => ({ item })) });
   expected.ecc = { framework: ecc.release.framework, sha256: ecc.release.sha256, optionSet: { id: optionSet.id, name: optionSet.name }, option: { id: option.id, name: option.name }, language: { id: language.id, name: language.name }, requests,
-    resolution: selected, visible: (selected.value?.selections ?? []).filter(selection => ecc.release.items.find(item => item.id === selection.item.itemId)?.role !== 'supporting').filter(selection => { const item = fit.items?.find(item => item.item.itemId === selection.item.itemId); return !item || item.support !== 'none' && !item.notRendered && !item.staticBlockers?.length; }).map(selection => selection.item.itemId) };
+    resolution: selected, pluginRoutes: fit.pluginRoutes, visible: (selected.value?.selections ?? []).filter(selection => ecc.release.items.find(item => item.id === selection.item.itemId)?.role !== 'supporting').filter(selection => { const item = fit.items?.find(item => item.item.itemId === selection.item.itemId); return !item || item.support !== 'none' && !item.notRendered && !item.staticBlockers?.length; }).map(selection => selection.item.itemId) };
   scenarios.browse = { ...scenarios.ready, prepared: [...scenarios.ready.prepared, { ...internal, frameworkId: ecc.release.framework.id, expectedContentSha256: ecc.release.sha256 }], fixture: true, indexStatePath: join(directory, 'browse-state.json') };
   const superpowers = await readInstalledPreparedContent({ root, frameworkId: 'superpowers', sourceInput: 'fixture-superpowers' });
   if (!superpowers.valid) throw new Error('Public Superpowers prepared fixture unavailable.');
@@ -63,6 +63,7 @@ export async function frameworkFixtures(directory, catalogArtifact) {
   scenarios.facts = { ...scenarios.browse, prepared: [...scenarios.browse.prepared, { ...internal, frameworkId: superpowers.release.framework.id, expectedContentSha256: superpowers.release.sha256 }], indexStatePath: join(directory, 'facts-state.json') };
   scenarios.facts.fixtureLabel = 'Controlled Scan decision-table and Windows x64 fallback specimens; not Linux host usage.';
   scenarios.hook = { fixture: true };
+  scenarios.eccFacts = { ...scenarios.browse, fixtureLabel: 'Actual current ECC set refusal with independent item facts; no acquisition or native use.' };
   scenarios.routes = { ...scenarios.facts, fixtureLabel: 'Public plugin-route guidance and controlled unavailable/refusal presentation fixtures; no native use.' };
   const routeItems = [{ item: superpowers.release.items.find(item => item.role === 'choosable') }];
   const nativeRoutes = [{ framework: superpowers.release.framework.id, lines: superpowers.release.nativeRoutes }];
