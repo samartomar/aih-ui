@@ -65,6 +65,7 @@ export async function runBrowseBrowser({ origin, output, playwrightModule, expec
       assert.equal(intent.pins.find(pin => pin.itemId === grill.id).recipe.sha256, grill.recipes['claude-code'].sha256);
       for (const source of intent.provenance) assert.equal(source.materialSource.internalContent.archiveSha256, expected.prepared.archiveSha256);
       await card.click(); await openSourceDetails(page);
+      assert.ok(await page.locator('#main-content').evaluate(node => node.getBoundingClientRect().top >= document.querySelector('header').getBoundingClientRect().bottom), 'Opening a long inspector keeps the pane shell in place');
       assert.match(await page.locator('#inspector-browse-facts').innerText(), /mattpocock\/skills/);
       assert.match(await page.locator('#inspector-browse-facts').innerText(), /Chosen by.*aih-extensions/);
       assert.match(await page.locator('#inspector-browse-facts').innerText(), /Comes with/);

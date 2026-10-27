@@ -354,7 +354,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
         if (!authoring.catalog) return;
         try {
           const bytes = authoring.bytes;
-          const policy = JSON.parse(new TextDecoder().decode(bytes));
+          const policy = bytes.length ? JSON.parse(new TextDecoder().decode(bytes)) : {};
+          state.savedChoiceProblem = null;
           const sources = authoring.draft?.intent?.provenance ?? authoring.intent?.provenance ?? policy.metadata?.['aih.workbench']?.provenance;
           const record = { version: 1, choices: (sources ?? []).flatMap(source => source.materialSource?.workbenchSetChoices?.choices ?? []) };
           const identity = JSON.stringify(record);
