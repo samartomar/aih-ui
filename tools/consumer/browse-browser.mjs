@@ -116,6 +116,13 @@ export async function runBrowseBrowser({ origin, output, playwrightModule, expec
       const addedOptions = page.waitForResponse(response => /authoring-(?:draft-edit|edit)$/.test(response.url()));
       await page.locator('[data-add-sets]').click();
       const optionResult = await (await addedOptions).json();
+      if (expected.ecc.resolution.status === 'refused') {
+        assert.equal(optionResult.status, 'refused'); assert.deepEqual(optionResult.diagnostics, expected.ecc.resolution.diagnostics);
+        const unchanged = await save(page, join(output, `${theme}-ecc-refusal-preserved.json`)); assert.deepEqual(unchanged, setsPolicy);
+        await page.screenshot({ path: join(output, `${theme}-ecc-language-refused.png`), animations: 'disabled' });
+        outcomes.push({ theme, positiveSingle: basics.id, positivePlural: grill.id, sets: setChoices(setsPolicy).length, language: expected.ecc.language.id, incompleteCriteria: ['UI159-AC02', 'UI159-AC07'], incomplete: 'Current public ECC set resolution requires caller-supplied MCP acquisition inputs; no language choice was saved.', diagnostics: optionResult.diagnostics });
+        await context.close(); continue;
+      }
       assert.ok(optionResult.diagnostics?.some(value => value.code === 'POLICY_BOUND_EXCEEDED'), 'The real large ECC policy keeps its existing executable bound');
       const recordedOptions = page.waitForResponse(response => response.url().endsWith('/api/authoring-draft-edit'));
       await page.locator('#browse-keep-draft').click();
@@ -136,7 +143,7 @@ export async function runBrowseBrowser({ origin, output, playwrightModule, expec
       outcomes.push({ theme, positiveSingle: basics.id, positivePlural: grill.id, sets: setChoices(setsPolicy).length, language: expected.ecc.language.id });
       await context.close();
     }
-    assert.deepEqual(errors, []); await writeFile(join(output, 'result.json'), JSON.stringify({ status: 'passed', outcomes, errors, humanAcceptance: 'pending', scope: 'ordinary running page, public packed fixtures; no installation or native launch' }, null, 2));
+    assert.deepEqual(errors, []); const result = { status: outcomes.some(value => value.incomplete) ? 'incomplete' : 'passed', outcomes, errors, humanAcceptance: 'pending', scope: 'ordinary running page, public packed fixtures; no installation or native launch' }; await writeFile(join(output, 'result.json'), JSON.stringify(result, null, 2)); return result;
   } finally { await browser.close(); }
 }
 export async function runBrowseReopenBrowser({ origin, output, savedDirectory, playwrightModule, expected }) {
@@ -144,6 +151,13 @@ export async function runBrowseReopenBrowser({ origin, output, savedDirectory, p
   try { for (const theme of ['dark', 'light']) {
     const context = await browser.newContext(); await context.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
     const page = await context.newPage(); page.setDefaultTimeout(30000); await enter(page, origin, theme);
+    if (expected.ecc.resolution?.status === 'refused') {
+      await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(join(savedDirectory, `${theme}-sets.json`));
+      await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+      await page.locator('#policy-status').filter({ hasText: 'Saved choices recovered from exact source snapshots.' }).waitFor(); await closePolicyDrawer(page);
+      const reopened = await save(page, join(output, `${theme}-sets-reopened.json`));
+      assert.deepEqual(reopened, JSON.parse(await readFile(join(savedDirectory, `${theme}-sets.json`), 'utf8')), 'Successful Extensions sets and unrelated Project basics choices reopen unchanged; refused ECC choices were not saved');
+    } else {
     await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(join(savedDirectory, `${theme}-options.json`));
     await page.locator('#policy-draft-status').filter({ hasText: /Saved draft reopened/i }).waitFor();
     await closePolicyDrawer(page); await framework(page, expected.ecc);
@@ -153,6 +167,7 @@ export async function runBrowseReopenBrowser({ origin, output, savedDirectory, p
     const original = JSON.parse(await readFile(join(savedDirectory, `${theme}-options.json`), 'utf8'));
     assert.deepEqual(intentOf(saved), intentOf(original), 'Fresh host and browser retain exact source, tool recipe, sets/options/origins');
     assert.deepEqual(saved.savedIntent, original.savedIntent, 'The original policy bytes remain exact');
+    }
     await framework(page, expected.additional);
     await page.route('**/api/authoring-catalog', async route => { const response = await route.fetch(); const catalog = await response.json(); await route.fulfill({ response, json: { ...catalog, frameworks: catalog.frameworks.filter(row => row.sha256 !== expected.additional.sha256), items: catalog.items.filter(item => item.root.releaseSha256 !== expected.additional.sha256) } }); });
     await page.reload();
@@ -160,7 +175,7 @@ export async function runBrowseReopenBrowser({ origin, output, savedDirectory, p
     assert.match(await page.locator('.framework-missing').innerText(), /unavailable.*saved choices are unchanged/);
     assert.notEqual(await page.locator('.wb-source-heading').innerText(), expected.additional.framework.name);
     await page.screenshot({ path: join(output, `${theme}-reopened-missing-framework.png`) }); await context.close();
-  } await writeFile(join(output, 'result.json'), JSON.stringify({ status: 'passed', humanAcceptance: 'pending' })); }
+  } await writeFile(join(output, 'result.json'), JSON.stringify({ status: 'passed', scope: expected.ecc.resolution?.status === 'refused' ? 'Successful Extensions sets and unrelated Project basics reopened; refused ECC options were not saved and remain incomplete.' : 'Exact ECC options and unrelated choices reopened.', humanAcceptance: 'pending' })); }
   finally { await browser.close(); }
 }
 export async function runOptionalHookBrowser({ origin, output, playwrightModule, savedDirectory, crossFramework = false }) {
@@ -346,4 +361,59 @@ export async function runEvidenceRefreshBrowser({ origin, output, playwrightModu
     await closePolicyDrawer(page); await card.locator(`[data-fact=scan][data-state="${retainedSummary.state}"]`).waitFor(); await page.screenshot({ path: join(output, `${theme}-refreshed-evidence.png`) });
     outcomes.push({ theme, supplied: changedSummary.state, retained: retainedSummary.state, unknownClientRefused: true }); await context.close();
   } await writeFile(join(output, 'result.json'), JSON.stringify({ status: 'passed', outcomes, scope: 'A labeled public positive summary specimen is replaced through ordinary evidence upload; all later summaries and retained-ID refusals use the actual packed backend, no fixture authentication or native use', humanAcceptance: 'pending' }, null, 2)); } finally { await browser.close(); }
+}
+
+// Public compatibility answers are the oracle; controlled HTTP cases are labelled
+// presentation fixtures, never claimed as actual source or native evidence.
+export async function runPluginRoutesBrowser({ origin, output, expected, playwrightModule }) {
+  await mkdir(output, { recursive: true }); const { chromium } = await import(playwrightModule); const browser = await chromium.launch({ headless: true });
+  const outcomes = [], errors = [];
+  try { for (const theme of ['dark', 'light']) {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
+    await context.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
+    const page = await context.newPage(); page.setDefaultTimeout(30000); page.on('pageerror', error => errors.push(error.message));
+    await enter(page, origin, theme); await framework(page, expected.routes); await page.locator('#browse-all-items').check();
+    const request = { tool: 'claude', releaseSha256: expected.routes.sha256, sets: [] };
+    const actual = await (await context.request.post(origin + '/api/authoring-browse-content', { headers: { origin }, data: request })).json();
+    assert.deepEqual(actual.compatibility.pluginRoutes, expected.routes.byTool.claude, 'Backend passes checked nativeRoutes verbatim to public compatibility');
+    assert.equal(expected.routes.byTool.claude[0].state, 'listed');
+    const listed = page.locator('#cards-grid [data-plugin-routes="listed"]'); await listed.first().waitFor();
+    for (const line of expected.routes.byTool.claude[0].lines) assert.ok((await listed.first().innerText()).includes(line));
+    assert.match(await listed.first().innerText(), /AIH doesn.t run it/);
+    const routeBadge = listed.first().locator('.browse-fact').filter({ hasText: 'own plugin' }).first(); await page.keyboard.press('Tab'); await routeBadge.focus();
+    await page.locator('#wb-tooltip').waitFor({ state: 'visible' }); await routeBadge.tap();
+    await page.screenshot({ path: join(output, theme + '-listed.png') });
+    await page.locator('#cards-grid [data-card-id]').first().locator('.wb-card-title').click(); await page.locator('#inspector-browse-facts [data-plugin-routes="listed"]').waitFor();
+    await page.screenshot({ path: join(output, theme + '-inspector.png') }); await page.locator('#close-inspector-btn').click();
+    for (const tool of ['codex', 'copilot', 'antigravity']) {
+      await page.locator('#your-tool-trigger').click(); await page.locator(`[data-tool="${tool}"]`).click();
+      const empty = page.locator('#cards-grid [data-plugin-routes="not-listed"]'); await empty.first().waitFor();
+      assert.equal(await empty.first().getByText(/own plugin/).count(), 0);
+      const response = await (await context.request.post(origin + '/api/authoring-browse-content', { headers: { origin }, data: { ...request, tool } })).json();
+      assert.deepEqual(response.compatibility.pluginRoutes, expected.routes.byTool[tool]); assert.equal(expected.routes.byTool[tool][0].state, 'not-listed');
+      outcomes.push({ theme, tool, state: 'not-listed', attributionGap: tool === 'copilot' || tool === 'antigravity' });
+    }
+    await page.locator('#your-tool-trigger').click(); await page.locator('[data-tool="claude"]').click();
+    await framework(page, expected.prepared); await page.locator('#cards-grid [data-plugin-routes="not-supplied"]').first().waitFor();
+    await framework(page, expected.routes);
+    let mode = 'unavailable', held = [], waiting = false;
+    await page.route('**/api/authoring-browse-content', async route => {
+      if (waiting) await new Promise(resolve => held.push(resolve));
+      const response = await route.fetch(); let body = await response.json();
+      if (mode === 'unavailable') { if (body.compatibility) delete body.compatibility.pluginRoutes; }
+      if (mode === 'failed') body = { status: 'failed', reason: 'Controlled unavailable route-source presentation fixture.' };
+      if (mode === 'refused') body.compatibility = { items: [], sets: [], checks: [expected.routes.refusal], setCheck: expected.routes.refusal };
+      await route.fulfill({ response, json: body });
+    });
+    await page.reload(); await enter(page, origin, theme); await page.locator('#cards-grid [data-plugin-routes="unavailable"]').first().waitFor();
+    assert.equal(expected.routes.refusal.status, 'refused'); assert.equal(expected.routes.refusal.reason, 'native-routes');
+    mode = 'refused'; await page.reload(); await enter(page, origin, theme); await page.locator('#cards-grid [data-plugin-routes="refused"]').first().waitFor();
+    await page.screenshot({ path: join(output, theme + '-refused-fixture.png') });
+    mode = 'failed'; await page.reload(); await enter(page, origin, theme); await page.locator('#cards-grid [data-plugin-routes="failed"]').first().waitFor();
+    mode = 'normal'; waiting = true; await page.reload(); await page.locator('#cards-grid [data-plugin-routes="loading"]').first().waitFor();
+    waiting = false; held.splice(0).forEach(resolve => resolve()); await page.locator('#cards-grid [data-plugin-routes="listed"]').first().waitFor();
+    outcomes.push({ theme, states: ['listed', 'not-listed', 'not-supplied', 'unavailable', 'refused', 'failed', 'loading'], nativeUse: false });
+    await context.close();
+  } assert.deepEqual(errors, []); await writeFile(join(output, 'result.json'), JSON.stringify({ status: 'passed', outcomes, errors, sourceRoutes: expected.routes.nativeRoutes, publicRefusal: expected.routes.refusal, scope: 'Public packed consumer and ordinary page; unavailable/refusal are controlled presentation fixtures; no installation, activation or native use', humanAcceptance: 'pending' }, null, 2)); }
+  finally { await browser.close(); }
 }

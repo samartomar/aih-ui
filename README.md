@@ -1383,9 +1383,12 @@ resolved chosen group. Observed counts use actual loaded items and their public
 compatibility observations on the execution host platform. Host facts,
 unsupported fit and unconfirmed fit stay distinct. Size is Harness bytes and
 characters, never a guessed token count. Invocation, variants and authorship come
-from producer declarations; selection and custody are separate facts. A missing
-published plugin-route value is shown as unavailable rather than inferred from
-tool hints. Enterprise organization badges use Core's advisory preview over the
+from producer declarations; selection and custody are separate facts. The host passes each checked release's `nativeRoutes` lines verbatim to Harness
+`checkCompatibility` and presents its framework-qualified `pluginRoutes`. Listed
+routes are display-only upstream plugin-manager guidance; AIH never runs them or
+infers installation or activation. `not-listed` is an empty line, not a claim that
+upstream has no route. `not-supplied`, an unavailable older contract, loading and
+a refused route check remain distinct. No tool-name map is supplied by Workbench. Enterprise organization badges use Core's advisory preview over the
 host-configured organization source and grant no authority.
 
 Scan badges use public `summariseItem`. The presentation policy checks all

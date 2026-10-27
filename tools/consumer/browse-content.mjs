@@ -22,11 +22,12 @@ export async function browseContent(inventories, { tool, releaseSha256, sets = [
   try {
     // A browsed card is not an instruction to install every item in the grid.
     // Ask Core about each candidate separately; set fit uses the resolved group.
-    const common = { tool: selected.tool.id, platform: platform(), binding };
+    const common = { tool: selected.tool.id, platform: platform(), binding,
+      nativeRoutes: release.nativeRoutes === undefined ? [] : [{ framework: release.framework.id, lines: release.nativeRoutes }] };
     const checks = members.map(({ item, fallback }) => harness.checkCompatibility({ ...common, items: [{ item, ...(fallback ? { fallback } : {}) }] }));
     const chosen = members.filter(member => resolution.value.selections.some(selection => selection.item.releaseSha256 === release.sha256 && selection.item.itemId === member.item.id));
     const setCheck = harness.checkCompatibility({ ...common, items: chosen });
-    compatibility = { items: checks.flatMap(result => result.items ?? []), sets: setCheck.sets ?? [], checks: checks.filter(result => result.status !== 'checked'), setCheck };
+    compatibility = { items: checks.flatMap(result => result.items ?? []), sets: setCheck.sets ?? [], pluginRoutes: checks[0]?.pluginRoutes ?? setCheck.pluginRoutes, checks: checks.filter(result => result.status !== 'checked'), setCheck };
   } catch { return { status: 'failed', reason: 'Compatibility could not be checked.', resolution, platform: platform() }; }
   const dependencies = typeof itemId === 'string' && release.items.some(item => item.id === itemId) ? { itemId, resolution: resolveSelections({ releases, roots: [{ releaseSha256, itemId, scope: 'project', configuration: {} }], skips: [] }) } : undefined;
   let host = { status: 'unavailable', reason: 'Host facts unchecked. Open an item to inspect this host; no tool is launched.' };

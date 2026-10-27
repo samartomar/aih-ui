@@ -38,7 +38,7 @@ const load = name => import(pathToFileURL(join(consumerDir, 'consumer', name)).h
 const selectedCases = process.argv.slice(5);
 const unavailableOnly = selectedCases.length === 1 && selectedCases[0] === 'readerUnavailable';
 const frameworkFixtures = unavailableOnly ? undefined : (await load('framework-fixtures.mjs')).frameworkFixtures;
-const { runBrowseBrowser, runBrowseReopenBrowser, runOptionalHookBrowser, runBrowseFactsBrowser, runSetActionAccessBrowser, runEvidenceRefreshBrowser } = await load('browse-browser.mjs');
+const { runBrowseBrowser, runBrowseReopenBrowser, runOptionalHookBrowser, runBrowseFactsBrowser, runSetActionAccessBrowser, runEvidenceRefreshBrowser, runPluginRoutesBrowser } = await load('browse-browser.mjs');
 const { runFrameworksBrowser, runFrameworkLoadingBrowser, runFrameworkReopenBrowser } = await load('frameworks-browser.mjs');
 const fixture = unavailableOnly ? { scenarios: { readerUnavailable: { fixture: true, prepared: [{}] } }, expected: {} } : await frameworkFixtures(join(output, 'fixtures'), artifacts.catalog);
 await writeFile(join(output, 'fixture-expectations.json'), JSON.stringify(fixture.expected, null, 2));
@@ -56,10 +56,11 @@ for (const [scenario, configuration] of [...Object.entries(fixture.scenarios), .
   const origin = `http://127.0.0.1:${(await listen(started.server,0)).port}`;
   try {
     console.log(`Framework page: ${scenario}`);
+    if(scenario==='routes') { await runPluginRoutesBrowser({origin,output:join(output,'routes'),expected:fixture.expected,playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
     if(scenario==='setAccess') { await runSetActionAccessBrowser({origin,output:join(output,'setAccess'),expected:fixture.expected,playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
     if(scenario==='evidenceRefresh') { await runEvidenceRefreshBrowser({origin,output:join(output,'evidenceRefresh'),expected:fixture.expected,positive:(await (await load('browse-summary-fixtures.mjs')).summaryFixtures()).find(value=>value.row===17),playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
     if(scenario==='facts') { await runBrowseFactsBrowser({origin,output:join(output,'facts'),expected:fixture.expected,specimens:await (await load('browse-summary-fixtures.mjs')).summaryFixtures(),fallbackSpecimen:await (await load('browse-summary-fixtures.mjs')).fallbackFixture(),playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
-    if(scenario==='browse') { await runBrowseBrowser({origin,output:join(output,'browse'),expected:fixture.expected,playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
+    if(scenario==='browse') { outcomes.push(await runBrowseBrowser({origin,output:join(output,'browse'),expected:fixture.expected,playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href}));continue; }
     if(scenario==='browseRestart') { await runBrowseReopenBrowser({origin,output:join(output,'browseRestart'),savedDirectory:join(output,'browse'),expected:fixture.expected,playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
     if(scenario==='hookCross') { await runOptionalHookBrowser({origin,output:join(output,'hookCross'),crossFramework:true,playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
     if(scenario==='hookCrossRestart') { await runOptionalHookBrowser({origin,output:join(output,'hookCrossRestart'),savedDirectory:join(output,'hookCross'),crossFramework:true,playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
@@ -73,4 +74,7 @@ for (const [scenario, configuration] of [...Object.entries(fixture.scenarios), .
 const source = { head: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(), dirty: execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }).trim().length > 0, pageFiles: await Promise.all(pageAssets(repo).map(async asset => ({ path: asset.from, sha256: createHash('sha256').update(await readFile(join(repo, asset.from))).digest('hex') }))) };
 if (source.head !== startedHead || (await Promise.all(copied.map(async file => createHash('sha256').update(await readFile(join(repo, file.path))).digest('hex') === file.sha256))).some(same => !same)) throw new Error('Source changed during the running-page proof; receipt withheld.');
 source.copiedFiles = copied;
-await writeFile(join(output,'result.json'),JSON.stringify({status:'passed',source,artifacts,installed,outcomes,humanAcceptance:'pending'},null,2));
+await writeFile(join(output,'result.json'),JSON.stringify({status:outcomes.some(value=>value?.status==='incomplete')?'incomplete':'passed',source,artifacts,installed,outcomes,humanAcceptance:'pending'},null,2));
+
+// A verified public refusal is useful evidence, but not completed positive acceptance.
+if (outcomes.some(value => value?.status === 'incomplete')) process.exitCode = 2;

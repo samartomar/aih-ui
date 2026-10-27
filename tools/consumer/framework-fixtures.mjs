@@ -50,10 +50,11 @@ export async function frameworkFixtures(directory, catalogArtifact) {
   const optionSet = ecc.release.sets.find(set => set.options?.length), option = optionSet.options[0], language = option.choices.find(choice => choice.id === 'typescript') ?? option.choices[0];
   const requests = [{ release: { releaseSha256: ecc.release.sha256, scope: 'project' }, setId: optionSet.id, setSha256: optionSet.setSha256, options: { [option.id]: [language.id] }, members: [] }];
   const selected = members(ecc.release, requests);
-  if (selected.status !== 'ok') throw new Error('Public ECC language resolution refused.');
+  // Keep current public input refusals visible without blocking unrelated source/route cases.
+  // The browser proof records this as incomplete, never as a successful language choice.
   const fit = checkCompatibility({ tool: 'claude', platform: { os: ({ win32: 'windows', darwin: 'macos' })[process.platform] ?? process.platform, arch: process.arch }, binding: toolBindings.find(binding => binding.tool === 'claude'), items: ecc.release.items.map(item => ({ item })) });
   expected.ecc = { framework: ecc.release.framework, sha256: ecc.release.sha256, optionSet: { id: optionSet.id, name: optionSet.name }, option: { id: option.id, name: option.name }, language: { id: language.id, name: language.name }, requests,
-    visible: selected.value.selections.filter(selection => ecc.release.items.find(item => item.id === selection.item.itemId)?.role !== 'supporting').filter(selection => { const item = fit.items?.find(item => item.item.itemId === selection.item.itemId); return !item || item.support !== 'none' && !item.notRendered && !item.staticBlockers?.length; }).map(selection => selection.item.itemId) };
+    resolution: selected, visible: (selected.value?.selections ?? []).filter(selection => ecc.release.items.find(item => item.id === selection.item.itemId)?.role !== 'supporting').filter(selection => { const item = fit.items?.find(item => item.item.itemId === selection.item.itemId); return !item || item.support !== 'none' && !item.notRendered && !item.staticBlockers?.length; }).map(selection => selection.item.itemId) };
   scenarios.browse = { ...scenarios.ready, prepared: [...scenarios.ready.prepared, { ...internal, frameworkId: ecc.release.framework.id, expectedContentSha256: ecc.release.sha256 }], fixture: true, indexStatePath: join(directory, 'browse-state.json') };
   const superpowers = await readInstalledPreparedContent({ root, frameworkId: 'superpowers', sourceInput: 'fixture-superpowers' });
   if (!superpowers.valid) throw new Error('Public Superpowers prepared fixture unavailable.');
@@ -62,6 +63,13 @@ export async function frameworkFixtures(directory, catalogArtifact) {
   scenarios.facts = { ...scenarios.browse, prepared: [...scenarios.browse.prepared, { ...internal, frameworkId: superpowers.release.framework.id, expectedContentSha256: superpowers.release.sha256 }], indexStatePath: join(directory, 'facts-state.json') };
   scenarios.facts.fixtureLabel = 'Controlled Scan decision-table and Windows x64 fallback specimens; not Linux host usage.';
   scenarios.hook = { fixture: true };
+  scenarios.routes = { ...scenarios.facts, fixtureLabel: 'Public plugin-route guidance and controlled unavailable/refusal presentation fixtures; no native use.' };
+  const routeItems = [{ item: superpowers.release.items.find(item => item.role === 'choosable') }];
+  const nativeRoutes = [{ framework: superpowers.release.framework.id, lines: superpowers.release.nativeRoutes }];
+  expected.routes = { framework: superpowers.release.framework, sha256: superpowers.release.sha256, nativeRoutes,
+    byTool: Object.fromEntries(['claude', 'codex', 'copilot', 'antigravity'].map(tool => [tool, checkCompatibility({ tool, platform: { os: 'linux', arch: 'x64' }, items: routeItems, binding: toolBindings.find(binding => binding.tool === tool), nativeRoutes }).pluginRoutes])),
+    refusal: checkCompatibility({ tool: 'claude', platform: { os: 'linux', arch: 'x64' }, items: routeItems, binding: toolBindings.find(binding => binding.tool === 'claude'), nativeRoutes: [{ framework: superpowers.release.framework.id, lines: [null] }] }) };
+
   const supported = release => release.items.filter(item => item.role !== 'supporting').filter(item => {
     const read = checkCompatibility({ tool: 'claude', platform: { os: ({ win32: 'windows', darwin: 'macos' })[process.platform] ?? process.platform, arch: process.arch }, binding: toolBindings.find(binding => binding.tool === 'claude'), items: [{ item }] });
     const fit = read.items?.[0]; return !fit || fit.support !== 'none' && !fit.notRendered && !fit.staticBlockers?.length;
@@ -69,7 +77,7 @@ export async function frameworkFixtures(directory, catalogArtifact) {
   expected.prepared.items = supported(prepared.release).map(item => ({ id: item.id, name: item.name, label: item.label }));
   expected.additional.choosable = supported(additional.release).length;
   const visibleECC = new Set(supported(ecc.release).map(item => item.id));
-  expected.ecc.visible = selected.value.selections.filter(selection => visibleECC.has(selection.item.itemId)).map(selection => selection.item.itemId);
+  expected.ecc.visible = (selected.value?.selections ?? []).filter(selection => visibleECC.has(selection.item.itemId)).map(selection => selection.item.itemId);
   expected.counts = listTools().map(tool => {
     const result = checkCompatibility({ tool: tool.id, platform: { os: ({ win32: 'windows', darwin: 'macos' })[process.platform] ?? process.platform, arch: process.arch }, binding: toolBindings.find(binding => binding.tool === tool.id), items: prepared.release.items.map(item => ({ item })) });
     return { tool: tool.id, label: tool.label, count: result.status === 'checked' ? result.items.filter(item => item.observedOn).length : null, result };
