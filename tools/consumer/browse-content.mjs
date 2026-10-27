@@ -30,11 +30,12 @@ export async function browseContent(inventories, { tool, releaseSha256, sets = [
   } catch { return { status: 'failed', reason: 'Compatibility could not be checked.', resolution, platform: platform() }; }
   const dependencies = typeof itemId === 'string' && release.items.some(item => item.id === itemId) ? { itemId, resolution: resolveSelections({ releases, roots: [{ releaseSha256, itemId, scope: 'project', configuration: {} }], skips: [] }) } : undefined;
   let host = { status: 'unavailable', reason: 'Host facts unchecked. Open an item to inspect this host; no tool is launched.' };
-  if (inspect && project && typeof runtime.inspectToolHost === 'function') {
+  const inspectedItem = release.items.find(item => item.id === itemId);
+  if (inspect && inspectedItem && project && typeof runtime.inspectToolHost === 'function') {
     try {
-      host = await runtime.inspectToolHost({ tool: selected.tool.id, project, items: release.items.map(item => ({ framework: release.framework.id, itemId: item.id, kind: item.kind,
-        ...(item.payload?.dirName || item.payload?.key ? { key: item.payload.dirName ?? item.payload.key } : {}),
-        inputs: Object.keys(item.requirements?.inputs ?? {}) })) }, { budgetMs: 5000 });
+      host = await runtime.inspectToolHost({ tool: selected.tool.id, project, items: [{ framework: release.framework.id, itemId: inspectedItem.id, kind: inspectedItem.kind,
+        ...(inspectedItem.payload?.dirName || inspectedItem.payload?.key ? { key: inspectedItem.payload.dirName ?? inspectedItem.payload.key } : {}),
+        inputs: Object.keys(inspectedItem.requirements?.inputs ?? {}) }] }, { budgetMs: 5000 });
     } catch { host = { status: 'failed', reason: 'Host facts could not be inspected; compatibility remains static.' }; }
   }
   const scans = [];
