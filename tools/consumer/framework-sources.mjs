@@ -111,5 +111,5 @@ export async function readFrameworkSources(configuration) {
       sources.push({ kind: 'internal', state: 'read', message: `Internal content: ${read.release.framework.name}. Not verified; baseline unbound, unauthenticated, non-production.` });
     } catch { sources.push({ kind: 'internal', state: 'failed', message: 'Internal content source failed its package, content or inventory checks.' }); }
   }
-  return { inventories, frameworks, sources, hostPlatform: { os: process.platform, arch: process.arch }, fixture: configuration.fixture === true };
+  return { inventories, frameworks, sources, hostPlatform: { os: process.platform, arch: process.arch }, fixture: configuration.fixture === true, ...(configuration.fixture === true && typeof configuration.fixtureLabel === 'string' ? { fixtureLabel: configuration.fixtureLabel.slice(0, 512) } : {}) };
 }

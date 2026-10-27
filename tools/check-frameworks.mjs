@@ -56,7 +56,7 @@ for (const [scenario, configuration] of [...Object.entries(fixture.scenarios), .
   const origin = `http://127.0.0.1:${(await listen(started.server,0)).port}`;
   try {
     console.log(`Framework page: ${scenario}`);
-    if(scenario==='facts') { await runBrowseFactsBrowser({origin,output:join(output,'facts'),expected:fixture.expected,specimens:await (await load('browse-summary-fixtures.mjs')).summaryFixtures(),playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
+    if(scenario==='facts') { await runBrowseFactsBrowser({origin,output:join(output,'facts'),expected:fixture.expected,specimens:await (await load('browse-summary-fixtures.mjs')).summaryFixtures(),fallbackSpecimen:await (await load('browse-summary-fixtures.mjs')).fallbackFixture(),playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
     if(scenario==='browse') { await runBrowseBrowser({origin,output:join(output,'browse'),expected:fixture.expected,playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
     if(scenario==='browseRestart') { await runBrowseReopenBrowser({origin,output:join(output,'browseRestart'),savedDirectory:join(output,'browse'),expected:fixture.expected,playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
     if(scenario==='hookRestart') { await runOptionalHookBrowser({origin,output:join(output,'hookRestart'),savedDirectory:join(output,'hook'),playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }

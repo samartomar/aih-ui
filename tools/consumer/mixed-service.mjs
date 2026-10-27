@@ -82,7 +82,7 @@ export async function createMixedService(maintained, { suppliedInventories, fami
       if (!all.some(entry => entry.release.sha256 === inventory.release.sha256)) all.push(inventory);
       if (!current.some(entry => entry.release.sha256 === inventory.release.sha256)) current.push(inventory);
     },
-    catalog() { return { hostPlatform: frameworkCatalog?.hostPlatform, frameworkFixture: frameworkCatalog?.fixture === true, frameworks: frameworkCatalog?.frameworks ?? [], frameworkSources: frameworkCatalog?.sources ?? [], executionAvailable: false, description: 'Installed Catalog families and independently authored review-note. Template is an authored demonstration. Family grouping preserves upstream origins and exact identities.',
+    catalog() { return { hostPlatform: frameworkCatalog?.hostPlatform, frameworkFixture: frameworkCatalog?.fixture === true, frameworkFixtureLabel: frameworkCatalog?.fixtureLabel, frameworks: frameworkCatalog?.frameworks ?? [], frameworkSources: frameworkCatalog?.sources ?? [], executionAvailable: false, description: 'Installed Catalog families and independently authored review-note. Template is an authored demonstration. Family grouping preserves upstream origins and exact identities.',
       items: current.flatMap(entry => entry.release.items.map(item => ({ ...item, root: root(entry, item), package: entry.release.package,
         ...(entry.internalContent ? { internalContent: entry.internalContent } : {}),
         family: entry.family ?? (entry === maintained ? 'Catalog' : 'Independent'),

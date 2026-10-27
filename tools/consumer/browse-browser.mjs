@@ -192,7 +192,7 @@ export async function runOptionalHookBrowser({ origin, output, playwrightModule,
   finally { await browser.close(); }
 }
 
-export async function runBrowseFactsBrowser({ origin, output, playwrightModule, expected, specimens }) {
+export async function runBrowseFactsBrowser({ origin, output, playwrightModule, expected, specimens, fallbackSpecimen }) {
   await mkdir(output, { recursive: true }); const { chromium } = await import(playwrightModule); const browser = await chromium.launch({ headless: true });
   const outcomes = [], errors = [];
   try { for (const theme of ['dark', 'light']) {
@@ -200,8 +200,15 @@ export async function runBrowseFactsBrowser({ origin, output, playwrightModule, 
     await context.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
     const base = await (await context.request.post(origin + '/api/authoring-browse-content', { headers: { origin }, data: { enterprise: true, tool: 'claude', releaseSha256: expected.additional.sha256, sets: expected.additional.requests } })).json();
     assert.equal(base.status, 'read'); let current;
+    const fallbackBase = await (await context.request.post(origin + '/api/authoring-browse-content', { headers: { origin }, data: { tool: 'kiro', releaseSha256: expected.fallback.sha256, sets: [] } })).json();
+    assert.equal(fallbackSpecimen.releaseSha256, expected.fallback.sha256);
+
     await context.route('**/api/authoring-browse-content', async route => {
       const body = route.request().postDataJSON();
+      if (current?.fallback) {
+        if (body.releaseSha256 !== expected.fallback.sha256) return route.continue();
+        return route.fulfill({ json: { ...fallbackBase, platform: fallbackSpecimen.platform, compatibility: fallbackSpecimen.compatibility, host: { status: 'unavailable', reason: 'Windows x64 static fixture, not current-host execution.' } } });
+      }
       if (!current || body.releaseSha256 !== expected.additional.sha256) return route.continue();
       if (current.boundaryResponse) return route.fulfill({ json: current.boundaryResponse });
       const specimen = structuredClone(base);
@@ -226,9 +233,10 @@ export async function runBrowseFactsBrowser({ origin, output, playwrightModule, 
       if ([1, 9, 17].includes(specimen.row)) await page.screenshot({ path: join(output, `${theme}-scan-row-${specimen.row}.png`) });
       outcomes.push({ theme, row: specimen.row, name: specimen.name, state: specimen.result.summary.state });
     }
+    current = { fallback: true };
     await page.locator('#your-tool-trigger').click(); await page.locator('[data-tool="kiro"]').click();
     await framework(page, expected.fallback); await page.locator('#catalog-search').fill(''); await page.locator('#browse-all-items').check();
-    const fallback = page.locator('#browse-unsupported'); await fallback.locator('> summary').click();
+    const fallback = page.locator('#browse-unsupported'); await fallback.locator('> summary').waitFor(); await fallback.locator('> summary').click();
     await fallback.getByText(new RegExp(`Installed as a ${expected.fallback.kind}`)).waitFor();
     await page.screenshot({ path: join(output, `${theme}-fallback.png`) });
     await page.locator('#your-tool-trigger').click(); await page.locator('[data-tool="claude"]').click();

@@ -18,3 +18,19 @@ export async function summaryFixtures() {
   }
   return cases;
 }
+
+export async function fallbackFixture() {
+  const { readInstalledPreparedContent } = await import('@aihq/catalog/node');
+  const { checkCompatibility, toolBindings } = await import('@aihq/core/harness');
+  const { dirname } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const root = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
+  const read = await readInstalledPreparedContent({ root, frameworkId: 'superpowers', sourceInput: 'public-fallback-specimen' });
+  assert.equal(read.valid, true);
+  const item = read.release.items.find(item => item.fallback);
+  const fallback = read.release.items.find(candidate => candidate.id === item.fallback.itemId);
+  const platform = { os: 'windows', arch: 'x64' };
+  const checked = checkCompatibility({ tool: 'kiro', platform, binding: toolBindings.find(binding => binding.tool === 'kiro'), items: [{ item, fallback }] });
+  assert.equal(checked.status, 'checked'); assert.equal(checked.items[0].boundAs?.kind, fallback.kind);
+  return { releaseSha256: read.release.sha256, platform, compatibility: { items: checked.items, sets: checked.sets, checks: [] } };
+}

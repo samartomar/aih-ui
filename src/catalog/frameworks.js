@@ -9,7 +9,7 @@ export function createFrameworkNavigation({ container, onChoose, onFirstStep }) 
     const focused = container.contains(document.activeElement) ? document.activeElement.dataset.framework : undefined;
     container.replaceChildren();
     if (!catalog) { container.append(el('p', '', 'Loading frameworks and observed counts…')); return; }
-    if (catalog.frameworkFixture) container.append(el('p', 'framework-source-note', 'Test fixture sources — not production data.'));
+    if (catalog.frameworkFixture) container.append(el('p', 'framework-source-note', `Test fixture sources — not production data. ${catalog.frameworkFixtureLabel ?? ''}`));
     for (const source of catalog.frameworkSources ?? []) {
       if (source.kind === 'internal' && source.state === 'read') continue;
       const disclosure = el('details', 'framework-source-note');

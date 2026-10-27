@@ -60,6 +60,7 @@ export async function frameworkFixtures(directory, catalogArtifact) {
   const fallback = superpowers.release.items.find(item => item.fallback);
   expected.fallback = { framework: superpowers.release.framework, sha256: superpowers.release.sha256, itemId: fallback.id, kind: superpowers.release.items.find(item => item.id === fallback.fallback.itemId).kind };
   scenarios.facts = { ...scenarios.browse, prepared: [...scenarios.browse.prepared, { ...internal, frameworkId: superpowers.release.framework.id, expectedContentSha256: superpowers.release.sha256 }], indexStatePath: join(directory, 'facts-state.json') };
+  scenarios.facts.fixtureLabel = 'Controlled Scan decision-table and Windows x64 fallback specimens; not Linux host usage.';
   scenarios.hook = { fixture: true };
   const supported = release => release.items.filter(item => item.role !== 'supporting').filter(item => {
     const read = checkCompatibility({ tool: 'claude', platform: { os: ({ win32: 'windows', darwin: 'macos' })[process.platform] ?? process.platform, arch: process.arch }, binding: toolBindings.find(binding => binding.tool === 'claude'), items: [{ item }] });
