@@ -38,14 +38,14 @@ const load = name => import(pathToFileURL(join(consumerDir, 'consumer', name)).h
 const selectedCases = process.argv.slice(5);
 const unavailableOnly = selectedCases.length === 1 && selectedCases[0] === 'readerUnavailable';
 const frameworkFixtures = unavailableOnly ? undefined : (await load('framework-fixtures.mjs')).frameworkFixtures;
-const { runBrowseBrowser, runBrowseReopenBrowser, runOptionalHookBrowser, runBrowseFactsBrowser } = await load('browse-browser.mjs');
+const { runBrowseBrowser, runBrowseReopenBrowser, runOptionalHookBrowser, runBrowseFactsBrowser, runSetActionAccessBrowser, runEvidenceRefreshBrowser } = await load('browse-browser.mjs');
 const { runFrameworksBrowser, runFrameworkLoadingBrowser, runFrameworkReopenBrowser } = await load('frameworks-browser.mjs');
 const fixture = unavailableOnly ? { scenarios: { readerUnavailable: { fixture: true, prepared: [{}] } }, expected: {} } : await frameworkFixtures(join(output, 'fixtures'), artifacts.catalog);
 await writeFile(join(output, 'fixture-expectations.json'), JSON.stringify(fixture.expected, null, 2));
 const summary = { packages: await Promise.all(Object.entries(artifacts).map(async ([name, value]) => ({name,packageName:`@aihq/${name}`,version:JSON.parse(await readFile(join(consumerDir,`node_modules/@aihq/${name}/package.json`),'utf8')).version,...value}))), coreTargets: coreTargetsSummary(callService(consumerDir, {op:'coreTargets'})) };
 const config = join(output, 'sources.json'); process.env.AIH_FRAMEWORK_SOURCES = config;
 const outcomes = [];
-for (const [scenario, configuration] of [...Object.entries(fixture.scenarios), ...(!unavailableOnly ? [['restart', fixture.scenarios.ready], ['browseRestart', fixture.scenarios.browse], ['hookRestart', fixture.scenarios.hook]] : [])].filter(([name]) => !selectedCases.length || selectedCases.includes(name))) {
+for (const [scenario, configuration] of [...Object.entries(fixture.scenarios), ...(!unavailableOnly ? [['restart', fixture.scenarios.ready], ['browseRestart', fixture.scenarios.browse], ['hookRestart', fixture.scenarios.hook], ['setAccess', fixture.scenarios.browse], ['evidenceRefresh', fixture.scenarios.facts]] : [])].filter(([name]) => !selectedCases.length || selectedCases.includes(name))) {
   await writeFile(config, JSON.stringify(configuration));
   const frameworkFixtureInventories = ['hook', 'hookRestart'].includes(scenario) ? await (await load('browse-fixtures.mjs')).optionalHookFixture() : undefined;
   const settingsPath = join(output, 'settings.json');
@@ -56,6 +56,8 @@ for (const [scenario, configuration] of [...Object.entries(fixture.scenarios), .
   const origin = `http://127.0.0.1:${(await listen(started.server,0)).port}`;
   try {
     console.log(`Framework page: ${scenario}`);
+    if(scenario==='setAccess') { await runSetActionAccessBrowser({origin,output:join(output,'setAccess'),expected:fixture.expected,playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
+    if(scenario==='evidenceRefresh') { await runEvidenceRefreshBrowser({origin,output:join(output,'evidenceRefresh'),expected:fixture.expected,positive:(await (await load('browse-summary-fixtures.mjs')).summaryFixtures()).find(value=>value.row===17),playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
     if(scenario==='facts') { await runBrowseFactsBrowser({origin,output:join(output,'facts'),expected:fixture.expected,specimens:await (await load('browse-summary-fixtures.mjs')).summaryFixtures(),fallbackSpecimen:await (await load('browse-summary-fixtures.mjs')).fallbackFixture(),playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
     if(scenario==='browse') { await runBrowseBrowser({origin,output:join(output,'browse'),expected:fixture.expected,playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
     if(scenario==='browseRestart') { await runBrowseReopenBrowser({origin,output:join(output,'browseRestart'),savedDirectory:join(output,'browse'),expected:fixture.expected,playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }

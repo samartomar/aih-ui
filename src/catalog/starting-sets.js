@@ -62,8 +62,8 @@ export function createStartingSets({ container, onChange, onAdd }) {
     const controls = el('div', 'set-footer');
     if (requests.length || saved) {
       const add = el('button', 'set-add', !requests.length ? 'Remove chosen sets' : saved ? 'Update chosen sets' : 'Add chosen sets'); add.type = 'button'; add.dataset.addSets = '';
-      if (!hasTool) { add.disabled = true; add.setAttribute('aria-disabled', 'true'); }
-      add.addEventListener('click', () => onAdd(requests)); attachTooltip(add, 'Add the exact members Catalog resolves, with options, exclusions and qualified set origins. No installation runs.'); controls.append(add);
+      if (!hasTool) add.setAttribute('aria-disabled', 'true');
+      add.addEventListener('click', () => { if (add.getAttribute('aria-disabled') !== 'true') onAdd(requests); }); attachTooltip(add, hasTool ? 'Add the exact members Catalog resolves, with options, exclusions and qualified set origins. No installation runs.' : 'Choose your tool in the header before adding sets. Your existing choices are unchanged.'); controls.append(add);
     }
     const all = el('label', 'set-all'); const tick = el('input'); tick.type = 'checkbox'; tick.id = 'browse-all-items'; tick.checked = allItems;
     tick.addEventListener('change', () => onChange(requests, tick.checked)); all.append(tick, document.createTextNode('All items')); controls.append(all);

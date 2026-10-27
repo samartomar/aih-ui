@@ -20,5 +20,9 @@ export async function optionalHookFixture() {
     }
     inventories.push({ release, family: release.framework.name, materialSource: { kind: 'local', input: `fixture-${name}` }, materials: [], fixture: 'Selection-only public golden specimen. Material acquisition, Prepare and execution are not part of this fixture.' });
   }
+  const alternateBytes = await bytes('@aihq/catalog/release-superpowers.content.json');
+  const alternate = readReleaseContent(alternateBytes, { expectedSha256: sha256(alternateBytes) });
+  if (!alternate.valid) throw new Error('Public alternate framework content refused.');
+  inventories.unshift({ release: alternate.release, family: alternate.release.framework.name, materialSource: { kind: 'local', input: 'fixture-other-version' }, materials: [], fixture: 'Distinct checked version of the same framework; selection-only fixture, no execution.' });
   return inventories;
 }

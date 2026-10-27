@@ -194,15 +194,6 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
       if (pathname.startsWith('/api/authoring-')) {
         const client = await clientFor(request), mixedService = client.mixed;
         const operation = pathname.slice('/api/authoring-'.length);
-        if (operation === 'browse-content') {
-          const result = await browseContent(mixedService.inventories, body, folder.project, (inventory, itemId) => client.scanEvidence.check({ inventory, itemId, supplied: (body.reviewEvidence ?? []).map(bytes => Uint8Array.from(bytes)), evaluationTime: new Date().toISOString(), withSummary: true }));
-          if (body.enterprise === true && result.status === 'read') {
-            const inventory = mixedService.inventories.find(entry => entry.release.sha256 === body.releaseSha256);
-            const source = organizationSource ? await readOrganization({ organizationSource, controls }) : {};
-            result.policy = await browsePolicy(inventory, body.tool, source.organization);
-          }
-          return send(response, 200, result);
-        }
         if (operation === 'scan-evidence-detail') return send(response, 200, client.scanEvidence.detail(body.scanId));
         if (body.reviewEvidenceIds !== undefined) {
           const ids = body.reviewEvidenceIds;
@@ -211,6 +202,15 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
           if (retained.some(value => value.status !== 'read')) return send(response, 200, { status: 'refused', diagnostics: [{ code: 'EVIDENCE_UNAVAILABLE', message: 'Original evidence is unavailable in this page session; check its source again. Saved review identities remain unchanged.' }] });
           if ((body.reviewEvidence?.length ?? 0) + ids.length > 32) return send(response, 200, { status: 'refused', diagnostics: [{ code: 'EVIDENCE_UNAVAILABLE', message: 'Use up to 32 original evidence documents.' }] });
           body.reviewEvidence = [...(body.reviewEvidence ?? []), ...retained.map(value => value.bytes)];
+        }
+        if (operation === 'browse-content') {
+          const result = await browseContent(mixedService.inventories, body, folder.project, (inventory, itemId) => client.scanEvidence.check({ inventory, itemId, supplied: (body.reviewEvidence ?? []).map(bytes => Uint8Array.from(bytes)), evaluationTime: new Date().toISOString(), withSummary: true }));
+          if (body.enterprise === true && result.status === 'read') {
+            const inventory = mixedService.inventories.find(entry => entry.release.sha256 === body.releaseSha256);
+            const source = organizationSource ? await readOrganization({ organizationSource, controls }) : {};
+            result.policy = await browsePolicy(inventory, body.tool, source.organization);
+          }
+          return send(response, 200, result);
         }
         if (operation === 'scan-evidence') {
           const [releaseSha256, itemId] = String(body.target ?? '').split('/');

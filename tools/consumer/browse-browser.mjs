@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { openPolicyAdvanced, openPolicyFileActions, openSourceDetails, closePolicyDrawer } from './policy-drawer.mjs';
-async function enter(page, origin, theme) {
+import { openPolicyAdvanced, openPolicyFileActions, openSourceDetails, closePolicyDrawer, openPolicySection } from './policy-drawer.mjs';
+async function enter(page, origin, theme, { hasTool = true } = {}) {
   await page.goto(origin + '/');
   await page.locator('#framework-navigation [data-framework]').first().waitFor();
   if (await page.locator('#setup-dialog').isVisible()) {
@@ -12,7 +12,7 @@ async function enter(page, origin, theme) {
   }
   const toggle = page.getByRole('button', { name: `Switch to ${theme} mode`, exact: true });
   if (await toggle.count()) await toggle.click();
-  await page.waitForFunction(() => document.getElementById('framework-guidance').textContent.includes('Choose content'));
+  if (hasTool) await page.waitForFunction(() => document.getElementById('framework-guidance').textContent.includes('Choose content'));
 }
 async function framework(page, value) {
   await page.locator(`[data-framework="internal:${value.framework.id}:${value.sha256}"]`).click();
@@ -152,7 +152,13 @@ export async function runBrowseReopenBrowser({ origin, output, savedDirectory, p
     const original = JSON.parse(await readFile(join(savedDirectory, `${theme}-options.json`), 'utf8'));
     assert.deepEqual(intentOf(saved), intentOf(original), 'Fresh host and browser retain exact source, tool recipe, sets/options/origins');
     assert.deepEqual(saved.savedIntent, original.savedIntent, 'The original policy bytes remain exact');
-    await page.screenshot({ path: join(output, `${theme}-reopened.png`) }); await context.close();
+    await framework(page, expected.additional);
+    await page.route('**/api/authoring-catalog', async route => { const response = await route.fetch(); const catalog = await response.json(); await route.fulfill({ response, json: { ...catalog, frameworks: catalog.frameworks.filter(row => row.sha256 !== expected.additional.sha256), items: catalog.items.filter(item => item.root.releaseSha256 !== expected.additional.sha256) } }); });
+    await page.reload();
+    await page.locator('.framework-missing').filter({ hasText: expected.additional.framework.name }).waitFor();
+    assert.match(await page.locator('.framework-missing').innerText(), /unavailable.*saved choices are unchanged/);
+    assert.notEqual(await page.locator('.wb-source-heading').innerText(), expected.additional.framework.name);
+    await page.screenshot({ path: join(output, `${theme}-reopened-missing-framework.png`) }); await context.close();
   } await writeFile(join(output, 'result.json'), JSON.stringify({ status: 'passed', humanAcceptance: 'pending' })); }
   finally { await browser.close(); }
 }
@@ -171,7 +177,13 @@ export async function runOptionalHookBrowser({ origin, output, playwrightModule,
     }
     assert.match(await page.locator('#framework-navigation').innerText(), /Test fixture sources/);
     const catalog = await (await context.request.get(origin + '/api/authoring-catalog')).json();
-    const fixture = catalog.frameworks.find(row => row.kind === 'fixture' && row.sets?.length);
+    const fixture = catalog.frameworks.find(row => row.kind === 'fixture' && row.reason?.startsWith('Selection-only public golden') && row.sets?.length);
+    const alternate = catalog.frameworks.find(row => row.reason?.startsWith('Distinct checked version'));
+    assert.equal(alternate.id, fixture.id); assert.notEqual(alternate.sha256, fixture.sha256);
+    await page.locator(`[data-framework="fixture:${alternate.id}:${alternate.sha256}"]`).click(); await page.locator('#browse-all-items').check();
+    const unrelated = page.locator('#cards-grid button[aria-label^="Add "]:not(:disabled)').first(); const unrelatedId = (await unrelated.getAttribute('aria-label')).slice(4);
+    await unrelated.click(); await page.getByRole('button', { name: `Remove ${unrelatedId}`, exact: true }).waitFor();
+    if (await page.locator('#added-notice-dismiss').isVisible()) await page.locator('#added-notice-dismiss').click();
     const set = fixture.sets.find(set => set.members.some(member => member.optional));
     const member = set.members.find(member => member.optional);
     await page.locator(`[data-framework="fixture:${fixture.id}:${fixture.sha256}"]`).click();
@@ -184,7 +196,8 @@ export async function runOptionalHookBrowser({ origin, output, playwrightModule,
     await page.locator('[data-add-sets]').click();
     await page.waitForFunction(() => document.getElementById('framework-guidance').textContent.includes('Chosen sets added'));
     const policy = await save(page, join(output, `${theme}-excluded-hook.json`)); const intent = policy.metadata['aih.workbench'];
-    assert.ok(intent.exclusions.some(value => value.itemId === member.item.itemId));
+    assert.ok(intent.exclusions.some(value => value.itemId === member.item.itemId && value.releaseSha256 === fixture.sha256), 'An exclusion binds the exact selected set release, not the first framework version');
+    assert.ok(intent.roots.some(root => root.releaseSha256 === alternate.sha256 && root.itemId === unrelatedId), 'The other version’s unrelated choice remains');
     assert.ok(!intent.pins.some(value => value.itemId === member.item.itemId));
     assert.ok(setChoices(policy).some(choice => choice.request.members.some(value => value.item.itemId === member.item.itemId && value.include === false)));
     await page.screenshot({ path: join(output, `${theme}-optional-hook-fixture.png`) }); await context.close();
@@ -264,4 +277,49 @@ export async function runBrowseFactsBrowser({ origin, output, playwrightModule, 
   }
   assert.deepEqual(errors, []); await writeFile(join(output, 'result.json'), JSON.stringify({ status: 'passed', outcomes, scope: 'Controlled public Scan decision-table outputs in a clearly marked running fixture page. Fixture authentication is not actual prepared-content authentication. No detector, installation or native usage.', humanAcceptance: 'pending' }, null, 2));
   } finally { await browser.close(); }
+}
+
+export async function runSetActionAccessBrowser({ origin, output, playwrightModule, expected }) {
+  await mkdir(output, { recursive: true }); const { chromium } = await import(playwrightModule); const browser = await chromium.launch({ headless: true });
+  try { for (const theme of ['dark', 'light']) {
+    const context = await browser.newContext({ hasTouch: true }); const page = await context.newPage(); await enter(page, origin, theme, { hasTool: false }); await framework(page, expected.additional);
+    let edits = 0; page.on('request', request => { if (/authoring-(?:draft-edit|edit)$/.test(new URL(request.url()).pathname)) edits++; });
+    const add = page.locator('[data-add-sets]'); assert.equal(await add.isDisabled(), false); assert.equal(await add.getAttribute('aria-disabled'), 'true');
+    await page.keyboard.press('Tab'); await add.focus(); await page.locator('#wb-tooltip:not([hidden])').waitFor(); assert.match(await page.locator('#wb-tooltip').innerText(), /Choose your tool/);
+    await add.tap(); assert.equal(await page.locator('#wb-tooltip').isVisible(), true); await add.click(); assert.equal(edits, 0, 'A focusable unavailable action grants no edit');
+    await page.screenshot({ path: join(output, `${theme}-choose-tool-explanation.png`) }); await context.close();
+  } await writeFile(join(output, 'result.json'), JSON.stringify({ status: 'passed', humanAcceptance: 'pending' })); } finally { await browser.close(); }
+}
+
+export async function runEvidenceRefreshBrowser({ origin, output, playwrightModule, expected, positive }) {
+  await mkdir(output, { recursive: true }); const { chromium } = await import(playwrightModule); const browser = await chromium.launch({ headless: true }); const outcomes = [];
+  try { for (const theme of ['dark', 'light']) {
+    const context = await browser.newContext(); await context.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude')); let injected = false;
+    await context.route('**/api/authoring-browse-content', async route => {
+      const body = route.request().postDataJSON();
+      if (injected || body.releaseSha256 !== expected.additional.sha256) return route.continue();
+      const response = await route.fetch(); const value = await response.json(); value.scans = [{ itemId: expected.additional.grill.id, ...positive.result }]; injected = true;
+      await route.fulfill({ response, json: value });
+    });
+    const page = await context.newPage(); page.setDefaultTimeout(30000); await enter(page, origin, theme); await framework(page, expected.additional); await page.locator('#catalog-search').fill('grill-me');
+    const card = page.locator(`[data-card-id="${expected.additional.sha256}/${expected.additional.grill.id}"]`); await card.locator('[data-fact=scan][data-state=verified]').waitFor();
+    await openPolicySection(page, 'Evidence review and reconsideration');
+    const changed = page.waitForResponse(response => response.url().endsWith('/api/authoring-browse-content') && response.request().postDataJSON().reviewEvidence?.length);
+    await page.getByLabel('Review evidence files', { exact: true }).setInputFiles({ name: 'public-other-content-report.json', mimeType: 'application/json', buffer: Buffer.from(positive.evidenceBytes) });
+    const changedValue = await (await changed).json(); const changedSummary = changedValue.scans.find(value => value.itemId === expected.additional.grill.id).summary;
+    assert.notEqual(changedSummary.state, 'verified', 'The actual backend never inherits controlled fixture authentication');
+    await closePolicyDrawer(page); await card.locator(`[data-fact=scan][data-state="${changedSummary.state}"]`).waitFor(); assert.equal(await card.locator('[data-state=verified]').count(), 0, 'Changing supplied evidence invalidates the visible positive summary');
+    await openPolicySection(page, 'Evidence review and reconsideration');
+    const latest = page.getByRole('region', { name: 'Latest Scan evidence', exact: true });
+    await latest.getByLabel('Search evidence subjects', { exact: true }).fill('grill-me'); await latest.getByLabel('Scan content', { exact: true }).selectOption(`${expected.additional.sha256}/${expected.additional.grill.id}`);
+    const history = latest.getByLabel('Scan history', { exact: true }); await history.locator('option[value^="scan:sha256:"]').first().waitFor({ state: 'attached' }); const scanId = await history.locator('option[value^="scan:sha256:"]').first().getAttribute('value'); await history.selectOption(scanId);
+    const retained = page.waitForResponse(response => response.url().endsWith('/api/authoring-browse-content') && response.request().postDataJSON().reviewEvidenceIds?.includes(scanId));
+    await latest.getByRole('button', { name: 'Use this exact assessment for a human review', exact: true }).click();
+    const retainedValue = await (await retained).json(); assert.equal(retainedValue.status, 'read'); const retainedSummary = retainedValue.scans.find(value => value.itemId === expected.additional.grill.id).summary;
+    assert.equal(retainedSummary.state, changedSummary.state); assert.equal(retainedSummary.why, changedSummary.why, 'Retained assessment IDs resolve to the same original bytes before browsing');
+    const unknownClient = await context.request.post(origin + '/api/authoring-browse-content', { headers: { origin }, data: { tool: 'claude', releaseSha256: expected.additional.sha256, reviewEvidenceIds: [scanId] } });
+    const refused = await unknownClient.json(); assert.equal(refused.status, 'refused'); assert.equal(refused.diagnostics[0].code, 'EVIDENCE_UNAVAILABLE', 'Another client cannot borrow a retained evidence identity');
+    await closePolicyDrawer(page); await card.locator(`[data-fact=scan][data-state="${retainedSummary.state}"]`).waitFor(); await page.screenshot({ path: join(output, `${theme}-refreshed-evidence.png`) });
+    outcomes.push({ theme, supplied: changedSummary.state, retained: retainedSummary.state, unknownClientRefused: true }); await context.close();
+  } await writeFile(join(output, 'result.json'), JSON.stringify({ status: 'passed', outcomes, scope: 'A labeled public positive summary specimen is replaced through ordinary evidence upload; all later summaries and retained-ID refusals use the actual packed backend, no fixture authentication or native use', humanAcceptance: 'pending' }, null, 2)); } finally { await browser.close(); }
 }

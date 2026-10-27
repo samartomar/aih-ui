@@ -14,7 +14,8 @@ export async function summaryFixtures() {
     }
     const result = await summariseItem(input);
     assert.equal(result.status, 'summarised'); assert.deepEqual(result.summary, specimen.value);
-    cases.push({ row: specimen.row, name: specimen.name, result });
+    const document = specimen.input.assessmentsInput.assessments.find(candidate => candidate.document)?.document;
+    cases.push({ row: specimen.row, name: specimen.name, result, ...(document ? { evidenceBytes: [...new TextEncoder().encode(stable(document))] } : {}) });
   }
   return cases;
 }

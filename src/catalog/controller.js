@@ -56,6 +56,10 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   let browseKey, browseContentKey, browseResult, browseAttempt = 0;
   let enterprise = false;
   const savedSetSources = new Set();
+  try {
+    const prior = JSON.parse(sessionStorage.getItem('aih-ui-framework-context') ?? 'null');
+    if (typeof prior?.name === 'string' && typeof prior.source === 'string') state.lastFramework = prior;
+  } catch { state.lastFramework = null; }
   const choices = new Map();
   const startingSets = createStartingSets({ container: document.getElementById('starting-sets'), onChange: (requests, allItems) => {
     const framework = currentFramework(); if (!framework) return;
@@ -70,7 +74,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   function saveBrowsing() { try { sessionStorage.setItem('aih-ui-set-browsing', JSON.stringify([...choices])); } catch { state.browsingStorageUnavailable = true; } }
   try { for (const [key, value] of JSON.parse(sessionStorage.getItem('aih-ui-set-browsing') ?? '[]')) if (Array.isArray(value.requests)) choices.set(key, value); } catch { choices.clear(); }
   async function readBrowse(framework, choice, inspect = false) {
-    const contentKey = JSON.stringify([framework?.sha256, chosenTool?.id, choice.requests, enterprise]);
+    const contentKey = JSON.stringify([framework?.sha256, chosenTool?.id, choice.requests, enterprise, authoring.evidenceRevision]);
     const inspectedItem = inspect ? selectedEntry()?.authoringItem : undefined;
     const itemId = inspectedItem && framework && inspectedItem.root.releaseSha256 === framework.sha256 ? inspectedItem.id : undefined;
     const key = JSON.stringify([contentKey, inspect, itemId]);
@@ -232,8 +236,13 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     family.value = state.view.family;
     const available = authoring.catalog?.frameworks?.filter(framework => framework.state === 'ready') ?? [];
     const current = available.find(framework => sourceFilterValue('family', framework.name, framework.sha256) === state.view.source);
-    const selectedFramework = legacyBrowsing ? null : current ?? available[0];
+    const last = available.find(framework => sourceFilterValue('family', framework.name, framework.sha256) === state.lastFramework?.source);
+    const selectedFramework = legacyBrowsing ? null : current ?? last ?? available[0];
     if (!legacyBrowsing && !current && selectedFramework) { if (state.view.family && state.view.family !== selectedFramework.name) state.missingFramework = `The previous framework ${state.view.family} is unavailable. Showing ${selectedFramework.name}; saved choices are unchanged.`; state.view.family = selectedFramework.name; state.view.source = sourceFilterValue('family', selectedFramework.name, selectedFramework.sha256); saveView(state.view); }
+    if (selectedFramework) {
+      const context = { name: selectedFramework.name, source: sourceFilterValue('family', selectedFramework.name, selectedFramework.sha256) };
+      if (state.lastFramework?.source !== context.source) { state.lastFramework = context; try { sessionStorage.setItem('aih-ui-framework-context', JSON.stringify(context)); } catch { state.browsingStorageUnavailable = true; } }
+    }
     family.value = state.view.family;
     frameworks.setCatalog(authoring.catalog, state.view);
     const guidance = document.querySelector('.framework-landing');
@@ -393,6 +402,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
           restoreView(state.view, state.counts);
           restoredView = true;
         }
+        const ready = authoring.catalog.frameworks?.filter(framework => framework.state === 'ready') ?? [];
+        if (!legacyBrowsing && state.lastFramework && ready.length && !ready.some(framework => sourceFilterValue('family', framework.name, framework.sha256) === state.lastFramework.source)) state.missingFramework = `The previous framework ${state.lastFramework.name} is unavailable. Showing ${ready[0].name}; saved choices are unchanged.`;
         if (![...family.options].some(option => option.value === state.view.family)) state.view.family = '';
         if (![...target.options].some(option => option.value === state.view.target)) state.view.target = target.options[0]?.value ?? '';
         toolbar.setQuery(state.view.query);
