@@ -60,7 +60,7 @@ export async function runFrameworksBrowser({ origin, output, playwrightModule, s
         assert.equal(await release.getAttribute('aria-pressed'),'true');
         if(scenario==='ready') {
           await page.locator('#catalog-filter-disclosure > summary').click();await page.locator('#browse-family').selectOption('');
-          assert.equal(await internal.getAttribute('aria-pressed'),'true','Clearing secondary filters preserves a valid framework context');
+          assert.equal(await release.getAttribute('aria-pressed'),'true','Clearing secondary filters preserves the selected valid release framework');
           await page.locator('#catalog-filters-close').click();await internal.click();
           await page.locator('#catalog-filter-disclosure > summary').click();await page.locator('#catalog-reset-filters').click();
           assert.equal(await internal.getAttribute('aria-pressed'),'true','Normal reset preserves the current framework context');await page.locator('#catalog-filters-close').click();
