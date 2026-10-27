@@ -91,7 +91,11 @@ export async function runSetInputsBrowser({ origin, output, playwrightModule, ex
     const ids = await panel.locator('[data-configuration-item]').evaluateAll(nodes => nodes.map(node => node.dataset.configurationItem));
     for (const itemId of ids) {
       const editor = panel.locator(`[data-configuration-item="${itemId}"]`);
-      for (const [name, value] of Object.entries(inputs)) await editor.getByLabel(`${name} for ${itemId}`, { exact: true }).fill(value);
+      for (const [name, value] of Object.entries(inputs)) {
+        const explicit = editor.getByLabel(`Set ${name} explicitly`, { exact: true });
+        if (!await explicit.isChecked()) await explicit.check();
+        await editor.getByLabel(`${name} for ${itemId}`, { exact: true }).fill(value);
+      }
       const reply = page.waitForResponse(response => response.url().endsWith('/api/authoring-browse-content') && response.request().postDataJSON().configurations?.some(root => root.itemId === itemId && root.configuration.npmCli === inputs.npmCli));
       await editor.getByRole('button', { name: 'Review configuration', exact: true }).click(); await reply;
     }

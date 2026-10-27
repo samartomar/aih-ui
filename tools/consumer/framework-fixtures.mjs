@@ -68,7 +68,7 @@ export async function frameworkFixtures(directory, catalogArtifact) {
   const routeItems = [{ item: superpowers.release.items.find(item => item.role === 'choosable') }];
   const nativeRoutes = [{ framework: superpowers.release.framework.id, lines: superpowers.release.nativeRoutes }];
   expected.routes = { framework: superpowers.release.framework, sha256: superpowers.release.sha256, nativeRoutes,
-    byTool: Object.fromEntries(['claude', 'codex', 'copilot', 'antigravity'].map(tool => [tool, checkCompatibility({ tool, platform: { os: 'linux', arch: 'x64' }, items: routeItems, binding: toolBindings.find(binding => binding.tool === tool), nativeRoutes }).pluginRoutes])),
+    byTool: Object.fromEntries(['claude', 'codex', 'copilot', 'antigravity', 'kiro'].map(tool => [tool, checkCompatibility({ tool, platform: { os: 'linux', arch: 'x64' }, items: routeItems, binding: toolBindings.find(binding => binding.tool === tool), nativeRoutes }).pluginRoutes])),
     refusal: checkCompatibility({ tool: 'claude', platform: { os: 'linux', arch: 'x64' }, items: routeItems, binding: toolBindings.find(binding => binding.tool === 'claude'), nativeRoutes: [{ framework: superpowers.release.framework.id, lines: [null] }] }) };
 
   const supported = release => release.items.filter(item => item.role !== 'supporting').filter(item => {

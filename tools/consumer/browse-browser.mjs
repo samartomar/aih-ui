@@ -385,14 +385,22 @@ export async function runPluginRoutesBrowser({ origin, output, expected, playwri
     await page.screenshot({ path: join(output, theme + '-listed.png') });
     await page.locator('#cards-grid [data-card-id]').first().locator('.wb-card-title').click(); await page.locator('#inspector-browse-facts [data-plugin-routes="listed"]').waitFor();
     await page.screenshot({ path: join(output, theme + '-inspector.png') }); await page.locator('#close-inspector-btn').click();
-    for (const tool of ['codex', 'copilot', 'antigravity']) {
+    for (const tool of ['codex', 'copilot', 'antigravity', 'kiro']) {
       await page.locator('#your-tool-trigger').click(); await page.locator(`[data-tool="${tool}"]`).click();
-      const empty = page.locator('#cards-grid [data-plugin-routes="not-listed"]'); await empty.first().waitFor();
-      assert.equal(await empty.first().getByText(/own plugin/).count(), 0);
+      const value = expected.routes.byTool[tool][0];
+      const shown = page.locator(`#cards-grid [data-plugin-routes="${value.state}"]`); await shown.first().waitFor();
+      if (value.state === 'listed') for (const line of value.lines) assert.ok((await shown.first().innerText()).includes(line));
+      else assert.equal(await shown.first().getByText(/own plugin/).count(), 0);
       const response = await (await context.request.post(origin + '/api/authoring-browse-content', { headers: { origin }, data: { ...request, tool } })).json();
-      assert.deepEqual(response.compatibility.pluginRoutes, expected.routes.byTool[tool]); assert.equal(expected.routes.byTool[tool][0].state, 'not-listed');
-      outcomes.push({ theme, tool, state: 'not-listed', attributionGap: tool === 'copilot' || tool === 'antigravity' });
+      assert.deepEqual(response.compatibility.pluginRoutes, expected.routes.byTool[tool]);
+      // Producer handoff expectations for this exact published Superpowers source.
+      assert.equal(value.lines.length, ({ codex: 0, copilot: 2, antigravity: 1, kiro: 0 })[tool]);
+      outcomes.push({ theme, tool, state: value.state, lines: value.lines, attributionGap: false });
+      await page.screenshot({ path: join(output, `${theme}-${tool}.png`) });
     }
+    const unknown = await (await context.request.post(origin + '/api/authoring-browse-content', { headers: { origin }, data: { ...request, tool: 'unknown-public-tool' } })).json();
+    assert.equal(unknown.status, 'unavailable');
+    outcomes.push({ theme, unknownTool: 'unavailable', reason: unknown.reason });
     await page.locator('#your-tool-trigger').click(); await page.locator('[data-tool="claude"]').click();
     await framework(page, expected.prepared); await page.locator('#cards-grid [data-plugin-routes="not-supplied"]').first().waitFor();
     await framework(page, expected.routes);
