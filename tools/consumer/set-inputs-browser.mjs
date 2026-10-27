@@ -81,13 +81,8 @@ export async function runSetInputsBrowser({ origin, output, playwrightModule, ex
       await editor.getByRole('button', { name: 'Review configuration', exact: true }).click(); await reply;
     }
     await page.locator('#starting-sets .set-refusal').waitFor({ state: 'detached' });
-    const members = page.locator('#starting-sets .set-members'); await members.locator('> summary').click();
-    const hook = members.locator('input[data-member^="ecc.hook"]:not(:disabled)').first();
-    const hookId = await hook.getAttribute('data-member'); assert.ok(hookId, 'A producer-declared optional hook remains a separate choice');
-    const included = page.waitForResponse(response => response.url().endsWith('/api/authoring-browse-content') && response.request().postDataJSON().sets?.some(set => set.members?.some(member => member.item.itemId === hookId && member.include)));
-    await hook.check(); await included;
-    const excluded = page.waitForResponse(response => response.url().endsWith('/api/authoring-browse-content') && response.request().postDataJSON().sets?.some(set => set.members?.some(member => member.item.itemId === hookId && !member.include)));
-    await members.locator(`input[data-member="${hookId}"]`).uncheck(); assert.equal((await (await excluded).json()).status, 'read');
+    // This actual ECC content publishes no hook items. Hook/exclusion behavior is
+    // exercised separately by the existing labelled public cross-hook fixture.
     const resolvedReply = page.waitForResponse(response => /authoring-(?:draft-edit|edit)$/.test(response.url()));
     await page.locator('[data-add-sets]').click(); const result = await (await resolvedReply).json();
     assert.ok(result.diagnostics?.some(value => value.code === 'POLICY_BOUND_EXCEEDED'), 'The existing executable policy bound is retained');
@@ -98,7 +93,7 @@ export async function runSetInputsBrowser({ origin, output, playwrightModule, ex
     assert.equal(saved.executable, false); const intent = intentOf(saved);
     assert.ok(intent.roots.some(root => root.itemId === unrelated));
     assert.deepEqual(choicesOf(saved).find(choice => choice.request.setId === expected.ecc.optionSet.id).request.options, expected.ecc.requests[0].options);
-    assert.ok(choicesOf(saved).find(choice => choice.request.setId === expected.ecc.optionSet.id).request.members.some(member => member.item.itemId === hookId && member.include === false));
+    assert.deepEqual(choicesOf(saved).find(choice => choice.request.setId === expected.ecc.optionSet.id).request.members, expected.ecc.requests[0].members);
     for (const itemId of ids) assert.deepEqual(intent.roots.find(root => root.itemId === itemId).configuration, inputs);
     // Refresh does not use browsing-cache inputs: the accepted draft is their authority.
     assert.ok(!(await page.evaluate(() => sessionStorage.getItem('aih-ui-set-browsing'))).includes(inputs.npmCli));
