@@ -857,8 +857,12 @@ does not answer within two minutes is the failed state.
 
 `package-support-1.1.json`, exported as `aih-ui/package-support-1.1.json`, is
 the Workbench's package-support declaration in Core's published
-`urn:aihq:package-support:1.1.0` format. It names what the Workbench actually
-reads and writes:
+`urn:aihq:package-support:1.1.0` format. Runtime support is per public entry:
+`aih-ui/stored-results` supports Node `>=24.15.0 <25 || >=26.12.1 <27`.
+The other Node entries retain `>=24.15.0 <25`; journey, workspace and batch
+retain their portable classification. A reader's entry range does not override
+a dependency package's installation engine range or establish runtime support
+for the application host. It names what the Workbench actually reads and writes:
 
 - each format this package exports a schema for, which it writes and reopens
   (`both`), with an accepted and a refused fixture read by the Workbench's own
