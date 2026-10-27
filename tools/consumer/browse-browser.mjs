@@ -144,7 +144,7 @@ export async function runBrowseReopenBrowser({ origin, output, savedDirectory, p
     const context = await browser.newContext(); await context.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
     const page = await context.newPage(); page.setDefaultTimeout(30000); await enter(page, origin, theme);
     await openPolicyFileActions(page); await page.locator('#policy-open').setInputFiles(join(savedDirectory, `${theme}-options.json`));
-    await page.locator('#policy-draft-status').filter({ hasText: /draft opened/i }).waitFor();
+    await page.locator('#policy-draft-status').filter({ hasText: /Saved draft reopened/i }).waitFor();
     await closePolicyDrawer(page); await framework(page, expected.ecc);
     await page.locator('#your-setup').click(); const reopenedDownload = page.waitForEvent('download'); await page.locator('#policy-draft-save').click();
     await (await reopenedDownload).saveAs(join(output, `${theme}-sets-reopened.json`)); await closePolicyDrawer(page);
