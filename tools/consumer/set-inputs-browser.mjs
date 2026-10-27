@@ -24,6 +24,13 @@ async function download(page, path, draft = false) {
   await (await event).saveAs(path); await closePolicyDrawer(page);
   return JSON.parse(await readFile(path, 'utf8'));
 }
+async function expectSetConfirmation(page) {
+  const guidance = page.locator('#framework-guidance').filter({ hasText: 'Chosen sets added' });
+  await guidance.waitFor();
+  // An ordinary filter render must not erase the accepted action's feedback.
+  await page.locator('#catalog-search').dispatchEvent('input');
+  await guidance.waitFor();
+}
 export async function runSetInputsBrowser({ origin, output, playwrightModule, expected, inputs, savedDirectory }) {
   await mkdir(output, { recursive: true });
   const { chromium } = await import(playwrightModule), browser = await chromium.launch({ headless: true });
@@ -54,7 +61,7 @@ export async function runSetInputsBrowser({ origin, output, playwrightModule, ex
     await chooseFramework(expected.additional);
     const acceptedSets = page.waitForResponse(response => /authoring-(?:draft-edit|edit)$/.test(response.url()));
     await page.locator('[data-add-sets]').click(); assert.equal((await (await acceptedSets).json()).status, 'ok');
-    await page.locator('#framework-guidance').filter({ hasText: 'Chosen sets added' }).waitFor();
+    await expectSetConfirmation(page);
     const setId = await page.locator('[data-set-id][aria-pressed="true"]').first().getAttribute('data-set-id');
     await page.locator(`[data-set-id="${setId}"]`).click();
     await chooseFramework(expected.prepared);
@@ -107,7 +114,7 @@ export async function runSetInputsBrowser({ origin, output, playwrightModule, ex
     assert.ok(result.diagnostics?.some(value => value.code === 'POLICY_BOUND_EXCEEDED'), 'The existing executable policy bound is retained');
     const draftReply = page.waitForResponse(response => response.url().endsWith('/api/authoring-draft-edit'));
     await page.locator('#browse-keep-draft').click(); assert.equal((await (await draftReply).json()).status, 'ok');
-    await page.locator('#framework-guidance').filter({ hasText: 'Chosen sets added' }).waitFor();
+    await expectSetConfirmation(page);
     const saved = await download(page, join(output, `${theme}-configured.json`), true);
     assert.equal(saved.executable, false); const intent = intentOf(saved);
     assert.ok(intent.roots.some(root => root.itemId === unrelated));
@@ -116,7 +123,12 @@ export async function runSetInputsBrowser({ origin, output, playwrightModule, ex
     for (const itemId of ids) assert.deepEqual(intent.roots.find(root => root.itemId === itemId).configuration, inputs);
     // Refresh does not use browsing-cache inputs: the accepted draft is their authority.
     assert.ok(!(await page.evaluate(() => sessionStorage.getItem('aih-ui-set-browsing'))).includes(inputs.npmCli));
-    await page.reload(); await page.locator('#starting-sets [data-option]').first().waitFor();
+    const refreshed = page.waitForResponse(response => response.url().endsWith('/api/authoring-browse-content') && response.request().postDataJSON().releaseSha256 === expected.ecc.sha256 && response.request().postDataJSON().configurations?.some(root => root.configuration.npmCli === inputs.npmCli));
+    await page.reload();
+    const refreshedContent = await (await refreshed).json();
+    assert.equal(refreshedContent.status, 'read'); assert.equal(refreshedContent.resolution.status, 'ok');
+    await page.locator('#starting-sets [data-option]').first().waitFor();
+    await page.locator('#cards-grid [data-card-id]').first().waitFor();
     assert.equal(await page.locator(`[data-option="${expected.ecc.language.id}"]`).isChecked(), true);
     await page.screenshot({ path: join(output, `${theme}-configured.png`), animations: 'disabled' });
     outcomes.push({ theme, collection: 'configured', language: expected.ecc.language.id, saved: 'exact', sourceRefresh: 'retained', execution: false, firstId }); await context.close();

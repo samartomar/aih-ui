@@ -56,6 +56,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   let browseKey, browseContentKey, browseResult, browseAttempt = 0;
   let enterprise = false;
   const savedSetSources = new Set();
+  let setFeedback;
   try {
     const prior = JSON.parse(sessionStorage.getItem('aih-ui-framework-context') ?? 'null');
     if (typeof prior?.name === 'string' && typeof prior.source === 'string') state.lastFramework = prior;
@@ -64,6 +65,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   const startingSets = createStartingSets({ container: document.getElementById('starting-sets'), onChange: (requests, allItems, configurations) => {
     const framework = currentFramework(); if (!framework) return;
     const prior = browseChoice(framework);
+    setFeedback = undefined;
     choices.set(framework.sha256, { requests, allItems, configurations: configurations ?? prior.configurations }); saveBrowsing(); render();
   }, onAdd: requests => addSets(requests) });
   function currentFramework() { return authoring.catalog?.frameworks?.find(framework => sourceFilterValue('family', framework.name, framework.sha256) === state.view.source); }
@@ -90,11 +92,20 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     if (factsOnly) { cards.updateFacts(cardsModel()); details.render(detailsModel(selectedEntry())); } else render();
   }
   async function addSets(requests) {
-    const result = await authoring.propose({ type: 'select-sets', sets: requests, configurations: browseChoice(currentFramework()).configurations, releaseSha256: currentFramework()?.sha256, tool: chosenTool?.id });
+    const framework = currentFramework(), tool = chosenTool?.id;
+    const result = await authoring.propose({ type: 'select-sets', sets: requests, configurations: browseChoice(framework).configurations, releaseSha256: framework?.sha256, tool });
     if (result.status === 'ok' && authoring.candidate && !result.diagnostics?.length) authoring.accept();
+    setFeedback = { framework: framework?.sha256, tool, result, requests };
+    renderSetGuidance();
+  }
+  function renderSetGuidance() {
     const guidance = document.getElementById('framework-guidance');
-    guidance.textContent = result.status === 'ok' ? 'Chosen sets added. Review Your setup; save to keep the exact options and origins.' : (result.diagnostics?.map(value => value.message).join(' ') || 'The selected sets could not be added.');
-    if (!authoring.draft && result.diagnostics?.some(value => value.code === 'POLICY_BOUND_EXCEEDED')) {
+    if (setFeedback && (setFeedback.framework !== currentFramework()?.sha256 || setFeedback.tool !== chosenTool?.id)) setFeedback = undefined;
+    const { result, requests } = setFeedback ?? {};
+    guidance.textContent = result
+      ? result.status === 'ok' ? 'Chosen sets added. Review Your setup; save to keep the exact options and origins.' : (result.diagnostics?.map(value => value.message).join(' ') || 'The selected sets could not be added.')
+      : chosenTool ? 'Choose content below. Add it to Your setup, then review your choices.' : 'Choose your tool in the header, then explore the framework below.';
+    if (!authoring.draft && result?.diagnostics?.some(value => value.code === 'POLICY_BOUND_EXCEEDED')) {
       const keep = el('button', 'set-choice', 'Keep set choices in a draft'); keep.type = 'button'; keep.id = 'browse-keep-draft';
       attachTooltip(keep, 'Explicitly keep these choices in a non-executable draft, retaining the original policy bytes. Existing policy bounds still apply when compiling.');
       keep.addEventListener('click', async () => { keep.disabled = true; const opened = await authoring.openDraft(); if (opened.status === 'ok') await addSets(requests); else guidance.textContent = opened.diagnostics?.map(value => value.message).join(' ') || 'The draft could not be opened. Original choices remain.'; });
@@ -250,7 +261,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     const guidance = document.querySelector('.framework-landing');
     guidance.dataset.step = chosenTool ? 'choose-content' : 'choose-tool';
     document.getElementById('framework-first-step').textContent = chosenTool ? `Browsing for ${chosenTool.label}` : 'Choose your tool';
-    document.getElementById('framework-guidance').textContent = chosenTool ? 'Choose content below. Add it to Your setup, then review your choices.' : 'Choose your tool in the header, then explore the framework below.';
+    renderSetGuidance();
     const choice = browseChoice(selectedFramework);
     readBrowse(selectedFramework, choice, Boolean(state.selectedId));
     startingSets.render({ framework: selectedFramework, frameworks: authoring.catalog?.frameworks, ...choice, result: browseResult, hasTool: Boolean(chosenTool), saved: savedSetSources.has(selectedFramework?.sha256), items: authoring.catalog?.items ?? [] });
