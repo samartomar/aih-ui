@@ -117,7 +117,8 @@ export async function runYourToolBrowser({ origin, output, playwrightModule, the
     assert.equal(await trigger(page).evaluate(node => node === document.activeElement), true, 'The keyboard reaches Your tool.');
     await bubble(page).waitFor({ state: 'visible' });
     assert.equal(await bubble(page).innerText(), await trigger(page).getAttribute('data-tooltip'));
-    assert.match(await bubble(page).innerText(), new RegExp(`^Your tool: ${first.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\. Core's inspection`));
+    const expectedInspection = inspection.method === 'read-only-host' ? '(?:Host version unchecked:|Version )' : "Core's inspection";
+    assert.match(await bubble(page).innerText(), new RegExp(`^Your tool: ${first.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\. ${expectedInspection}`));
     await page.keyboard.press('Enter');
     await page.locator('#your-tool-pop').waitFor();
     assert.equal(await page.locator(`#your-tool-list > button[data-tool="${first.id}"]`).evaluate(node => node === document.activeElement), true, 'Opening focuses Your tool.');

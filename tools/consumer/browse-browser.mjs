@@ -178,7 +178,7 @@ export async function runOptionalHookBrowser({ origin, output, playwrightModule,
     assert.match(await page.locator('#framework-navigation').innerText(), /Test fixture sources/);
     const catalog = await (await context.request.get(origin + '/api/authoring-catalog')).json();
     const fixture = catalog.frameworks.find(row => row.kind === 'fixture' && row.reason?.startsWith('Selection-only public golden') && row.sets?.length);
-    const alternate = catalog.frameworks.find(row => row.reason?.startsWith('Distinct checked version'));
+    const alternate = catalog.frameworks.find(row => row.reason?.startsWith('Distinct checked TEST version'));
     assert.equal(alternate.id, fixture.id); assert.notEqual(alternate.sha256, fixture.sha256);
     await page.locator(`[data-framework="fixture:${alternate.id}:${alternate.sha256}"]`).click(); await page.locator('#browse-all-items').check();
     const unrelated = page.locator('#cards-grid [data-kind="skill"] button[aria-label^="Add "]:not(:disabled)').first(); const unrelatedId = (await unrelated.getAttribute('aria-label')).slice(4);
@@ -193,7 +193,9 @@ export async function runOptionalHookBrowser({ origin, output, playwrightModule,
     await tick.check().catch(async error => { await page.screenshot({ path: join(output, `${theme}-hook-failed.png`) }); await writeFile(join(output, `${theme}-hook-failed.html`), await page.content()); throw error; }); await page.waitForFunction(id => document.querySelector(`input[data-member="${id}"]`)?.checked, member.item.itemId);
     await page.locator('#starting-sets .set-note').filter({ hasText: 'refused' }).waitFor();
     await tick.uncheck();
+    const added = page.waitForResponse(response => /authoring-(?:draft-edit|edit)$/.test(response.url()));
     await page.locator('[data-add-sets]').click();
+    const addedValue = await (await added).json(); if (addedValue.status !== 'ok') await writeFile(join(output, `${theme}-hook-set-refused.json`), JSON.stringify(addedValue, null, 2)); assert.equal(addedValue.status, 'ok', JSON.stringify(addedValue.diagnostics));
     await page.waitForFunction(() => document.getElementById('framework-guidance').textContent.includes('Chosen sets added'));
     const policy = await save(page, join(output, `${theme}-excluded-hook.json`)); const intent = policy.metadata['aih.workbench'];
     assert.ok(intent.exclusions.some(value => value.itemId === member.item.itemId && value.releaseSha256 === fixture.sha256), 'An exclusion binds the exact selected set release, not the first framework version');

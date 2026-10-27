@@ -2,6 +2,7 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
+import { stable } from './primitives.mjs';
 import { readReleaseContent, readReleaseSets } from '@aihq/catalog/reader';
 const bytes = specifier => readFile(fileURLToPath(import.meta.resolve(specifier)));
 const sha256 = value => createHash('sha256').update(value).digest('hex');
@@ -20,9 +21,13 @@ export async function optionalHookFixture() {
     }
     inventories.push({ release, family: release.framework.name, materialSource: { kind: 'local', input: `fixture-${name}` }, materials: [], fixture: 'Selection-only public golden specimen. Material acquisition, Prepare and execution are not part of this fixture.' });
   }
-  const alternateBytes = await bytes('@aihq/catalog/release-superpowers.content.json');
+  const alternateDocument = JSON.parse(await bytes('@aihq/catalog/release-superpowers.content.json'));
+  // A declared test version of public content, admitted by the real reader.
+  // No producer file, index entry, baseline or trust statement is changed.
+  alternateDocument.framework.version = '999.0.0';
+  const alternateBytes = new TextEncoder().encode(stable(alternateDocument) + '\n');
   const alternate = readReleaseContent(alternateBytes, { expectedSha256: sha256(alternateBytes) });
   if (!alternate.valid) throw new Error('Public alternate framework content refused.');
-  inventories.unshift({ release: alternate.release, family: alternate.release.framework.name, materialSource: { kind: 'local', input: 'fixture-other-version' }, materials: [], fixture: 'Distinct checked version of the same framework; selection-only fixture, no execution.' });
+  inventories.unshift({ release: alternate.release, family: alternate.release.framework.name, materialSource: { kind: 'local', input: 'fixture-other-version' }, materials: [], fixture: 'Distinct checked TEST version of the same framework; generated selection-only fixture, not a production release, no execution.' });
   return inventories;
 }
