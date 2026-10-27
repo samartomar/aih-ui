@@ -31,6 +31,7 @@ async function main() {
   // already on screen, not only ones built after it.
   createTheme();
   const shell = createShell(shellElements());
+  let catalog;
   try {
     const policyWorkspace = createPolicyWorkspace();
     const authoring = createAuthoringClient();
@@ -60,7 +61,7 @@ async function main() {
       onComplete: applySettings,
     });
 
-    const catalog = createCatalog({
+    catalog = createCatalog({
       authoring,
       subscribeSecurity: shell.subscribeSecurity,
       onAdd: item => authoringWorkspace.add(item),
@@ -88,6 +89,7 @@ async function main() {
     catalog.setTool(yourTool.current());
   } catch (error) {
     shell.showError(error?.message ?? String(error));
+    catalog?.sourceUnavailable(error?.message ?? String(error));
     const families = document.getElementById('framework-navigation');
     if (families && !families.querySelector('button')) families.textContent = 'Content families unavailable. See the source error.';
   }

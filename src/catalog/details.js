@@ -184,8 +184,10 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
         if (item.derivedFrom) authored.append(el('p', '', `Derived from ${JSON.stringify(item.derivedFrom)}`));
         context.append(authored, renderBrowseFacts(item, browse, tool, { detailed: true }));
         const comes = el('div', 'inspector-row'); comes.append(el('strong', '', 'Comes with'));
-        const support = (item.dependencies?.requires ?? []).map(ref => authoring?.catalog?.items.find(value => value.root.releaseSha256 === item.root.releaseSha256 && value.id === ref.itemId)).filter(value => value?.role === 'supporting');
-        comes.append(el('p', '', support.length ? support.map(value => value.name ?? value.label).join(' · ') : 'No supporting material declared.')); context.append(comes);
+        const closure = browse?.dependencies?.itemId === item.id ? browse.dependencies.resolution : undefined;
+        const support = (closure?.value?.selections ?? []).map(selection => authoring?.catalog?.items.find(value => value.root.releaseSha256 === selection.item.releaseSha256 && value.id === selection.item.itemId)).filter(value => value?.role === 'supporting');
+        comes.append(el('p', '', closure?.status === 'ok' ? support.length ? support.map(value => value.name ?? value.label).join(' · ') : 'No supporting content in Catalog’s resolved closure.' : closure ? 'Catalog could not resolve supporting content with the current configuration.' : 'Supporting-content closure unchecked.'));
+ context.append(comes);
         const replaces = el('div', 'inspector-row'); replaces.append(el('strong', '', 'Replaces'), el('p', '', item.supersedes?.length ? item.supersedes.map(value => value.itemId).join(' · ') : 'No replacements declared.')); context.append(replaces);
         const copies = el('div', 'inspector-row'); copies.append(el('strong', '', 'Also seen by your tool'), el('p', '', browse?.host?.items ? JSON.stringify(browse.host.items.find(value => value.itemId === item.id)?.copies ?? 'Copies not reported.') : 'Copies unchecked. No client was launched.')); context.append(copies);
         const start = el('div', 'inspector-row'); start.append(el('strong', '', 'How it starts'), el('p', '', item.payload?.invocation ?? 'Activation not published.')); context.append(start);

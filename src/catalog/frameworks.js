@@ -4,10 +4,11 @@ import { iconSpan } from '../app/icons.js';
 import { sourceFilterValue } from './selectors.js';
 // Names, availability and observations are public reader results projected by the host.
 export function createFrameworkNavigation({ container, onChoose, onFirstStep }) {
-  let catalog, tool, selected;
+  let catalog, tool, selected, failure;
   function render() {
     const focused = container.contains(document.activeElement) ? document.activeElement.dataset.framework : undefined;
     container.replaceChildren();
+    if (failure) { const message = el('p', '', 'Content families unavailable. See the source error.'); attachTooltip(message, failure); container.append(message); return; }
     if (!catalog) { container.append(el('p', '', 'Loading frameworks and observed counts…')); return; }
     if (catalog.frameworkFixture) container.append(el('p', 'framework-source-note', `Test fixture sources — not production data. ${catalog.frameworkFixtureLabel ?? ''}`));
     for (const source of catalog.frameworkSources ?? []) {
@@ -50,7 +51,7 @@ export function createFrameworkNavigation({ container, onChoose, onFirstStep }) 
   const landing = document.getElementById('framework-first-step');
   landing?.addEventListener('click', () => onFirstStep());
   render();
-  return { setCatalog(value, view) {
+  return { setFailure(message) { failure = message; render(); }, setCatalog(value, view) {
     catalog = value;
     const current = value?.frameworks?.find(framework => view?.family === framework.name && view?.source === sourceFilterValue('family', framework.name, framework.sha256));
     selected = current ? `${current.kind}:${current.id}:${current.sha256}` : undefined;

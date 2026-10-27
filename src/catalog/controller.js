@@ -71,12 +71,14 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   try { for (const [key, value] of JSON.parse(sessionStorage.getItem('aih-ui-set-browsing') ?? '[]')) if (Array.isArray(value.requests)) choices.set(key, value); } catch { choices.clear(); }
   async function readBrowse(framework, choice, inspect = false) {
     const contentKey = JSON.stringify([framework?.sha256, chosenTool?.id, choice.requests, enterprise]);
-    const key = JSON.stringify([contentKey, inspect]);
+    const inspectedItem = inspect ? selectedEntry()?.authoringItem : undefined;
+    const itemId = inspectedItem?.root.releaseSha256 === framework?.sha256 ? inspectedItem.id : undefined;
+    const key = JSON.stringify([contentKey, inspect, itemId]);
     const factsOnly = inspect && contentKey === browseContentKey;
     if (key === browseKey) return;
     browseKey = key; browseContentKey = contentKey; const attempt = ++browseAttempt; if (!factsOnly) browseResult = undefined;
     if (!framework) return;
-    try { const result = await authoring.request('browse-content', { releaseSha256: framework.sha256, tool: chosenTool?.id, sets: choice.requests, inspect, enterprise, policyBytes: undefined });
+    try { const result = await authoring.request('browse-content', { releaseSha256: framework.sha256, tool: chosenTool?.id, sets: choice.requests, inspect, itemId, enterprise, policyBytes: undefined });
       if (attempt !== browseAttempt) return; browseResult = result;
     } catch { if (attempt !== browseAttempt) return; browseResult = { status: 'failed', reason: 'Could not read this source’s sets or tool fit. Your choices are unchanged.' }; }
     if (factsOnly) { cards.updateFacts(cardsModel()); details.render(detailsModel(selectedEntry())); } else render();
@@ -341,6 +343,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   }
 
   return {
+    sourceUnavailable: message => { if (!authoring.catalog) frameworks.setFailure(message); },
     setMode: settings => { enterprise = ['admin', 'developer'].includes(settings?.role); render(); },
     setTool: tool => { chosenTool = tool; frameworks.setTool(tool); render(); },
     async start() {

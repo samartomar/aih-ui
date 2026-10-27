@@ -7,10 +7,9 @@
  *                    A tool is observed when `listTools()` also lists it; an
  *                    unobserved tool carries the refusal `selectTool` gives for it
  *                    (its code and reason), never a reason written here.
- *   toolInspection() Core `inspect({ network: 'off' })` from `@aihq/core`: each
- *                    tool's existence/run `state` and `selection`, and the
- *                    observations for its target. Offline, so no network probe
- *                    runs; read-only, so nothing is repaired or recorded.
+ *   toolInspection() Harness `inspectToolHost` from its runtime export:
+ *                    bounded read-only filesystem/configuration facts, with
+ *                    unknown versions kept unchecked. No client is launched.
  *
  * The harness module is imported as a namespace, so a Core that predates
  * `listTools` answers "unavailable" instead of failing to load. Nothing here
