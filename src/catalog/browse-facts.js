@@ -47,7 +47,8 @@ export function renderBrowseFacts(item, browse, tool, { detailed = false, onAppr
     row.dataset.mcpApproval = approval.approvable ? 'offered' : 'in-tool';
     // The box reflects the artifact: after a tick/untick the card re-renders, and a hardcoded false
     // would silently drop the person's choice (their next click would toggle the wrong way).
-    const box = el('input', 'mt-0.5'); box.type = 'checkbox'; box.checked = Boolean(approved); box.disabled = !approval.approvable;
+    const box = el('input', 'mt-0.5'); box.type = 'checkbox'; box.checked = Boolean(approved);
+    box.disabled = !approval.approvable || typeof onApprove !== 'function';
     box.dataset.server = item.id; box.setAttribute('aria-label', `${approval.words} (${item.id})`);
     row.append(box, el('span', '', `${approval.words}. ${approval.requirements}`));
     attachTooltip(row, approval.reason);

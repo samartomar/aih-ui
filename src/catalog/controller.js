@@ -208,11 +208,13 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   function unusable(entry) { const fit = browseResult?.compatibility?.items?.find(value => value.item.itemId === entry.authoringItem.id); return fit && (fit.support === 'none' || fit.notRendered || fit.staticBlockers?.length); }
   // Whether the open artifact currently carries the one-server approval for an item: the card's tick must
   // reflect this exactly, or a re-render silently flips it back to unchecked.
+  // Whether the open artifact currently grants the one-server approval for an item: the selection for this
+  // exact item whose inline recipe carries Core's approve-server operation (the one-server approval op).
   const approvalGranted = itemId => {
     try {
       const policy = JSON.parse(new TextDecoder().decode(authoring.bytes));
       const selection = (policy.selections ?? []).find(candidate => candidate.item?.itemId === itemId);
-      return Boolean(selection && JSON.stringify(selection.recipe?.inline?.operations ?? []).includes('approve-server'));
+      return Boolean(selection?.recipe?.inline?.operations?.some(operation => operation.id === 'approve-server'));
     } catch { return false; }
   };
   function cardsModel() {
@@ -245,6 +247,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       },
       // The one-server tick: exactly this server, through the ordinary edit operation; the consumer renders
       // the approval into the recipe. A failure leaves the box unticked and says why (#162).
+      approvalOf: approvalGranted,
       onApprove: async (item, granted) => {
         const framework = currentFramework();
         const result = await authoring.request('edit', { operation: { type: 'mcp-approval', root: { releaseSha256: framework?.sha256, itemId: item.id, scope: 'project' }, granted }, tool: chosenTool?.id });

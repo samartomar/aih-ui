@@ -155,7 +155,7 @@ function card(entry, selectedId, onSelect, model) {
   }
   head.appendChild(toggle);
   if (entry.authoringItem?.role) {
-    foot.replaceChildren(renderBrowseFacts(entry.authoringItem, model.browse, model.tool, { onApprove: (item, granted) => model.onApprove?.(item, granted) }));
+    foot.replaceChildren(renderBrowseFacts(entry.authoringItem, model.browse, model.tool, { onApprove: (item, granted) => model.onApprove?.(item, granted), approved: model.approvalOf?.(entry.authoringItem.id) ?? false }));
     const namespace = el('span', 'card-namespace', entry.authoringItem.id);
     attachTooltip(namespace, `Namespaced Catalog identity: ${entry.authoringItem.id}`); top.append(namespace);
     const facts = itemBrowseFacts(entry.authoringItem, model.browse, model.tool);
@@ -223,7 +223,7 @@ export function createCards({ elements, onSelect }) {
         if (!entry.authoringItem?.role) continue;
         const node = elements.cardsGrid.querySelector(`[data-card-id="${CSS.escape(entry.entryId)}"]`);
         const facts = node?.querySelector('.browse-facts');
-        if (facts) facts.replaceWith(renderBrowseFacts(entry.authoringItem, model.browse, model.tool, { onApprove: (item, granted) => model.onApprove?.(item, granted) }));
+        if (facts) facts.replaceWith(renderBrowseFacts(entry.authoringItem, model.browse, model.tool, { onApprove: (item, granted) => model.onApprove?.(item, granted), approved: model.approvalOf?.(entry.authoringItem.id) ?? false }));
       }
     },
 
