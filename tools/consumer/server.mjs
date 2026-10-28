@@ -1,5 +1,5 @@
 import { browsePolicy } from './browse-policy.mjs';
-import { browseContent } from './browse-content.mjs';
+import { browseContent, inspectChosenHost } from './browse-content.mjs';
 import { createServer } from 'node:http';
 import { readFile, mkdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -212,6 +212,9 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
             result.policy = await browsePolicy(inventory, body.tool, source.organization);
           }
           return send(response, 200, result);
+        }
+        if (operation === 'tool-host') {
+          return send(response, 200, await inspectChosenHost(mixedService.inventories, body, folder.project));
         }
         if (operation === 'scan-evidence') {
           const [releaseSha256, itemId] = String(body.target ?? '').split('/');

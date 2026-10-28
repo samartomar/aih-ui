@@ -1,6 +1,8 @@
 import { el } from '../app/dom.js';
 import { iconFor, iconSpan } from '../app/icons.js';
 import { attachTooltip } from '../app/tooltip.js';
+import { copiesWords } from '../app/tool-host-warnings.js';
+import { mcpApprovalView } from '../app/mcp-approval.js';
 export function badge(group, key, words, explanation) {
   const node = el('span', 'browse-fact'); node.append(iconSpan(group, key), el('span', '', words));
   node.addEventListener('click', event => event.stopPropagation());
@@ -21,7 +23,7 @@ export function itemBrowseFacts(item, browse, tool) {
   const explanation = !fit ? (browse?.reason ?? 'Tool fit is loading or unavailable. Choose your tool; no successful use is assumed.') : `${fit.reason} ${fit.notRendered?.detail ?? ''} ${(fit.staticBlockers ?? []).map(value => value.detail).join(' ')} ${observed ? `Observed ${observed.observedAt}, ${observed.os} ${observed.arch}, tool ${observed.toolVersion}.` : `No observation on ${browse.platform?.os ?? 'unknown OS'} ${browse.platform?.arch ?? 'unknown architecture'}.`} A fallback label describes the published binding, not an installed-file check. Host facts ${host?.status ?? 'unchecked'}; static observation is not proof of use here.`;
   return { fit, scan, recipe, fitKey, words, explanation };
 }
-export function renderBrowseFacts(item, browse, tool, { detailed = false } = {}) {
+export function renderBrowseFacts(item, browse, tool, { detailed = false, onApprove = undefined } = {}) {
   const node = el('div', 'browse-facts'); const facts = itemBrowseFacts(item, browse, tool);
   node.append(badge('fit', facts.fitKey, facts.words, facts.explanation));
   if (item.payload?.invocation === 'user-only') node.append(badge('state', 'on-request', 'Only when you ask', 'Invocation is declared by this Catalog item.'));
@@ -35,7 +37,28 @@ export function renderBrowseFacts(item, browse, tool, { detailed = false } = {})
   node.append(badge('state', 'size', value, value + '. Harness delivered size; not a token estimate or measured model usage.'));
   if (item.hints?.tools?.length) node.append(badge('state', 'info', `Written for ${item.hints.tools.join(', ')}`, 'Producer-declared display hints; not tool support or a binding.'));
   if (item.variantOf) node.append(badge('state', 'info', `Variant of ${item.variantOf.itemId ?? JSON.stringify(item.variantOf)}`, JSON.stringify(item.variantOf)));
-  if (facts.fit?.permissionStep) node.append(badge('state', 'needs-ok', facts.fit.permissionStep, facts.fit.permissionStep));
+  const isMcp = item.kind === 'mcp-server' || item.kind === 'mcp';
+  if (facts.fit?.permissionStep && !isMcp) node.append(badge('state', 'needs-ok', facts.fit.permissionStep, facts.fit.permissionStep));
+  // One MCP server's own approval row: the tick is off by default, exists only when Core can write this
+  // tool's one-server approval, and never carries an input value (#162).
+  const approval = mcpApprovalView(item, facts.fit, browse, tool);
+  if (approval.state === 'checked') {
+    const row = el('label', 'browse-mcp-approval flex items-start gap-x-2 text-on-surface');
+    row.dataset.mcpApproval = approval.approvable ? 'offered' : 'in-tool';
+    const box = el('input', 'mt-0.5'); box.type = 'checkbox'; box.checked = false; box.disabled = !approval.approvable;
+    box.dataset.server = item.id; box.setAttribute('aria-label', `${approval.words} (${item.id})`);
+    row.append(box, el('span', '', `${approval.words}. ${approval.requirements}`));
+    attachTooltip(row, approval.reason);
+    if (approval.approvable && typeof onApprove === 'function') box.addEventListener('change', () => { box.disabled = true; void Promise.resolve(onApprove(item, box.checked)).finally(() => { box.disabled = false; }); });
+    node.append(row);
+  } else if (approval.state !== 'empty') node.append(badge('state', 'needs-ok', approval.words, approval.words));
+  // What the host inspection saw about a second copy, exactly as Core reported it (#163). The badge appears
+  // for inspected (chosen) items and for any item Core named in a warning; unchosen items were not checked
+  // and carry no line. The drawer states the global couldn't-check wording.
+  const inspected = browse?.host?.items?.some(hostItem => hostItem.itemId === item.id) ?? false;
+  const warned = (browse?.host?.warnings ?? []).some(warning => warning.code === 'same-key-elsewhere' && warning.item?.itemId === item.id);
+  if (inspected || warned) node.append(badge('state', 'two-copies', copiesWords(browse?.host, item.id, { chosen: inspected }),
+    'Read-only Core host inspection of your project folder. No client was launched; the Workbench does not decide what counts as a duplicate.'));
   if (facts.recipe && !facts.recipe.available) node.append(badge('state', 'info', 'Can’t be added yet', facts.recipe.reason));
   const policy = browse?.policy?.find(value => value.itemId === item.id)?.preview;
   if (browse?.enterprise && !policy) node.append(badge('state', 'policy', browse.status === 'failed' ? 'Organization policy failed' : browse.status ? 'Organization policy unavailable' : 'Organization policy loading', 'An organization preference grants no authority. The badge waits for Core’s preview over the host-configured source.'));

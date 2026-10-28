@@ -31,13 +31,19 @@ export async function browseContent(inventories, { tool, releaseSha256, sets = [
     compatibility = { items: checks.flatMap(result => result.items ?? []), sets: setCheck.sets ?? [], pluginRoutes: checks[0]?.pluginRoutes ?? setCheck.pluginRoutes, checks: checks.filter(result => result.status !== 'checked'), setCheck };
   } catch { return { status: 'failed', reason: 'Compatibility could not be checked.', resolution, platform: platform() }; }
   const dependencies = typeof itemId === 'string' && release.items.some(item => item.id === itemId) ? { itemId, resolution: resolveSelections({ releases, roots: [{ releaseSha256, itemId, scope: 'project', configuration: {} }], skips: [] }) } : undefined;
-  let host = { status: 'unavailable', reason: 'Host facts unchecked. Open an item to inspect this host; no tool is launched.' };
-  const inspectedItem = release.items.find(item => item.id === itemId);
-  if (inspect && inspectedItem && project && typeof runtime.inspectToolHost === 'function') {
+  // Host facts come from one bounded read-only inspection of everything chosen, whenever the project
+  // folder is known; the inspector no longer triggers a separate inspection (#163).
+  const hostItem = item => ({ framework: release.framework.id, itemId: item.id, kind: item.kind,
+    ...(item.payload?.dirName || item.payload?.key ? { key: item.payload.dirName ?? item.payload.key } : {}),
+    inputs: Object.keys(item.requirements?.inputs ?? {}) });
+  const chosenItems = members.filter(({ item }) => selections.some(selection => selection.item.releaseSha256 === release.sha256 && selection.item.itemId === item.id)).map(({ item }) => item);
+  let host;
+  if (!project) host = { status: 'unavailable', reason: 'Choose a project folder to check whether your tool already has your chosen content; no tool is launched.' };
+  else if (typeof runtime.inspectToolHost !== 'function') host = { status: 'unavailable', reason: 'This Core does not publish host inspection.' };
+  else if (!chosenItems.length) host = { status: 'unavailable', reason: 'Nothing is chosen from this source, so there is nothing to check for a second copy.' };
+  else {
     try {
-      host = await runtime.inspectToolHost({ tool: selected.tool.id, project, items: [{ framework: release.framework.id, itemId: inspectedItem.id, kind: inspectedItem.kind,
-        ...(inspectedItem.payload?.dirName || inspectedItem.payload?.key ? { key: inspectedItem.payload.dirName ?? inspectedItem.payload.key } : {}),
-        inputs: Object.keys(inspectedItem.requirements?.inputs ?? {}) }] }, { budgetMs: 5000 });
+      host = await runtime.inspectToolHost({ tool: selected.tool.id, project, items: chosenItems.map(hostItem) }, { budgetMs: 5000 });
     } catch { host = { status: 'failed', reason: 'Host facts could not be inspected; compatibility remains static.' }; }
   }
   const scans = [];
@@ -46,5 +52,36 @@ export async function browseContent(inventories, { tool, releaseSha256, sets = [
     scans.push({ itemId: item.id, ...result.itemSummary });
   }
   return { status: resolution.status === 'ok' ? 'read' : 'refused', ...(resolution.status === 'ok' ? {} : { diagnostics: resolution.diagnostics }), observations: release.items.map(item => ({ itemId: item.id, observations: binding?.layouts[item.kind]?.observations ?? [] })), scans, dependencies, tool: selected.tool, platform: platform(), compatibility, host, resolution,
+    // Whether Core's one-server approval write exists for this tool's MCP registration ('object-keyed' or
+    // 'array'), or null/'other' when the shape cannot be written and the person approves in the tool (#162).
+    approvalShape: binding?.layouts?.['mcp-server']?.register?.approvalLocation?.shape ?? null,
     recipes: release.items.map(item => ({ itemId: item.id, ...recipeClient(item, tool) })) };
+}
+
+// The Your setup drawer's one bounded host read across every chosen item, from the same public inspection
+// the cards use. Items are named by the page from its own chosen list and validated against the checked
+// inventories; nothing is run and nothing is written (#163).
+export async function inspectChosenHost(inventories, { tool, items = [] }, project) {
+  if (!Array.isArray(items) || items.length > 128) return { status: 'unavailable', reason: 'Supply at most 128 chosen items to check.' };
+  if (typeof harness.selectTool !== 'function') return { status: 'unavailable', reason: 'This Core does not publish selected-tool identity.' };
+  const selected = harness.selectTool(tool);
+  if (selected.status !== 'selected') return { status: 'unavailable', reason: 'Choose your tool to check its host.' };
+  if (typeof runtime.inspectToolHost !== 'function') return { status: 'unavailable', reason: 'This Core does not publish host inspection.' };
+  if (!project) return { status: 'unavailable', reason: 'Choose a project folder to check whether your tool already has your chosen content; no tool is launched.' };
+  const facts = [];
+  for (const ref of items) {
+    if (!ref || typeof ref.itemId !== 'string' || typeof ref.releaseSha256 !== 'string') return { status: 'unavailable', reason: 'Chosen items must name their exact source and item.' };
+    const inventory = inventories.find(entry => entry.release.sha256 === ref.releaseSha256);
+    const item = inventory?.release.items.find(candidate => candidate.id === ref.itemId);
+    if (!inventory || !item) return { status: 'unavailable', reason: `Exact source/item unavailable: ${ref.releaseSha256}/${ref.itemId}. Your saved choices are unchanged.` };
+    facts.push({ framework: inventory.release.framework.id, itemId: item.id, kind: item.kind,
+      ...(item.payload?.dirName || item.payload?.key ? { key: item.payload.dirName ?? item.payload.key } : {}),
+      inputs: Object.keys(item.requirements?.inputs ?? {}) });
+  }
+  if (!facts.length) return { status: 'unavailable', reason: 'Nothing is chosen yet, so there is nothing to check for a second copy.' };
+  try {
+    return await runtime.inspectToolHost({ tool: selected.tool.id, project, items: facts }, { budgetMs: 5000 });
+  } catch {
+    return { status: 'failed', reason: 'Host facts could not be inspected.' };
+  }
 }

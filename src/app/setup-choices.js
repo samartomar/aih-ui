@@ -7,6 +7,7 @@
 
 import { setupNeeds } from './setup-needs.js';
 import { compact } from './compact.js';
+import { copiesWords, drawerCopiesWords, secondCopyWarnings } from './tool-host-warnings.js';
 
 const entryKey = ref => `${ref.releaseSha256}/${ref.itemId}`;
 const itemKey = item => `${item.root?.releaseSha256}/${item.id}`;
@@ -28,19 +29,26 @@ export function choiceLines({ roots = [], needs = new Map(), items = [] }) {
   });
 }
 
-/** `onRemove(root, name)` takes one chosen item out of the setup and resolves when it is done. */
-export function createSetupChoices({ client, el, button, onRemove = async () => {} }) {
+/** `onRemove(root, name)` takes one chosen item out of the setup and resolves when it is done.
+ * `hostView()` returns the last Core host-inspection result (or undefined while loading); the drawer only
+ * projects it, exactly as the cards and inspector do (#163). */
+export function createSetupChoices({ client, el, button, onRemove = async () => {}, hostView = () => undefined }) {
   const node = el('section', 'space-y-1'); node.id = 'setup-choices';
   const title = el('h3', 'text-sm font-semibold text-on-surface', 'Your choices'); title.id = 'setup-choices-title';
   const empty = el('p', 'text-on-surface-variant', 'Nothing chosen yet. Add content from the catalog.'); empty.id = 'setup-choices-empty';
   const list = el('ul', 'space-y-1'); list.id = 'setup-choices-list';
-  node.append(title, empty, list);
+  const hostLine = el('p', 'text-on-surface-variant text-[11px]'); hostLine.id = 'setup-choices-host-copies'; hostLine.setAttribute('role', 'status');
+  node.append(title, empty, list, hostLine);
   let removing = false;
 
   function line({ root, item, name, needed }) {
     const row = el('li', 'flex flex-wrap items-center gap-x-2 gap-y-0.5'); row.dataset.choiceItem = root.itemId;
     const label = el('span', 'font-medium text-on-surface', name); label.title = `${item?.family ? `${item.family} · ` : ''}${root.itemId} · ${root.scope ?? ''}`.replace(/ · $/, '');
     row.append(label);
+    // A second-copy warning names its item; the summary line below carries the check's own state.
+    const host = hostView();
+    const mine = secondCopyWarnings(host).filter(warning => warning.itemId === root.itemId);
+    if (mine.length) row.append(el('span', 'setup-choice-copies text-[11px]', copiesWords(host, root.itemId, { chosen: true })));
     if (needed.length) {
       const fold = el('details', 'setup-choice-needs text-on-surface-variant');
       fold.append(el('summary', 'cursor-pointer', `+ ${needed.length} it needs`));
@@ -69,6 +77,7 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
     title.textContent = lines.length ? `Your choices (${lines.length})` : 'Your choices';
     empty.hidden = Boolean(lines.length);
     list.replaceChildren(...lines.map(line));
+    hostLine.textContent = drawerCopiesWords(hostView());
   }
   return { node, render };
 }

@@ -22,6 +22,7 @@
  */
 
 import { renderBrowseFacts } from './browse-facts.js';
+import { copiesWords } from '../app/tool-host-warnings.js';
 import { createGapIndicator } from '../app/gap-indicator.js';
 import { createInspectorEvidence } from '../app/inspector-evidence.js';
 import { el, text } from "../app/dom.js";
@@ -190,7 +191,7 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
         comes.append(el('p', '', closure?.status === 'ok' ? support.length ? support.map(value => value.name ?? value.label).join(' · ') : 'No supporting content in Catalog’s resolved closure.' : closure ? 'Catalog could not resolve supporting content with the current configuration.' : 'Supporting-content closure unchecked.'));
  context.append(comes);
         const replaces = el('div', 'inspector-row'); replaces.append(el('strong', '', 'Replaces'), el('p', '', item.supersedes?.length ? item.supersedes.map(value => value.itemId).join(' · ') : 'No replacements declared.')); context.append(replaces);
-        const copies = el('div', 'inspector-row'); copies.append(el('strong', '', 'Also seen by your tool'), el('p', '', browse?.host?.items ? JSON.stringify(browse.host.items.find(value => value.itemId === item.id)?.copies ?? 'Copies not reported.') : 'Copies unchecked. No client was launched.')); context.append(copies);
+        const copies = el('div', 'inspector-row'); copies.append(el('strong', '', 'Also seen by your tool'), el('p', '', copiesWords(browse?.host, item.id, { chosen: browse?.host?.items?.some(hostItem => hostItem.itemId === item.id) ?? false }))); context.append(copies);
         const start = el('div', 'inspector-row'); start.append(el('strong', '', 'How it starts'), el('p', '', item.payload?.invocation ?? 'Activation not published.')); context.append(start);
         const files = el('details'); files.append(el('summary', '', 'Files'), el('pre', 'browse-json', item.materials.map(value => value.relPath ?? value.path ?? value.packagePath).join('\n'))); context.append(files);
         elements.detailsDesc.after(context);

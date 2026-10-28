@@ -16,6 +16,7 @@ import { createAddedNotice } from './added-notice.js';
 import { createInstalledPanel } from './installed-panel.js';
 import { createProjectFolderRow } from './project-folder.js';
 import { createSetupChoices } from './setup-choices.js';
+import { YOUR_TOOL_KEY } from './your-tool.js';
 import { rememberOpen } from './advanced.js';
 
 const buttonClass = 'px-3 py-1.5 rounded bg-surface-container text-on-surface border border-wb-border hover:bg-surface-container-high';
@@ -139,20 +140,36 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   // Changing the folder discards what this page prepared for the old one, then checks the new one.
   const folderRow = createProjectFolderRow({ el, button, busy: () => installPanel.busy || installedPanel.busy, onChanged: async () => {
     client.discardHostWork(); installedPanel.clear(); installPanel.recheck();
-    try { await client.loadCatalog(); } finally { installPanel.recheck(); await installedPanel.refresh(); }
+    try { await client.loadCatalog(); } finally { installPanel.recheck(); await installedPanel.refresh(); void refreshHostFacts(); }
   } });
   void folderRow.refresh();
   // Your choices (#137): one line per chosen item, its needs folded, and Remove from setup through the same
   // remove-root proposal and acceptance as Undo after Add.
   let installedFor;
-  const choicesView = createSetupChoices({ client, el, button, onRemove: async (root, name) => {
+  // What the host inspection saw about second copies, for the Your choices drawer (#163). One bounded
+  // read-only check over exactly the chosen items, after the chosen set or the folder changes. The page
+  // names the tool it already chose; nothing is launched and nothing is written.
+  let hostCopies, hostCopiesAttempt = 0;
+  const refreshHostFacts = async () => {
+    const attempt = ++hostCopiesAttempt;
+    const roots = client.draft?.roots ?? client.intent?.roots ?? [];
+    const tool = (() => { try { return globalThis.localStorage?.getItem(YOUR_TOOL_KEY) ?? undefined; } catch { return undefined; } })();
+    const items = roots.map(root => ({ releaseSha256: root.releaseSha256, itemId: root.itemId }));
+    const result = await client.request('tool-host', { tool, items }).catch(() => undefined);
+    if (attempt !== hostCopiesAttempt) return;
+    hostCopies = result;
+    choicesView.render();
+  };
+  const choicesView = createSetupChoices({ client, el, button, hostView: () => hostCopies, onRemove: async (root, name) => {
     const outcome = await undoAdd(client, root).catch(thrown);
     if (outcome.status === 'superseded') return;
+    void refreshHostFacts();
     diagnostics.textContent = JSON.stringify(outcome.result, null, 2);
     if (outcome.status !== 'removed') return openReview(outcome, `${name} is still in your ${setupWord()}.`, `Removing ${name} is not done yet. Read what the check reported, then Update setup or Cancel.`);
     showStatus(`Removed ${name} from your ${setupWord()}. Files already installed stay in the project folder until you Remove them under Installed in this project.`);
   } });
-  document.addEventListener('aih:policy-review-open', () => { void folderRow.refresh(); void installedPanel.refresh(); });
+  void refreshHostFacts();
+  document.addEventListener('aih:policy-review-open', () => { void folderRow.refresh(); void installedPanel.refresh(); void refreshHostFacts(); });
   review.after(button('Open policy choices and review', () => reviewPanel.open(), true));
   const pageContext = el('p', 'text-on-surface-variant'); choices.after(pageContext);
   const canReplace = () => !(client.dirty || client.candidate) || window.confirm('This policy has accepted changes that have not been downloaded or a proposal awaiting acceptance. Replace them with another artifact?');
