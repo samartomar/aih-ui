@@ -44,6 +44,9 @@ try {
     try {
       for (const theme of ['dark', 'light']) {
         const context = await browser.newContext({ viewport: { width: 1440, height: 1100 } });
+        // grill-me carries per-client recipes; the header's canonical tool is chosen up front, as the other
+        // owning journeys do, or the Add guard correctly refuses and this check never reaches its subject.
+        await context.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
         const page = await context.newPage();
         console.log(`State location: ${mode}/${theme}: opening page`);
         page.setDefaultTimeout(30_000); page.on('pageerror', e => errors.push(e.message));
