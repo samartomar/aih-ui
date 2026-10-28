@@ -1,14 +1,5 @@
-/*
- * Project basics (owner decision 4 of the second gate A run): what applies to the project whichever framework is
- * chosen. Tool support links the existing Check this machine page; the project files are Catalog content the person
- * adds with the same one-click Add as a card; the workspace opens the one workspace view, which lives in Your setup's
- * Advanced section.
- *
- * Items are routed by the kind the Catalog publishes, never by id. Tool adapters are not offered here: they stay where
- * Get started and Check this machine use them, and under Advanced.
- */
-
-import { createCards } from "./cards.js";
+// Project tools and workspace link to maintained framework content without duplicating it.
+import { el } from '../app/dom.js';
 
 const PROJECT_CONTEXT_KIND = "project-context";
 const PROJECT_FILE_KINDS = new Set([PROJECT_CONTEXT_KIND, "client-entry-pointer"]);
@@ -24,23 +15,12 @@ export function projectFileEntries(entries) {
     (b.authoringItem.kind === PROJECT_CONTEXT_KIND) - (a.authoringItem.kind === PROJECT_CONTEXT_KIND) || labelOf(a).localeCompare(labelOf(b)));
 }
 
-/**
- * @param elements        the Project basics section's elements
- * @param onSelect        called with a project file's entry id when its card is selected
- * @param onOpenWorkspace called when the person opens the workspace
- */
-export function createProjectBasics({ elements, onSelect, onOpenWorkspace }) {
-  const cards = createCards({ elements: { cardsGrid: elements.grid, categoryContext: elements.context, visibleCount: elements.count, visibleCaption: elements.caption }, onSelect });
-  elements.openWorkspace.addEventListener("click", () => onOpenWorkspace());
-  return {
-    /** @param model the catalog's cards model, with the project files as its entries */
-    render(model) {
-      elements.empty.hidden = model.entries.length > 0;
-      elements.grid.hidden = model.entries.length === 0;
-      if (model.entries.length) cards.render(model);
-      else { elements.grid.replaceChildren(); elements.count.textContent = "0"; elements.caption.textContent = "entries"; }
-    },
-    setSelected: (previousId, nextId) => cards.setSelected(previousId, nextId),
-    focus: (entryId) => cards.focus(entryId),
-  };
+export function createProjectBasics({ elements, onChooseFramework, onOpenWorkspace }) {
+  elements.openWorkspace.addEventListener('click', () => onOpenWorkspace());
+  return { render({ framework }) {
+    elements.context.hidden = false; elements.context.replaceChildren();
+    if (!framework) { elements.context.textContent = 'Project basics is unavailable from the configured sources. Existing choices remain in Your setup.'; return; }
+    const open = el('button', 'set-choice', `Browse ${framework.name}`); open.type = 'button'; open.id = 'project-files-open-framework';
+    open.addEventListener('click', () => onChooseFramework(framework)); elements.context.append(open);
+  } };
 }

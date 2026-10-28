@@ -8,7 +8,7 @@
  */
 
 import { catalogElements } from "./elements.js";
-import { renderBrowseFacts } from './browse-facts.js';
+import { renderBrowseFacts, renderFrameworkRoutes } from './browse-facts.js';
 import { createStartingSets } from './starting-sets.js';
 import { createFrameworkNavigation } from './frameworks.js';
 import { createCards } from "./cards.js";
@@ -24,7 +24,7 @@ import { inventoryCounts, scopeTotal, selectedScope, visibleEntries, sourceScope
 import { emptyView, restoreView, saveView } from "./view-state.js";
 import { attachTooltip } from "../app/tooltip.js";
 import { el, text } from "../app/dom.js";
-import { createProjectBasics, projectFileEntries } from "./project-basics.js";
+import { createProjectBasics } from "./project-basics.js";
 
 /**
  * @param onSelectEntry    called with the entry when the selection changes
@@ -73,6 +73,13 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     if (!framework) return { requests: [], allItems: true };
     if (!choices.has(framework.sha256)) choices.set(framework.sha256, { requests: (framework.sets ?? []).filter(set => set.offer === 'pre-ticked').map(set => ({ release: { releaseSha256: framework.sha256, scope: 'project' }, setId: set.id, setSha256: set.setSha256, options: {}, members: [] })), allItems: !(framework.sets?.length) });
     return choices.get(framework.sha256);
+  }
+  function showsAllContent(framework, choice) {
+    return choice.allItems || !framework?.sets?.length || !choice.requests.length
+      || !Array.isArray(browseResult?.resolution?.value?.selections);
+  }
+  function visibleByTool(entries) {
+    return currentFramework() ? entries.filter(entry => !unusable(entry)) : supportedEntries(entries, target.value, support.value);
   }
   // Input values belong in explicitly saved intent, not the browsing cache.
   function saveBrowsing() { try { sessionStorage.setItem('aih-ui-set-browsing', JSON.stringify([...choices].map(([key, { requests, allItems }]) => [key, { requests, allItems }]))); } catch { state.browsingStorageUnavailable = true; } }
@@ -156,18 +163,20 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     changeView({ family: family.value, source: row?.filterValue ?? null, sourceType: null });
   });
   const frameworkNavigation = document.getElementById('framework-navigation');
-  const frameworks = createFrameworkNavigation({ container: frameworkNavigation, onFirstStep: () => document.getElementById('your-tool-trigger').click(), onChoose: framework => {
+  function chooseFramework(framework) {
     legacyBrowsing = false; state.missingFramework = null;
     const entry = state.entries.find(entry => entry.authoringItem.root.releaseSha256 === framework.sha256);
     changeView({ family: entry?.authoringItem.family ?? framework.name, source: sourceFilterValue('family', framework.name, framework.sha256), sourceType: null, kind: null });
-  } });
+    document.getElementById('nav-sources').click();
+  }
+  const frameworks = createFrameworkNavigation({ container: frameworkNavigation, onFirstStep: () => document.getElementById('your-tool-trigger').click(), onChoose: chooseFramework });
   target.addEventListener('change', () => changeView({ target: target.value }));
   // Project basics shows in place of the cards.
-  const projectBasics = createProjectBasics({ elements: elements.projectBasics, onSelect: (entryId) => select(entryId), onOpenWorkspace });
+  const projectBasics = createProjectBasics({ elements: elements.projectBasics, onChooseFramework: chooseFramework, onOpenWorkspace });
   const basicsOpen = () => !elements.projectBasics.section.hidden;
-  const focusCard = (entryId) => basicsOpen() ? projectBasics.focus(entryId) : cards.focus(entryId);
+  const focusCard = (entryId) => !basicsOpen() && cards.focus(entryId);
   support.addEventListener('change', () => changeView({ support: support.value }));
-  const resetFilters = () => { legacyBrowsing = false; const { family, source } = state.view; Object.assign(state.view, emptyView(), { family, source }); toolbar.setQuery(''); changeView({ target: target.options[0]?.value ?? '' }); };
+  const resetFilters = () => { legacyBrowsing = false; const framework = currentFramework(); if (framework) { browseChoice(framework).allItems = true; saveBrowsing(); } const { family, source } = state.view; Object.assign(state.view, emptyView(), { family, source }); toolbar.setQuery(''); changeView({ target: target.options[0]?.value ?? '' }); };
   document.getElementById('catalog-reset-filters').addEventListener('click', resetFilters);
   const filterDisclosure = document.getElementById('catalog-filter-disclosure');
   filterDisclosure.open = false;
@@ -183,10 +192,10 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   function browseEntries(view = state.view) {
     const framework = currentFramework(), choice = browseChoice(framework);
     const selected = browseResult?.resolution?.value?.selections;
-    return visibleEntries(state.entries, view)
+    return visibleEntries(state.entries, framework ? { ...view, sourceType: null } : view)
       .filter(entry => !view.family || entry.authoringItem.family === view.family)
       .filter(entry => !framework || entry.authoringItem.role !== 'supporting')
-      .filter(entry => !framework || choice.allItems || selected?.some(value => value.item.releaseSha256 === entry.authoringItem.root.releaseSha256 && value.item.itemId === entry.authoringItem.id));
+      .filter(entry => !framework || showsAllContent(framework, choice) || selected?.some(value => value.item.releaseSha256 === entry.authoringItem.root.releaseSha256 && value.item.itemId === entry.authoringItem.id));
   }
 
   function selectedEntry() {
@@ -197,7 +206,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   function cardsModel() {
     const scope = selectedScope(state.counts, state.view);
     return {
-      entries: supportedEntries(browseEntries(), target.value, support.value).filter(entry => !unusable(entry)),
+      entries: visibleByTool(browseEntries()),
       browse: { ...browseResult, enterprise },
       tool: chosenTool,
       total: scopeTotal(state.entries, state.view),
@@ -264,7 +273,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     renderSetGuidance();
     const choice = browseChoice(selectedFramework);
     readBrowse(selectedFramework, choice, Boolean(state.selectedId));
-    startingSets.render({ framework: selectedFramework, frameworks: authoring.catalog?.frameworks, ...choice, result: browseResult, hasTool: Boolean(chosenTool), saved: savedSetSources.has(selectedFramework?.sha256), items: authoring.catalog?.items ?? [] });
+    startingSets.render({ framework: selectedFramework, frameworks: authoring.catalog?.frameworks, ...choice, allItems: showsAllContent(selectedFramework, choice), result: browseResult, hasTool: Boolean(chosenTool), saved: savedSetSources.has(selectedFramework?.sha256), items: authoring.catalog?.items ?? [] });
     let quiet = document.getElementById('browse-unsupported');
     if (!quiet) { quiet = el('details', 'browse-unsupported'); quiet.id = 'browse-unsupported'; elements.cards.cardsGrid.before(quiet); }
     const blocked = browseEntries().filter(unusable); quiet.hidden = !blocked.length;
@@ -281,17 +290,20 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       if (state.missingFramework) context.append(el('span', 'framework-missing', state.missingFramework));
       context.append(el('span', 'framework-internal', selectedFramework.kind === 'internal' ? 'Internal · not verified' : selectedFramework.kind === 'fixture' ? 'Public selection-only fixture · not production' : 'Release source · not verified'));
     }
+    if (selectedFramework) context.append(renderFrameworkRoutes(selectedFramework.id, browseResult, chosenTool));
     document.querySelector(".wb-source-heading").textContent = state.view.family || "Choose content for your AI tool";
     target.value = state.view.target;
-    support.value = state.view.support;
+    support.value = selectedFramework ? 'all' : state.view.support;
+    target.disabled = Boolean(selectedFramework); support.disabled = Boolean(selectedFramework);
+    target.title = support.title = selectedFramework ? 'Framework fit uses Your tool in the header. Legacy target filters do not narrow this framework.' : '';
     const total = state.entries.length;
     const scope = selectedScope(state.counts, state.view);
     const inScope = scopeTotal(state.entries, state.view);
     const cardsView = cardsModel();
     const scoped = browseEntries();
     const count = status => scoped.filter(entry => capabilityFacts(entry.authoringItem, target.value).some(fact => fact.support === status)).length;
-    counts.textContent = `${publishedClients(state.summary?.coreTargets)?.ids.length ?? 'Unknown'} Core clients are listed in setup; this catalog declares ${target.options.length} target clients. Target declarations do not establish installation. ${target.value || 'No declared target'} · ${scoped.length} items in family/search/source scope: ${count('supported')} with supported facts · ${count('unsupported')} with unsupported facts · ${count('unknown')} with unknown facts. Mixed items can count in more than one group.`;
-    const availableKinds = supportedEntries(browseEntries({ ...state.view, kind: null }), target.value, support.value);
+    counts.textContent = selectedFramework ? `Framework fit follows ${chosenTool?.label ?? 'Your tool in the header'}. Published observations and unavailable content are shown separately; legacy target filters are inactive.` : `${publishedClients(state.summary?.coreTargets)?.ids.length ?? 'Unknown'} Core clients are listed in setup; this catalog declares ${target.options.length} target clients. Target declarations do not establish installation. ${target.value || 'No declared target'} · ${scoped.length} items in family/search/source scope: ${count('supported')} with supported facts · ${count('unsupported')} with unsupported facts · ${count('unknown')} with unknown facts. Mixed items can count in more than one group.`;
+    const availableKinds = visibleByTool(browseEntries({ ...state.view, kind: null }));
     const filteredCounts = inventoryCounts(availableKinds);
     provenance.render({
       summary: state.summary,
@@ -313,11 +325,18 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       visibleTotal: cardsView.entries.length,
       view: state.view,
     });
+    let activeFilters = document.getElementById('catalog-active-filters');
+    if (!activeFilters) { activeFilters = el('div', 'set-footer'); activeFilters.id = 'catalog-active-filters'; elements.cards.cardsGrid.before(activeFilters); }
+    activeFilters.replaceChildren();
+    const applied = [state.view.query && `Search: ${state.view.query}`, state.view.kind && `Kind: ${state.view.kind}`].filter(Boolean);
+    activeFilters.hidden = !applied.length;
+    if (applied.length) {
+      activeFilters.append(el('span', '', applied.join(' · ')));
+      const clear = el('button', 'set-choice', 'Clear filters'); clear.type = 'button'; clear.addEventListener('click', resetFilters); activeFilters.append(clear);
+    }
     elements.cards.cardsGrid.setAttribute('aria-busy', 'false');
     cards.render(cardsView);
-    // Project files are offered whatever the filters and the tool: they apply to every tool.
-    const files = projectFileEntries(state.entries);
-    projectBasics.render({ ...cardsView, entries: files, total: files.length, noun: 'project files' });
+    projectBasics.render({ framework: authoring.catalog?.frameworks?.find(value => value.id === 'project-basics' && value.state === 'ready') });
     details.render(detailsModel(selectedEntry()));
   }
 
@@ -358,7 +377,6 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     // The two cards concerned are updated in place. The grid is not rebuilt,
     // so the card the operator activated keeps keyboard focus.
     cards.setSelected(previous, entryId);
-    projectBasics.setSelected(previous, entryId);
     details.render(detailsModel(entry));
     readBrowse(currentFramework(), browseChoice(currentFramework()), true);
     onSelectEntry(entry);

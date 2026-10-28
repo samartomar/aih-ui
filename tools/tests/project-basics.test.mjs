@@ -45,11 +45,14 @@ test('Project basics has its own entry in the left panel', () => {
   assert.doesNotMatch(section('catalog-advanced'), /nav-project-basics/, 'not behind Advanced');
 });
 
-test('Project basics holds tool support, project files and the workspace, apart from the catalog cards', () => {
+test('Project basics holds tool support and the workspace apart from the catalog cards, and points to the Project basics framework for project files', () => {
   const basics = section('project-basics');
   for (const id of ['project-basics-tools', 'project-basics-files', 'project-basics-workspace']) assert.match(basics, new RegExp(`id="${id}"`));
   assert.match(section('project-basics-tools'), /href="readiness\.html"/, 'tool support opens the existing Check this machine page');
-  assert.match(section('project-files-grid'), /id="project-files-grid"/);
+  const files = section('project-basics-files');
+  assert.match(files, /id="project-files-context"/, 'the project-files section reports the maintained count');
+  assert.doesNotMatch(files, /id="project-files-grid"/, 'project files are not repeated as cards here');
+  assert.match(files, /Project basics framework/, 'the section points at the maintained Project basics framework');
   assert.match(section('project-basics-workspace'), /id="project-basics-open-workspace"/);
   assert.doesNotMatch(section('catalog-workspace'), /id="project-basics"/);
 });

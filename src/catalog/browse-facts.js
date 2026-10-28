@@ -40,16 +40,7 @@ export function renderBrowseFacts(item, browse, tool, { detailed = false } = {})
   const policy = browse?.policy?.find(value => value.itemId === item.id)?.preview;
   if (browse?.enterprise && !policy) node.append(badge('state', 'policy', browse.status === 'failed' ? 'Organization policy failed' : browse.status ? 'Organization policy unavailable' : 'Organization policy loading', 'An organization preference grants no authority. The badge waits for Core’s preview over the host-configured source.'));
   if (policy) node.append(badge('state', 'policy', policy.status === 'ok' ? `Organization policy · ${policy.value.enforced.admitted ? 'advisory preview' : 'blocked'}` : 'Organization policy unavailable', JSON.stringify(policy)));
-  const refusedRoutes = [...(browse?.compatibility?.checks ?? []), browse?.compatibility?.setCheck].find(value => value?.status === 'refused' && value.reason === 'native-routes');
-  const routes = browse?.compatibility?.pluginRoutes?.find(value => value.framework === facts.fit?.item.framework);
-  const routeState = refusedRoutes ? 'refused' : routes?.state ?? (browse?.status === 'failed' ? 'failed' : browse?.status ? 'unavailable' : 'loading');
-  node.dataset.pluginRoutes = routeState;
-  const routeNote = 'Display-only guidance from public Harness compatibility over the checked Catalog release. AIH does not run it; this says nothing about installation, activation, permission, observation or successful use.';
-  if (routeState === 'listed') for (const line of routes.lines) node.append(badge('state', 'info', `Also available as ${tool?.label ?? 'this tool'}'s own plugin: ${line}. AIH doesn't run it.`, routeNote));
-  else if (routeState !== 'not-listed') {
-    const label = routeState === 'not-supplied' ? 'Plugin routes not supplied' : routeState === 'refused' ? 'Plugin route check refused' : routeState === 'failed' ? 'Plugin routes failed' : routeState === 'loading' ? 'Plugin routes loading' : 'Plugin routes unavailable';
-    node.append(badge('state', 'info', label, refusedRoutes ? JSON.stringify(refusedRoutes) : `${routeNote} ${routeState === 'not-supplied' ? 'No route lines were supplied for this framework.' : 'No published route result is available.'}`));
-  }
+  if (detailed) node.append(renderFrameworkRoutes(facts.fit?.item.framework, browse, tool, { inspector: true }));
 
   if (detailed) {
     const observedHost = browse?.host;
@@ -61,7 +52,24 @@ export function renderBrowseFacts(item, browse, tool, { detailed = false } = {})
     if (observations?.length) {
       const prior = el('details'); prior.append(el('summary', '', 'Published observations, including other platforms'), el('pre', 'browse-json', JSON.stringify(observations, null, 2))); node.append(prior);
     }
-    const raw = el('details'); raw.append(el('summary', '', 'Exact tool fit and host observations'), el('pre', 'browse-json', JSON.stringify({ platform: browse?.platform, compatibility: facts.fit, pluginRoutes: browse?.compatibility?.pluginRoutes, routeRefusal: refusedRoutes, host: browse?.host }, null, 2))); node.append(raw);
+    const raw = el('details'); raw.append(el('summary', '', 'Exact tool fit and host observations'), el('pre', 'browse-json', JSON.stringify({ platform: browse?.platform, compatibility: facts.fit, pluginRoutes: browse?.compatibility?.pluginRoutes, routeRefusal: [...(browse?.compatibility?.checks ?? []), browse?.compatibility?.setCheck].find(value => value?.status === 'refused' && value.reason === 'native-routes'), host: browse?.host }, null, 2))); node.append(raw);
   }
+  return node;
+}
+
+export function renderFrameworkRoutes(frameworkId, browse, tool, { inspector = false } = {}) {
+  const node = el('div', 'browse-facts');
+  if (!inspector) node.id = 'framework-plugin-routes';
+  const refusedRoutes = [...(browse?.compatibility?.checks ?? []), browse?.compatibility?.setCheck].find(value => value?.status === 'refused' && value.reason === 'native-routes');
+  const routes = browse?.compatibility?.pluginRoutes?.find(value => value.framework === frameworkId);
+  const routeState = refusedRoutes ? 'refused' : routes?.state ?? (browse?.status === 'failed' ? 'failed' : browse?.status ? 'unavailable' : 'loading');
+  node.dataset.pluginRoutes = routeState;
+  const routeNote = 'Display-only guidance from public Harness compatibility over the checked Catalog release. AIH does not run it; this says nothing about installation, activation, permission, observation or successful use.';
+  if (routeState === 'listed') for (const line of routes.lines) node.append(badge('state', 'info', `Also available as ${tool?.label ?? 'this tool'}'s own plugin: ${line}. AIH doesn't run it.`, routeNote));
+  else if (routeState !== 'not-listed') {
+    const label = routeState === 'not-supplied' ? 'Plugin routes not supplied' : routeState === 'refused' ? 'Plugin route check refused' : routeState === 'failed' ? 'Plugin routes failed' : routeState === 'loading' ? 'Plugin routes loading' : 'Plugin routes unavailable';
+    node.append(badge('state', 'info', label, refusedRoutes ? JSON.stringify(refusedRoutes) : `${routeNote} ${routeState === 'not-supplied' ? 'No route lines were supplied for this framework.' : 'No published route result is available.'}`));
+  }
+
   return node;
 }
