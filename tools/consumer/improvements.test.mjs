@@ -1545,17 +1545,21 @@ test('the npm tie from an npx item names the persisted check for the item, and t
 });
 
 // A real draft over the installed maintained Catalog and the four family releases that selects one family item (the ECC MCP items declare the npx they run).
-async function familyScenario(itemId) {
+async function familyScenario(itemId, configuration = {}) {
   const found = await installed(), families = await installedFamilies(), inventories = [{ release: found.release, materialSource: found.source }, ...families];
   const entry = families.find(family => family.release.items.some(i => i.id === itemId)), offered = entry?.release.items.find(i => i.id === itemId);
   assert.ok(offered, `${itemId} is offered by an installed family release.`); assert.ok(found.release.items.some(i => i.id === DIAGNOSING), `${DIAGNOSING} is offered by the maintained release.`);
-  const intent = { ...freshAuthoring(), roots: [{ releaseSha256: entry.release.sha256, itemId, itemSha256: offered.itemSha256, scope: offered.scopes[0], configuration: {}, originIds: ['direct'] }] };
+  const intent = { ...freshAuthoring(), roots: [{ releaseSha256: entry.release.sha256, itemId, itemSha256: offered.itemSha256, scope: offered.scopes[0], configuration, originIds: ['direct'] }] };
   const base = valueOf(await composeAuthoring({ intent: freshAuthoring(), inventories })), composed = valueOf(await composeAuthoring({ basePolicyBytes: base.policyBytes, intent, inventories }));
   return { inventories, offered, scope: offered.scopes[0], envelopeBytes: valueOf(await openDraft({ bytes: composed.policyBytes, inventories })).envelopeBytes };
 }
 
 test('an installed ECC family item that runs npx ties the npm check through the public check; recovery alone and another target give no suggestion', async () => {
-  const s = await familyScenario('ecc.claude.mcp.context7'), { label } = s.offered, readings = [journalCheck(1, 'failed', 'failed'), journalRepair(2, 'passed'), journalCheck(3, 'failed', 'passed'), journalCheck(4, 'failed', 'failed')];
+  // Composition-only caller inputs; these synthetic paths are never opened or executed.
+  const s = await familyScenario('ecc.claude.mcp.context7', {
+    npmCli: fileURLToPath(new URL('./fixtures/npm-cli.js', import.meta.url)),
+    npmCache: fileURLToPath(new URL('./fixtures/npm-cache/', import.meta.url)),
+  }), { label } = s.offered, readings = [journalCheck(1, 'failed', 'failed'), journalRepair(2, 'passed'), journalCheck(3, 'failed', 'passed'), journalCheck(4, 'failed', 'failed')];
   assert.deepEqual(s.offered.targets.filter(t => t.kind === 'executable').map(t => t.name), ['npx']);
   const value = await check(s, s.envelopeBytes, { evidence: stored(onTarget('npm', readings)) }), friction = frictionOf(value.leading);
   assert.equal(value.leading.change.itemId, DIAGNOSING); assert.equal(value.leading.scope, s.scope);
