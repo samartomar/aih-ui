@@ -56,7 +56,11 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
     frameworkCatalog.inventories.push(...frameworkFixtureInventories);
     frameworkCatalog.frameworks.push(...frameworkFixtureInventories.map(entry => ({ ...entry.release.framework, sha256: entry.release.sha256, kind: 'fixture', reason: entry.fixture, state: 'ready', sets: entry.release.sets ?? [], sources: entry.release.sources, observations: observation(entry.release) })));
   }
-  const familyInventories = [...await installedFamilies(), ...frameworkCatalog.inventories];
+  // installedFamilies now reads the same prepared releases the default catalog reader exposes; compose once
+  // per exact release so the catalog never renders the same item twice.
+  const installedFamilyInventories = await installedFamilies();
+  const installedShas = new Set(installedFamilyInventories.map(entry => entry.release.sha256));
+  const familyInventories = [...installedFamilyInventories, ...frameworkCatalog.inventories.filter(entry => !installedShas.has(entry.release.sha256))];
   // Explicit previous-package history participates in exact saved-pin reads,
   // never in the current browse inventory. Preserve the logical input saved
   // before upgrade; historical execution is guarded separately below.

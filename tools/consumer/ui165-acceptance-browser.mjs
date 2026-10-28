@@ -75,8 +75,9 @@ export async function runRestartInstallBrowser({ origin, output, playwrightModul
     // The Extensions grill-me add is per-client content and always needs the canonical tool; the optional
     // plain ECC item was chosen from positive public fit + resolution facts by the fixture.
     const { context, page } = await openPage(browser, origin, { theme, tool: true });
+    await chooseCatalogFamily(page, 'Extensions');
     await addFromCatalog(page, 'extensions.matt.grill-me');
-    if (extraItem) await addFromCatalog(page, extraItem);
+    if (extraItem) { await chooseCatalogFamily(page, 'ECC'); await addFromCatalog(page, extraItem); }
     // Save the real artifact through the ordinary drawer download.
     await page.locator('#your-setup').click();
     await openSetupAdvanced(page);
@@ -161,6 +162,7 @@ export async function runMcpFailedApplyBrowser({ origin, output, project, playwr
   const browser = await chromium.launch({ headless: true });
   try {
     const { context, page } = await openPage(browser, origin, { theme, tool: true });
+    await chooseCatalogFamily(page, 'ECC');
     await page.locator('#catalog-search').fill('cloudflare-docs');
     const card = page.locator('[data-card-id$="/ecc.mcp.cloudflare-docs"]');
     if (!await card.count()) {
@@ -195,6 +197,7 @@ export async function runMcpApplyBrowser({ origin, output, project, playwrightMo
   try {
     const { context, page } = await openPage(browser, origin, { theme, tool: true });
     page.on('pageerror', error => errors.push(error.message));
+    await chooseCatalogFamily(page, 'ECC');
     await page.locator('#catalog-search').fill('cloudflare-docs');
     const card = page.locator('[data-card-id$="/ecc.mcp.cloudflare-docs"]');
     if (!await card.count()) {
@@ -243,6 +246,7 @@ export async function runStaleReviewBrowser({ origin, output, project, playwrigh
   try {
     const { context, page } = await openPage(browser, origin, { theme, tool: true });
     page.on('pageerror', error => errors.push(error.message));
+    await chooseCatalogFamily(page, 'Extensions');
     await addFromCatalog(page, 'extensions.matt.grill-me');
     await openSetupAdvanced(page);
     const advanced = page.locator('details.policy-advanced').filter({ hasText: 'Prepare exact effects' });
