@@ -6,6 +6,7 @@ import { pageAssets } from './server/assets.mjs';
 import { createWorkbench } from './server/workbench.mjs';
 import { listen } from './server/static.mjs';
 import { runInstalledPanelBrowser } from './consumer/installed-panel-browser.mjs';
+import { runFirstRunBrowser, runRestartInstallBrowser, runRestartVerifyBrowser, runMcpFailedApplyBrowser, runMcpApplyBrowser } from './consumer/ui165-acceptance-browser.mjs';
 import { runProjectFolderBrowser } from './consumer/project-folder-browser.mjs';
 
 // Runs after the ordinary integrated check has assembled the packed consumer and page. Only this
@@ -32,3 +33,38 @@ try {
   if (!cancelAfterFirst) await runProjectFolderBrowser({ origin: `http://127.0.0.1:${address.port}`, output: join(consumerDir, 'project-folder-evidence'),
     playwrightModule: import.meta.resolve('playwright'), project, other: `${project}-other` });
 } finally { await new Promise(resolve => workbench.server.close(resolve)); }
+
+// UI165 acceptance cases. Each case owns a fresh disposable target; the restart case stops and restarts the
+// owned server process on the same target and account between its install and verify phases. A case the public
+// fixtures cannot truthfully produce reports 'incomplete' and exits 2, never a silent pass.
+async function withCase(project, run) {
+  await mkdir(project, { recursive: true });
+  process.env.AIH_CONSUMER_PROJECT = project;
+  const caseRunDir = join(project, 'page');
+  for (const asset of pageAssets(repo)) {
+    const target = join(caseRunDir, asset.to); await mkdir(dirname(target), { recursive: true });
+    await copyFile(join(repo, asset.from), target);
+  }
+  await writeFile(join(caseRunDir, 'summary.json'), JSON.stringify(summary));
+  const caseWorkbench = await createWorkbench({ consumerDir, runDir: caseRunDir, summary, settingsPath: join(project, 'settings.json') });
+  const address = await listen(caseWorkbench.server, 0);
+  try { await run(`http://127.0.0.1:${address.port}`); }
+  finally { await new Promise(resolve => caseWorkbench.server.close(resolve)); }
+}
+const caseOutcome = async (name, outcome) => {
+  if (outcome.status === 'incomplete') { console.log(`${name} incomplete: ${outcome.reason}`); process.exitCode = 2; return; }
+  if (outcome.status !== 'passed') throw new Error(`${name} failed: ${JSON.stringify(outcome)}`);
+};
+const playwrightPath = import.meta.resolve('playwright');
+
+const restartProject = join(consumerDir, `restart-project-${randomUUID().slice(0, 8)}`);
+await withCase(restartProject, async origin => await caseOutcome('restart install phase', await runRestartInstallBrowser({ origin, output: join(consumerDir, 'restart-install-evidence'), playwrightModule: playwrightPath })));
+// The owned server process was stopped above; starting a fresh one on the same target and account home.
+await withCase(restartProject, async origin => await caseOutcome('restart verify phase', await runRestartVerifyBrowser({ origin, output: join(consumerDir, 'restart-verify-evidence'), playwrightModule: playwrightPath })));
+
+const firstRunProject = join(consumerDir, `first-run-project-${randomUUID().slice(0, 8)}`);
+await withCase(firstRunProject, async origin => await caseOutcome('firstRun positive case', await runFirstRunBrowser({ origin, output: join(consumerDir, 'first-run-evidence'), playwrightModule: playwrightPath })));
+
+const mcpProject = join(consumerDir, `mcp-apply-project-${randomUUID().slice(0, 8)}`);
+await withCase(mcpProject, async origin => await caseOutcome('MCP failed Apply case', await runMcpFailedApplyBrowser({ origin, output: join(consumerDir, 'mcp-failed-apply-evidence'), project: mcpProject, playwrightModule: playwrightPath })));
+await withCase(mcpProject, async origin => await caseOutcome('MCP ticked Apply case', await runMcpApplyBrowser({ origin, output: join(consumerDir, 'mcp-apply-evidence'), project: mcpProject, playwrightModule: playwrightPath })));
