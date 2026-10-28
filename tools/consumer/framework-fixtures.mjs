@@ -55,6 +55,10 @@ export async function frameworkFixtures(directory, catalogArtifact) {
   const fit = checkCompatibility({ nativeRoutes: ecc.release.nativeRoutes === undefined ? [] : [{ framework: ecc.release.framework.id, lines: ecc.release.nativeRoutes }], tool: 'claude', platform: { os: ({ win32: 'windows', darwin: 'macos' })[process.platform] ?? process.platform, arch: process.arch }, binding: toolBindings.find(binding => binding.tool === 'claude'), items: ecc.release.items.map(item => ({ item })) });
   expected.ecc = { framework: ecc.release.framework, sha256: ecc.release.sha256, optionSet: { id: optionSet.id, name: optionSet.name }, option: { id: option.id, name: option.name }, language: { id: language.id, name: language.name }, requests,
     resolution: selected, pluginRoutes: fit.pluginRoutes, visible: (selected.value?.selections ?? []).filter(selection => ecc.release.items.find(item => item.id === selection.item.itemId)?.role !== 'supporting').filter(selection => { const item = fit.items?.find(item => item.item.itemId === selection.item.itemId); return !item || item.support !== 'none' && !item.notRendered && !item.staticBlockers?.length; }).map(selection => selection.item.itemId) };
+  // The real checked MCP server the UI165 one-server approval cases run against; read from the release, never authored.
+  const mcp = ecc.release.items.find(item => item.kind === 'mcp-server');
+  if (!mcp) throw new Error('Public ECC fixture carries no MCP server item.');
+  expected.ecc.mcp = { id: mcp.id, name: mcp.name ?? mcp.label };
   scenarios.browse = { ...scenarios.ready, prepared: [...scenarios.ready.prepared, { ...internal, frameworkId: ecc.release.framework.id, expectedContentSha256: ecc.release.sha256 }], fixture: true, indexStatePath: join(directory, 'browse-state.json') };
   const superpowers = await readInstalledPreparedContent({ root, frameworkId: 'superpowers', sourceInput: 'fixture-superpowers' });
   if (!superpowers.valid) throw new Error('Public Superpowers prepared fixture unavailable.');

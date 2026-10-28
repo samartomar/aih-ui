@@ -43,6 +43,13 @@ export async function runInstalledPanelBrowser({ origin, output, playwrightModul
       await page.locator('#install-message[data-outcome="installed"]').waitFor({ timeout: 120_000 });
       const group = page.locator('[data-installed-item="extensions.matt.grill-me"]');
       await group.waitFor(); assert.match(await group.innerText(), /it needs:.*grilling/);
+      // UI166: only the strict complete run claims confirmed on disk, and the review is named rows with folders.
+      assert.match(await page.locator('#install-message').innerText(), /Confirmed on disk/);
+      await page.locator('#install-review-rows [data-review-selection]').first().waitFor();
+      assert.match(await page.locator('#install-folders').innerText(), /Project folder:/);
+      assert.match(await page.locator('#install-review-rows').innerText(), /When used:|Size unknown/);
+      // UI166-AC04: a directly added item has no set-owned first step, so the guidance line stays empty.
+      assert.equal(await page.locator('#install-first-run').textContent(), '');
       await page.screenshot({ path: join(output, `${theme}-installed.png`), fullPage: true });
       const download = page.waitForEvent('download'); await openSetupAdvanced(page); await page.locator('#policy-save').click();
       const saved = join(output, `${theme}-policy.json`); await (await download).saveAs(saved);
@@ -59,6 +66,7 @@ export async function runInstalledPanelBrowser({ origin, output, playwrightModul
       }
       const installed = page.locator('[data-installed-item="extensions.matt.grill-me"]');
       await installed.waitFor();
+      assert.match(await installed.innerText(), /it needs:.*grilling/, 'recorded names and the needed-by grouping survive a fresh page reopen against the on-disk receipts');
       if (cancelAfterFirst) assert.equal(await page.locator('#install-message').getAttribute('data-outcome'), 'installed');
       else await page.locator('#install-message').filter({ hasText: 'Already installed:' }).waitFor();
       await installed.getByRole('button', { name: 'Remove', exact: true }).click();
