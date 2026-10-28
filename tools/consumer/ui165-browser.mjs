@@ -6,7 +6,10 @@ import { openPolicyAdvanced, closePolicyDrawer } from './policy-drawer.mjs';
 // UI165 ordinary page cases on the real browse fixture (project-basics + extensions + the actual checked ECC
 // release). The MCP server is the real ecc.mcp.cloudflare-docs item; the tool is the header's canonical
 // claude choice. No project folder is chosen in this seam, so the duplicate check truthfully says it could
-// not check — that unavailable wording is the assertion, never a clean state.
+// not check — that unavailable wording is the assertion, never a clean state. Each theme runs on its own
+// Workbench host (the harness starts one server per scenario): the host owns the chosen project folder for
+// its lifetime and the public API has no way to unset it, so a shared host would leak the prior theme's
+// folder into the next theme's no-project assertions.
 
 async function enter(page, origin, theme) {
   await page.goto(origin + '/');
@@ -42,17 +45,22 @@ async function save(page, path) {
 
 const selectionOf = (policy, itemId) => (policy.selections ?? []).find(selection => selection.item?.itemId === itemId ?? selection.id);
 
-export async function runUi165Browser({ origin, output, expected, playwrightModule }) {
+export async function runUi165Browser({ origin, output, expected, playwrightModule, themes = ['dark', 'light'] }) {
   await mkdir(output, { recursive: true });
   const { chromium } = await import(playwrightModule);
   const browser = await chromium.launch({ headless: true });
   const errors = [], outcomes = [];
   try {
-    for (const theme of ['dark', 'light']) {
+    for (const theme of themes) {
       const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
       await context.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
       const page = await context.newPage(); page.setDefaultTimeout(30_000);
       page.on('pageerror', error => errors.push(error.message));
+      // Each theme starts clean: the host must have no project folder. A leftover folder from a prior
+      // theme on a shared host would make the folder row record it (wb-recent-project-folders) and would
+      // invalidate the no-folder assertions below; that leak is caught here at the public endpoint.
+      const hostStart = await (await page.request.get(origin + '/api/authoring-project')).json();
+      assert.equal(hostStart.project, null, `${theme}: the Workbench host starts with no project folder`);
       await enter(page, origin, theme);
       await framework(page, expected.ecc);
 
@@ -212,7 +220,7 @@ export async function runUi165Browser({ origin, output, expected, playwrightModu
     const incompleteDuplicate = outcomes.find(value => value?.duplicate === 'incomplete');
     const status = incompleteDuplicate || canaryGap ? 'incomplete' : 'passed';
     await writeFile(join(output, 'ui165-evidence.json'), JSON.stringify({ status, outcomes, errors, canaryGap }, null, 2));
-    console.log(`UI165 ordinary page cases ${status}: ${output}`);
+    console.log(`UI165 ordinary page cases ${status} (${themes.join('/')}): ${output}`);
     return incompleteDuplicate
       ? { status: 'incomplete', reason: `positive duplicate card/inspector surface: ${incompleteDuplicate.reason}` }
       : { status: 'incomplete', reason: `AC05 secret-canary coverage: ${canaryGap.reason}` };
