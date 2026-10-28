@@ -72,10 +72,39 @@ export async function runUi165Browser({ origin, output, expected, playwrightModu
       const unticked = await save(page, join(output, `${theme}-mcp-unticked.json`));
       const untickedSelection = (unticked.selections ?? []).find(selection => selection.item?.itemId === expected.ecc.mcp.id);
       assert.ok(!JSON.stringify(untickedSelection?.recipe ?? {}).includes('approve-server'), 'untick removes only the proposed approval');
-      // The opt-in never becomes browser state: the only stored key is the header’s own tool choice.
-      const stored = await page.evaluate(() => ({ local: Object.keys(localStorage), session: Object.keys(sessionStorage) }));
-      assert.deepEqual(stored.session, [], 'nothing is written to session storage');
-      assert.ok(stored.local.every(key => /^wb-/.test(key)), 'only ordinary Workbench UI keys exist in local storage');
+      // #162-AC05 under the declared input path: the approval tick records only the renderer-produced
+      // recipe; the selection stores no configuration and declared inputs stay value-less declarations,
+      // so the sensitive server value has nothing to persist.
+      assert.deepEqual(tickedSelection.configuration ?? {}, {}, 'the approval tick stores no input value on the selection');
+      for (const [name, spec] of Object.entries(tickedSelection.recipe.inline.inputs ?? {}))
+        assert.ok(!('value' in spec), `declared input ${name} stays a value-less declaration`);
+      // The opt-in never becomes browser state beyond the owning bounded values, and every stored
+      // value is inspected and decoded — never just its key name (#162-AC05: no input value in the
+      // session, browser storage, saved intent or exports; #165-AC07: no secret anywhere).
+      const stored = await page.evaluate(() => ({
+        local: Object.fromEntries(Object.keys(localStorage).map(key => [key, localStorage.getItem(key)])),
+        session: Object.fromEntries(Object.keys(sessionStorage).map(key => [key, sessionStorage.getItem(key)])),
+      }));
+      assert.deepEqual(Object.keys(stored.session).sort(), ['aih-ui-framework-context', 'aih-ui-sources-view', 'aih.workbench.accepted.v1'],
+        'session storage holds exactly the owning bounded values: catalog view state, the recovery artifact and framework context');
+      const savedView = JSON.parse(stored.session['aih-ui-sources-view']);
+      assert.ok(Object.values(savedView).every(value => typeof value === 'string' || value === null), 'the catalog view state is bounded UI filters, never an input value');
+      const savedContext = JSON.parse(stored.session['aih-ui-framework-context']);
+      assert.deepEqual(Object.keys(savedContext).sort(), ['name', 'source'], 'the framework context is only the chosen source identity');
+      const recovery = JSON.parse(stored.session['aih.workbench.accepted.v1']);
+      assert.match(recovery.base64, /^[A-Za-z0-9+/]*={0,2}$/, 'the recovery artifact is bounded base64 bytes');
+      const recoveredBytes = Buffer.from(recovery.base64, 'base64');
+      assert.ok(recoveredBytes.length > 0 && recoveredBytes.length <= 2_000_000, 'the recovery artifact stays inside the public 2 MB bound');
+      assert.deepEqual(JSON.parse(recoveredBytes.toString('utf8')), unticked,
+        'the session recovery artifact is exactly the saved unticked policy and nothing else');
+      assert.ok(Object.keys(stored.local).every(key => /^wb-/.test(key)), 'only ordinary Workbench UI keys exist in local storage');
+      // No live host handle enters the saved intent or its export: no host origin and no
+      // machine-local absolute path, only release-relative recipe custody.
+      const exported = JSON.stringify(unticked);
+      assert.ok(!exported.includes('127.0.0.1'), 'no live host origin enters the saved intent');
+      const custodyPaths = [untickedSelection.recipe?.reference, ...(untickedSelection.recipe?.reference?.materials ?? [])]
+        .filter(Boolean).map(entry => entry.path ?? '');
+      assert.ok(custodyPaths.every(path => typeof path === 'string' && !path.startsWith('/')), 'recipe custody stays release-relative, never a machine-local handle');
 
       // --- Unsupported approval shape: the public codex binding declares approvalLocation 'other';
       // Core cannot write it, so the card says to approve in the tool and offers no tick (#162-AC03).
@@ -151,15 +180,24 @@ export async function runUi165Browser({ origin, output, expected, playwrightModu
         await writeFile(join(output, `${theme}-duplicate-incomplete.json`), JSON.stringify({ status: 'incomplete', reason: 'The copilot fit filter hides the grill-me card from the framework grid; the drawer warning above is still asserted. A copilot-observed skill card needs a binding-supported skill fixture.' }, null, 2));
         outcomes.push({ theme, duplicate: 'incomplete', reason: 'card filtered under copilot' });
       }
-      outcomes.push({ theme, mcp: tickedSelection.recipe.inline.schema, storedKeys: stored.local.length });
+      outcomes.push({ theme, mcp: tickedSelection.recipe.inline.schema, storedKeys: Object.keys(stored.local).length });
       await context.close();
     }
     assert.deepEqual(errors, []);
+    // #162-AC05 secret-canary coverage is unavailable in this seam: the checked MCP catalog item declares
+    // no inputs of its own ({}), its card offers the approval checkbox only, and no other supported UI input
+    // path feeds this selection — so no real path can carry a synthetic secret canary here. That gap is
+    // marked incomplete rather than laundered into green; value privacy is proven structurally above
+    // (recovery artifact ≡ saved intent, empty selection configuration, value-less input declarations,
+    // no live host handle in the saved intent or its export).
+    const canaryGap = { reason: 'secret-canary injection needs a supported input path carrying the MCP item’s declared inputs; the checked item declares none and the approval card offers a checkbox only, so canary coverage is unproved in this seam' };
     const incompleteDuplicate = outcomes.find(value => value?.duplicate === 'incomplete');
-    const status = incompleteDuplicate ? 'incomplete' : 'passed';
-    await writeFile(join(output, 'ui165-evidence.json'), JSON.stringify({ status, outcomes, errors }, null, 2));
+    const status = incompleteDuplicate || canaryGap ? 'incomplete' : 'passed';
+    await writeFile(join(output, 'ui165-evidence.json'), JSON.stringify({ status, outcomes, errors, canaryGap }, null, 2));
     console.log(`UI165 ordinary page cases ${status}: ${output}`);
-    return incompleteDuplicate ? { status: 'incomplete', reason: `positive duplicate card/inspector surface: ${incompleteDuplicate.reason}` } : { status: 'passed' };
+    return incompleteDuplicate
+      ? { status: 'incomplete', reason: `positive duplicate card/inspector surface: ${incompleteDuplicate.reason}` }
+      : { status: 'incomplete', reason: `AC05 secret-canary coverage: ${canaryGap.reason}` };
   } catch (error) {
     await writeFile(join(output, 'failure.json'), JSON.stringify({ error: error.message, errors }, null, 2)).catch(() => {});
     throw error;
