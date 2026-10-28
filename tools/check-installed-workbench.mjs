@@ -1,5 +1,8 @@
-import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { existsSync, readFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import assert from 'node:assert/strict';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pageAssets } from './server/assets.mjs';
@@ -34,22 +37,48 @@ try {
     playwrightModule: import.meta.resolve('playwright'), project, other: `${project}-other` });
 } finally { await new Promise(resolve => workbench.server.close(resolve)); }
 
-// UI165 acceptance cases. Each case owns a fresh disposable target; the restart case stops and restarts the
-// owned server process on the same target and account between its install and verify phases. A case the public
-// fixtures cannot truthfully produce reports 'incomplete' and exits 2, never a silent pass.
-async function withCase(project, run) {
+// UI165 acceptance cases. Each case owns a fresh disposable target hosted by a REAL child Node process
+// (tools/installed-host.mjs): the parent kills and reaps the child between phases and starts a fresh process
+// on the same target, account home and settings. An in-process server recreation is not a process restart and
+// is never described as one. A case the public fixtures cannot truthfully produce reports 'incomplete' and
+// exits 2, never a silent pass.
+async function withHost(project, { sources = undefined } = {}, run) {
   await mkdir(project, { recursive: true });
-  process.env.AIH_CONSUMER_PROJECT = project;
   const caseRunDir = join(project, 'page');
   for (const asset of pageAssets(repo)) {
     const target = join(caseRunDir, asset.to); await mkdir(dirname(target), { recursive: true });
     await copyFile(join(repo, asset.from), target);
   }
-  await writeFile(join(caseRunDir, 'summary.json'), JSON.stringify(summary));
-  const caseWorkbench = await createWorkbench({ consumerDir, runDir: caseRunDir, summary, settingsPath: join(project, 'settings.json') });
-  const address = await listen(caseWorkbench.server, 0);
-  try { await run(`http://127.0.0.1:${address.port}`); }
-  finally { await new Promise(resolve => caseWorkbench.server.close(resolve)); }
+  const summaryPath = join(caseRunDir, 'summary.json');
+  await writeFile(summaryPath, JSON.stringify(summary));
+  const portPath = join(project, 'host.port'), configPath = join(project, 'host-config.json');
+  await writeFile(configPath, JSON.stringify({
+    consumerDir, runDir: caseRunDir, summaryPath, settingsPath: join(project, 'settings.json'), portPath,
+    env: { AIH_CONSUMER_PROJECT: project, ...(sources ? { AIH_FRAMEWORK_SOURCES: sources } : {}) },
+  }));
+  await rm(portPath, { force: true });
+  const child = spawn(process.execPath, [join(repo, 'tools/installed-host.mjs'), configPath], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const log = [];
+  child.stdout.on('data', chunk => log.push(String(chunk)));
+  child.stderr.on('data', chunk => log.push(String(chunk)));
+  const host = { pid: child.pid, project };
+  const earlyExit = new Promise((_, reject) => child.once('exit', (code, signal) => reject(new Error(`host exited before ready (code ${code}, signal ${signal}): ${log.join('').slice(-2000)}`))));
+  earlyExit.catch(() => {}); // The race below settles first once the port is read; a later exit must not surface as unhandled.
+  const port = await Promise.race([earlyExit, (async () => {
+    for (let attempt = 0; attempt < 300; attempt++) {
+      if (existsSync(portPath)) return Number(readFileSync(portPath, 'utf8').trim());
+      await new Promise(done => setTimeout(done, 100));
+    }
+    throw new Error(`host did not write its port within 30s: ${log.join('').slice(-2000)}`);
+  })()]);
+  try { await run(`http://127.0.0.1:${port}`); }
+  finally {
+    const exit = new Promise(resolve => child.once('exit', (code, signal) => resolve({ code, signal })));
+    child.kill('SIGTERM');
+    host.exit = await Promise.race([exit, new Promise((_, reject) => setTimeout(() => reject(new Error('host did not exit after SIGTERM')), 30_000))]);
+  }
+  host.log = log.join('').slice(-2000);
+  return host;
 }
 const caseOutcome = async (name, outcome) => {
   if (outcome.status === 'incomplete') { console.log(`${name} incomplete: ${outcome.reason}`); process.exitCode = 2; return; }
@@ -58,13 +87,34 @@ const caseOutcome = async (name, outcome) => {
 const playwrightPath = import.meta.resolve('playwright');
 
 const restartProject = join(consumerDir, `restart-project-${randomUUID().slice(0, 8)}`);
-await withCase(restartProject, async origin => await caseOutcome('restart install phase', await runRestartInstallBrowser({ origin, output: join(consumerDir, 'restart-install-evidence'), playwrightModule: playwrightPath })));
-// The owned server process was stopped above; starting a fresh one on the same target and account home.
-await withCase(restartProject, async origin => await caseOutcome('restart verify phase', await runRestartVerifyBrowser({ origin, output: join(consumerDir, 'restart-verify-evidence'), playwrightModule: playwrightPath })));
+const restartHosts = [];
+restartHosts.push(await withHost(restartProject, {}, async origin =>
+  await caseOutcome('restart install phase', await runRestartInstallBrowser({ origin, output: join(consumerDir, 'restart-install-evidence'), playwrightModule: playwrightPath }))));
+// The first host process was killed and reaped above; this is a fresh process on the same target and account.
+restartHosts.push(await withHost(restartProject, {}, async origin =>
+  await caseOutcome('restart verify phase', await runRestartVerifyBrowser({ origin, output: join(consumerDir, 'restart-verify-evidence'), playwrightModule: playwrightPath }))));
+assert.notEqual(restartHosts[0].pid, restartHosts[1].pid, 'the restart evidence names two distinct host processes');
+await writeFile(join(consumerDir, 'restart-verify-evidence', 'host-processes.json'), JSON.stringify({ status: 'passed', hosts: restartHosts }, null, 2));
 
 const firstRunProject = join(consumerDir, `first-run-project-${randomUUID().slice(0, 8)}`);
-await withCase(firstRunProject, async origin => await caseOutcome('firstRun positive case', await runFirstRunBrowser({ origin, output: join(consumerDir, 'first-run-evidence'), playwrightModule: playwrightPath })));
+await withHost(firstRunProject, {}, async origin =>
+  await caseOutcome('firstRun positive case', await runFirstRunBrowser({ origin, output: join(consumerDir, 'first-run-evidence'), playwrightModule: playwrightPath })));
+
+// The MCP cases need the checked ECC release in the catalog. It loads through the same configured fixture
+// route check-frameworks uses (frameworkFixtures + AIH_FRAMEWORK_SOURCES), scoped to these cases only; no
+// Catalog source or archive change, no fabricated checked handle. The intentional unconfigured refusal
+// coverage elsewhere stays on the default sources.
+const { frameworkFixtures } = await import(pathToFileURL(join(consumerDir, 'consumer/framework-fixtures.mjs')).href);
+const reviewed = JSON.parse(await readFile(join(consumerDir, 'reviewed-packages.json'), 'utf8'));
+const catalogArtifact = reviewed.find(entry => entry.name === 'catalog');
+if (!catalogArtifact?.tarball || !catalogArtifact?.sha256) throw new Error('reviewed-packages.json lacks the catalog archive identity for the ECC fixture route.');
+const mcpFixtureDir = join(consumerDir, 'mcp-framework-fixtures');
+const mcpFixture = await frameworkFixtures(mcpFixtureDir, catalogArtifact);
+const mcpSources = join(mcpFixtureDir, 'sources.json');
+await writeFile(mcpSources, JSON.stringify(mcpFixture.scenarios.browse));
 
 const mcpProject = join(consumerDir, `mcp-apply-project-${randomUUID().slice(0, 8)}`);
-await withCase(mcpProject, async origin => await caseOutcome('MCP failed Apply case', await runMcpFailedApplyBrowser({ origin, output: join(consumerDir, 'mcp-failed-apply-evidence'), project: mcpProject, playwrightModule: playwrightPath })));
-await withCase(mcpProject, async origin => await caseOutcome('MCP ticked Apply case', await runMcpApplyBrowser({ origin, output: join(consumerDir, 'mcp-apply-evidence'), project: mcpProject, playwrightModule: playwrightPath })));
+await withHost(mcpProject, { sources: mcpSources }, async origin =>
+  await caseOutcome('MCP failed Apply case', await runMcpFailedApplyBrowser({ origin, output: join(consumerDir, 'mcp-failed-apply-evidence'), project: mcpProject, playwrightModule: playwrightPath })));
+await withHost(mcpProject, { sources: mcpSources }, async origin =>
+  await caseOutcome('MCP ticked Apply case', await runMcpApplyBrowser({ origin, output: join(consumerDir, 'mcp-apply-evidence'), project: mcpProject, playwrightModule: playwrightPath })));
