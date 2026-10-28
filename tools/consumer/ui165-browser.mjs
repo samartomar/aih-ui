@@ -186,7 +186,8 @@ export async function runUi165Browser({ origin, output, expected, playwrightModu
         const badgeText = await badge.innerText();
         assert.ok(badgeText.includes(`Second copy: ${expected.additional.grillDirName} is also in a parent folder (`), 'the card shows the same Core warning');
         assert.ok(badgeText.includes('.github/skills'), 'the card names where the copy was seen');
-        await warnedCard.click();
+        // Badge clicks stop propagation; inspect through the card's ordinary title target.
+        await warnedCard.locator('.wb-card-title').click();
         await page.locator('#inspector-browse-facts').waitFor();
         const inspectorText = await page.locator('#inspector-browse-facts').innerText();
         assert.match(inspectorText, /Also seen by your tool[\s\S]*Second copy: .*parent folder/, 'the inspector shows the same warning');
