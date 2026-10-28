@@ -32,6 +32,9 @@ export async function runProjectFolderBrowser({ origin, output, playwrightModule
   try {
     for (const theme of ['dark', 'light']) {
       const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 1000 } });
+      // Extensions skills carry per-client recipes; the page truthfully refuses to add them without the header
+      // tool, so this journey chooses claude up front, as the installed journey does.
+      await context.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
       page = await context.newPage(); page.setDefaultTimeout(30_000);
       page.on('pageerror', error => errors.push(error.message));
       await page.goto(origin + '/');

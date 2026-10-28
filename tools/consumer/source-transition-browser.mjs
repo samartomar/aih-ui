@@ -39,7 +39,9 @@ export async function runSourceTransitionBrowser({ plan, output, playwrightModul
   assert.equal(historicalPreparation.status, 'refused');
   assert.equal(historicalPreparation.diagnostics[0].code, 'HISTORICAL_SOURCE_UPDATE_REQUIRED');
   const artifact = await acquireBaselineArtifact(after.release.baseline.artifact, { packageRoot: dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'))) });
-  const read = await readArtifact(artifact), descriptors = item => [item.recipe, ...item.materials].map(({ path, sha256, byteLength }) => ({ path, sha256, byteLength }));
+  // Release 1.7 items carry a recipes map in place of the single recipe; every recipe descriptor is part of
+  // the checked subject, so coverage names them all, never just the first.
+  const read = await readArtifact(artifact), descriptors = item => [item.recipe, ...Object.values(item.recipes ?? {}), ...item.materials].filter(Boolean).map(({ path, sha256, byteLength }) => ({ path, sha256, byteLength }));
   const oldCoverage = await readContentCoverage({ read, descriptors: descriptors(oldItem) }), newCoverage = await readContentCoverage({ read, descriptors: descriptors(newItem) });
   assert.equal(newCoverage.status, 'matched'); assert.equal(oldCoverage.status, 'mismatched');
   const trustBytes = await readFile(plan.trust.path); assert.equal(hash(trustBytes), plan.trust.sha256);

@@ -159,3 +159,19 @@ test('a project folder change supersedes every host result still out, and an inv
   assert.equal((await latePreview).status, 'superseded');
   assert.equal((await lateInventory).status, 'superseded');
 });
+
+test('the header tool serializes as its canonical id, never the registry object', async t => {
+  const previous = globalThis.fetch; const bodies = [];
+  globalThis.fetch = (_url, init) => { bodies.push(JSON.parse(init.body)); return Promise.resolve(response({ status: 'ok', value: value(9) })); };
+  t.after(() => { globalThis.fetch = previous; });
+  const client = createAuthoringClient();
+  client.setTool({ id: 'claude', label: 'Claude Code', surface: 'cli', observed: true }); // the header hands over the entry
+  await client.request('edit', { operation: { type: 'select' } });
+  assert.equal(bodies[0].tool, 'claude', 'a tool object becomes its canonical id');
+  client.setTool('codex');
+  await client.request('edit', { operation: { type: 'select' } });
+  assert.equal(bodies[1].tool, 'codex', 'a string id is kept verbatim');
+  client.setTool(null);
+  await client.request('edit', { operation: { type: 'select' } });
+  assert.equal(Object.hasOwn(bodies[2], 'tool'), false, 'no tool sends no tool field at all');
+});
