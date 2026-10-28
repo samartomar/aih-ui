@@ -98,13 +98,68 @@ export async function runUi165Browser({ origin, output, expected, playwrightModu
       assert.match(await page.locator('#inspector-browse-facts').innerText(), /Couldn't check/, 'the inspector says the same, never implying no second copy');
       await page.screenshot({ path: join(output, `${theme}-mcp-inspector.png`), animations: 'disabled' });
       await page.locator('#close-inspector-btn').click();
+
+      // --- Positive duplicate warning: a real second copy one folder above the granted project, observed
+      // through public inspectToolHost (#163-AC01). Only the copilot binding declares ancestor-folder reads,
+      // so the header switches to it; saved selections keep their recorded tool identity (no rebind).
+      await page.locator('#your-tool-trigger').click();
+      await page.locator('[data-tool="claude"]').click();
+      await framework(page, expected.additional);
+      const grill = expected.additional.grill;
+      const grillCard = page.locator(`[data-card-id="${expected.additional.sha256}/${grill.id}"]`);
+      if (!(await grillCard.count())) { await page.locator('#browse-all-items').check(); await grillCard.waitFor(); }
+      await grillCard.getByRole('button', { name: `Add ${grill.id}`, exact: true }).click();
+      await grillCard.getByRole('button', { name: `Remove ${grill.id}`, exact: true }).waitFor();
+      // A nested disposable target: the granted project is inner/; the second copy sits one level up where
+      // copilot's public binding (.github/skills, ancestor reads) observes it. No real home is touched.
+      const nested = join(output, `${theme}-duplicate-target`);
+      const inner = join(nested, 'outer', 'inner');
+      await mkdir(join(nested, 'outer', '.github', 'skills', expected.additional.grillDirName), { recursive: true });
+      await writeFile(join(nested, 'outer', '.github', 'skills', expected.additional.grillDirName, 'SKILL.md'), '# A second copy outside the project\n');
+      await mkdir(inner, { recursive: true });
+      await page.locator('#your-setup').click();
+      await page.locator('#project-folder-change').click();
+      await page.locator('#project-folder-input').fill(inner);
+      await page.locator('#project-folder-use').click();
+      await page.locator('#project-folder-message').filter({ hasNotText: /^Checking the folder…$/ }).waitFor();
+      await closePolicyDrawer(page);
+      // The tool switch re-browses with the folder set, so the real inspection runs for the chosen items.
+      await page.locator('#your-tool-trigger').click();
+      await page.locator('[data-tool="copilot"]').click();
+      await framework(page, expected.additional);
+      await page.locator('#your-setup').click();
+      await page.waitForFunction(() => /Second copy|Couldn't check/.test(document.getElementById('setup-choices-host-copies').textContent));
+      const drawerLine = await page.locator('#setup-choices-host-copies').textContent();
+      assert.ok(drawerLine.includes(`Second copy: ${expected.additional.grillDirName} is also in a parent folder (`), 'the drawer names the real second copy exactly as Core reported it');
+      assert.doesNotMatch(drawerLine, /No second copy reported|Couldn't check/, 'a reported copy never shows a clean or unavailable line');
+      await closePolicyDrawer(page);
+      const warnedCard = page.locator(`[data-card-id="${expected.additional.sha256}/${grill.id}"]`);
+      if (await warnedCard.count()) {
+        const badge = warnedCard.locator('[data-state="two-copies"]');
+        await badge.waitFor();
+        const badgeText = await badge.innerText();
+        assert.ok(badgeText.includes(`Second copy: ${expected.additional.grillDirName} is also in a parent folder (`), 'the card shows the same Core warning');
+        assert.ok(badgeText.includes('.github/skills'), 'the card names where the copy was seen');
+        await warnedCard.click();
+        await page.locator('#inspector-browse-facts').waitFor();
+        const inspectorText = await page.locator('#inspector-browse-facts').innerText();
+        assert.match(inspectorText, /Also seen by your tool[\s\S]*Second copy: .*parent folder/, 'the inspector shows the same warning');
+        await page.screenshot({ path: join(output, `${theme}-duplicate-warning.png`), animations: 'disabled' });
+        await page.locator('#close-inspector-btn').click();
+        outcomes.push({ theme, duplicate: 'passed' });
+      } else {
+        await writeFile(join(output, `${theme}-duplicate-incomplete.json`), JSON.stringify({ status: 'incomplete', reason: 'The copilot fit filter hides the grill-me card from the framework grid; the drawer warning above is still asserted. A copilot-observed skill card needs a binding-supported skill fixture.' }, null, 2));
+        outcomes.push({ theme, duplicate: 'incomplete', reason: 'card filtered under copilot' });
+      }
       outcomes.push({ theme, mcp: tickedSelection.recipe.inline.schema, storedKeys: stored.local.length });
       await context.close();
     }
     assert.deepEqual(errors, []);
-    await writeFile(join(output, 'ui165-evidence.json'), JSON.stringify({ status: 'passed', outcomes, errors }, null, 2));
-    console.log(`UI165 ordinary page cases passed: ${output}`);
-    return { status: 'passed' };
+    const incompleteDuplicate = outcomes.find(value => value?.duplicate === 'incomplete');
+    const status = incompleteDuplicate ? 'incomplete' : 'passed';
+    await writeFile(join(output, 'ui165-evidence.json'), JSON.stringify({ status, outcomes, errors }, null, 2));
+    console.log(`UI165 ordinary page cases ${status}: ${output}`);
+    return incompleteDuplicate ? { status: 'incomplete', reason: `positive duplicate card/inspector surface: ${incompleteDuplicate.reason}` } : { status: 'passed' };
   } catch (error) {
     await writeFile(join(output, 'failure.json'), JSON.stringify({ error: error.message, errors }, null, 2)).catch(() => {});
     throw error;

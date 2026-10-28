@@ -44,7 +44,10 @@ export async function frameworkFixtures(directory, catalogArtifact) {
   expected.additional = { framework: additional.release.framework, sha256: additional.release.sha256, items: additional.release.items.length,
     choosable: additional.release.items.filter(item => item.role !== 'supporting').length,
     defaults: defaults.value.selections.filter(selection => additional.release.items.find(item => item.id === selection.item.itemId)?.role !== 'supporting').length,
-    requests: starting(additional.release), grill: additional.release.items.find(item => item.name === 'grill-me') };
+    requests: starting(additional.release), grill: additional.release.items.find(item => item.name === 'grill-me'),
+    // The keyed directory Core's host inspection looks for when checking for second copies (#163).
+    grillDirName: additional.release.items.find(item => item.name === 'grill-me')?.payload?.dirName
+      ?? additional.release.items.find(item => item.name === 'grill-me')?.payload?.key };
   const ecc = await readInstalledPreparedContent({ root, frameworkId: 'ecc', sourceInput: 'fixture-ecc' });
   if (!ecc.valid) throw new Error('Public ECC prepared fixture unavailable.');
   const optionSet = ecc.release.sets.find(set => set.options?.length), option = optionSet.options[0], language = option.choices.find(choice => choice.id === 'typescript') ?? option.choices[0];

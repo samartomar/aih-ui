@@ -171,7 +171,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     const reopened = await openPage();
     operations = []; categoriesSent = [];
     await openSaved(reopened, policyPath, OPENED);
-    assert.deepEqual(operations.filter(operation => !['read', 'draft-open', 'maintenance-check', 'improvements-check', 'workspace-read', 'trials-read', 'evidence-states'].includes(operation)), [], 'Opening may only read.');
+    assert.deepEqual(operations.filter(operation => !['read', 'draft-open', 'maintenance-check', 'improvements-check', 'workspace-read', 'trials-read', 'evidence-states', 'tool-host'].includes(operation)), [], 'Opening may only read.');
     assert.deepEqual(categoriesSent, [['content']]);
     assert.match(await checkedText(reopened), /^Last checked \d{4}/);
     let groups = await groupsOf(reopened);
@@ -339,7 +339,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     const reachedPage = await openPage();
     operations = [];
     await openSaved(reachedPage, reachedPath, OPENED);
-    assert.deepEqual(operations.filter(operation => !['read', 'draft-open', 'maintenance-check', 'improvements-check', 'workspace-read', 'trials-read', 'evidence-states'].includes(operation)), [], 'Reopening only reads; nothing is scheduled or applied.');
+    assert.deepEqual(operations.filter(operation => !['read', 'draft-open', 'maintenance-check', 'improvements-check', 'workspace-read', 'trials-read', 'evidence-states', 'tool-host'].includes(operation)), [], 'Reopening only reads; nothing is scheduled or applied.');
     groups = await groupsOf(reachedPage);
     assert.equal(groups['Needs attention'].length, 1);
     assert.match(groups['Needs attention'][0], new RegExp(`Defer date reached \\(${pastDate}\\); needs attention\\.`));
@@ -404,7 +404,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     await waitSettled(resolvedPage, null);
     assert.equal(await resolvedPage.locator('#policy-draft').isHidden(), true, 'A resolved policy reopens as an ordinary policy, not a draft.');
     assert.equal(await resolvedPage.locator('#policy-updates').isVisible(), true);
-    assert.deepEqual(operations.filter(operation => !['read', 'maintenance-check', 'improvements-check', 'workspace-read', 'trials-read', 'evidence-states'].includes(operation)), [], 'Opening may only read.');
+    assert.deepEqual(operations.filter(operation => !['read', 'maintenance-check', 'improvements-check', 'workspace-read', 'trials-read', 'evidence-states', 'tool-host'].includes(operation)), [], 'Opening may only read.');
     assert.deepEqual(checkInputs, ['policy']); assert.deepEqual(categoriesSent, [['content']]);
     groups = await groupsOf(resolvedPage);
     assert.deepEqual(Object.keys(groups), ['Needs attention']);
@@ -441,7 +441,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     operations = [];
     await supplyEvidence(resolvedReopened);
     await openSaved(resolvedReopened, resolvedDraftPath, 'Saved draft reopened');
-    assert.deepEqual(operations.filter(operation => !['read', 'draft-open', 'maintenance-check', 'improvements-check', 'workspace-read', 'trials-read', 'evidence-states'].includes(operation)), [], 'Reopening only reads.');
+    assert.deepEqual(operations.filter(operation => !['read', 'draft-open', 'maintenance-check', 'improvements-check', 'workspace-read', 'trials-read', 'evidence-states', 'tool-host'].includes(operation)), [], 'Reopening only reads.');
     groups = await groupsOf(resolvedReopened);
     assert.deepEqual(Object.keys(groups), ['Skipped revisions']);
     assert.match(groups['Skipped revisions'][0], /Skipped this exact revision\./);
