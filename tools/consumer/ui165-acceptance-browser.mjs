@@ -150,7 +150,7 @@ export async function runRestartVerifyBrowser({ origin, output, playwrightModule
       const { appendFile } = await import('node:fs/promises');
       await appendFile(join(project, '.claude', 'skills', 'grill-me', 'SKILL.md'), '\n# edited outside the Workbench\n');
       await closePolicyDrawer(page); await openPolicyDrawer(page);
-      const changed = page.locator('[data-installed-state="changed-since-install"]');
+      const changed = page.locator('[data-installed-state="changed"]');
       await changed.waitFor();
       assert.match(await changed.innerText(), /Changed since install/);
       assert.ok(await changed.getAttribute('title') ?? await changed.locator('[title]').first().getAttribute('title'), 'the state chip carries its explanation');
