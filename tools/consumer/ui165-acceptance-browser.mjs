@@ -87,16 +87,8 @@ export async function runRestartInstallBrowser({ origin, output, playwrightModul
     await closePolicyDrawer(page);
     // A FRESH browser context reopens and validates the exact saved choices - the mixed saved/reopen half of
     // the accepted criterion, independent of the later fresh-PROCESS inventory proof.
-    const context2 = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
-    await context2.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
-    const reopened = await context2.newPage(); reopened.setDefaultTimeout(30_000);
-    await reopened.goto(origin + '/');
-    await reopened.locator('#browse-family option[value="Extensions"]').waitFor({ state: 'attached' });
-    if (await reopened.locator('#setup-dialog').isVisible()) {
-      await reopened.getByRole('radio', { name: /Vibe coder/ }).check();
-      for (let step = 0; step < 4; step++) await reopened.locator('#setup-next').click();
-      await reopened.locator('#setup-dialog').waitFor({ state: 'hidden' });
-    }
+    const { context: context2, page: reopened } = await openPage(browser, origin, { theme, tool: true });
+    assert.equal(await reopened.evaluate(() => document.documentElement.dataset.mode), theme, 'The reopened mixed review uses the requested theme.');
     await openPolicyWorkspace(reopened); await openPolicyFileActions(reopened);
     await reopened.locator('#policy-open').setInputFiles(savedPath);
     await reopened.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
@@ -123,7 +115,7 @@ export async function runRestartInstallBrowser({ origin, output, playwrightModul
 
 // (2b) Verify phase after the OWNED SERVER PROCESS was stopped and started again on the same target: no policy
 // opened, no draft — the inventory must come from Core's on-disk receipts alone.
-export async function runRestartVerifyBrowser({ origin, output, playwrightModule, theme = 'dark', project = undefined, extraItem = undefined }) {
+export async function runRestartVerifyBrowser({ origin, output, playwrightModule, theme = 'dark', project = undefined, extraItem = undefined, extraName = undefined }) {
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true });
