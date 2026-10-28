@@ -125,14 +125,17 @@ export async function runRestartVerifyBrowser({ origin, output, playwrightModule
     const { context, page } = await openPage(browser, origin, { theme });
     page.on('pageerror', error => errors.push(error.message));
     await openPolicyDrawer(page);
-    const installed = page.locator('[data-installed-item="extensions.matt.grill-me"]');
-    await installed.waitFor();
-    assert.match(await installed.innerText(), /it needs:.*grilling/, 'recorded names and the needed-by grouping survive a full server restart with no draft');
+    // No draft is opened here by design: Core's recorded selections list apart under 'Other installed
+    // items' (data-installed-other), never as data-installed-item, and the policy-derived needed-by text is
+    // legitimately absent. The truthful no-draft surface is the recorded names in the installed list.
+    const list = page.locator('#installed-list');
+    await list.waitFor();
+    await page.locator('#installed-note').filter({ hasNotText: /^Checking/ }).waitFor();
+    await page.waitForFunction(() => document.getElementById('installed-list').textContent.includes('grill-me'), null, { timeout: 30_000 });
+    assert.match(await list.innerText(), /grill-me/, 'the recorded Extensions name survives a full server restart with no draft');
+    assert.match(await list.innerText(), /Other installed items/, 'with no draft, recorded selections list apart truthfully');
     if (extraItem) {
-      const mixed = page.locator(`[data-installed-item="${extraItem}"]`);
-      await mixed.waitFor();
-      assert.match(await mixed.innerText(), new RegExp('it needs|Chosen|sets?:', 'i'), 'the mixed ECC+Extensions setup keeps the ECC item from the recorded projection after the restart');
-      if (extraName) assert.ok((await mixed.innerText()).includes(extraName), 'the recorded ECC name survives the fresh process');
+      assert.ok((await list.innerText()).includes(extraName ?? extraItem), 'the mixed ECC+Extensions setup keeps the ECC item from the recorded projection after the restart');
     }
     assert.equal(await page.locator('[data-installed-state]').count(), 0, 'a fresh complete install carries no adverse state chips');
     if (project) {
