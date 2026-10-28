@@ -277,7 +277,16 @@ export async function runStaleReviewBrowser({ origin, output, project, playwrigh
     const shown = await advanced.innerText();
     assert.match(shown, /REVIEW_STALE/, 'Core\'s own stale diagnostic is shown, not a UI rule');
     assert.match(await readFile(target, 'utf8'), /Tampered after prepare/, 'the refused Apply changed nothing on disk');
-    // Fresh preparation is required; the same Core path then succeeds and replaces the tampered bytes.
+    // Fresh preparation is required. Core detects the tampered on-disk file at PREPARE time - the honest
+    // answer is partial with STATE_CONFLICT and Apply stays disabled - so the person first resolves the
+    // conflict (removes the unreviewed file), then prepares again: ready, Apply completes, bytes replaced.
+    await advanced.getByRole('button', { name: 'Prepare exact effects', exact: true }).click();
+    await page.waitForFunction(() => [...document.querySelectorAll('details.policy-advanced')].some(node => node.textContent.includes('Prepare exact effects') && /STATE_CONFLICT/.test(node.textContent)), null, { timeout: 60_000 });
+    const conflict = await advanced.innerText();
+    assert.match(conflict, /STATE_CONFLICT/, 'Core names the on-disk conflict at prepare time');
+    assert.equal(await advanced.getByRole('button', { name: 'Approve and Apply reviewed effects', exact: true }).isDisabled(), true, 'Apply stays disabled while the conflict is unresolved');
+    const { rm } = await import('node:fs/promises');
+    await rm(join(project, '.claude', 'skills', 'grill-me', 'SKILL.md'), { force: true });
     await advanced.getByRole('button', { name: 'Prepare exact effects', exact: true }).click();
     await page.waitForFunction(() => { const t = document.querySelectorAll('details.policy-advanced'); const panel = [...t].find(node => node.textContent.includes('Prepare exact effects')); return panel && panel.textContent.includes('Prepared effects are ready for review'); }, null, { timeout: 120_000 });
     await advanced.getByRole('button', { name: 'Approve and Apply reviewed effects', exact: true }).click();
