@@ -39,12 +39,8 @@ export async function runInstalledPanelBrowser({ origin, output, playwrightModul
       await page.locator('#installed-note').filter({ hasText: 'Nothing from Workbench is installed' }).waitFor();
       await page.locator('#install-button:not([disabled])').waitFor();
       assert.ok(await page.locator('#install-files').getByText(/SKILL.md/).count());
-      await page.locator('#install-button').click();
-      await page.locator('#install-message[data-outcome="installed"]').waitFor({ timeout: 120_000 });
-      const group = page.locator('[data-installed-item="extensions.matt.grill-me"]');
-      await group.waitFor(); assert.match(await group.innerText(), /it needs:.*grilling/);
-      // UI166: only the strict complete run claims confirmed on disk, and the review is named rows with folders.
-      assert.match(await page.locator('#install-message').innerText(), /Confirmed on disk/);
+      // Review the named items through the same expandable section a person opens before Install.
+      await page.locator('#install-details > summary').click();
       await page.locator('#install-review-rows [data-review-selection]').first().waitFor();
       const folders = await page.locator('#install-folders').innerText();
       assert.match(folders, /Project folder: .+\./, 'the actual project folder is stated');
@@ -52,6 +48,12 @@ export async function runInstalledPanelBrowser({ origin, output, playwrightModul
       const rowsText = await page.locator('#install-review-rows').innerText();
       assert.match(rowsText, /(When used: \d+ bytes · \d+ chars|Size unknown: Core reported no delivered size for this item\.)/, 'the size line is Core\'s exact wording, never a vague allowance');
       assert.match(rowsText, /Chosen by you/, 'a directly chosen item says its recorded origin');
+      await page.locator('#install-button').click();
+      await page.locator('#install-message[data-outcome="installed"]').waitFor({ timeout: 120_000 });
+      const group = page.locator('[data-installed-item="extensions.matt.grill-me"]');
+      await group.waitFor(); assert.match(await group.innerText(), /it needs:.*grilling/);
+      // UI166: only the strict complete run claims confirmed on disk.
+      assert.match(await page.locator('#install-message').innerText(), /Confirmed on disk/);
       // UI166-AC04: a directly added item has no set-owned first step, so the guidance line stays empty.
       assert.equal(await page.locator('#install-first-run').textContent(), '');
       await page.screenshot({ path: join(output, `${theme}-installed.png`), fullPage: true });
