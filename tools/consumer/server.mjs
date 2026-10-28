@@ -57,18 +57,14 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
     frameworkCatalog.frameworks.push(...frameworkFixtureInventories.map(entry => ({ ...entry.release.framework, sha256: entry.release.sha256, kind: 'fixture', reason: entry.fixture, state: 'ready', sets: entry.release.sets ?? [], sources: entry.release.sources, observations: observation(entry.release) })));
   }
   // installedFamilies now reads the same prepared releases the default catalog reader exposes; compose once
-  // per exact release so the catalog never renders the same item twice.
+  // per exact release so the catalog never renders the same item twice, with explicit fixture
+  // inventories replacing the installed default for their exact framework+version (see the module).
   const installedFamilyInventories = await installedFamilies();
-  const installedShas = new Set(installedFamilyInventories.map(entry => entry.release.sha256));
-  // An explicitly supplied fixture inventory replaces the installed default for the SAME framework and
-  // version: hook fixtures pin an exact golden release while the installed family ships the same
-  // framework/version under a different sha, and Catalog's set resolution rejects that legitimate
-  // ambiguity (REFERENCE_AMBIGUOUS). The fixture wins; other families are untouched.
-  const fixtureVersions = new Set((frameworkFixtureInventories ?? []).map(entry => `${entry.release.framework?.id}@${entry.release.framework?.version}`));
-  const familyInventories = [
-    ...installedFamilyInventories.filter(entry => !fixtureVersions.has(`${entry.release.framework?.id}@${entry.release.framework?.version}`)),
-    ...frameworkCatalog.inventories.filter(entry => !installedShas.has(entry.release.sha256)),
-  ];
+  const familyInventories = composeFamilyInventories({
+    installed: installedFamilyInventories,
+    catalog: frameworkCatalog.inventories,
+    fixtures: frameworkFixtureInventories ?? [],
+  });
   // Explicit previous-package history participates in exact saved-pin reads,
   // never in the current browse inventory. Preserve the logical input saved
   // before upgrade; historical execution is guarded separately below.
