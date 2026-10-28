@@ -36,7 +36,10 @@ export async function installedFamilies({ root = dirname(fileURLToPath(import.me
   return Promise.all(families.map(async ([family, releaseExport, frameworkId]) => {
     if (frameworkId) {
       const prepared = await readInstalledPreparedContent({ root, frameworkId }).catch(() => null);
-      if (prepared?.valid) return { family, release: prepared.release, materialSource: prepared.source, materials: await materialsOf(root, prepared.release) };
+      // The prepared release carries the item identities; custody keeps the caller's host-bound materialSource
+      // input (the service binds that input to the installed package root - an unfamiliar input is staged
+      // separately and cannot serve Core's material reads).
+      if (prepared?.valid) return { family, release: prepared.release, materialSource: { kind: 'local', input: sourceInput }, materials: await materialsOf(root, prepared.release) };
     }
     return { family, ...await installedReleaseInventory({ root, releaseExport, sourceInput }) };
   }));
