@@ -79,11 +79,13 @@ requires explicit reconciliation and never silently replaces the saved choice.
 Your setup and the inspector keep the internal status and full identity inspectable.
 No machine path is added to portable metadata.
 
-Observed counts use Harness static `checkCompatibility` over the actual loaded
+Compatibility observation counts use Harness static `checkCompatibility` over the actual loaded
 items for the header's chosen tool and this host's OS/architecture. They count
 per-item platform observations, not successful execution; the tooltip says
-**observed, not works**. Missing or refused compatibility is unavailable, never a
+**observed, not works**. Zero observations means not yet confirmed on that platform, not zero installed items or an unsupported tool. Missing or refused compatibility is unavailable, never a
 guessed zero. First-step guidance points to tool selection and framework browsing.
+
+Framework browsing uses the header's chosen tool; legacy target/support filters do not narrow it. Active search and kind filters are visible beside a clear action. No selected sets, no published sets, or an unresolved set shows all independently browsable content while keeping Catalog's refusal visible. **Clear set choices** deselects the browsing sets; **Remove chosen sets** explicitly removes previously added sets from Your setup. Shared plugin routes appear once above the framework's cards, with full details still available in the inspector. Project tools and workspace link to the Project basics framework instead of repeating a second project-content grid.
 
 When Catalog refuses a chosen set for missing declared inputs, **Required inputs
 for chosen sets** reuses the ordinary configuration editor. Values are explicit
@@ -167,7 +169,7 @@ Git publishing and operator-host inputs that are still needed.
 
 Optional host configuration uses the existing `AIH_CONSUMER_PROJECT`,
 `AIH_CONSUMER_CONTROLS`, `AIH_ORGANIZATION_SOURCE` and `AIH_REVIEW_TRUST`
-environment inputs. `AIH_CONSUMER_PROJECT` is the default project folder; the review drawer's Project folder row can choose another for the server's lifetime. The host refuses a relative, missing or non-folder path, a drive or filesystem root, the account's and the server's home folders themselves (the account's own, `HOME`, `USERPROFILE`), and Core's published state root and anything inside it, comparing real paths; folders inside a home folder are allowed. Install and Remove check the chosen folder again before each run. A switch is refused while Install or Remove is running and replaces the execution hosts, so nothing prepared for the old folder can be applied. Recent folders stay in this browser only. Without a project folder, Prepare/Apply and managed removal
+environment inputs. `AIH_CONSUMER_PROJECT` is the default project folder; the review drawer's Project folder row can choose another for the server's lifetime. The host refuses a relative, missing or non-folder path, a drive or filesystem root, the account's and the server's home folders themselves (the account's own, `HOME`, `USERPROFILE`), and Core's published state root and anything inside it, comparing real paths; folders inside a home folder are allowed. Install and Remove check the chosen folder again before each run. A switch is refused while Install or Remove is running and replaces the execution hosts, so nothing prepared for the old folder can be applied. Use folder opens a menu of directories on the Workbench host, which can be a different machine from the browser. The menu reads names only, excludes dot-prefixed directories and directory links, and caps traversal at 1,000 entries with at most 200 returned folders; it does not recurse, upload files, change the selected project or install anything. A full host path remains available. Explicitly choosing Use this folder applies the existing validation and switch rules. Recent folders stay in this browser only. Without a project folder, Prepare/Apply and managed removal
 remain unavailable with an explanation. `AIH_UPDATE_SOURCE_CATALOG_ROOTS` configures the update source: an ordered list of at most 8 absolute paths of locally packed Catalog package roots, oldest first, separated by the platform path delimiter (`;` on Windows, `:` elsewhere). Each root is read only through the public `readInstalledRelease`, one export at a time: its `release.json` and the four family release exports, and nothing else under it except, as described next, its `package.json`; nothing is written and no scan runs. The frozen default `./release.json` is optional: a root whose package does not declare it is read from its four family releases. Only when the reader refuses the default as not exported is the root's `package.json` read, and only to see whether its export map names `./release.json`; a declared default the reader refuses stays offline as before. Such a root still counts as online, and its source line names the first family release it read. A root counts as read only when every release it exports of those five is a valid release of the installed `@aihq/catalog` package, and the four family exports are always required; otherwise it is reported offline as unreadable, invalid or a different package, naming the first export that failed, with the time it was last read kept for the lifetime of the server. While some roots are offline, the updates the readable ones offer are still listed, but content is reported unknown ("some update sources could not be read"), never checked, and the page keeps earlier updates and their check time; the improvements check says the same. The page shows each source by position, never by path. Later entries are newer, which is this host's own declaration and not a Catalog or producer fact (local packs can share one package version), so the page words it as the order declared by this host's update source. A launcher passes the same list as `startConsumer({ updateSourceCatalogRoots })`; the owner-testing candidate sets it from its manifest's `updateSourceCatalogs`. More than 8 entries, an empty entry or a relative path fails at startup, and so does setting it together with `AIH_MAINTENANCE_SOURCE`. `AIH_MAINTENANCE_SOURCE` is a test fixture only: the path of a small JSON file naming note-fixture revisions to publish as newer revisions of the review note, shown as "Test fixture source — not a real update source". With neither set, the host has no update source and content updates are unknown, not checked. `AIH_UI_SETTINGS_PATH` selects an
 isolated local setup store for tests; HTTP inputs cannot choose that path.
 
@@ -179,7 +181,7 @@ The application declares `@aihq/core` 1.0.0-dev.37, `@aihq/catalog` 0.1.0 and `@
 
 For the saved-intent local proof, set `CORE_TGZ`, `CATALOG_TGZ` and `SCAN_TGZ`
 to reviewed archives, then run `node tools/saved-intent-proof.mjs <output-directory> --serve`
-with Node 24.15–24.x. It installs into an isolated consumer, runs the focused tests,
+with Node 26.12.1–26.x for the current reviewed producer archives. It installs into an isolated consumer, runs the focused tests,
 writes policies and measurements beneath that output directory, and serves
 `http://127.0.0.1:4821/intent` (override with `AIH_CONSUMER_PORT`). The ordinary `/`
 page still uses installed Catalog content and the public execution host when configured.
@@ -857,8 +859,12 @@ does not answer within two minutes is the failed state.
 
 `package-support-1.1.json`, exported as `aih-ui/package-support-1.1.json`, is
 the Workbench's package-support declaration in Core's published
-`urn:aihq:package-support:1.1.0` format. It names what the Workbench actually
-reads and writes:
+`urn:aihq:package-support:1.1.0` format. Runtime support is per public entry:
+`aih-ui/stored-results` supports Node `>=24.15.0 <25 || >=26.12.1 <27`.
+The other Node entries retain `>=24.15.0 <25`; journey, workspace and batch
+retain their portable classification. A reader's entry range does not override
+a dependency package's installation engine range or establish runtime support
+for the application host. It names what the Workbench actually reads and writes:
 
 - each format this package exports a schema for, which it writes and reopens
   (`both`), with an accepted and a refused fixture read by the Workbench's own
@@ -1236,7 +1242,7 @@ loopback URL and exact package hashes. Without `AIH_CONSUMER_PROJECT`, browsing,
 authoring, download and reopen work while Prepare/Apply stay unavailable. An
 explicit host-configured disposable target enables review and approval; the
 browser cannot supply material roots, and can change the project folder only through the host's checked choice above. `AIH_CONSUMER_CONTROLS`
-may name a host-owned controls JSON file. Use Node 24.15 through 24.x.
+may name a host-owned controls JSON file. The current reviewed producer archives require Node 26.12.1 through 26.x for this mixed-package host. This host requirement does not broaden the per-entry support declaration above.
 
 The page saves ordinary execution policy JSON plus namespaced
 `aih.workbench` metadata describing exact source identity, explicit roots and

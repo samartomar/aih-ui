@@ -8,6 +8,7 @@ export function createStartingSets({ container, onChange, onAdd }) {
   function button(set, chosen, update) {
     const node = el('button', 'set-choice', set.name); node.type = 'button';
     node.dataset.setId = set.id; node.setAttribute('aria-pressed', String(chosen));
+    node.setAttribute('aria-label', `${set.name} — ${chosen ? 'selected; click to deselect' : 'not selected; click to select'}`);
     attachTooltip(node, `${set.description ?? set.name} · ${set.offer}. Exact set ${set.setSha256}.`);
     node.addEventListener('click', () => update(set.id)); return node;
   }
@@ -41,7 +42,12 @@ export function createStartingSets({ container, onChange, onAdd }) {
       }
       disclosure.append(list); row.append(disclosure);
     }
+    if (sets.length && requests.length) {
+      const clear = el('button', 'set-choice', 'Clear set choices'); clear.type = 'button'; clear.id = 'browse-clear-sets';
+      clear.addEventListener('click', () => onChange([], true)); row.append(clear);
+    }
     container.append(row);
+
     for (const request of requests) {
       const set = sets.find(set => set.id === request.setId);
       for (const option of set?.options ?? []) {
@@ -67,7 +73,10 @@ export function createStartingSets({ container, onChange, onAdd }) {
       add.addEventListener('click', () => { if (add.getAttribute('aria-disabled') !== 'true') onAdd(requests); }); attachTooltip(add, hasTool ? 'Add the exact members Catalog resolves, with options, exclusions and qualified set origins. No installation runs.' : 'Choose your tool in the header before adding sets. Your existing choices are unchanged.'); controls.append(add);
     }
     const all = el('label', 'set-all'); const tick = el('input'); tick.type = 'checkbox'; tick.id = 'browse-all-items'; tick.checked = allItems;
+    tick.disabled = !sets.length || !requests.length || !Array.isArray(result?.resolution?.value?.selections);
     tick.addEventListener('change', () => onChange(requests, tick.checked)); all.append(tick, document.createTextNode('All items')); controls.append(all);
+    if (!requests.length) controls.append(el('span', 'set-note', 'Showing all content. No starting sets are selected.'));
+    else if (!Array.isArray(result?.resolution?.value?.selections)) controls.append(el('span', 'set-note', 'Showing all content while set choices need attention. Your selected sets are unchanged.'));
     if (result?.status === 'read') {
       const fit = result.compatibility?.sets ?? [];
       for (const value of fit) { const badge = el('span', 'browse-fact', `${value.set?.setId ?? value.setId ?? 'Set'} · ${value.members.native} observed · ${value.members.unconfirmed} unconfirmed · ${value.members.none} unavailable`); badge.append(iconSpan('state', 'info')); attachTooltip(badge, JSON.stringify(value)); controls.append(badge); }

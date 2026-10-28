@@ -156,6 +156,8 @@ export function createToolbar({ elements, onQuery, onToggleKind, onSourceType, o
       }
       elements.sourceFilter.parentElement.hidden = model.sourceTypeCounts.size <= 1;
       elements.sourceFilter.value = model.view.sourceType ?? "";
+      elements.sourceFilter.disabled = Boolean(model.frameworkBrowsing);
+      elements.sourceFilter.title = model.frameworkBrowsing ? 'Source type filters do not apply within a framework. Choose another source in Advanced.' : '';
       elements.sortSelect.value = model.view.sort;
       markPillOverflow();
     },

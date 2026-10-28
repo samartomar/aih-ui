@@ -38,7 +38,7 @@ const load = name => import(pathToFileURL(join(consumerDir, 'consumer', name)).h
 const selectedCases = process.argv.slice(5);
 const unavailableOnly = selectedCases.length === 1 && selectedCases[0] === 'readerUnavailable';
 const frameworkFixtures = unavailableOnly ? undefined : (await load('framework-fixtures.mjs')).frameworkFixtures;
-const { runBrowseBrowser, runBrowseReopenBrowser, runOptionalHookBrowser, runBrowseFactsBrowser, runSetActionAccessBrowser, runEvidenceRefreshBrowser, runPluginRoutesBrowser, runRefusedSetFactsBrowser } = await load('browse-browser.mjs');
+const { runBrowseFeedbackBrowser, runFolderMenuBrowser, runBrowseBrowser, runBrowseReopenBrowser, runOptionalHookBrowser, runBrowseFactsBrowser, runSetActionAccessBrowser, runEvidenceRefreshBrowser, runPluginRoutesBrowser, runRefusedSetFactsBrowser } = await load('browse-browser.mjs');
 const { runFrameworksBrowser, runFrameworkLoadingBrowser, runFrameworkReopenBrowser } = await load('frameworks-browser.mjs');
 const { runSetInputsBrowser } = await load('set-inputs-browser.mjs');
 const fixture = unavailableOnly ? { scenarios: { readerUnavailable: { fixture: true, prepared: [{}] } }, expected: {} } : await frameworkFixtures(join(output, 'fixtures'), artifacts.catalog);
@@ -47,7 +47,7 @@ await writeFile(join(output, 'fixture-expectations.json'), JSON.stringify(fixtur
 const summary = { packages: await Promise.all(Object.entries(artifacts).map(async ([name, value]) => ({name,packageName:`@aihq/${name}`,version:JSON.parse(await readFile(join(consumerDir,`node_modules/@aihq/${name}/package.json`),'utf8')).version,...value}))), coreTargets: coreTargetsSummary(callService(consumerDir, {op:'coreTargets'})) };
 const config = join(output, 'sources.json'); process.env.AIH_FRAMEWORK_SOURCES = config;
 const outcomes = [];
-for (const [scenario, configuration] of [...Object.entries(fixture.scenarios), ...(!unavailableOnly ? [['restart', fixture.scenarios.ready], ['browseRestart', fixture.scenarios.browse], ['hookRestart', fixture.scenarios.hook], ['hookCross', fixture.scenarios.hook], ['hookCrossRestart', fixture.scenarios.hook], ['setAccess', fixture.scenarios.browse], ['evidenceRefresh', fixture.scenarios.facts]] : [])].filter(([name]) => !selectedCases.length || selectedCases.includes(name))) {
+for (const [scenario, configuration] of [...Object.entries(fixture.scenarios), ...(!unavailableOnly ? [['restart', fixture.scenarios.ready], ['browseRestart', fixture.scenarios.browse], ['hookRestart', fixture.scenarios.hook], ['hookCross', fixture.scenarios.hook], ['hookCrossRestart', fixture.scenarios.hook], ['setAccess', fixture.scenarios.browse], ['evidenceRefresh', fixture.scenarios.facts], ['browseFeedback', { prepared: fixture.scenarios.routes.prepared }], ['folderMenu', { prepared: fixture.scenarios.routes.prepared }]] : [])].filter(([name]) => !selectedCases.length || selectedCases.includes(name))) {
   await writeFile(config, JSON.stringify(configuration));
   const frameworkFixtureInventories = ['hook', 'hookRestart', 'hookCross', 'hookCrossRestart'].includes(scenario) ? await (await load('browse-fixtures.mjs')).optionalHookFixture() : undefined;
   const settingsPath = join(output, 'settings.json');
@@ -63,6 +63,8 @@ for (const [scenario, configuration] of [...Object.entries(fixture.scenarios), .
       outcomes.push(await runSetInputsBrowser({ origin, output: join(output, scenario), savedDirectory: scenario === 'callerInputRestart' ? join(output, 'callerInputs') : undefined, inputs, expected: fixture.expected, playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href })); continue;
     }
     if(scenario==='eccFacts') { await runRefusedSetFactsBrowser({origin,output:join(output,'eccFacts'),expected:fixture.expected,playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
+    if(scenario==='folderMenu') { const folderRoot=join(output,'folder-menu-fixture'); await mkdir(join(folderRoot,'project-a'),{recursive:true}); await runFolderMenuBrowser({origin,output:join(output,'folderMenu'),folderRoot,playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
+    if(scenario==='browseFeedback') { outcomes.push(await runBrowseFeedbackBrowser({origin,output:join(output,'browseFeedback'),expected:fixture.expected,playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href}));continue; }
     if(scenario==='routes') { await runPluginRoutesBrowser({origin,output:join(output,'routes'),expected:fixture.expected,playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
     if(scenario==='setAccess') { await runSetActionAccessBrowser({origin,output:join(output,'setAccess'),expected:fixture.expected,playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }
     if(scenario==='evidenceRefresh') { await runEvidenceRefreshBrowser({origin,output:join(output,'evidenceRefresh'),expected:fixture.expected,positive:(await (await load('browse-summary-fixtures.mjs')).summaryFixtures()).find(value=>value.row===17),playwrightModule:pathToFileURL(join(repo,'node_modules/playwright/index.mjs')).href});continue; }

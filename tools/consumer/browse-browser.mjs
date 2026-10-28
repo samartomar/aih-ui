@@ -74,7 +74,7 @@ export async function runBrowseBrowser({ origin, output, playwrightModule, expec
       await page.locator('#close-inspector-btn').click();
       await page.locator('#catalog-filter-disclosure > summary').click(); await page.locator('#catalog-reset-filters').click(); await page.locator('#catalog-filters-close').click();
       assert.equal(await page.locator('.wb-source-heading').innerText(), expected.additional.framework.name, 'Reset keeps framework context');
-      await page.waitForFunction(count => document.querySelectorAll('#cards-grid [data-card-id]').length === count, expected.additional.defaults);
+      await page.waitForFunction(count => document.querySelectorAll('#cards-grid [data-card-id]').length === count, expected.additional.choosable);
       await page.locator('#browse-all-items').check();
       await page.waitForFunction(count => document.querySelectorAll('#cards-grid [data-card-id]').length === count, expected.additional.choosable);
       await page.locator('#browse-all-items').uncheck();
@@ -109,10 +109,17 @@ export async function runBrowseBrowser({ origin, output, playwrightModule, expec
         await button.click();
       }
       await page.locator(`#starting-sets input[data-option="${expected.ecc.language.id}"]`).check();
-      await page.waitForFunction(ids => {
-        const actual = [...document.querySelectorAll('#cards-grid [data-card-id]')].map(node => node.dataset.cardId.split('/')[1]).sort();
-        return JSON.stringify(actual) === JSON.stringify(ids.slice().sort());
-      }, expected.ecc.visible);
+      if (expected.ecc.resolution.status === 'refused') {
+        assert.equal(await page.locator('#browse-all-items').isChecked(), true);
+        assert.equal(await page.locator('#browse-all-items').isDisabled(), true);
+        assert.ok(await page.locator('#cards-grid [data-card-id]').count() > 0, 'Refused sets keep independent content browsable');
+      } else {
+        await page.locator('#browse-all-items').uncheck();
+        await page.waitForFunction(ids => {
+          const actual = [...document.querySelectorAll('#cards-grid [data-card-id]')].map(node => node.dataset.cardId.split('/')[1]).sort();
+          return JSON.stringify(actual) === JSON.stringify(ids.slice().sort());
+        }, expected.ecc.visible);
+      }
       const addedOptions = page.waitForResponse(response => /authoring-(?:draft-edit|edit)$/.test(response.url()));
       await page.locator('[data-add-sets]').click();
       const optionResult = await (await addedOptions).json();
@@ -377,7 +384,7 @@ export async function runPluginRoutesBrowser({ origin, output, expected, playwri
     const actual = await (await context.request.post(origin + '/api/authoring-browse-content', { headers: { origin }, data: request })).json();
     assert.deepEqual(actual.compatibility.pluginRoutes, expected.routes.byTool.claude, 'Backend passes checked nativeRoutes verbatim to public compatibility');
     assert.equal(expected.routes.byTool.claude[0].state, 'listed');
-    const listed = page.locator('#cards-grid [data-plugin-routes="listed"]'); await listed.first().waitFor();
+    const listed = page.locator('#framework-plugin-routes[data-plugin-routes="listed"]'); await listed.first().waitFor();
     for (const line of expected.routes.byTool.claude[0].lines) assert.ok((await listed.first().innerText()).includes(line));
     assert.match(await listed.first().innerText(), /AIH doesn.t run it/);
     const routeBadge = listed.first().locator('.browse-fact').filter({ hasText: 'own plugin' }).first(); await page.keyboard.press('Tab'); await routeBadge.focus();
@@ -388,7 +395,7 @@ export async function runPluginRoutesBrowser({ origin, output, expected, playwri
     for (const tool of ['codex', 'copilot', 'antigravity', 'kiro']) {
       await page.locator('#your-tool-trigger').click(); await page.locator(`[data-tool="${tool}"]`).click();
       const value = expected.routes.byTool[tool][0];
-      const shown = page.locator(`#cards-grid [data-plugin-routes="${value.state}"]`); await shown.first().waitFor();
+      const shown = page.locator(`#framework-plugin-routes[data-plugin-routes="${value.state}"]`); await shown.first().waitFor({ state: 'attached' });
       if (value.state === 'listed') for (const line of value.lines) assert.ok((await shown.first().innerText()).includes(line));
       else assert.equal(await shown.first().getByText(/own plugin/).count(), 0);
       const response = await (await context.request.post(origin + '/api/authoring-browse-content', { headers: { origin }, data: { ...request, tool } })).json();
@@ -402,7 +409,7 @@ export async function runPluginRoutesBrowser({ origin, output, expected, playwri
     assert.equal(unknown.status, 'unavailable');
     outcomes.push({ theme, unknownTool: 'unavailable', reason: unknown.reason });
     await page.locator('#your-tool-trigger').click(); await page.locator('[data-tool="claude"]').click();
-    await framework(page, expected.prepared); await page.locator('#cards-grid [data-plugin-routes="not-supplied"]').first().waitFor();
+    await framework(page, expected.prepared); await page.locator('#framework-plugin-routes[data-plugin-routes="not-supplied"]').first().waitFor();
     await framework(page, expected.routes);
     let mode = 'unavailable', held = [], waiting = false;
     await page.route('**/api/authoring-browse-content', async route => {
@@ -413,15 +420,15 @@ export async function runPluginRoutesBrowser({ origin, output, expected, playwri
       if (mode === 'refused') body.compatibility = { items: [], sets: [], checks: [expected.routes.refusal], setCheck: expected.routes.refusal };
       await route.fulfill({ response, json: body });
     });
-    await page.reload(); await enter(page, origin, theme); await page.locator('#cards-grid [data-plugin-routes="unavailable"]').first().waitFor();
+    await page.reload(); await enter(page, origin, theme); await page.locator('#framework-plugin-routes[data-plugin-routes="unavailable"]').first().waitFor();
     assert.equal(expected.routes.refusal.status, 'refused'); assert.equal(expected.routes.refusal.reason, 'native-routes');
-    mode = 'refused'; await page.reload(); await enter(page, origin, theme); await page.locator('#cards-grid [data-plugin-routes="refused"]').first().waitFor();
+    mode = 'refused'; await page.reload(); await enter(page, origin, theme); await page.locator('#framework-plugin-routes[data-plugin-routes="refused"]').first().waitFor();
     await page.screenshot({ path: join(output, theme + '-refused-fixture.png') });
-    mode = 'failed'; await page.reload(); await enter(page, origin, theme); await page.locator('#cards-grid [data-plugin-routes="failed"]').first().waitFor();
-    mode = 'normal'; waiting = true; await page.reload(); await page.locator('#cards-grid [data-plugin-routes="loading"]').first().waitFor();
-    waiting = false; held.splice(0).forEach(resolve => resolve()); await page.locator('#cards-grid [data-plugin-routes="listed"]').first().waitFor();
+    mode = 'failed'; await page.reload(); await enter(page, origin, theme); await page.locator('#framework-plugin-routes[data-plugin-routes="failed"]').first().waitFor();
+    mode = 'normal'; waiting = true; await page.reload(); await page.locator('#framework-plugin-routes[data-plugin-routes="loading"]').first().waitFor();
+    waiting = false; held.splice(0).forEach(resolve => resolve()); await page.locator('#framework-plugin-routes[data-plugin-routes="listed"]').first().waitFor();
     outcomes.push({ theme, states: ['listed', 'not-listed', 'not-supplied', 'unavailable', 'refused', 'failed', 'loading'], nativeUse: false });
-    await context.close();
+    await context.unrouteAll({ behavior: 'wait' }); await context.close();
   } assert.deepEqual(errors, []); await writeFile(join(output, 'result.json'), JSON.stringify({ status: 'passed', outcomes, errors, sourceRoutes: expected.routes.nativeRoutes, publicRefusal: expected.routes.refusal, scope: 'Public packed consumer and ordinary page; unavailable/refusal are controlled presentation fixtures; no installation, activation or native use', humanAcceptance: 'pending' }, null, 2)); }
   finally { await browser.close(); }
 }
@@ -453,9 +460,107 @@ export async function runRefusedSetFactsBrowser({ origin, output, expected, play
     await page.locator('#starting-sets .set-refusal').waitFor();
     assert.ok(held.length, 'The initial response was held while Details completed'); holdInitial = false; held.splice(0).forEach(resolve => resolve());
     await page.screenshot({ path: join(output, theme + '-details.png') }); await page.locator('#close-inspector-btn').click();
-    await page.locator(`#cards-grid [data-plugin-routes="${state}"]`).first().waitFor(); await page.screenshot({ path: join(output, theme + '-all-items.png') });
+    await page.locator(`#framework-plugin-routes[data-plugin-routes="${state}"]`).first().waitFor(); await page.screenshot({ path: join(output, theme + '-all-items.png') });
     await writeFile(join(output, theme + '-public-result.json'), JSON.stringify({ status: result.status, resolution: result.resolution, pluginRoutes: result.compatibility.pluginRoutes, items: result.compatibility.items.length, scans: result.scans.length, host: result.host }, null, 2));
     outcomes.push({ theme, set: 'refused', itemFacts: 'available', routeState: state, initialBrowseHeldUntilDetailsCompleted: true, startingSets: 'refusal settled' }); await context.close();
   } await writeFile(join(output, 'result.json'), JSON.stringify({ status: 'passed', outcomes, scope: 'Refusal remains non-executable; independent item facts remain browsable.', humanAcceptance: 'pending' }, null, 2)); }
   finally { await browser.close(); }
+}
+
+
+// Owner-reported selection/filter regressions through the real running page.
+export async function runBrowseFeedbackBrowser({ origin, output, expected, playwrightModule }) {
+  await mkdir(output, { recursive: true }); const { chromium } = await import(playwrightModule);
+  const browser = await chromium.launch({ headless: true }); const outcomes = [], errors = [];
+  try { for (const theme of ['dark', 'light']) {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
+    await context.addInitScript(({ sha }) => {
+      localStorage.setItem('wb-your-tool', 'claude');
+      sessionStorage.setItem('aih-ui-sources-view', JSON.stringify({ support: 'unsupported', target: 'copilot-vscode', sourceType: 'local' }));
+      sessionStorage.setItem('aih-ui-set-browsing', JSON.stringify([[sha, { requests: [], allItems: false }]]));
+    }, { sha: expected.prepared.sha256 });
+    const page = await context.newPage(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
+    const settled = () => page.waitForFunction(() => !document.querySelector('#starting-sets').textContent.includes('Reading set membership'));
+    const cards = page.locator('#cards-grid [data-card-id]');
+    // Presentation fixture only: a Personal row makes the restored LOCAL filter valid.
+    // It is never selected, saved or passed to an owning validator as real content.
+    await page.route('**/api/authoring-catalog', async route => {
+      const response = await route.fetch(), body = await response.json();
+      const sample = body.items[0]; body.items.push({ ...sample, family: 'Personal', id: 'presentation.local-filter', root: { ...sample.root, itemId: 'presentation.local-filter' } });
+      await route.fulfill({ response, json: body });
+    });
+    await enter(page, origin, theme); await settled();
+    assert.equal(await page.locator('#source-filter').isDisabled(), true, 'Framework source-type filter is explicitly inactive');
+    assert.equal(await page.locator('#source-filter').inputValue(), '', 'Inactive source filter cannot look selected');
+    assert.ok(!(await page.locator('#visible-caption').getAttribute('title')).includes('of 0 '), 'Inactive local source filter cannot zero the denominator');
+    await page.locator('#catalog-advanced > summary').click();
+    await page.locator('button[data-focus-key]').filter({ hasText: 'Personal' }).click();
+    assert.equal(await page.locator('#source-filter').isDisabled(), false, 'Explicit local-source browsing remains available');
+    await page.locator('#catalog-advanced-close').click();
+    await framework(page, expected.prepared); await settled();
+    assert.ok(await cards.count() > 0, 'No-set framework stays browsable despite stale legacy filters/all-items preference');
+    assert.equal(await page.locator('#browse-all-items').isChecked(), true);
+    assert.equal(await page.locator('#browse-all-items').isDisabled(), true);
+    await page.locator('#nav-project-basics').click();
+    assert.equal(await page.locator('#project-files-grid').count(), 0, 'No duplicate project-content cards');
+    await page.locator('#project-files-open-framework').click();
+    await page.locator('#catalog-workspace').waitFor();
+    assert.equal(await page.locator('.wb-source-heading').innerText(), expected.prepared.framework.name);
+    await page.locator('#nav-project-basics').click();
+    await framework(page, expected.additional); await page.locator('#catalog-workspace').waitFor(); await settled();
+    await page.locator('#browse-clear-sets').click(); await settled();
+    assert.equal(await page.locator('button[data-set-id][aria-pressed="true"]').count(), 0, 'Clear really deselects all sets');
+    assert.ok(await cards.count() > 0, 'Clearing sets must not hide all content');
+    const first = page.locator('button[data-set-id]').first(); const id = await first.getAttribute('data-set-id');
+    await first.click(); await settled(); assert.equal(await page.locator(`button[data-set-id="${id}"]`).getAttribute('aria-pressed'), 'true');
+    await page.locator(`button[data-set-id="${id}"]`).click(); await settled();
+    assert.equal(await page.locator(`button[data-set-id="${id}"]`).getAttribute('aria-pressed'), 'false');
+    assert.ok(await cards.count() > 0, 'Last-set deselection leaves a browsable framework');
+    for (const tool of ['codex', 'claude']) {
+      await page.locator('#your-tool-trigger').click(); await page.locator(`[data-tool="${tool}"]`).click(); await settled();
+      assert.ok(await cards.count() > 0, `${tool}: no invisible legacy support filter`);
+    }
+    await framework(page, expected.ecc); await settled();
+    assert.ok(await cards.count() > 0, 'Unconfigured ECC remains browsable while its refusal stays visible');
+    assert.ok((await page.locator('#starting-sets').innerText()).includes('Showing all content'));
+    await framework(page, expected.routes); await settled();
+    const routes = page.locator('#framework-plugin-routes[data-plugin-routes="listed"]'); await routes.waitFor();
+    assert.equal(await page.locator('#cards-grid [data-plugin-routes]').count(), 0, 'Framework routes are not repeated per card');
+    for (const line of expected.routes.byTool.claude[0].lines) assert.ok((await routes.innerText()).includes(line));
+    await page.screenshot({ path: join(output, theme + '-feedback.png') });
+    outcomes.push({ theme, clearSets: true, staleFiltersIgnored: true, eccBrowsable: true, routesAtFramework: true });
+    await context.unrouteAll({ behavior: 'wait' }); await context.close();
+  }
+  assert.deepEqual(errors, []); await writeFile(join(output, 'result.json'), JSON.stringify({ outcomes, errors }, null, 2)); return outcomes;
+  } finally { await browser.close(); }
+}
+
+// The folder menu lists the host filesystem; choosing a folder does not install.
+export async function runFolderMenuBrowser({ origin, output, playwrightModule, folderRoot }) {
+  await mkdir(output, { recursive: true }); const { chromium } = await import(playwrightModule);
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext(); await context.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
+    const page = await context.newPage(); page.setDefaultTimeout(10000); await enter(page, origin, 'dark');
+    const initial = await (await context.request.get(origin + '/api/authoring-project')).json();
+    const foreign = await context.request.post(origin + '/api/authoring-project-folders', { headers: { origin: 'https://foreign.invalid' }, data: { path: folderRoot } });
+    assert.equal(foreign.status(), 403, 'Foreign origins cannot enumerate folders');
+    await page.locator('#your-setup').click();
+    assert.equal(await page.locator('#project-folder-browse').count(), 1, 'Use folder must open a folder menu');
+    await page.locator('#project-folder-browse').click(); await page.locator('#project-folder-dialog').waitFor();
+    await page.locator('#project-folder-menu-path').fill(folderRoot); await page.locator('#project-folder-go').click();
+    await page.locator('#project-folder-directories button').filter({ hasText: 'project-a' }).click();
+    await page.waitForFunction(path => document.querySelector('#project-folder-menu-path').value === path, join(folderRoot, 'project-a'));
+    await page.locator('#project-folder-dialog-cancel').click();
+    const unchanged = await (await context.request.get(origin + '/api/authoring-project')).json();
+    assert.equal(unchanged.project, initial.project, 'Browsing/cancel never changes the project');
+    await page.locator('#project-folder-browse').click();
+    await page.locator('#project-folder-menu-path').fill(join(folderRoot, 'project-a')); await page.locator('#project-folder-go').click();
+    await page.locator('#project-folder-dialog-use').click(); await page.locator('#project-folder-dialog').waitFor({ state: 'hidden' });
+    const selected = await (await context.request.get(origin + '/api/authoring-project')).json();
+    assert.equal(selected.project, join(folderRoot, 'project-a'));
+    await page.screenshot({ path: join(output, 'selected-folder.png') });
+    await writeFile(join(output, 'result.json'), JSON.stringify({ status: 'passed', browsedWithoutSwitch: true, selected: selected.project, install: false }, null, 2));
+    await context.close();
+  } finally { await browser.close(); }
 }

@@ -187,6 +187,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
       let body;
       try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
       catch { return send(response, 400, { error: 'invalid-json' }); }
+      if (pathname === '/api/authoring-project-folders') return send(response, 200, await folder.browse(body.path));
       if (pathname === '/api/authoring-project') {
         const result = await folder.choose(body.path);
         return send(response, result.status === 'busy' ? 409 : 200, result);

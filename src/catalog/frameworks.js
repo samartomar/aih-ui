@@ -21,8 +21,9 @@ export function createFrameworkNavigation({ container, onChoose, onFirstStep }) 
       attachTooltip(summary, source.message);
       disclosure.append(summary, el('p', '', source.message)); container.append(disclosure);
     }
-    const scope = el('p', 'framework-source-note', tool ? `Observed in ${tool.label} on ${catalog.hostPlatform?.os ?? "unknown OS"} ${catalog.hostPlatform?.arch ?? "unknown architecture"}` : 'Choose your tool to read observed counts.');
+    const scope = el('p', 'framework-source-note', tool ? `Compatibility observations for ${tool.label} · Workbench host: ${catalog.hostPlatform?.os ?? "unknown OS"} ${catalog.hostPlatform?.arch ?? "unknown architecture"}` : 'Choose your tool to read observed counts.');
     attachTooltip(scope, 'Harness static observations for the loaded items on this OS and architecture, not proof that an item works in this project.'); container.append(scope);
+    if (tool) container.append(el('p', 'framework-source-note', 'Published compatibility evidence, not installed-item counts. Zero observations means not yet confirmed, not unsupported.'));
     const frameworks = catalog.frameworks ?? [];
     if (!frameworks.length) container.append(el('p', '', 'No frameworks available from the configured sources. Existing content is in Filters & your sources.'));
     for (const framework of frameworks) {
@@ -33,7 +34,7 @@ export function createFrameworkNavigation({ container, onChoose, onFirstStep }) 
       button.setAttribute('aria-pressed', String(selected === key));
       const name = el('span', '', framework.name);
       const observation = framework.observations?.find(value => value.tool === tool?.id);
-      const count = framework.state !== 'ready' ? framework.state : !tool ? 'Choose your tool' : observation?.status !== 'checked' ? 'Count unavailable' : `${observation.count} observed`;
+      const count = framework.state !== 'ready' ? framework.state : !tool ? 'Choose your tool' : observation?.status !== 'checked' ? 'Count unavailable' : `${observation.count} observations`;
       button.append(iconSpan('kind', 'framework'), name, el('span', 'framework-count', count));
       if (framework.kind === 'fixture') button.append(el('span', 'framework-internal', 'Test content · not production'));
       if (framework.kind === 'internal') button.append(el('span', 'framework-internal', 'Internal · not verified'));
