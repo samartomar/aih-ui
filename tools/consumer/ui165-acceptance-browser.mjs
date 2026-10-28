@@ -42,7 +42,9 @@ export async function runFirstRunBrowser({ origin, output, playwrightModule, the
       await writeFile(join(output, 'incomplete.json'), JSON.stringify({ status: 'incomplete', reason: 'The checked Extensions release in this consumer does not offer the engineering set; the positive firstRun case needs that public set.' }, null, 2));
       return { status: 'incomplete', reason: 'engineering set not offered' };
     }
-    await toggle.click();
+    // The checked release pre-ticks engineering by default; clicking would toggle it OFF. Press it only when
+    // it is not already pressed, so the draft records the set whatever the published default is.
+    if ((await toggle.getAttribute('aria-pressed')) !== 'true') await toggle.click();
     const added = page.waitForResponse(response => /authoring-(?:draft-edit|edit)$/.test(response.url()));
     await page.locator('[data-add-sets]').click();
     const result = await (await added).json();
