@@ -1544,7 +1544,7 @@ test('the npm tie from an npx item names the persisted check for the item, and t
   assert.equal(frictionOf(found).text.includes(FIXTURE_NOTE), false); assert.deepEqual(found.references, [{ kind: 'catalog-item', ref: context7.id }, { kind: 'catalog-item', ref: DIAGNOSING }]);
 });
 
-// A real draft over the installed maintained Catalog and the four family releases that selects one family item (the ECC MCP items declare the npx they run).
+// A real draft over the installed maintained Catalog and the four family releases that selects one family item (the ECC MCP items declare their actual executable).
 async function familyScenario(itemId, configuration = {}) {
   const found = await installed(), families = await installedFamilies(), inventories = [{ release: found.release, materialSource: found.source }, ...families];
   const entry = families.find(family => family.release.items.some(i => i.id === itemId)), offered = entry?.release.items.find(i => i.id === itemId);
@@ -1554,22 +1554,22 @@ async function familyScenario(itemId, configuration = {}) {
   return { inventories, offered, scope: offered.scopes[0], envelopeBytes: valueOf(await openDraft({ bytes: composed.policyBytes, inventories })).envelopeBytes };
 }
 
-test('an installed ECC family item that runs npx ties the npm check through the public check; recovery alone and another target give no suggestion', async () => {
+test('an installed ECC family item that runs node ties the node check through the public check; recovery alone and another target give no suggestion', async () => {
   // Composition-only caller inputs; these synthetic paths are never opened or executed.
   const s = await familyScenario('ecc.claude.mcp.context7', {
     npmCli: fileURLToPath(new URL('./fixtures/npm-cli.js', import.meta.url)),
     npmCache: fileURLToPath(new URL('./fixtures/npm-cache/', import.meta.url)),
   }), { label } = s.offered, readings = [journalCheck(1, 'failed', 'failed'), journalRepair(2, 'passed'), journalCheck(3, 'failed', 'passed'), journalCheck(4, 'failed', 'failed')];
-  assert.deepEqual(s.offered.targets.filter(t => t.kind === 'executable').map(t => t.name), ['npx']);
-  const value = await check(s, s.envelopeBytes, { evidence: stored(onTarget('npm', readings)) }), friction = frictionOf(value.leading);
+  assert.deepEqual(s.offered.targets.filter(t => t.kind === 'executable').map(t => t.name), ['node']);
+  const value = await check(s, s.envelopeBytes, { evidence: stored(onTarget('node', readings)) }), friction = frictionOf(value.leading);
   assert.equal(value.leading.change.itemId, DIAGNOSING); assert.equal(value.leading.scope, s.scope);
-  assert.equal(friction.text.startsWith(`Recurring failure: the persisted-configuration npm/tls/node/registry.npmjs.org readiness check for “${label}” failed`), true);
+  assert.equal(friction.text.startsWith(`Recurring failure: the persisted-configuration node/tls/node/registry.npmjs.org readiness check for “${label}” failed`), true);
   assert.equal(JSON.stringify(value).includes(FIXTURE_NOTE), false); assert.deepEqual(value.coverage[1], { trigger: 'recurring-friction', state: 'checked', text: FRICTION_COVERAGE.checked });
   // Recovery with no later failure is checked with nothing to suggest.
-  const held = await check(s, s.envelopeBytes, { evidence: stored(onTarget('npm', readings.slice(0, 2))) });
+  const held = await check(s, s.envelopeBytes, { evidence: stored(onTarget('node', readings.slice(0, 2))) });
   assert.deepEqual(held.coverage[1], { trigger: 'recurring-friction', state: 'checked', text: FRICTION_COVERAGE.checked }); assert.equal(held.leading, null);
   // The same records on a target the item does not run on settle nothing for it.
-  const other = await check(s, s.envelopeBytes, { evidence: stored(onTarget('node', readings)) });
+  const other = await check(s, s.envelopeBytes, { evidence: stored(onTarget('npm', readings)) });
   assert.deepEqual(other.coverage[1], { trigger: 'recurring-friction', state: 'unknown', reason: 'no-recurrence-evidence', text: FRICTION_COVERAGE['no-recurrence-evidence'] }); assert.equal(other.leading, null);
 });
 
