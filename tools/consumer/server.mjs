@@ -1,3 +1,4 @@
+import { composeFamilyInventories } from './compose-inventories.mjs';
 import { browsePolicy } from './browse-policy.mjs';
 import { browseContent, inspectChosenHost } from './browse-content.mjs';
 import { firstRunForSets } from './first-run.mjs';
