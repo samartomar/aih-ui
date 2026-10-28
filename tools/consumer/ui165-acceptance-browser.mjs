@@ -227,6 +227,7 @@ export async function runMcpApplyBrowser({ origin, output, project, playwrightMo
     const settings = JSON.parse(await readFile(join(project, '.claude', 'settings.local.json'), 'utf8'));
     assert.deepEqual(settings.enabledMcpjsonServers, ['cloudflare-docs'], 'exactly the one ticked server is approved');
     // Untick removes only the proposed approval from the review; registration stands in the saved policy view.
+    await closePolicyDrawer(page);
     await page.locator('[data-card-id$="/ecc.mcp.cloudflare-docs"] .browse-mcp-approval input[type=checkbox]').uncheck();
     await page.waitForFunction(() => { const input = document.querySelector('.browse-mcp-approval input'); return Boolean(input) && !input.disabled; });
     const download = page.waitForEvent('download'); await openSetupAdvanced(page); await page.locator('#policy-save').click();
@@ -262,8 +263,9 @@ export async function runStaleReviewBrowser({ origin, output, project, playwrigh
     const advancedText = () => { const panel = [...document.querySelectorAll('details.policy-advanced')].find(node => node.textContent.includes('Prepare exact effects')); return panel ? panel.textContent : ''; };
     await advanced.getByRole('button', { name: 'Prepare exact effects', exact: true }).click();
     await page.waitForFunction(() => { const t = document.querySelectorAll('details.policy-advanced'); const panel = [...t].find(node => node.textContent.includes('Prepare exact effects')); return panel && panel.textContent.includes('Prepared effects are ready for review'); }, null, { timeout: 120_000 });
-    // The reviewed material changes while the preparation is held.
+    // The reviewed material changes while the preparation is held (fresh target: create the parent first).
     const target = join(project, '.claude', 'skills', 'grill-me', 'SKILL.md');
+    await mkdir(join(project, '.claude', 'skills', 'grill-me'), { recursive: true });
     await writeFile(target, '# Tampered after prepare\n', { encoding: 'utf8' });
     await advanced.getByRole('button', { name: 'Approve and Apply reviewed effects', exact: true }).click();
     await page.waitForFunction(() => [...document.querySelectorAll('details.policy-advanced')].some(node => node.textContent.includes('Prepare exact effects') && node.textContent.includes('REVIEW_STALE')), null, { timeout: 120_000 });

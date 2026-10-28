@@ -136,8 +136,11 @@ for (const theme of THEMES) {
   assert.notEqual(restartHosts[0].pid, restartHosts[1].pid, `the ${theme} restart evidence names two distinct host processes`);
   await writeFile(join(consumerDir, `restart-verify-evidence-${theme}`, 'host-processes.json'), JSON.stringify({ status: 'passed', theme, hosts: restartHosts }, null, 2));
 
+  // The positive firstRun case needs the Extensions FRAMEWORK open (starting sets render only in a framework
+  // context); the checked release's published sets arrive through the same public sources route the mixed
+  // cases use - the sets themselves are the release's own, never manufactured.
   const firstRunProject = join(consumerDir, `first-run-project-${theme}-${randomUUID().slice(0, 8)}`);
-  await withHost(firstRunProject, {}, async origin =>
+  await withHost(firstRunProject, { sources: mcpSources }, async origin =>
     await caseOutcome(`firstRun positive case (${theme})`, await runFirstRunBrowser({ origin, output: join(consumerDir, `first-run-evidence-${theme}`), playwrightModule: playwrightPath, theme })));
 
   const staleProject = join(consumerDir, `stale-review-project-${theme}-${randomUUID().slice(0, 8)}`);
