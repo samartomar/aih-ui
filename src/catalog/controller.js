@@ -74,6 +74,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     if (!choices.has(framework.sha256)) choices.set(framework.sha256, { requests: (framework.sets ?? []).filter(set => set.offer === 'pre-ticked').map(set => ({ release: { releaseSha256: framework.sha256, scope: 'project' }, setId: set.id, setSha256: set.setSha256, options: {}, members: [] })), allItems: !(framework.sets?.length) });
     return choices.get(framework.sha256);
   }
+  function browsingView(view = state.view) { return currentFramework() ? { ...view, sourceType: null } : view; }
   function showsAllContent(framework, choice) {
     return choice.allItems || !framework?.sets?.length || !choice.requests.length
       || !Array.isArray(browseResult?.resolution?.value?.selections);
@@ -135,6 +136,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   const navigation = createNavigation({
     elements: elements.navigation,
     onSelectSource: (source) => {
+      legacyBrowsing = !authoring.catalog?.frameworks?.some(value => value.state === 'ready' && sourceFilterValue('family', value.name, value.sha256) === source);
       const row = sourceScopes(state.counts).find(row => row.filterValue === source);
       changeView({ source, sourceType: null, family: row?.source.release ?? '' });
     },
@@ -144,7 +146,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     onQuery: (query) => changeView({ query }),
     onToggleKind: (kind) => changeView({ kind: kind === null || state.view.kind === kind ? null : kind }),
     onSourceType: (sourceType) => {
-      const scope = selectedScope(state.counts, state.view);
+      if (currentFramework()) return;
+      const scope = selectedScope(state.counts, browsingView());
       // A compatible source-type choice narrows within the source; another type leaves the source.
       const keepsScope = sourceType === null || scope?.type === sourceType;
       changeView({ sourceType, ...(keepsScope ? {} : { source: null, family: "" }) });
@@ -192,7 +195,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   function browseEntries(view = state.view) {
     const framework = currentFramework(), choice = browseChoice(framework);
     const selected = browseResult?.resolution?.value?.selections;
-    return visibleEntries(state.entries, framework ? { ...view, sourceType: null } : view)
+    return visibleEntries(state.entries, browsingView(view))
       .filter(entry => !view.family || entry.authoringItem.family === view.family)
       .filter(entry => !framework || entry.authoringItem.role !== 'supporting')
       .filter(entry => !framework || showsAllContent(framework, choice) || selected?.some(value => value.item.releaseSha256 === entry.authoringItem.root.releaseSha256 && value.item.itemId === entry.authoringItem.id));
@@ -204,12 +207,12 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
 
   function unusable(entry) { const fit = browseResult?.compatibility?.items?.find(value => value.item.itemId === entry.authoringItem.id); return fit && (fit.support === 'none' || fit.notRendered || fit.staticBlockers?.length); }
   function cardsModel() {
-    const scope = selectedScope(state.counts, state.view);
+    const scope = selectedScope(state.counts, browsingView());
     return {
       entries: visibleByTool(browseEntries()),
       browse: { ...browseResult, enterprise },
       tool: chosenTool,
-      total: scopeTotal(state.entries, state.view),
+      total: scopeTotal(state.entries, browsingView()),
       noun: scope === null ? "catalog entries" : "entries from this source",
       selectedId: state.selectedId,
       intent: authoring.intent,
@@ -237,7 +240,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   /** The rail's model. */
   function navigationModel() {
     return {
-      view: state.view,
+      view: browsingView(),
       total: state.entries.length,
       counts: state.counts,
       organizationName: state.organizationName,
@@ -297,8 +300,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     target.disabled = Boolean(selectedFramework); support.disabled = Boolean(selectedFramework);
     target.title = support.title = selectedFramework ? 'Framework fit uses Your tool in the header. Legacy target filters do not narrow this framework.' : '';
     const total = state.entries.length;
-    const scope = selectedScope(state.counts, state.view);
-    const inScope = scopeTotal(state.entries, state.view);
+    const scope = selectedScope(state.counts, browsingView());
+    const inScope = scopeTotal(state.entries, browsingView());
     const cardsView = cardsModel();
     const scoped = browseEntries();
     const count = status => scoped.filter(entry => capabilityFacts(entry.authoringItem, target.value).some(fact => fact.support === status)).length;
@@ -323,7 +326,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       sourceTypeCounts: state.counts.sourceTypeCounts,
       total: availableKinds.length,
       visibleTotal: cardsView.entries.length,
-      view: state.view,
+      frameworkBrowsing: Boolean(selectedFramework),
+      view: browsingView(),
     });
     let activeFilters = document.getElementById('catalog-active-filters');
     if (!activeFilters) { activeFilters = el('div', 'set-footer'); activeFilters.id = 'catalog-active-filters'; elements.cards.cardsGrid.before(activeFilters); }

@@ -74,7 +74,7 @@ export async function runBrowseBrowser({ origin, output, playwrightModule, expec
       await page.locator('#close-inspector-btn').click();
       await page.locator('#catalog-filter-disclosure > summary').click(); await page.locator('#catalog-reset-filters').click(); await page.locator('#catalog-filters-close').click();
       assert.equal(await page.locator('.wb-source-heading').innerText(), expected.additional.framework.name, 'Reset keeps framework context');
-      await page.waitForFunction(count => document.querySelectorAll('#cards-grid [data-card-id]').length === count, expected.additional.defaults);
+      await page.waitForFunction(count => document.querySelectorAll('#cards-grid [data-card-id]').length === count, expected.additional.choosable);
       await page.locator('#browse-all-items').check();
       await page.waitForFunction(count => document.querySelectorAll('#cards-grid [data-card-id]').length === count, expected.additional.choosable);
       await page.locator('#browse-all-items').uncheck();
@@ -109,10 +109,17 @@ export async function runBrowseBrowser({ origin, output, playwrightModule, expec
         await button.click();
       }
       await page.locator(`#starting-sets input[data-option="${expected.ecc.language.id}"]`).check();
-      await page.waitForFunction(ids => {
-        const actual = [...document.querySelectorAll('#cards-grid [data-card-id]')].map(node => node.dataset.cardId.split('/')[1]).sort();
-        return JSON.stringify(actual) === JSON.stringify(ids.slice().sort());
-      }, expected.ecc.visible);
+      if (expected.ecc.resolution.status === 'refused') {
+        assert.equal(await page.locator('#browse-all-items').isChecked(), true);
+        assert.equal(await page.locator('#browse-all-items').isDisabled(), true);
+        assert.ok(await page.locator('#cards-grid [data-card-id]').count() > 0, 'Refused sets keep independent content browsable');
+      } else {
+        await page.locator('#browse-all-items').uncheck();
+        await page.waitForFunction(ids => {
+          const actual = [...document.querySelectorAll('#cards-grid [data-card-id]')].map(node => node.dataset.cardId.split('/')[1]).sort();
+          return JSON.stringify(actual) === JSON.stringify(ids.slice().sort());
+        }, expected.ecc.visible);
+      }
       const addedOptions = page.waitForResponse(response => /authoring-(?:draft-edit|edit)$/.test(response.url()));
       await page.locator('[data-add-sets]').click();
       const optionResult = await (await addedOptions).json();
@@ -469,13 +476,28 @@ export async function runBrowseFeedbackBrowser({ origin, output, expected, playw
     const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
     await context.addInitScript(({ sha }) => {
       localStorage.setItem('wb-your-tool', 'claude');
-      sessionStorage.setItem('aih-ui-sources-view', JSON.stringify({ support: 'unsupported', target: 'copilot-vscode' }));
+      sessionStorage.setItem('aih-ui-sources-view', JSON.stringify({ support: 'unsupported', target: 'copilot-vscode', sourceType: 'local' }));
       sessionStorage.setItem('aih-ui-set-browsing', JSON.stringify([[sha, { requests: [], allItems: false }]]));
     }, { sha: expected.prepared.sha256 });
     const page = await context.newPage(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
     const settled = () => page.waitForFunction(() => !document.querySelector('#starting-sets').textContent.includes('Reading set membership'));
     const cards = page.locator('#cards-grid [data-card-id]');
-    await enter(page, origin, theme); await framework(page, expected.prepared); await settled();
+    // Presentation fixture only: a Personal row makes the restored LOCAL filter valid.
+    // It is never selected, saved or passed to an owning validator as real content.
+    await page.route('**/api/authoring-catalog', async route => {
+      const response = await route.fetch(), body = await response.json();
+      const sample = body.items[0]; body.items.push({ ...sample, family: 'Personal', id: 'presentation.local-filter', root: { ...sample.root, itemId: 'presentation.local-filter' } });
+      await route.fulfill({ response, json: body });
+    });
+    await enter(page, origin, theme); await settled();
+    assert.equal(await page.locator('#source-filter').isDisabled(), true, 'Framework source-type filter is explicitly inactive');
+    assert.equal(await page.locator('#source-filter').inputValue(), '', 'Inactive source filter cannot look selected');
+    assert.ok(!(await page.locator('#visible-caption').getAttribute('title')).includes('of 0 '), 'Inactive local source filter cannot zero the denominator');
+    await page.locator('#catalog-advanced > summary').click();
+    await page.locator('button[data-focus-key]').filter({ hasText: 'Personal' }).click();
+    assert.equal(await page.locator('#source-filter').isDisabled(), false, 'Explicit local-source browsing remains available');
+    await page.locator('#catalog-advanced-close').click();
+    await framework(page, expected.prepared); await settled();
     assert.ok(await cards.count() > 0, 'No-set framework stays browsable despite stale legacy filters/all-items preference');
     assert.equal(await page.locator('#browse-all-items').isChecked(), true);
     assert.equal(await page.locator('#browse-all-items').isDisabled(), true);
