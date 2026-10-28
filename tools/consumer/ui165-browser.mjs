@@ -162,8 +162,10 @@ export async function runUi165Browser({ origin, output, expected, playwrightModu
       await writeFile(join(nested, 'outer', '.github', 'skills', expected.additional.grillDirName, 'SKILL.md'), '# A second copy outside the project\n');
       await mkdir(inner, { recursive: true });
       await page.locator('#your-setup').click();
-      await page.locator('#project-folder-change').click();
-      await page.locator('#project-folder-input').fill(inner);
+      // With no project selected the folder field is already open; Change toggles it.
+      const projectInput = page.locator('#project-folder-input');
+      if (await projectInput.isHidden()) await page.locator('#project-folder-change').click();
+      await projectInput.fill(inner);
       await page.locator('#project-folder-use').click();
       await page.locator('#project-folder-message').filter({ hasNotText: /^Checking the folder…$/ }).waitFor();
       await closePolicyDrawer(page);
