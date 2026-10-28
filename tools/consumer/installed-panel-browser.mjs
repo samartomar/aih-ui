@@ -31,6 +31,11 @@ export async function runInstalledPanelBrowser({ origin, output, playwrightModul
     for (const theme of ['dark', 'light']) {
       const cancelAfterFirst = cancellationThemes.includes(theme);
       const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 1000 } });
+      // The header's canonical tool: extensions skills carry per-client recipes, and Catalog refuses to compose
+      // them without a named client, so this journey — like every other UI165 journey — chooses claude up front.
+      // With the tool, the composed policy carries the execution-policy 1.4 metadata bundle and Core's prepare
+      // echoes named prepared-1.6 rows with origins; the assertions below require exactly that.
+      await context.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
       page = await open(context, theme);
       await chooseCatalogFamily(page, 'Extensions');
       await page.locator('#catalog-search').fill('grill-me');
@@ -62,6 +67,7 @@ export async function runInstalledPanelBrowser({ origin, output, playwrightModul
       // The normal journey proves a fresh reopen. Cancellation keeps the original Install outcome,
       // so it also catches an old data-outcome=installed surviving a partially applied Remove.
       const reopened = cancelAfterFirst ? context : await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+      if (!cancelAfterFirst) await reopened.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
       if (!cancelAfterFirst) {
         await context.close();
         page = await open(reopened, theme); await openPolicyWorkspace(page);
