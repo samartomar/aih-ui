@@ -62,6 +62,23 @@ export async function frameworkFixtures(directory, catalogArtifact) {
   const mcp = ecc.release.items.find(item => item.kind === 'mcp-server');
   if (!mcp) throw new Error('Public ECC fixture carries no MCP server item.');
   expected.ecc.mcp = { id: mcp.id, name: mcp.name ?? mcp.label };
+  // The mixed restart path needs one PLAIN addable ECC item, chosen from positive public facts only: not
+  // supporting, not an MCP server, no required inputs, a compatibility fit that is not blocked, and a
+  // Catalog resolution that succeeds with its dependency closure. An empty options-set resolution (the
+  // current ECC fixture refusal) is not evidence that no such item exists, so this is computed independently
+  // of expected.ecc.visible; when nothing passes, the mixed path reports incomplete with this fact.
+  const plainCandidates = ecc.release.items.filter(item => item.role !== 'supporting' && item.kind !== 'mcp-server'
+    && !Object.keys(item.requirements?.inputs ?? {}).length);
+  const fitById = new Map((fit.items ?? []).map(entry => [entry.item.itemId, entry]));
+  let mixed = null;
+  for (const item of plainCandidates) {
+    const entry = fitById.get(item.id);
+    if (!entry || entry.support === 'none' || entry.notRendered || entry.staticBlockers?.length) continue;
+    const resolution = resolveSelections({ releases: { [ecc.release.sha256]: ecc.release },
+      roots: [{ releaseSha256: ecc.release.sha256, itemId: item.id, scope: 'project', configuration: {} }], skips: [] });
+    if (resolution.status === 'ok') { mixed = { id: item.id, name: item.name ?? item.label }; break; }
+  }
+  expected.ecc.mixed = mixed;
   scenarios.browse = { ...scenarios.ready, prepared: [...scenarios.ready.prepared, { ...internal, frameworkId: ecc.release.framework.id, expectedContentSha256: ecc.release.sha256 }], fixture: true, indexStatePath: join(directory, 'browse-state.json') };
   const superpowers = await readInstalledPreparedContent({ root, frameworkId: 'superpowers', sourceInput: 'fixture-superpowers' });
   if (!superpowers.valid) throw new Error('Public Superpowers prepared fixture unavailable.');

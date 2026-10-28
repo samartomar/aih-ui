@@ -113,10 +113,14 @@ const mcpFixtureDir = join(consumerDir, 'mcp-framework-fixtures');
 const mcpFixture = await frameworkFixtures(mcpFixtureDir, catalogArtifact);
 const mcpSources = join(mcpFixtureDir, 'sources.json');
 await writeFile(mcpSources, JSON.stringify(mcpFixture.scenarios.browse));
-// The mixed restart path adds one plain ECC item alongside grill-me. The MCP server is excluded: it carries
-// approval semantics of its own and is covered by the dedicated MCP cases, not the mixed inventory path.
-const mixedEccItem = (mcpFixture.expected?.ecc?.visible ?? []).find(id => id !== mcpFixture.expected?.ecc?.mcp?.id) ?? null;
-if (typeof mixedEccItem !== 'string') console.log('ECC fixture exposes no plain visible item; the mixed restart path runs Extensions-only and says so.');
+// The mixed restart path adds one plain ECC item alongside grill-me, chosen by the fixture from positive
+// public fit + resolution facts. When no candidate passes those facts, the mixed criterion is explicitly
+// incomplete (exit 2) - Extensions-only is never reported as the mixed acceptance.
+const mixedEcc = mcpFixture.expected?.ecc?.mixed ?? null;
+if (!mixedEcc) {
+  console.log('mixed ECC+Extensions restart incomplete: no plain ECC item passed the public fit + resolution facts (options-set refusal does not imply all of ECC is unavailable).');
+  process.exitCode = 2;
+}
 
 // Every case runs in BOTH themes, each with its own disposable target, host processes and output; a theme
 // never reuses another theme's project or process evidence.
@@ -125,10 +129,10 @@ for (const theme of THEMES) {
   const restartProject = join(consumerDir, `restart-project-${theme}-${randomUUID().slice(0, 8)}`);
   const restartHosts = [];
   restartHosts.push(await withHost(restartProject, { sources: mcpSources }, async origin =>
-    await caseOutcome(`restart install phase (${theme})`, await runRestartInstallBrowser({ origin, output: join(consumerDir, `restart-install-evidence-${theme}`), playwrightModule: playwrightPath, theme, extraItem: mixedEccItem }))));
+    await caseOutcome(`restart install phase (${theme})`, await runRestartInstallBrowser({ origin, output: join(consumerDir, `restart-install-evidence-${theme}`), playwrightModule: playwrightPath, theme, extraItem: mixedEcc?.id ?? null, extraName: mixedEcc?.name ?? null }))));
   // The first host process was killed and reaped above; this is a fresh process on the same target and account.
   restartHosts.push(await withHost(restartProject, { sources: mcpSources }, async origin =>
-    await caseOutcome(`restart verify phase (${theme})`, await runRestartVerifyBrowser({ origin, output: join(consumerDir, `restart-verify-evidence-${theme}`), playwrightModule: playwrightPath, theme, project: restartProject, extraItem: mixedEccItem }))));
+    await caseOutcome(`restart verify phase (${theme})`, await runRestartVerifyBrowser({ origin, output: join(consumerDir, `restart-verify-evidence-${theme}`), playwrightModule: playwrightPath, theme, project: restartProject, extraItem: mixedEcc?.id ?? null, extraName: mixedEcc?.name ?? null }))));
   assert.notEqual(restartHosts[0].pid, restartHosts[1].pid, `the ${theme} restart evidence names two distinct host processes`);
   await writeFile(join(consumerDir, `restart-verify-evidence-${theme}`, 'host-processes.json'), JSON.stringify({ status: 'passed', theme, hosts: restartHosts }, null, 2));
 

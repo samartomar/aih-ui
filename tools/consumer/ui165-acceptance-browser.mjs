@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { addFromCatalog, chooseCatalogFamily, closePolicyDrawer, openPolicyDrawer } from './policy-drawer.mjs';
-import { openSetupAdvanced } from './advanced-browser.mjs';
+import { addFromCatalog, chooseCatalogFamily, closePolicyDrawer, openPolicyDrawer, openPolicyFileActions } from './policy-drawer.mjs';
+import { openPolicyWorkspace, openSetupAdvanced } from './advanced-browser.mjs';
 
 // UI165 acceptance cases on the disposable-target seams. Everything mutates through the running page's ordinary
 // reviewed Core path against real packed packages; outcomes a public fixture cannot truthfully produce are
@@ -67,22 +67,56 @@ export async function runFirstRunBrowser({ origin, output, playwrightModule, the
 }
 
 // (2a) Install phase for the server-restart inventory case: a real Apply into a fresh disposable target.
-export async function runRestartInstallBrowser({ origin, output, playwrightModule, theme = 'dark', extraItem = undefined }) {
+export async function runRestartInstallBrowser({ origin, output, playwrightModule, theme = 'dark', extraItem = undefined, extraName = undefined }) {
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true });
   try {
-    // The Extensions grill-me add is per-client content and always needs the canonical tool, whether or not
-    // the optional plain ECC item is present (extraItem may be null when the fixture exposes none).
+    // The Extensions grill-me add is per-client content and always needs the canonical tool; the optional
+    // plain ECC item was chosen from positive public fit + resolution facts by the fixture.
     const { context, page } = await openPage(browser, origin, { theme, tool: true });
     await addFromCatalog(page, 'extensions.matt.grill-me');
     if (extraItem) await addFromCatalog(page, extraItem);
-    await openPolicyDrawer(page);
-    await page.locator('#install-button:not([disabled])').waitFor();
-    await page.locator('#install-button').click();
-    await page.locator('#install-message[data-outcome="installed"]').waitFor({ timeout: 120_000 });
-    await page.locator('[data-installed-item="extensions.matt.grill-me"]').waitFor();
-    await context.close();
+    // Save the real artifact through the ordinary drawer download.
+    await page.locator('#your-setup').click();
+    await openSetupAdvanced(page);
+    const download = page.waitForEvent('download');
+    await page.locator('#policy-save').click();
+    const savedPath = join(output, `mixed-${theme}-saved.json`);
+    await (await download).saveAs(savedPath);
+    await closePolicyDrawer(page);
+    // A FRESH browser context reopens and validates the exact saved choices - the mixed saved/reopen half of
+    // the accepted criterion, independent of the later fresh-PROCESS inventory proof.
+    const context2 = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    await context2.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
+    const reopened = await context2.newPage(); reopened.setDefaultTimeout(30_000);
+    await reopened.goto(origin + '/');
+    await reopened.locator('#browse-family option[value="Extensions"]').waitFor({ state: 'attached' });
+    if (await reopened.locator('#setup-dialog').isVisible()) {
+      await reopened.getByRole('radio', { name: /Vibe coder/ }).check();
+      for (let step = 0; step < 4; step++) await reopened.locator('#setup-next').click();
+      await reopened.locator('#setup-dialog').waitFor({ state: 'hidden' });
+    }
+    await openPolicyWorkspace(reopened); await openPolicyFileActions(reopened);
+    await reopened.locator('#policy-open').setInputFiles(savedPath);
+    await reopened.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+    await reopened.locator('#policy-status').filter({ hasText: 'Saved choices recovered' }).waitFor();
+    const choices = await reopened.locator('#setup-choices').innerText();
+    assert.match(choices, /grill-me/, 'Extensions is still chosen after the exact reopen');
+    if (extraItem) assert.ok(choices.includes(extraName ?? extraItem), 'the ECC item is still chosen after the exact reopen');
+    // Named prepared-1.6 rows for both families, before any Apply.
+    await openPolicyDrawer(reopened);
+    await reopened.locator('#install-button:not([disabled])').waitFor({ timeout: 120_000 });
+    await reopened.locator('#install-details > summary').click();
+    const rows = await reopened.locator('#install-review-rows').innerText();
+    assert.match(rows, /grill-me/, 'named Extensions review row');
+    assert.match(rows, /Chosen by you/, 'recorded origins shown');
+    if (extraItem) assert.ok(rows.includes(extraName ?? extraItem), 'named ECC review row');
+    // Apply: the strict checked result.
+    await reopened.locator('#install-button').click();
+    await reopened.locator('#install-message[data-outcome="installed"]').waitFor({ timeout: 120_000 });
+    assert.match(await reopened.locator('#install-message').innerText(), /Confirmed on disk/);
+    await context2.close(); await context.close();
     return { status: 'passed' };
   } finally { await browser.close(); }
 }
@@ -105,6 +139,7 @@ export async function runRestartVerifyBrowser({ origin, output, playwrightModule
       const mixed = page.locator(`[data-installed-item="${extraItem}"]`);
       await mixed.waitFor();
       assert.match(await mixed.innerText(), new RegExp('it needs|Chosen|sets?:', 'i'), 'the mixed ECC+Extensions setup keeps the ECC item from the recorded projection after the restart');
+      if (extraName) assert.ok((await mixed.innerText()).includes(extraName), 'the recorded ECC name survives the fresh process');
     }
     assert.equal(await page.locator('[data-installed-state]').count(), 0, 'a fresh complete install carries no adverse state chips');
     if (project) {
