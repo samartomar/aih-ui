@@ -23,7 +23,7 @@ export function itemBrowseFacts(item, browse, tool) {
   const explanation = !fit ? (browse?.reason ?? 'Tool fit is loading or unavailable. Choose your tool; no successful use is assumed.') : `${fit.reason} ${fit.notRendered?.detail ?? ''} ${(fit.staticBlockers ?? []).map(value => value.detail).join(' ')} ${observed ? `Observed ${observed.observedAt}, ${observed.os} ${observed.arch}, tool ${observed.toolVersion}.` : `No observation on ${browse.platform?.os ?? 'unknown OS'} ${browse.platform?.arch ?? 'unknown architecture'}.`} A fallback label describes the published binding, not an installed-file check. Host facts ${host?.status ?? 'unchecked'}; static observation is not proof of use here.`;
   return { fit, scan, recipe, fitKey, words, explanation };
 }
-export function renderBrowseFacts(item, browse, tool, { detailed = false, onApprove = undefined } = {}) {
+export function renderBrowseFacts(item, browse, tool, { detailed = false, onApprove = undefined, approved = false } = {}) {
   const node = el('div', 'browse-facts'); const facts = itemBrowseFacts(item, browse, tool);
   node.append(badge('fit', facts.fitKey, facts.words, facts.explanation));
   if (item.payload?.invocation === 'user-only') node.append(badge('state', 'on-request', 'Only when you ask', 'Invocation is declared by this Catalog item.'));
@@ -45,7 +45,9 @@ export function renderBrowseFacts(item, browse, tool, { detailed = false, onAppr
   if (approval.state === 'checked') {
     const row = el('label', 'browse-mcp-approval flex items-start gap-x-2 text-on-surface');
     row.dataset.mcpApproval = approval.approvable ? 'offered' : 'in-tool';
-    const box = el('input', 'mt-0.5'); box.type = 'checkbox'; box.checked = false; box.disabled = !approval.approvable;
+    // The box reflects the artifact: after a tick/untick the card re-renders, and a hardcoded false
+    // would silently drop the person's choice (their next click would toggle the wrong way).
+    const box = el('input', 'mt-0.5'); box.type = 'checkbox'; box.checked = Boolean(approved); box.disabled = !approval.approvable;
     box.dataset.server = item.id; box.setAttribute('aria-label', `${approval.words} (${item.id})`);
     row.append(box, el('span', '', `${approval.words}. ${approval.requirements}`));
     attachTooltip(row, approval.reason);

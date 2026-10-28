@@ -206,6 +206,15 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   }
 
   function unusable(entry) { const fit = browseResult?.compatibility?.items?.find(value => value.item.itemId === entry.authoringItem.id); return fit && (fit.support === 'none' || fit.notRendered || fit.staticBlockers?.length); }
+  // Whether the open artifact currently carries the one-server approval for an item: the card's tick must
+  // reflect this exactly, or a re-render silently flips it back to unchecked.
+  const approvalGranted = itemId => {
+    try {
+      const policy = JSON.parse(new TextDecoder().decode(authoring.bytes));
+      const selection = (policy.selections ?? []).find(candidate => candidate.item?.itemId === itemId);
+      return Boolean(selection && JSON.stringify(selection.recipe?.inline?.operations ?? []).includes('approve-server'));
+    } catch { return false; }
+  };
   function cardsModel() {
     const scope = selectedScope(state.counts, browsingView());
     return {

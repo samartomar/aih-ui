@@ -165,7 +165,7 @@ export async function runRestartVerifyBrowser({ origin, output, playwrightModule
   } finally { assert.deepEqual(errors, []); await browser.close(); }
 }
 
-// (3a) Strict failed Apply: a real filesystem obstacle at the registration target makes Core fail honestly; the
+// (3a) Obstacle case: preparation-refusal checkpoint. A real failed/partial RUN page case is a separate, unproven requirement (see the returned disposition).
 // page must not look installed and must name the failed members.
 export async function runMcpFailedApplyBrowser({ origin, output, project, playwrightModule, theme = 'dark' }) {
   const { chromium } = await import(playwrightModule);
