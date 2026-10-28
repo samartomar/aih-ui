@@ -54,7 +54,9 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
     inspectAuthority,
     // Session ids still held, so a host replaced for another project folder can name what it discarded.
     heldSessions: () => [...sessions.keys()],
-    managedInventory() { return listManagedSelections({ target: { project: projectRoot }, scope: 'project' }); },
+    // The redacted 1.1 projection is requested explicitly; without the format the 1.0 default would silently
+    // drop recorded names/origins and the per-selection states the installed list renders (UI167).
+    managedInventory() { return listManagedSelections({ target: { project: projectRoot }, scope: 'project', format: 'urn:aihq:core:managed-inventory-result:1.1.0' }); },
     async prepareRemovalSession({ managementId, scope, mode, controls } = {}) {
       // Removal reads Core's retained custody; it does not acquire recipe material.
       const { authentication, signal, logging } = controlsFor(controls);

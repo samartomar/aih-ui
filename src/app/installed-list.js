@@ -1,6 +1,8 @@
-// What is installed in the project folder, grouped by the item the person chose. The list comes from Core's
-// managed inventory; names and the needed-by relation come from the policy this page compiled (each selection's
-// `requires`, as Catalog resolved it) and the saved intent's pins. Nothing here decides a dependency itself.
+// What is installed in the project folder. Names, kinds, tools and set origins come from Core's redacted
+// managed-inventory 1.1 projection as recorded at install time — never from the current draft, so the list is
+// the same after a restart and for items outside the setup. The needed-by relation and removal grouping still
+// come from the compiled policy (each selection's `requires`, as Catalog resolved it). Nothing here decides a
+// dependency, an update state or an admission state itself.
 
 /** Selection ids in an order where every item comes before the items it requires. */
 export function removalOrder(ids, byId) {
@@ -21,6 +23,44 @@ function closure(id, byId, seen = new Set()) {
   return seen;
 }
 
+/** The redacted 1.1 per-selection states, straight from Core's projection; unknown stays unknown. */
+export function inventoryState(entry) {
+  return {
+    file: (entry.members ?? []).some(member => ['changed', 'missing', 'block-changed', 'block-missing'].includes(member.fileState)) ? 'changed'
+      : (entry.members ?? []).some(member => member.fileState === 'unchecked') ? 'unchecked'
+      : (entry.members ?? []).length ? 'matches' : 'unknown',
+    update: entry.updateState ?? 'unknown',
+    policy: entry.policyState ?? null,
+    approval: entry.approval ?? null,
+    install: entry.installState ?? null,
+  };
+}
+
+/** Every in-set origin a selection recorded, all simultaneous memberships retained. */
+export const recordedSets = entry => (entry.origins ?? []).map(origin => origin.set).filter(Boolean);
+
+/**
+ * Grouping by the recorded set origins of the installed selections, independent of any draft. Selections with
+ * no recorded set origin (legacy metadata or direct installs) fall under `set: null`, said explicitly.
+ */
+export function originGroups(inventory) {
+  const groups = new Map();
+  for (const entry of inventory?.selections ?? []) {
+    const sets = recordedSets(entry);
+    if (!sets.length) {
+      const key = 'null';
+      if (!groups.has(key)) groups.set(key, { set: null, items: [] });
+      groups.get(key).items.push(entry.managementId);
+    }
+    for (const set of sets) {
+      const key = `${set.framework}/${set.setId}`;
+      if (!groups.has(key)) groups.set(key, { set, items: [] });
+      if (!groups.get(key).items.includes(entry.managementId)) groups.get(key).items.push(entry.managementId);
+    }
+  }
+  return [...groups.values()];
+}
+
 /**
  * {readable, reason?, partial, groups, others, notInstalled, setupInstalled}
  * groups: one per installed chosen item: {name, itemId, managementId, scope, needed, removes, kept}
@@ -35,10 +75,15 @@ export function groupInstalled({ inventory, policy, intent, label = () => undefi
   const installed = new Map(inventory.selections.map(entry => [entry.managementId, entry]));
   const itemByRecipe = new Map((intent?.pins ?? []).map(entry => [entry.recipe?.sha256, entry.itemId]));
   const byId = new Map((policy?.selections ?? []).map(entry => [entry.id, entry]));
+  // Recorded 1.1 projection wins for the name; the draft-derived recipe/pin lookup is only a fallback and
+  // never changes what Core recorded.
   const describe = entry => {
     const itemId = itemByRecipe.get(entry.recipe?.reference?.sha256);
-    return { id: entry.id, itemId, managementId: entry.managementId, scope: entry.scope, name: (itemId && label(itemId)) ?? itemId ?? entry.managementId };
+    const recorded = installed.get(entry.managementId);
+    return { id: entry.id, itemId, managementId: entry.managementId, scope: entry.scope,
+      name: recorded?.name ?? (itemId && label(itemId)) ?? itemId ?? entry.managementId };
   };
+  const withState = item => ({ ...item, state: inventoryState(installed.get(item.managementId) ?? {}) });
   const rootIds = new Set((intent?.roots ?? []).map(root => root.itemId));
   const chosen = [...byId.values()].map(describe).filter(item => item.itemId && rootIds.has(item.itemId));
   const isInstalled = item => installed.has(item.managementId);
@@ -52,15 +97,21 @@ export function groupInstalled({ inventory, policy, intent, label = () => undefi
     const removes = removalOrder(removable.map(item => item.id), byId).map(id => removable.find(item => item.id === id));
     for (const item of [root, ...needed]) grouped.add(item.managementId);
     const neededBy = item => installedRoots.filter(other => other.id !== root.id && closure(other.id, byId).has(item.id)).map(other => other.name);
-    return { ...root, needed, removes, kept: needed.filter(item => othersNeed.has(item.id)).map(item => ({ ...item, neededBy: neededBy(item) })) };
+    return { ...withState(root), sets: recordedSets(installed.get(root.managementId) ?? {}),
+      needed: needed.map(withState).map(item => ({ ...item, sets: recordedSets(installed.get(item.managementId) ?? {}) })),
+      removes, kept: needed.filter(item => othersNeed.has(item.id)).map(item => ({ ...withState(item), neededBy: neededBy(item) })) };
   });
 
   const known = new Map([...byId.values()].map(entry => [entry.managementId, describe(entry)]));
   const others = inventory.selections.filter(entry => !grouped.has(entry.managementId)).map(entry => {
     const item = known.get(entry.managementId);
-    return { managementId: entry.managementId, scope: entry.scope, name: item?.name ?? entry.managementId, inSetup: Boolean(item) };
+    return withState({ managementId: entry.managementId, scope: entry.scope,
+      name: entry.name ?? item?.name ?? entry.managementId, inSetup: Boolean(item),
+      sets: recordedSets(entry) });
   });
   // Core lists every selection of the current setup as installed (matching bytes alone do not show this).
   const setupInstalled = byId.size > 0 && [...byId.values()].every(entry => installed.has(entry.managementId));
-  return { readable: true, partial: inventory.status !== 'complete', groups, others, notInstalled: chosen.filter(item => !isInstalled(item)), setupInstalled };
+  return { readable: true, partial: inventory.status !== 'complete', groups, others, notInstalled: chosen.filter(item => !isInstalled(item)), setupInstalled,
+    // Grouping purely from recorded origins, independent of the draft; legacy rows stay explicit under set:null.
+    originGroups: originGroups(inventory) };
 }

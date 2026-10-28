@@ -5,6 +5,35 @@
 import { groupInstalled } from './installed-list.js';
 import { cancelRemoval, confirmRemoval, previewRemoval } from './installed-removal.js';
 import { compact } from './compact.js';
+import { iconSpan } from './icons.js';
+import { attachTooltip } from './tooltip.js';
+
+// What Core's redacted 1.1 projection said about one installed selection, each state with its own icon,
+// tooltip and wording. Core owns these states; nothing here recomputes them (#167).
+const STATE_WORDS = {
+  'update-available': ['update-available', 'Update available', 'Core reports a newer offered version of this item.'],
+  'no-longer-offered': ['no-longer-offered', 'No longer offered', 'Core no longer finds this item in the offered index supplied to it.'],
+  superseded: ['no-longer-offered', 'Superseded', 'Core reports this item replaced by another.'],
+  revoked: ['no-longer-offered', 'Revoked', 'Core reports this item revoked.'],
+  changed: ['changed-since-install', 'Changed since install', 'Core found installed files that differ from what was reviewed.'],
+  'block-edited': ['block-edited', 'AIH block edited', 'Core found a managed text block edited by hand.'],
+  interrupted: ['changed-since-install', 'Install interrupted', 'Core reports this selection’s installation was interrupted.'],
+  'granted-by-aih': ['needs-ok', 'OK granted by AIH', 'The one-server approval was written by AIH as reviewed.'],
+  needed: ['needs-ok', 'Needs your OK', 'The tool still needs your OK for this item.'],
+};
+function stateBadges(state = {}, el) {
+  const chips = [];
+  const add = (key, extra) => { const words = STATE_WORDS[key]; if (!words) return;
+    const chip = el('span', 'inline-flex items-center gap-1 text-[11px]', ''); chip.dataset.installedState = key;
+    chip.append(iconSpan('state', words[0]), el('span', '', words[1])); attachTooltip(chip, `${words[2]}${extra ? ` ${extra}` : ''}`); chips.push(chip); };
+  if (state.update && state.update !== 'current' && state.update !== 'unknown') add(state.update);
+  if (state.file === 'changed') add('changed');
+  if (state.install === 'interrupted') add('interrupted');
+  if (state.approval === 'granted-by-aih') add('granted-by-aih');
+  else if (state.approval === 'needed') add('needed');
+  if (state.policy && !['permitted', 'recommended', 'unknown'].includes(state.policy)) add('no-longer-offered', `Organization policy: ${state.policy}.`);
+  return chips;
+}
 
 export function createInstalledPanel({ client, el, button, onRemoved = () => {}, onInventory = () => {} }) {
   const node = el('section', 'p-3 rounded border border-wb-border bg-surface-container-low space-y-2'); node.id = 'installed-panel'; node.hidden = true;
@@ -86,6 +115,8 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       const row = el('li', 'space-y-1'); row.dataset.installedItem = group.itemId; row.title = group.managementId;
       const { remove, area } = removeControl(group.removes, group.kept);
       const head = el('div', 'flex flex-wrap items-center gap-2'); head.append(el('span', 'font-medium', group.name));
+      head.append(...stateBadges(group.state, el));
+      if (group.sets?.length) head.append(el('span', 'text-on-surface-variant text-[11px]', `From set ${group.sets.map(set => set.setId).join(', ')}`));
       if (group.needed.length) head.append(el('span', 'text-on-surface-variant', `+ ${group.needed.length} it needs: ${group.needed.map(item => item.name).join(', ')}`));
       head.append(remove); row.append(head, area); list.append(row);
     }
@@ -98,6 +129,8 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
         // The full installed id stays in the tooltip (#137).
         const name = el('span', 'font-medium break-all', item.name); name.title = item.managementId;
         const head = el('div', 'flex flex-wrap items-center gap-2'); head.append(name);
+        head.append(...stateBadges(item.state, el));
+        if (item.sets?.length) head.append(el('span', 'text-on-surface-variant text-[11px]', `From set ${item.sets.map(set => set.setId).join(', ')}`));
         if (!item.inSetup) head.append(el('span', 'text-on-surface-variant', 'Not in your setup'));
         head.append(remove); row.append(head, area); others.append(row);
       }

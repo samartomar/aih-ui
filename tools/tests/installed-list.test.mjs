@@ -33,7 +33,10 @@ test('Remove takes the chosen item and only the needed items nothing else instal
 
 test('installed items outside the current setup are listed apart by their management id', () => {
   const view = groupInstalled({ inventory: inventory('m-project--kiro.grill-me', 'grill-me', 'grilling', 'notices'), policy, intent, label });
-  assert.deepEqual(view.others, [{ managementId: 'm-project--kiro.grill-me', scope: 'project', name: 'm-project--kiro.grill-me', inSetup: false }]);
+  assert.equal(view.others.length, 1);
+  assert.deepEqual(view.others.map(item => ({ managementId: item.managementId, scope: item.scope, name: item.name, inSetup: item.inSetup })),
+    [{ managementId: 'm-project--kiro.grill-me', scope: 'project', name: 'm-project--kiro.grill-me', inSetup: false }]);
+  assert.deepEqual(view.others[0].state, { file: 'unknown', update: 'unknown', policy: null, approval: null, install: null });
 });
 
 test('a needed item whose chosen item is no longer installed is listed apart with its name', () => {
@@ -73,4 +76,47 @@ test('the whole setup counts as installed only when Core lists every one of its 
   assert.equal(groupInstalled({ inventory: { ...all, status: 'incomplete' }, policy, intent, label }).setupInstalled, true);
   assert.equal(groupInstalled({ inventory: { status: 'invalid', selections: [] }, policy, intent, label }).setupInstalled, false);
   assert.equal(groupInstalled({ inventory: all, policy: { selections: [] }, intent, label }).setupInstalled, false);
+});
+
+// UI167: the redacted 1.1 projection records names, origins and states at install time; the list uses them
+// independent of the current draft, and legacy rows without recorded metadata stay explicit instead of inferred.
+const recorded = (managementId, over = {}) => ({ managementId, scope: 'project', name: null, kind: null, framework: null, item: null, tool: null,
+  origins: [], updateState: 'current', installState: 'complete', approval: null, members: [], ...over });
+
+test('recorded 1.1 names win over draft-derived labels, and per-selection states come from the projection', () => {
+  const inv = { status: 'complete', selections: [recorded('m-grill-me', { name: 'Grill me (recorded)', updateState: 'update-available',
+    members: [{ fileState: 'changed' }] }), recorded('m-grilling'), recorded('m-notices')] };
+  const view = groupInstalled({ inventory: inv, policy, intent, label });
+  const grill = view.groups.find(group => group.name === 'Grill me (recorded)');
+  assert.ok(grill, 'recorded name is used');
+  assert.deepEqual(grill.state, { file: 'changed', update: 'update-available', policy: null, approval: null, install: 'complete' });
+  assert.equal(view.groups.find(group => group.managementId === 'm-grill-me').needed.find(item => item.managementId === 'm-grilling').state.file, 'unknown', 'no members is unknown, never fabricated');
+});
+
+test('items outside the current setup keep their recorded names from the projection', () => {
+  const inv = { status: 'complete', selections: [recorded('m-elsewhere', { name: 'Outside item', item: { framework: 'ecc', itemId: 'ecc.other' } })] };
+  const view = groupInstalled({ inventory: inv, policy: undefined, intent: undefined, label });
+  assert.deepEqual(view.others.map(item => [item.name, item.inSetup]), [['Outside item', false]]);
+});
+
+test('origin groups come from recorded in-set origins, keep simultaneous membership, and stay explicit for legacy rows', () => {
+  const starter = { framework: 'ecc', setId: 'starter', setSha256: 'a'.repeat(64) };
+  const extra = { framework: 'ecc', setId: 'extra', setSha256: 'b'.repeat(64) };
+  const inv = { status: 'complete', selections: [
+    recorded('m-a', { origins: [{ reasonIncluded: 'in-set', set: starter }, { reasonIncluded: 'in-set', set: extra }] }),
+    recorded('m-b', { origins: [{ reasonIncluded: 'in-set', set: starter }] }),
+    recorded('m-legacy', { origins: [{ reasonIncluded: 'chosen' }] }),
+  ] };
+  const view = groupInstalled({ inventory: inv, policy: undefined, intent: undefined, label });
+  const byKey = new Map(view.originGroups.map(group => [group.set ? `${group.set.framework}/${group.set.setId}` : 'null', group.items]));
+  assert.deepEqual(byKey.get('ecc/starter'), ['m-a', 'm-b'], 'overlapping sets keep every membership');
+  assert.deepEqual(byKey.get('ecc/extra'), ['m-a']);
+  assert.deepEqual(byKey.get('null'), ['m-legacy'], 'a row without recorded set origin stays explicit, never inferred');
+});
+
+test('update and install states Core reports are never recomputed here', () => {
+  const inv = { status: 'incomplete', selections: [recorded('m-x', { updateState: 'no-longer-offered', installState: 'interrupted', members: [{ fileState: 'missing' }] })] };
+  const view = groupInstalled({ inventory: inv, policy: undefined, intent: undefined, label });
+  assert.equal(view.partial, true, 'an incomplete result is said incomplete, distinct from the selection state');
+  assert.deepEqual(view.others[0].state, { file: 'changed', update: 'no-longer-offered', policy: null, approval: null, install: 'interrupted' });
 });
