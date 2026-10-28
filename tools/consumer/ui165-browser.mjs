@@ -133,7 +133,9 @@ export async function runUi165Browser({ origin, output, expected, playwrightModu
       // --- Duplicate facts: unavailable is said, never a clean state ----------------------------
       // No project folder is chosen in this seam, so Core’s host inspection cannot run.
       const copiesLine = await page.locator('#setup-choices-host-copies').textContent();
-      assert.match(copiesLine, /Couldn't check whether your tool already has your chosen content/, 'the drawer says the duplicate check could not run');
+      assert.match(copiesLine, /^Couldn't check whether your tool already has this\./, 'the drawer says the duplicate check could not run');
+      assert.match(copiesLine, /Choose a project folder/, 'the missing project-folder prerequisite is explicit');
+      assert.doesNotMatch(copiesLine, /reported no second copies|No second copy reported/, 'an unavailable inspection never claims a clean state');
       await card.click();
       await page.locator('#inspector-browse-facts').waitFor();
       assert.match(await page.locator('#inspector-browse-facts').innerText(), /Also seen by your tool/);
