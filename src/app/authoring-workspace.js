@@ -46,6 +46,9 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   const review = document.getElementById('policy-review-description');
   const controls = el('div', 'flex flex-wrap gap-2'); start.after(controls);
   const roots = el('div', 'space-y-2'); choices.after(roots);
+  const internalNotice = el('details', 'text-on-surface-variant'); internalNotice.id = 'policy-internal-content';
+  const internalSummary = el('summary', '', 'Internal content · not verified');
+  const internalProvenance = el('pre', 'whitespace-pre-wrap break-words'); internalNotice.append(internalSummary, internalProvenance);
   const proposal = el('div', 'space-y-2'); proposal.id = 'policy-proposal'; proposal.setAttribute('role', 'status'); review.after(proposal);
   const status = el('p', 'wb-status-area text-on-surface-variant'); status.id = 'policy-status'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite'); controls.after(status);
   const file = el('input'); file.type = 'file'; file.accept = 'application/json,.json'; file.id = 'policy-open'; file.setAttribute('aria-label', 'Open saved project policy');
@@ -130,6 +133,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   // "Your setup" lands on Install, or on the installed list when there is nothing to install.
   const setupHeading = () => [installPanel, installedPanel].find(panel => !panel.node.hidden)?.heading ?? null;
   const reviewPanel = createPolicyReview({ client, accept, proposed, status, setupHeading, onBack: onBackToCatalog });
+  reviewPanel.head.after(internalNotice);
   const installPanel = createInstallPanel({ client, el, button, onInstalled: () => void installedPanel.refresh() });
   const installedPanel = createInstalledPanel({ client, el, button, onRemoved: () => installPanel.recheck(), onInventory: view => installPanel.setManaged(view?.setupInstalled) });
   // Changing the folder discards what this page prepared for the old one, then checks the new one.
@@ -510,6 +514,9 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     const contextSummary = document.getElementById('policy-context-summary');
     if (contextSummary) contextSummary.textContent = `${draft ? 'Draft' : 'Setup'} · ${client.candidate ? 'Waiting to add' : client.dirty ? 'Unsaved' : `${current.length} chosen`}`;
     if (persistentContext) persistentContext.textContent = `${draft ? 'Working draft' : 'Your setup'} · ${current.length} chosen ${current.length === 1 ? 'item' : 'items'}${client.candidate ? ' · A change is waiting in Your setup' : ''}${client.dirty ? ' · Changes not downloaded' : ' · No changes waiting to download'}${client.recoveryAvailable === false ? ' · Browser recovery unavailable' : ''}`;
+    const internalSources = (client.intent?.provenance ?? client.draft?.intent?.provenance ?? []).filter(source => source.materialSource?.internalContent);
+    internalNotice.hidden = internalSources.length === 0;
+    internalProvenance.textContent = internalSources.length ? 'Baseline unbound; unauthenticated, non-production. Exact saved source and choice:\n' + JSON.stringify(internalSources, null, 2) : '';
     pageContext.textContent = `${draft ? 'Working draft' : 'Current project policy'}: ${current.length} accepted choices${client.dirty ? ' · Changes not downloaded' : ''}${client.startupSource === 'recovery' ? ' · Recovered from this browser session' : ''}. Open policy choices and review to edit, download or reopen an artifact.`;
     summary.textContent = draft ? (intent
       ? `Current executable policy: compiled from the draft · ${intent.roots.length} explicit choices · ${intent.pins.length} exact pins including dependencies. The draft envelope is kept separately and is not executable.`

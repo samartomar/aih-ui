@@ -36,6 +36,85 @@ The Policy Workbench user interface for AIH, built as an independent application
 
 An outside developer can build this UI from public package interfaces. The policy artifacts it saves are consumed by `@aihq/core` without the UI; local onboarding settings are owned only by this UI. Updating only `@aihq/catalog` brings compatible new content without changing core.
 
+## Framework sources
+
+The framework rail reads release availability and published names through Catalog's
+public `readReleaseIndex`, then reads each host-acquired release with the admitted
+SHA-256. Unsigned indexes say **not verified**. Failed, offline and conflicting
+sources keep their diagnostics; an unavailable release never receives an invented
+item count. Other valid sources remain browsable. The frozen unnamed default and
+historical presentation groups remain available under **Filters & your sources**;
+they do not establish framework availability.
+
+`AIH_FRAMEWORK_SOURCES` names a host-owned JSON file. It accepts up to 16 `indexes`
+and 16 `prepared` selections. `indexStatePath` names an absolute host-owned JSON
+state store; index reads require it and atomically retain the public reader's complete
+per-source rollback and TUF state across restarts. An unreadable state store fails
+closed for indexes while internal sources remain independent. Paths are absolute, chosen by the host, and never
+accepted from browser requests or saved policies. An index selection contains
+`sourceId`, `path` (the exact index bytes), independently chosen `trust` and
+`authorizedFrameworks`, plus optional `releases`: `{ sha256, path, root }` entries
+for exact locally acquired release documents and their installed material roots.
+No network discovery or trust selection happens in the Workbench. A selected TUF
+root without public cryptographic verification remains withheld; this file cannot
+supply a serialized verification grant. Restart reads the configured bytes again.
+
+For internal local-package use, a prepared selection contains `root` (the installed
+Catalog package), `frameworkId`, `archivePath`, `archiveSha256`, and optional
+`expectedContentSha256`. Catalog's public `readInstalledPreparedContent` checks the
+content, inventory and members. The host binds the discovered content digest with
+a second pinned read, checks the exact archive hash, and compares its content and
+inventory bytes to the installed reader result. Names and items come from that
+result. The host reads single and per-tool recipe descriptors as published, without choosing
+a tool-specific variant. Catalog retains configuration and delivery-choice refusals.
+No prepared selection becomes a release-index entry or gains a baseline.
+It stays **Internal · not verified**, unbound, unauthenticated and non-production.
+
+The existing open `materialSource` provenance object in saved intent retains an
+`internalContent` member containing the reader's exact `status`, `provenance` and
+`archiveSha256`. This is descriptive source metadata only: configuration and Core
+execution still receive the ordinary public material source. Reopen compares that
+exact metadata with the host-selected source; another archive or unavailable source
+requires explicit reconciliation and never silently replaces the saved choice.
+Your setup and the inspector keep the internal status and full identity inspectable.
+No machine path is added to portable metadata.
+
+Compatibility observation counts use Harness static `checkCompatibility` over the actual loaded
+items for the header's chosen tool and this host's OS/architecture. They count
+per-item platform observations, not successful execution; the tooltip says
+**observed, not works**. Zero observations means not yet confirmed on that platform, not zero installed items or an unsupported tool. Missing or refused compatibility is unavailable, never a
+guessed zero. First-step guidance points to tool selection and framework browsing.
+
+Framework browsing uses the header's chosen tool; legacy target/support filters do not narrow it. Active search and kind filters are visible beside a clear action. No selected sets, no published sets, or an unresolved set shows all independently browsable content while keeping Catalog's refusal visible. **Clear set choices** deselects the browsing sets; **Remove chosen sets** explicitly removes previously added sets from Your setup. Shared plugin routes appear once above the framework's cards, with full details still available in the inspector. Project tools and workspace link to the Project basics framework instead of repeating a second project-content grid.
+
+When Catalog refuses a chosen set for missing declared inputs, **Required inputs
+for chosen sets** reuses the ordinary configuration editor. Values are explicit
+qualified selection roots supplied to public `resolveSelections`; Catalog still
+expands the sets and validates configuration. Remembered values do not select an
+excluded or unrelated item. Ambiguous missing-item identities remain refused.
+Accepted values persist in the existing saved roots and are revalidated with
+recorded set origins on reopen. The browsing cache stores no configuration values.
+Paths are caller supplied: the page does not infer them, inspect their contents,
+acquire tools or run services. Descriptions and validation come from the public
+input contract; a successful configuration check is not runtime readiness.
+
+`node tools/check-frameworks.mjs <installed-consumer> <new-output-directory> <artifact-manifest.json>`
+runs the focused page proof in a disposable account home and temporary directory,
+without an execution target (append case names for affected-only checks; `restart`
+uses saved policies from `ready` in the same output directory). The manifest maps `core`, `catalog` and `scan` to
+`{ tarball, sha256, commit }` from pinned packed-public inputs. The proof uses real
+prepared content plus separate public release/index fixtures; its synthetic index
+bindings are test data, never production release evidence. It retains both-theme
+screenshots, source states and expected public compatibility results. The ordinary
+`check:workbench` suite remains required. These checks do not establish human
+acceptance, production Catalog availability, or release readiness.
+The affected `callerInputs` / `callerInputRestart` cases exercise required set
+inputs. `AIH_TEST_SET_INPUTS` may name a host-selected JSON file of actual
+task-local input values for the positive case; it is a test-runner input only.
+Without it, collection and missing-input refusal are checked and positive
+acceptance is explicitly incomplete. No host paths or executable defaults are
+invented by the fixture.
+
 ## Latest Scan evidence
 
 The ordinary Policy workspace's Scan Review has a separate **Latest, baseline and history** view. `aih-ui/scan-evidence` exposes the same `selectContentEvidence` application projection to headless consumers. Scan's public `selectAssessments` owns matching, creation-date ordering, ties, future dates and refusal diagnostics; the Workbench does not rank by producer trust or arrival. Catalog's checked baseline inventory and `baseline.scope` supply exact package-relative coordinates. Item capture and detector coverage are read separately: an inventory match alone demonstrates no item coverage. Different requested scopes have an explicit selector. Without a release baseline the initial comparison requests the exact item's descriptor paths; other available scopes can be chosen explicitly.
@@ -90,7 +169,7 @@ Git publishing and operator-host inputs that are still needed.
 
 Optional host configuration uses the existing `AIH_CONSUMER_PROJECT`,
 `AIH_CONSUMER_CONTROLS`, `AIH_ORGANIZATION_SOURCE` and `AIH_REVIEW_TRUST`
-environment inputs. `AIH_CONSUMER_PROJECT` is the default project folder; the review drawer's Project folder row can choose another for the server's lifetime. The host refuses a relative, missing or non-folder path, a drive or filesystem root, the account's and the server's home folders themselves (the account's own, `HOME`, `USERPROFILE`), and Core's published state root and anything inside it, comparing real paths; folders inside a home folder are allowed. Install and Remove check the chosen folder again before each run. A switch is refused while Install or Remove is running and replaces the execution hosts, so nothing prepared for the old folder can be applied. Recent folders stay in this browser only. Without a project folder, Prepare/Apply and managed removal
+environment inputs. `AIH_CONSUMER_PROJECT` is the default project folder; the review drawer's Project folder row can choose another for the server's lifetime. The host refuses a relative, missing or non-folder path, a drive or filesystem root, the account's and the server's home folders themselves (the account's own, `HOME`, `USERPROFILE`), and Core's published state root and anything inside it, comparing real paths; folders inside a home folder are allowed. Install and Remove check the chosen folder again before each run. A switch is refused while Install or Remove is running and replaces the execution hosts, so nothing prepared for the old folder can be applied. Use folder opens a menu of directories on the Workbench host, which can be a different machine from the browser. The menu reads names only, excludes dot-prefixed directories and directory links, and caps traversal at 1,000 entries with at most 200 returned folders; it does not recurse, upload files, change the selected project or install anything. A full host path remains available. Explicitly choosing Use this folder applies the existing validation and switch rules. Recent folders stay in this browser only. Without a project folder, Prepare/Apply and managed removal
 remain unavailable with an explanation. `AIH_UPDATE_SOURCE_CATALOG_ROOTS` configures the update source: an ordered list of at most 8 absolute paths of locally packed Catalog package roots, oldest first, separated by the platform path delimiter (`;` on Windows, `:` elsewhere). Each root is read only through the public `readInstalledRelease`, one export at a time: its `release.json` and the four family release exports, and nothing else under it except, as described next, its `package.json`; nothing is written and no scan runs. The frozen default `./release.json` is optional: a root whose package does not declare it is read from its four family releases. Only when the reader refuses the default as not exported is the root's `package.json` read, and only to see whether its export map names `./release.json`; a declared default the reader refuses stays offline as before. Such a root still counts as online, and its source line names the first family release it read. A root counts as read only when every release it exports of those five is a valid release of the installed `@aihq/catalog` package, and the four family exports are always required; otherwise it is reported offline as unreadable, invalid or a different package, naming the first export that failed, with the time it was last read kept for the lifetime of the server. While some roots are offline, the updates the readable ones offer are still listed, but content is reported unknown ("some update sources could not be read"), never checked, and the page keeps earlier updates and their check time; the improvements check says the same. The page shows each source by position, never by path. Later entries are newer, which is this host's own declaration and not a Catalog or producer fact (local packs can share one package version), so the page words it as the order declared by this host's update source. A launcher passes the same list as `startConsumer({ updateSourceCatalogRoots })`; the owner-testing candidate sets it from its manifest's `updateSourceCatalogs`. More than 8 entries, an empty entry or a relative path fails at startup, and so does setting it together with `AIH_MAINTENANCE_SOURCE`. `AIH_MAINTENANCE_SOURCE` is a test fixture only: the path of a small JSON file naming note-fixture revisions to publish as newer revisions of the review note, shown as "Test fixture source — not a real update source". With neither set, the host has no update source and content updates are unknown, not checked. `AIH_UI_SETTINGS_PATH` selects an
 isolated local setup store for tests; HTTP inputs cannot choose that path.
 
@@ -98,11 +177,11 @@ The machine-readiness host tests run Core only against a disposable fixture home
 
 Pack each local package with `npm pack`, install the tarballs into a throwaway consumer project, and run the scenario there. Do not use `npm link`: it hides packaging errors such as a wrong `exports` map or a missing file.
 
-The application declares `@aihq/core` 1.0.0-dev.37, `@aihq/catalog` 0.1.0 and `@aihq/scan` 0.5.0 as optional peer dependencies. The `aih-ui/authoring` entry and the authoring host (review bindings, the headless operations and the mixed authoring service) import `readContentCoverage` from `@aihq/scan/read`, so they require a Scan 0.5.0 archive that exports it; with an archive that does not, these modules fail to load. The owning operations the Workbench calls in place of its own copies set the minimum archives: a Core 1.0.0-dev.37 archive whose `@aihq/core/contracts` exports `recipeOperationKinds`, whose policy Prepare reports `operationSelections`, whose file-state results are 1.1.0 with `targets[].selectionIds`, whose `@aihq/core/harness` `targets` carry `executables` and whose claim-set validation (`validateClaimSet`, `projectClaims`) refuses machine-local paths; and a Catalog 0.1.0 archive whose `@aihq/catalog/reader` exports `compareReleases` and whose `resolveSelections` refusals carry `reference` and `declaredBy` on unavailable and conflict diagnostics. Earlier archives of the same versions lack these and are not supported. They are peers because the consumer installs the reviewed archives beside the application, and optional because those versions exist only as local archives, so npm must not fetch them for this repository's own install. An installation that supplies another version of any of them is reported by npm as an unmet peer. The package entries are application-tier readers and writers of the Workbench's stored formats, not an SDK: `aih-ui/authoring`, `aih-ui/intake`, `aih-ui/journey`, `aih-ui/maintenance`, `aih-ui/improvements`, `aih-ui/trials`, `aih-ui/workspace`, `aih-ui/batch`, `aih-ui/organization-author`, `aih-ui/scan-evidence` and the twelve record schemas. Host adapters (review, execution, readiness, workspace and batch hosts), the readiness and claims projections and shared helpers are application-internal and are not entries. The portable entries (`aih-ui/journey`, `aih-ui/workspace`, `aih-ui/batch`) import none of the three; `aih-ui/batch` therefore takes the policy reader as `parsePolicy` and the recipe operation kinds as `operationKinds` (Core's `parsePolicy` and `recipeOperationKinds`, supplied by the caller), reads the exact saved policy bytes it binds through the first and calls an action verifiable only when every operation is a kind Core lists as `observable` for its recipe format; `tools/tests/pure-imports.test.mjs` keeps their whole import graph free of packages, Node built-ins, host modules and browser globals.
+The application declares `@aihq/core` 1.0.0-dev.37, `@aihq/catalog` 0.1.0 and `@aihq/scan` 0.5.0 as optional peer dependencies. The `aih-ui/authoring` entry and the authoring host (review bindings, the headless operations and the mixed authoring service) import `readContentCoverage` from `@aihq/scan/read`, so they require a Scan 0.5.0 archive that exports it; with an archive that does not, these modules fail to load. The owning operations the Workbench calls in place of its own copies set the minimum archives: a Core 1.0.0-dev.37 archive whose `@aihq/core/contracts` exports `recipeOperationKinds`, whose policy Prepare reports `operationSelections`, whose file-state results are 1.1.0 with `targets[].selectionIds`, whose `@aihq/core/harness` `targets` carry `executables` and whose claim-set validation (`validateClaimSet`, `projectClaims`) refuses machine-local paths; and a Catalog 0.1.0 archive whose `@aihq/catalog/reader` exports `compareReleases` and whose `resolveSelections` refusals carry `reference` and `declaredBy` on unavailable and conflict diagnostics. The browse flow additionally needs Harness `selectTool`, `checkCompatibility`, `toolBindings` and runtime `inspectToolHost`, Core contracts `previewOrganizationObligations`, Catalog `readReleaseIndex`, `readInstalledPreparedContent`, `resolveSelections` with sets and `itemEvidenceDescriptor`, and Scan `summariseItem`. Earlier archives of the same versions that lack an owning operation cannot establish that behavior; the page reports its missing source or capability rather than inventing a result. They are peers because the consumer installs the reviewed archives beside the application, and optional because those versions exist only as local archives, so npm must not fetch them for this repository's own install. An installation that supplies another version of any of them is reported by npm as an unmet peer. The package entries are application-tier readers and writers of the Workbench's stored formats, not an SDK: `aih-ui/authoring`, `aih-ui/intake`, `aih-ui/journey`, `aih-ui/maintenance`, `aih-ui/improvements`, `aih-ui/trials`, `aih-ui/workspace`, `aih-ui/batch`, `aih-ui/organization-author`, `aih-ui/scan-evidence` and the twelve record schemas. Host adapters (review, execution, readiness, workspace and batch hosts), the readiness and claims projections and shared helpers are application-internal and are not entries. The portable entries (`aih-ui/journey`, `aih-ui/workspace`, `aih-ui/batch`) import none of the three; `aih-ui/batch` therefore takes the policy reader as `parsePolicy` and the recipe operation kinds as `operationKinds` (Core's `parsePolicy` and `recipeOperationKinds`, supplied by the caller), reads the exact saved policy bytes it binds through the first and calls an action verifiable only when every operation is a kind Core lists as `observable` for its recipe format; `tools/tests/pure-imports.test.mjs` keeps their whole import graph free of packages, Node built-ins, host modules and browser globals.
 
 For the saved-intent local proof, set `CORE_TGZ`, `CATALOG_TGZ` and `SCAN_TGZ`
 to reviewed archives, then run `node tools/saved-intent-proof.mjs <output-directory> --serve`
-with Node 24.15–24.x. It installs into an isolated consumer, runs the focused tests,
+with Node 26.12.1–26.x for the current reviewed producer archives. It installs into an isolated consumer, runs the focused tests,
 writes policies and measurements beneath that output directory, and serves
 `http://127.0.0.1:4821/intent` (override with `AIH_CONSUMER_PORT`). The ordinary `/`
 page still uses installed Catalog content and the public execution host when configured.
@@ -716,14 +795,11 @@ the host through public exports (`tools/service/tools.mjs`, `GET /api/tools` and
   binding). Every other tool, IDEs included, stays listed and greyed, and its
   tooltip gives the refusal Core's `selectTool` returns for it (today
   `tool-not-observed`);
-- each tool's icon is its existence/run state from Core's offline `inspect`
-  (`network: 'off'`), matched by registry id, in the same words as the client
-  checks below. A tool the inspection does not report says so. Finding a tool is
-  never shown as proof that it loads content, and none of these icons is green.
-  Opening the page runs that inspection once per host: it starts the local
-  version commands Core declares, and nothing else. Its answer is kept until the
-  host restarts, so a repair made from Check this machine shows here after a
-  restart.
+- the header reads filesystem and configuration facts through Harness
+  `inspectToolHost`, with a bounded budget and no client launch. An absent or
+  unreadable version stays unchecked. These facts are separate from static
+  compatibility observations and are never proof of use on this host. Explicit
+  **Check this machine** remains a separate action with its existing behavior.
 
 The page keeps no tool names, so a reinstalled Core changes the list with no UI
 edit. The choice is a per-viewer convenience: only its tool id is kept in this
@@ -744,8 +820,9 @@ retirement.
 
 The catalog's **Catalog target** filter -- the client names a catalog declares,
 which the Support filter reads -- works as before from the catalog's Advanced
-section, so the default page shows one tool control. Nothing yet reads Your tool
-to choose cards; that waits for the cards to read tool fit.
+section, so the default page shows one tool control. Browse cards read Harness
+compatibility for Your tool; changing the tool does not silently rewrite saved
+recipe pins.
 
 The strip also carries the start-up contract-check message, as information
 that blocks nothing. At start-up the host runs the installed Core's
@@ -782,8 +859,12 @@ does not answer within two minutes is the failed state.
 
 `package-support-1.1.json`, exported as `aih-ui/package-support-1.1.json`, is
 the Workbench's package-support declaration in Core's published
-`urn:aihq:package-support:1.1.0` format. It names what the Workbench actually
-reads and writes:
+`urn:aihq:package-support:1.1.0` format. Runtime support is per public entry:
+`aih-ui/stored-results` supports Node `>=24.15.0 <25 || >=26.12.1 <27`.
+The other Node entries retain `>=24.15.0 <25`; journey, workspace and batch
+retain their portable classification. A reader's entry range does not override
+a dependency package's installation engine range or establish runtime support
+for the application host. It names what the Workbench actually reads and writes:
 
 - each format this package exports a schema for, which it writes and reopens
   (`both`), with an accepted and a refused fixture read by the Workbench's own
@@ -1161,7 +1242,7 @@ loopback URL and exact package hashes. Without `AIH_CONSUMER_PROJECT`, browsing,
 authoring, download and reopen work while Prepare/Apply stay unavailable. An
 explicit host-configured disposable target enables review and approval; the
 browser cannot supply material roots, and can change the project folder only through the host's checked choice above. `AIH_CONSUMER_CONTROLS`
-may name a host-owned controls JSON file. Use Node 24.15 through 24.x.
+may name a host-owned controls JSON file. The current reviewed producer archives require Node 26.12.1 through 26.x for this mixed-package host. This host requirement does not broaden the per-entry support declaration above.
 
 The page saves ordinary execution policy JSON plus namespaced
 `aih.workbench` metadata describing exact source identity, explicit roots and
@@ -1288,3 +1369,69 @@ search-result egress classification; per-engine scanner telemetry and detector
 identities; network egress, execution sandbox and required secrets; the policy
 determination choices; Reset Item and Apply; and the Policy JSON pane with its Copy
 and Download.
+
+
+### Framework browsing and starting sets
+
+A ready framework stays open in the configured source order, or the last valid
+framework in this browser. Reset filters preserves that context; switching a
+framework preserves search. Release-index sources and host-selected internal
+prepared content retain their separate reader and trust boundaries. Missing or
+failed sources do not hide other valid sources.
+
+Starting sets, offer levels, options and optional member choices come from the
+checked Catalog release. Catalog `resolveSelections` expands them and returns
+qualified origins; the UI does not build a parallel dependency resolver. Only
+choosable content appears as ordinary cards. Supporting content remains in
+**Comes with**. **All items** shows all choosable content in the current framework.
+A refused set remains editable, including its optional hook ticks; required
+configuration is never invented to make a refused choice look successful.
+
+Add records a draft choice without installing. For items with multiple recipes,
+Workbench matches an exact Catalog recipe key against the selected public
+Harness tool id and aliases. An absent or ambiguous match is unavailable; no
+client-id translation table is supplied by the UI. The selected recipe descriptor
+is pinned using the existing saved-intent representation. When supporting content
+publishes one identical recipe under several client keys, Catalog must confirm
+that all matching keys produce an identical configured selection before that
+pin can be reopened without choosing a different recipe. Set requests, options,
+exclusions and qualified origins are descriptive `workbenchSetChoices` metadata
+inside that source's existing `materialSource` provenance object. It grants no
+execution authority. Reopen checks those origins through Catalog and preserves
+exact package/content/inventory identity; a different archive is not silently
+substituted for the saved source.
+
+Card fit comes from per-candidate Harness static checks; set fit checks the
+resolved chosen group. Observed counts use actual loaded items and their public
+compatibility observations on the execution host platform. Host facts,
+unsupported fit and unconfirmed fit stay distinct. Size is Harness bytes and
+characters, never a guessed token count. Invocation, variants and authorship come
+from producer declarations; selection and custody are separate facts. The host passes each checked release's `nativeRoutes` lines verbatim to Harness
+`checkCompatibility` and presents its framework-qualified `pluginRoutes`. Listed
+routes are display-only upstream plugin-manager guidance; AIH never runs them or
+infers installation or activation. `not-listed` is an empty line, not a claim that
+upstream has no route. `not-supplied`, an unavailable older contract, loading and
+a refused route check remain distinct. No tool-name map is supplied by Workbench.
+A refused set keeps its public diagnostics and remains unavailable to Add, while
+All items and Details still read independent compatibility, routes and evidence.
+Caller-owned required configuration is never fabricated to make a set resolve.
+Use each pinned producer package's declared Node engine range; current
+route-capable Core builds require Node 26.12.1–26.x. Enterprise organization badges use Core's advisory preview over the
+host-configured organization source and grant no authority.
+
+Scan badges use public `summariseItem`. The presentation policy checks all
+requested detectors, permits no suppression and leaves unclassified severities
+unavailable. Missing host trust remains unavailable. Existing Security Scan,
+review decisions, baseline/latest/history and JSON surfaces remain available.
+The focused page harness uses separately marked public release/index fixtures,
+optional-hook selection specimens and Scan's full decision table. Specimen trust
+and authentication are controlled fixture inputs, never claims about actual
+prepared content, native usage or production readiness.
+
+
+A large resolved set can exceed the existing executable policy bound. That refusal
+keeps the current policy unchanged. **Keep set choices in a draft** is an explicit
+alternative: it opens the existing non-executable journey representation and
+records the same choices there. **Download draft** retains the original policy
+bytes plus exact options and origins. This does not relax policy or intent bounds
+or claim that an oversized set can be compiled or installed.

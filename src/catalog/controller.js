@@ -8,6 +8,9 @@
  */
 
 import { catalogElements } from "./elements.js";
+import { renderBrowseFacts, renderFrameworkRoutes } from './browse-facts.js';
+import { createStartingSets } from './starting-sets.js';
+import { createFrameworkNavigation } from './frameworks.js';
 import { createCards } from "./cards.js";
 import { createDetails } from "./details.js";
 import { createMetrics } from "./metrics.js";
@@ -17,11 +20,11 @@ import { loadContractCheck } from "../app/contract-check.js";
 import { createToolbar } from "./toolbar.js";
 import { projectItems, capabilityFacts, declaredTargets, supportedEntries } from "./authoring-model.js";
 import { publishedClients } from "../app/core-targets.js";
-import { inventoryCounts, scopeTotal, selectedScope, visibleEntries, sourceScopes } from "./selectors.js";
+import { inventoryCounts, scopeTotal, selectedScope, visibleEntries, sourceScopes, sourceFilterValue } from "./selectors.js";
 import { emptyView, restoreView, saveView } from "./view-state.js";
 import { attachTooltip } from "../app/tooltip.js";
 import { el, text } from "../app/dom.js";
-import { createProjectBasics, projectFileEntries } from "./project-basics.js";
+import { createProjectBasics } from "./project-basics.js";
 
 /**
  * @param onSelectEntry    called with the entry when the selection changes
@@ -49,7 +52,74 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     // entryId -> 'Adding…' or 'Removing…' while a card's Add or Remove is in flight (the grid is redrawn meanwhile).
     busy: new Map(),
   };
-  let restoredView = false;
+  let restoredView = false, chosenTool = null, legacyBrowsing = false;
+  let browseKey, browseContentKey, browseResult, browseAttempt = 0;
+  let enterprise = false;
+  const savedSetSources = new Set();
+  let setFeedback;
+  try {
+    const prior = JSON.parse(sessionStorage.getItem('aih-ui-framework-context') ?? 'null');
+    if (typeof prior?.name === 'string' && typeof prior.source === 'string') state.lastFramework = prior;
+  } catch { state.lastFramework = null; }
+  const choices = new Map();
+  const startingSets = createStartingSets({ container: document.getElementById('starting-sets'), onChange: (requests, allItems, configurations) => {
+    const framework = currentFramework(); if (!framework) return;
+    const prior = browseChoice(framework);
+    setFeedback = undefined;
+    choices.set(framework.sha256, { requests, allItems, configurations: configurations ?? prior.configurations }); saveBrowsing(); render();
+  }, onAdd: requests => addSets(requests) });
+  function currentFramework() { return authoring.catalog?.frameworks?.find(framework => sourceFilterValue('family', framework.name, framework.sha256) === state.view.source); }
+  function browseChoice(framework) {
+    if (!framework) return { requests: [], allItems: true };
+    if (!choices.has(framework.sha256)) choices.set(framework.sha256, { requests: (framework.sets ?? []).filter(set => set.offer === 'pre-ticked').map(set => ({ release: { releaseSha256: framework.sha256, scope: 'project' }, setId: set.id, setSha256: set.setSha256, options: {}, members: [] })), allItems: !(framework.sets?.length) });
+    return choices.get(framework.sha256);
+  }
+  function browsingView(view = state.view) { return currentFramework() ? { ...view, sourceType: null } : view; }
+  function showsAllContent(framework, choice) {
+    return choice.allItems || !framework?.sets?.length || !choice.requests.length
+      || !Array.isArray(browseResult?.resolution?.value?.selections);
+  }
+  function visibleByTool(entries) {
+    return currentFramework() ? entries.filter(entry => !unusable(entry)) : supportedEntries(entries, target.value, support.value);
+  }
+  // Input values belong in explicitly saved intent, not the browsing cache.
+  function saveBrowsing() { try { sessionStorage.setItem('aih-ui-set-browsing', JSON.stringify([...choices].map(([key, { requests, allItems }]) => [key, { requests, allItems }]))); } catch { state.browsingStorageUnavailable = true; } }
+  try { for (const [key, value] of JSON.parse(sessionStorage.getItem('aih-ui-set-browsing') ?? '[]')) if (Array.isArray(value.requests)) choices.set(key, value); } catch { choices.clear(); }
+  async function readBrowse(framework, choice, inspect = false) {
+    const contentKey = JSON.stringify([framework?.sha256, chosenTool?.id, choice.requests, choice.configurations ?? [], enterprise, authoring.evidenceRevision]);
+    const inspectedItem = inspect ? selectedEntry()?.authoringItem : undefined;
+    const itemId = inspectedItem && framework && inspectedItem.root.releaseSha256 === framework.sha256 ? inspectedItem.id : undefined;
+    const key = JSON.stringify([contentKey, inspect, itemId]);
+    const factsOnly = inspect && contentKey === browseContentKey && ['read', 'refused'].includes(browseResult?.status);
+    if (key === browseKey) return;
+    browseKey = key; browseContentKey = contentKey; const attempt = ++browseAttempt; if (!factsOnly) browseResult = undefined;
+    if (!framework) return;
+    try { const result = await authoring.request('browse-content', { releaseSha256: framework.sha256, tool: chosenTool?.id, sets: choice.requests, configurations: choice.configurations, inspect, itemId, enterprise, policyBytes: undefined });
+      if (attempt !== browseAttempt) return; browseResult = result;
+    } catch { if (attempt !== browseAttempt) return; browseResult = { status: 'failed', reason: 'Could not read this source’s sets or tool fit. Your choices are unchanged.' }; }
+    if (factsOnly) { cards.updateFacts(cardsModel()); details.render(detailsModel(selectedEntry())); } else render();
+  }
+  async function addSets(requests) {
+    const framework = currentFramework(), tool = chosenTool?.id;
+    const result = await authoring.propose({ type: 'select-sets', sets: requests, configurations: browseChoice(framework).configurations, releaseSha256: framework?.sha256, tool });
+    if (result.status === 'ok' && authoring.candidate && !result.diagnostics?.length) authoring.accept();
+    setFeedback = { framework: framework?.sha256, tool, result, requests };
+    renderSetGuidance();
+  }
+  function renderSetGuidance() {
+    const guidance = document.getElementById('framework-guidance');
+    if (setFeedback && (setFeedback.framework !== currentFramework()?.sha256 || setFeedback.tool !== chosenTool?.id)) setFeedback = undefined;
+    const { result, requests } = setFeedback ?? {};
+    guidance.textContent = result
+      ? result.status === 'ok' ? 'Chosen sets added. Review Your setup; save to keep the exact options and origins.' : (result.diagnostics?.map(value => value.message).join(' ') || 'The selected sets could not be added.')
+      : chosenTool ? 'Choose content below. Add it to Your setup, then review your choices.' : 'Choose your tool in the header, then explore the framework below.';
+    if (!authoring.draft && result?.diagnostics?.some(value => value.code === 'POLICY_BOUND_EXCEEDED')) {
+      const keep = el('button', 'set-choice', 'Keep set choices in a draft'); keep.type = 'button'; keep.id = 'browse-keep-draft';
+      attachTooltip(keep, 'Explicitly keep these choices in a non-executable draft, retaining the original policy bytes. Existing policy bounds still apply when compiling.');
+      keep.addEventListener('click', async () => { keep.disabled = true; const opened = await authoring.openDraft(); if (opened.status === 'ok') await addSets(requests); else guidance.textContent = opened.diagnostics?.map(value => value.message).join(' ') || 'The draft could not be opened. Original choices remain.'; });
+      guidance.append(document.createTextNode(' '), keep);
+    }
+  }
 
   const changeView = (patch) => {
     Object.assign(state.view, patch);
@@ -66,6 +136,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   const navigation = createNavigation({
     elements: elements.navigation,
     onSelectSource: (source) => {
+      legacyBrowsing = !authoring.catalog?.frameworks?.some(value => value.state === 'ready' && sourceFilterValue('family', value.name, value.sha256) === source);
       const row = sourceScopes(state.counts).find(row => row.filterValue === source);
       changeView({ source, sourceType: null, family: row?.source.release ?? '' });
     },
@@ -75,7 +146,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     onQuery: (query) => changeView({ query }),
     onToggleKind: (kind) => changeView({ kind: kind === null || state.view.kind === kind ? null : kind }),
     onSourceType: (sourceType) => {
-      const scope = selectedScope(state.counts, state.view);
+      if (currentFramework()) return;
+      const scope = selectedScope(state.counts, browsingView());
       // A compatible source-type choice narrows within the source; another type leaves the source.
       const keepsScope = sourceType === null || scope?.type === sourceType;
       changeView({ sourceType, ...(keepsScope ? {} : { source: null, family: "" }) });
@@ -90,38 +162,24 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   const counts = document.getElementById('support-counts');
   family.addEventListener('change', () => {
     const row = sourceScopes(state.counts).find(row => row.source.release === family.value);
+    legacyBrowsing = Boolean(family.value && !authoring.catalog?.frameworks?.some(framework => framework.name === family.value));
     changeView({ family: family.value, source: row?.filterValue ?? null, sourceType: null });
   });
   const frameworkNavigation = document.getElementById('framework-navigation');
-  function renderFrameworkNavigation() {
-    const options = [...family.options];
-    const focusedFamily = frameworkNavigation.contains(document.activeElement) ? document.activeElement.dataset.family : undefined;
-    frameworkNavigation.replaceChildren();
-    if (options.length < 2) { frameworkNavigation.textContent = 'No content families listed'; return; }
-    for (const option of options) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.textContent = option.value ? option.textContent : 'All content';
-      button.dataset.family = option.value;
-      button.setAttribute('aria-pressed', String(option.value === state.view.family));
-      attachTooltip(button, option.value ? `Browse installed ${option.value} content. Counts describe listed items, not observed tool support.` : 'Browse all installed content families');
-      button.addEventListener('click', () => {
-        family.value = option.value;
-        family.dispatchEvent(new Event('change'));
-        filterDisclosure.open = false;
-        document.getElementById("catalog-advanced").open = false;
-      });
-      frameworkNavigation.appendChild(button);
-      if (focusedFamily === option.value) button.focus();
-    }
+  function chooseFramework(framework) {
+    legacyBrowsing = false; state.missingFramework = null;
+    const entry = state.entries.find(entry => entry.authoringItem.root.releaseSha256 === framework.sha256);
+    changeView({ family: entry?.authoringItem.family ?? framework.name, source: sourceFilterValue('family', framework.name, framework.sha256), sourceType: null, kind: null });
+    document.getElementById('nav-sources').click();
   }
+  const frameworks = createFrameworkNavigation({ container: frameworkNavigation, onFirstStep: () => document.getElementById('your-tool-trigger').click(), onChoose: chooseFramework });
   target.addEventListener('change', () => changeView({ target: target.value }));
   // Project basics shows in place of the cards.
-  const projectBasics = createProjectBasics({ elements: elements.projectBasics, onSelect: (entryId) => select(entryId), onOpenWorkspace });
+  const projectBasics = createProjectBasics({ elements: elements.projectBasics, onChooseFramework: chooseFramework, onOpenWorkspace });
   const basicsOpen = () => !elements.projectBasics.section.hidden;
-  const focusCard = (entryId) => basicsOpen() ? projectBasics.focus(entryId) : cards.focus(entryId);
+  const focusCard = (entryId) => !basicsOpen() && cards.focus(entryId);
   support.addEventListener('change', () => changeView({ support: support.value }));
-  const resetFilters = () => { Object.assign(state.view, emptyView()); toolbar.setQuery(''); changeView({ target: target.options[0]?.value ?? '' }); };
+  const resetFilters = () => { legacyBrowsing = false; const framework = currentFramework(); if (framework) { browseChoice(framework).allItems = true; saveBrowsing(); } const { family, source } = state.view; Object.assign(state.view, emptyView(), { family, source }); toolbar.setQuery(''); changeView({ target: target.options[0]?.value ?? '' }); };
   document.getElementById('catalog-reset-filters').addEventListener('click', resetFilters);
   const filterDisclosure = document.getElementById('catalog-filter-disclosure');
   filterDisclosure.open = false;
@@ -135,19 +193,26 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   advancedDisclosure.addEventListener('toggle', () => { if (advancedDisclosure.open) filterDisclosure.open = false; });
 
   function browseEntries(view = state.view) {
-    return visibleEntries(state.entries, view)
-      .filter(entry => !view.family || entry.authoringItem.family === view.family);
+    const framework = currentFramework(), choice = browseChoice(framework);
+    const selected = browseResult?.resolution?.value?.selections;
+    return visibleEntries(state.entries, browsingView(view))
+      .filter(entry => !view.family || entry.authoringItem.family === view.family)
+      .filter(entry => !framework || entry.authoringItem.role !== 'supporting')
+      .filter(entry => !framework || showsAllContent(framework, choice) || selected?.some(value => value.item.releaseSha256 === entry.authoringItem.root.releaseSha256 && value.item.itemId === entry.authoringItem.id));
   }
 
   function selectedEntry() {
     return state.entries.find((candidate) => text(candidate?.entryId) === state.selectedId) ?? null;
   }
 
+  function unusable(entry) { const fit = browseResult?.compatibility?.items?.find(value => value.item.itemId === entry.authoringItem.id); return fit && (fit.support === 'none' || fit.notRendered || fit.staticBlockers?.length); }
   function cardsModel() {
-    const scope = selectedScope(state.counts, state.view);
+    const scope = selectedScope(state.counts, browsingView());
     return {
-      entries: supportedEntries(browseEntries(), target.value, support.value),
-      total: scopeTotal(state.entries, state.view),
+      entries: visibleByTool(browseEntries()),
+      browse: { ...browseResult, enterprise },
+      tool: chosenTool,
+      total: scopeTotal(state.entries, browsingView()),
       noun: scope === null ? "catalog entries" : "entries from this source",
       selectedId: state.selectedId,
       intent: authoring.intent,
@@ -159,7 +224,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       onChoose: async (item, entryId) => {
         state.chosenId = entryId ?? null;
         state.busy.set(entryId, 'Adding…');
-        try { await onAdd(item); } finally { state.busy.delete(entryId); render(); }
+        try { await onAdd({ ...item, selectedTool: chosenTool?.id }); } finally { state.busy.delete(entryId); render(); }
         // A clean Add rebuilds the grid without opening the review; keyboard focus returns to the card.
         if (document.activeElement === document.body || !document.activeElement?.isConnected) focusCard(state.chosenId);
       },
@@ -175,7 +240,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   /** The rail's model. */
   function navigationModel() {
     return {
-      view: state.view,
+      view: browsingView(),
       total: state.entries.length,
       counts: state.counts,
       organizationName: state.organizationName,
@@ -183,7 +248,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   }
 
   function detailsModel(entry) {
-    return { entry, counts: state.counts, target: target.value,
+    return { entry, browse: { ...browseResult, enterprise }, tool: chosenTool, counts: state.counts, target: target.value,
       // Core's nativeClientIds when it published them, otherwise null (support unknown).
       coreClients: publishedClients(state.summary?.coreTargets)?.ids ?? null };
   }
@@ -194,18 +259,54 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     if (!restoredView) return;
     state.counts = inventoryCounts(state.entries);
     family.value = state.view.family;
-    renderFrameworkNavigation();
+    const available = authoring.catalog?.frameworks?.filter(framework => framework.state === 'ready') ?? [];
+    const current = available.find(framework => sourceFilterValue('family', framework.name, framework.sha256) === state.view.source);
+    const last = available.find(framework => sourceFilterValue('family', framework.name, framework.sha256) === state.lastFramework?.source);
+    const selectedFramework = legacyBrowsing ? null : current ?? last ?? available[0];
+    if (!legacyBrowsing && !current && selectedFramework) { if (state.view.family && state.view.family !== selectedFramework.name) state.missingFramework = `The previous framework ${state.view.family} is unavailable. Showing ${selectedFramework.name}; saved choices are unchanged.`; state.view.family = selectedFramework.name; state.view.source = sourceFilterValue('family', selectedFramework.name, selectedFramework.sha256); saveView(state.view); }
+    if (selectedFramework) {
+      const context = { name: selectedFramework.name, source: sourceFilterValue('family', selectedFramework.name, selectedFramework.sha256) };
+      if (state.lastFramework?.source !== context.source) { state.lastFramework = context; try { sessionStorage.setItem('aih-ui-framework-context', JSON.stringify(context)); } catch { state.browsingStorageUnavailable = true; } }
+    }
+    family.value = state.view.family;
+    frameworks.setCatalog(authoring.catalog, state.view);
+    const guidance = document.querySelector('.framework-landing');
+    guidance.dataset.step = chosenTool ? 'choose-content' : 'choose-tool';
+    document.getElementById('framework-first-step').textContent = chosenTool ? `Browsing for ${chosenTool.label}` : 'Choose your tool';
+    renderSetGuidance();
+    const choice = browseChoice(selectedFramework);
+    readBrowse(selectedFramework, choice, Boolean(state.selectedId));
+    startingSets.render({ framework: selectedFramework, frameworks: authoring.catalog?.frameworks, ...choice, allItems: showsAllContent(selectedFramework, choice), result: browseResult, hasTool: Boolean(chosenTool), saved: savedSetSources.has(selectedFramework?.sha256), items: authoring.catalog?.items ?? [] });
+    let quiet = document.getElementById('browse-unsupported');
+    if (!quiet) { quiet = el('details', 'browse-unsupported'); quiet.id = 'browse-unsupported'; elements.cards.cardsGrid.before(quiet); }
+    const blocked = browseEntries().filter(unusable); quiet.hidden = !blocked.length;
+    quiet.replaceChildren(el('summary', '', `${blocked.length} items don’t work in ${chosenTool?.label ?? 'this tool'} — show why`));
+    for (const entry of blocked) { const fit = browseResult.compatibility.items.find(value => value.item.itemId === entry.authoringItem.id); const row = el('div', 'unsupported-item'); row.append(el('p', '', `${entry.authoringItem.name ?? entry.authoringItem.label}: ${fit.notRendered?.detail ?? fit.reason} ${(fit.staticBlockers ?? []).map(value => value.detail).join(' ')}`), renderBrowseFacts(entry.authoringItem, browseResult, chosenTool)); quiet.append(row); }
+    const context = document.getElementById('framework-context');
+    context.replaceChildren();
+    if (selectedFramework) {
+      context.append(el('span', 'framework-version', selectedFramework.version || 'Version not published'), el('span', 'framework-description', selectedFramework.description || 'Framework description not published.'));
+      const sources = (selectedFramework.sources ?? []).map(source => source.repository ?? source.url ?? source.name ?? source.id).filter(Boolean);
+      context.append(el('span', 'framework-origin', sources.length ? sources.join(' · ') : 'Source name not published.'));
+      if (state.browsingStorageUnavailable) context.append(el('span', '', 'Browsing preferences cannot be saved in this browser.'));
+      if (state.savedChoiceProblem) context.append(el('span', '', state.savedChoiceProblem));
+      if (state.missingFramework) context.append(el('span', 'framework-missing', state.missingFramework));
+      context.append(el('span', 'framework-internal', selectedFramework.kind === 'internal' ? 'Internal · not verified' : selectedFramework.kind === 'fixture' ? 'Public selection-only fixture · not production' : 'Release source · not verified'));
+    }
+    if (selectedFramework) context.append(renderFrameworkRoutes(selectedFramework.id, browseResult, chosenTool));
     document.querySelector(".wb-source-heading").textContent = state.view.family || "Choose content for your AI tool";
     target.value = state.view.target;
-    support.value = state.view.support;
+    support.value = selectedFramework ? 'all' : state.view.support;
+    target.disabled = Boolean(selectedFramework); support.disabled = Boolean(selectedFramework);
+    target.title = support.title = selectedFramework ? 'Framework fit uses Your tool in the header. Legacy target filters do not narrow this framework.' : '';
     const total = state.entries.length;
-    const scope = selectedScope(state.counts, state.view);
-    const inScope = scopeTotal(state.entries, state.view);
+    const scope = selectedScope(state.counts, browsingView());
+    const inScope = scopeTotal(state.entries, browsingView());
     const cardsView = cardsModel();
     const scoped = browseEntries();
     const count = status => scoped.filter(entry => capabilityFacts(entry.authoringItem, target.value).some(fact => fact.support === status)).length;
-    counts.textContent = `${publishedClients(state.summary?.coreTargets)?.ids.length ?? 'Unknown'} Core clients are listed in setup; this catalog declares ${target.options.length} target clients. Target declarations do not establish installation. ${target.value || 'No declared target'} · ${scoped.length} items in family/search/source scope: ${count('supported')} with supported facts · ${count('unsupported')} with unsupported facts · ${count('unknown')} with unknown facts. Mixed items can count in more than one group.`;
-    const availableKinds = supportedEntries(browseEntries({ ...state.view, kind: null }), target.value, support.value);
+    counts.textContent = selectedFramework ? `Framework fit follows ${chosenTool?.label ?? 'Your tool in the header'}. Published observations and unavailable content are shown separately; legacy target filters are inactive.` : `${publishedClients(state.summary?.coreTargets)?.ids.length ?? 'Unknown'} Core clients are listed in setup; this catalog declares ${target.options.length} target clients. Target declarations do not establish installation. ${target.value || 'No declared target'} · ${scoped.length} items in family/search/source scope: ${count('supported')} with supported facts · ${count('unsupported')} with unsupported facts · ${count('unknown')} with unknown facts. Mixed items can count in more than one group.`;
+    const availableKinds = visibleByTool(browseEntries({ ...state.view, kind: null }));
     const filteredCounts = inventoryCounts(availableKinds);
     provenance.render({
       summary: state.summary,
@@ -225,13 +326,21 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       sourceTypeCounts: state.counts.sourceTypeCounts,
       total: availableKinds.length,
       visibleTotal: cardsView.entries.length,
-      view: state.view,
+      frameworkBrowsing: Boolean(selectedFramework),
+      view: browsingView(),
     });
+    let activeFilters = document.getElementById('catalog-active-filters');
+    if (!activeFilters) { activeFilters = el('div', 'set-footer'); activeFilters.id = 'catalog-active-filters'; elements.cards.cardsGrid.before(activeFilters); }
+    activeFilters.replaceChildren();
+    const applied = [state.view.query && `Search: ${state.view.query}`, state.view.kind && `Kind: ${state.view.kind}`].filter(Boolean);
+    activeFilters.hidden = !applied.length;
+    if (applied.length) {
+      activeFilters.append(el('span', '', applied.join(' · ')));
+      const clear = el('button', 'set-choice', 'Clear filters'); clear.type = 'button'; clear.addEventListener('click', resetFilters); activeFilters.append(clear);
+    }
     elements.cards.cardsGrid.setAttribute('aria-busy', 'false');
     cards.render(cardsView);
-    // Project files are offered whatever the filters and the tool: they apply to every tool.
-    const files = projectFileEntries(state.entries);
-    projectBasics.render({ ...cardsView, entries: files, total: files.length, noun: 'project files' });
+    projectBasics.render({ framework: authoring.catalog?.frameworks?.find(value => value.id === 'project-basics' && value.state === 'ready') });
     details.render(detailsModel(selectedEntry()));
   }
 
@@ -272,20 +381,47 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     // The two cards concerned are updated in place. The grid is not rebuilt,
     // so the card the operator activated keeps keyboard focus.
     cards.setSelected(previous, entryId);
-    projectBasics.setSelected(previous, entryId);
     details.render(detailsModel(entry));
+    readBrowse(currentFramework(), browseChoice(currentFramework()), true);
     onSelectEntry(entry);
   }
 
   return {
+    sourceUnavailable: message => { if (!authoring.catalog) frameworks.setFailure(message); },
+    setMode: settings => { enterprise = ['admin', 'developer'].includes(settings?.role); render(); },
+    setTool: tool => { chosenTool = tool; frameworks.setTool(tool); render(); },
     async start() {
       state.summary = await (await fetch('./summary.json', { cache: 'no-store' })).json();
       provenance.setSummary(state.summary);
       // The start-up contract check answers on its own time; the strip reads "Checking contracts…" meanwhile.
       loadContractCheck().then(answer => provenance.setContractCheck(answer));
       onSummary?.(state.summary);
+      let restoredChoiceBytes;
       const refresh = () => {
         if (!authoring.catalog) return;
+        try {
+          const bytes = authoring.bytes;
+          const policy = bytes.length ? JSON.parse(new TextDecoder().decode(bytes)) : {};
+          state.savedChoiceProblem = null;
+          const sources = authoring.draft?.intent?.provenance ?? authoring.intent?.provenance ?? policy.metadata?.['aih.workbench']?.provenance;
+          const record = { version: 1, choices: (sources ?? []).flatMap(source => source.materialSource?.workbenchSetChoices?.choices ?? []) };
+          const roots = authoring.draft?.intent?.roots ?? authoring.intent?.roots ?? policy.metadata?.['aih.workbench']?.roots ?? [];
+          const savedOriginIds = new Set(record.choices.map(choice => choice.originId));
+          const configuredRoots = roots.filter(root => root.originIds.some(id => savedOriginIds.has(id)) && Object.keys(root.configuration).length);
+          const identity = JSON.stringify([record, configuredRoots.map(({ releaseSha256, itemId, scope, configuration }) => ({ releaseSha256, itemId, scope, configuration }))]);
+          if (record?.version === 1 && identity !== restoredChoiceBytes) {
+            restoredChoiceBytes = identity;
+            savedSetSources.clear();
+            for (const choice of record.choices) savedSetSources.add(choice.request.release.releaseSha256);
+            for (const framework of authoring.catalog.frameworks ?? []) {
+              const requests = record.choices.filter(choice => choice.request.release.releaseSha256 === framework.sha256).map(choice => choice.request);
+              const originIds = record.choices.filter(choice => choice.request.release.releaseSha256 === framework.sha256).map(choice => choice.originId);
+              const configurations = roots.filter(root => root.originIds.some(id => originIds.includes(id)) && Object.keys(root.configuration).length)
+                .map(({ releaseSha256, itemId, scope, configuration }) => ({ releaseSha256, itemId, scope, configuration }));
+              if (requests.length) choices.set(framework.sha256, { requests, configurations, allItems: false });
+            }
+          }
+        } catch { state.savedChoiceProblem = 'Saved set context could not be read. Existing choices are unchanged.'; }
         state.entries = projectItems(authoring.catalog.items);
         if (state.selectedId && !selectedEntry()) { state.selectedId = null; onSelectEntry(null); }
         const selectedFamily = state.view.family, selectedTarget = state.view.target;
@@ -307,6 +443,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
           restoreView(state.view, state.counts);
           restoredView = true;
         }
+        const ready = authoring.catalog.frameworks?.filter(framework => framework.state === 'ready') ?? [];
+        if (!legacyBrowsing && state.lastFramework && ready.length && !ready.some(framework => sourceFilterValue('family', framework.name, framework.sha256) === state.lastFramework.source)) state.missingFramework = `The previous framework ${state.lastFramework.name} is unavailable. Showing ${ready[0].name}; saved choices are unchanged.`;
         if (![...family.options].some(option => option.value === state.view.family)) state.view.family = '';
         if (![...target.options].some(option => option.value === state.view.target)) state.view.target = target.options[0]?.value ?? '';
         toolbar.setQuery(state.view.query);

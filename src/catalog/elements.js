@@ -17,8 +17,7 @@ export function catalogElements() {
     "details-identity", "details-source", "details-desc", "details-capabilities",
     "details-artifacts", "detector-run-state", "detector-finding-detail",
     "statement-count", "security-statements",
-    "project-basics", "project-files-grid", "project-files-context", "project-files-count", "project-files-caption",
-    "project-files-empty", "project-basics-open-workspace",
+    "project-basics", "project-files-context", "project-basics-open-workspace",
   ];
   const found = collectIds(ids);
   return {
@@ -49,11 +48,7 @@ export function catalogElements() {
     },
     projectBasics: {
       section: found.projectBasics,
-      grid: found.projectFilesGrid,
       context: found.projectFilesContext,
-      count: found.projectFilesCount,
-      caption: found.projectFilesCaption,
-      empty: found.projectFilesEmpty,
       openWorkspace: found.projectBasicsOpenWorkspace,
     },
     details: {

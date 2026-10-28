@@ -99,7 +99,7 @@
 </div>
 </div>
 <!-- MAIN 3-PANEL RESPONSIVE CONTAINER (100vh - 76px) -->
-<div class="flex w-full h-[calc(100vh-4.75rem)] overflow-hidden relative">
+<div id="workbench-panels" class="flex w-full h-[calc(100vh-4.75rem)] overflow-hidden relative">
 <!-- LEFT COLUMN 1: Main Nav Rail (Collapsible) -->
 <aside class="rail-transition shrink-0 bg-wb-nav border-r border-wb-border flex flex-col justify-between overflow-hidden w-60" id="nav-rail">
 <div class="flex flex-col h-full justify-between overflow-y-auto">
@@ -122,12 +122,13 @@
 </div>
 <nav class="framework-navigation" aria-label="Content families">
 <p class="framework-navigation-title">Frameworks</p>
-<div id="framework-navigation" aria-live="polite">Loading content families…</div>
+<div id="framework-navigation" aria-live="polite">Loading frameworks and observed counts…</div>
 </nav>
-<!-- PROJECT BASICS: what applies to the project whichever content is chosen, in its own place in the left panel. -->
-<nav class="pt-1 border-t border-wb-border text-[11px]" aria-label="Project basics">
-<a class="flex items-center justify-between px-2 py-1 rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface" href="#basics" id="nav-project-basics" data-tip="Tool support, project files and the workspace: they apply whichever framework you choose.">
-<span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[14px]" aria-hidden="true">foundation</span><span>Project basics</span></span>
+<!-- PROJECT TOOLS & WORKSPACE: what applies to the project whichever content is chosen, in its own place in the
+     left panel. Project guidance files are maintained content; the Project basics framework in the rail lists them. -->
+<nav class="pt-1 border-t border-wb-border text-[11px]" aria-label="Project tools and workspace">
+<a class="flex items-center justify-between px-2 py-1 rounded text-on-surface-variant hover:bg-surface-container hover:text-on-surface" href="#basics" id="nav-project-basics" data-tip="Tool support and the workspace: they apply whichever framework you choose. Project guidance files live in the Project basics framework.">
+<span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[14px]" aria-hidden="true">foundation</span><span>Project tools &amp; workspace</span></span>
 </a>
 </nav>
 <div class="space-y-1 pt-1 border-t border-wb-border">
@@ -163,7 +164,8 @@
 <div class="flex-1 flex w-full overflow-hidden relative" id="workspace-split-row">
 <main class="flex-1 flex flex-col min-w-0 bg-background overflow-hidden" id="main-content">
 <div class="flex-1 flex flex-col overflow-y-auto min-w-0 bg-wb-center" id="catalog-workspace">
-<div class="catalog-heading-row"><div><h1 class="wb-source-heading text-wb-heading font-semibold text-wb-title tracking-tight" tabindex="-1">Choose content for your AI tool</h1><p class="text-on-surface-variant">Add content, then install it from Your setup.</p></div><div class="catalog-heading-tools"><details id="catalog-filter-disclosure"><summary>Filters &amp; your sources</summary><div class="catalog-secondary-panel"><div class="catalog-secondary-heading"><strong>Filters &amp; your sources</strong><button id="catalog-filters-close" type="button" class="wb-header-control">Close filters</button></div><div class="flex flex-wrap gap-2 mb-3 text-[11px]" id="authoring-browse">
+
+<div class="catalog-heading-row"><div><h1 class="wb-source-heading text-wb-heading font-semibold text-wb-title tracking-tight" tabindex="-1">Choose content for your AI tool</h1><div id="framework-context" class="framework-context"></div><p class="framework-landing"><button type="button" id="framework-first-step">Choose your tool</button><span id="framework-guidance">Choose your tool, then explore the framework below.</span></p></div><div class="catalog-heading-tools"><details id="catalog-filter-disclosure"><summary>Filters &amp; your sources</summary><div class="catalog-secondary-panel"><div class="catalog-secondary-heading"><strong>Filters &amp; your sources</strong><button id="catalog-filters-close" type="button" class="wb-header-control">Close filters</button></div><div class="flex flex-wrap gap-2 mb-3 text-[11px]" id="authoring-browse">
 <label>Family <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-family" aria-label="Content family"></select></label>
 <label>Support <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-support" aria-label="Target support"><option value="supported">With supported facts</option><option value="all">Full inventory</option><option value="unsupported">With unsupported facts</option><option value="unknown">With unknown facts</option></select></label>
 <label class="cursor-pointer rounded border border-wb-border p-1">Choose personal folder <input id="personal-folder" type="file" webkitdirectory multiple aria-label="Choose personal folder"></label>
@@ -238,6 +240,7 @@
 </div>
 </div>
 </details></div></div>
+<section id="starting-sets" aria-label="Starting sets"></section>
 <div id="workbench-toolbar" class="border-b border-wb-border shrink-0"><div class="browse-primary-controls"><div class="toolbar-search flex items-center gap-2 min-w-0">
 <label class="w-8 h-8 rounded border border-wb-border bg-wb-input hover:bg-surface-container text-outline hover:text-on-surface flex items-center justify-center shrink-0 transition-colors cursor-pointer" for="catalog-search" data-tip="Search published identities">
 <span class="material-symbols-outlined text-[15px]" aria-hidden="true">search</span>
@@ -255,12 +258,13 @@
 </div>
 </div>
 </div>
-<!-- PROJECT BASICS: tool support, project files and the workspace. Opened from its own entry in the left panel. -->
+<!-- PROJECT TOOLS & WORKSPACE: tool support and the workspace, in their own place. Opened from its own entry
+     in the left panel; the project guidance files themselves are the Project basics framework's maintained content. -->
 <section class="flex-1 overflow-y-auto bg-wb-center" id="project-basics" aria-labelledby="project-basics-title" hidden>
 <div class="max-w-5xl p-5 space-y-4">
 <div>
-<h1 class="text-wb-heading font-semibold text-wb-title tracking-tight" id="project-basics-title" tabindex="-1">Project basics</h1>
-<p class="text-on-surface-variant mt-1">What applies to this project whichever framework you choose. None of it is listed in a framework.</p>
+<h1 class="text-wb-heading font-semibold text-wb-title tracking-tight" id="project-basics-title" tabindex="-1">Project tools &amp; workspace</h1>
+<p class="text-on-surface-variant mt-1">Tool support and the workspace apply to this project whichever framework you choose. Project guidance files are maintained content: the Project basics framework in the rail lists them.</p>
 </div>
 <section class="p-4 rounded border border-wb-border bg-surface-container-low space-y-2" id="project-basics-tools" aria-labelledby="project-basics-tools-title">
 <h2 class="font-semibold text-on-surface" id="project-basics-tools-title">Tool support</h2>
@@ -268,11 +272,9 @@
 <p class="flex flex-wrap gap-2"><a class="px-3 py-1.5 rounded border border-wb-border text-primary hover:bg-surface-container" href="readiness.html" id="project-basics-tool-support">Open Check this machine</a><a class="px-3 py-1.5 rounded border border-wb-border text-on-surface-variant hover:bg-surface-container hover:text-on-surface" href="guided.html" id="project-basics-get-started">Get started</a></p>
 </section>
 <section class="p-4 rounded border border-wb-border bg-surface-container-low space-y-2" id="project-basics-files" aria-labelledby="project-basics-files-title">
-<h2 class="font-semibold text-on-surface" id="project-basics-files-title">Project files <span class="font-mono text-[10px] text-outline font-normal"><span id="project-files-count">…</span> <span id="project-files-caption">entries</span></span></h2>
-<p class="text-on-surface-variant">Files in the project folder that AI tools read to learn about the project, such as AGENTS.md or CLAUDE.md. Add puts one in Your setup with the items it needs; Install writes it.</p>
+<h2 class="font-semibold text-on-surface" id="project-basics-files-title">Project files</h2>
+<p class="text-on-surface-variant">Choose shared project guidance and entry files in the Project basics framework. Tool support and workspace settings stay on this page.</p>
 <p class="text-outline" id="project-files-context" hidden></p>
-<p class="text-on-surface-variant" id="project-files-empty" hidden>The installed Catalog lists no project files.</p>
-<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3" id="project-files-grid"></div>
 </section>
 <section class="p-4 rounded border border-wb-border bg-surface-container-low space-y-2" id="project-basics-workspace" aria-labelledby="project-basics-workspace-title">
 <h2 class="font-semibold text-on-surface" id="project-basics-workspace-title">Workspace</h2>

@@ -110,3 +110,33 @@ test('first-folder preparation runs once at a time, later callers wait for it, a
   fail = false; const retry = task(); release(); await retry; await task();
   assert.equal(runs, 2);
 });
+
+
+test('folder menu lists directories only and never changes the chosen project', async () => {
+  const fixture = await layout();
+  try {
+    await mkdir(join(fixture.base, '.hidden'));
+    const folder = createProjectFolder({ initial: fixture.project, options: fixture.options });
+    assert.equal(typeof folder.browse, 'function', 'Project folder exposes a read-only menu');
+    const result = await folder.browse(fixture.base);
+    assert.equal(result.status, 'ok'); assert.equal(result.path, fixture.base);
+    assert.deepEqual(result.directories.map(value => value.name), ['env-home', 'home']);
+    assert.equal(folder.project, fixture.project);
+    assert.equal((await folder.browse('relative')).status, 'refused');
+    assert.equal((await folder.browse(join(fixture.base, 'notes.txt'))).status, 'refused');
+    assert.equal((await folder.browse(join(fixture.base, 'missing'))).status, 'refused');
+  } finally { await fixture.done(); }
+});
+
+
+test('folder menu bounds large directories without reading their files', async () => {
+  const fixture = await layout();
+  try {
+    const many = join(fixture.base, 'many'); await mkdir(many);
+    await Promise.all(Array.from({ length: 205 }, (_, i) => mkdir(join(many, `project-${i}`))));
+    const folder = createProjectFolder({ initial: fixture.project, options: fixture.options });
+    const result = await folder.browse(many);
+    assert.equal(result.directories.length, 200); assert.equal(result.truncated, true);
+    assert.equal(folder.project, fixture.project);
+  } finally { await fixture.done(); }
+});

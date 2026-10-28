@@ -49,6 +49,10 @@ export function createYourTool({ elements, onChange = () => {} }) {
   function ready(tool) {
     if (inspection === undefined) return { key: "checking", words: "Checking this machine with Core's inspection…" };
     if (inspection.state !== "inspected") return { key: "inspection-failed", words: `Core's inspection didn't run: ${inspection.reason ?? "no reason was given"}.` };
+    if (inspection.method === 'read-only-host') {
+      const host = inspection.tools.find(row => row.id === tool.id)?.host;
+      return { key: host?.installedVersion?.state === 'known' ? 'binary' : 'not-reported', words: host?.installedVersion?.state === 'known' ? `Version ${host.installedVersion.version} found in local files. Read-only host inspection; the client was not launched.` : `Host version unchecked: ${host?.installedVersion?.reason ?? host?.status ?? 'unavailable'}. No client was launched.` };
+    }
     const found = inspection.tools.find((row) => row.id === tool.id);
     if (!found) {
       // A cancelled or invalid inspection reports no tools at all; say so on the row, not only in the note.
@@ -197,6 +201,7 @@ export function createYourTool({ elements, onChange = () => {} }) {
     async start() {
       list = await read("/api/tools");
       render();
+      onChange(list?.state === "published" ? list.tools.find(tool => tool.id === chosen && tool.observed) ?? null : null);
       if (list.state !== "published" || list.tools.length === 0) return;
       inspection = await read("/api/tool-inspection");
       render();

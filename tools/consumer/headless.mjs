@@ -1,4 +1,6 @@
 // Supported consumer boundary. No host acquisition or execution authority.
+import { selectSetChoices, checkRecordedSetChoices, setChoicesOf, setChoiceSources, SET_CHOICES_KEY } from './set-choices.mjs';
+import { configurePinned, pinSelectedRecipes, recipeDescriptor } from './selected-recipe.mjs';
 import { parsePolicy } from '@aihq/core/contracts';
 import { isCheckedRelease, listItems, configureItem, resolveSelections, validateSelectionSet, compareReleases } from '@aihq/catalog/reader';
 import { checkIntentShape, checkReview, rootKey, pinKey, managementIdOf, AUTHORING_SCHEMA, REVIEW_SCHEMA } from './intent-shape.mjs';
@@ -9,6 +11,7 @@ import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJo
 // The ./authoring entry: these names and the operations below. inspectReviewEvidence builds the review identities from Scan's readContentCoverage.
 export { inspectReviewEvidence } from './review-bindings.mjs';
 export { AUTHORING_SCHEMA, REVIEW_SCHEMA, freshAuthoring } from './intent-shape.mjs';
+const pinMaterials = item => item.materials.map(material => material.path ? material : ({ id: material.id, path: material.packagePath, sha256: material.sha256, byteLength: material.byteLength }));
 const sorted = values => [...values].sort((a, b) => stable(a) < stable(b) ? -1 : stable(a) > stable(b) ? 1 : 0);
 function inventoryIndex(inventories) {
   if (!Array.isArray(inventories) || inventories.length > 32) throw new Error('Supply at most 32 exact checked inventories.');
@@ -45,16 +48,17 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
     if (stable(entry.input) !== stable(input)) return refuse('SOURCE_IDENTITY_MISMATCH', '/inputs', 'Acquired input identity differs from the saved snapshot.');
   }
   const resolution = resolveSelections({ releases: index.releases,
+    sets: setChoicesOf(intent).map(choice => choice.request),
     roots: intent.roots.map(({ releaseSha256, itemId, scope, configuration }) => ({ releaseSha256, itemId, scope, configuration })),
     skips: intent.exclusions.map(({ releaseSha256, itemId, scope }) => ({ releaseSha256, itemId, scope })) });
   if (resolution.status !== 'ok') return resolution;
   const resolved = resolution.value;
   // Preserve existing selection identity for unchanged recipe/source/scope; a
   // historical v1 selection id is not a reason to rewrite execution semantics.
-  const selections = [], pins = new Map(), sourceIds = new Set([...intent.exclusions.map(r => r.releaseSha256), ...intent.origins.filter(o => o.kind === 'template').map(o => o.releaseSha256)]);
+  const selections = [], pins = new Map(), sourceIds = new Set([...setChoiceSources(intent), ...intent.exclusions.map(r => r.releaseSha256), ...intent.origins.filter(o => o.kind === 'template').map(o => o.releaseSha256)]);
   for (const selection of resolved.selections) {
     const found = index.items.get(pinKey(selection.item)), { entry, item } = found;
-    const configured = configureItem({ release: entry.release, itemId: item.id, configuration: selection.configuration, materialSource: entry.materialSource });
+    const configured = configurePinned(entry, item, selection.configuration, intent.pins);
     if (!configured.valid) return refuse('INPUT_INVALID', '/roots/configuration', 'Catalog refused item configuration.', undefined, { owner: 'catalog', diagnostics: configured.diagnostics });
     const prior = base?.selections.find(s => s.scope === selection.scope && stable(s.recipe) === stable(configured.selection.recipe));
     // An organization's root provenance identifies that exact selection only.
@@ -67,15 +71,16 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
     selections.push({ ...prior, id: prior?.id ?? selection.id, managementId, scope: selection.scope, configuration: configured.selection.configuration,
       ...(base?.mode === 'enterprise' ? { organizationSelectionId: [...organizationIds][0] ?? prior?.organizationSelectionId ?? managementId } : {}),
       requires: [], recipe: configured.selection.recipe });
-    pins.set(pinKey(selection.item), { releaseSha256: entry.release.sha256, itemId: item.id, itemSha256: item.itemSha256, recipe: item.recipe, materials: item.materials });
+    pins.set(pinKey(selection.item), { releaseSha256: entry.release.sha256, itemId: item.id, itemSha256: item.itemSha256, recipe: item.recipe ?? recipeDescriptor(Object.values(item.recipes).find(recipe => recipe.sha256 === configured.selection.recipe.reference.sha256)), materials: pinMaterials(item) });
     sourceIds.add(entry.release.sha256);
   }
   const validation = validateSelectionSet({ releases: index.releases, selections: resolved.selections.map((s, i) => ({ ...s, id: selections[i].id })) });
   if (!validation.valid) return refuse('INPUT_INVALID', '/selections', 'Catalog refused the resolved set.', undefined, { owner: 'catalog', diagnostics: validation.diagnostics });
   for (const selection of selections) selection.requires = validation.requiresBySelectionId[selection.id];
-  const provenance = inventories.filter(e => sourceIds.has(e.release.sha256)).map(e => ({ releaseSha256: e.release.sha256, package: e.release.package, sources: e.release.sources, materialSource: e.materialSource }));
+  const provenance = inventories.filter(e => sourceIds.has(e.release.sha256)).map(e => ({ releaseSha256: e.release.sha256, package: e.release.package, sources: e.release.sources, materialSource: { ...e.materialSource, ...(e.internalContent ? { internalContent: e.internalContent } : {}), ...(intent.provenance.find(source => source.releaseSha256 === e.release.sha256)?.materialSource?.[SET_CHOICES_KEY] ? { [SET_CHOICES_KEY]: intent.provenance.find(source => source.releaseSha256 === e.release.sha256).materialSource[SET_CHOICES_KEY] } : {}) } }));
   const inputs = inventories.filter(e => sourceIds.has(e.release.sha256) && e.input).map(e => e.input);
   const next = { ...structuredClone(intent), pins: sorted([...pins.values()]), provenance: sorted(provenance), inputs: sorted(inputs) };
+  if (new TextEncoder().encode(JSON.stringify(next)).length > 850_000) return refuse('POLICY_BOUND_EXCEEDED', '/metadata/aih.workbench', 'The captured choices exceed the 850,000-byte saved-intent bound. Choose fewer sets or members.');
   if (!checkIntentShape(next)) return refuse('FIELD_SEMANTICS_UNSUPPORTED', '/metadata/aih.workbench', 'Captured authoring state violates the supported shape.');
   // v2 captured source provenance from resolved pins/exclusions only. Validate
   // that frozen projection before enriching migrated v3 template provenance.
@@ -85,6 +90,8 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
     return refuse('INTENT_POLICY_CONTRADICTION', '/metadata/aih.workbench', 'Pins, provenance or inputs contradict the checked closure.');
   const policy = { ...(base ?? { schema: 'urn:aihq:core:execution-policy:1.3.0', mode: 'vibe' }), selections,
     metadata: { ...base?.metadata, 'aih.workbench': next } };
+  const setProblem = checkRecordedSetChoices(policy.metadata?.['aih.workbench'], inventories);
+  if (setProblem) return refuse('INTENT_POLICY_CONTRADICTION', '/metadata/aih.workbench/provenance', setProblem);
   const policyBytes = new TextEncoder().encode(JSON.stringify(policy) + '\n');
   if (policyBytes.length > 1_000_000 || new TextEncoder().encode(JSON.stringify(next)).length > 850_000) return refuse('POLICY_BOUND_EXCEEDED', '', 'Policy exceeds the Core or consumer byte bound; reduce selected state.');
   const parsed = parsePolicy(new TextDecoder().decode(policyBytes));
@@ -105,6 +112,8 @@ export async function readAuthoring({ policyBytes, inventories, reviewEvidence =
   catch { return refuse('INPUT_INVALID', '/policyBytes', 'Invalid UTF-8 policy.', originalBytes); }
   if (!parsed.valid) return refuse('INPUT_INVALID', '', 'Core refused the execution policy.', originalBytes, { owner: 'core', diagnostics: parsed.diagnostics });
   const policy = parsed.document;
+  const setError = checkRecordedSetChoices(policy.metadata?.['aih.workbench'], inventories);
+  if (setError) return refuse('INTENT_POLICY_CONTRADICTION', '/metadata/aih.workbench/provenance', setError, originalBytes);
   let intent = policy.metadata?.['aih.workbench'], migration;
   if (intent?.schema !== AUTHORING_SCHEMA) {
     try { migration = migrateIntent(intent, inventories); }
@@ -203,6 +212,13 @@ export async function editAuthoring({ policyBytes, inventories, operation, revie
     if (item) operation = { ...operation, root: { ...operation.root, itemSha256: item.itemSha256 } };
   }
   const intent = structuredClone(original.value.intent), before = intent.roots;
+  if (operation?.type === 'select-sets') {
+    try {
+      const selected = selectSetChoices({ intent, policy: original.value.policy, inventories, sets: operation.sets, tool: operation.tool, releaseSha256: operation.releaseSha256, configurations: operation.configurations });
+      if (selected.status !== 'ok') return { ...selected, originalBytes: policyBytes.slice() };
+      return buildReviewed({ intent: selected.value.intent, inventories, base: original.value.policy, originalBytes: policyBytes, reviewEvidence, comparisons, recipient });
+    } catch (error) { return refuse('INPUT_INVALID', '/operation/sets', error.message, policyBytes); }
+  }
   const add = root => {
     const prior = intent.roots.find(r => rootKey(r) === rootKey(root));
     if (prior && stable(prior.configuration) !== stable(root.configuration)) throw new Error('Conflicting root configuration.');
@@ -211,6 +227,7 @@ export async function editAuthoring({ policyBytes, inventories, operation, revie
   };
   try {
     if (operation.type === 'select') {
+      if (operation.tool) pinSelectedRecipes(intent, inventories, operation.root, operation.tool);
       if (!intent.origins.some(o => o.id === 'direct')) intent.origins.push({ id: 'direct', kind: 'direct' });
       const prior = intent.roots.find(r => rootKey(r) === rootKey(operation.root));
       if (prior?.originIds.length === 1 && prior.originIds[0] === 'direct') prior.configuration = structuredClone(operation.root.configuration);
@@ -225,7 +242,8 @@ export async function editAuthoring({ policyBytes, inventories, operation, revie
       intent.roots = before.map(r => ({ ...r, originIds: r.originIds.filter(id => id !== operation.originId) })).filter(r => r.originIds.length);
       intent.exclusions = intent.exclusions.filter(e => e.originId !== operation.originId);
       intent.origins = intent.origins.filter(o => o.id !== operation.originId);
-    } else if (operation.type === 'remove-root') intent.roots = before.filter(r => rootKey(r) !== rootKey(operation.root));
+    } else if (operation.type === 'remove-root' && before.find(root => rootKey(root) === rootKey(operation.root))?.originIds.some(id => setChoicesOf(original.value.intent).some(choice => choice.originId === id))) return refuse('SET_MEMBER_REQUIRED', '/operation/root', 'This choice belongs to a saved set. Change its member ticks or remove the set explicitly.', policyBytes);
+    else if (operation.type === 'remove-root') intent.roots = before.filter(r => rootKey(r) !== rootKey(operation.root));
     else if (operation.type === 'skip') intent.exclusions.push(operation.exclusion);
     else if (operation.type === 'unskip') intent.exclusions = intent.exclusions.filter(e => stable(e) !== stable(operation.exclusion));
     else return refuse('INPUT_INVALID', '/operation', 'Unsupported edit operation.', policyBytes);
@@ -249,7 +267,8 @@ export async function recordReview({ policyBytes, inventories, evidenceBytes, ta
   if (read.value.editing !== 'available') return { status: 'refused', diagnostics: refusalDiagnostics(read.value), originalBytes: policyBytes.slice() };
   const intent = structuredClone(read.value.intent), inventory = inventories.find(entry => entry.release.sha256 === target?.releaseSha256);
   if (!inventory || !intent.pins.some(pin => pin.releaseSha256 === target.releaseSha256 && pin.itemId === target.itemId)) return refuse('REVIEW_BINDING_UNAVAILABLE', '/target', 'Review target must be an exact selected item.', policyBytes);
-  const inspected = await inspectReviewEvidence({ evidenceBytes, inventory, itemId: target.itemId });
+  const pin = intent.pins.find(pin => pin.releaseSha256 === target.releaseSha256 && pin.itemId === target.itemId);
+  const inspected = await inspectReviewEvidence({ evidenceBytes, inventory, itemId: target.itemId, recipe: pin.recipe, configuration: intent.roots.find(root => root.releaseSha256 === target.releaseSha256 && root.itemId === target.itemId)?.configuration });
   const binding = inspected.status === 'ok' ? inspected.value.bindings.find(binding => stable(binding.finding) === stable(finding)) : undefined;
   if (!binding) return refuse('REVIEW_BINDING_UNAVAILABLE', '/finding', 'Checked report cannot establish the complete subject/finding/evidence binding.', policyBytes);
   if (!decision || Object.keys(decision).some(key => !['id', 'owner', 'actor', 'recordedAt', 'disposition', 'reason', 'supersedes'].includes(key))) return refuse('FIELD_SEMANTICS_UNSUPPORTED', '/decision', 'Supply supported review fields only.', policyBytes);
@@ -326,14 +345,14 @@ function reach(graph, start) {
   return seen;
 }
 // What ordinary authoring would decide about one choice: its required closure, or Catalog's refusal.
-function liveClosure(index, root, skips) {
+function liveClosure(index, root, skips, pins) {
   const resolved = resolveSelections({ releases: index.releases, roots: [{ releaseSha256: root.releaseSha256, itemId: root.itemId, scope: root.scope, configuration: root.configuration }], skips });
   if (resolved.status !== 'ok') return { diagnostics: resolved.diagnostics };
   const refusal = (path, message, diagnostics) => ({ diagnostics: [{ code: 'INPUT_INVALID', path, message, details: { owner: 'catalog', diagnostics } }] });
   for (const selection of resolved.value.selections) {
     const found = index.items.get(pinKey(selection.item));
     if (!found) continue;
-    const configured = configureItem({ release: found.entry.release, itemId: found.item.id, configuration: selection.configuration, materialSource: found.entry.materialSource });
+    const configured = configurePinned(found.entry, found.item, selection.configuration, pins);
     if (!configured.valid) return refusal('/roots/configuration', 'Catalog refused item configuration.', configured.diagnostics);
   }
   const validation = validateSelectionSet({ releases: index.releases, selections: resolved.value.selections });
@@ -366,6 +385,14 @@ function analyzeDraft({ intent, policy, inventories, live = true }) {
       || (input && e.input && e.input.kind === input.kind && stable(e.input.locator) === stable(input.locator)))) ? 'revision-unavailable' : 'source-unavailable';
   };
   const mismatches = [], nodeEntries = new Map(), originEntries = new Map(), exclusionEntries = [], inputEntries = [], unavailableNodes = new Set(), undeterminedRoots = new Set(), resolvable = new Set(), closures = new Map(), refusals = new Map();
+  const setProblem = checkRecordedSetChoices(intent, inventories);
+  if (setProblem) mismatches.push({ code: 'INTENT_POLICY_CONTRADICTION', path: '/provenance', message: setProblem });
+  for (const source of intent.provenance) {
+    const entry = entryOf(source.releaseSha256); if (!entry) continue;
+    const { [SET_CHOICES_KEY]: descriptiveChoices, ...savedSource } = source.materialSource;
+    const expected = { ...entry.materialSource, ...(entry.internalContent ? { internalContent: entry.internalContent } : {}) };
+    if (stable(savedSource) !== stable(expected) || stable(source.sources) !== stable(entry.release.sources) || source.package && stable(source.package) !== stable(entry.release.package)) mismatches.push({ code: 'SOURCE_IDENTITY_MISMATCH', path: '/provenance', message: 'Exact saved source, package or internal provenance differs from the checked source.' });
+  }
   const check = (value, path) => {
     const found = index.items.get(pinKey(value));
     if (found && value.itemSha256 !== undefined && found.item.itemSha256 !== value.itemSha256) mismatches.push({ code: 'SOURCE_IDENTITY_MISMATCH', path, message: 'Recorded item differs from the checked item.' });
@@ -389,7 +416,7 @@ function analyzeDraft({ intent, policy, inventories, live = true }) {
     // only evidence of what it needs. A root is never treated as resolved while that is unknown. An
     // unknown closure is an availability gap only when required content is missing from the supplied
     // inventories; any other refusal is a contradiction and keeps Catalog's own diagnostics.
-    const evidence = live && complete ? liveClosure(index, root, skips) : undefined;
+    const evidence = live && complete ? liveClosure(index, root, skips, intent.pins) : undefined;
     if (evidence?.closure) for (const node of evidence.closure) nodes.add(node);
     else if (evidence) {
       complete = false; undeterminedRoots.add(key);
@@ -573,14 +600,18 @@ export async function editDraft({ envelopeBytes, inventories, operation, reviewE
     if (root.itemSha256 !== undefined && root.itemSha256 !== found.item.itemSha256) return fail('SOURCE_IDENTITY_MISMATCH', '/operation/root/itemSha256', 'Supplied item identity differs from the checked item.');
     const resolution = resolveSelections({ releases: index.releases, roots: [{ releaseSha256: root.releaseSha256, itemId: root.itemId, scope: root.scope, configuration: root.configuration }], skips: before.skips });
     if (resolution.status !== 'ok') return unchanged(resolution);
-    const configured = configureItem({ release: found.entry.release, itemId: found.item.id, configuration: root.configuration, materialSource: found.entry.materialSource });
+    if (operation.tool) pinSelectedRecipes(intent, inventories, root, operation.tool);
+    const configured = configurePinned(found.entry, found.item, root.configuration, intent.pins);
     if (!configured.valid) return fail('INPUT_INVALID', '/operation/root/configuration', 'Catalog refused item configuration.', { owner: 'catalog', diagnostics: configured.diagnostics });
     return { found };
   };
   const draftRoot = (value, prior) => ({ releaseSha256: value.releaseSha256, itemId: value.itemId, itemSha256: index.items.get(pinKey(value)).item.itemSha256, scope: value.scope,
     configuration: structuredClone(value.configuration ?? {}), originIds: prior?.originIds ?? ['direct'], ...(prior?.reason !== undefined ? { reason: prior.reason } : {}) });
   try {
-    if (operation.type === 'remove-root') {
+    if (operation.type === 'select-sets') {
+      const selected = selectSetChoices({ intent, policy, inventories, sets: operation.sets, tool: operation.tool, releaseSha256: operation.releaseSha256, configurations: operation.configurations });
+      if (selected.status !== 'ok') return unchanged(selected);
+    } else if (operation.type === 'remove-root') {
       if (!isRef(operation.root)) return fail('INPUT_INVALID', '/operation/root', 'Supply {releaseSha256,itemId,scope}.');
       const target = operation.root, key = rootKey(target), found = intent.roots.find(r => rootKey(r) === key), retained = intent.roots.filter(r => r !== found);
       const dependents = dependentsOf(target, retained);
@@ -664,21 +695,23 @@ export async function editDraft({ envelopeBytes, inventories, operation, reviewE
   // (an item behind a missing one is invisible), so every recorded pin is retained until it resolves again.
   if (after.undeterminedRoots.size) for (const pin of record.intent.pins) reached.add(pinKey(pin));
   const pins = [...reached].flatMap(key => {
-    const existing = record.intent.pins.find(p => pinKey(p) === key), found = index.items.get(key);
-    return existing ? [existing] : found ? [{ releaseSha256: found.entry.release.sha256, itemId: found.item.id, itemSha256: found.item.itemSha256, recipe: found.item.recipe, materials: found.item.materials }] : [];
+    const existing = intent.pins.find(p => pinKey(p) === key), found = index.items.get(key);
+    return existing ? [existing] : found ? [{ releaseSha256: found.entry.release.sha256, itemId: found.item.id, itemSha256: found.item.itemSha256, recipe: found.item.recipe, materials: pinMaterials(found.item) }] : [];
   });
-  const releases = new Set([...pins.map(p => p.releaseSha256), ...intent.exclusions.map(e => e.releaseSha256), ...intent.origins.filter(o => o.kind === 'template').map(o => o.releaseSha256)]);
+  const releases = new Set([...setChoiceSources(intent), ...pins.map(p => p.releaseSha256), ...intent.exclusions.map(e => e.releaseSha256), ...intent.origins.filter(o => o.kind === 'template').map(o => o.releaseSha256)]);
   const entryOf = sha => inventories.find(e => e.release.sha256 === sha);
   intent.pins = sorted(pins);
   intent.provenance = sorted([...releases].flatMap(sha => {
-    const existing = record.intent.provenance.find(p => p.releaseSha256 === sha), entry = entryOf(sha);
-    return existing ? [existing] : entry ? [{ releaseSha256: sha, package: entry.release.package, sources: entry.release.sources, materialSource: entry.materialSource }] : [];
+    const existing = intent.provenance.find(p => p.releaseSha256 === sha), entry = entryOf(sha);
+    return existing ? [existing] : entry ? [{ releaseSha256: sha, package: entry.release.package, sources: entry.release.sources, materialSource: { ...entry.materialSource, ...(entry.internalContent ? { internalContent: entry.internalContent } : {}) } }] : [];
   }));
   intent.inputs = sorted([...releases].flatMap(sha => {
     const existing = record.intent.inputs.find(i => i.releaseSha256 === sha), entry = entryOf(sha);
     return existing ? [existing] : entry?.input ? [entry.input] : [];
   }));
   changes.removedPins = record.intent.pins.filter(p => !reached.has(pinKey(p))).map(p => ({ releaseSha256: p.releaseSha256, itemId: p.itemId }));
+  const setProblem = checkRecordedSetChoices(intent, inventories);
+  if (setProblem) return fail('INTENT_POLICY_CONTRADICTION', '/intent/provenance', setProblem);
   if (!checkIntentShape(intent)) return fail('FIELD_SEMANTICS_UNSUPPORTED', '/records/0/intent', 'Edited draft violates the supported saved-intent shape.');
   const known = read.records.filter(r => Object.hasOwn(JOURNEY_RECORD_KINDS, r.schema)).map(r => r === record ? { id: r.id, schema: r.schema, required: true, intent } : r);
   const written = await writeJourneyEnvelope({ savedIntentBytes: read.savedIntentBytes, records: known, previous: read });

@@ -1,7 +1,7 @@
 // Application projection; Scan owns matching, ordering, refusals and summaries.
 import { selectAssessments, readContentCoverage, readArtifact, readReport } from '@aihq/scan/read';
 import { evidenceKey, evidenceDigest } from './evidence-cache.mjs';
-import { isCheckedRelease, listItems } from '@aihq/catalog/reader';
+import { isCheckedRelease, listItems, itemEvidenceDescriptor } from '@aihq/catalog/reader';
 
 // Presentation only: preserve the reader's states and counts, omit large path,
 // observation and finding bodies. Scan Review keeps the full public-reader answer.
@@ -27,7 +27,8 @@ export async function selectContentEvidence({ inventory, itemId, assessments, so
   const item = listItems(inventory.release).find(item => item.id === itemId);
   if (!item) return { status: 'invalid', diagnostics: [{ code: 'ITEM_UNAVAILABLE', detail: 'Exact Catalog item unavailable.' }] };
   const baseline = inventory.release.baseline;
-  const descriptors = [item.recipe, ...item.materials].map(({ path, sha256, byteLength }) => ({ path, sha256, byteLength }));
+  const evidence = itemEvidenceDescriptor(inventory.release, { itemId });
+  const descriptors = evidence.valid ? evidence.descriptor.materials.map(({ path, sha256, byteLength }) => ({ path, sha256, byteLength })) : [item.recipe, ...item.materials].filter(Boolean).map(({ path, sha256, byteLength }) => ({ path, sha256, byteLength }));
   // The inventory compares release declarations; item capture/coverage is a separate read below.
   const context = { sourceIds, descriptors: baseline ? [baseline.inventory] : descriptors,
     selection: selection ?? (baseline ? { paths: baseline.scope.paths, excludedPaths: baseline.scope.excludedPaths } : { paths: descriptors.map(value => value.path).sort(), excludedPaths: [] }) };

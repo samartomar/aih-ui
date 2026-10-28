@@ -16,7 +16,7 @@ const textOf = node => [node.textContent, ...node.children.map(textOf)].join(' '
 
 function mount(t) {
   const previous = { document: globalThis.document };
-  globalThis.document = { createElement: tag => new Node(tag), addEventListener() {} };
+  globalThis.document = { createElement: tag => new Node(tag), createElementNS: (_namespace, tag) => new Node(tag), addEventListener() {} };
   t.after(() => { globalThis.document = previous.document; });
   const elements = Object.fromEntries(['aiToolsTrigger', 'aiToolsCount', 'aiToolsPop', 'aiToolsList', 'aiToolsNote'].map(name => [name, new Node()]));
   elements.aiToolsPop.classList.add('hidden');

@@ -124,5 +124,5 @@ export function createPolicyReview({ client, accept, proposed, status, setupHead
   }
   client.subscribe(() => { render(); syncEntry(); });
   syncEntry();
-  return { node, open: () => { if (node.hidden) opener = entry ?? trigger; show(true); }, render };
+  return { node, head, open: () => { if (node.hidden) opener = entry ?? trigger; show(true); }, render };
 }

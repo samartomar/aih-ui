@@ -377,7 +377,7 @@
     {
       "export": "aih-ui/stored-results",
       "runtime": "node",
-      "nodeRange": ">=24.15.0 <25"
+      "nodeRange": ">=24.15.0 <25 || >=26.12.1 <27"
     },
     {
       "export": "aih-ui/trials",

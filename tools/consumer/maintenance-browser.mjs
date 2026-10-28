@@ -1,4 +1,4 @@
-import { chooseCatalogFamily, chooseCatalogSupport } from './policy-drawer.mjs';
+import { chooseCatalogFamily, chooseCatalogSupport, setPersonalFolder } from './policy-drawer.mjs';
 // Ordinary Workbench journey: available updates for a saved choice are checked on open and on Check now,
 // each exact revision keeps its own keep/skip/defer choice inside the saved envelope, and the check only reads.
 import assert from 'node:assert/strict';
@@ -157,7 +157,7 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     const authoring = await openPage();
     // A personal skill (not rebound in the fresh pages) is chosen as well, so this saved policy reopens as an unresolved draft;
     // the review note stays resolved. The fully resolved route is journeyed separately below.
-    await authoring.locator('#personal-folder').setInputFiles(folder);
+    await setPersonalFolder(authoring, folder);
     await authoring.locator('#personal-result').filter({ hasText: 'Folder validated' }).waitFor();
     await choose(authoring, 'Personal', PERSONAL);
     await choose(authoring, 'Independent', NOTE);

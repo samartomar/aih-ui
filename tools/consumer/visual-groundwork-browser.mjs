@@ -190,9 +190,14 @@ export async function runVisualGroundworkBrowser({ origin, output, playwrightMod
       const [r, g, b] = rgb(color); assert.ok(r > g && g > b, `the hook accent is orange: ${color}`);
     }
 
+    // Return to browsing through the existing disclosure controls before clicking a card.
+    if (await page.locator('#catalog-advanced').evaluate(node => node.open)) await page.locator('#catalog-advanced-close').click();
+    if (await page.locator('#package-disclosure').evaluate(node => node.open)) await page.locator('#package-disclosure > summary').click();
     // ------------------------------------------------------------- neutral scan words: catalog, inspector, drawer
     assert.deepEqual(positive(await scanWords(page.locator('#cards-grid'))), [], 'catalog: no positive scan word');
     await card.click();
+    await page.locator('#catalog-advanced > summary').click();
+    await page.locator('#tab-json').waitFor();
     await page.locator('#tab-details').focus();
     for (const id of ['tab-security', 'tab-json', 'tab-details']) {
       await page.keyboard.press('ArrowRight');

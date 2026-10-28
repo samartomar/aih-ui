@@ -47,6 +47,7 @@ const KIND = {
 
 /* How far "works in your tool" was proven (Core compatibility `support`). */
 const FIT = {
+  fallback: { icon: "alt_route", tone: NEUTRAL, label: "Installed as a fallback kind; static binding only" },
   recognised: { icon: "check_circle", fill: true, tone: "text-primary", label: "Works in {tool}" },
   registered: { icon: "playlist_add_check", tone: "text-primary", label: "{tool} lists it; not yet seen in use" },
   "listed-only": { icon: "visibility", tone: NEUTRAL, label: "{tool} sees its name; not yet seen using it" },

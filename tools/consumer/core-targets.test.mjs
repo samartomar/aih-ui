@@ -149,6 +149,22 @@ test('the Workbench package-support declaration is valid for the installed Core 
     schemaExports.map(key => `aih-ui${key.slice(1)}`).sort(), 'each exported schema is declared once');
   const entries = Object.keys(manifest.exports).filter(key => !key.startsWith('./schemas/') && !key.startsWith('./fixtures/') && !key.endsWith('.json'));
   assert.deepEqual(declared.entries.map(entry => entry.export).sort(), entries.map(key => `aih-ui${key.slice(1)}`).sort());
+  // Runtime expansion is limited to the stored-result readers used by the contract check.
+  assert.deepEqual(declared.entries.filter(entry => entry.runtime === 'node').map(entry => [entry.export, entry.nodeRange]), [
+    ['aih-ui/authoring', '>=24.15.0 <25'],
+    ['aih-ui/intake', '>=24.15.0 <25'],
+    ['aih-ui/maintenance', '>=24.15.0 <25'],
+    ['aih-ui/improvements', '>=24.15.0 <25'],
+    ['aih-ui/stored-results', '>=24.15.0 <25 || >=26.12.1 <27'],
+    ['aih-ui/trials', '>=24.15.0 <25'],
+    ['aih-ui/organization-author', '>=24.15.0 <25'],
+    ['aih-ui/scan-evidence', '>=24.15.0 <25'],
+  ]);
+  assert.deepEqual(declared.entries.filter(entry => entry.runtime === 'portable'), [
+    { export: 'aih-ui/journey', runtime: 'portable' },
+    { export: 'aih-ui/workspace', runtime: 'portable' },
+    { export: 'aih-ui/batch', runtime: 'portable' },
+  ]);
 });
 
 // The Workbench's own reader for each of its formats. A record is read where the Workbench reads it: written into a

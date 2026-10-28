@@ -53,7 +53,7 @@ const testGroups = [
 ];
 let checksLog = '';
 for (const tests of testGroups) {
-  const result = spawnSync(process.execPath, ['--test', ...tests.map(name => join(output, `consumer/${name}.test.mjs`))], {
+  const result = spawnSync(process.execPath, ['--test', '--test-concurrency=2', ...tests.map(name => join(output, `consumer/${name}.test.mjs`))], {
     cwd: output, encoding: 'utf8', windowsHide: true, maxBuffer: 20_000_000, timeout: tests.includes('batch') ? 180_000 : 120_000,
     env: { ...isolated, AIH_REPO: repo }
   });
@@ -126,7 +126,7 @@ if (process.exitCode === 0) {
   process.exitCode = report.status ?? 1;
 }
 if (process.exitCode === 0) {
-  const unit = spawnSync(process.execPath, ['--test', ...readdirSync(join(repo, 'tools/tests')).filter(name => name.endsWith('.test.mjs')).map(name => join(repo, 'tools/tests', name))], {
+  const unit = spawnSync(process.execPath, ['--test', '--test-concurrency=2', ...readdirSync(join(repo, 'tools/tests')).filter(name => name.endsWith('.test.mjs')).map(name => join(repo, 'tools/tests', name))], {
     cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 120_000, env: isolated,
   });
   writeFileSync(join(output, 'presentation-checks.log'), `${unit.stdout ?? ''}${unit.stderr ?? ''}`);

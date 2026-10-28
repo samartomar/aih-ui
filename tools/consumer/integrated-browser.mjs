@@ -86,13 +86,13 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     assert.equal(await fresh.locator('#policy-save').isDisabled(), true);
     await fresh.locator('#nav-sources').click(); assert.equal(await fresh.locator('#personal-binding option').count(), 2);
     await writeFile(join(folder, 'skills/example/support/checklist.txt'), 'Changed content.\n');
-    await fresh.locator('#personal-folder').setInputFiles(folder);
+    await setPersonalFolder(fresh, folder);
     await fresh.locator('#personal-result').filter({ hasText: 'LOCAL_ROOT_CHANGED' }).waitFor();
     assert.deepEqual(await policy(fresh), saved);
     await writeFile(join(folder, 'skills/example/support/checklist.txt'), sources['skills/example/support/checklist.txt']);
     let releaseCatalog, observedCatalog; const gate = new Promise(resolve => { releaseCatalog = resolve; }); const observedGate = new Promise(resolve => { observedCatalog = resolve; });
     await fresh.route('**/api/authoring-catalog', async route => { const response = await route.fetch(); observedCatalog(); await gate; await route.fulfill({ response }); });
-    await fresh.locator('#personal-folder').setInputFiles(folder); await observedGate;
+    await setPersonalFolder(fresh, folder); await observedGate;
     assert.doesNotMatch(await fresh.locator('#personal-result').textContent(), /Exact folder rebound/);
     releaseCatalog(); await fresh.locator('#personal-result').filter({ hasText: 'Exact folder rebound' }).waitFor(); await fresh.unroute('**/api/authoring-catalog');
     await openPolicyWorkspace(fresh); await openPolicyFileActions(fresh); await drawer(fresh).getByRole('button', { name: 'Validate and reopen', exact: true }).click();

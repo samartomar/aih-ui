@@ -8,7 +8,7 @@ import { createWorkbench } from './server/workbench.mjs';
 import { listen } from './server/static.mjs';
 import { pageAssets, serviceAssets } from './server/assets.mjs';
 import { homeEnvironment } from './consumer/home-environment.mjs';
-import { addFromCatalog } from './consumer/policy-drawer.mjs';
+import { addFromCatalog, chooseCatalogFamily } from './consumer/policy-drawer.mjs';
 
 const consumerDir = resolve(process.argv[2]);
 const output = resolve(process.argv[3] ?? join(consumerDir, 'state-location-evidence'));
@@ -56,7 +56,7 @@ try {
         }
         const toggle = page.getByRole('button', { name: `Switch to ${theme} mode`, exact: true });
         if (await toggle.count()) await toggle.click();
-        await page.locator('#browse-family').selectOption('Extensions');
+        await chooseCatalogFamily(page, 'Extensions');
         await page.locator('#catalog-search').fill('grill-me');
         await addFromCatalog(page, 'extensions.matt.grill-me');
         await page.locator('#your-setup').click();

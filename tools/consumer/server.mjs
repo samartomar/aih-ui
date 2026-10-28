@@ -1,3 +1,5 @@
+import { browsePolicy } from './browse-policy.mjs';
+import { browseContent } from './browse-content.mjs';
 import { createServer } from 'node:http';
 import { readFile, mkdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -5,17 +7,18 @@ import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readInstalledRelease } from '@aihq/catalog/node';
-import { listItems } from '@aihq/catalog/reader';
+import { listItems, isCheckedRelease } from '@aihq/catalog/reader';
 import { parsePolicy } from '@aihq/core/contracts';
 import * as coreContracts from '@aihq/core/contracts';
 import * as core from '@aihq/core';
 import { createHost } from './host.mjs';
 import { createProjectFolder, shared } from './project-folder.mjs';
-import { readAuthoritySource } from './authority-source.mjs';
+import { readAuthoritySource, readOrganization } from './authority-source.mjs';
 import { editSetup, reopenSetup, reviewSetupUpdate } from './setup.mjs';
 import { presentReport, readScanBytes } from './report-view.mjs';
 import { createIntentService } from './intent-service.mjs';
 import { createMixedService } from './mixed-service.mjs';
+import { readFrameworkSources, observation } from './framework-sources.mjs';
 import { installedFamilies, installedReleaseInventory } from './installed-families.mjs';
 import { inspectAuthenticatedReviewEvidence } from './review-host.mjs';
 import { intakePersonalFolder } from './personal-folder.mjs';
@@ -24,7 +27,7 @@ import { createCatalogUpdateSource } from './update-source.mjs';
 import { inspectorSummary } from './scan-evidence.mjs';
 import { createScanEvidenceHost } from './scan-evidence-host.mjs';
 
-export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, updateSourceCatalogRoots, evidenceSources, evidenceDetectorIds, port = 0, createExecutionHost = createHost, coreState = { resolveStateLocation: core.resolveStateLocation, stateLocation: coreContracts.stateLocation } } = {}) {
+export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, updateSourceCatalogRoots, evidenceSources, evidenceDetectorIds, frameworkSources, frameworkFixtureInventories, port = 0, createExecutionHost = createHost, coreState = { resolveStateLocation: core.resolveStateLocation, stateLocation: coreContracts.stateLocation } } = {}) {
   // `createExecutionHost` is createHost; tests pass one that holds Install work while they act.
   // The fixture is a test source; a host names one update source, so both together would be ambiguous.
   if (updateSourceCatalogRoots !== undefined && maintenanceSource) throw new Error('Configure one update source: Catalog package roots or the test fixture, not both.');
@@ -45,7 +48,14 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
     if (!path.startsWith(catalogRoot + sep)) throw new Error('Catalog material path escapes the installed package.');
     return { ...descriptor, bytes: new Uint8Array(await readFile(path)) };
   }));
-  const familyInventories = await installedFamilies();
+  const frameworkCatalog = await readFrameworkSources(frameworkSources);
+  if (frameworkFixtureInventories !== undefined) {
+    if (!Array.isArray(frameworkFixtureInventories) || frameworkFixtureInventories.length > 8 || frameworkFixtureInventories.some(entry => !isCheckedRelease(entry.release))) throw new Error('Supply bounded public-reader checked fixture inventories.');
+    frameworkCatalog.fixture = true;
+    frameworkCatalog.inventories.push(...frameworkFixtureInventories);
+    frameworkCatalog.frameworks.push(...frameworkFixtureInventories.map(entry => ({ ...entry.release.framework, sha256: entry.release.sha256, kind: 'fixture', reason: entry.fixture, state: 'ready', sets: entry.release.sets ?? [], sources: entry.release.sources, observations: observation(entry.release) })));
+  }
+  const familyInventories = [...await installedFamilies(), ...frameworkCatalog.inventories];
   // Explicit previous-package history participates in exact saved-pin reads,
   // never in the current browse inventory. Preserve the logical input saved
   // before upgrade; historical execution is guarded separately below.
@@ -55,7 +65,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   // One source object per host, so the last time each root was read lives as long as the server.
   const updateSource = updateSourceCatalogRoots !== undefined ? createCatalogUpdateSource({ roots: updateSourceCatalogRoots, installedPackage: release.package }) : null;
   if (updateSource) maintenanceSource = () => updateSource.read();
-  const mixedService = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, historicalInventories, maintenanceSource, frictionEvidence, observeCheckout });
+  const mixedService = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, frameworkCatalog, historicalInventories, maintenanceSource, frictionEvidence, observeCheckout });
   const authoringRoots = { maintained: catalogRoot };
   // Startup inventories are staged once, when the first project folder is known. Concurrent callers share the one run,
   // and the roots are published only once every file is written; a failed run is retried by the next caller.
@@ -118,7 +128,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
         scanEvidence: createScanEvidenceHost({ sources: evidenceSources, packageRoot: catalogRoot, trust: reviewTrust, detectorIds: evidenceDetectorIds }) };
       clients.set(id, client);
       client.ready = (async () => {
-        client.mixed = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, historicalInventories, maintenanceSource, frictionEvidence, observeCheckout });
+        client.mixed = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, frameworkCatalog, historicalInventories, maintenanceSource, frictionEvidence, observeCheckout });
         client.recipeMaterials = client.mixed.inventories.flatMap(i => i.materials ?? []);
         client.host = clientHost(client);
       })();
@@ -177,6 +187,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
       let body;
       try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
       catch { return send(response, 400, { error: 'invalid-json' }); }
+      if (pathname === '/api/authoring-project-folders') return send(response, 200, await folder.browse(body.path));
       if (pathname === '/api/authoring-project') {
         const result = await folder.choose(body.path);
         return send(response, result.status === 'busy' ? 409 : 200, result);
@@ -192,6 +203,15 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
           if (retained.some(value => value.status !== 'read')) return send(response, 200, { status: 'refused', diagnostics: [{ code: 'EVIDENCE_UNAVAILABLE', message: 'Original evidence is unavailable in this page session; check its source again. Saved review identities remain unchanged.' }] });
           if ((body.reviewEvidence?.length ?? 0) + ids.length > 32) return send(response, 200, { status: 'refused', diagnostics: [{ code: 'EVIDENCE_UNAVAILABLE', message: 'Use up to 32 original evidence documents.' }] });
           body.reviewEvidence = [...(body.reviewEvidence ?? []), ...retained.map(value => value.bytes)];
+        }
+        if (operation === 'browse-content') {
+          const result = await browseContent(mixedService.inventories, body, folder.project, (inventory, itemId) => client.scanEvidence.check({ inventory, itemId, supplied: (body.reviewEvidence ?? []).map(bytes => Uint8Array.from(bytes)), evaluationTime: new Date().toISOString(), withSummary: true }));
+          if (body.enterprise === true && result.compatibility) {
+            const inventory = mixedService.inventories.find(entry => entry.release.sha256 === body.releaseSha256);
+            const source = organizationSource ? await readOrganization({ organizationSource, controls }) : {};
+            result.policy = await browsePolicy(inventory, body.tool, source.organization);
+          }
+          return send(response, 200, result);
         }
         if (operation === 'scan-evidence') {
           const [releaseSha256, itemId] = String(body.target ?? '').split('/');
@@ -249,8 +269,10 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
               : await host.prepareRemovalSession({ managementId: body.managementId, scope: body.scope, mode: body.mode });
           }));
         }
+        const reviewIntent = pathname === '/api/authoring-inspect-review' && reviewTrust && body.policyBytes ? (await mixedService.run('read', body)).value?.intent : undefined;
+        const reviewPin = reviewIntent?.pins.find(pin => pin.releaseSha256 === body.target?.releaseSha256 && pin.itemId === body.target?.itemId);
         const result = pathname === '/api/authoring-inspect-review' && reviewTrust
-          ? await inspectAuthenticatedReviewEvidence({ evidenceBytes: Uint8Array.from((Number.isSafeInteger(body.evidenceIndex) ? body.reviewEvidence?.[body.evidenceIndex] : body.evidenceBytes) ?? []), inventory: mixedService.inventories.find(entry => entry.release.sha256 === body.target?.releaseSha256), itemId: body.target?.itemId, trust: reviewTrust })
+          ? await inspectAuthenticatedReviewEvidence({ evidenceBytes: Uint8Array.from((Number.isSafeInteger(body.evidenceIndex) ? body.reviewEvidence?.[body.evidenceIndex] : body.evidenceBytes) ?? []), inventory: mixedService.inventories.find(entry => entry.release.sha256 === body.target?.releaseSha256), itemId: body.target?.itemId, recipe: reviewPin?.recipe, configuration: reviewIntent?.roots.find(root => root.releaseSha256 === body.target?.releaseSha256 && root.itemId === body.target?.itemId)?.configuration, trust: reviewTrust })
           : await mixedService.run(pathname.slice('/api/authoring-'.length), body);
         // JSON transport represents bytes as arrays, never serialized handles.
         return send(response, 200, JSON.parse(JSON.stringify(result, (_key, value) => value instanceof Uint8Array ? [...value] : value)));

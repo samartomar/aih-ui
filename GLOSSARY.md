@@ -9,11 +9,11 @@ An AI client the person uses, such as Claude Code or Codex, chosen in the header
 _Avoid_: client (on default screens), harness, native client
 
 **Framework**:
-A named collection of content released together, such as AIH-Extensions, ECC, Anthropic or Superpowers; the left panel lists the frameworks and one is always open.
+A named collection of content released together, such as AIH-Extensions, ECC, Anthropic or Superpowers; the left panel lists release-backed frameworks by their published names. Host-selected internal prepared content is labelled separately.
 _Avoid_: family (on default screens), release, catalog, category
 
 **Project basics**:
-What applies to the project whichever framework is chosen: tool support, project files and the workspace. It has its own place and is never part of a framework.
+A framework of shared project guidance. Internal prepared content is explicitly unbound, unauthenticated and non-production until its release obligations are met. The existing project tools and workspace remain accessible separately.
 _Avoid_: shared selection, cross-cutting, adapter, harness
 
 **Your sources**:
@@ -51,3 +51,16 @@ _Avoid_: managed selection, custody
 **Remove**:
 Taking a chosen item's files, and those of its needed items that nothing else installed still needs, out of the project folder; the setup's choices are unchanged.
 _Avoid_: uninstall, cleanup, managed removal (on default screens)
+
+
+**Starting set**:
+A producer-declared group of content, with exact membership, options and origins
+resolved by Catalog. An optional hook stays a separate choice.
+
+**Observed**:
+Harness has a published compatibility observation for the selected tool and
+platform. This does not prove successful use on the current host.
+
+**Unconfirmed fit**:
+The public compatibility result has no observation for the selected tool and
+platform. This differs from unsupported fit and from unknown host facts.

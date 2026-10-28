@@ -7,7 +7,7 @@ import { listTools } from '@aihq/core/harness';
 // V1 header Your tool, on the running page. The list is the installed packed Core's own listTools({ includeUnobserved:
 // true }), read here through the same public export the host reads: observed tools (listTools()) can be chosen, every
 // other tool stays listed and greyed with Core's refusal reason. Each ready icon is the tool's state in the host's Core
-// inspect answer. The choice survives a restart of the host, there is one tool control, every row's tooltip is
+// inspection answer (read-only file facts on the ordinary host). The choice survives a restart of the host, there is one tool control, every row's tooltip is
 // reachable by keyboard focus and touch, and its words meet 4.5:1 in the theme shown. The empty, loading, unavailable
 // and failed states, and the icons' checking and failed states, come from fixtures (fixtures/your-tool) served in place of
 // the host's answers.
@@ -86,7 +86,10 @@ export async function runYourToolBrowser({ origin, output, playwrightModule, the
     for (const row of shown) {
       assert.equal(row.disabled, !observed.has(row.id), `${row.id}: choosable exactly when listTools() offers it`);
       const found = inspection.tools.find(tool => tool.id === row.id);
-      assert.equal(row.icon, `tool:${found ? found.state : 'not-reported'}`, `${row.id}: the ready icon is Core inspect's state`);
+      if (inspection.method === 'read-only-host') {
+        assert.equal(row.icon, `tool:${found?.host?.installedVersion?.state === 'known' ? 'binary' : 'not-reported'}`, `${row.id}: only a known file version has the version-found icon`);
+        if (!row.disabled) assert.match(row.tip, /No client was launched|client was not launched/, 'Host facts do not claim native use');
+      } else assert.equal(row.icon, `tool:${found ? found.state : 'not-reported'}`, `${row.id}: the legacy inspection fixture reports its own state`);
       if (row.disabled) assert.match(row.tip, /Can't be chosen: Core hasn't observed it working \(tool-not-observed\)\./, `${row.id}: greyed with Core's reason`);
     }
     assert.ok(shown.some(row => row.disabled && all.find(tool => tool.id === row.id).surface === 'ide'), 'Unobserved IDEs are listed, greyed.');
@@ -114,7 +117,8 @@ export async function runYourToolBrowser({ origin, output, playwrightModule, the
     assert.equal(await trigger(page).evaluate(node => node === document.activeElement), true, 'The keyboard reaches Your tool.');
     await bubble(page).waitFor({ state: 'visible' });
     assert.equal(await bubble(page).innerText(), await trigger(page).getAttribute('data-tooltip'));
-    assert.match(await bubble(page).innerText(), new RegExp(`^Your tool: ${first.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\. Core's inspection`));
+    const expectedInspection = inspection.method === 'read-only-host' ? '(?:Host version unchecked:|Version )' : "Core's inspection";
+    assert.match(await bubble(page).innerText(), new RegExp(`^Your tool: ${first.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\. ${expectedInspection}`));
     await page.keyboard.press('Enter');
     await page.locator('#your-tool-pop').waitFor();
     assert.equal(await page.locator(`#your-tool-list > button[data-tool="${first.id}"]`).evaluate(node => node === document.activeElement), true, 'Opening focuses Your tool.');

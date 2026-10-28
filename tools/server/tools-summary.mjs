@@ -19,6 +19,8 @@ export function toolsSummary(answer) {
 
 export function toolInspectionSummary(answer) {
   if (!answer?.ok) return { state: "failed", reason: text(answer?.error) ?? "Core's inspection could not run" };
+  if (answer.method === 'read-only-host') return { state: 'inspected', source: '@aihq/core/harness/runtime inspectToolHost', method: answer.method, status: text(answer.status),
+    tools: (answer.tools ?? []).map(row => ({ id: text(row.id), host: { status: text(row.host?.status), installedVersion: keep(row.host?.installedVersion, ['state', 'version', 'source', 'reason']) } })), observations: [], diagnostics: [] };
   return {
     state: "inspected", source: "@aihq/core inspect", status: text(answer.status), package: keep(answer.package, ["name", "version"]),
     tools: (answer.tools ?? []).map(row => keep(row, ["id", "label", "state", "selection"])).filter(row => row.id),

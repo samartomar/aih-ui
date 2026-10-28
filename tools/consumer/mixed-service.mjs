@@ -14,7 +14,7 @@ const encode = value => new TextEncoder().encode(value);
 const bytesOf = value => Array.isArray(value) ? Uint8Array.from(value) : undefined;
 const WORKSPACE_OPERATIONS = ['workspace-read', 'workspace-edit', 'workspace-plan', 'workspace-bind', 'workspace-unbind', 'workspace-verify', 'workspace-export'];
 // `observeCheckout(root)` is the host's read of one local checkout (see ./workspace-host.mjs); a service made without one cannot inspect folders.
-export async function createMixedService(maintained, { suppliedInventories, familyInventories = [], historicalInventories = [], maintenanceSource, frictionEvidence, observeCheckout } = {}) {
+export async function createMixedService(maintained, { suppliedInventories, familyInventories = [], frameworkCatalog, historicalInventories = [], maintenanceSource, frictionEvidence, observeCheckout } = {}) {
   async function supplied(snapshot, id = 'notes') {
     const input = { id, kind: 'local', locator: { input: id }, resolvedIdentity: { sha256: await digestBytes(snapshot.declarationBytes) } };
     const result = await intakeDeclaration({ input, ...snapshot, materialSource: { kind: 'local', input: id } });
@@ -82,8 +82,9 @@ export async function createMixedService(maintained, { suppliedInventories, fami
       if (!all.some(entry => entry.release.sha256 === inventory.release.sha256)) all.push(inventory);
       if (!current.some(entry => entry.release.sha256 === inventory.release.sha256)) current.push(inventory);
     },
-    catalog() { return { executionAvailable: false, description: 'Installed Catalog families and independently authored review-note. Template is an authored demonstration. Family grouping preserves upstream origins and exact identities.',
+    catalog() { return { hostPlatform: frameworkCatalog?.hostPlatform, frameworkFixture: frameworkCatalog?.fixture === true, frameworkFixtureLabel: frameworkCatalog?.fixtureLabel, frameworks: frameworkCatalog?.frameworks ?? [], frameworkSources: frameworkCatalog?.sources ?? [], executionAvailable: false, description: 'Installed Catalog families and independently authored review-note. Template is an authored demonstration. Family grouping preserves upstream origins and exact identities.',
       items: current.flatMap(entry => entry.release.items.map(item => ({ ...item, root: root(entry, item), package: entry.release.package,
+        ...(entry.internalContent ? { internalContent: entry.internalContent } : {}),
         family: entry.family ?? (entry === maintained ? 'Catalog' : 'Independent'),
         sources: entry.release.sources.filter(source => item.sourceIds.includes(source.id)) }))),
       templates: notes.templates.map(t => ({ ...t, releaseSha256: notes.release.sha256 })) }; },
@@ -155,7 +156,12 @@ export async function createMixedService(maintained, { suppliedInventories, fami
       if (operation === 'compose') return composeAuthoring({ basePolicyBytes: policyBytes, intent: body.intent, inventories: all, ...reviewContext });
       if (operation === 'edit') return editAuthoring({ policyBytes, inventories: all, operation: body.operation, ...reviewContext });
       if (operation === 'reconcile') return reconcileAuthoring({ savedPolicyBytes: policyBytes, inventories: all, candidateInventories: candidates(body.candidateMode), ...reviewContext });
-      if (operation === 'inspect-review') return inspectReviewEvidence({ evidenceBytes, inventory: all.find(entry => entry.release.sha256 === body.target?.releaseSha256), itemId: body.target?.itemId });
+      if (operation === 'inspect-review') {
+        const read = policyBytes ? await readAuthoring({ policyBytes, inventories: all }) : null;
+        const intent = read?.value?.intent;
+        const pin = intent?.pins.find(pin => pin.releaseSha256 === body.target?.releaseSha256 && pin.itemId === body.target?.itemId);
+        return inspectReviewEvidence({ evidenceBytes, inventory: all.find(entry => entry.release.sha256 === body.target?.releaseSha256), itemId: body.target?.itemId, recipe: pin?.recipe, configuration: intent?.roots.find(root => root.releaseSha256 === body.target?.releaseSha256 && root.itemId === body.target?.itemId)?.configuration });
+      }
       // Per-item evidence state for the catalog cards: read only, from the supplied evidence documents.
       if (operation === 'evidence-states') return describeEvidenceStates({ reviewEvidence, inventories: all, subjects: body.subjects, evaluationTime: new Date().toISOString() });
       if (operation === 'record-review') return recordReview({ policyBytes, inventories: all, evidenceBytes, target: body.target, finding: body.finding, decision: body.decision, ...reviewContext });

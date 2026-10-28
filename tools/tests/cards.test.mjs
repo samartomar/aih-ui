@@ -21,7 +21,7 @@ function element(tag) {
 }
 function renderCard(t, description, evidence, model = {}) {
   const previous = Object.getOwnPropertyDescriptor(globalThis, "document");
-  globalThis.document = { createElement: element };
+  globalThis.document = { createElement: element, createElementNS: (_namespace, tag) => element(tag) };
   t.after(() => {
     if (previous) Object.defineProperty(globalThis, "document", previous);
     else delete globalThis.document;
@@ -77,7 +77,7 @@ test("missing evidence keeps its exact accessible reason and tokens stay unknown
   assert.equal(tooltip.textContent, `Not supplied: ${EVIDENCE_STATE['not-supplied'].title()}`);
   const text = descendants(node).map(e => e.textContent).join("|");
   assert.equal(text.includes("Not published"), false);
-  assert.match(text, /\|Unknown\|/);
+  assert.match(text, /(?:^|\|)Unknown(?:\||$)/);
 });
 
 test("each supplied evidence state renders neutral scan words, and matched is not authentication or Verified", (t) => {
@@ -151,7 +151,7 @@ test("a chosen item's card offers Remove (#144), reads Removing… while it remo
 test("returning to the catalog focuses the chosen card when the grid shows it, and reports when it does not", t => {
   const previous = Object.getOwnPropertyDescriptor(globalThis, "document");
   let focused = null;
-  globalThis.document = { createElement: tag => Object.assign(element(tag), { focus() { focused = this; } }) };
+  globalThis.document = { createElement: tag => Object.assign(element(tag), { focus() { focused = this; } }), createElementNS: (_namespace, tag) => element(tag) };
   t.after(() => { if (previous) Object.defineProperty(globalThis, "document", previous); else delete globalThis.document; });
   const entry = id => ({ entryId: id, subject: { id, kind: "skill", subjectDigest: `sha256:${id}`, source: { type: "github" } } });
   const elements = Object.fromEntries(["cardsGrid", "visibleCount", "visibleCaption", "categoryContext"].map(key => [key, element("div")]));

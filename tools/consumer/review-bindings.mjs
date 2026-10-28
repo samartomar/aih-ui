@@ -4,7 +4,7 @@
 // digests nor grant custody.
 import { readContentCoverage, maxContentDescriptors, selectAssessments } from '@aihq/scan/read';
 import { readScanBytes, presentReport } from './report-view.mjs';
-import { isCheckedRelease, listItems } from '@aihq/catalog/reader';
+import { isCheckedRelease, listItems, itemEvidenceDescriptor, configureItem } from '@aihq/catalog/reader';
 import { stable, ok, refuse, digestJson } from './primitives.mjs';
 import { deriveRecipeIdentity } from '@aihq/core/contracts';
 import { checkIntentShape } from './intent-shape.mjs';
@@ -18,18 +18,18 @@ const boundedExact = async (tag, value) => {
   return identity.length <= 1000 ? identity : `${tag}:sha256:${await digestJson(value)}`;
 };
 const absent = (field, value) => `absent:${field}:${value.reason}`;
-const descriptorsOf = item => [item.recipe, ...item.materials].map(({ path, sha256, byteLength }) => ({ path, sha256, byteLength }));
+const descriptorsOf = (item, release) => { const read = release && item.role ? itemEvidenceDescriptor(release, { itemId: item.id }) : null; return read?.valid ? read.descriptor.materials.map(({ path, sha256, byteLength }) => ({ path, sha256, byteLength })) : [item.recipe, ...item.materials].filter(Boolean).map(({ path, packagePath, sha256, byteLength }) => ({ path: path ?? packagePath, sha256, byteLength })); };
 // Scan's coverage status is the association: matched, mismatched, or unavailable when Scan cannot assess it.
 const association = coverage => ['matched', 'mismatched'].includes(coverage.status) ? coverage.status : 'unavailable';
-export async function inspectReviewEvidence({ evidenceBytes, inventory, itemId }) {
+export async function inspectReviewEvidence({ evidenceBytes, inventory, itemId, recipe, configuration }) {
   if (!(evidenceBytes instanceof Uint8Array) || !isCheckedRelease(inventory?.release)) return bindingFailure('Supply evidence bytes and an actual checked inventory.');
   const read = await readScanBytes(evidenceBytes);
   const view = presentReport(read);
   if (read.status !== 'read') return ok({ reportSupport: read.status, view, bindings: [], sourceAssociation: 'unavailable', producerAuthentication: 'unchecked' });
-  const subject = await describeAuthoringSubject({ inventory, itemId });
+  const subject = await describeAuthoringSubject({ inventory, itemId, recipe, configuration });
   if (subject.status !== 'ok') return subject;
   const item = listItems(inventory.release).find(item => item.id === itemId);
-  const coverage = await readContentCoverage({ read, descriptors: descriptorsOf(item) });
+  const coverage = await readContentCoverage({ read, descriptors: descriptorsOf(item, inventory.release) });
   const sourceAssociation = association(coverage);
   const bindings = [];
   // Only observations Scan reports as covering the complete exact subject can support a reusable decision.
@@ -106,7 +106,7 @@ export async function describeEvidenceStates({ reviewEvidence = [], inventories,
   const found = subjects.flatMap(subject => {
     const inventory = inventories.find(entry => entry.release.sha256 === subject.releaseSha256);
     const item = inventory && listItems(inventory.release).find(item => item.id === subject.itemId);
-    return item ? [{ key: `${subject.releaseSha256}/${subject.itemId}`, descriptors: descriptorsOf(item) }] : [];
+    return item ? [{ key: `${subject.releaseSha256}/${subject.itemId}`, descriptors: descriptorsOf(item, inventory.release) }] : [];
   });
   const perDocument = await Promise.all(reads.map(read => read.status === 'read' ? coverageStates(read, found) : new Map()));
   const releaseSelections = new Map(), values = [];
@@ -126,7 +126,7 @@ export async function describeEvidenceStates({ reviewEvidence = [], inventories,
       }
       let selected = baseline ? releaseSelections.get(subject.releaseSha256) : undefined;
       if (!selected) {
-        selected = await selectAssessments({ assessments, context: { sourceIds: ['supplied'], descriptors: baseline ? [baseline.inventory] : descriptorsOf(item), selection },
+        selected = await selectAssessments({ assessments, context: { sourceIds: ['supplied'], descriptors: baseline ? [baseline.inventory] : descriptorsOf(item, inventory.release), selection },
           evaluationTime, checks: [{ sourceId: 'supplied', status: 'succeeded', attemptedAt: evaluationTime, lastSuccessfulAt: evaluationTime, diagnostics: [] }] });
         if (baseline) releaseSelections.set(subject.releaseSha256, selected);
       }
@@ -157,13 +157,13 @@ export async function compareReviewBindings({ intent, inventories, reviewEvidenc
     if (!pin) [state, reason] = ['changed', 'subject-not-selected'];
     else if (!inventory) reason = 'source-unavailable';
     else {
-      const subject = await describeAuthoringSubject({ inventory, itemId: target.itemId });
+      const subject = await describeAuthoringSubject({ inventory, itemId: target.itemId, recipe: pin.recipe, configuration: intent.roots.find(root => root.itemId === target.itemId && root.releaseSha256 === target.releaseSha256)?.configuration });
       if (subject.status !== 'ok') reason = 'source-unavailable';
       else {
         comparedSubject = subject.value;
         if (comparedSubject.itemId !== record.subject.itemId || (comparedSubject.releaseSha256 === record.subject.releaseSha256 && comparedSubject.itemSha256 !== record.subject.itemSha256) || comparedSubject.recipeIdentity !== record.subject.recipeIdentity || stable(comparedSubject.materials) !== stable(record.subject.materials)) [state, reason] = ['changed', 'subject-changed'];
         else for (const evidenceBytes of reviewEvidence) {
-          const inspected = await inspectReviewEvidence({ evidenceBytes, inventory, itemId: target.itemId });
+          const inspected = await inspectReviewEvidence({ evidenceBytes, inventory, itemId: target.itemId, recipe: pin.recipe, configuration: intent.roots.find(root => root.itemId === target.itemId && root.releaseSha256 === target.releaseSha256)?.configuration });
           if (inspected.status !== 'ok' || inspected.value.reportSupport !== 'supported' || inspected.value.sourceAssociation !== 'matched') continue;
           [state, reason] = ['changed', 'evidence-changed'];
           if (inspected.value.bindings.some(binding => stable(binding.finding) === stable(record.finding) && stable(binding.evidence) === stable(record.evidence))) { [state, reason] = ['unchanged', null]; break; }
@@ -198,16 +198,24 @@ export function summarizeReviewJudgments(judgments) {
 }
 // Use Core's public identity semantics for exact supplied recipe snapshots.
 // This describes content, not human approval or observation custody.
-export async function describeAuthoringSubject({ inventory, itemId }) {
+export async function describeAuthoringSubject({ inventory, itemId, recipe: pinned, configuration = {} }) {
   if (!inventory || !isCheckedRelease(inventory.release)) return refuse('SOURCE_IDENTITY_MISMATCH', '/inventory', 'Supply an actual checked Catalog reader value.');
   const item = listItems(inventory.release).find(item => item.id === itemId);
   if (!item) return refuse('SOURCE_REVISION_UNAVAILABLE', '/itemId', 'Exact item unavailable.');
-  const recipeBytes = inventory.materials?.find(material => material.path === item.recipe.path)?.bytes;
+  let reference;
+  if (item.role) {
+    const choices = Object.entries(item.recipes ?? {});
+    const client = choices.find(([, recipe]) => recipe.sha256 === pinned?.sha256 && recipe.path === pinned?.path);
+    if (item.recipes && !client) return bindingFailure('Add this item for your selected tool before recording a recipe-bound review.');
+    const configured = configureItem({ release: inventory.release, itemId, configuration, materialSource: inventory.materialSource, ...(client ? { clientId: client[0] } : {}) });
+    if (!configured.valid) return bindingFailure('Configure this exact item before recording a recipe-bound review.');
+    reference = configured.selection.recipe.reference;
+  } else reference = { source: inventory.materialSource, path: item.recipe.path, sha256: item.recipe.sha256, byteLength: item.recipe.byteLength,
+    materials: item.materials.map(({ id, path, sha256, byteLength }) => ({ id, path, sha256, byteLength })) };
+  const recipeBytes = inventory.materials?.find(material => material.path === reference.path)?.bytes;
   if (!recipeBytes) return refuse('SOURCE_REVISION_UNAVAILABLE', '/recipeBytes', 'Exact recipe bytes are required for identity derivation.');
   // Identity describes the checked recipe declaration, independent of the
   // authored values for its required inputs. Core validates this public shape.
-  const reference = { source: inventory.materialSource, path: item.recipe.path, sha256: item.recipe.sha256, byteLength: item.recipe.byteLength,
-    materials: item.materials.map(({ id, path, sha256, byteLength }) => ({ id, path, sha256, byteLength })) };
   const identity = await deriveRecipeIdentity({ recipeBytes, reference });
   if (identity.status !== 'ok') return identity;
   return ok({ releaseSha256: inventory.release.sha256, itemId, itemSha256: item.itemSha256, recipeIdentity: identity.value.recipeIdentity, materials: identity.value.materials });

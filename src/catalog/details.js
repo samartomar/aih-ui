@@ -21,6 +21,7 @@
  * evidence statements, exactly as Catalog's public reader returns them.
  */
 
+import { renderBrowseFacts } from './browse-facts.js';
 import { createGapIndicator } from '../app/gap-indicator.js';
 import { createInspectorEvidence } from '../app/inspector-evidence.js';
 import { el, text } from "../app/dom.js";
@@ -105,6 +106,7 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
   }
 
   function reset() {
+    document.getElementById('inspector-browse-facts')?.remove();
     elements.detailsIdentity.replaceChildren();
     elements.detailsSource.replaceChildren();
     elements.detailsCapabilities.replaceChildren();
@@ -159,7 +161,7 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
      * @param model { entry, counts, target, coreClients } `target` is the AI client whose capability facts the
      *   page shows; `coreClients` is Core's nativeClientIds, or null when Core published none (client support is then unknown)
      */
-    render({ entry, counts, target, coreClients }) {
+    render({ entry, counts, target, coreClients, browse, tool }) {
       reset();
       evidence.show(entry?.authoringItem);
       elements.detectorRunState.title = DETECTOR_RUN_STATE_ABSENT;
@@ -175,6 +177,24 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
         elements.detectorFindingDetail.removeAttribute('title');
         const item = entry.authoringItem;
         const source = sourcePresentation(item);
+        if (item.role) {
+        const existing = document.getElementById('inspector-browse-facts'); if (existing) existing.remove();
+        const context = el('section', 'inspector-browse-facts'); context.id = 'inspector-browse-facts';
+        const authored = el('div', 'inspector-row'); authored.append(el('strong', '', 'Where it came from'), el('p', '', item.source ?? 'Authorship not published.'));
+        if (item.selectedBy) authored.append(el('p', '', `Chosen by ${item.selectedBy}`));
+        if (item.derivedFrom) authored.append(el('p', '', `Derived from ${JSON.stringify(item.derivedFrom)}`));
+        context.append(authored, renderBrowseFacts(item, browse, tool, { detailed: true }));
+        const comes = el('div', 'inspector-row'); comes.append(el('strong', '', 'Comes with'));
+        const closure = browse?.dependencies?.itemId === item.id ? browse.dependencies.resolution : undefined;
+        const support = (closure?.value?.selections ?? []).map(selection => authoring?.catalog?.items.find(value => value.root.releaseSha256 === selection.item.releaseSha256 && value.id === selection.item.itemId)).filter(value => value?.role === 'supporting');
+        comes.append(el('p', '', closure?.status === 'ok' ? support.length ? support.map(value => value.name ?? value.label).join(' · ') : 'No supporting content in Catalog’s resolved closure.' : closure ? 'Catalog could not resolve supporting content with the current configuration.' : 'Supporting-content closure unchecked.'));
+ context.append(comes);
+        const replaces = el('div', 'inspector-row'); replaces.append(el('strong', '', 'Replaces'), el('p', '', item.supersedes?.length ? item.supersedes.map(value => value.itemId).join(' · ') : 'No replacements declared.')); context.append(replaces);
+        const copies = el('div', 'inspector-row'); copies.append(el('strong', '', 'Also seen by your tool'), el('p', '', browse?.host?.items ? JSON.stringify(browse.host.items.find(value => value.itemId === item.id)?.copies ?? 'Copies not reported.') : 'Copies unchecked. No client was launched.')); context.append(copies);
+        const start = el('div', 'inspector-row'); start.append(el('strong', '', 'How it starts'), el('p', '', item.payload?.invocation ?? 'Activation not published.')); context.append(start);
+        const files = el('details'); files.append(el('summary', '', 'Files'), el('pre', 'browse-json', item.materials.map(value => value.relPath ?? value.path ?? value.packagePath).join('\n'))); context.append(files);
+        elements.detailsDesc.after(context);
+        }
         elements.inspectorName.textContent = source.name;
         elements.inspectorKind.setAttribute('aria-label', `Kind: ${item.kind}`);
         attachTooltip(elements.inspectorKind, `Kind: ${iconFor('kind', item.kind).label}`);
@@ -222,7 +242,12 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
         }
         row(elements.detailsSource, 'Content family', item.family);
         row(elements.detailsSource, 'Package', `${item.package.name}@${item.package.version}`);
-        row(elements.detailsSource, 'Provenance', item.family === 'Personal' ? 'Local folder explicitly selected in this page session; no GitHub provenance inferred.' : 'Published installed release; upstream origins retained below.');
+        row(elements.detailsSource, 'Provenance', item.internalContent ? 'Internal prepared content; not verified, baseline unbound, unauthenticated, non-production.' : item.family === 'Personal' ? 'Local folder explicitly selected in this page session; no GitHub provenance inferred.' : 'Published installed release; upstream origins retained below.');
+        if (item.internalContent) {
+          const exact = el('details'); exact.id = 'internal-content-identity';
+          exact.append(el('summary', '', 'Exact internal content identity'), el('pre', 'whitespace-pre-wrap break-words', JSON.stringify(item.internalContent, null, 2)));
+          elements.detailsSource.append(exact);
+        }
         for (const fact of capabilityFacts(item, target)) {
           const node = el('p', 'p-2 rounded border border-wb-border text-[11px]', `${fact.support} · ${fact.capability} · ${fact.surface} — ${fact.reason ?? 'No producer reason supplied.'}`);
           elements.detailsCapabilities.append(node);

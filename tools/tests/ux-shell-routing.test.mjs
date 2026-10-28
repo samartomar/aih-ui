@@ -48,7 +48,7 @@ test('direct review URL and history navigation announce the actual view without 
 test('mobile kind and policy context start compact, and inspector makes disclosure inert', t => {
   const h = shell(t, '', 390);
   assert.equal(h.elements.catalogKindsDisclosure.open, false);
-  assert.equal(h.context.open, false);
+  assert.equal(h.context.open, true, 'The accepted compact header keeps its one-line setup context visible.');
   h.instance.setInspectorSelection(true);
   assert.equal(h.elements.catalogKindsDisclosure.inert, true);
   assert.equal(h.elements.inspectorRail.attributes['aria-modal'], 'true');

@@ -68,7 +68,9 @@ export async function chooseCatalogFamily(page, value) {
   await closePolicyDrawer(page);
   const rail = page.locator('#nav-rail');
   if (await rail.evaluate(node => node.classList.contains('w-0'))) await page.locator('#toggle-nav-btn').click();
-  await page.locator('#framework-navigation button[data-family=' + JSON.stringify(value) + ']').click();
+  const primary = page.locator('#framework-navigation button[data-family=' + JSON.stringify(value) + ']');
+  if (await primary.count()) await primary.click();
+  else { await openCatalogFilters(page); await page.locator('#browse-family').selectOption(value); await page.locator('#catalog-filters-close').click(); }
 }
 export async function chooseCatalogSupport(page, value) {
   await openCatalogFilters(page);
