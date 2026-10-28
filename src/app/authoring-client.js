@@ -27,7 +27,10 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
   const headers = { 'x-aih-client': crypto.randomUUID() };
   const listeners = new Set();
   let catalog, bytes = new Uint8Array(), intent, candidate, draftValue, compiled, revision = 0, catalogRevision = 0, hostRevision = 0, folderRevision = 0, reviewEvidence = [], evidenceRevision = 0, recipient, judgments = [], judgmentSummary;
-  let dirty = false, checkpoint, recoveryAvailable, startupSource;
+  let dirty = false, checkpoint, recoveryAvailable, startupSource, selectedTool;
+  // The header's canonical tool as ephemeral page context: it rides composing/editing/compiling requests,
+  // never the saved policy bytes, and never rebinding a recorded selection's own tool identity.
+  const setTool = tool => { selectedTool = tool; };
   const artifactBytes = () => draftValue?.envelopeBytes ?? bytes;
   const notify = () => {
     const current = artifactBytes();
@@ -46,7 +49,7 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
   async function request(operation, body = {}) {
     const response = await fetch(`/api/authoring-${operation}`, {
       method: 'POST', headers: { ...headers, 'content-type': 'application/json' },
-      body: JSON.stringify({ policyBytes: [...bytes], reviewEvidence: reviewEvidence.map(value => [...value]), ...(reviewEvidenceIds.length ? { reviewEvidenceIds } : {}), ...(recipient ? { recipient } : {}), ...body }),
+      body: JSON.stringify({ policyBytes: [...bytes], reviewEvidence: reviewEvidence.map(value => [...value]), ...(reviewEvidenceIds.length ? { reviewEvidenceIds } : {}), ...(recipient ? { recipient } : {}), ...(selectedTool ? { tool: selectedTool } : {}), ...body }),
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error ?? JSON.stringify(result));
@@ -97,6 +100,7 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
   }
   return {
     get dirty() { return dirty; }, get recoveryAvailable() { return recoveryAvailable; }, get startupSource() { return startupSource; },
+    setTool, get tool() { return selectedTool; },
     markDownloaded(downloaded = bytes) { const current = artifactBytes(); if (current.length !== downloaded.length || current.some((byte, index) => byte !== downloaded[index])) return; dirty = false; checkpoint = current.slice(); notify(); },
     discard() { revision++; candidate = undefined; notify(); },
     get catalog() { return catalog; }, get intent() { return intent; },

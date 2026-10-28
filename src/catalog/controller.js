@@ -234,6 +234,14 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
         try { await onRemove(item); } finally { state.busy.delete(entryId); render(); }
         if (document.activeElement === document.body || !document.activeElement?.isConnected) focusCard(state.chosenId);
       },
+      // The one-server tick: exactly this server, through the ordinary edit operation; the consumer renders
+      // the approval into the recipe. A failure leaves the box unticked and says why (#162).
+      onApprove: async (item, granted) => {
+        const framework = currentFramework();
+        const result = await authoring.request('edit', { operation: { type: 'mcp-approval', root: { releaseSha256: framework?.sha256, itemId: item.id, scope: 'project' }, granted }, tool: chosenTool?.id });
+        if (result.status !== 'ok') { render(); throw new Error(result.diagnostics?.map(value => value.message).join(' ') ?? 'The approval was not recorded.'); }
+        render();
+      },
     };
   }
 

@@ -46,7 +46,9 @@ async function main() {
     const organization = createOrganization({ elements: organizationElements(), onEdit: section => onboarding.edit(section), onModeComplete: applySettings });
     // Your tool reads Core's tool registry and inspection itself; it is not the workspace setup's AI clients, which
     // stay in Settings (Edit AI tools).
-    const yourTool = createYourTool({ elements: yourToolElements(), onChange: tool => catalog.setTool(tool) });
+    // The header's one canonical tool feeds both the catalog and the authoring context; it is the same
+    // choice, not a Settings client, and it rebinds no saved execution.
+    const yourTool = createYourTool({ elements: yourToolElements(), onChange: tool => { catalog.setTool(tool); authoring.setTool(tool); } });
 
     function applySettings(settings, location) {
       organization.setSettings(settings, location);
@@ -87,6 +89,7 @@ async function main() {
     // Browser-local drafts never decide whether first-run setup is complete.
     await Promise.all([authoring.start(), onboarding.start(), catalog.start(), yourTool.start()]);
     catalog.setTool(yourTool.current());
+    authoring.setTool(yourTool.current());
   } catch (error) {
     shell.showError(error?.message ?? String(error));
     catalog?.sourceUnavailable(error?.message ?? String(error));

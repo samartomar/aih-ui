@@ -2,6 +2,7 @@
 import { selectSetChoices, checkRecordedSetChoices, setChoicesOf, setChoiceSources, SET_CHOICES_KEY } from './set-choices.mjs';
 import { configurePinned, pinSelectedRecipes, recipeDescriptor } from './selected-recipe.mjs';
 import { parsePolicy } from '@aihq/core/contracts';
+import * as harness from '@aihq/core/harness';
 import { isCheckedRelease, listItems, configureItem, resolveSelections, validateSelectionSet, compareReleases } from '@aihq/catalog/reader';
 import { checkIntentShape, checkReview, rootKey, pinKey, managementIdOf, AUTHORING_SCHEMA, REVIEW_SCHEMA } from './intent-shape.mjs';
 import { migrateIntent } from './migrate-intent.mjs';
@@ -23,13 +24,28 @@ function inventoryIndex(inventories) {
   }
   return { releases, items };
 }
-const projected = selections => sorted(selections.map(({ id, managementId, organizationSelectionId, scope, configuration, requires, recipe }) =>
-  ({ id, managementId, ...(organizationSelectionId !== undefined ? { organizationSelectionId } : {}), scope, configuration, requires: [...requires].sort(), recipe })));
+const projected = selections => sorted(selections.map(({ id, managementId, organizationSelectionId, scope, configuration, requires, recipe, item, tool, name, kind, origins }) =>
+  ({ id, managementId, ...(organizationSelectionId !== undefined ? { organizationSelectionId } : {}), scope, configuration, requires: [...requires].sort(), recipe,
+    // The execution-policy 1.4 metadata bundle travels all-or-none; the comparison must see it so stale or
+    // tampered item/tool/origin metadata is never ignored on read (#165).
+    ...(item !== undefined ? { item, tool, name, kind, origins } : {}) })));
 
-async function build({ intent, inventories, base, capture = false, historicalV2 = false }) {
+async function build({ intent, inventories, base, capture = false, historicalV2 = false, tool = undefined, grantApproval = undefined }) {
   if (intent && new TextEncoder().encode(JSON.stringify(intent)).length > 850_000) return refuse('POLICY_BOUND_EXCEEDED', '/metadata/aih.workbench', 'Intent exceeds 850,000 UTF-8 bytes; reduce selected state.');
   if (intent?.reviews?.schema && intent.reviews.schema !== REVIEW_SCHEMA) return refuse('INTENT_VERSION_UNSUPPORTED', '/metadata/aih.workbench/reviews/schema', 'Unsupported review document version.');
   if (!checkIntentShape(intent)) return refuse('FIELD_SEMANTICS_UNSUPPORTED', '/metadata/aih.workbench', 'Malformed, oversized or unknown authoring semantics.');
+  // The composing tool is explicit page context, canonicalized through Harness; there is no default or
+  // inferred client. Saved selections keep their recorded tool identity — the current header never rebinds.
+  let canonicalTool;
+  if (tool !== undefined) {
+    const selected = typeof harness.selectTool === 'function' ? harness.selectTool(tool) : null;
+    if (!selected || selected.status !== 'selected') return refuse('TOOL_UNAVAILABLE', '/tool', 'Choose your tool before composing this setup; no tool is silently selected.');
+    canonicalTool = selected.tool.id;
+  }
+  // The one-server approval opt-in is exactly { framework, itemId }, ephemeral and explicit.
+  if (grantApproval !== undefined && (!grantApproval || typeof grantApproval.framework !== 'string' || typeof grantApproval.itemId !== 'string' || Object.keys(grantApproval).length !== 2))
+    return refuse('INPUT_INVALID', '/grantApproval', 'Name the one MCP server to allow as { framework, itemId }; there is no list or approve-all.');
+  if (grantApproval && !canonicalTool) return refuse('TOOL_UNAVAILABLE', '/tool', 'Choose your tool before approving an MCP server.');
   let index;
   try { index = inventoryIndex(inventories); }
   catch (error) { return refuse('SOURCE_IDENTITY_MISMATCH', '/inventories', error.message); }
@@ -56,6 +72,7 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
   // Preserve existing selection identity for unchanged recipe/source/scope; a
   // historical v1 selection id is not a reason to rewrite execution semantics.
   const selections = [], pins = new Map(), sourceIds = new Set([...setChoiceSources(intent), ...intent.exclusions.map(r => r.releaseSha256), ...intent.origins.filter(o => o.kind === 'template').map(o => o.releaseSha256)]);
+  let approvalRendered = false;
   for (const selection of resolved.selections) {
     const found = index.items.get(pinKey(selection.item)), { entry, item } = found;
     const configured = configurePinned(entry, item, selection.configuration, intent.pins);
@@ -68,14 +85,50 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
       .map(id => intent.origins.find(o => o.id === id)).filter(o => o?.kind === 'organization').map(o => o.organizationSelectionId));
     if (organizationIds.size > 1) return refuse('INTENT_POLICY_CONTRADICTION', '/origins', 'Conflicting organization selection identities.');
     const managementId = prior?.managementId ?? managementIdOf({ scope: selection.scope, packageName: entry.release.package.name, itemId: item.id });
+    // Execution-policy 1.4 metadata travels all-or-none. What the checked source supports truthfully today:
+    const checkedBundle = entry.release.framework?.id && item.contentSha256 && item.behaviourSha256
+      ? { item: { framework: entry.release.framework.id, itemId: item.id, contentSha256: item.contentSha256, behaviourSha256: item.behaviourSha256 },
+          name: item.name ?? item.label, kind: item.kind, origins: structuredClone(selection.origins) } : undefined;
+    // A recorded bundle is validated against the exact checked source and its resolved origins, then kept —
+    // the current header never rebinds saved execution. A new bundle attaches only from the explicit
+    // composing tool; legacy items without 1.6 identities stay metadata-free (valid 1.4), never fabricated.
+    if (prior?.item) {
+      const mismatch = !checkedBundle
+        || prior.item.itemId !== checkedBundle.item.itemId || prior.item.framework !== checkedBundle.item.framework
+        || prior.item.contentSha256 !== checkedBundle.item.contentSha256 || prior.item.behaviourSha256 !== checkedBundle.item.behaviourSha256
+        || prior.kind !== checkedBundle.kind || prior.name !== checkedBundle.name
+        || stable(prior.origins ?? null) !== stable(selection.origins);
+      if (mismatch) return refuse('INTENT_POLICY_CONTRADICTION', '/selections',
+        `Saved selection metadata for ${item.id} no longer matches the checked source and its resolved origins.`, undefined, { owner: 'core' });
+    }
+    const bundle = prior?.item ? { item: prior.item, tool: prior.tool, name: prior.name, kind: prior.kind, origins: prior.origins }
+      : canonicalTool && checkedBundle ? { ...checkedBundle, tool: canonicalTool } : undefined;
+    // The one-server tick renders that server's delivery through public Harness and the rendered recipe —
+    // the ordinary recipe with the one approval operation — becomes the policy's recipe for this selection.
+    // A recorded inline recipe stands until a fresh explicit tick; nothing is silently approved.
+    let recipe = configured.selection.recipe;
+    const ticked = Boolean(grantApproval && bundle && grantApproval.framework === bundle.item.framework && grantApproval.itemId === item.id && (item.kind === 'mcp-server' || item.kind === 'mcp'));
+    if (grantApproval && grantApproval.itemId === item.id && !ticked)
+      return refuse('INPUT_INVALID', '/grantApproval', 'Only the one MCP server being allowed may be named, and it must be part of this setup.');
+    if (ticked) {
+      approvalRendered = true;
+      const binding = harness.toolBindings.find(candidate => candidate.tool === canonicalTool);
+      const rendered = harness.renderDelivery({ tool: canonicalTool, item, binding, scope: selection.scope, grantApproval });
+      if (rendered.status !== 'rendered') return refuse('PREREQUISITE_UNAVAILABLE', '/grantApproval',
+        rendered.guidance ?? rendered.message ?? rendered.reason ?? 'Core refused the one-server approval.', undefined,
+        { owner: 'core', diagnostics: rendered.diagnostics ?? (rendered.code ? [{ code: rendered.code, message: rendered.reason ?? rendered.message }] : []) });
+      recipe = { inline: rendered.recipe };
+    }
     selections.push({ ...prior, id: prior?.id ?? selection.id, managementId, scope: selection.scope, configuration: configured.selection.configuration,
+      ...(bundle ? { item: bundle.item, tool: bundle.tool, name: bundle.name, kind: bundle.kind, origins: bundle.origins } : {}),
       ...(base?.mode === 'enterprise' ? { organizationSelectionId: [...organizationIds][0] ?? prior?.organizationSelectionId ?? managementId } : {}),
-      requires: [], recipe: configured.selection.recipe });
+      requires: [], recipe });
     pins.set(pinKey(selection.item), { releaseSha256: entry.release.sha256, itemId: item.id, itemSha256: item.itemSha256, recipe: item.recipe ?? recipeDescriptor(Object.values(item.recipes).find(recipe => recipe.sha256 === configured.selection.recipe.reference.sha256)), materials: pinMaterials(item) });
     sourceIds.add(entry.release.sha256);
   }
   const validation = validateSelectionSet({ releases: index.releases, selections: resolved.selections.map((s, i) => ({ ...s, id: selections[i].id })) });
   if (!validation.valid) return refuse('INPUT_INVALID', '/selections', 'Catalog refused the resolved set.', undefined, { owner: 'catalog', diagnostics: validation.diagnostics });
+  if (grantApproval && !approvalRendered) return refuse('INPUT_INVALID', '/grantApproval', 'The server being allowed is not part of this setup; the opt-in was not applied.');
   for (const selection of selections) selection.requires = validation.requiresBySelectionId[selection.id];
   const provenance = inventories.filter(e => sourceIds.has(e.release.sha256)).map(e => ({ releaseSha256: e.release.sha256, package: e.release.package, sources: e.release.sources, materialSource: { ...e.materialSource, ...(e.internalContent ? { internalContent: e.internalContent } : {}), ...(intent.provenance.find(source => source.releaseSha256 === e.release.sha256)?.materialSource?.[SET_CHOICES_KEY] ? { [SET_CHOICES_KEY]: intent.provenance.find(source => source.releaseSha256 === e.release.sha256).materialSource[SET_CHOICES_KEY] } : {}) } }));
   const inputs = inventories.filter(e => sourceIds.has(e.release.sha256) && e.input).map(e => e.input);
@@ -197,7 +250,7 @@ export async function reconcileAuthoring({ savedPolicyBytes, inventories, candid
   return { ...ok({ status: choices.length ? 'needs-decisions' : 'unchanged', affectedRoots, retainedRoots, choices }), originalBytes: savedPolicyBytes.slice() };
 }
 export async function composeAuthoring(options) { return composeReviewed(options); }
-async function composeReviewed({ basePolicyBytes, intent, inventories, reviewEvidence = [], comparisons = [], recipient }, reviewTransition = false) {
+async function composeReviewed({ basePolicyBytes, intent, inventories, reviewEvidence = [], comparisons = [], recipient, tool = undefined, grantApproval = undefined }, reviewTransition = false) {
   if (intent && new TextEncoder().encode(JSON.stringify(intent)).length > 850_000) return refuse('POLICY_BOUND_EXCEEDED', '/metadata/aih.workbench', 'Intent exceeds 850,000 UTF-8 bytes; reduce selected state.', basePolicyBytes);
   if (intent?.reviews?.schema && intent.reviews.schema !== REVIEW_SCHEMA) return refuse('INTENT_VERSION_UNSUPPORTED', '/metadata/aih.workbench/reviews/schema', 'Unsupported review document version.', basePolicyBytes);
   if (!checkIntentShape(intent)) return refuse('FIELD_SEMANTICS_UNSUPPORTED', '/metadata/aih.workbench', 'Malformed or unknown authoring semantics.', basePolicyBytes);
@@ -209,18 +262,30 @@ async function composeReviewed({ basePolicyBytes, intent, inventories, reviewEvi
     base = original.value.policy;
     if (!reviewTransition && stable(intent.reviews) !== stable(original.value.intent.reviews)) return refuse('REVIEW_BINDING_UNAVAILABLE', '/reviews', 'Use the checked evidence review workflow to change decisions.', basePolicyBytes);
   }
-  return buildReviewed({ intent, inventories, base, originalBytes: basePolicyBytes, reviewEvidence, comparisons, recipient });
+  return buildReviewed({ intent, inventories, base, originalBytes: basePolicyBytes, reviewEvidence, comparisons, recipient, tool, grantApproval });
 }
 // Saved judgments are never refused or converted here: their applicability is reported beside the result.
-async function buildReviewed({ intent, inventories, base, originalBytes, reviewEvidence, comparisons, recipient }) {
-  const result = await build({ intent, inventories, base, capture: true });
+async function buildReviewed({ intent, inventories, base, originalBytes, reviewEvidence, comparisons, recipient, tool = undefined, grantApproval = undefined }) {
+  const result = await build({ intent, inventories, base, capture: true, tool, grantApproval });
   if (result.status === 'ok') return ok({ ...result.value, ...await reviewView({ intent: result.value.intent, inventories, reviewEvidence, comparisons, recipient }) });
   return originalBytes ? { ...result, originalBytes: originalBytes.slice() } : result;
 }
-export async function editAuthoring({ policyBytes, inventories, operation, reviewEvidence = [], comparisons = [], recipient }) {
+export async function editAuthoring({ policyBytes, inventories, operation, reviewEvidence = [], comparisons = [], recipient, tool = undefined, grantApproval = undefined }) {
   const original = await readAuthoring({ policyBytes, inventories });
   if (original.status !== 'ok') return original;
   if (original.value.editing !== 'available') return { status: 'refused', diagnostics: refusalDiagnostics(original.value), originalBytes: policyBytes.slice() };
+  // The one-server tick re-composes unchanged choices with the approval rendered for exactly that server.
+  // Unticking re-composes without it, restoring the recorded recipe. Neither writes an input value.
+  if (operation?.type === 'mcp-approval') {
+    const root = original.value.intent.roots.find(candidate => rootKey(candidate) === rootKey(operation.root));
+    if (!root) return refuse('INPUT_INVALID', '/operation/root', 'The server is not part of this setup.', policyBytes);
+    const entry = inventories.find(candidate => candidate.release.sha256 === root.releaseSha256);
+    const item = entry?.release.items.find(candidate => candidate.id === root.itemId);
+    if (!item || (item.kind !== 'mcp-server' && item.kind !== 'mcp')) return refuse('INPUT_INVALID', '/operation/root', 'Only an MCP server can be allowed this way.', policyBytes);
+    if (!entry.release.framework?.id) return refuse('SOURCE_REVISION_UNAVAILABLE', '/operation/root', 'This exact source publishes no framework identity to name the approval.', policyBytes);
+    return composeAuthoring({ basePolicyBytes: policyBytes, intent: original.value.intent, inventories, reviewEvidence, comparisons, recipient, tool,
+      ...(operation.granted ? { grantApproval: { framework: entry.release.framework.id, itemId: item.id } } : {}) });
+  }
   // An omitted hash is filled from the checked inventory; a supplied one is verified by composition.
   if (operation?.type === 'select' && operation.root && operation.root.itemSha256 === undefined) {
     const item = inventories.find(e => e.release.sha256 === operation.root.releaseSha256)?.release.items.find(i => i.id === operation.root.itemId);
@@ -231,7 +296,7 @@ export async function editAuthoring({ policyBytes, inventories, operation, revie
     try {
       const selected = selectSetChoices({ intent, policy: original.value.policy, inventories, sets: operation.sets, tool: operation.tool, releaseSha256: operation.releaseSha256, configurations: operation.configurations });
       if (selected.status !== 'ok') return { ...selected, originalBytes: policyBytes.slice() };
-      return buildReviewed({ intent: selected.value.intent, inventories, base: original.value.policy, originalBytes: policyBytes, reviewEvidence, comparisons, recipient });
+      return buildReviewed({ intent: selected.value.intent, inventories, base: original.value.policy, originalBytes: policyBytes, reviewEvidence, comparisons, recipient, tool });
     } catch (error) { return refuse('INPUT_INVALID', '/operation/sets', error.message, policyBytes); }
   }
   const add = root => {
@@ -270,7 +335,7 @@ export async function editAuthoring({ policyBytes, inventories, operation, revie
       add({ ...ref, itemSha256: pin.itemSha256, configuration: selection.configuration, originIds: ['direct'] });
     }
   } catch (error) { return refuse('INTENT_POLICY_CONTRADICTION', '/operation', error.message, policyBytes); }
-  return composeAuthoring({ basePolicyBytes: policyBytes, intent, inventories, reviewEvidence, comparisons, recipient });
+  return composeAuthoring({ basePolicyBytes: policyBytes, intent, inventories, reviewEvidence, comparisons, recipient, tool });
 }
 
 // These are the only mutation paths for reviews on an existing document.
@@ -493,7 +558,7 @@ async function loadDraft(envelopeBytes) {
   return { status: 'ok', value: { read: read.value, record, policy: parsed.document }, diagnostics: read.diagnostics };
 }
 // Compose and Core-validate an executable policy for the requested roots only.
-async function compileScope({ policy, intent, inventories, analysis, roots, reviewEvidence, comparisons, recipient, originalBytes }) {
+async function compileScope({ policy, intent, inventories, analysis, roots, reviewEvidence, comparisons, recipient, originalBytes, tool = undefined }) {
   const requested = roots ?? intent.roots.map(rootRef), keys = new Set(intent.roots.map(rootKey));
   if (!Array.isArray(requested) || requested.some(r => !isRef(r) || !keys.has(rootKey(r)))) return refuse('INPUT_INVALID', '/roots', 'Requested scope must name choices that exist in the draft.', originalBytes);
   const want = new Set(requested.map(rootKey)), whole = intent.roots.every(r => want.has(rootKey(r)));
@@ -514,7 +579,7 @@ async function compileScope({ policy, intent, inventories, analysis, roots, revi
     scoped = { ...scoped, origins, roots: structuredClone(kept), exclusions, pins: intent.pins.filter(p => pinKeys.has(pinKey(p))),
       provenance: intent.provenance.filter(p => releases.has(p.releaseSha256)), inputs: intent.inputs.filter(i => releases.has(i.releaseSha256)) };
   }
-  const result = await buildReviewed({ intent: scoped, inventories, base: policy, originalBytes, reviewEvidence, comparisons, recipient });
+  const result = await buildReviewed({ intent: scoped, inventories, base: policy, originalBytes, reviewEvidence, comparisons, recipient, tool });
   if (result.status !== 'ok') return result;
   const { policyBytes, intent: compiled, policy: composed, reviewJudgments, reviewSummary, reviewJudgmentDiagnostics } = result.value;
   return ok({ policyBytes, intent: compiled, policy: composed, scope: requested.map(rootRef),
@@ -554,7 +619,7 @@ export async function openDraft({ bytes, inventories, reviewEvidence = [], compa
   return presentDraft({ ...context, envelopeBytes: written.value.envelopeBytes, envelope: written.value.envelope, savedIntentBytes: bytes, supported: true, policy: read.value.policy, intent: read.value.intent });
 }
 // The only executable output of a draft. Unresolved or dependency-incorrect scopes refuse.
-export async function compileDraft({ envelopeBytes, inventories, roots, reviewEvidence = [], comparisons = [], recipient } = {}) {
+export async function compileDraft({ envelopeBytes, inventories, roots, reviewEvidence = [], comparisons = [], recipient, tool = undefined } = {}) {
   const loaded = await loadDraft(envelopeBytes);
   if (loaded.status !== 'ok') return loaded;
   const { read, record, policy } = loaded.value;
@@ -563,7 +628,7 @@ export async function compileDraft({ envelopeBytes, inventories, roots, reviewEv
   try { analysis = analyzeDraft({ intent: record.intent, policy, inventories }); }
   catch (error) { return refuse('SOURCE_IDENTITY_MISMATCH', '/inventories', error.message, envelopeBytes); }
   if (analysis.mismatches.length) return { status: 'refused', diagnostics: analysis.mismatches, originalBytes: envelopeBytes.slice() };
-  return compileScope({ policy, intent: record.intent, inventories, analysis, roots, reviewEvidence, comparisons, recipient, originalBytes: envelopeBytes });
+  return compileScope({ policy, intent: record.intent, inventories, analysis, roots, reviewEvidence, comparisons, recipient, originalBytes: envelopeBytes, tool });
 }
 // Safe edits of the recorded choices; each success is a new envelope revision.
 export async function editDraft({ envelopeBytes, inventories, operation, reviewEvidence = [], comparisons = [], recipient } = {}) {

@@ -112,7 +112,7 @@ export async function createMixedService(maintained, { suppliedInventories, fami
       // Unresolved drafts travel as a journey envelope; bytes stay arrays of numbers over JSON.
       if (operation === 'draft-open') return openDraft({ bytes: bytesOf(body.bytes), inventories: available, ...reviewContext });
       if (operation === 'draft-edit') return editDraft({ envelopeBytes: bytesOf(body.envelopeBytes), inventories: available, operation: body.operation, ...reviewContext });
-      if (operation === 'draft-compile') return compileDraft({ envelopeBytes: bytesOf(body.envelopeBytes), inventories: available, ...(Array.isArray(body.roots) ? { roots: body.roots } : {}), ...reviewContext });
+      if (operation === 'draft-compile') return compileDraft({ envelopeBytes: bytesOf(body.envelopeBytes), inventories: available, ...(Array.isArray(body.roots) ? { roots: body.roots } : {}), ...(body.tool !== undefined ? { tool: body.tool } : {}), ...reviewContext });
       if (['maintenance-check', 'maintenance-record', 'improvements-check', 'improvements-record', 'trials-read', 'trials-record', ...WORKSPACE_OPERATIONS].includes(operation)) {
         // With no draft open the saved policy is wrapped by the same pure open path (a sequence-1 envelope); a check writes nothing.
         // Improvements share this branch, so recording on an ordinary saved policy saves it as a draft.
@@ -153,8 +153,8 @@ export async function createMixedService(maintained, { suppliedInventories, fami
           candidateSource: maintenanceSource ? 'configured' : 'unconfigured', candidateCoverage: coverageOf(source), ...(body.categories !== undefined ? { categories: body.categories } : {}), now });
         return checked.status === 'ok' && source ? { ...checked, value: { ...checked.value, updateSource: describeSource(source) } } : checked;
       }
-      if (operation === 'compose') return composeAuthoring({ basePolicyBytes: policyBytes, intent: body.intent, inventories: all, ...reviewContext });
-      if (operation === 'edit') return editAuthoring({ policyBytes, inventories: all, operation: body.operation, ...reviewContext });
+      if (operation === 'compose') return composeAuthoring({ basePolicyBytes: policyBytes, intent: body.intent, inventories: all, ...(body.tool !== undefined ? { tool: body.tool } : {}), ...(body.grantApproval ? { grantApproval: body.grantApproval } : {}), ...reviewContext });
+      if (operation === 'edit') return editAuthoring({ policyBytes, inventories: all, operation: body.operation, ...(body.tool !== undefined ? { tool: body.tool } : {}), ...reviewContext });
       if (operation === 'reconcile') return reconcileAuthoring({ savedPolicyBytes: policyBytes, inventories: all, candidateInventories: candidates(body.candidateMode), ...reviewContext });
       if (operation === 'inspect-review') {
         const read = policyBytes ? await readAuthoring({ policyBytes, inventories: all }) : null;
