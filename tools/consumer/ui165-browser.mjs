@@ -97,7 +97,12 @@ export async function runUi165Browser({ origin, output, expected, playwrightModu
       assert.ok(recoveredBytes.length > 0 && recoveredBytes.length <= 2_000_000, 'the recovery artifact stays inside the public 2 MB bound');
       assert.deepEqual(JSON.parse(recoveredBytes.toString('utf8')), unticked,
         'the session recovery artifact is exactly the saved unticked policy and nothing else');
-      assert.ok(Object.keys(stored.local).every(key => /^wb-/.test(key)), 'only ordinary Workbench UI keys exist in local storage');
+      for (const [key, value] of Object.entries(stored.local)) {
+        if (key === 'wb-mode') assert.ok(['dark', 'light'].includes(value), 'stored theme is a theme enum');
+        else if (key === 'wb-your-tool') assert.equal(value, 'claude', 'stored tool is the selected canonical tool');
+        else if (/^aih-workbench-advanced-[a-z0-9-]+$/.test(key)) assert.equal(value, 'open', 'advanced disclosure stores only its open preference');
+        else assert.fail(`Unexpected local storage key: ${key}`);
+      }
       // No live host handle enters the saved intent or its export: no host origin and no
       // machine-local absolute path, only release-relative recipe custody.
       const exported = JSON.stringify(unticked);
