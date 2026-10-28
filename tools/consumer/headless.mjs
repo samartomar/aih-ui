@@ -30,7 +30,7 @@ const projected = selections => sorted(selections.map(({ id, managementId, organ
     // tampered item/tool/origin metadata is never ignored on read (#165).
     ...(item !== undefined ? { item, tool, name, kind, origins } : {}) })));
 
-async function build({ intent, inventories, base, capture = false, historicalV2 = false, tool = undefined, grantApproval = undefined }) {
+async function build({ intent, inventories, base, capture = false, historicalV2 = false, tool = undefined, grantApproval = undefined, revokeApproval = undefined }) {
   if (intent && new TextEncoder().encode(JSON.stringify(intent)).length > 850_000) return refuse('POLICY_BOUND_EXCEEDED', '/metadata/aih.workbench', 'Intent exceeds 850,000 UTF-8 bytes; reduce selected state.');
   if (intent?.reviews?.schema && intent.reviews.schema !== REVIEW_SCHEMA) return refuse('INTENT_VERSION_UNSUPPORTED', '/metadata/aih.workbench/reviews/schema', 'Unsupported review document version.');
   if (!checkIntentShape(intent)) return refuse('FIELD_SEMANTICS_UNSUPPORTED', '/metadata/aih.workbench', 'Malformed, oversized or unknown authoring semantics.');
@@ -42,10 +42,12 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
     if (!selected || selected.status !== 'selected') return refuse('TOOL_UNAVAILABLE', '/tool', 'Choose your tool before composing this setup; no tool is silently selected.');
     canonicalTool = selected.tool.id;
   }
-  // The one-server approval opt-in is exactly { framework, itemId }, ephemeral and explicit.
-  if (grantApproval !== undefined && (!grantApproval || typeof grantApproval.framework !== 'string' || typeof grantApproval.itemId !== 'string' || Object.keys(grantApproval).length !== 2))
-    return refuse('INPUT_INVALID', '/grantApproval', 'Name the one MCP server to allow as { framework, itemId }; there is no list or approve-all.');
-  if (grantApproval && !canonicalTool) return refuse('TOOL_UNAVAILABLE', '/tool', 'Choose your tool before approving an MCP server.');
+  // The one-server approval opt-in is exactly { framework, itemId }, ephemeral and explicit. `false`-less
+  // revocation uses revokeApproval with the same shape; both never carry a value.
+  const approvalShape = value => value !== undefined && (!value || typeof value.framework !== 'string' || typeof value.itemId !== 'string' || Object.keys(value).length !== 2);
+  if (approvalShape(grantApproval)) return refuse('INPUT_INVALID', '/grantApproval', 'Name the one MCP server to allow as { framework, itemId }; there is no list or approve-all.');
+  if (approvalShape(revokeApproval)) return refuse('INPUT_INVALID', '/revokeApproval', 'Name the one MCP server to un-allow as { framework, itemId }; there is no list.');
+  if ((grantApproval || revokeApproval) && !canonicalTool) return refuse('TOOL_UNAVAILABLE', '/tool', 'Choose your tool before changing an MCP server approval.');
   let index;
   try { index = inventoryIndex(inventories); }
   catch (error) { return refuse('SOURCE_IDENTITY_MISMATCH', '/inventories', error.message); }
@@ -72,12 +74,15 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
   // Preserve existing selection identity for unchanged recipe/source/scope; a
   // historical v1 selection id is not a reason to rewrite execution semantics.
   const selections = [], pins = new Map(), sourceIds = new Set([...setChoiceSources(intent), ...intent.exclusions.map(r => r.releaseSha256), ...intent.origins.filter(o => o.kind === 'template').map(o => o.releaseSha256)]);
-  let approvalRendered = false;
+  let approvalRendered = false, approvalRevoked = false;
   for (const selection of resolved.selections) {
     const found = index.items.get(pinKey(selection.item)), { entry, item } = found;
     const configured = configurePinned(entry, item, selection.configuration, intent.pins);
     if (!configured.valid) return refuse('INPUT_INVALID', '/roots/configuration', 'Catalog refused item configuration.', undefined, { owner: 'catalog', diagnostics: configured.diagnostics });
-    const prior = base?.selections.find(s => s.scope === selection.scope && stable(s.recipe) === stable(configured.selection.recipe));
+    // An MCP selection whose one-server approval was rendered carries the renderer-produced inline recipe,
+    // not the configured reference; it is the same selection, matched by its recorded tool and recipe id.
+    const prior = base?.selections.find(s => s.scope === selection.scope && (stable(s.recipe) === stable(configured.selection.recipe)
+      || (s.recipe?.inline && s.tool && s.recipe.inline.id === `${s.tool}.${item.id}`)));
     // An organization's root provenance identifies that exact selection only.
     // Dependencies retain their own prior/default admission identities.
     const organizationIds = new Set(intent.roots.filter(r => rootKey(r) === rootKey({ ...selection.item, scope: selection.scope }))
@@ -105,11 +110,15 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
       : canonicalTool && checkedBundle ? { ...checkedBundle, tool: canonicalTool } : undefined;
     // The one-server tick renders that server's delivery through public Harness and the rendered recipe —
     // the ordinary recipe with the one approval operation — becomes the policy's recipe for this selection.
-    // A recorded inline recipe stands until a fresh explicit tick; nothing is silently approved.
+    // A recorded approval stands until an explicit untick; nothing is silently granted or kept.
     let recipe = configured.selection.recipe;
     const ticked = Boolean(grantApproval && bundle && grantApproval.framework === bundle.item.framework && grantApproval.itemId === item.id && (item.kind === 'mcp-server' || item.kind === 'mcp'));
-    if (grantApproval && grantApproval.itemId === item.id && !ticked)
-      return refuse('INPUT_INVALID', '/grantApproval', 'Only the one MCP server being allowed may be named, and it must be part of this setup.');
+    const approvalRecorded = Boolean(prior?.recipe?.inline && prior.tool && prior.recipe.inline.id === `${prior.tool}.${item.id}`);
+    const revoked = Boolean(revokeApproval && bundle && revokeApproval.framework === bundle.item.framework && revokeApproval.itemId === item.id);
+    if (revoked) approvalRevoked = true;
+    if (approvalRecorded && !ticked && !revoked) recipe = prior.recipe;
+    if (revokeApproval && revokeApproval.itemId === item.id && !revoked)
+      return refuse('INPUT_INVALID', '/revokeApproval', 'Only the one MCP server being un-allowed may be named, and it must be part of this setup.');
     if (ticked) {
       approvalRendered = true;
       const binding = harness.toolBindings.find(candidate => candidate.tool === canonicalTool);
@@ -129,6 +138,7 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
   const validation = validateSelectionSet({ releases: index.releases, selections: resolved.selections.map((s, i) => ({ ...s, id: selections[i].id })) });
   if (!validation.valid) return refuse('INPUT_INVALID', '/selections', 'Catalog refused the resolved set.', undefined, { owner: 'catalog', diagnostics: validation.diagnostics });
   if (grantApproval && !approvalRendered) return refuse('INPUT_INVALID', '/grantApproval', 'The server being allowed is not part of this setup; the opt-in was not applied.');
+  if (revokeApproval && !approvalRevoked) return refuse('INPUT_INVALID', '/revokeApproval', 'The server being un-allowed is not part of this setup; nothing was removed.');
   for (const selection of selections) selection.requires = validation.requiresBySelectionId[selection.id];
   const provenance = inventories.filter(e => sourceIds.has(e.release.sha256)).map(e => ({ releaseSha256: e.release.sha256, package: e.release.package, sources: e.release.sources, materialSource: { ...e.materialSource, ...(e.internalContent ? { internalContent: e.internalContent } : {}), ...(intent.provenance.find(source => source.releaseSha256 === e.release.sha256)?.materialSource?.[SET_CHOICES_KEY] ? { [SET_CHOICES_KEY]: intent.provenance.find(source => source.releaseSha256 === e.release.sha256).materialSource[SET_CHOICES_KEY] } : {}) } }));
   const inputs = inventories.filter(e => sourceIds.has(e.release.sha256) && e.input).map(e => e.input);
@@ -250,7 +260,7 @@ export async function reconcileAuthoring({ savedPolicyBytes, inventories, candid
   return { ...ok({ status: choices.length ? 'needs-decisions' : 'unchanged', affectedRoots, retainedRoots, choices }), originalBytes: savedPolicyBytes.slice() };
 }
 export async function composeAuthoring(options) { return composeReviewed(options); }
-async function composeReviewed({ basePolicyBytes, intent, inventories, reviewEvidence = [], comparisons = [], recipient, tool = undefined, grantApproval = undefined }, reviewTransition = false) {
+async function composeReviewed({ basePolicyBytes, intent, inventories, reviewEvidence = [], comparisons = [], recipient, tool = undefined, grantApproval = undefined, revokeApproval = undefined }, reviewTransition = false) {
   if (intent && new TextEncoder().encode(JSON.stringify(intent)).length > 850_000) return refuse('POLICY_BOUND_EXCEEDED', '/metadata/aih.workbench', 'Intent exceeds 850,000 UTF-8 bytes; reduce selected state.', basePolicyBytes);
   if (intent?.reviews?.schema && intent.reviews.schema !== REVIEW_SCHEMA) return refuse('INTENT_VERSION_UNSUPPORTED', '/metadata/aih.workbench/reviews/schema', 'Unsupported review document version.', basePolicyBytes);
   if (!checkIntentShape(intent)) return refuse('FIELD_SEMANTICS_UNSUPPORTED', '/metadata/aih.workbench', 'Malformed or unknown authoring semantics.', basePolicyBytes);
@@ -262,15 +272,15 @@ async function composeReviewed({ basePolicyBytes, intent, inventories, reviewEvi
     base = original.value.policy;
     if (!reviewTransition && stable(intent.reviews) !== stable(original.value.intent.reviews)) return refuse('REVIEW_BINDING_UNAVAILABLE', '/reviews', 'Use the checked evidence review workflow to change decisions.', basePolicyBytes);
   }
-  return buildReviewed({ intent, inventories, base, originalBytes: basePolicyBytes, reviewEvidence, comparisons, recipient, tool, grantApproval });
+  return buildReviewed({ intent, inventories, base, originalBytes: basePolicyBytes, reviewEvidence, comparisons, recipient, tool, grantApproval, revokeApproval });
 }
 // Saved judgments are never refused or converted here: their applicability is reported beside the result.
-async function buildReviewed({ intent, inventories, base, originalBytes, reviewEvidence, comparisons, recipient, tool = undefined, grantApproval = undefined }) {
-  const result = await build({ intent, inventories, base, capture: true, tool, grantApproval });
+async function buildReviewed({ intent, inventories, base, originalBytes, reviewEvidence, comparisons, recipient, tool = undefined, grantApproval = undefined, revokeApproval = undefined }) {
+  const result = await build({ intent, inventories, base, capture: true, tool, grantApproval, revokeApproval });
   if (result.status === 'ok') return ok({ ...result.value, ...await reviewView({ intent: result.value.intent, inventories, reviewEvidence, comparisons, recipient }) });
   return originalBytes ? { ...result, originalBytes: originalBytes.slice() } : result;
 }
-export async function editAuthoring({ policyBytes, inventories, operation, reviewEvidence = [], comparisons = [], recipient, tool = undefined, grantApproval = undefined }) {
+export async function editAuthoring({ policyBytes, inventories, operation, reviewEvidence = [], comparisons = [], recipient, tool = undefined, grantApproval = undefined, revokeApproval = undefined }) {
   const original = await readAuthoring({ policyBytes, inventories });
   if (original.status !== 'ok') return original;
   if (original.value.editing !== 'available') return { status: 'refused', diagnostics: refusalDiagnostics(original.value), originalBytes: policyBytes.slice() };
@@ -284,7 +294,7 @@ export async function editAuthoring({ policyBytes, inventories, operation, revie
     if (!item || (item.kind !== 'mcp-server' && item.kind !== 'mcp')) return refuse('INPUT_INVALID', '/operation/root', 'Only an MCP server can be allowed this way.', policyBytes);
     if (!entry.release.framework?.id) return refuse('SOURCE_REVISION_UNAVAILABLE', '/operation/root', 'This exact source publishes no framework identity to name the approval.', policyBytes);
     return composeAuthoring({ basePolicyBytes: policyBytes, intent: original.value.intent, inventories, reviewEvidence, comparisons, recipient, tool,
-      ...(operation.granted ? { grantApproval: { framework: entry.release.framework.id, itemId: item.id } } : {}) });
+      ...(operation.granted ? { grantApproval: { framework: entry.release.framework.id, itemId: item.id } } : { revokeApproval: { framework: entry.release.framework.id, itemId: item.id } }) });
   }
   // An omitted hash is filled from the checked inventory; a supplied one is verified by composition.
   if (operation?.type === 'select' && operation.root && operation.root.itemSha256 === undefined) {
@@ -335,7 +345,7 @@ export async function editAuthoring({ policyBytes, inventories, operation, revie
       add({ ...ref, itemSha256: pin.itemSha256, configuration: selection.configuration, originIds: ['direct'] });
     }
   } catch (error) { return refuse('INTENT_POLICY_CONTRADICTION', '/operation', error.message, policyBytes); }
-  return composeAuthoring({ basePolicyBytes: policyBytes, intent, inventories, reviewEvidence, comparisons, recipient, tool });
+  return composeAuthoring({ basePolicyBytes: policyBytes, intent, inventories, reviewEvidence, comparisons, recipient, tool, revokeApproval });
 }
 
 // These are the only mutation paths for reviews on an existing document.
