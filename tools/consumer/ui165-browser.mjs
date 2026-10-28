@@ -25,7 +25,15 @@ async function framework(page, value) {
   await page.waitForFunction(name => document.querySelector('.wb-source-heading').textContent === name, value.framework.name);
 }
 async function save(page, path) {
-  if (await page.locator('#added-notice-dismiss').isVisible()) await page.locator('#added-notice-dismiss').click();
+  // The notice's visibility is owned by page-side async round-trips (Add/approval), so a
+  // separate isVisible() ahead of the click races them — the check saw it visible, then the
+  // click waited out after the notice flipped. Decide and dismiss in one event-loop turn,
+  // then require the settled hidden state; the real Dismiss handler still runs.
+  await page.evaluate(() => {
+    const notice = document.getElementById('added-notice');
+    if (notice && !notice.hidden) document.getElementById('added-notice-dismiss').click();
+  });
+  await page.waitForFunction(() => { const notice = document.getElementById('added-notice'); return !notice || notice.hidden; });
   await page.locator('#your-setup').click(); await openPolicyAdvanced(page);
   const pending = page.waitForEvent('download'); await page.locator('#policy-save').click();
   await (await pending).saveAs(path); await closePolicyDrawer(page);
