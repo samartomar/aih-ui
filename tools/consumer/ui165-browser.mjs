@@ -119,7 +119,7 @@ export async function runUi165Browser({ origin, output, expected, playwrightModu
       const inTool = codexCard.locator('.browse-mcp-approval[data-mcp-approval="in-tool"]');
       await inTool.waitFor({ timeout: 30_000 });
       assert.match(await inTool.innerText(), /Approve in .* instead/, 'the person is sent to the tool');
-      assert.match(await inTool.innerText(), /Approve the project MCP server/, 'its permission step is still shown as the requirements');
+      assert.ok((await inTool.innerText()).includes("Allow the server's tool calls in the Codex approval policy."), 'the published Codex permission step is shown verbatim');
       assert.equal(await inTool.locator('input[type=checkbox]').isDisabled(), true, 'no tick exists for a shape Core cannot write');
 
       // --- Duplicate facts: unavailable is said, never a clean state ----------------------------
