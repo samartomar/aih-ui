@@ -46,8 +46,12 @@ export async function runInstalledPanelBrowser({ origin, output, playwrightModul
       // UI166: only the strict complete run claims confirmed on disk, and the review is named rows with folders.
       assert.match(await page.locator('#install-message').innerText(), /Confirmed on disk/);
       await page.locator('#install-review-rows [data-review-selection]').first().waitFor();
-      assert.match(await page.locator('#install-folders').innerText(), /Project folder:/);
-      assert.match(await page.locator('#install-review-rows').innerText(), /When used:|Size unknown/);
+      const folders = await page.locator('#install-folders').innerText();
+      assert.match(folders, /Project folder: .+\./, 'the actual project folder is stated');
+      assert.match(folders, /Guidance folder: (this setup writes no user-folder content\..+|.+\.)/, 'the guidance folder is stated, including the explicit none case');
+      const rowsText = await page.locator('#install-review-rows').innerText();
+      assert.match(rowsText, /(When used: \d+ bytes · \d+ chars|Size unknown: Core reported no delivered size for this item\.)/, 'the size line is Core\'s exact wording, never a vague allowance');
+      assert.match(rowsText, /Chosen by you/, 'a directly chosen item says its recorded origin');
       // UI166-AC04: a directly added item has no set-owned first step, so the guidance line stays empty.
       assert.equal(await page.locator('#install-first-run').textContent(), '');
       await page.screenshot({ path: join(output, `${theme}-installed.png`), fullPage: true });

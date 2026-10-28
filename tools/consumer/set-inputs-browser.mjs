@@ -121,6 +121,11 @@ export async function runSetInputsBrowser({ origin, output, playwrightModule, ex
     assert.deepEqual(choicesOf(saved).find(choice => choice.request.setId === expected.ecc.optionSet.id).request.options, expected.ecc.requests[0].options);
     assert.deepEqual(choicesOf(saved).find(choice => choice.request.setId === expected.ecc.optionSet.id).request.members, expected.ecc.requests[0].members);
     for (const itemId of ids) assert.deepEqual(intent.roots.find(root => root.itemId === itemId).configuration, inputs);
+    // UI162-AC05/UI165-AC07: entered values live only in the accepted artifact (legitimate caller
+    // configuration, asserted above), never in any browser storage value; key names alone prove nothing.
+    const storage = await page.evaluate(() => ({ local: Object.entries(localStorage), session: Object.entries(sessionStorage) }));
+    for (const value of Object.values(inputs)) for (const [where, entries] of [['localStorage', storage.local], ['sessionStorage', storage.session]])
+      for (const [key, stored] of entries) assert.equal(String(stored).includes(value), false, `${where}[${key}] must not retain an entered value`);
     // Refresh does not use browsing-cache inputs: the accepted draft is their authority.
     assert.ok(!(await page.evaluate(() => sessionStorage.getItem('aih-ui-set-browsing'))).includes(inputs.npmCli));
     const refreshed = page.waitForResponse(response => response.url().endsWith('/api/authoring-browse-content') && response.request().postDataJSON().releaseSha256 === expected.ecc.sha256 && response.request().postDataJSON().configurations?.some(root => root.configuration.npmCli === inputs.npmCli));

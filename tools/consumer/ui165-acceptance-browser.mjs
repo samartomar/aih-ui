@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { addFromCatalog, chooseCatalogFamily, openPolicyDrawer } from './policy-drawer.mjs';
+import { addFromCatalog, chooseCatalogFamily, closePolicyDrawer, openPolicyDrawer } from './policy-drawer.mjs';
 import { openSetupAdvanced } from './advanced-browser.mjs';
 
 // UI165 acceptance cases on the disposable-target seams. Everything mutates through the running page's ordinary
@@ -27,13 +27,13 @@ async function openPage(browser, origin, { theme = 'dark', tool = false } = {}) 
 // (1) Positive set-owned firstRun: the real checked Extensions 'engineering' set declares
 // extensions.matt.setup-matt-pocock-skills as its first step. Choosing the set (not the item directly) is what
 // records the in-set origin the guidance resolves from.
-export async function runFirstRunBrowser({ origin, output, playwrightModule }) {
+export async function runFirstRunBrowser({ origin, output, playwrightModule, theme = 'dark' }) {
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true });
   const errors = [];
   try {
-    const { context, page } = await openPage(browser, origin, { tool: true });
+    const { context, page } = await openPage(browser, origin, { theme, tool: true });
     page.on('pageerror', error => errors.push(error.message));
     await chooseCatalogFamily(page, 'Extensions');
     await page.locator('#starting-sets .more-sets > summary').click();
@@ -67,13 +67,15 @@ export async function runFirstRunBrowser({ origin, output, playwrightModule }) {
 }
 
 // (2a) Install phase for the server-restart inventory case: a real Apply into a fresh disposable target.
-export async function runRestartInstallBrowser({ origin, output, playwrightModule }) {
+export async function runRestartInstallBrowser({ origin, output, playwrightModule, theme = 'dark', extraItem = undefined }) {
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true });
   try {
-    const { context, page } = await openPage(browser, origin, {});
-    await addFromCatalog(page, 'extensions.matt.grill-me'); await openPolicyDrawer(page);
+    const { context, page } = await openPage(browser, origin, { theme, tool: Boolean(extraItem) });
+    await addFromCatalog(page, 'extensions.matt.grill-me');
+    if (extraItem) await addFromCatalog(page, extraItem);
+    await openPolicyDrawer(page);
     await page.locator('#install-button:not([disabled])').waitFor();
     await page.locator('#install-button').click();
     await page.locator('#install-message[data-outcome="installed"]').waitFor({ timeout: 120_000 });
@@ -85,19 +87,36 @@ export async function runRestartInstallBrowser({ origin, output, playwrightModul
 
 // (2b) Verify phase after the OWNED SERVER PROCESS was stopped and started again on the same target: no policy
 // opened, no draft — the inventory must come from Core's on-disk receipts alone.
-export async function runRestartVerifyBrowser({ origin, output, playwrightModule }) {
+export async function runRestartVerifyBrowser({ origin, output, playwrightModule, theme = 'dark', project = undefined, extraItem = undefined }) {
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true });
   const errors = [];
   try {
-    const { context, page } = await openPage(browser, origin, {});
+    const { context, page } = await openPage(browser, origin, { theme });
     page.on('pageerror', error => errors.push(error.message));
     await openPolicyDrawer(page);
     const installed = page.locator('[data-installed-item="extensions.matt.grill-me"]');
     await installed.waitFor();
     assert.match(await installed.innerText(), /it needs:.*grilling/, 'recorded names and the needed-by grouping survive a full server restart with no draft');
+    if (extraItem) {
+      const mixed = page.locator(`[data-installed-item="${extraItem}"]`);
+      await mixed.waitFor();
+      assert.match(await mixed.innerText(), new RegExp('it needs|Chosen|sets?:', 'i'), 'the mixed ECC+Extensions setup keeps the ECC item from the recorded projection after the restart');
+    }
     assert.equal(await page.locator('[data-installed-state]').count(), 0, 'a fresh complete install carries no adverse state chips');
+    if (project) {
+      // Adverse state, truthfully produced: edit an installed file on disk; Core's redacted projection must
+      // report it and the page renders its changed-since-install state with icon, tooltip and wording.
+      const { appendFile } = await import('node:fs/promises');
+      await appendFile(join(project, '.claude', 'skills', 'grill-me', 'SKILL.md'), '\n# edited outside the Workbench\n');
+      await closePolicyDrawer(page); await openPolicyDrawer(page);
+      const changed = page.locator('[data-installed-state="changed-since-install"]');
+      await changed.waitFor();
+      assert.match(await changed.innerText(), /Changed since install/);
+      assert.ok(await changed.getAttribute('title') ?? await changed.locator('[title]').first().getAttribute('title'), 'the state chip carries its explanation');
+      await page.screenshot({ path: join(output, `adverse-changed-${theme}.png`), fullPage: true });
+    }
     await page.screenshot({ path: join(output, 'restart-inventory.png'), fullPage: true });
     await writeFile(join(output, 'restart-evidence.json'), JSON.stringify({ status: 'passed', errors }, null, 2));
     await context.close();
@@ -107,12 +126,12 @@ export async function runRestartVerifyBrowser({ origin, output, playwrightModule
 
 // (3a) Strict failed Apply: a real filesystem obstacle at the registration target makes Core fail honestly; the
 // page must not look installed and must name the failed members.
-export async function runMcpFailedApplyBrowser({ origin, output, project, playwrightModule }) {
+export async function runMcpFailedApplyBrowser({ origin, output, project, playwrightModule, theme = 'dark' }) {
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true });
   try {
-    const { context, page } = await openPage(browser, origin, { tool: true });
+    const { context, page } = await openPage(browser, origin, { theme, tool: true });
     await page.locator('#catalog-search').fill('cloudflare-docs');
     const card = page.locator('[data-card-id$="/ecc.mcp.cloudflare-docs"]');
     if (!await card.count()) {
@@ -139,7 +158,7 @@ export async function runMcpFailedApplyBrowser({ origin, output, project, playwr
 
 // (3b) Typed MCP-ticked real Apply: registration and the one-server approval land in the tool's own files,
 // separated exactly as Core's recipe says; unticking removes only the approval.
-export async function runMcpApplyBrowser({ origin, output, project, playwrightModule }) {
+export async function runMcpApplyBrowser({ origin, output, project, playwrightModule, theme = 'dark' }) {
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true });
@@ -177,6 +196,46 @@ export async function runMcpApplyBrowser({ origin, output, project, playwrightMo
     assert.ok(!JSON.stringify(selection.recipe ?? {}).includes('approve-server'), 'untick removed only the approval operation');
     await page.screenshot({ path: join(output, 'mcp-apply.png'), fullPage: true });
     await writeFile(join(output, 'mcp-apply-evidence.json'), JSON.stringify({ status: 'passed', registered: Object.keys(registered.mcpServers), approved: settings.enabledMcpjsonServers, errors }, null, 2));
+    await context.close();
+    return { status: 'passed' };
+  } finally { assert.deepEqual(errors, []); await browser.close(); }
+}
+
+// UI165-AC06 at the owning execution seam: the advanced flow holds a prepared session; changing a reviewed
+// file on disk makes Core itself refuse the held Apply with REVIEW_STALE; the page shows Core's reason and
+// requires fresh preparation (Prepare again, then Apply succeeds). No Workbench stale rule is involved, and
+// the Install panel's own fresh-prepare flow is unaffected.
+export async function runStaleReviewBrowser({ origin, output, project, playwrightModule, theme = 'dark' }) {
+  const { chromium } = await import(playwrightModule);
+  const { readFile, writeFile } = await import('node:fs/promises');
+  await mkdir(output, { recursive: true });
+  const browser = await chromium.launch({ headless: true });
+  const errors = [];
+  try {
+    const { context, page } = await openPage(browser, origin, { theme });
+    page.on('pageerror', error => errors.push(error.message));
+    await addFromCatalog(page, 'extensions.matt.grill-me');
+    await openSetupAdvanced(page);
+    const advanced = page.locator('details.policy-advanced').filter({ hasText: 'Prepare exact effects' });
+    const advancedText = () => { const panel = [...document.querySelectorAll('details.policy-advanced')].find(node => node.textContent.includes('Prepare exact effects')); return panel ? panel.textContent : ''; };
+    await advanced.getByRole('button', { name: 'Prepare exact effects', exact: true }).click();
+    await page.waitForFunction(() => { const t = document.querySelectorAll('details.policy-advanced'); const panel = [...t].find(node => node.textContent.includes('Prepare exact effects')); return panel && panel.textContent.includes('Prepared effects are ready for review'); }, null, { timeout: 120_000 });
+    // The reviewed material changes while the preparation is held.
+    const target = join(project, '.claude', 'skills', 'grill-me', 'SKILL.md');
+    await writeFile(target, '# Tampered after prepare\n', { encoding: 'utf8' });
+    await advanced.getByRole('button', { name: 'Approve and Apply reviewed effects', exact: true }).click();
+    await page.waitForFunction(() => [...document.querySelectorAll('details.policy-advanced')].some(node => node.textContent.includes('Prepare exact effects') && node.textContent.includes('REVIEW_STALE')), null, { timeout: 120_000 });
+    const shown = await advanced.innerText();
+    assert.match(shown, /REVIEW_STALE/, 'Core\'s own stale diagnostic is shown, not a UI rule');
+    assert.match(await readFile(target, 'utf8'), /Tampered after prepare/, 'the refused Apply changed nothing on disk');
+    // Fresh preparation is required; the same Core path then succeeds and replaces the tampered bytes.
+    await advanced.getByRole('button', { name: 'Prepare exact effects', exact: true }).click();
+    await page.waitForFunction(() => { const t = document.querySelectorAll('details.policy-advanced'); const panel = [...t].find(node => node.textContent.includes('Prepare exact effects')); return panel && panel.textContent.includes('Prepared effects are ready for review'); }, null, { timeout: 120_000 });
+    await advanced.getByRole('button', { name: 'Approve and Apply reviewed effects', exact: true }).click();
+    await page.waitForFunction(() => [...document.querySelectorAll('details.policy-advanced')].some(node => node.textContent.includes('Prepare exact effects') && node.textContent.includes('"completion": "complete"')), null, { timeout: 120_000 });
+    assert.doesNotMatch(await readFile(target, 'utf8'), /Tampered after prepare/, 'the fresh, current-disk preparation replaced the tampered file');
+    await page.screenshot({ path: join(output, `stale-${theme}.png`), fullPage: true });
+    await writeFile(join(output, `stale-evidence-${theme}.json`), JSON.stringify({ status: 'passed', reason: shown.slice(0, 400), errors }, null, 2));
     await context.close();
     return { status: 'passed' };
   } finally { assert.deepEqual(errors, []); await browser.close(); }

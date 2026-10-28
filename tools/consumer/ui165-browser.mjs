@@ -77,6 +77,17 @@ export async function runUi165Browser({ origin, output, expected, playwrightModu
       assert.deepEqual(stored.session, [], 'nothing is written to session storage');
       assert.ok(stored.local.every(key => /^wb-/.test(key)), 'only ordinary Workbench UI keys exist in local storage');
 
+      // --- Unsupported approval shape: the public codex binding declares approvalLocation 'other';
+      // Core cannot write it, so the card says to approve in the tool and offers no tick (#162-AC03).
+      await page.locator('#your-tool-trigger').click();
+      await page.locator('[data-tool="codex"]').click();
+      const codexCard = page.locator(`[data-card-id="${expected.ecc.sha256}/${expected.ecc.mcp.id}"]`);
+      const inTool = codexCard.locator('.browse-mcp-approval[data-mcp-approval="in-tool"]');
+      await inTool.waitFor({ timeout: 30_000 });
+      assert.match(await inTool.innerText(), /Approve in .* instead/, 'the person is sent to the tool');
+      assert.match(await inTool.innerText(), /Approve the project MCP server/, 'its permission step is still shown as the requirements');
+      assert.equal(await inTool.locator('input[type=checkbox]').isDisabled(), true, 'no tick exists for a shape Core cannot write');
+
       // --- Duplicate facts: unavailable is said, never a clean state ----------------------------
       // No project folder is chosen in this seam, so Core’s host inspection cannot run.
       const copiesLine = await page.locator('#setup-choices-host-copies').textContent();

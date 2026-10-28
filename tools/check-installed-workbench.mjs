@@ -9,7 +9,7 @@ import { pageAssets } from './server/assets.mjs';
 import { createWorkbench } from './server/workbench.mjs';
 import { listen } from './server/static.mjs';
 import { runInstalledPanelBrowser } from './consumer/installed-panel-browser.mjs';
-import { runFirstRunBrowser, runRestartInstallBrowser, runRestartVerifyBrowser, runMcpFailedApplyBrowser, runMcpApplyBrowser } from './consumer/ui165-acceptance-browser.mjs';
+import { runFirstRunBrowser, runRestartInstallBrowser, runRestartVerifyBrowser, runMcpFailedApplyBrowser, runMcpApplyBrowser, runStaleReviewBrowser } from './consumer/ui165-acceptance-browser.mjs';
 import { runProjectFolderBrowser } from './consumer/project-folder-browser.mjs';
 
 // Runs after the ordinary integrated check has assembled the packed consumer and page. Only this
@@ -102,24 +102,9 @@ const caseOutcome = async (name, outcome) => {
 };
 const playwrightPath = import.meta.resolve('playwright');
 
-const restartProject = join(consumerDir, `restart-project-${randomUUID().slice(0, 8)}`);
-const restartHosts = [];
-restartHosts.push(await withHost(restartProject, {}, async origin =>
-  await caseOutcome('restart install phase', await runRestartInstallBrowser({ origin, output: join(consumerDir, 'restart-install-evidence'), playwrightModule: playwrightPath }))));
-// The first host process was killed and reaped above; this is a fresh process on the same target and account.
-restartHosts.push(await withHost(restartProject, {}, async origin =>
-  await caseOutcome('restart verify phase', await runRestartVerifyBrowser({ origin, output: join(consumerDir, 'restart-verify-evidence'), playwrightModule: playwrightPath }))));
-assert.notEqual(restartHosts[0].pid, restartHosts[1].pid, 'the restart evidence names two distinct host processes');
-await writeFile(join(consumerDir, 'restart-verify-evidence', 'host-processes.json'), JSON.stringify({ status: 'passed', hosts: restartHosts }, null, 2));
-
-const firstRunProject = join(consumerDir, `first-run-project-${randomUUID().slice(0, 8)}`);
-await withHost(firstRunProject, {}, async origin =>
-  await caseOutcome('firstRun positive case', await runFirstRunBrowser({ origin, output: join(consumerDir, 'first-run-evidence'), playwrightModule: playwrightPath })));
-
-// The MCP cases need the checked ECC release in the catalog. It loads through the same configured fixture
-// route check-frameworks uses (frameworkFixtures + AIH_FRAMEWORK_SOURCES), scoped to these cases only; no
-// Catalog source or archive change, no fabricated checked handle. The intentional unconfigured refusal
-// coverage elsewhere stays on the default sources.
+// The MCP cases (and the mixed-source restart path) need the checked ECC release in the catalog. It loads
+// through the same configured fixture route check-frameworks uses (frameworkFixtures + AIH_FRAMEWORK_SOURCES),
+// scoped to those cases' child processes; no Catalog source or archive change, no fabricated checked handle.
 const { frameworkFixtures } = await import(pathToFileURL(join(consumerDir, 'consumer/framework-fixtures.mjs')).href);
 const reviewed = JSON.parse(await readFile(join(consumerDir, 'reviewed-packages.json'), 'utf8'));
 const catalogArtifact = reviewed.find(entry => entry.name === 'catalog');
@@ -128,9 +113,33 @@ const mcpFixtureDir = join(consumerDir, 'mcp-framework-fixtures');
 const mcpFixture = await frameworkFixtures(mcpFixtureDir, catalogArtifact);
 const mcpSources = join(mcpFixtureDir, 'sources.json');
 await writeFile(mcpSources, JSON.stringify(mcpFixture.scenarios.browse));
+const mixedEccItem = mcpFixture.expected?.ecc?.visible?.[0] ?? null;
 
-const mcpProject = join(consumerDir, `mcp-apply-project-${randomUUID().slice(0, 8)}`);
-await withHost(mcpProject, { sources: mcpSources }, async origin =>
-  await caseOutcome('MCP failed Apply case', await runMcpFailedApplyBrowser({ origin, output: join(consumerDir, 'mcp-failed-apply-evidence'), project: mcpProject, playwrightModule: playwrightPath })));
-await withHost(mcpProject, { sources: mcpSources }, async origin =>
-  await caseOutcome('MCP ticked Apply case', await runMcpApplyBrowser({ origin, output: join(consumerDir, 'mcp-apply-evidence'), project: mcpProject, playwrightModule: playwrightPath })));
+// Every case runs in BOTH themes, each with its own disposable target, host processes and output; a theme
+// never reuses another theme's project or process evidence.
+const THEMES = ['dark', 'light'];
+for (const theme of THEMES) {
+  const restartProject = join(consumerDir, `restart-project-${theme}-${randomUUID().slice(0, 8)}`);
+  const restartHosts = [];
+  restartHosts.push(await withHost(restartProject, { sources: mcpSources }, async origin =>
+    await caseOutcome(`restart install phase (${theme})`, await runRestartInstallBrowser({ origin, output: join(consumerDir, `restart-install-evidence-${theme}`), playwrightModule: playwrightPath, theme, extraItem: mixedEccItem }))));
+  // The first host process was killed and reaped above; this is a fresh process on the same target and account.
+  restartHosts.push(await withHost(restartProject, { sources: mcpSources }, async origin =>
+    await caseOutcome(`restart verify phase (${theme})`, await runRestartVerifyBrowser({ origin, output: join(consumerDir, `restart-verify-evidence-${theme}`), playwrightModule: playwrightPath, theme, project: restartProject, extraItem: mixedEccItem }))));
+  assert.notEqual(restartHosts[0].pid, restartHosts[1].pid, `the ${theme} restart evidence names two distinct host processes`);
+  await writeFile(join(consumerDir, `restart-verify-evidence-${theme}`, 'host-processes.json'), JSON.stringify({ status: 'passed', theme, hosts: restartHosts }, null, 2));
+
+  const firstRunProject = join(consumerDir, `first-run-project-${theme}-${randomUUID().slice(0, 8)}`);
+  await withHost(firstRunProject, {}, async origin =>
+    await caseOutcome(`firstRun positive case (${theme})`, await runFirstRunBrowser({ origin, output: join(consumerDir, `first-run-evidence-${theme}`), playwrightModule: playwrightPath, theme })));
+
+  const staleProject = join(consumerDir, `stale-review-project-${theme}-${randomUUID().slice(0, 8)}`);
+  await withHost(staleProject, {}, async origin =>
+    await caseOutcome(`REVIEW_STALE install-preview case (${theme})`, await runStaleReviewBrowser({ origin, output: join(consumerDir, `stale-review-evidence-${theme}`), project: staleProject, playwrightModule: playwrightPath, theme })));
+
+  const mcpProject = join(consumerDir, `mcp-apply-project-${theme}-${randomUUID().slice(0, 8)}`);
+  await withHost(mcpProject, { sources: mcpSources }, async origin =>
+    await caseOutcome(`MCP failed Apply case (${theme})`, await runMcpFailedApplyBrowser({ origin, output: join(consumerDir, `mcp-failed-apply-evidence-${theme}`), project: mcpProject, playwrightModule: playwrightPath, theme })));
+  await withHost(mcpProject, { sources: mcpSources }, async origin =>
+    await caseOutcome(`MCP ticked Apply case (${theme})`, await runMcpApplyBrowser({ origin, output: join(consumerDir, `mcp-apply-evidence-${theme}`), project: mcpProject, playwrightModule: playwrightPath, theme })));
+}
