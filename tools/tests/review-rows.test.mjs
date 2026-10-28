@@ -1,0 +1,64 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { reviewRows, sizeWords, guidanceFolder } from '../../src/app/review-rows.js';
+
+const set = (setId, setSha256 = 'a'.repeat(64)) => ({ framework: 'ecc', setId, setSha256 });
+const operation = (id, over = {}) => ({ id, purpose: `Op ${id}`, kind: 'file.write', scope: 'project', effects: 'create-file',
+  ownership: 'managed', requires: [], checks: [], details: {}, ...over });
+const review = (over = {}) => ({ schema: 'urn:aihq:core:prepared-work:1.6.0', target: { scope: 'project', project: 'C:\\p' },
+  operations: [], selections: [], conflicts: [], omissions: [], ...over });
+
+test('prepared-work 1.6 selections name the rows; operations attach by published selectionId', () => {
+  const r = review({
+    selections: [
+      { selectionId: 's1', managementId: 'm1', scope: 'project', name: 'Grill me', kind: 'skill',
+        origins: [{ reasonIncluded: 'chosen' }, { reasonIncluded: 'in-set', set: set('starter') }, { reasonIncluded: 'required-by', requiredBy: { framework: 'ecc', itemId: 'other' } }],
+        inputs: ['tone'], deliveredSize: { bytes: 10, chars: 10, alwaysLoaded: { bytes: 2, chars: 2 } } },
+      { selectionId: 's2', managementId: 'm2', scope: 'project' },
+    ],
+    operations: [operation('op-a', { selectionId: 's1', details: { target: 'C:\\p\\.claude\\x' } }),
+      operation('op-b', { selectionId: null }), // generated lifecycle cleanup: no selection, no row
+      operation('op-c', { selectionId: 's1', effects: 'conflict', details: { reason: 'Another tool owns this file.' } })],
+  });
+  const { rows, global } = reviewRows(r);
+  assert.equal(rows.length, 2);
+  const first = rows[0];
+  assert.equal(first.heading, 'Grill me');
+  assert.deepEqual(first.sets.map(s => s.setId), ['starter']);
+  assert.deepEqual(first.how, ['Chosen by you', 'Required by other']);
+  assert.equal(first.effects.length, 2);
+  assert.deepEqual(first.blockers, ['Op op-c: Another tool owns this file.'], 'Core’s reason, verbatim');
+  assert.equal(rows[1].heading, 'Selection s2 (its recorded metadata is unavailable)', 'missing name stays explicit');
+  assert.equal(rows[1].size, null);
+  assert.deepEqual(global, []);
+});
+
+test('operationSelections links operations that carry no selectionId; unlinked diagnostics stay global', () => {
+  const r = review({
+    selections: [{ selectionId: 's1', managementId: 'm1', scope: 'project', name: 'A' }],
+    operations: [operation('op-x', { selectionId: null, effects: 'unavailable', details: { reason: 'Material unreadable.' } })],
+    conflicts: [{ message: 'Policy conflicts with an installed file.' }],
+    omissions: [{ code: 'OMITTED', message: 'One material was omitted.' }],
+  });
+  const linked = reviewRows(r, { operationSelections: [{ selectionId: 's1', operationId: 'op-x' }] });
+  assert.deepEqual(linked.rows[0].blockers, ['Op op-x: Material unreadable.']);
+  assert.deepEqual(linked.global, ['Policy conflicts with an installed file.', 'One material was omitted.'],
+    'review conflicts and omissions are published globally regardless of operation linkage');
+  const unlinked = reviewRows(r, { operationSelections: [] });
+  assert.equal(unlinked.rows[0].blockers.length, 0, 'no published linkage, no invented blocker');
+  assert.deepEqual(unlinked.global, ['Policy conflicts with an installed file.', 'One material was omitted.']);
+});
+
+test('size words: absent is unknown, never zero; with and without always-loaded', () => {
+  assert.match(sizeWords(null), /^Size unknown: Core reported no delivered size/);
+  assert.match(sizeWords({ bytes: 100, chars: 90 }), /^When used: 100 bytes · 90 chars$/);
+  assert.match(sizeWords({ bytes: 100, chars: 90, alwaysLoaded: { bytes: 5, chars: 4 } }), /every session: 5 bytes · 4 chars/);
+});
+
+test('the guidance folder is the common directory of user-scope operation targets, or explicitly none', () => {
+  assert.equal(guidanceFolder(review({ operations: [
+    operation('u1', { scope: 'user', details: { target: 'C:\\Users\\me\\.claude\\CLAUDE.md' } }),
+    operation('u2', { scope: 'user', details: { target: 'C:\\Users\\me\\.claude\\rules\\x.md' } })] })), 'C:\\Users\\me\\.claude');
+  assert.equal(guidanceFolder(review({ operations: [operation('p1', { scope: 'project', details: { target: 'C:\\p\\x' } })] })), null);
+  assert.equal(guidanceFolder(review({})), null);
+});

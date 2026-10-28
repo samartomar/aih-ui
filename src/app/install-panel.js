@@ -3,6 +3,7 @@
 // advanced Prepare and Apply buttons stay where they are; this reuses the same host operations.
 
 import { applyIfUnchanged, diagnosticWords, fileCount, installFiles, IN_PLACE, listNames, relativeTarget, staleReason } from './host-review.js';
+import { reviewRows, sizeWords, guidanceFolder } from './review-rows.js';
 
 export { relativeTarget } from './host-review.js';
 
@@ -66,6 +67,20 @@ export function installOutcome(run, files, project) {
 
 const readyPreparation = result => { const preparation = result?.preparation ?? result; return preparation?.status === 'ready' && preparation.sessionId && preparation.review ? preparation : undefined; };
 
+// Set-owned first step, presentation only: exact recorded set identity resolves through the consumer against
+// the checked sources; absent or unresolved is said unavailable, never inferred (#166-AC04).
+async function showFirstRun(client, review, line) {
+  line.textContent = '';
+  const sets = [...new Map((review?.selections ?? []).flatMap(row => (row.origins ?? []).map(origin => origin.set)).filter(Boolean)
+    .map(set => [`${set.framework}/${set.setId}/${set.setSha256}`, set])).values()];
+  if (!sets.length) return;
+  const result = await client.request('first-run', { sets }).catch(() => undefined);
+  if (result?.status !== 'ok') { line.textContent = 'First-step guidance unavailable: the checked sources could not be asked.'; return; }
+  line.textContent = result.value.map(entry => entry.firstRun
+    ? `First step: ${entry.firstRun.name} (${entry.firstRun.kind}) — the step its set ${entry.set.setId} declares to run first. It does not run by itself.`
+    : `First-step guidance unavailable for set ${entry.set.setId}: ${entry.reason}`).join(' ');
+}
+
 function refusal(result) {
   const preparation = result?.preparation ?? result;
   return diagnosticWords(preparation, result) || result?.error || preparation?.status || 'The host did not return a review.';
@@ -85,22 +100,54 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
   // One button and "N files will change", which opens what will be installed and every file (#137).
   const details = el('details', 'install-details text-on-surface-variant'); details.id = 'install-details';
   const detailsSummary = el('summary', 'cursor-pointer'); detailsSummary.append(filesHeading);
-  details.append(detailsSummary, where, items, files);
+  const folders = el('p', 'font-mono text-[11px] text-outline break-all'); folders.id = 'install-folders';
+  const named = el('ul', 'space-y-2 text-on-surface'); named.id = 'install-review-rows';
+  details.append(detailsSummary, where, folders, items, named, files);
   const action = el('div', 'flex flex-wrap items-center gap-x-3 gap-y-1'); action.append(install, details);
-  node.append(title, action, message);
+  const firstRunLine = el('p', 'text-on-surface-variant text-[11px]'); firstRunLine.id = 'install-first-run'; firstRunLine.setAttribute('role', 'status');
+  node.append(title, action, message, firstRunLine);
 
   let preview, previewing = false, installing = false, shownFor, managed = false, again = false;
   const itemOf = ref => client.catalog?.items.find(item => item.id === ref.itemId && item.root.releaseSha256 === ref.releaseSha256);
   const label = ref => { const item = itemOf(ref); return item ? item.label ?? item.id : ref.itemId; };
   const ready = () => Boolean(client.catalog && client.intent && !client.candidate && !(client.draft && !client.compiled));
 
-  function show(review) {
+  function show(review, operationSelections = []) {
     const rows = installFiles(review), project = review?.target?.project;
     title.textContent = `Install your setup into ${projectName(project)}`;
     where.textContent = project ?? '';
+    const guidance = guidanceFolder(review);
+    folders.textContent = [`Project folder: ${project ?? 'not chosen yet'}.`,
+      guidance ? `Guidance folder: ${guidance}.` : 'Guidance folder: this setup writes no user-folder content.'].join(' ');
+    named.replaceChildren(...namedRows(review, operationSelections, project));
     filesHeading.textContent = installSummary(rows, { managed }).heading;
     files.replaceChildren(...rows.map(row => el('li', '', `${row.action}  ${row.path}`)));
     return rows;
+  }
+  // Named prepared-work 1.6 rows: Core's selections name them; operations attach by published selectionId;
+  // blockers and global lines are Core's words, verbatim (#165).
+  function namedRows(review, operationSelections, project) {
+    const { rows, global } = reviewRows(review, { operationSelections });
+    const nodes = rows.map(row => {
+      const item = el('li', 'space-y-0.5'); item.dataset.reviewSelection = row.selectionId;
+      const head = el('div', 'flex flex-wrap items-center gap-x-2');
+      head.append(el('span', 'font-medium', row.heading));
+      if (row.kind) head.append(el('span', 'text-[11px] text-on-surface-variant', row.kind));
+      if (row.how.length) head.append(el('span', 'text-[11px] text-on-surface-variant', row.how.join('; ')));
+      if (row.sets.length) head.append(el('span', 'text-[11px] text-on-surface-variant', `Sets: ${row.sets.map(set => set.setId).join(', ')}`));
+      item.append(head);
+      const meta = [row.scope === 'user' ? 'Your folders' : 'This project', sizeWords(row.size),
+        row.permissionStep ? `Still needs your OK: ${row.permissionStep}` : null,
+        row.inputs.length ? `Inputs: ${row.inputs.join(', ')} (names only, never values)` : null]
+        .filter(Boolean).join(' · ');
+      item.append(el('p', 'text-[11px] text-on-surface-variant', meta));
+      for (const blocker of row.blockers) item.append(el('p', 'text-[11px]', `Blocker: ${blocker}`));
+      for (const effect of row.effects) item.append(el('p', 'text-[11px] text-on-surface-variant',
+        `${effect.effect}: ${effect.purpose}${effect.target ? ` → ${relativeTarget(effect.target, project)}` : ''}`));
+      return item;
+    });
+    for (const line of global) nodes.push(el('li', 'text-[11px]', line));
+    return nodes;
   }
   async function loadPreview() {
     if (previewing || installing) return;
@@ -110,11 +157,19 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
       if (result.status === 'superseded') { message.textContent = ''; return; }
       const preparation = readyPreparation(result);
       if (preparation) {
-        preview = preparation; const rows = show(preparation.review);
+        preview = preparation; const rows = show(preparation.review, preparation.operationSelections ?? []);
         const reason = nothingToInstall({ roots: client.intent?.roots ?? [], rows });
         install.disabled = Boolean(reason); message.textContent = reason || installSummary(rows, { managed }).message;
         install.title = reason || 'Install your setup into this project folder.';
-      } else { files.replaceChildren(); filesHeading.textContent = 'What will be installed'; message.textContent = `Can't install yet: ${refusal(result)}`; }
+      } else {
+        files.replaceChildren(); filesHeading.textContent = 'What will be installed';
+        // A non-ready preparation can still carry a review with useful per-item facts; they are shown, and
+        // the reason the run is not ready is said alongside — no executable session is implied (#165).
+        const review = result?.preparation?.review ?? result?.review;
+        if (review) named.replaceChildren(...namedRows(review, result?.preparation?.operationSelections ?? result?.operationSelections ?? [], review?.target?.project));
+        else named.replaceChildren();
+        message.textContent = `Can't install yet: ${refusal(result)}`;
+      }
     } catch (error) { message.textContent = `Can't install yet: ${error.message}`; }
     finally {
       previewing = false;
@@ -134,11 +189,12 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
       if (attemptResult.state === 'not-ready') { message.textContent = `Install did not start: ${refusal(attemptResult.result)}`; return; }
       const { preparation } = attemptResult;
       if (attemptResult.state === 'stale') {
-        preview = preparation; const rows = show(preparation.review); install.disabled = Boolean(nothingToInstall({ roots: client.intent?.roots ?? [], rows }));
+        preview = preparation; const rows = show(preparation.review, preparation.operationSelections ?? []); install.disabled = Boolean(nothingToInstall({ roots: client.intent?.roots ?? [], rows }));
         message.textContent = `The reviewed setup changed: ${attemptResult.reason} The list now shows what would happen — check it and click Install again.`; return;
       }
       const outcome = installOutcome(attemptResult.run, installFiles(preparation.review), preparation.review.target?.project);
       message.textContent = outcome.message; message.dataset.outcome = outcome.ok ? 'installed' : outcome.state ?? 'failed';
+      if (outcome.ok) void showFirstRun(client, preparation.review, firstRunLine);
       // The count said what would change; once written, the same list is what was installed.
       if (outcome.ok) filesHeading.textContent = 'What was installed';
       preview = undefined;
@@ -170,6 +226,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
   // folder, so they are dropped and it is checked again (once the preview already out has come back).
   function recheck() {
     message.textContent = ''; delete message.dataset.outcome; shownFor = undefined; preview = undefined; install.disabled = true;
+    firstRunLine.textContent = ''; named.replaceChildren();
     files.replaceChildren(); where.textContent = ''; title.textContent = 'Install your setup into your project';
     if (previewing) { again = true; return; }
     render();
