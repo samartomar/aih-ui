@@ -35,11 +35,19 @@ export async function installedReleaseInventory({ root, releaseExport = './relea
 export async function installedFamilies({ root = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'))), sourceInput = 'maintained' } = {}) {
   return Promise.all(families.map(async ([family, releaseExport, frameworkId]) => {
     if (frameworkId) {
-      const prepared = await readInstalledPreparedContent({ root, frameworkId }).catch(() => null);
+      const prepared = await readInstalledPreparedContent({ root, frameworkId });
       // The prepared release carries the item identities; custody keeps the caller's host-bound materialSource
       // input (the service binds that input to the installed package root - an unfamiliar input is staged
       // separately and cannot serve Core's material reads).
-      if (prepared?.valid) return { family, release: prepared.release, materialSource: { kind: 'local', input: sourceInput }, materials: await materialsOf(root, prepared.release) };
+      if (prepared.valid) return { family, release: prepared.release, materialSource: { kind: 'local', input: sourceInput }, materials: await materialsOf(root, prepared.release) };
+      // Public contract: 'prepared-content-unknown' means this package genuinely lists no prepared content for
+      // the framework (an older Catalog) - the legacy export is then the truthful fallback. ANY other reason
+      // (malformed content, a missing declared member, inventory or package mismatch) means the content is
+      // present but broken; falling back to the legacy export would silently mask corruption, so it fails loudly.
+      const reasons = (prepared.diagnostics ?? []).map(diagnostic => diagnostic.reason ?? diagnostic.code);
+      if (reasons.length && reasons.every(reason => reason === 'prepared-content-unknown'))
+        return { family, ...await installedReleaseInventory({ root, releaseExport, sourceInput }) };
+      throw new Error(`${family}: prepared content is present but unreadable; refusing to mask it with the legacy export: ${JSON.stringify(prepared.diagnostics?.slice(0, 2) ?? [])}`);
     }
     return { family, ...await installedReleaseInventory({ root, releaseExport, sourceInput }) };
   }));

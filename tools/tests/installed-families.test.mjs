@@ -31,3 +31,25 @@ test('custody keeps the caller host-bound input, and materials resolve from the 
 test('an invalid package root fails truthfully instead of masking invalid content', async () => {
   await assert.rejects(() => installedFamilies({ root: '/nonexistent-catalog-package-root' }));
 });
+
+test('corrupt or removed prepared content fails loudly; it is never masked by the legacy export', async t => {
+  const { cp, rm, mkdtemp, readFile, writeFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const contentPath = join('release', 'release-extensions.content.json');
+  const makeVariant = async mutate => {
+    const copy = await mkdtemp(join(tmpdir(), 'aih-families-'));
+    await cp(root, copy, { recursive: true }); // real copy: the corruption must not touch the installed package
+    await mutate(join(copy, contentPath));
+    return copy;
+  };
+  const corrupt = await makeVariant(async path => {
+    const bytes = await readFile(path);
+    const broken = Buffer.from(bytes); broken[100] ^= 0xff;
+    await rm(path); await writeFile(path, broken); // replace, never mutate a shared inode
+  });
+  await assert.rejects(() => installedFamilies({ root: corrupt }), /prepared content is present but unreadable/);
+  const removed = await makeVariant(path => rm(path));
+  await assert.rejects(() => installedFamilies({ root: removed }), /prepared content is present but unreadable|member-missing/);
+  t.after(async () => { await rm(corrupt, { recursive: true, force: true }); await rm(removed, { recursive: true, force: true }); });
+});

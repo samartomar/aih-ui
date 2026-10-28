@@ -164,7 +164,7 @@ export async function runMcpApplyBrowser({ origin, output, project, playwrightMo
   const browser = await chromium.launch({ headless: true });
   const errors = [];
   try {
-    const { context, page } = await openPage(browser, origin, { tool: true });
+    const { context, page } = await openPage(browser, origin, { theme, tool: true });
     page.on('pageerror', error => errors.push(error.message));
     await page.locator('#catalog-search').fill('cloudflare-docs');
     const card = page.locator('[data-card-id$="/ecc.mcp.cloudflare-docs"]');
@@ -212,7 +212,7 @@ export async function runStaleReviewBrowser({ origin, output, project, playwrigh
   const browser = await chromium.launch({ headless: true });
   const errors = [];
   try {
-    const { context, page } = await openPage(browser, origin, { theme });
+    const { context, page } = await openPage(browser, origin, { theme, tool: true });
     page.on('pageerror', error => errors.push(error.message));
     await addFromCatalog(page, 'extensions.matt.grill-me');
     await openSetupAdvanced(page);

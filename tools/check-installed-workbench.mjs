@@ -113,7 +113,10 @@ const mcpFixtureDir = join(consumerDir, 'mcp-framework-fixtures');
 const mcpFixture = await frameworkFixtures(mcpFixtureDir, catalogArtifact);
 const mcpSources = join(mcpFixtureDir, 'sources.json');
 await writeFile(mcpSources, JSON.stringify(mcpFixture.scenarios.browse));
-const mixedEccItem = mcpFixture.expected?.ecc?.visible?.[0] ?? null;
+// The mixed restart path adds one plain ECC item alongside grill-me. The MCP server is excluded: it carries
+// approval semantics of its own and is covered by the dedicated MCP cases, not the mixed inventory path.
+const mixedEccItem = (mcpFixture.expected?.ecc?.visible ?? []).find(id => id !== mcpFixture.expected?.ecc?.mcp?.id) ?? null;
+if (typeof mixedEccItem !== 'string') console.log('ECC fixture exposes no plain visible item; the mixed restart path runs Extensions-only and says so.');
 
 // Every case runs in BOTH themes, each with its own disposable target, host processes and output; a theme
 // never reuses another theme's project or process evidence.
