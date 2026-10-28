@@ -72,7 +72,9 @@ export async function runRestartInstallBrowser({ origin, output, playwrightModul
   await mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true });
   try {
-    const { context, page } = await openPage(browser, origin, { theme, tool: Boolean(extraItem) });
+    // The Extensions grill-me add is per-client content and always needs the canonical tool, whether or not
+    // the optional plain ECC item is present (extraItem may be null when the fixture exposes none).
+    const { context, page } = await openPage(browser, origin, { theme, tool: true });
     await addFromCatalog(page, 'extensions.matt.grill-me');
     if (extraItem) await addFromCatalog(page, extraItem);
     await openPolicyDrawer(page);
