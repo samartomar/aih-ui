@@ -125,17 +125,23 @@ export async function runRestartVerifyBrowser({ origin, output, playwrightModule
     const { context, page } = await openPage(browser, origin, { theme });
     page.on('pageerror', error => errors.push(error.message));
     await openPolicyDrawer(page);
-    // No draft is opened here by design: Core's recorded selections list apart under 'Other installed
-    // items' (data-installed-other), never as data-installed-item, and the policy-derived needed-by text is
-    // legitimately absent. The truthful no-draft surface is the recorded names in the installed list.
+    // Without a draft, recorded selections use the ungrouped inventory rows. The section heading is
+    // shown only when chosen groups precede those rows; require the actual names and recorded ids instead.
     const list = page.locator('#installed-list');
     await list.waitFor();
-    await page.locator('#installed-note').filter({ hasNotText: /^Checking/ }).waitFor();
-    await page.waitForFunction(() => document.getElementById('installed-list').textContent.includes('grill-me'), null, { timeout: 30_000 });
-    assert.match(await list.innerText(), /grill-me/, 'the recorded Extensions name survives a full server restart with no draft');
-    assert.match(await list.innerText(), /Other installed items/, 'with no draft, recorded selections list apart truthfully');
+    const recorded = name => list.locator('[data-installed-other]').filter({ has: page.getByText(name, { exact: true }) });
+    const installed = recorded('grill-me');
+    await installed.waitFor();
+    assert.equal(await installed.count(), 1, 'one recorded Extensions row survives the fresh host');
+    assert.ok(await installed.getAttribute('data-installed-other'), 'the Extensions row retains its recorded management id');
+    assert.match(await installed.innerText(), /Not in your setup/, 'recorded inventory is independent of an open draft');
+    assert.equal(await list.locator('[data-installed-item]').count(), 0, 'no draft-derived chosen groups are invented');
     if (extraItem) {
-      assert.ok((await list.innerText()).includes(extraName ?? extraItem), 'the mixed ECC+Extensions setup keeps the ECC item from the recorded projection after the restart');
+      const mixed = recorded(extraName ?? extraItem);
+      await mixed.waitFor();
+      assert.equal(await mixed.count(), 1, 'one recorded ECC row survives the fresh host');
+      assert.ok(await mixed.getAttribute('data-installed-other'), 'the ECC row retains its recorded management id');
+      assert.match(await mixed.innerText(), /Not in your setup/);
     }
     assert.equal(await page.locator('[data-installed-state]').count(), 0, 'a fresh complete install carries no adverse state chips');
     if (project) {
