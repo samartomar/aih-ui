@@ -6,7 +6,7 @@ import { confirmRemoval, previewRemoval, removalOutcome } from '../../src/app/in
 const project = 'C:\\Temp\\proof\\sample-js-app';
 function fakeHost({ requires = {}, members = {}, applyResult, script = {} } = {}) {
   const installed = new Set(Object.keys(members)), calls = [];
-  let session = 0;
+  let session = 0, preparedCounts = new Map();
   const sessions = new Map();
   const review = id => ({ target: { project }, reviewDigest: `d-${id}-${session}`, operations: members[id].map((path, index) => ({
     id: `lifecycle/remove-${index}`, kind: 'file.remove', effects: 'remove-file', details: { target: `${project}\\${path}` } })) });
@@ -16,9 +16,15 @@ function fakeHost({ requires = {}, members = {}, applyResult, script = {} } = {}
     if (operation === 'remove') {
       const id = body.managementId;
       if (!installed.has(id)) return { disposition: 'absent', diagnostics: [] };
-      if ([...installed].some(other => requires[other]?.includes(id))) return { disposition: 'retained', diagnostics: [{ reason: 'dependency-retained', message: 'Another managed selection still requires this one, so its claim is retained.' }] };
+      if ([...installed].some(other => requires[other]?.includes(id))) return { disposition: 'retained', diagnostics: [{ reason: 'dependency-retained', message: 'Another managed selection still requires this one, so its claim is retained.' }] }
+      // Core is the stale authority (#165): when the reviewed files changed since this item was last prepared,
+      // the fresh preparation carries Core's own REVIEW_STALE reason; the Workbench never compares effects.
+      const stale = preparedCounts.has(id) && preparedCounts.get(id) !== members[id].length;
+      preparedCounts.set(id, members[id].length);
       session++; const sessionId = `s${session}`, prepared = review(id); sessions.set(sessionId, { id, prepared });
-      return { disposition: 'prepared', diagnostics: [], preparation: { status: 'ready', sessionId, review: prepared } };
+      return { disposition: 'prepared', diagnostics: [],
+        preparation: { status: 'ready', sessionId, review: prepared,
+          ...(stale ? { diagnostics: [{ code: 'REVIEW_STALE', message: 'A reviewed file changed since this list was shown.', changed: { reason: 'binding-changed' } }] } : {}) } };
     }
     const held = sessions.get(body.sessionId);
     if (!held || held.prepared.reviewDigest !== body.reviewDigest) return { status: 'rejected', diagnostics: [{ message: 'digest-mismatch' }] };
