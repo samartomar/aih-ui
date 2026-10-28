@@ -183,21 +183,29 @@ export async function runMcpFailedApplyBrowser({ origin, output, project, playwr
     await addFromCatalog(page, 'ecc.mcp.cloudflare-docs');
     await openPolicyDrawer(page);
     await page.locator('#install-button:not([disabled])').waitFor();
-    // The obstacle: the registration file's path exists as a directory, so Core's write genuinely fails.
+    // Preparation-refusal checkpoint: the registration file's path exists as a directory. This TESTED
+    // obstacle makes Core refuse the fresh preparation (INPUT_INVALID: the requested work cannot be
+    // admitted) - it does NOT produce a failed or partial run; Apply never executes and no run outcome
+    // exists. A real failed/partial run page case remains a separate, unproven requirement.
     await mkdir(join(project, '.mcp.json'), { recursive: true });
     await page.locator('#install-button').click();
-    // Core refuses at PREPARE time - the directory obstacle makes the fresh preparation invalid
-    // (INPUT_INVALID: the requested work cannot be admitted), so Apply never runs and no run outcome
-    // exists. The truthful assertions are the refusal wording, no green, and no outcome dataset.
     await page.waitForFunction(() => /Install did not start/.test(document.getElementById('install-message').textContent), null, { timeout: 60_000 });
     const message = await page.locator('#install-message').innerText();
     assert.match(message, /Install did not start: .*admit the requested work/i, 'Core names the prepare-time refusal');
     assert.doesNotMatch(message, /Confirmed on disk/, 'the strict success claim never appears on a refusal');
     assert.equal(await page.locator('#install-message').getAttribute('data-outcome'), null, 'a refused preparation sets no run outcome');
-    await page.screenshot({ path: join(output, 'mcp-failed-apply.png'), fullPage: true });
+    await page.screenshot({ path: join(output, 'mcp-obstacle-preparation-refusal.png'), fullPage: true });
+    await writeFile(join(output, `mcp-obstacle-evidence-${theme}.json`), JSON.stringify({
+      status: 'PREPARATION_REFUSAL_PASSED_FAILED_RUN_UNPROVEN',
+      checkpoint: 'prepare-time INPUT_INVALID refusal under the .mcp.json directory obstacle',
+      actualMessage: message,
+      outcomeDataset: await page.locator('#install-message').getAttribute('data-outcome'),
+      applyExecuted: false,
+      failedOrPartialRunProven: false,
+    }, null, 2));
     await rm(join(project, '.mcp.json'), { recursive: true, force: true });
     await context.close();
-    return { status: 'passed' };
+    return { status: 'incomplete', reason: 'prepare-time refusal proven at this seam; a failed/partial RUN page case is not provable with this tested obstacle and remains an unproven acceptance requirement' };
   } finally { await rm(join(project, '.mcp.json'), { recursive: true, force: true }); await browser.close(); }
 }
 

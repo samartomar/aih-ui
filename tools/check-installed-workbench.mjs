@@ -149,7 +149,7 @@ for (const theme of THEMES) {
 
   const mcpProject = join(consumerDir, `mcp-apply-project-${theme}-${randomUUID().slice(0, 8)}`);
   await withHost(mcpProject, { sources: mcpSources }, async origin =>
-    await caseOutcome(`MCP failed Apply case (${theme})`, await runMcpFailedApplyBrowser({ origin, output: join(consumerDir, `mcp-failed-apply-evidence-${theme}`), project: mcpProject, playwrightModule: playwrightPath, theme })));
+    await caseOutcome(`MCP obstacle case: preparation refusal proven, failed-run unproven (${theme})`, await runMcpFailedApplyBrowser({ origin, output: join(consumerDir, `mcp-failed-apply-evidence-${theme}`), project: mcpProject, playwrightModule: playwrightPath, theme })));
   await withHost(mcpProject, { sources: mcpSources }, async origin =>
     await caseOutcome(`MCP ticked Apply case (${theme})`, await runMcpApplyBrowser({ origin, output: join(consumerDir, `mcp-apply-evidence-${theme}`), project: mcpProject, playwrightModule: playwrightPath, theme })));
 }
