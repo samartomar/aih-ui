@@ -12,6 +12,7 @@ import { digestBytes } from './primitives.mjs';
 import { openDraft } from './headless.mjs';
 import { intakeDeclaration } from './intake.mjs';
 import { noteFixture } from './note-fixture.mjs';
+import { inspectReviewEvidence } from './review-bindings.mjs';
 import { installedFamilies } from './installed-families.mjs';
 import { addFromCatalog, closePolicyDrawer, drawer, openPolicyDrawer, openPolicyFileActions, openPolicySection } from './policy-drawer.mjs';
 import { openPolicyWorkspace, openSetupAdvanced } from './advanced-browser.mjs';
@@ -61,6 +62,12 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
   assert.equal(scan.status, 'assessment', JSON.stringify(scan));
   const evidence = await prepareArtifact({ report: scan.report, annexes: scan.annexes.map(annex => ({ id: annex.id, bytes: Buffer.from(annex.bytesBase64, 'base64') })) });
   const evidencePath = join(output, 'review-evidence.unsigned.json'); await writeFile(evidencePath, evidence.bytes);
+  // The journey's own evidence must really bind findings to the note: the page review below selects one by its
+  // bound identity. This is the same public inspection chain the page uses; it fails here, with the journey's
+  // evidence and inventory, instead of as a bare select timeout on the page.
+  const bound = await inspectReviewEvidence({ evidenceBytes: evidence.bytes, inventory: inventories.at(-1), itemId: NOTE, configuration: {} });
+  assert.equal(bound.status, 'ok', JSON.stringify(bound.diagnostics ?? bound));
+  assert.ok(bound.value.bindings.length >= 1, `The journey evidence binds no checked finding to ${NOTE}: ${JSON.stringify(bound.value.view ?? bound.value).slice(0, 400)}`);
   const browser = await chromium.launch({ headless: true });
   const errors = [], failedResponses = []; let observed; let operations = [], categoriesSent = [], checkInputs = [];
   const openPage = async () => {
@@ -375,8 +382,17 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     await drawer(resolvedAuthoring).getByLabel('Reviewer', { exact: true }).fill('fixture-reviewer');
     await drawer(resolvedAuthoring).getByLabel('Review disposition', { exact: true }).selectOption('false-alarm');
     await drawer(resolvedAuthoring).getByLabel('Review reason', { exact: true }).fill('Fixture note intentionally has no license declaration.');
-    // A person chooses the checked finding they are reviewing; the first is the one bound to the fixture note.
-    await drawer(resolvedAuthoring).getByLabel('Checked finding', { exact: true }).selectOption('0');
+    // A person chooses the checked finding they are reviewing, by its bound identity (detector · rule ·
+    // finding), not a positional index. If Core's page inspection reports no findings while the journey's own
+    // evidence binds them, fail with the page's diagnostics instead of a bare select timeout.
+    const findingSelect = drawer(resolvedAuthoring).getByLabel('Checked finding', { exact: true });
+    const firstFinding = findingSelect.locator('option:not([value=""])').first();
+    if (!await firstFinding.waitFor({ timeout: 10_000 }).then(() => true).catch(() => false)) {
+      await drawer(resolvedAuthoring).getByText('Checked evidence diagnostics').click();
+      const diagnostics = await drawer(resolvedAuthoring).locator('pre').filter({ hasText: '{' }).last().innerText().catch(() => '(diagnostics unreadable)');
+      throw new Error(`Core's page inspection bound no checked finding to ${NOTE}, while the journey evidence binds ${bound.value.bindings.length}. Page diagnostics: ${diagnostics.slice(0, 1200)}`);
+    }
+    await findingSelect.selectOption({ label: await firstFinding.innerText() });
     await drawer(resolvedAuthoring).getByRole('button', { name: 'Propose human review', exact: true }).click();
     await resolvedAuthoring.locator('#policy-accept:not([disabled])').waitFor(); await resolvedAuthoring.locator('#policy-accept').click();
     const resolvedPath = join(output, 'policy.resolved.downloaded.json');
