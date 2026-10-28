@@ -240,6 +240,9 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
         const framework = currentFramework();
         const result = await authoring.request('edit', { operation: { type: 'mcp-approval', root: { releaseSha256: framework?.sha256, itemId: item.id, scope: 'project' }, granted }, tool: chosenTool?.id });
         if (result.status !== 'ok') { render(); throw new Error(result.diagnostics?.map(value => value.message).join(' ') ?? 'The approval was not recorded.'); }
+        // Adopt the composed artifact: the tick changes execution semantics, so the page state, preview and
+        // any saved download must carry it - otherwise the approval exists only in the thrown-away response.
+        if (result.value?.policyBytes) authoring.publish({ policyBytes: result.value.policyBytes, intent: result.value.intent });
         render();
       },
     };

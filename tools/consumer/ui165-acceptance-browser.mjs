@@ -216,6 +216,7 @@ export async function runMcpApplyBrowser({ origin, output, project, playwrightMo
       return { status: 'incomplete', reason: 'ECC MCP item not in integrated catalog' };
     }
     const approval = card.locator('.browse-mcp-approval');
+    // The one-server approval edit requires the server to be part of the setup: Add first, then tick.
     await addFromCatalog(page, 'ecc.mcp.cloudflare-docs');
     await approval.locator('input[type=checkbox]').check();
     await page.waitForFunction(() => { const input = document.querySelector('.browse-mcp-approval input'); return Boolean(input) && !input.disabled; });
@@ -260,7 +261,9 @@ export async function runStaleReviewBrowser({ origin, output, project, playwrigh
     page.on('pageerror', error => errors.push(error.message));
     await chooseCatalogFamily(page, 'Extensions');
     await addFromCatalog(page, 'extensions.matt.grill-me');
-    await openSetupAdvanced(page);
+    // The execution controls live in the inner 'Sources and execution' disclosure; open that section or the
+    // closed details renders nothing and the Prepare control is absent.
+    await openSetupAdvanced(page, 'Sources and execution');
     const advanced = page.locator('details.policy-advanced').filter({ hasText: 'Prepare exact effects' });
     const advancedText = () => { const panel = [...document.querySelectorAll('details.policy-advanced')].find(node => node.textContent.includes('Prepare exact effects')); return panel ? panel.textContent : ''; };
     await advanced.getByRole('button', { name: 'Prepare exact effects', exact: true }).click();
