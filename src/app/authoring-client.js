@@ -29,8 +29,9 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
   let catalog, bytes = new Uint8Array(), intent, candidate, draftValue, compiled, revision = 0, catalogRevision = 0, hostRevision = 0, folderRevision = 0, reviewEvidence = [], evidenceRevision = 0, recipient, judgments = [], judgmentSummary;
   let dirty = false, checkpoint, recoveryAvailable, startupSource, selectedTool;
   // The header's canonical tool as ephemeral page context: it rides composing/editing/compiling requests,
-  // never the saved policy bytes, and never rebinding a recorded selection's own tool identity.
-  const setTool = tool => { selectedTool = tool; };
+  // never the saved policy bytes, and never rebinding a recorded selection's own tool identity. The header
+  // hands over the registry entry; requests carry its canonical id string (Core's selectTool names ids only).
+  const setTool = tool => { selectedTool = typeof tool === 'string' ? tool : tool?.id ?? null; };
   const artifactBytes = () => draftValue?.envelopeBytes ?? bytes;
   const notify = () => {
     const current = artifactBytes();
