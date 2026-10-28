@@ -2,7 +2,7 @@
 // then one Install button that prepares again, checks the review is unchanged and applies it. The
 // advanced Prepare and Apply buttons stay where they are; this reuses the same host operations.
 
-import { applyIfUnchanged, diagnosticWords, effectsFingerprint, fileCount, installFiles, IN_PLACE } from './host-review.js';
+import { applyIfUnchanged, diagnosticWords, fileCount, installFiles, IN_PLACE, listNames, relativeTarget, staleReason } from './host-review.js';
 
 export { relativeTarget } from './host-review.js';
 
@@ -38,34 +38,30 @@ export function skillHints(files) {
   return [...new Set(names)];
 }
 
-/** The outcome of an Apply, in words. Only a complete run with every operation applied and verified is a success. */
+/** The outcome of an Apply, in words. Only run result 1.4's own member checks can establish "confirmed on disk". */
 export function installOutcome(run, files, project) {
   if (!run) return { ok: false, message: 'Install did not return a result. Check the files below before trying again.' };
   // The page moved on after sending Apply; the host may already have written files.
   if (run.status === 'superseded') return { ok: false, message: 'The page changed while Install was running, so it cannot tell whether any files were written. Check what is installed in this project before installing again.' };
-  const operations = run.operations ?? [];
-  const applied = operations.filter(operation => operation.application === 'applied').length;
-  // Core found these files already holding the expected bytes; they are verified like any other.
-  const inPlace = operations.filter(operation => operation.application === 'already-satisfied').length;
-  const verified = operations.filter(operation => operation.verification?.status === 'passed').length;
-  // Every reviewed file must be accounted for, not just the operations the run happened to report.
-  const total = Math.max(operations.length, files.length);
-  if (run.completion === 'complete' && total && applied + inPlace === total && verified === total) {
-    const skills = skillHints(files);
-    const tryLine = skills.length ? ` Open Claude Code in this folder and type ${skills.map(name => `/${name}`).join(' or ')}.` : ' Open your AI tool in this folder to use them.';
-    const already = inPlace ? ` (${inPlace} ${inPlace === 1 ? 'was' : 'were'} already in place)` : '';
-    return { ok: true, message: `Installed ${total} ${total === 1 ? 'file' : 'files'} into ${projectName(project)}${already}.${tryLine}` };
+  // Run result 1.4: Core checked each touched member directly on disk. Only a complete run whose every intended
+  // write member was written and found present-matching is confirmed; kept, restored, unchecked, absent or
+  // present-different members never are, and no other shape of result makes that claim.
+  if (Array.isArray(run.members)) {
+    const intended = run.members.filter(member => member.intent === 'write');
+    const failed = intended.filter(member => member.outcome !== 'written' || member.check !== 'present-matching');
+    if (run.completion === 'complete' && intended.length > 0 && failed.length === 0) {
+      const skills = skillHints(files);
+      const tryLine = skills.length ? ` Open Claude Code in this folder and type ${skills.map(name => `/${name}`).join(' or ')}.` : ' Open your AI tool in this folder to use them.';
+      return { ok: true, state: 'confirmed', message: `Confirmed on disk: all ${fileCount(intended.length)} written into ${projectName(project)} checked present-matching.${tryLine}` };
+    }
+    const words = member => `${relativeTarget(member.path, project)} (${member.outcome === 'written' ? `written, check ${member.check}` : `${member.outcome}, check ${member.check}`})`;
+    const reason = [...(run.diagnostics ?? [])].map(diagnostic => diagnostic.message ?? diagnostic.code).filter(Boolean).join(' ');
+    return { ok: false, state: run.completion === 'complete' ? 'failed' : 'partial',
+      message: `Install is not confirmed on disk${run.completion === 'complete' ? '' : ` (run ${run.completion})`}: ${listNames(failed.length ? failed.map(words) : ['no intended file was written'])}.${reason ? ` ${reason}` : ''} Check what is installed in this project before installing again.` };
   }
-  // Everything was written and every supplied check passed, but Core had no check for some changes (the Catalog declared
-  // none, e.g. a marked section merged into AGENTS.md): Core reports them unverified. Named, never called verified.
-  const unchecked = operations.filter(operation => operation.verification?.status === 'unverified' && operation.verification?.reason === 'no-supplied-check');
-  if (run.completion === 'complete' && total && operations.length === files.length && applied + inPlace === total && unchecked.length && verified + unchecked.length === total) {
-    const names = unchecked.map(operation => files[operations.indexOf(operation)]?.path ?? operation.id);
-    const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
-    return { ok: false, state: 'unchecked', message: `Installed ${total} ${total === 1 ? 'file' : 'files'} into ${projectName(project)}. ${verified} ${verified === 1 ? 'was' : 'were'} checked; ${list} ${names.length === 1 ? 'was' : 'were'} written but ${names.length === 1 ? 'has' : 'have'} no check from the Catalog, so ${names.length === 1 ? 'it is' : 'they are'} not verified. Open ${names.length === 1 ? 'it' : 'them'} to confirm.` };
-  }
+  // No run-result 1.4 member projection: the page cannot claim installed-and-checked, whatever the operations say.
   const reason = [...(run.diagnostics ?? [])].map(diagnostic => diagnostic.message ?? diagnostic.code).filter(Boolean).join(' ');
-  return { ok: false, message: `Install did not finish: ${applied} of ${total} applied,${inPlace ? ` ${inPlace} already in place,` : ''} ${verified} verified.${reason ? ` ${reason}` : ''} Nothing else was changed by this page.` };
+  return { ok: false, message: `Install did not finish${reason ? `: ${reason}` : '. Nothing else was changed by this page.'} Check what is installed in this project before installing again.` };
 }
 
 const readyPreparation = result => { const preparation = result?.preparation ?? result; return preparation?.status === 'ready' && preparation.sessionId && preparation.review ? preparation : undefined; };
@@ -128,24 +124,23 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
   }
   async function run() {
     if (!preview || installing || install.disabled) return;
-    const shown = effectsFingerprint(preview.review);
     let sent = false;
     installing = true; install.disabled = true; install.setAttribute('aria-busy', 'true'); message.textContent = 'Installing…';
     try {
-      // Prepare again so the approval is for what is on disk now; refuse if its effects differ from the list shown.
-      // Apply is bound to this fresh review's own digest, exactly as the advanced Apply button does.
-      const attemptResult = await applyIfUnchanged({ prepare: () => client.requestHost('prepare'), readyPreparation, shown,
+      // Prepare again so the approval is for what is on disk now; Apply is bound to this fresh review's own
+      // digest. What is stale is Core's call: a REVIEW_STALE diagnostic shows its reason and asks to prepare again.
+      const attemptResult = await applyIfUnchanged({ prepare: () => client.requestHost('prepare'), readyPreparation,
         apply: approval => { sent = true; return client.requestHost('apply', approval); } });
       if (attemptResult.state === 'not-ready') { message.textContent = `Install did not start: ${refusal(attemptResult.result)}`; return; }
       const { preparation } = attemptResult;
-      if (attemptResult.state === 'changed') {
+      if (attemptResult.state === 'stale') {
         preview = preparation; const rows = show(preparation.review); install.disabled = Boolean(nothingToInstall({ roots: client.intent?.roots ?? [], rows }));
-        message.textContent = `The files changed since this list was shown (${rows.length} now). Check the list and click Install again.`; return;
+        message.textContent = `The reviewed setup changed: ${attemptResult.reason} The list now shows what would happen — check it and click Install again.`; return;
       }
       const outcome = installOutcome(attemptResult.run, installFiles(preparation.review), preparation.review.target?.project);
       message.textContent = outcome.message; message.dataset.outcome = outcome.ok ? 'installed' : outcome.state ?? 'failed';
       // The count said what would change; once written, the same list is what was installed.
-      if (outcome.ok || outcome.state === 'unchecked') filesHeading.textContent = 'What was installed';
+      if (outcome.ok) filesHeading.textContent = 'What was installed';
       preview = undefined;
     } catch (error) { message.textContent = `Install did not finish: ${error.message}`; message.dataset.outcome = 'failed'; }
     finally { installing = false; install.removeAttribute('aria-busy'); if (sent) onInstalled(); }

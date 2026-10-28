@@ -1,6 +1,7 @@
 // What Install and Remove share about a Core review: its files in plain words, what the person agreed to,
-// Core's reasons as text, and the prepare-again → compare → apply sequence that binds each Apply to the
-// fresh review's own digest.
+// Core's reasons as text, and the prepare-again → apply sequence that binds each Apply to the fresh review's
+// own digest. Staleness is Core's call alone: a REVIEW_STALE diagnostic from Prepare or Apply is shown in
+// Core's words and the person prepares again; the Workbench keeps no stale rule of its own (UI165).
 
 const effectVerb = { 'create-file': 'Add', 'replace-file': 'Replace', 'update-file': 'Update', 'remove-file': 'Remove', 'already-satisfied': 'Already in place' };
 export const IN_PLACE = effectVerb['already-satisfied'];
@@ -33,24 +34,34 @@ export function installFiles(review) {
 }
 
 /**
- * What the person agreed to: each operation's kind, effect, target and expected content. Core's
- * review digest differs on every Prepare even for identical effects, so it cannot be compared across two.
+ * Core's REVIEW_STALE reason from any stage's diagnostics, in Core's own words: what changed (a reviewed
+ * binding, the prepared handle or a digest) and why. Undefined when Core reported none — a new Scan assessment
+ * or changed release-index status alone never invalidates held preparation.
  */
-export function effectsFingerprint(review) {
-  return JSON.stringify((review?.operations ?? []).map(operation => [operation.kind, operation.effects, operation.details?.target ?? null,
-    (operation.checks ?? []).map(check => check.details?.content ?? null)]));
+export function staleReason(...results) {
+  for (const result of results) {
+    const diagnostic = (result?.diagnostics ?? []).find(entry => entry.code === 'REVIEW_STALE');
+    if (!diagnostic) continue;
+    const changed = diagnostic.changed?.reason ? ` (${diagnostic.changed.reason})` : '';
+    return `${diagnostic.message ?? 'The reviewed setup changed.'}${changed}`;
+  }
+  return undefined;
 }
 
 /**
- * Prepares again and applies only if the fresh review has the effects that were shown.
+ * Prepares again and applies with the fresh review's own digest. Core itself refuses or marks stale what
+ * changed; the caller shows the fresh review again when Core reports REVIEW_STALE.
  * `readyPreparation(result)` returns the prepared {sessionId, review} or undefined.
- * Returns {state: 'not-ready', result} | {state: 'changed', preparation} | {state: 'applied', preparation, run}.
+ * Returns {state:'not-ready', result} | {state:'stale', preparation, reason, run?} | {state:'applied', preparation, run}.
  */
-export async function applyIfUnchanged({ prepare, readyPreparation, shown, apply }) {
+export async function applyIfUnchanged({ prepare, readyPreparation, apply }) {
   const result = await prepare();
   const preparation = readyPreparation(result);
   if (!preparation) return { state: 'not-ready', result };
-  if (effectsFingerprint(preparation.review) !== shown) return { state: 'changed', preparation };
+  const reason = staleReason(result, preparation);
+  if (reason) return { state: 'stale', preparation, reason };
   const run = await apply({ sessionId: preparation.sessionId, reviewDigest: preparation.review.reviewDigest });
+  const stale = staleReason(run);
+  if (stale) return { state: 'stale', preparation, reason: stale, run };
   return { state: 'applied', preparation, run };
 }

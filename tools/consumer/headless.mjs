@@ -88,7 +88,19 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
   const comparisonProvenance = historicalV2 ? next.provenance.filter(p => historicalSources.has(p.releaseSha256)) : next.provenance;
   if (!capture && (stable(sorted(intent.pins)) !== stable(next.pins) || stable(sorted(intent.provenance)) !== stable(comparisonProvenance) || stable(sorted(intent.inputs)) !== stable(next.inputs)))
     return refuse('INTENT_POLICY_CONTRADICTION', '/metadata/aih.workbench', 'Pins, provenance or inputs contradict the checked closure.');
-  const policy = { ...(base ?? { schema: 'urn:aihq:core:execution-policy:1.3.0', mode: 'vibe' }), selections,
+  // Execution policy 1.4 (#165): each selection carries the qualified origins Catalog resolution recorded for
+  // it, excludedItems name what the person left out by framework and item id, and management ids stay on each
+  // selection. A release without published framework identity cannot name an exclusion; the skip still stands.
+  const excludedItems = [...(base?.excludedItems ?? [])];
+  for (const exclusion of intent.exclusions) {
+    const found = index.items.get(pinKey(exclusion));
+    const framework = found?.entry.release.framework?.id;
+    if (framework) excludedItems.push({ framework, itemId: exclusion.itemId });
+  }
+  const policy = { ...(base ?? { schema: 'urn:aihq:core:execution-policy:1.4.0', mode: 'vibe' }),
+    schema: 'urn:aihq:core:execution-policy:1.4.0',
+    selections: selections.map((selection, i) => ({ ...selection, origins: resolved.selections[i].origins })),
+    excludedItems: [...new Map(excludedItems.map(ref => [`${ref.framework}/${ref.itemId}`, ref])).values()],
     metadata: { ...base?.metadata, 'aih.workbench': next } };
   const setProblem = checkRecordedSetChoices(policy.metadata?.['aih.workbench'], inventories);
   if (setProblem) return refuse('INTENT_POLICY_CONTRADICTION', '/metadata/aih.workbench/provenance', setProblem);

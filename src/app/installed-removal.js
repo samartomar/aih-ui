@@ -4,7 +4,7 @@
 // Core decides what may go; anything it keeps is said in words. Only a complete, verified Apply is "removed";
 // a complete Apply whose operations Core left unverified is said as deleted but unverified.
 
-import { applyIfUnchanged, diagnosticWords, effectsFingerprint, fileCount, installFiles, listNames } from './host-review.js';
+import { applyIfUnchanged, diagnosticWords, fileCount, installFiles, listNames } from './host-review.js';
 
 const STILL_NEEDED = 'Core says another installed item still needs it.';
 // The page plans from the current setup's resolved needs; Core's answer also covers items outside it.
@@ -40,7 +40,7 @@ const waitingMessage = pending => `Core checks this after ${listNames(pending.ma
 // A later round names only the items still to be removed before a waiting one, not those already gone.
 const rewordWaiting = steps => steps.map((step, index) => step.state === 'after'
   ? { ...step, message: waitingMessage(steps.slice(0, index).filter(before => ['ready', 'after'].includes(before.state))) } : step);
-const shownStep = (entry, review) => ({ entry, state: 'ready', files: installFiles(review), fingerprint: effectsFingerprint(review), message: `${fileCount(review.operations.length)} will be removed.` });
+const shownStep = (entry, review) => ({ entry, state: 'ready', files: installFiles(review), message: `${fileCount(review.operations.length)} will be removed.` });
 
 /** The outcome of a removal Apply: removed, unverified (complete but Core ran no check) or failed. */
 export function removalOutcome(run, rows) {
@@ -101,16 +101,16 @@ export async function confirmRemoval({ preview, request, mode, results: earlier 
       stop(fresh?.status === 'superseded' ? 'superseded' : 'failed', fresh?.status === 'superseded' ? `${name} was not removed: the page changed before it was. Check the list.` : `${name} ${notPrepared(fresh)}`);
       continue;
     }
-    // Prepare again so the approval is for what is on disk now, and apply only the files that were shown.
-    const attempt = await applyIfUnchanged({ prepare: removal, readyPreparation: preparedRemoval, shown: step.fingerprint, apply: approval => request('apply', approval) });
+    // Prepare again so the approval is for what is on disk now; Core itself decides what is stale.
+    const attempt = await applyIfUnchanged({ prepare: removal, readyPreparation: preparedRemoval, apply: approval => request('apply', approval) });
     if (attempt.state === 'not-ready') {
       const fresh = attempt.result;
       if (fresh?.status === 'superseded') stop('superseded', `${name} was not removed: the page changed before it was. Check the list.`);
       else if (fresh?.disposition === 'absent') results.push({ name, state: 'absent' });
       else if (fresh?.disposition === 'retained') results.push({ name, state: 'kept', message: STILL_NEEDED });
       else stop('failed', `${name} ${notPrepared(fresh)}`);
-    } else if (attempt.state === 'changed') {
-      stop('changed', `${name} was not removed: its files changed since the list was shown (${fileCount(attempt.preparation.review.operations.length)} now). Click Remove again to see them.`);
+    } else if (attempt.state === 'stale') {
+      stop('changed', `${name} was not removed: ${attempt.reason} Click Remove again to see what its removal takes now.`);
     } else if (attempt.run?.status === 'superseded') stop('superseded', `For ${name} this page cannot tell whether files were removed; check the list.`);
     else {
       const outcome = removalOutcome(attempt.run, installFiles(attempt.preparation.review));

@@ -1,14 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { installOutcome, installSummary, projectName, relativeTarget, skillHints } from '../../src/app/install-panel.js';
-import { effectsFingerprint, installFiles } from '../../src/app/host-review.js';
+import { installFiles } from '../../src/app/host-review.js';
 
 const project = 'C:\\Temp\\proof\\sample-js-app';
 const write = (id, path) => ({ id, kind: 'file.write', effects: 'create-file', purpose: `Deliver ${path}`, details: { target: `${project}\\${path}` } });
 const review = { target: { project, scope: 'project' }, reviewDigest: 'd1', operations: [
   write('a', '.claude\\skills\\grill-me\\SKILL.md'), write('b', '.claude\\skills\\grilling\\SKILL.md'), write('c', '.aih-extensions\\notices\\LICENSE'),
 ] };
-const run = (completion, states) => ({ completion, diagnostics: [], operations: states.map(([application, verification], index) => ({ id: String(index), application, verification: { status: verification } })) });
 
 test('lists every file the review will write, relative to the project, with a plain verb', () => {
   assert.deepEqual(installFiles(review), [
@@ -23,69 +22,62 @@ test('lists every file the review will write, relative to the project, with a pl
   assert.deepEqual(installFiles({ ...review, operations: [satisfied] }), [{ action: 'Already in place', path: '.aih-extensions/notices/NOTICE.md' }]);
 });
 
-test('two Prepares with the same effects match even though their review digests differ', () => {
-  const again = { ...structuredClone(review), reviewDigest: 'd2' };
-  assert.equal(effectsFingerprint(again), effectsFingerprint(review));
-  const changedContent = structuredClone(review); changedContent.operations[0].checks = [{ details: { content: 'sha256:other' } }];
-  assert.notEqual(effectsFingerprint(changedContent), effectsFingerprint(review));
-  const extraFile = structuredClone(review); extraFile.operations.push(write('d', 'extra.md'));
-  assert.notEqual(effectsFingerprint(extraFile), effectsFingerprint(review));
-});
+// Run result 1.4 members: what the reviewed plan meant for the member, what the run did, what Core found on disk.
+const member = (path, intent, outcome, check) => ({ intent, outcome, check, path: `${project}\\${path}` });
+const run14 = (completion, members, diagnostics = []) => ({ completion, diagnostics, members });
 
 test('names the skills to try from the SKILL.md files being added', () => {
   assert.deepEqual(skillHints(installFiles(review)), ['grill-me', 'grilling']);
 });
 
-test('reports success only when every operation was applied and verified', () => {
+test('confirms on disk only when the run is complete and every intended write member was written and checked present-matching', () => {
   const files = installFiles(review);
-  const ok = installOutcome(run('complete', [['applied', 'passed'], ['applied', 'passed'], ['applied', 'passed']]), files, project);
+  const ok = installOutcome(run14('complete', [
+    member('.claude\\skills\\grill-me\\SKILL.md', 'write', 'written', 'present-matching'),
+    member('.claude\\skills\\grilling\\SKILL.md', 'write', 'written', 'present-matching'),
+    member('.aih-extensions\\notices\\LICENSE', 'write', 'written', 'present-matching'),
+  ]), files, project);
   assert.equal(ok.ok, true);
-  assert.match(ok.message, /Installed 3 files into sample-js-app\. Open Claude Code in this folder and type \/grill-me or \/grilling\./);
+  assert.equal(ok.state, 'confirmed');
+  assert.match(ok.message, /Confirmed on disk: all 3 files written into sample-js-app checked present-matching\. Open Claude Code in this folder and type \/grill-me or \/grilling\./);
 
-  const unverified = installOutcome(run('complete', [['applied', 'passed'], ['applied', 'failed'], ['applied', 'passed']]), files, project);
-  assert.equal(unverified.ok, false);
-  assert.match(unverified.message, /3 of 3 applied, 2 verified/);
+  // One member written but found present-different: never green, the member is named.
+  const different = installOutcome(run14('complete', [
+    member('.claude\\skills\\grill-me\\SKILL.md', 'write', 'written', 'present-different'),
+    member('.claude\\skills\\grilling\\SKILL.md', 'write', 'written', 'present-matching'),
+  ]), files, project);
+  assert.equal(different.ok, false);
+  assert.match(different.message, /not confirmed on disk: .claude\/skills\/grill-me\/SKILL\.md \(written, check present-different\)/);
 
-  const partial = installOutcome({ ...run('partial', [['applied', 'passed'], ['not-applied', 'not-run']]), diagnostics: [{ code: 'X', message: 'Disk full.' }] }, files, project);
+  // A kept member and a restored one never satisfy the install-success claim.
+  const kept = installOutcome(run14('complete', [
+    member('a.md', 'write', 'written', 'present-matching'),
+    member('b.md', 'write', 'kept', 'unchecked'),
+  ]), files, project);
+  assert.equal(kept.ok, false);
+  assert.match(kept.message, /b\.md \(kept, check unchecked\)/);
+  const restored = installOutcome(run14('complete', [member('a.md', 'remove', 'restored', 'present-matching')]), files, project);
+  assert.equal(restored.ok, false);
+
+  // An incomplete run is partial and names the members the run did not finish.
+  const partial = installOutcome(run14('incomplete', [member('a.md', 'write', 'written', 'present-matching')], [{ code: 'X', message: 'Disk full.' }]), files, project);
   assert.equal(partial.ok, false);
-  assert.match(partial.message, /1 of 3 applied.*Disk full\./);
+  assert.equal(partial.state, 'partial');
+  assert.match(partial.message, /run incomplete.*Disk full\./);
 
-  // Files already in place with the expected bytes are verified by Core and count as installed, but are named apart.
-  const inPlace = installOutcome(run('complete', [['already-satisfied', 'passed'], ['applied', 'passed'], ['applied', 'passed']]), files, project);
-  assert.equal(inPlace.ok, true);
-  assert.match(inPlace.message, /Installed 3 files into sample-js-app \(1 was already in place\)\./);
-  const inPlaceUnverified = installOutcome(run('complete', [['already-satisfied', 'failed'], ['applied', 'passed']]), files, project);
-  assert.equal(inPlaceUnverified.ok, false);
-  assert.match(inPlaceUnverified.message, /1 of 3 applied, 1 already in place, 1 verified/);
-
-  assert.equal(installOutcome(run('complete', []), files, project).ok, false, 'an empty run is not a success');
-  // A newer page request can supersede Apply after the host already wrote files, so it never claims nothing changed.
+  // Empty, cancelled and memberless runs never confirm.
+  assert.equal(installOutcome(run14('complete', []), files, project).ok, false, 'an empty run is not a success');
+  assert.equal(installOutcome(run14('cancelled', []), files, project).ok, false);
   const superseded = installOutcome({ status: 'superseded' }, files, project);
   assert.equal(superseded.ok, false);
   assert.match(superseded.message, /cannot tell whether any files were written/);
   assert.doesNotMatch(superseded.message, /interrupted|Nothing is reported/);
-  // A run that reports fewer operations than were reviewed is not a complete install.
-  const short = installOutcome(run('complete', [['applied', 'passed'], ['applied', 'passed']]), files, project);
-  assert.equal(short.ok, false);
-  assert.match(short.message, /2 of 3 applied/);
+  // A run without the 1.4 member projection cannot claim installed-and-checked.
+  const legacy = installOutcome({ completion: 'complete', diagnostics: [], operations: [
+    { id: '0', application: 'applied', verification: { status: 'passed' } }] }, files, project);
+  assert.equal(legacy.ok, false);
+  assert.doesNotMatch(legacy.message, /Confirmed on disk/i);
   assert.equal(installOutcome(undefined, files, project).ok, false);
-});
-
-// Core gives an operation the Catalog declared no check for "unverified" (no-supplied-check), e.g. a marked block merged
-// into AGENTS.md. Everything was applied; the page says which change was not checked, and never calls it verified.
-test('an applied change with no check is named as not checked, not as an unfinished install', () => {
-  const files = [{ action: 'Add', path: 'ai-coding/RULE_ROUTER.md' }, { action: 'Add', path: 'AGENTS.md' }];
-  const noCheck = { completion: 'complete', diagnostics: [], operations: [
-    { id: 'a', application: 'applied', verification: { status: 'passed' } },
-    { id: 'b', application: 'applied', verification: { status: 'unverified', reason: 'no-supplied-check' } }] };
-  const outcome = installOutcome(noCheck, files, project);
-  assert.equal(outcome.ok, false, 'not a verified success');
-  assert.equal(outcome.state, 'unchecked');
-  assert.match(outcome.message, /^Installed 2 files into sample-js-app\. 1 was checked; AGENTS\.md was written but has no check from the Catalog, so it is not verified\. Open it to confirm\.$/);
-  assert.doesNotMatch(outcome.message, /did not finish/);
-  // A failed or unavailable check is still an unfinished install.
-  const failed = structuredClone(noCheck); failed.operations[0].verification = { status: 'failed' };
-  assert.match(installOutcome(failed, files, project).message, /Install did not finish: 2 of 2 applied, 0 verified/);
 });
 
 test('files in place are not called installed unless Core lists the whole setup as installed', async () => {
