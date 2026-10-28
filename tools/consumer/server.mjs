@@ -60,7 +60,15 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   // per exact release so the catalog never renders the same item twice.
   const installedFamilyInventories = await installedFamilies();
   const installedShas = new Set(installedFamilyInventories.map(entry => entry.release.sha256));
-  const familyInventories = [...installedFamilyInventories, ...frameworkCatalog.inventories.filter(entry => !installedShas.has(entry.release.sha256))];
+  // An explicitly supplied fixture inventory replaces the installed default for the SAME framework and
+  // version: hook fixtures pin an exact golden release while the installed family ships the same
+  // framework/version under a different sha, and Catalog's set resolution rejects that legitimate
+  // ambiguity (REFERENCE_AMBIGUOUS). The fixture wins; other families are untouched.
+  const fixtureVersions = new Set((frameworkFixtureInventories ?? []).map(entry => `${entry.release.framework?.id}@${entry.release.framework?.version}`));
+  const familyInventories = [
+    ...installedFamilyInventories.filter(entry => !fixtureVersions.has(`${entry.release.framework?.id}@${entry.release.framework?.version}`)),
+    ...frameworkCatalog.inventories.filter(entry => !installedShas.has(entry.release.sha256)),
+  ];
   // Explicit previous-package history participates in exact saved-pin reads,
   // never in the current browse inventory. Preserve the logical input saved
   // before upgrade; historical execution is guarded separately below.
