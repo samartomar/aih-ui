@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pageAssets } from './server/assets.mjs';
 import { createWorkbench } from './server/workbench.mjs';
 import { listen } from './server/static.mjs';
@@ -62,20 +62,36 @@ async function withHost(project, { sources = undefined } = {}, run) {
   child.stdout.on('data', chunk => log.push(String(chunk)));
   child.stderr.on('data', chunk => log.push(String(chunk)));
   const host = { pid: child.pid, project };
-  const earlyExit = new Promise((_, reject) => child.once('exit', (code, signal) => reject(new Error(`host exited before ready (code ${code}, signal ${signal}): ${log.join('').slice(-2000)}`))));
-  earlyExit.catch(() => {}); // The race below settles first once the port is read; a later exit must not surface as unhandled.
-  const port = await Promise.race([earlyExit, (async () => {
+  let spawnError;
+  child.once('error', error => { spawnError = error; });
+  const exited = new Promise(resolve => child.once('exit', (code, signal) => resolve({ code, signal })));
+  const waitExit = async milliseconds => {
+    let timer;
+    try {
+      return await Promise.race([exited, new Promise(resolve => { timer = setTimeout(() => resolve(null), milliseconds); })]);
+    } finally { clearTimeout(timer); }
+  };
+  try {
+    let port;
     for (let attempt = 0; attempt < 300; attempt++) {
-      if (existsSync(portPath)) return Number(readFileSync(portPath, 'utf8').trim());
+      if (spawnError) throw spawnError;
+      if (child.exitCode !== null || child.signalCode !== null) throw new Error(`host exited before ready: ${log.join('').slice(-2000)}`);
+      if (existsSync(portPath)) { port = Number(readFileSync(portPath, 'utf8').trim()); break; }
       await new Promise(done => setTimeout(done, 100));
     }
-    throw new Error(`host did not write its port within 30s: ${log.join('').slice(-2000)}`);
-  })()]);
-  try { await run(`http://127.0.0.1:${port}`); }
-  finally {
-    const exit = new Promise(resolve => child.once('exit', (code, signal) => resolve({ code, signal })));
-    child.kill('SIGTERM');
-    host.exit = await Promise.race([exit, new Promise((_, reject) => setTimeout(() => reject(new Error('host did not exit after SIGTERM')), 30_000))]);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`host did not write a valid port within 30s: ${log.join('').slice(-2000)}`);
+    await run(`http://127.0.0.1:${port}`);
+  } finally {
+    if (child.pid && !spawnError) {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
+      host.exit = await waitExit(5000);
+      if (!host.exit) {
+        child.kill('SIGKILL');
+        host.exit = await waitExit(5000);
+        throw new Error(`host required forced shutdown: ${JSON.stringify(host.exit)}`);
+      }
+      if (host.exit.code !== 0) throw new Error(`host did not exit cleanly: ${JSON.stringify(host.exit)}`);
+    }
   }
   host.log = log.join('').slice(-2000);
   return host;
