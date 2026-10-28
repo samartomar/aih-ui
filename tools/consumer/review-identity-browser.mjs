@@ -91,13 +91,14 @@ export async function runReviewIdentityBrowser({ origin, output, playwrightModul
     // Choose the checked finding by its bound identity, not a positional index; fail with the page's
     // diagnostics if Core's inspection bound none, exactly as the maintenance journey does.
     const findingSelect = drawer(page).getByLabel('Checked finding', { exact: true });
+    // Native select options are attached without their own visible box until the dropdown opens.
     const firstFinding = findingSelect.locator('option:not([value=""])').first();
-    if (!await firstFinding.waitFor({ timeout: 10_000 }).then(() => true).catch(() => false)) {
+    if (!await firstFinding.waitFor({ state: 'attached', timeout: 10_000 }).then(() => true).catch(() => false)) {
       await drawer(page).getByText('Checked evidence diagnostics').click();
       const diagnostics = await drawer(page).locator('pre').filter({ hasText: '{' }).last().innerText().catch(() => '(diagnostics unreadable)');
       throw new Error(`Core's page inspection bound no checked finding to ${NOTE}, while the journey evidence binds ${bound.value.bindings.length}. Page diagnostics: ${diagnostics.slice(0, 1200)}`);
     }
-    await findingSelect.selectOption({ label: await firstFinding.innerText() });
+    await findingSelect.selectOption({ label: await firstFinding.textContent() });
     await drawer(page).getByRole('button', { name: 'Propose human review', exact: true }).click();
     await page.locator('#policy-accept:not([disabled])').waitFor(); await page.locator('#policy-accept').click();
   };

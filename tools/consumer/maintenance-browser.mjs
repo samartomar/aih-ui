@@ -386,13 +386,14 @@ export async function runMaintenanceBrowser({ origin, output, playwrightModule, 
     // finding), not a positional index. If Core's page inspection reports no findings while the journey's own
     // evidence binds them, fail with the page's diagnostics instead of a bare select timeout.
     const findingSelect = drawer(resolvedAuthoring).getByLabel('Checked finding', { exact: true });
+    // Native select options are attached without their own visible box until the dropdown opens.
     const firstFinding = findingSelect.locator('option:not([value=""])').first();
-    if (!await firstFinding.waitFor({ timeout: 10_000 }).then(() => true).catch(() => false)) {
+    if (!await firstFinding.waitFor({ state: 'attached', timeout: 10_000 }).then(() => true).catch(() => false)) {
       await drawer(resolvedAuthoring).getByText('Checked evidence diagnostics').click();
       const diagnostics = await drawer(resolvedAuthoring).locator('pre').filter({ hasText: '{' }).last().innerText().catch(() => '(diagnostics unreadable)');
       throw new Error(`Core's page inspection bound no checked finding to ${NOTE}, while the journey evidence binds ${bound.value.bindings.length}. Page diagnostics: ${diagnostics.slice(0, 1200)}`);
     }
-    await findingSelect.selectOption({ label: await firstFinding.innerText() });
+    await findingSelect.selectOption({ label: await firstFinding.textContent() });
     await drawer(resolvedAuthoring).getByRole('button', { name: 'Propose human review', exact: true }).click();
     await resolvedAuthoring.locator('#policy-accept:not([disabled])').waitFor(); await resolvedAuthoring.locator('#policy-accept').click();
     const resolvedPath = join(output, 'policy.resolved.downloaded.json');
