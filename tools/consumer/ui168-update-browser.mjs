@@ -84,7 +84,7 @@ export async function runUi168UpdateInstallBrowser({ origin, output, playwrightM
   } finally { await browser.close(); }
 }
 
-export async function runUi168UpdateVerifyBrowser({ origin, output, project, playwrightModule, theme = 'dark', edited = false }) {
+export async function runUi168UpdateVerifyBrowser({ origin, output, project, playwrightModule, theme = 'dark', edited = false, operationState = undefined }) {
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true });
@@ -97,7 +97,21 @@ export async function runUi168UpdateVerifyBrowser({ origin, output, project, pla
     const installed = page.locator('[data-installed-other]').filter({ hasText: 'Review note' }).first();
     await installed.waitFor();
     await installed.locator('[data-installed-state="update-available"]').waitFor();
+    if (operationState === 'loading') await page.route('**/api/authoring-update', async route => { await new Promise(done => setTimeout(done, 500)); await route.continue(); });
+    if (operationState === 'unavailable') await page.route('**/api/authoring-update', route => route.fulfill({ json: { disposition: 'unavailable', diagnostics: [{ message: 'Update unavailable fixture' }] } }));
+    if (operationState === 'failed') await page.route('**/api/authoring-update', route => route.abort());
     await installed.getByRole('button', { name: 'Update', exact: true }).click();
+    if (operationState === 'loading') await page.locator('#installed-message').filter({ hasText: 'Checking the replacement…' }).waitFor();
+    if (operationState === 'unavailable') {
+      await page.locator('#installed-message').filter({ hasText: 'Update cannot go ahead.' }).waitFor();
+      await writeFile(join(output, `update-unavailable-${theme}.json`), JSON.stringify({ status: 'passed', state: operationState }, null, 2));
+      return { status: 'passed' };
+    }
+    if (operationState === 'failed') {
+      await page.locator('#installed-message').filter({ hasText: 'Update did not start:' }).waitFor();
+      await writeFile(join(output, `update-failed-${theme}.json`), JSON.stringify({ status: 'passed', state: operationState }, null, 2));
+      return { status: 'passed' };
+    }
     const preview = installed.locator('[data-update-preview]');
     await preview.waitFor();
     assert.match(await preview.innerText(), /replacement/i);

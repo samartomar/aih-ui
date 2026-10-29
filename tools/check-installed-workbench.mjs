@@ -40,6 +40,10 @@ try {
   // The project folder and Your setup entry: typed, refused and recent folders, against the same disposable default.
   if (!cancelAfterFirst) await runProjectFolderBrowser({ origin: `http://127.0.0.1:${address.port}`, output: join(consumerDir, 'project-folder-evidence'),
     playwrightModule: import.meta.resolve('playwright'), project, other: `${project}-other` });
+  if (!cancelAfterFirst) for (const timingState of ['loading', 'unavailable', 'failed']) {
+    await runInstalledPanelBrowser({ origin: `http://127.0.0.1:${address.port}`, output: join(consumerDir, `installed-timing-state-${timingState}`),
+      playwrightModule: import.meta.resolve('playwright'), timingState });
+  }
 } finally { await new Promise(resolve => workbench.server.close(resolve)); }
 
 // UI165 acceptance cases. Each case owns a fresh disposable target hosted by a REAL child Node process
@@ -168,12 +172,26 @@ for (const theme of THEMES) {
     await withHost(updateProject, { noteVariant: 'updated' }, async origin =>
       await caseOutcome(`UI168 reviewed update (${theme}, edited=${edited})`, await runUi168UpdateVerifyBrowser({ origin, output: join(consumerDir, `ui168-update-verify-${theme}-${edited}`), project: updateProject, playwrightModule: playwrightPath, theme, edited })));
   }
+  for (const operationState of ['loading', 'unavailable', 'failed']) {
+    const updateStateProject = join(consumerDir, `ui168-update-state-${theme}-${operationState}-${randomUUID().slice(0, 8)}`);
+    await withHost(updateStateProject, { noteVariant: 'current' }, async origin =>
+      await runUi168UpdateInstallBrowser({ origin, output: join(consumerDir, `ui168-update-state-install-${theme}-${operationState}`), playwrightModule: playwrightPath, theme }));
+    await withHost(updateStateProject, { noteVariant: 'updated' }, async origin =>
+      await caseOutcome(`UI168 update ${operationState} state (${theme})`, await runUi168UpdateVerifyBrowser({ origin, output: join(consumerDir, `ui168-update-state-${theme}-${operationState}`), project: updateStateProject, playwrightModule: playwrightPath, theme, operationState })));
+  }
 
   const basicsProject = join(consumerDir, `ui168-basics-${theme}-${randomUUID().slice(0, 8)}`);
   await mkdir(basicsProject, { recursive: true });
   await writeFile(join(basicsProject, 'package.json'), JSON.stringify({ name: 'ui168-facts-fixture', private: true, type: 'module', engines: { node: '>=26 <27' }, scripts: { test: 'node --test' } }, null, 2));
   await withHost(basicsProject, { sources: mcpSources }, async origin =>
     await caseOutcome(`UI168 project facts and install (${theme})`, await runUi168ProjectBasicsBrowser({ origin, output: join(consumerDir, `ui168-basics-evidence-${theme}`), playwrightModule: playwrightPath, theme })));
+  for (const factsState of ['loading', 'empty', 'unavailable', 'failed']) {
+    const factsStateProject = join(consumerDir, `ui168-facts-state-${theme}-${factsState}-${randomUUID().slice(0, 8)}`);
+    await mkdir(factsStateProject, { recursive: true });
+    await writeFile(join(factsStateProject, 'package.json'), JSON.stringify({ name: 'ui168-facts-fixture', private: true, type: 'module', engines: { node: '>=26 <27' }, scripts: { test: 'node --test' } }, null, 2));
+    await withHost(factsStateProject, { sources: mcpSources }, async origin =>
+      await caseOutcome(`UI168 project facts ${factsState} state (${theme})`, await runUi168ProjectBasicsBrowser({ origin, output: join(consumerDir, `ui168-facts-state-${theme}-${factsState}`), playwrightModule: playwrightPath, theme, factsState })));
+  }
   const driftProject = join(consumerDir, `ui168-drift-${theme}-${randomUUID().slice(0, 8)}`);
   await withHost(driftProject, { sources: mcpSources }, async origin =>
     await caseOutcome(`UI168 managed block drift (${theme})`, await runUi168BlockDriftBrowser({ origin, output: join(consumerDir, `ui168-drift-evidence-${theme}`), project: driftProject, playwrightModule: playwrightPath, theme })));

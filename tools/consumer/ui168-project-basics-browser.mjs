@@ -18,7 +18,7 @@ async function openPage(browser, origin, theme, family) {
   return { context, page };
 }
 
-export async function runUi168ProjectBasicsBrowser({ origin, output, playwrightModule, theme = 'dark' }) {
+export async function runUi168ProjectBasicsBrowser({ origin, output, playwrightModule, theme = 'dark', factsState = undefined }) {
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true });
@@ -29,12 +29,29 @@ export async function runUi168ProjectBasicsBrowser({ origin, output, playwrightM
     await page.locator('#framework-navigation button[data-framework^="internal:project-basics"]').click();
     if (!await page.locator('#browse-all-items').isChecked()) await page.locator('#browse-all-items').check();
     await page.locator('#cards-grid [data-card-id]').first().waitFor();
+    if (factsState === 'loading') await page.route('**/api/authoring-project-facts', async route => { await new Promise(done => setTimeout(done, 500)); await route.continue(); });
+    if (factsState === 'unavailable') await page.route('**/api/authoring-project-facts', route => route.fulfill({ json: { status: 'invalid', facts: null, diagnostics: [{ message: 'Facts unavailable fixture' }] } }));
+    if (factsState === 'failed') await page.route('**/api/authoring-project-facts', route => route.abort());
+    if (factsState === 'empty') await page.route('**/api/authoring-project-facts', route => route.fulfill({ json: { status: 'complete', facts: [], diagnostics: [] } }));
     await addFromCatalog(page, 'project-basics.working-rules');
     await openPolicyDrawer(page);
     await page.locator('#install-details > summary').click();
+    if (factsState === 'loading') {
+      await page.locator('#install-project-facts').filter({ hasText: 'Loading project facts…' }).waitFor();
+      await page.locator('#install-project-facts').filter({ hasText: 'Detected: ' }).waitFor();
+    }
     const facts = await page.locator('#install-project-facts').innerText();
-    assert.match(facts, /Detected: /, facts);
-    assert.match(facts, /Inferred: /, facts);
+    if (factsState === 'unavailable') assert.match(facts, /Project facts unavailable: Facts unavailable fixture/);
+    else if (factsState === 'failed') assert.match(facts, /Project facts failed:/);
+    else if (factsState === 'empty') assert.match(facts, /No project facts detected or inferred/);
+    else {
+      assert.match(facts, /Detected: /, facts);
+      assert.match(facts, /Inferred: /, facts);
+    }
+    if (['unavailable', 'failed', 'empty'].includes(factsState)) {
+      await writeFile(join(output, `project-facts-${factsState}-${theme}.json`), JSON.stringify({ status: 'passed', state: factsState, facts }, null, 2));
+      return { status: 'passed' };
+    }
     await page.locator('#install-button').waitFor();
     assert.equal(await page.locator('#install-button').isEnabled(), true, await page.locator('#install-message').innerText());
     await page.locator('#install-button').click();

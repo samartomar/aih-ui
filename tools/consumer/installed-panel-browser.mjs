@@ -8,7 +8,7 @@ import { openPolicyWorkspace, openSetupAdvanced } from './advanced-browser.mjs';
 
 // Real packed packages and a disposable host project. Every mutation goes through the running page's
 // ordinary reviewed Core path; no mocked inventory, preparation, Apply or browser client state.
-export async function runInstalledPanelBrowser({ origin, output, playwrightModule, cancellationThemes = [] }) {
+export async function runInstalledPanelBrowser({ origin, output, playwrightModule, cancellationThemes = [], timingState = undefined }) {
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true }), errors = [], outcomes = [];
@@ -41,7 +41,8 @@ export async function runInstalledPanelBrowser({ origin, output, playwrightModul
       await page.locator('#catalog-search').fill('grill-me');
       // One-click Add puts it in the setup with the items it needs; Install and the installed list are in Your setup.
       await addFromCatalog(page, 'extensions.matt.grill-me'); await openPolicyDrawer(page);
-      await page.locator('#installed-note').filter({ hasText: 'Nothing from Workbench is installed' }).waitFor();
+      if (!['unavailable', 'failed'].includes(timingState)) await page.locator('#installed-note').filter({ hasText: 'Nothing from Workbench is installed' }).waitFor();
+      assert.equal(await page.locator('#install-timings').isHidden(), true, 'timings are empty before the first install');
       await page.locator('#install-button:not([disabled])').waitFor();
       assert.ok(await page.locator('#install-files').getByText(/SKILL.md/).count());
       // Review the named items through the same expandable section a person opens before Install.
@@ -53,12 +54,24 @@ export async function runInstalledPanelBrowser({ origin, output, playwrightModul
       const rowsText = await page.locator('#install-review-rows').innerText();
       assert.match(rowsText, /(When used: \d+ bytes · \d+ chars|Size unknown: Core reported no delivered size for this item\.)/, 'the size line is Core\'s exact wording, never a vague allowance');
       assert.match(rowsText, /Chosen by you/, 'a directly chosen item says its recorded origin');
+      if (timingState === 'loading') await page.route('**/api/authoring-timings', async route => { await new Promise(done => setTimeout(done, 500)); await route.continue(); });
+      if (timingState === 'unavailable') await page.route('**/api/authoring-timings', route => route.fulfill({ json: { status: 'unavailable', reason: 'Timings unavailable fixture' } }));
+      if (timingState === 'failed') await page.route('**/api/authoring-timings', route => route.abort());
       await page.locator('#install-button').click();
       await page.locator('#install-message[data-outcome="installed"]').waitFor({ timeout: 120_000 });
+      if (timingState === 'loading') await page.locator('#install-timing-rows').filter({ hasText: 'Loading timings for run' }).waitFor({ state: 'attached' });
+      if (['unavailable', 'failed'].includes(timingState)) {
+        await page.locator('#install-timing-rows').filter({ hasText: timingState === 'unavailable' ? 'Timings unavailable for run' : 'Timings failed for run' }).waitFor({ state: 'attached' });
+        await writeFile(join(output, `timings-${timingState}-${theme}.json`), JSON.stringify({ status: 'passed', state: timingState }, null, 2));
+        await context.close();
+        continue;
+      }
       const group = page.locator('[data-installed-item="extensions.matt.grill-me"]');
       await group.waitFor();
       if (!await group.locator('details').evaluate(details => details.open)) await group.locator('details > summary').click();
       assert.match(await group.innerText(), /it needs[\s\S]*grilling/);
+      assert.equal(await group.getByRole('button', { name: 'Update', exact: true }).count(), 0, 'no update action in the empty update state');
+      assert.equal(await page.locator('#install-project-facts').textContent(), '', 'no Project basics facts in the empty facts state');
       // UI166: only the strict complete run claims confirmed on disk.
       assert.match(await page.locator('#install-message').innerText(), /Confirmed on disk/);
       await page.locator('#install-timing-rows').getByText(/inventory:/).waitFor({ state: 'attached' });

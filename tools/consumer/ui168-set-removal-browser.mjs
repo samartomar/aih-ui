@@ -3,6 +3,28 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { addFromCatalog, chooseCatalogFamily, openPolicyDrawer } from './policy-drawer.mjs';
 
+async function assertLifecycleContrast(page) {
+  const ratios = await page.evaluate(() => {
+    const channels = value => (value.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+    const luminance = rgb => rgb.map(value => value / 255).map(value => value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
+      .reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
+    const background = node => {
+      for (let current = node; current; current = current.parentElement) {
+        const value = getComputedStyle(current).backgroundColor;
+        if (value !== 'transparent' && value !== 'rgba(0, 0, 0, 0)') return value;
+      }
+      return getComputedStyle(document.body).backgroundColor;
+    };
+    return [...document.querySelectorAll('[data-installed-set], #install-project-facts li, #install-timing-rows li, [data-update-preview]')]
+      .filter(node => node.checkVisibility()).map(node => {
+        const [high, low] = [luminance(channels(getComputedStyle(node).color)), luminance(channels(background(node)))].sort((a, b) => b - a);
+        return (high + 0.05) / (low + 0.05);
+      });
+  });
+  assert.ok(ratios.length > 0, 'lifecycle text is present for contrast checks');
+  assert.ok(ratios.every(ratio => ratio >= 4.5), `lifecycle contrast below 4.5: ${Math.min(...ratios)}`);
+}
+
 export async function runUi168SetRemovalBrowser({ origin, output, playwrightModule, theme = 'dark' }) {
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
@@ -44,6 +66,8 @@ export async function runUi168SetRemovalBrowser({ origin, output, playwrightModu
     assert.ok(['removed', 'nothing-removed'].includes(await page.locator('#installed-message').getAttribute('data-outcome')), await page.locator('#installed-message').innerText());
     assert.deepEqual(calls, ['remove', 'apply']);
     assert.match(await page.locator('#installed-message').innerText(), /kept/i);
+    await page.locator('#install-timings > summary').click();
+    await assertLifecycleContrast(page);
     await page.screenshot({ path: join(output, `set-removal-${theme}.png`), fullPage: true });
     await writeFile(join(output, `set-removal-${theme}.json`), JSON.stringify({ status: 'passed', review, message: await page.locator('#installed-message').innerText(), calls, errors }, null, 2));
     assert.deepEqual(errors, []);
