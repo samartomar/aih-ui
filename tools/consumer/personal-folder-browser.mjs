@@ -55,6 +55,7 @@ try {
   // Every maintained family remains selectable alongside the local root.
   for (const [family, id] of [['Extensions', 'extensions.matt.ask-matt'], ['ECC', 'ecc.skill.accessibility'], ['Superpowers', 'superpowers.skill.brainstorming'], ['Anthropic', 'anthropic.skill.academy-guide']]) {
     await page.locator('#family').selectOption(family);
+    await page.locator('#support-filter').selectOption('all');
     await page.getByRole('button', { name: `Choose ${id}`, exact: true }).click();
     await page.locator('#accept:not([disabled])').waitFor(); await page.locator('#accept').click();
   }
@@ -126,7 +127,7 @@ try {
   assert.deepEqual(headless.value.intent.roots, saved.metadata['aih.workbench'].roots);
   assert.deepEqual(headless.value.policy.selections, saved.selections);
   await assert.rejects(access(marker)); assert.deepEqual(errors, []);
-  await reopened.screenshot({ path: join(output, 'fresh-rebound.png'), fullPage: true });
+  await reopened.screenshot({ path: join(output, 'fresh-rebound.png') });
   await writeFile(join(output, 'browser-evidence.json'), JSON.stringify({ status: 'passed', entry: '/authoring', chromium: browser.version(),
     families: ['Extensions', 'ECC', 'Superpowers', 'Anthropic', 'Personal'], roots: saved.metadata['aih.workbench'].roots,
     scenarios: ['invalid-folder-refused', 'two-skills-recognized', 'local-origin', 'five-family-selection', 'actual-download', 'fresh-context-missing-root', 'changed-root-refused', 'exact-explicit-rebind', 'catalog-ready-before-success', 'immediate-reopen-preserves-personal-browsing', 'headless-agreement', 'no-supplied-code-execution'], errors }, null, 2));
