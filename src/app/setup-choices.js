@@ -79,28 +79,56 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
     title.textContent = entries.length ? `Your choices (${entries.length})` : 'Your choices';
     empty.hidden = Boolean(entries.length);
     list.replaceChildren(...groupedLines(entries, source));
-    const left = leftOutSection(source, items);
-    if (left) list.append(left);
+    for (const section of leftOutSection(source, items) ?? []) list.append(section);
     hostLine.textContent = drawerCopiesWords(hostView());
   }
-  // Named left-out items (Q7-R), from the live intent's recorded exclusions: truthful reasons, explicit
-  // skips visible; recovery stays with the existing draft operations, so this renders facts only.
+  // Named left-out groups (Q7-R), from the live intent's recorded exclusions: each exclusion keeps the
+  // originId of the set choice that authored it, so left-out items group under that recorded exact set
+  // identity. Direct exclusions stay in their own explicit group; an origin the intent no longer records
+  // is said as unknown - never a fabricated set. Reasons render verbatim when recorded.
   function leftOutSection(source, items) {
     const exclusions = source?.exclusions ?? [];
     if (!exclusions.length) return null;
     const byKey = new Map(items.map(item => [itemKey(item), item]));
-    const section = el('li', 'space-y-1'); section.dataset.leftOut = 'true';
-    section.append(el('p', 'text-[11px] font-medium text-on-surface-variant', 'Left out'));
-    const rows = el('ul', 'pl-3 space-y-1');
+    const choices = (source?.provenance ?? []).flatMap(entry => entry.materialSource?.workbenchSetChoices?.choices ?? []);
+    // Set-choice origin ids embed their release digest by construction (set-<releaseSha16>-<setId>) and the
+    // consumer refuses duplicate identities, so originId is the validated public qualification - no invented
+    // collision semantics.
+    const byOrigin = new Map(choices.map(choice => [choice.originId, choice.request]));
+    const knownOrigins = new Set((source?.origins ?? []).map(origin => origin.id));
+    const groups = new Map();
+    const push = (key, request, exclusion) => {
+      if (!groups.has(key)) groups.set(key, { request, exclusions: [] });
+      groups.get(key).exclusions.push(exclusion);
+    };
     for (const exclusion of exclusions) {
-      const row = el('li', 'text-[11px] text-on-surface-variant');
-      const name = byKey.get(`${exclusion.releaseSha256}/${exclusion.itemId}`)?.label ?? exclusion.itemId;
-      row.textContent = `${name}${exclusion.scope === 'user' ? ' (your folders)' : ''}${exclusion.reason ? ` — ${exclusion.reason}` : ' — recorded left-out choice'}`;
-      row.dataset.leftOutItem = exclusion.itemId;
-      rows.append(row);
+      const request = byOrigin.get(exclusion.originId);
+      if (request) push(`${request.release?.releaseSha256}/${request.setId}/${request.setSha256}`, request, exclusion);
+      else if (exclusion.originId === 'direct') push('direct', null, exclusion);
+      else push('unknown', null, exclusion);
     }
-    section.append(rows);
-    return section;
+    const nodes = [];
+    for (const [key, group] of groups) {
+      const section = el('li', 'space-y-1'); section.dataset.leftOut = key;
+      const heading = el('p', 'text-[11px] font-medium text-on-surface-variant');
+      if (group.request) {
+        heading.textContent = `Left out from ${group.request.setId} · exact set ${group.request.setSha256}`;
+        heading.title = key;
+        heading.dataset.leftOutSet = group.request.setId;
+      } else if (key === 'direct') { heading.textContent = 'Left out — direct choices'; heading.dataset.leftOutSet = 'direct'; }
+      else { heading.textContent = 'Left out — origin no longer recorded'; heading.dataset.leftOutSet = 'unknown'; }
+      const rows = el('ul', 'pl-3 space-y-1');
+      for (const exclusion of group.exclusions) {
+        const row = el('li', 'text-[11px] text-on-surface-variant');
+        const name = byKey.get(`${exclusion.releaseSha256}/${exclusion.itemId}`)?.label ?? exclusion.itemId;
+        row.textContent = `${name}${exclusion.scope === 'user' ? ' (your folders)' : ''}${exclusion.reason ? ` — ${exclusion.reason}` : ' — recorded left-out choice'}`;
+        row.dataset.leftOutItem = exclusion.itemId;
+        rows.append(row);
+      }
+      section.append(heading, rows);
+      nodes.push(section);
+    }
+    return nodes;
   }
   // Group the actual named choice rows under their recorded exact set identities (Q7-R): simultaneous
   // memberships appear under every set they belong to; roots with no set origin stay explicit. Removal
@@ -108,30 +136,51 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
   function groupedLines(entries, source) {
     const choices = (source?.provenance ?? []).flatMap(entry => entry.materialSource?.workbenchSetChoices?.choices ?? []);
     const byOrigin = new Map(choices.map(choice => [choice.originId, choice.request]));
+    const keyOf = request => `${request.release?.releaseSha256}/${request.setId}/${request.setSha256}`;
+    // Each interactive row renders exactly once (its Remove action is never duplicated): in its FIRST
+    // recorded set, with an 'Also in' note naming every further exact set membership.
+    const rows = new Map(entries.map(entry => [entry, line(entry)]));
+    const memberships = new Map();
+    for (const entry of entries) {
+      const sets = (entry.root.originIds ?? []).filter(id => byOrigin.has(id)).map(id => byOrigin.get(id));
+      memberships.set(entry, sets);
+    }
+    const firstKey = new Map([...memberships].map(([entry, sets]) => [entry, sets.length ? keyOf(sets[0]) : null]));
     const groups = new Map();
     const push = (key, request, entry) => {
       if (!groups.has(key)) groups.set(key, { request, entries: [] });
-      if (!groups.get(key).entries.includes(entry)) groups.get(key).entries.push(entry);
+      groups.get(key).entries.push(entry);
     };
     for (const entry of entries) {
-      const sets = (entry.root.originIds ?? []).filter(id => byOrigin.has(id)).map(id => byOrigin.get(id));
-      if (!sets.length) push(null, null, entry);
-      // Fully qualified identity (Q7-R): release digest + setId + setSha256, so provenance entries from
-      // different frameworks/releases never collide.
-      else for (const request of sets) push(`${request.release?.releaseSha256}/${request.setId}/${request.setSha256}`, request, entry);
+      const key = firstKey.get(entry);
+      push(key, key ? groups.get(key)?.request ?? [...memberships.get(entry)][0] : null, entry);
+    }
+    // Seed group metadata from every membership so a group's heading identity is exact even for
+    // simultaneous members whose row renders in their first set.
+    for (const entry of entries) for (const request of memberships.get(entry)) {
+      const key = keyOf(request);
+      if (!groups.has(key)) groups.set(key, { request, entries: [] });
+      groups.get(key).request = groups.get(key).request ?? request;
     }
     const nodes = [];
     for (const [key, group] of groups) {
+      const members = group.entries;
+      if (!members.length) continue;
       const head = el('p', 'text-[11px] font-medium text-on-surface-variant');
       if (group.request) {
         head.textContent = `${group.request.setId} · exact set ${group.request.setSha256}`;
-        head.title = `${group.request.release?.releaseSha256}/${group.request.setId}/${group.request.setSha256}`;
+        head.title = keyOf(group.request);
         head.dataset.choiceSet = group.request.setId;
       } else { head.textContent = 'Individual choices'; head.dataset.choiceSet = 'individual'; }
-      const rows = el('ul', 'pl-3 space-y-1');
-      rows.append(...group.entries.map(line));
+      const rowsNode = el('ul', 'pl-3 space-y-1');
+      for (const entry of members) {
+        const row = rows.get(entry);
+        const all = memberships.get(entry);
+        if (all.length > 1) row.children[0].append(el('span', 'text-on-surface-variant text-[11px]', `Also in: ${all.slice(1).map(request => request.setId).join(', ')}`));
+        rowsNode.append(row);
+      }
       const wrap = el('li', 'space-y-1', ''); wrap.dataset.choiceGroup = key ?? 'individual';
-      wrap.append(head, rows);
+      wrap.append(head, rowsNode);
       nodes.push(wrap);
     }
     return nodes;

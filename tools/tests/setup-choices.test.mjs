@@ -70,15 +70,22 @@ test('Q7-R: chosen rows group under recorded exact set identities, with simultan
   assert.deepEqual(removed, [['tdd', 'tdd']], 'the grouped row\'s removal invokes the real onRemove callback');
 });
 
-test('Q7-R: two recorded sets keep separate qualified groups and left-out items render with reasons', () => {
+test('Q7-R: one chosen item in TWO actual sets, and left-out items grouped under their authoring sets', () => {
   const SHA1 = '1'.repeat(64), SHA2 = '2'.repeat(64);
   const originA = `set-${REL.slice(0, 16)}-alpha`, originB = `set-${REL.slice(0, 16)}-beta`;
+  // tdd is chosen by BOTH recorded sets - the simultaneous two-set proof.
   const roots = [
     { ...ref('grill-me'), originIds: [originA] },
-    { ...ref('tdd'), originIds: [originB] },
+    { ...ref('tdd'), originIds: [originA, originB] },
     { ...ref('git-guard'), originIds: [] },
   ];
-  const intent = { roots, pins: [], exclusions: [{ originId: 'direct', releaseSha256: REL, itemId: 'notices', scope: 'project', reason: 'left out by me' }],
+  const origins = [{ id: 'direct', kind: 'direct' }, { id: originA, kind: 'direct' }, { id: originB, kind: 'direct' }];
+  const intent = { roots, pins: [], origins,
+    exclusions: [
+      { originId: originA, releaseSha256: REL, itemId: 'notices', scope: 'project', reason: 'alpha left it out' },
+      { originId: originB, releaseSha256: REL, itemId: 'grilling', scope: 'project' },
+      { originId: 'direct', releaseSha256: REL, itemId: 'git-guard.scripts', scope: 'project', reason: 'left out by me' },
+    ],
     provenance: [{ releaseSha256: REL, materialSource: { workbenchSetChoices: { choices: [
       { originId: originA, request: { setId: 'alpha', setSha256: SHA1, release: { releaseSha256: REL } } },
       { originId: originB, request: { setId: 'beta', setSha256: SHA2, release: { releaseSha256: REL } } },
@@ -88,13 +95,43 @@ test('Q7-R: two recorded sets keep separate qualified groups and left-out items 
   view.render();
   const groups = new Map(walk(view.node).filter(node => node.dataset.choiceGroup).map(group => [group.dataset.choiceGroup, group]));
   assert.ok(groups.get(`${REL}/alpha/${SHA1}`), 'first set group by full identity');
-  assert.ok(groups.get(`${REL}/beta/${SHA2}`), 'second set group by full identity');
-  assert.deepEqual(walk(groups.get(`${REL}/beta/${SHA2}`)).filter(node => node.dataset.choiceItem).map(node => node.dataset.choiceItem), ['tdd']);
+  // beta has no chosen rows of its own (tdd renders once in alpha with an Also-in note); its group shows in left-out.
+  // The one item in two actual sets: chosen membership appears under BOTH sets, rendered once overall.
+  assert.deepEqual(walk(groups.get(`${REL}/alpha/${SHA1}`)).filter(node => node.dataset.choiceItem).map(node => node.dataset.choiceItem).sort(), ['grill-me', 'tdd']);
+  assert.equal(walk(view.node).filter(node => node.dataset.choiceItem === 'tdd').length, 1, 'the simultaneous member renders exactly once (no duplicated Remove)');
+  const tddRow = walk(view.node).find(node => node.dataset.choiceItem === 'tdd');
+  const note = walk(tddRow).find(node => /Also in:/.test(node.textContent));
+  assert.ok(note && /beta/.test(note.textContent), 'the second set membership stays visible as an exact note');
   assert.deepEqual(walk(groups.get('individual')).filter(node => node.dataset.choiceItem).map(node => node.dataset.choiceItem), ['git-guard']);
-  const left = walk(view.node).find(node => node.dataset.leftOut);
-  assert.ok(left, 'a left-out section renders');
-  const leftRow = walk(left).find(node => node.dataset.leftOutItem === 'notices');
-  assert.match(leftRow.textContent, /Extensions licenses and notices — left out by me/, 'named left-out item with its truthful reason');
+  // Left-out items group under the exact set that authored them; direct stays explicit.
+  const leftGroups = new Map(walk(view.node).filter(node => node.dataset.leftOut).map(group => [group.dataset.leftOut, group]));
+  const alphaLeft = leftGroups.get(`${REL}/alpha/${SHA1}`);
+  assert.ok(alphaLeft, 'set-owned left-out group by full identity');
+  const alphaRow = walk(alphaLeft).find(node => node.dataset.leftOutItem === 'notices');
+  assert.match(alphaRow.textContent, /Extensions licenses and notices — alpha left it out/, 'named left-out item under its authoring set with its reason');
+  const betaLeft = leftGroups.get(`${REL}/beta/${SHA2}`);
+  const betaRow = walk(betaLeft).find(node => node.dataset.leftOutItem === 'grilling');
+  assert.match(betaRow.textContent, /grilling — recorded left-out choice/, 'no fabricated reason when none is recorded');
+  const directLeft = leftGroups.get('direct');
+  assert.match(walk(directLeft).find(node => node.dataset.leftOutItem === 'git-guard.scripts').textContent, /left out by me/, 'direct exclusion stays in its own explicit group');
+  // Live draft: the same render reads the draft's live intent, not the saved base.
+  const draft = { intent };
+  const draftView = createSetupChoices({ client: { draft, intent: { roots: [], pins: [] }, catalog: { items }, bytes: [] }, el: fake, button });
+  draftView.render();
+  const draftLeft = new Map(walk(draftView.node).filter(node => node.dataset.leftOut).map(group => [group.dataset.leftOut, group]));
+  assert.ok(draftLeft.get(`${REL}/beta/${SHA2}`), 'draft live intent drives the same grouped left-out render');
+});
+
+test('Q7-R: a left-out origin the intent no longer records is said as unknown, never a fabricated set', () => {
+  const intent = { roots: [], pins: [], origins: [{ id: 'direct', kind: 'direct' }],
+    exclusions: [{ originId: 'set-stale-left-out', releaseSha256: REL, itemId: 'notices', scope: 'project' }],
+    provenance: [] };
+  const button = (label, action) => { const node = fake('button', '', label); node.addEventListener('click', action); return node; };
+  const view = createSetupChoices({ client: { intent, catalog: { items }, bytes: [] }, el: fake, button });
+  view.render();
+  const unknown = walk(view.node).find(node => node.dataset.leftOut === 'unknown');
+  assert.ok(unknown, 'unknown-origin left-out group renders explicitly');
+  assert.match(walk(unknown).find(node => node.dataset.leftOutItem === 'notices').textContent, /Extensions licenses and notices/, 'the item is still named');
 });
 
 // A small DOM: enough for the section to build its rows.
