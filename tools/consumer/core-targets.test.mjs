@@ -90,11 +90,15 @@ test('the contractCheck service operation runs the installed Core checkContracts
     else assert.deepEqual([row.status, row.reason], ['unavailable', 'fixtures-missing'], JSON.stringify(row));
   }
   // The Workbench reads Core results through its own public readers (aih-ui/stored-results, Core's validators). With a Core that
-  // publishes no file-state validator there is no file-state reader, so those checks cannot run and never pass.
+  // publishes no file-state validator there is no file-state reader, so those checks cannot run and never pass. Every other
+  // Core format the Workbench declares it accepts has no public reader to run, so its checks stay unavailable, never passed.
   const fileStateReader = typeof contracts.validateFileStateResult === 'function';
+  const readable = new Set(['urn:aihq:core:native-verification-result:1.0.0', ...(fileStateReader ? ['urn:aihq:core:file-state-result:1.1.0'] : [])]);
+  const accepted = new Set(JSON.parse(readFileSync(join(repo, 'package-support-1.1.json'), 'utf8')).contracts.filter(item => item.role === 'accepts').map(item => item.id));
   for (const row of summary.checks.filter(item => item.readerPackage === 'aih-ui')) {
-    if (row.contractId === 'urn:aihq:core:native-verification-result:1.0.0' || fileStateReader) assert.equal(row.status, 'passed', JSON.stringify(row));
-    else assert.deepEqual([row.contractId, row.status, row.reason], ['urn:aihq:core:file-state-result:1.1.0', 'unavailable', 'reader-missing'], JSON.stringify(row));
+    assert.ok(accepted.has(row.contractId), JSON.stringify(row));
+    if (readable.has(row.contractId)) assert.equal(row.status, 'passed', JSON.stringify(row));
+    else assert.deepEqual([row.status, row.reason], ['unavailable', 'reader-missing'], JSON.stringify(row));
   }
   // With Core's file-state validator, both file-state fixtures Core publishes are read by the Workbench's own reader.
   // Every fixture Core publishes for a result the Workbench reads is checked against the Workbench's reader, accept and refuse alike.
