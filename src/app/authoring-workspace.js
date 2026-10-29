@@ -152,7 +152,8 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   let hostCopies, hostCopiesAttempt = 0;
   const refreshHostFacts = async () => {
     const attempt = ++hostCopiesAttempt;
-    const roots = client.draft?.roots ?? client.intent?.roots ?? [];
+    // One snapshot with the catalog controller and compileDraft: an open draft's LIVE intent roots win (Q6-R).
+    const roots = (client.draft ? client.draft.intent?.roots : client.intent?.roots) ?? [];
     const tool = (() => { try { return globalThis.localStorage?.getItem(YOUR_TOOL_KEY) ?? undefined; } catch { return undefined; } })();
     const items = roots.map(root => ({ releaseSha256: root.releaseSha256, itemId: root.itemId }));
     const result = await client.request('tool-host', { tool, items }).catch(() => undefined);

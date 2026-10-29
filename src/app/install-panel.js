@@ -136,7 +136,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
       head.append(el('span', 'font-medium', row.heading));
       if (row.kind) head.append(el('span', 'text-[11px] text-on-surface-variant', row.kind));
       if (row.how.length) head.append(el('span', 'text-[11px] text-on-surface-variant', row.how.join('; ')));
-      if (row.sets.length) head.append(el('span', 'text-[11px] text-on-surface-variant', `Sets: ${row.sets.map(set => set.setId).join(', ')}`));
+      if (row.sets.length) head.append(...row.sets.map(set => { const chip = el('span', 'text-[11px] text-on-surface-variant', `${set.setId} · exact set ${set.setSha256}`); chip.title = `${set.framework}/${set.setId}/${set.setSha256}`; return chip; }));
       item.append(head);
       const meta = [row.scope === 'user' ? 'Your folders' : 'This project', sizeWords(row.size),
         row.permissionStep ? `Still needs your OK: ${row.permissionStep}` : null,

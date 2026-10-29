@@ -34,6 +34,36 @@ test('an item the installed Catalog no longer lists is named by its id, never le
   assert.deepEqual(lines.map(line => [line.name, line.needed.map(entry => entry.name)]), [['gone.item', ['other.gone']]]);
 });
 
+test('Q7-R: chosen rows group under recorded exact set identities, with simultaneous membership and explicit individuals', () => {
+  const SHA = 's'.repeat(64);
+  const originSet = `set-${REL.slice(0, 16)}-starter`;
+  const roots = [
+    { ...ref('grill-me'), originIds: [originSet] },
+    { ...ref('tdd'), originIds: [originSet, 'direct'] },
+    { ...ref('git-guard'), originIds: ['direct'] },
+  ];
+  const intent = { roots, pins: [], provenance: [{ releaseSha256: REL,
+    materialSource: { workbenchSetChoices: { choices: [{ originId: originSet, request: { setId: 'starter', setSha256: SHA, release: { releaseSha256: REL } } }] } } }] };
+  const client = { intent, catalog: { items }, bytes: [] };
+  const button = (label, action) => { const node = fake('button', '', label); node.addEventListener('click', action); return node; };
+  const view = createSetupChoices({ client, el: fake, button });
+  view.render();
+  const groups = new Map(walk(view.node).filter(node => node.dataset.choiceGroup).map(group => [group.dataset.choiceGroup, group]));
+  const starter = groups.get(`starter/${SHA}`);
+  assert.ok(starter, 'the group key is the exact recorded set identity');
+  const heading = walk(starter).find(node => node.dataset.choiceSet);
+  assert.match(heading.textContent, /starter/);
+  assert.equal(heading.title, `${REL}/starter/${SHA}`);
+  const members = walk(starter).filter(node => node.dataset.choiceItem).map(node => node.dataset.choiceItem).sort();
+  assert.deepEqual(members, ['grill-me', 'tdd'], 'named rows belong to the correct set');
+  const individual = groups.get('individual');
+  assert.deepEqual(walk(individual).filter(node => node.dataset.choiceItem).map(node => node.dataset.choiceItem), ['git-guard'], 'no-origin rows stay explicit');
+  assert.equal(walk(view.node).filter(node => node.dataset.choiceItem === 'tdd').length, 1, 'a simultaneous member renders once');
+  // Removal still works through the grouped row.
+  const remove = walk(starter).filter(node => node.dataset.choiceItem === 'tdd').flatMap(node => walk(node)).find(node => node.tag === 'button');
+  assert.equal(remove.attributes['aria-label'], 'Remove tdd from setup');
+});
+
 // A small DOM: enough for the section to build its rows.
 function fake(tag, className = '', text) {
   const node = { tag, className, textContent: text ?? '', children: [], dataset: {}, attributes: {}, hidden: false, listeners: {},

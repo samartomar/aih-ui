@@ -70,14 +70,48 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
 
   function render() {
     const draft = client.draft, intent = client.intent;
-    const roots = draft?.roots ?? intent?.roots ?? [];
+    // One snapshot everywhere (Q6-R): an open draft's LIVE intent wins, for grouping and host facts alike.
+    const source = draft ? draft.intent : intent;
+    const roots = source?.roots ?? [];
     const items = client.catalog?.items ?? [];
     const needs = setupNeeds({ intent, draft, policyBytes: draft ? undefined : client.bytes });
-    const lines = choiceLines({ roots, needs, items });
-    title.textContent = lines.length ? `Your choices (${lines.length})` : 'Your choices';
-    empty.hidden = Boolean(lines.length);
-    list.replaceChildren(...lines.map(line));
+    const entries = choiceLines({ roots, needs, items });
+    title.textContent = entries.length ? `Your choices (${entries.length})` : 'Your choices';
+    empty.hidden = Boolean(entries.length);
+    list.replaceChildren(...groupedLines(entries, source));
     hostLine.textContent = drawerCopiesWords(hostView());
+  }
+  // Group the actual named choice rows under their recorded exact set identities (Q7-R): simultaneous
+  // memberships appear under every set they belong to; roots with no set origin stay explicit. Removal
+  // behavior lives in line() and is unchanged by grouping.
+  function groupedLines(entries, source) {
+    const choices = (source?.provenance ?? []).flatMap(entry => entry.materialSource?.workbenchSetChoices?.choices ?? []);
+    const byOrigin = new Map(choices.map(choice => [choice.originId, choice.request]));
+    const groups = new Map();
+    const push = (key, request, entry) => {
+      if (!groups.has(key)) groups.set(key, { request, entries: [] });
+      if (!groups.get(key).entries.includes(entry)) groups.get(key).entries.push(entry);
+    };
+    for (const entry of entries) {
+      const sets = (entry.root.originIds ?? []).filter(id => byOrigin.has(id)).map(id => byOrigin.get(id));
+      if (!sets.length) push(null, null, entry);
+      else for (const request of sets) push(`${request.setId}/${request.setSha256}`, request, entry);
+    }
+    const nodes = [];
+    for (const [key, group] of groups) {
+      const head = el('p', 'text-[11px] font-medium text-on-surface-variant');
+      if (group.request) {
+        head.textContent = `${group.request.setId} · exact set ${group.request.setSha256}`;
+        head.title = `${group.request.release?.releaseSha256 ?? ''}/${group.request.setId}/${group.request.setSha256}`;
+        head.dataset.choiceSet = group.request.setId;
+      } else { head.textContent = 'Individual choices'; head.dataset.choiceSet = 'individual'; }
+      const rows = el('ul', 'pl-3 space-y-1');
+      rows.append(...group.entries.map(line));
+      const wrap = el('li', 'space-y-1', ''); wrap.dataset.choiceGroup = key ?? 'individual';
+      wrap.append(head, rows);
+      nodes.push(wrap);
+    }
+    return nodes;
   }
   return { node, render };
 }
