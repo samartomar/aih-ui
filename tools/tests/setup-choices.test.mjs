@@ -87,7 +87,10 @@ test('Q7-R: one chosen item in TWO actual sets, and left-out items grouped under
       { originId: 'direct', releaseSha256: REL, itemId: 'git-guard.scripts', scope: 'project', reason: 'left out by me' },
     ],
     provenance: [{ releaseSha256: REL, materialSource: { workbenchSetChoices: { choices: [
-      { originId: originA, request: { setId: 'alpha', setSha256: SHA1, release: { releaseSha256: REL } } },
+      { originId: originA, request: { setId: 'alpha', setSha256: SHA1, release: { releaseSha256: REL }, members: [
+        { item: { framework: 'other-framework', itemId: 'grilling' }, include: false },
+        { item: { framework: 'ecc', itemId: 'grill-me' }, include: true },
+      ] } },
       { originId: originB, request: { setId: 'beta', setSha256: SHA2, release: { releaseSha256: REL } } },
     ] } } }] };
   const button = (label, action) => { const node = fake('button', '', label); node.addEventListener('click', action); return node; };
@@ -119,6 +122,11 @@ test('Q7-R: one chosen item in TWO actual sets, and left-out items grouped under
   const directLeft = leftGroups.get('known:direct');
   assert.match(walk(directLeft).find(node => node.dataset.leftOutItem === 'git-guard.scripts').textContent, /left out by me/, 'a direct exclusion is recorded provenance in its own explicit group (AF3)');
   assert.match(walk(directLeft).find(node => node.dataset.leftOutSet).textContent, /recorded choice/);
+  // A member left out of its set is retained only in the saved set request (include:false) - it renders
+  // under that set's exact identity, keeping the member's own framework, with a truthful neutral reason.
+  const falseMember = walk(alphaLeft).find(node => node.dataset.leftOutItem === 'grilling');
+  assert.ok(falseMember, 'the false set member has a named left-out row under its set');
+  assert.match(falseMember.textContent, /grilling \[other-framework\] — left out of set alpha/, 'exact member identity and truthful reason, no fabricated origin');
   // Live draft: the same render reads the draft's live intent, not the saved base.
   const draft = { intent };
   const draftView = createSetupChoices({ client: { draft, intent: { roots: [], pins: [] }, catalog: { items }, bytes: [] }, el: fake, button });
@@ -143,11 +151,17 @@ test('Q7-R: a known non-set origin (template) is recorded provenance, never "no 
 
 // A small DOM: enough for the section to build its rows.
 function fake(tag, className = '', text) {
-  const node = { tag, className, textContent: text ?? '', children: [], dataset: {}, attributes: {}, hidden: false, listeners: {},
-    append(...children) { for (const child of children) if (typeof child === 'object') this.children.push(child); },
+  // DOM-faithful: parentElement is a READ-ONLY getter (assignment in module code must throw, as on a real
+  // DOM node); append owns the child.
+  let parent = null;
+  const node = { tag, className, textContent: text ?? '', children: [], dataset: {}, attributes: {}, hidden: false,
+    get parentElement() { return parent; },
+    append(...children) { for (const child of children) if (child && typeof child === 'object') { this.children.push(child); parent = this; } },
     replaceChildren(...children) { this.children = []; this.append(...children); },
     setAttribute(key, value) { this.attributes[key] = String(value); }, removeAttribute(key) { delete this.attributes[key]; },
-    addEventListener(key, fn) { (this.listeners[key] ??= []).push(fn); }, click() { return Promise.all((this.listeners.click ?? []).map(fn => fn())); } };
+    listeners: {},
+    addEventListener(key, fn) { (this.listeners[key] ??= []).push(fn); },
+    click() { return Promise.all((this.listeners.click ?? []).map(fn => fn())); } };
   return node;
 }
 const walk = (node, out = []) => { out.push(node); for (const child of node.children) walk(child, out); return out; };

@@ -96,8 +96,9 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   async function readBrowse(framework, choice, inspect = false) {
     if (!framework) {
       // No ready framework (legacy Your sources/Tools navigation): old facts are invalidated, not kept.
+      // Never call render() here - render() is the caller of this branch, and re-entering it would
+      // recurse synchronously before any await.
       browseKey = undefined; browseContentKey = undefined; browseAttempt++; browseResult = undefined;
-      render();
       return;
     }
     // Root/tool/folder/artifact changes participate in the refresh identity: an unchanged browse set with

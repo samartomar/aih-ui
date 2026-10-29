@@ -110,6 +110,17 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
       else if (known.has(exclusion.originId)) push(`known:${exclusion.originId}`, null, exclusion);
       else push('unknown', null, exclusion);
     }
+    // Set members the person left out are retained ONLY in the saved set request (request.members with
+    // include:false) - they never become intent exclusions. Render them under their set's exact identity
+    // with a truthful neutral reason, preserving the member's own framework identity.
+    for (const choice of choices) {
+      const request = choice.request;
+      for (const member of request?.members ?? []) {
+        if (member.include !== false) continue;
+        push(`${request.release?.releaseSha256}/${request.setId}/${request.setSha256}`, request,
+          { originId: choice.originId, releaseSha256: request.release?.releaseSha256, itemId: member.item?.itemId, scope: 'project', reason: null, setLeftOut: true, memberFramework: member.item?.framework });
+      }
+    }
     const nodes = [];
     for (const [key, group] of groups) {
       const section = el('li', 'space-y-1'); section.dataset.leftOut = key;
@@ -124,7 +135,10 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
       for (const exclusion of group.exclusions) {
         const row = el('li', 'text-[11px] text-on-surface-variant');
         const name = byKey.get(`${exclusion.releaseSha256}/${exclusion.itemId}`)?.label ?? exclusion.itemId;
-        row.textContent = `${name}${exclusion.scope === 'user' ? ' (your folders)' : ''}${exclusion.reason ? ` — ${exclusion.reason}` : ' — recorded left-out choice'}`;
+        // A member left out of its set names the member's own framework when it differs from the set's.
+        const cross = exclusion.memberFramework && group.request && exclusion.memberFramework !== undefined ? ` [${exclusion.memberFramework}]` : '';
+        const why = exclusion.reason ? ` — ${exclusion.reason}` : exclusion.setLeftOut ? ` — left out of set ${group.request?.setId ?? ''}`.replace(/ $/, '') : ' — recorded left-out choice';
+        row.textContent = `${name}${cross}${exclusion.scope === 'user' ? ' (your folders)' : ''}${why}`;
         row.dataset.leftOutItem = exclusion.itemId;
         rows.append(row);
       }
@@ -142,7 +156,10 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
     const keyOf = request => `${request.release?.releaseSha256}/${request.setId}/${request.setSha256}`;
     // Each interactive row renders exactly once (its Remove action is never duplicated): in its FIRST
     // recorded set, with an 'Also in' note naming every further exact set membership.
-    const rows = new Map(entries.map(entry => { const row = line(entry); row.parentElement = null; return [entry, row]; }));
+    // Interactive rows are tracked in a local Set: DOM parentElement is a read-only getter and must
+    // never be assigned (real-DOM safety).
+    const rows = new Map(entries.map(entry => [entry, line(entry)]));
+    const placed = new Set();
     const memberships = new Map();
     for (const entry of entries) {
       const sets = (entry.root.originIds ?? []).filter(id => byOrigin.has(id)).map(id => byOrigin.get(id));
@@ -172,11 +189,10 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
         head.dataset.choiceSet = group.request.setId;
       } else { head.textContent = 'Individual choices'; head.dataset.choiceSet = 'individual'; }
       const rowsNode = el('ul', 'pl-3 space-y-1');
-      const placedElsewhere = new Set([...rows].filter(([, placed]) => placed).map(([entry]) => entry));
       for (const entry of members) {
         const row = rows.get(entry);
         const all = memberships.get(entry);
-        if (placedElsewhere.has(entry) && row.parentElement) {
+        if (placed.has(entry)) {
           // Secondary group: a named read-only reference keeps the exact membership visible without a
           // second interactive row (Q7-R2).
           const ref = el('li', 'text-[11px] text-on-surface-variant', entry.name);
@@ -186,7 +202,7 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
         }
         // Q7-R2: every further membership keeps its exact identity, not a bare id.
         if (all.length > 1) row.children[0].append(el('span', 'text-on-surface-variant text-[11px]', `Also in: ${all.slice(1).map(request => `${request.setId} · ${request.setSha256}`).join(', ')}`));
-        row.parentElement = rowsNode;
+        placed.add(entry);
         rowsNode.append(row);
       }
       const wrap = el('li', 'space-y-1', ''); wrap.dataset.choiceGroup = key ?? 'individual';
