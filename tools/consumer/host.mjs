@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { apply, prepare, prepareManagedRemoval, prepareUpdate, listManagedSelections } from '@aihq/core';
 import { parsePolicy } from '@aihq/core/contracts';
-import { composeAuthoring, freshAuthoring } from './headless.mjs';
+import { composeAuthoring, freshAuthoring, inlineRecipelessSelections } from './headless.mjs';
 import { pinSelectedRecipes } from './selected-recipe.mjs';
 import { readOrganization } from './authority-source.mjs';
 import { previewPolicyAuthority } from './organization.mjs';
@@ -79,7 +79,8 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
     const read = await readOrganization({ organizationSource, controls: controlsFor(controls) });
     if (read.status === 'unreadable') return { status: 'refused', diagnostics: read.diagnostics, authority: { source: read.read.source, helper: read.read.helper, accounting: read.read.accounting } };
     if (read.status === 'invalid') return { status: 'refused', diagnostics: read.diagnostics };
-    const result = await previewPolicyAuthority({ policy: parsed.document, organization: read.organization, recipeMaterials, privateInputs: controlsFor(controls).privateInputs });
+    // The organization permits recipes: a recipe-less selection is judged by the recipe Core renders for it.
+    const result = await previewPolicyAuthority({ policy: inlineRecipelessSelections({ policy: parsed.document, inventories }), organization: read.organization, recipeMaterials, privateInputs: controlsFor(controls).privateInputs });
     return result.status === 'ok' ? { ...result, value: { ...result.value, authority: read.authority } } : { ...result, authority: read.authority };
   }
   return {
@@ -123,7 +124,8 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
           ? { framework: update.item.framework, itemId: update.item.itemId } : undefined;
         const composed = await composeAuthoring({ intent, inventories, tool: recordedTool, ...(grantApproval ? { grantApproval } : {}) });
         if (composed.status !== 'ok') return { disposition: 'invalid', diagnostics: composed.diagnostics };
-        const selection = composed.value.policy.selections.find(candidate => candidate.item?.itemId === root.itemId);
+        // An update request names no Catalog release, so the replacement carries its rendered recipe inline.
+        const selection = inlineRecipelessSelections({ policy: composed.value.policy, inventories }).selections.find(candidate => candidate.item?.itemId === root.itemId);
         if (!selection) return { disposition: 'invalid', diagnostics: [{ code: 'REPLACEMENT_UNAVAILABLE', message: `Catalog did not compose the explicit replacement ${root.itemId}.` }] };
         replacements.push({ managementId: update.managementId, replacement: { ...selection, managementId: update.managementId,
           ...(Array.isArray(update.origins) ? { origins: structuredClone(update.origins) } : {}) } });
@@ -134,7 +136,8 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
     async prepareFinishSession({ policyText, managementId, controls } = {}) {
       const parsed = parsePolicy(policyText);
       if (!parsed.valid) return { status: 'invalid', diagnostics: parsed.diagnostics };
-      const selection = parsed.document.selections.find(candidate => candidate.managementId === managementId);
+      // Rendered within the whole setup, so a supporting document finished alone keeps its place beside the items requiring it.
+      const selection = inlineRecipelessSelections({ policy: parsed.document, inventories }).selections.find(candidate => candidate.managementId === managementId);
       if (!selection) return { status: 'invalid', diagnostics: [{ code: 'SELECTION_UNAVAILABLE', message: 'Finish is available only while the interrupted selection is in the current setup.' }] };
       return this.prepareSession({ policyText: JSON.stringify({ ...parsed.document, selections: [{ ...selection, requires: [] }] }), controls });
     },

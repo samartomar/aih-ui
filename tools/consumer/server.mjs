@@ -329,7 +329,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
         if (!parsed.valid) return send(response, 200, parsed);
         // Imported policies may refer only to material sources configured by this host.
         for (const selection of parsed.document.selections) {
-          if (!selection.recipe.reference) return send(response, 400, { error: 'This bounded host executes configured Catalog recipe references only; inline policies remain read-only.' });
+          if (!selection.recipe?.reference) return send(response, 400, { error: 'This bounded host executes configured Catalog recipe references only; inline policies remain read-only.' });
           const source = selection.recipe.reference?.source;
           if (source !== undefined && JSON.stringify(source) !== JSON.stringify(materialSource)) {
             return send(response, 400, { error: 'Imported recipe source is not the host-configured Catalog source.' });

@@ -13,8 +13,65 @@ import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJo
 // The ./authoring entry: these names and the operations below. inspectReviewEvidence builds the review identities from Scan's readContentCoverage.
 export { inspectReviewEvidence } from './review-bindings.mjs';
 export { AUTHORING_SCHEMA, REVIEW_SCHEMA, freshAuthoring } from './intent-shape.mjs';
+const POLICY_SCHEMA = 'urn:aihq:core:execution-policy:1.6.0';
 const pinMaterials = item => item.materials.map(material => material.path ? material : ({ id: material.id, path: material.packagePath, sha256: material.sha256, byteLength: material.byteLength }));
 const sorted = values => [...values].sort((a, b) => stable(a) < stable(b) ? -1 : stable(a) > stable(b) ? 1 : 0);
+// One item's recipe as Core renders it for a recipe-less selection: one rendering, or for a supporting document one beside each
+// requiring item, combined with each rendering's operation and check ids suffixed by its position.
+function renderRecipe({ tool, entry, item, scope, requirers = [], grantApproval }) {
+  const binding = harness.toolBindings.find(candidate => candidate.tool === tool);
+  const contents = Object.fromEntries((entry.materials ?? []).filter(material => material.id && material.bytes)
+    .map(material => [material.id, new TextDecoder().decode(material.bytes)]));
+  const deliveries = (requirers.length ? requirers : [undefined]).map(requiredBy =>
+    harness.renderDelivery({ tool, item, binding, scope, contents, ...(grantApproval ? { grantApproval } : {}), ...(requiredBy ? { requiredBy } : {}) }));
+  const refused = deliveries.find(delivery => delivery.status !== 'rendered');
+  if (refused) return { refused };
+  const rendered = deliveries[0];
+  const unique = deliveries.map((delivery, index) => ({ ...delivery, recipe: { ...delivery.recipe,
+    operations: delivery.recipe.operations.map(operation => ({ ...operation, id: `${operation.id}-${index + 1}`,
+      requires: (operation.requires ?? []).map(required => `${required}-${index + 1}`), checks: (operation.checks ?? []).map(check => `${check}-${index + 1}`) })),
+    checks: delivery.recipe.checks.map(check => ({ ...check, id: `${check.id}-${index + 1}` })) } }));
+  const combined = deliveries.length === 1 ? rendered.recipe : { ...rendered.recipe,
+    materials: [...new Map(unique.flatMap(delivery => delivery.recipe.materials).map(material => [`${material.id}/${material.path}/${material.sha256}`, material])).values()],
+    targets: [...new Set(unique.flatMap(delivery => delivery.recipe.targets))], prerequisites: [...new Set(unique.flatMap(delivery => delivery.recipe.prerequisites))],
+    operations: unique.flatMap(delivery => delivery.recipe.operations), checks: unique.flatMap(delivery => delivery.recipe.checks) };
+  return { rendered, recipe: { inline: combined } };
+}
+const supportingDocument = item => item.kind === 'document' && item.payload?.placement !== 'project-folder';
+// Execution policy 1.6.0 names the Catalog release content document a recipe-less selection is rendered from. Only an
+// inventory read from an installed Catalog package carries one, at that package's `catalog` material root.
+const catalogReleaseOf = entry => entry?.catalogRelease && entry.release.framework?.id ? { framework: entry.release.framework.id,
+  source: { kind: 'local', input: harness.deliveryMaterialRoot ?? 'catalog' }, ...entry.catalogRelease } : undefined;
+// The recipe each recipe-less selection of a composed policy is rendered to, by selection id, so a saved policy that still
+// carries the same recipe inline reads as the same setup.
+const renderedRecipes = new WeakMap();
+const itemFor = (inventories, ref) => {
+  for (const entry of inventories ?? []) {
+    if (entry?.release?.framework?.id !== ref?.framework) continue;
+    const item = entry.release.items.find(candidate => candidate.id === ref.itemId);
+    if (item && item.contentSha256 === ref.contentSha256 && item.behaviourSha256 === ref.behaviourSha256) return { entry, item };
+  }
+  return undefined;
+};
+// A policy whose recipe-less selections carry the recipes Core renders for them, from the same inventories they were composed
+// from. Core's update and organization admission read inline recipes, and a single selection finished on its own keeps a
+// supporting document's rendering beside items that are not in its policy. A selection that cannot be rendered stays as it is.
+export function inlineRecipelessSelections({ policy, inventories }) {
+  if (!policy?.selections?.some(selection => selection.recipe === undefined) || !inventories?.length) return policy;
+  const selections = policy.selections.map(selection => {
+    if (selection.recipe !== undefined || !selection.item || !selection.tool) return selection;
+    const found = itemFor(inventories, selection.item);
+    if (!found) return selection;
+    const requirers = supportingDocument(found.item) ? (selection.origins ?? []).filter(origin => origin.reasonIncluded === 'required-by').map(origin => {
+      const other = policy.selections.find(candidate => candidate.item?.framework === (origin.requiredBy?.framework ?? selection.item.framework) && candidate.item.itemId === origin.requiredBy?.itemId);
+      return other && itemFor(inventories, other.item)?.item;
+    }) : [];
+    if (requirers.some(required => !required)) return selection;
+    const rendered = renderRecipe({ tool: selection.tool, entry: found.entry, item: found.item, scope: selection.scope, requirers });
+    return rendered.refused ? selection : { ...selection, recipe: rendered.recipe };
+  });
+  return { ...policy, selections };
+}
 function inventoryIndex(inventories) {
   if (!Array.isArray(inventories) || inventories.length > 32) throw new Error('Supply at most 32 exact checked inventories.');
   const releases = Object.create(null), items = new Map();
@@ -78,6 +135,14 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
   // historical v1 selection id is not a reason to rewrite execution semantics.
   const selections = [], pins = new Map(), sourceIds = new Set([...setChoiceSources(intent), ...intent.exclusions.map(r => r.releaseSha256), ...intent.origins.filter(o => o.kind === 'template').map(o => o.releaseSha256)]);
   let approvalRendered = false, approvalRevoked = false;
+  const catalogReleases = new Map(), recipelessRecipes = new Map();
+  // One release per framework: a selection whose framework already names another release keeps its recipe inline.
+  const nameReleases = entries => {
+    const named = entries.map(catalogReleaseOf);
+    if (named.some(release => !release || (catalogReleases.has(release.framework) && stable(catalogReleases.get(release.framework)) !== stable(release)))) return false;
+    for (const release of named) catalogReleases.set(release.framework, release);
+    return true;
+  };
   for (const selection of resolved.selections) {
     const found = index.items.get(pinKey(selection.item)), { entry, item } = found;
     const identityPrior = base?.selections.find(candidate => candidate.scope === selection.scope && candidate.item?.itemId === item.id
@@ -86,7 +151,7 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
     const canRender = Boolean(entry.release.framework?.id && item.contentSha256 && item.behaviourSha256 && renderTool && typeof harness.renderDelivery === 'function');
     const configured = canRender ? { valid: true, selection: { configuration: selection.configuration } } : configurePinned(entry, item, selection.configuration, intent.pins);
     if (!configured.valid) return refuse('INPUT_INVALID', '/roots/configuration', 'Catalog refused item configuration.', undefined, { owner: 'catalog', diagnostics: configured.diagnostics });
-    const prior = identityPrior ?? base?.selections.find(candidate => candidate.scope === selection.scope && (stable(candidate.recipe) === stable(configured.selection.recipe)
+    const prior = identityPrior ?? base?.selections.find(candidate => candidate.scope === selection.scope && ((configured.selection.recipe !== undefined && stable(candidate.recipe) === stable(configured.selection.recipe))
       || (candidate.recipe?.inline && candidate.tool && candidate.recipe.inline.id === `${candidate.tool}.${item.id}`)));
     const organizationIds = new Set(intent.roots.filter(r => rootKey(r) === rootKey({ ...selection.item, scope: selection.scope }))
       .flatMap(r => r.originIds)
@@ -112,36 +177,25 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
     const approvalRecorded = Boolean(prior?.recipe?.inline && prior.tool && prior.recipe.inline.id === `${prior.tool}.${item.id}`);
     const revoked = Boolean(revokeApproval && bundle && revokeApproval.framework === bundle.item.framework && revokeApproval.itemId === item.id);
     if (revoked) approvalRevoked = true;
-    let recipe = configured.selection.recipe, rendered;
+    let recipe = configured.selection.recipe, rendered, renderedRecipe, requirerEntries = [];
     if (canRender) {
       if (ticked && bundle.tool !== canonicalTool) return refuse('INPUT_INVALID', '/grantApproval',
         `The server's recorded tool ${bundle.tool} does not match the requested tool ${canonicalTool}; remove and reselect it explicitly before changing approval.`);
-      const binding = harness.toolBindings.find(candidate => candidate.tool === renderTool);
-      const requirers = item.kind === 'document' && item.payload?.placement !== 'project-folder'
+      const requirers = supportingDocument(item)
         ? selection.origins.filter(origin => origin.reasonIncluded === 'required-by').map(origin => {
           const other = resolved.selections.find(candidate => candidate.item.itemId === origin.requiredBy?.itemId
             && index.releases[candidate.item.releaseSha256]?.framework?.id === origin.requiredBy?.framework);
-          return other ? index.items.get(pinKey(other.item)).item : undefined;
+          return other ? index.items.get(pinKey(other.item)) : undefined;
         }) : [];
       if (requirers.some(required => !required)) return refuse('PREREQUISITE_UNAVAILABLE', '/selections', 'Catalog could not name the item requiring this document.');
-      const contents = Object.fromEntries((entry.materials ?? []).filter(material => material.id && material.bytes)
-        .map(material => [material.id, new TextDecoder().decode(material.bytes)]));
-      const deliveries = (requirers.length ? requirers : [undefined]).map(requiredBy =>
-        harness.renderDelivery({ tool: renderTool, item, binding, scope: selection.scope, contents, ...(ticked ? { grantApproval } : {}), ...(requiredBy ? { requiredBy } : {}) }));
-      const refused = deliveries.find(delivery => delivery.status !== 'rendered');
+      const delivered = renderRecipe({ tool: renderTool, entry, item, scope: selection.scope, requirers: requirers.map(required => required.item), ...(ticked ? { grantApproval } : {}) });
+      const { refused } = delivered;
       if (refused) return refuse('PREREQUISITE_UNAVAILABLE', ticked ? '/grantApproval' : '/selections',
         refused.guidance ?? refused.message ?? refused.reason ?? 'Core refused the content delivery.', undefined,
         { owner: 'core', diagnostics: refused.diagnostics ?? (refused.code ? [{ code: refused.code, message: refused.reason ?? refused.message }] : []) });
-      rendered = deliveries[0];
-      const unique = deliveries.map((delivery, index) => ({ ...delivery, recipe: { ...delivery.recipe,
-        operations: delivery.recipe.operations.map(operation => ({ ...operation, id: `${operation.id}-${index + 1}`,
-          requires: (operation.requires ?? []).map(required => `${required}-${index + 1}`), checks: (operation.checks ?? []).map(check => `${check}-${index + 1}`) })),
-        checks: delivery.recipe.checks.map(check => ({ ...check, id: `${check.id}-${index + 1}` })) } }));
-      const combined = deliveries.length === 1 ? rendered.recipe : { ...rendered.recipe,
-        materials: [...new Map(unique.flatMap(delivery => delivery.recipe.materials).map(material => [`${material.id}/${material.path}/${material.sha256}`, material])).values()],
-        targets: [...new Set(unique.flatMap(delivery => delivery.recipe.targets))], prerequisites: [...new Set(unique.flatMap(delivery => delivery.recipe.prerequisites))],
-        operations: unique.flatMap(delivery => delivery.recipe.operations), checks: unique.flatMap(delivery => delivery.recipe.checks) };
-      recipe = { inline: combined };
+      rendered = delivered.rendered;
+      recipe = renderedRecipe = delivered.recipe;
+      requirerEntries = requirers.map(required => required.entry);
       if (ticked) approvalRendered = true;
     }
     if (approvalRecorded && !ticked && !revoked && approvalRecipeStands({ prior, item, scope: selection.scope, renderDelivery: harness.renderDelivery, toolBindings: harness.toolBindings })) recipe = prior.recipe;
@@ -164,6 +218,12 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
           sha256: material.sha256, byteLength: material.byteLength, role: material.role })) } : {}) } : {}),
       ...(base?.mode === 'enterprise' ? { organizationSelectionId: [...organizationIds][0] ?? prior?.organizationSelectionId ?? managementId } : {}),
       requires: [], recipe });
+    // Execution policy 1.6.0: the plain rendering Core reproduces at Prepare is left out of the policy when its release (and each
+    // requiring item's) can be named. A one-server approval is not a recipe-less input, so it stays inline.
+    if (rendered && recipe === renderedRecipe && !ticked && nameReleases([entry, ...requirerEntries])) {
+      delete selections.at(-1).recipe;
+      recipelessRecipes.set(selections.at(-1).id, recipe);
+    }
     const pinRecipe = rendered ? recipeDescriptor({ id: recipe.inline.id, path: `inline:${recipe.inline.id}`,
       sha256: await digestJson(recipe.inline), byteLength: new TextEncoder().encode(stable(recipe.inline)).byteLength, schema: recipe.inline.schema })
       : item.recipe ?? recipeDescriptor(Object.values(item.recipes).find(recipe => recipe.sha256 === configured.selection.recipe.reference.sha256));
@@ -186,7 +246,7 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
   const comparisonProvenance = historicalV2 ? next.provenance.filter(p => historicalSources.has(p.releaseSha256)) : next.provenance;
   if (!capture && (stable(sorted(intent.pins)) !== stable(next.pins) || stable(sorted(intent.provenance)) !== stable(comparisonProvenance) || stable(sorted(intent.inputs)) !== stable(next.inputs)))
     return refuse('INTENT_POLICY_CONTRADICTION', '/metadata/aih.workbench', 'Pins, provenance or inputs contradict the checked closure.');
-  // Execution policy 1.5 carries the rendered binding and exact Catalog identity, origins and exclusions.
+  // Execution policy 1.6 carries the rendered binding and exact Catalog identity, origins and exclusions.
   // A release without published framework identity keeps its legacy recipe and cannot name an exclusion;
   // the skip still stands. ExcludedItems name current intent exclusions and false members retained only
   // in exact set requests.
@@ -206,11 +266,14 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
   }).filter(Boolean));
   const effectiveExclusions = new Map();
   for (const ref of excludedItems) if (!included.has(`${ref.framework}/${ref.itemId}`)) effectiveExclusions.set(`${ref.framework}/${ref.itemId}`, ref);
-  const policy = { ...(base ?? { schema: 'urn:aihq:core:execution-policy:1.5.0', mode: 'vibe' }),
-    schema: 'urn:aihq:core:execution-policy:1.5.0',
+  const { catalogReleases: _previousReleases, ...rest } = base ?? { schema: POLICY_SCHEMA, mode: 'vibe' };
+  const policy = { ...rest,
+    schema: POLICY_SCHEMA,
+    ...(catalogReleases.size ? { catalogReleases: sorted([...catalogReleases.values()]) } : {}),
     selections,
     excludedItems: [...effectiveExclusions.values()],
     metadata: { ...base?.metadata, 'aih.workbench': next } };
+  renderedRecipes.set(policy, recipelessRecipes);
   const setProblem = checkRecordedSetChoices(policy.metadata?.['aih.workbench'], inventories);
   if (setProblem) return refuse('INTENT_POLICY_CONTRADICTION', '/metadata/aih.workbench/provenance', setProblem);
   const policyBytes = new TextEncoder().encode(JSON.stringify(policy) + '\n');
@@ -253,7 +316,11 @@ export async function readAuthoring({ policyBytes, inventories, reviewEvidence =
       unresolved: analysis.unresolved, roots: analysis.roots, ...await reviewView({ intent, inventories, reviewEvidence, comparisons, recipient }), ...note });
   }
   const rebuilt = await build({ intent, inventories, base: policy, capture: migration?.capture === true, historicalV2: migration?.historicalV2 === true, strictOrigins: true });
-  const diagnostics = rebuilt.status === 'refused' ? rebuilt.diagnostics : stable(projected(rebuilt.value.policy.selections)) !== stable(projected(policy.selections))
+  // A policy saved with the inline recipe Core now renders from the item is the same setup.
+  const recipeless = rebuilt.status === 'ok' ? renderedRecipes.get(rebuilt.value.policy) : undefined;
+  const saved = policy.selections.map(selection => recipeless?.has(selection.id) && stable(selection.recipe) === stable(recipeless.get(selection.id))
+    ? (({ recipe: _recipe, ...rest }) => rest)(selection) : selection);
+  const diagnostics = rebuilt.status === 'refused' ? rebuilt.diagnostics : stable(projected(rebuilt.value.policy.selections)) !== stable(projected(saved))
     ? [{ code: 'INTENT_POLICY_CONTRADICTION', path: '/selections', message: 'Intent contradicts executable selections.' }] : [];
   const current = rebuilt.status === 'ok' ? rebuilt.value.intent : intent;
   return ok({ policy, intent: current, editing: diagnostics.length ? 'unavailable' : 'available', originalBytes, diagnostics,

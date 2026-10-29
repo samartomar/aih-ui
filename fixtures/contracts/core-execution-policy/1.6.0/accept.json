@@ -1,0 +1,201 @@
+{
+  "schema": "urn:aihq:core:execution-policy:1.6.0",
+  "mode": "vibe",
+  "catalogReleases": [
+    {
+      "framework": "ecc",
+      "source": {
+        "kind": "local",
+        "input": "catalog"
+      },
+      "path": "release/release-ecc.content.json",
+      "sha256": "2a971b40ccff7c8a24f95cf5c5a8aadd3a887f59e88089b853a9b0203938f404",
+      "byteLength": 2425899
+    }
+  ],
+  "selections": [
+    {
+      "id": "catalog-664500871f2994ed21111b770bc9d67e38f8a1d494cfdd89b176253dcb46864c",
+      "managementId": "project--aihq.catalog--ecc.notices",
+      "scope": "project",
+      "configuration": {},
+      "item": {
+        "framework": "ecc",
+        "itemId": "ecc.notices",
+        "contentSha256": "620500100a08339d1d67255c29fb5f80d12d45513948e7d5ac599e2bd4f196af",
+        "behaviourSha256": "4827da231f59b3666cdef51d6a92a6affb46629e94648c902dc4ed4c6632d6a9"
+      },
+      "tool": "claude",
+      "name": "ECC notices",
+      "kind": "document",
+      "origins": [
+        {
+          "reasonIncluded": "required-by",
+          "requiredBy": {
+            "framework": "ecc",
+            "itemId": "ecc.skill.accessibility"
+          }
+        }
+      ],
+      "bindingDigest": "3a4b13d5f9263fa9f4aee089c8e4e1d5ae7fe895b43f18bbc81e25dcdac6b9e2",
+      "requires": []
+    },
+    {
+      "id": "catalog-10ddeb929bedd6b737555f8ff8563ba296e1512398a5793c05a16c21ea80dcd6",
+      "managementId": "project--aihq.catalog--ecc.skill.accessibility",
+      "scope": "project",
+      "configuration": {},
+      "item": {
+        "framework": "ecc",
+        "itemId": "ecc.skill.accessibility",
+        "contentSha256": "7c661ab98c388278d25238305e11515aa943d5a792b4d4c473e5b72b82b586ab",
+        "behaviourSha256": "9d5c8421ff3dfb7e301f26a10c6c4c5b7f1105751f7d45a6d74411fb45942820"
+      },
+      "tool": "claude",
+      "name": "accessibility",
+      "kind": "skill",
+      "origins": [
+        {
+          "reasonIncluded": "chosen"
+        }
+      ],
+      "bindingDigest": "3a4b13d5f9263fa9f4aee089c8e4e1d5ae7fe895b43f18bbc81e25dcdac6b9e2",
+      "requires": [
+        "catalog-664500871f2994ed21111b770bc9d67e38f8a1d494cfdd89b176253dcb46864c"
+      ]
+    }
+  ],
+  "excludedItems": [],
+  "metadata": {
+    "aih.workbench": {
+      "schema": "urn:aihq:workbench:saved-intent:3.0.0",
+      "origins": [
+        {
+          "id": "direct",
+          "kind": "direct"
+        }
+      ],
+      "roots": [
+        {
+          "releaseSha256": "2a971b40ccff7c8a24f95cf5c5a8aadd3a887f59e88089b853a9b0203938f404",
+          "itemId": "ecc.skill.accessibility",
+          "itemSha256": "c96c61424015f8c5343c3198dd1802194541a33bbaaa6f6b22ed48cc5076e823",
+          "scope": "project",
+          "configuration": {},
+          "originIds": [
+            "direct"
+          ]
+        }
+      ],
+      "exclusions": [],
+      "pins": [
+        {
+          "releaseSha256": "2a971b40ccff7c8a24f95cf5c5a8aadd3a887f59e88089b853a9b0203938f404",
+          "itemId": "ecc.notices",
+          "itemSha256": "5a8aac4e570b4ab2b1a593d7b8cfe3e8c1ed7acf12d294f5aaff2456540e5060",
+          "recipe": {
+            "id": "claude.ecc.notices.beside.ecc.skill.accessibility",
+            "path": "inline:claude.ecc.notices.beside.ecc.skill.accessibility",
+            "sha256": "d7ab7335b6e781d04936a804c69d8720d75a9f775bbfaac8e06864d10c69bb8f",
+            "byteLength": 4405,
+            "schema": "urn:aihq:core:recipe:1.0.0"
+          },
+          "materials": [
+            {
+              "id": "asset-0",
+              "path": "release/materials/github.com/affaan-m/ECC/5064474d4d762dc9640234a41617cccb79185cec/LICENSE",
+              "sha256": "326146379f01bb137c0a5d3c54770c1aa31076705c8b88a7f6b26a460f6221b2",
+              "byteLength": 1071
+            },
+            {
+              "id": "asset-1",
+              "path": "release/materials/github.com/affaan-m/ECC/5064474d4d762dc9640234a41617cccb79185cec/AGENTS.md",
+              "sha256": "8d39c1fc1468598954bff7b0cad5c0e985d9fa1b2b5b66d94d363f59db99634b",
+              "byteLength": 8805
+            },
+            {
+              "id": "asset-2",
+              "path": "release/materials/github.com/affaan-m/ECC/5064474d4d762dc9640234a41617cccb79185cec/.claude-plugin/plugin.json",
+              "sha256": "58a0fc1e43c01a5a83cc57c33ac6d6139ac9bd04c551c720296d5350cd834451",
+              "byteLength": 1265
+            },
+            {
+              "id": "asset-3",
+              "path": "release/materials/github.com/affaan-m/ECC/5064474d4d762dc9640234a41617cccb79185cec/README.md",
+              "sha256": "56a45e47eef049918382751151d00ca27012b48398ffe137e705e14a28bf29a1",
+              "byteLength": 118682
+            },
+            {
+              "id": "behaviour",
+              "path": "release/items/ecc.notices/aih-behaviour.json",
+              "sha256": "47b2403adf710f0429ab93d158d774f2b2092144f321b33732f4c9a629663bcd",
+              "byteLength": 277
+            }
+          ]
+        },
+        {
+          "releaseSha256": "2a971b40ccff7c8a24f95cf5c5a8aadd3a887f59e88089b853a9b0203938f404",
+          "itemId": "ecc.skill.accessibility",
+          "itemSha256": "c96c61424015f8c5343c3198dd1802194541a33bbaaa6f6b22ed48cc5076e823",
+          "recipe": {
+            "id": "claude.ecc.skill.accessibility",
+            "path": "inline:claude.ecc.skill.accessibility",
+            "sha256": "6259e38ba408c53bcf830353a8fa5cede7714955a0e62cd792bb58b13bf44ed4",
+            "byteLength": 2286,
+            "schema": "urn:aihq:core:recipe:1.0.0"
+          },
+          "materials": [
+            {
+              "id": "asset-0",
+              "path": "release/materials/github.com/affaan-m/ECC/5064474d4d762dc9640234a41617cccb79185cec/skills/accessibility/SKILL.md",
+              "sha256": "d8578fe750e7321658450386e2112a46ea1aedca0235fbf97f3db2457e599b3a",
+              "byteLength": 6563
+            },
+            {
+              "id": "asset-1",
+              "path": "release/materials/github.com/affaan-m/ECC/5064474d4d762dc9640234a41617cccb79185cec/LICENSE",
+              "sha256": "326146379f01bb137c0a5d3c54770c1aa31076705c8b88a7f6b26a460f6221b2",
+              "byteLength": 1071
+            },
+            {
+              "id": "behaviour",
+              "path": "release/items/ecc.skill.accessibility/aih-behaviour.json",
+              "sha256": "a902a7bce126c07828852fd7326ddc8ce155814c92a7ebdba968c36c1a816baf",
+              "byteLength": 314
+            }
+          ]
+        }
+      ],
+      "provenance": [
+        {
+          "releaseSha256": "2a971b40ccff7c8a24f95cf5c5a8aadd3a887f59e88089b853a9b0203938f404",
+          "package": {
+            "name": "@aihq/catalog",
+            "version": "0.1.0"
+          },
+          "sources": [
+            {
+              "id": "ecc",
+              "license": "MIT",
+              "origin": {
+                "kind": "git",
+                "repository": "https://github.com/affaan-m/ECC",
+                "revision": "5064474d4d762dc9640234a41617cccb79185cec"
+              }
+            }
+          ],
+          "materialSource": {
+            "kind": "local",
+            "input": "maintained"
+          }
+        }
+      ],
+      "inputs": [],
+      "reviews": {
+        "schema": "urn:aihq:workbench:review-decisions:1.0.0",
+        "records": [],
+        "history": []
+      }
+    }
+  }
+}

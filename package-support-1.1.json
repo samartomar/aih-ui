@@ -331,8 +331,20 @@
       "fixtures": []
     },
     {
-      "id": "urn:aihq:core:execution-policy:1.5.0",
+      "id": "urn:aihq:core:execution-policy:1.6.0",
       "role": "produces",
+      "schemaExport": "@aihq/core/schemas/execution-policy/1.6.0.json",
+      "versions": ["1.6.0"],
+      "fixtures": [
+        {
+          "export": "aih-ui/fixtures/core-execution-policy/1.6.0/accept.json",
+          "expect": "accept"
+        }
+      ]
+    },
+    {
+      "id": "urn:aihq:core:execution-policy:1.5.0",
+      "role": "accepts",
       "schemaExport": "@aihq/core/schemas/execution-policy/1.5.0.json",
       "versions": ["1.5.0"],
       "fixtures": [
