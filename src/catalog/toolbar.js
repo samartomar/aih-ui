@@ -88,6 +88,7 @@ function kindPill(label, count, active, onClick, key = label) {
  * @param onQuery / onToggleKind / onSourceType / onSort  the toolbar's callbacks
  */
 export function createToolbar({ elements, onQuery, onToggleKind, onSourceType, onSort }) {
+  let overflowQueued = false;
   function markPillOverflow() {
     const strip = elements.kindFilters;
     const atEnd = strip.scrollLeft + strip.clientWidth >= strip.scrollWidth - 1;
@@ -159,7 +160,9 @@ export function createToolbar({ elements, onQuery, onToggleKind, onSourceType, o
       elements.sourceFilter.disabled = Boolean(model.frameworkBrowsing);
       elements.sourceFilter.title = model.frameworkBrowsing ? 'Source type filters do not apply within a framework. Choose another source in Advanced.' : '';
       elements.sortSelect.value = model.view.sort;
-      markPillOverflow();
+      // Measured in the next frame: reading the strip's scroll width here forced a layout of the freshly rebuilt grid
+      // on every render.
+      if (!overflowQueued) { overflowQueued = true; requestAnimationFrame(() => { overflowQueued = false; markPillOverflow(); }); }
     },
   };
 }
