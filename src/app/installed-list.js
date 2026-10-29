@@ -82,31 +82,44 @@ export function originGroups(inventory, { name = recordedName } = {}) {
       }
     }
   }
-  // What removing a set takes: every selection whose each recorded origin is this set or a requirement of
-  // something else leaving, found until nothing more leaves. Those go whole; any other member keeps its other
-  // owners and loses only this set's origin.
+  // What removing a set takes: every selection whose each recorded origin is this set or a requirement of a
+  // selection already leaving, found until nothing more leaves. Selections are matched by their own management id
+  // only, and Core's requiredBy (which names no scope) resolves at the requiring entry's own scope, so an item at the
+  // other scope, chosen there for itself, never leaves with this set. Those that leave go whole; any other member keeps
+  // its other owners and loses only this set's origin.
   const selections = inventory?.selections ?? [];
-  const nameOfItem = item => { const found = selections.find(entry => itemKey(entry.item) === itemKey(item)); return found ? name(found) : item?.itemId; };
+  const requirer = (entry, origin) => selections.find(candidate => candidate.scope === entry.scope && itemKey(candidate.item) === itemKey(origin.requiredBy));
   for (const group of groups.values()) {
     if (!group.set) continue;
     const leaving = new Set();
     for (let grew = true; grew;) {
       grew = false;
       for (const entry of selections) {
-        if (leaving.has(itemKey(entry.item)) || !(entry.origins ?? []).length) continue;
-        if (entry.origins.every(origin => sameSet(origin.set, group.set) || (origin.reasonIncluded === 'required-by' && leaving.has(itemKey(origin.requiredBy))))) { leaving.add(itemKey(entry.item)); grew = true; }
+        if (leaving.has(entry.managementId) || !(entry.origins ?? []).length) continue;
+        const leaves = entry.origins.every(origin => (origin.reasonIncluded === 'in-set' && sameSet(origin.set, group.set) && group.items.includes(entry.managementId))
+          || (origin.reasonIncluded === 'required-by' && leaving.has(requirer(entry, origin)?.managementId)));
+        if (leaves) { leaving.add(entry.managementId); grew = true; }
       }
     }
     group.members = group.members.map(member => {
       const entry = selections.find(candidate => candidate.managementId === member.managementId);
-      if (leaving.has(itemKey(entry.item))) return { ...member, leaves: true };
-      const neededBy = (entry.origins ?? []).filter(origin => origin.reasonIncluded === 'required-by' && !leaving.has(itemKey(origin.requiredBy))).map(origin => nameOfItem(origin.requiredBy));
-      return { ...member, neededBy };
+      if (leaving.has(member.managementId)) return { ...member, leaves: true };
+      const stillRequired = (entry.origins ?? []).some(origin => origin.reasonIncluded === 'required-by' && !leaving.has(requirer(entry, origin)?.managementId));
+      return { ...member, stillRequired };
     });
-    group.needs = selections.filter(entry => leaving.has(itemKey(entry.item)) && !group.items.includes(entry.managementId))
+    group.needs = selections.filter(entry => leaving.has(entry.managementId) && !group.items.includes(entry.managementId))
       .map(entry => ({ managementId: entry.managementId, scope: entry.scope, name: name(entry) }));
   }
   return [...groups.values()];
+}
+/**
+ * What "Remove this set" sends to Core for one recorded set group: each member that leaves goes whole; any other
+ * member releases only this set's origin and names the other sets it stays in (`keptFor`, possibly empty when only a
+ * direct choice or a requirement keeps it); what only leaving selections need goes whole after the members.
+ */
+export function setRemovalEntries(group) {
+  return [...group.members.map(({ leaves, stillRequired, alsoIn, ...member }) => leaves ? member
+    : { ...member, origin: { set: group.set }, keptFor: alsoIn.filter(origin => origin.set).map(origin => origin.set) }), ...group.needs];
 }
 // A recorded origin that owns the item (a set or a direct choice), not one that only requires it.
 const owners = entry => (entry.origins ?? []).filter(origin => origin.reasonIncluded !== 'required-by');
