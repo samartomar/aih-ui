@@ -98,7 +98,7 @@ try {
     }
     await editor.getByRole('button', { name: 'Review configuration', exact: true }).click();
   }
-  await page.locator('#starting-sets .set-refusal').waitFor({ state: 'detached' });
+  if (await page.locator('#starting-sets .set-refusal').count()) throw new Error(await page.locator('#starting-sets .set-refusal').innerText());
   console.log('F20 stage: add configured sets');
   const added = page.waitForResponse(response => /authoring-(?:draft-edit|edit)$/.test(response.url()));
   await page.locator('[data-add-sets]').click();
