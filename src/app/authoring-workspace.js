@@ -17,6 +17,7 @@ import { createInstalledPanel } from './installed-panel.js';
 import { createProjectFolderRow } from './project-folder.js';
 import { createSetupChoices } from './setup-choices.js';
 import { rememberOpen } from './advanced.js';
+import { indexStatusText } from '../catalog/index-status.js';
 
 const buttonClass = 'px-3 py-1.5 rounded bg-surface-container text-on-surface border border-wb-border hover:bg-surface-container-high';
 function button(label, action, primary = false) {
@@ -545,7 +546,10 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     const internalSources = (client.intent?.provenance ?? client.draft?.intent?.provenance ?? []).filter(source => source.materialSource?.internalContent);
     internalNotice.hidden = internalSources.length === 0;
     const archives = new Map(internalSources.map(source => source.materialSource.internalContent).map(content => [content.archiveSha256, content.provenance?.package]));
-    internalArchives.replaceChildren(...[...archives].map(([digest, pack]) => el('span', 'block', `From ${pack ? `${pack.name} ${pack.version}` : 'the Catalog package'} · archive sha256 ${digest}`)));
+    // Catalog labels prepared content unauthenticated: the release list it came from is not signed yet.
+    const unsigned = internalSources.some(source => source.materialSource.internalContent.status?.authenticated === false);
+    internalArchives.replaceChildren(...(unsigned ? [el('span', 'block', indexStatusText('unsigned'))] : []),
+      ...[...archives].map(([digest, pack]) => el('span', 'block', `From ${pack ? `${pack.name} ${pack.version}` : 'the Catalog package'} · archive sha256 ${digest}`)));
     internalProvenance.textContent = internalSources.length ? 'Baseline unbound; unauthenticated, non-production. Exact saved source and choice:\n' + JSON.stringify(internalSources, null, 2) : '';
     pageContext.textContent = `${draft ? 'Working draft' : 'Current project policy'}: ${current.length} accepted choices${client.dirty ? ' · Changes not downloaded' : ''}${client.startupSource === 'recovery' ? ' · Recovered from this browser session' : ''}. Open policy choices and review to edit, download or reopen an artifact.`;
     summary.textContent = draft ? (intent

@@ -60,7 +60,7 @@ export async function readFrameworkSources(configuration) {
     } catch { result = { valid: false, entries: [], sources: [], diagnostics: [{ code: 'INPUT_INVALID', reason: 'state-unavailable' }] }; }
     for (const source of result.sources ?? []) {
       const codes = source.diagnostics.map(value => value.code);
-      sources.push({ id: source.sourceId, state: codes.some(code => code !== 'unsigned') ? 'failed' : 'read',
+      sources.push({ id: source.sourceId, lastVerifiedAt: source.state?.lastVerifiedAt ?? null, state: codes.some(code => code !== 'unsigned') ? 'failed' : 'read',
         message: codes.length ? `Release index: ${codes.includes('unsigned') ? 'not verified (unsigned). ' : ''}${source.diagnostics.filter(value => value.code !== 'unsigned').map(value => `${value.code}: ${value.message}`).join(' ')}` : 'Release index read.', diagnostics: source.diagnostics });
     }
     if (!result.valid && !result.sources?.length) sources.push({ state: 'failed', message: 'Release index failed.', diagnostics: result.diagnostics });
@@ -79,7 +79,8 @@ export async function readFrameworkSources(configuration) {
         inventories.push(inventory); Object.assign(row, { sources: checked.release.sources, description: checked.release.framework.description, sets: checked.release.sets ?? [] }); row.state = 'ready'; row.observations = observation(checked.release);
       } catch { row.state = 'failed'; row.reason = 'Release failed its exact identity or member checks.'; }
     }
-  } else sources.push({ state: 'unavailable', message: 'Release index unavailable: no source configured.' });
+  // With no index, the release list is the configured prepared content, whose status Catalog reports per framework.
+  } else if (!(configuration.prepared?.length)) sources.push({ state: 'unavailable', message: 'Release index unavailable: no source configured.' });
   for (const selected of configuration.prepared ?? []) {
     try {
       if (typeof catalogNode.readInstalledPreparedContent !== 'function') { sources.push({ kind: 'internal', state: 'unavailable', message: 'Internal content unavailable: this Catalog does not publish its installed prepared-content reader.' }); continue; }

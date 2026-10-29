@@ -55,7 +55,7 @@ export async function runFrameworksBrowser({ origin, output, playwrightModule, s
       }
       if(['ready','unsigned','internalFailed'].includes(scenario)) {
         const release=rail.locator('[data-framework^="release:"]');await release.waitFor();assert.match(await release.innerText(),new RegExp(expected.release.framework.name));
-        assert.match(await rail.innerText(),/not verified \(unsigned\)/);await release.click();
+        assert.match(await rail.innerText(),/Release list not signed yet/);await release.click();
         assert.equal(await page.locator('.wb-source-heading').innerText(),expected.release.framework.name);
         assert.equal(await release.getAttribute('aria-pressed'),'true');
         if(scenario==='ready') {
@@ -67,7 +67,7 @@ export async function runFrameworksBrowser({ origin, output, playwrightModule, s
         }
       }
       if(['failed','missing'].includes(scenario))assert.match(await rail.innerText(),/failed|unavailable/i);
-      if(scenario==='conflicting'){assert.match(await rail.innerText(),/conflict/i);assert.equal(await rail.locator('[data-framework*="framework-alpha"]').count(),0,'Conflicting framework is withheld');assert.match(await rail.locator('[data-framework^="release:"] .framework-count').innerText(),/unavailable/);}
+      if(scenario==='conflicting'){assert.match(await rail.innerText(),/Sources disagree about \S+ \S+; neither is used/);assert.equal(await rail.locator('[data-framework*="framework-alpha"]').count(),0,'Conflicting framework is withheld');assert.match(await rail.locator('[data-framework^="release:"] .framework-count').innerText(),/unavailable/);}
       if(scenario==='releaseFailed')assert.match(await rail.locator('[data-framework^="release:"] .framework-count').innerText(),/failed/);
       if(['empty','unavailable'].includes(scenario))assert.match(await rail.innerText(),/No frameworks available/);
       if(scenario==='readerUnavailable'){assert.match(await rail.innerText(),/Internal content unavailable/);assert.equal(await internal.count(),0);}

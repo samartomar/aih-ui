@@ -2,6 +2,7 @@ import { el } from '../app/dom.js';
 import { attachTooltip } from '../app/tooltip.js';
 import { iconSpan } from '../app/icons.js';
 import { sourceFilterValue } from './selectors.js';
+import { indexStatuses, onlyIndexStatuses } from './index-status.js';
 // Names, availability and observations are public reader results projected by the host.
 export function createFrameworkNavigation({ container, onChoose, onFirstStep }) {
   let catalog, tool, selected, failure;
@@ -11,11 +12,17 @@ export function createFrameworkNavigation({ container, onChoose, onFirstStep }) 
     if (failure) { const message = el('p', '', 'Content families unavailable. See the source error.'); attachTooltip(message, failure); container.append(message); return; }
     if (!catalog) { container.append(el('p', '', 'Loading frameworks and observed counts…')); return; }
     if (catalog.frameworkFixture) container.append(el('p', 'framework-source-note', `Test fixture sources — not production data. ${catalog.frameworkFixtureLabel ?? ''}`));
+    // Index status in the contract's words, from what Catalog reported; Catalog's own message is the tooltip.
+    for (const status of indexStatuses(catalog)) {
+      const line = el('p', 'framework-source-note', status.text); line.dataset.indexStatus = status.code;
+      attachTooltip(line, status.message); container.append(line);
+    }
     for (const source of catalog.frameworkSources ?? []) {
       if (source.kind === 'internal' && source.state === 'read') continue;
+      // A source whose diagnostics are all index statuses is fully described by the lines above.
+      if (source.kind !== 'internal' && (source.state === 'read' || onlyIndexStatuses(source))) continue;
       const disclosure = el('details', 'framework-source-note');
-      const conflicting = source.diagnostics?.some(value => value.code === 'conflict');
-      const label = source.kind === 'internal' ? (source.state === 'unavailable' ? 'Internal content unavailable' : 'Internal content source failed') : conflicting ? 'Conflicting index · not verified' : source.state === 'failed' ? 'Release index failed' : source.state === 'unavailable' ? 'Release index unavailable' : 'Release index · not verified (unsigned)';
+      const label = source.kind === 'internal' ? (source.state === 'unavailable' ? 'Internal content unavailable' : 'Internal content source failed') : source.state === 'unavailable' ? 'Release index unavailable' : 'Release index failed';
       const summary = el('summary', '', label);
       disclosure.dataset.sourceState = source.state;
       attachTooltip(summary, source.message);
