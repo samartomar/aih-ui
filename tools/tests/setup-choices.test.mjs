@@ -94,7 +94,7 @@ test('Q7-R: one chosen item in TWO actual sets, and left-out items grouped under
       { originId: originB, request: { setId: 'beta', setSha256: SHA2, release: { releaseSha256: REL } } },
     ] } } }] };
   const button = (label, action) => { const node = fake('button', '', label); node.addEventListener('click', action); return node; };
-  const view = createSetupChoices({ client: { intent, catalog: { items }, bytes: [] }, el: fake, button });
+  const view = createSetupChoices({ client: { intent, catalog: { items, frameworks: [{ id: 'ecc', sha256: REL }] }, bytes: [] }, el: fake, button });
   view.render();
   const groups = new Map(walk(view.node).filter(node => node.dataset.choiceGroup).map(group => [group.dataset.choiceGroup, group]));
   assert.ok(groups.get(`${REL}/alpha/${SHA1}`), 'first set group by full identity');
@@ -126,10 +126,10 @@ test('Q7-R: one chosen item in TWO actual sets, and left-out items grouped under
   // under that set's exact identity, keeping the member's own framework, with a truthful neutral reason.
   const falseMember = walk(alphaLeft).find(node => node.dataset.leftOutItem === 'grilling');
   assert.ok(falseMember, 'the false set member has a named left-out row under its set');
-  assert.match(falseMember.textContent, /grilling \[other-framework\] — left out of set alpha/, 'exact member identity and truthful reason, no fabricated origin');
+  assert.match(falseMember.textContent, /other-framework\/grilling \[other-framework\] — left out of set alpha/, 'exact member identity and truthful reason, no fabricated origin or release');
   // Live draft: the same render reads the draft's live intent, not the saved base.
   const draft = { intent };
-  const draftView = createSetupChoices({ client: { draft, intent: { roots: [], pins: [] }, catalog: { items }, bytes: [] }, el: fake, button });
+  const draftView = createSetupChoices({ client: { draft, intent: { roots: [], pins: [] }, catalog: { items, frameworks: [{ id: 'ecc', sha256: REL }] }, bytes: [] }, el: fake, button });
   draftView.render();
   const draftLeft = new Map(walk(draftView.node).filter(node => node.dataset.leftOut).map(group => [group.dataset.leftOut, group]));
   assert.ok(draftLeft.get(`${REL}/beta/${SHA2}`), 'draft live intent drives the same grouped left-out render');

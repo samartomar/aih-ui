@@ -88,8 +88,8 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
   // is said as unknown - never a fabricated set. Reasons render verbatim when recorded.
   function leftOutSection(source, items) {
     const exclusions = source?.exclusions ?? [];
-    if (!exclusions.length) return null;
     const byKey = new Map(items.map(item => [itemKey(item), item]));
+    const frameworkOf = new Map((client.catalog?.frameworks ?? []).map(framework => [framework.sha256, framework.id]));
     const choices = (source?.provenance ?? []).flatMap(entry => entry.materialSource?.workbenchSetChoices?.choices ?? []);
     // Set-choice origin ids embed their release digest by construction (set-<releaseSha16>-<setId>) and the
     // consumer refuses duplicate identities, so originId is the validated public qualification - no invented
@@ -99,7 +99,11 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
     const groups = new Map();
     const push = (key, request, exclusion) => {
       if (!groups.has(key)) groups.set(key, { request, origin: known.get(exclusion.originId), exclusions: [] });
-      groups.get(key).exclusions.push(exclusion);
+      const group = groups.get(key);
+      const memberFramework = exclusion.memberFramework ?? frameworkOf.get(exclusion.releaseSha256);
+      const dedupeKey = `${memberFramework ?? exclusion.releaseSha256 ?? 'unknown'}/${exclusion.itemId}/${exclusion.scope ?? ''}`;
+      if (group.exclusions.some(value => value.dedupeKey === dedupeKey)) return;
+      group.exclusions.push({ ...exclusion, memberFramework, dedupeKey });
     };
     for (const exclusion of exclusions) {
       const request = byOrigin.get(exclusion.originId);
@@ -110,15 +114,14 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
       else if (known.has(exclusion.originId)) push(`known:${exclusion.originId}`, null, exclusion);
       else push('unknown', null, exclusion);
     }
-    // Set members the person left out are retained ONLY in the saved set request (request.members with
-    // include:false) - they never become intent exclusions. Render them under their set's exact identity
-    // with a truthful neutral reason, preserving the member's own framework identity.
+    // Cross-framework false members are retained only in the saved request; same-framework members can also
+    // have an exclusion. Recorded exclusions are pushed first, so deduplication retains their explicit reason.
     for (const choice of choices) {
       const request = choice.request;
       for (const member of request?.members ?? []) {
         if (member.include !== false) continue;
         push(`${request.release?.releaseSha256}/${request.setId}/${request.setSha256}`, request,
-          { originId: choice.originId, releaseSha256: request.release?.releaseSha256, itemId: member.item?.itemId, scope: 'project', reason: null, setLeftOut: true, memberFramework: member.item?.framework });
+          { originId: choice.originId, itemId: member.item?.itemId, scope: request.release?.scope, reason: null, setLeftOut: true, memberFramework: member.item?.framework });
       }
     }
     const nodes = [];
@@ -134,9 +137,13 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
       const rows = el('ul', 'pl-3 space-y-1');
       for (const exclusion of group.exclusions) {
         const row = el('li', 'text-[11px] text-on-surface-variant');
-        const name = byKey.get(`${exclusion.releaseSha256}/${exclusion.itemId}`)?.label ?? exclusion.itemId;
-        // A member left out of its set names the member's own framework when it differs from the set's.
-        const cross = exclusion.memberFramework && group.request && exclusion.memberFramework !== undefined ? ` [${exclusion.memberFramework}]` : '';
+        const qualified = `${exclusion.memberFramework}/${exclusion.itemId}`;
+        const matches = exclusion.setLeftOut ? items.filter(item => item.id === exclusion.itemId && frameworkOf.get(item.root?.releaseSha256) === exclusion.memberFramework) : [];
+        const name = exclusion.setLeftOut
+          ? (matches.length === 1 ? matches[0].label ?? qualified : qualified)
+          : byKey.get(`${exclusion.releaseSha256}/${exclusion.itemId}`)?.label ?? exclusion.itemId;
+        const setFramework = frameworkOf.get(group.request?.release?.releaseSha256);
+        const cross = exclusion.memberFramework && setFramework && exclusion.memberFramework !== setFramework ? ` [${exclusion.memberFramework}]` : '';
         const why = exclusion.reason ? ` — ${exclusion.reason}` : exclusion.setLeftOut ? ` — left out of set ${group.request?.setId ?? ''}`.replace(/ $/, '') : ' — recorded left-out choice';
         row.textContent = `${name}${cross}${exclusion.scope === 'user' ? ' (your folders)' : ''}${why}`;
         row.dataset.leftOutItem = exclusion.itemId;

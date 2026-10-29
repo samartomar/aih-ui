@@ -130,9 +130,68 @@ async function folderOrdering() {
   await page.close();
 }
 
+async function setupChoices() {
+  const page = await browser.newPage(); page.setDefaultTimeout(5_000);
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(origin, { waitUntil: 'domcontentloaded' });
+  const A = 'a'.repeat(64), B = 'b'.repeat(64), C = 'c'.repeat(64);
+  const item = (releaseSha256, id, label) => ({ id, label, kind: 'skill', root: { releaseSha256 } });
+  const source = (members, exclusions = [], scope = 'user') => ({
+    roots: [], pins: [], exclusions, origins: [{ id: 'set-origin', kind: 'set' }],
+    provenance: [{ materialSource: { workbenchSetChoices: { choices: [{ originId: 'set-origin', request: {
+      release: { releaseSha256: A, scope }, setId: 'starter', setSha256: 'exact-set-digest', members,
+    } }] } } }],
+  });
+  await page.evaluate(async () => {
+    const [{ createSetupChoices }, { el }] = await Promise.all([import('/app/setup-choices.js'), import('/app/dom.js')]);
+    window.renderLeftOut = ({ source, items, frameworks }) => {
+      document.body.replaceChildren();
+      const client = { intent: source, catalog: { items, frameworks }, bytes: new TextEncoder().encode('{}'), candidate: undefined, draft: undefined };
+      const view = createSetupChoices({ client, el, button: (label, action) => {
+        const node = el('button', '', label); node.type = 'button'; node.addEventListener('click', action); return node;
+      } });
+      document.body.append(view.node); view.render();
+      return [...document.querySelectorAll('[data-left-out-item]')].map(row => ({ id: row.dataset.leftOutItem, text: row.textContent }));
+    };
+  });
+  const frameworks = [{ id: 'ecc', sha256: A }, { id: 'extensions', sha256: B }];
+  const members = [{ item: { framework: 'extensions', itemId: 'shared' }, include: false }];
+  const items = [item(A, 'shared', 'Wrong set release label'), item(B, 'shared', 'Actual member label')];
+  const rows = await page.evaluate(({ source, items, frameworks }) => window.renderLeftOut({ source, items, frameworks }), { source: source(members), items, frameworks });
+  assert.equal(rows.length, 1, 'a false-only saved request renders its left-out member');
+  assert.match(rows[0].text, /Actual member label/);
+  assert.match(rows[0].text, /\(your folders\)/);
+  assert.match(rows[0].text, /\[extensions\]/);
+  assert.doesNotMatch(rows[0].text, /Wrong set release label/);
+
+  const ambiguous = await page.evaluate(({ source, items, frameworks }) => window.renderLeftOut({ source, items, frameworks }), {
+    source: source(members), items: [...items, item(C, 'shared', 'Ambiguous other release')], frameworks: [...frameworks, { id: 'extensions', sha256: C }],
+  });
+  assert.equal(ambiguous.length, 1);
+  assert.match(ambiguous[0].text, /extensions\/shared/);
+  assert.doesNotMatch(ambiguous[0].text, /Actual member label|Ambiguous other release|Wrong set release label/);
+
+  const sameFramework = await page.evaluate(({ source, items, frameworks }) => window.renderLeftOut({ source, items, frameworks }), {
+    source: source([{ item: { framework: 'ecc', itemId: 'same' }, include: false }], [], 'project'),
+    items: [item(A, 'same', 'Same framework')], frameworks,
+  });
+  assert.equal(sameFramework.length, 1);
+  assert.doesNotMatch(sameFramework[0].text, /\[ecc\]/);
+  assert.doesNotMatch(sameFramework[0].text, /your folders/);
+
+  const duplicate = await page.evaluate(({ source, items, frameworks }) => window.renderLeftOut({ source, items, frameworks }), {
+    source: source([{ item: { framework: 'ecc', itemId: 'same' }, include: false }], [{ originId: 'set-origin', releaseSha256: A, itemId: 'same', scope: 'project', reason: 'Recorded reason' }], 'project'),
+    items: [item(A, 'same', 'Same framework')], frameworks,
+  });
+  assert.equal(duplicate.length, 1, 'the exclusion and false member render once');
+  assert.match(duplicate[0].text, /Recorded reason/);
+  await page.close();
+}
+
 try {
   if (!only || only === 'no-framework') { await noFramework(); passed++; console.log('✔ no-framework navigation invalidates real DOM facts without recursion'); }
   if (!only || only === 'folder') { await folderOrdering(); passed++; console.log('✔ a late old-folder reply cannot replace current real DOM facts'); }
+  if (!only || only === 'setup-choices') { await setupChoices(); passed++; console.log('✔ left-out rows preserve real member identity, scope and deduplication'); }
   assert.deepEqual(errors, []);
   console.log(`catalog-controller browser: pass ${passed} fail 0`);
 } finally {
