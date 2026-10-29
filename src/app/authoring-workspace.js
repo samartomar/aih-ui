@@ -135,7 +135,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   const reviewPanel = createPolicyReview({ client, accept, proposed, status, setupHeading, onBack: onBackToCatalog });
   reviewPanel.head.after(internalNotice);
   const installPanel = createInstallPanel({ client, el, button, onInstalled: () => installedPanel.refresh() });
-  const installedPanel = createInstalledPanel({ client, el, button, onRemoved: () => installPanel.recheck(), onFinish: () => installPanel.finish(), onInventory: view => installPanel.setManaged(view?.setupInstalled) });
+  const installedPanel = createInstalledPanel({ client, el, button, onRemoved: () => installPanel.recheck(), onFinish: managementId => installPanel.finish(managementId), onInventory: view => installPanel.setManaged(view?.setupInstalled) });
   // Changing the folder discards what this page prepared for the old one, then checks the new one.
   const folderRow = createProjectFolderRow({ el, button, busy: () => installPanel.busy || installedPanel.busy, onChanged: async () => {
     client.discardHostWork(); installedPanel.clear(); installPanel.recheck();

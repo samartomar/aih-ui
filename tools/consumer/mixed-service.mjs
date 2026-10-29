@@ -154,8 +154,8 @@ export async function createMixedService(maintained, { suppliedInventories, fami
           candidateSource: maintenanceSource ? 'configured' : 'unconfigured', candidateCoverage: coverageOf(source), ...(body.categories !== undefined ? { categories: body.categories } : {}), now });
         return checked.status === 'ok' && source ? { ...checked, value: { ...checked.value, updateSource: describeSource(source) } } : checked;
       }
-      if (operation === 'compose') return composeAuthoring({ basePolicyBytes: policyBytes, intent: body.intent, inventories: all, ...(body.tool !== undefined ? { tool: body.tool } : {}), ...(body.grantApproval ? { grantApproval: body.grantApproval } : {}), ...reviewContext });
-      if (operation === 'edit') return editAuthoring({ policyBytes, inventories: all, operation: body.operation, ...(body.tool !== undefined ? { tool: body.tool } : {}), ...(body.revokeApproval ? { revokeApproval: body.revokeApproval } : {}), ...reviewContext });
+      if (operation === 'compose') return composeAuthoring({ basePolicyBytes: policyBytes, intent: body.intent, inventories: all, ...(body.tool !== undefined ? { tool: body.tool } : {}), ...(body.projectFacts !== undefined ? { projectFacts: body.projectFacts } : {}), ...reviewContext });
+      if (operation === 'edit') return editAuthoring({ policyBytes, inventories: all, operation: body.operation, ...(body.tool !== undefined ? { tool: body.tool } : {}), ...(body.projectFacts !== undefined ? { projectFacts: body.projectFacts } : {}), ...reviewContext });
       if (operation === 'reconcile') return reconcileAuthoring({ savedPolicyBytes: policyBytes, inventories: all, candidateInventories: candidates(body.candidateMode), ...reviewContext });
       if (operation === 'inspect-review') {
         const read = policyBytes ? await readAuthoring({ policyBytes, inventories: all }) : null;

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +9,7 @@ import { pinSelectedRecipes } from './selected-recipe.mjs';
 import { installedFamilies } from './installed-families.mjs';
 import { createHost } from './host.mjs';
 import { homeEnvironment } from './home-environment.mjs';
+import { readInstalledPreparedContent } from '@aihq/catalog/node';
 
 const catalogRoot = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
 const inventories = await installedFamilies({ root: catalogRoot, sourceInput: 'managed-inventory-index' });
@@ -145,4 +146,24 @@ test('Finish prepares only the interrupted management id, not the whole current 
   assert.equal(prepared.status, 'ready', JSON.stringify(prepared));
   assert.ok(prepared.review.operations.length > 0);
   assert.ok(prepared.review.operations.every(operation => operation.details?.target?.endsWith('FINISH.md')), JSON.stringify(prepared.review.operations));
+});
+
+test('Project basics facts are digest-bound in the composed selection and read-back', async () => {
+  const prepared = await readInstalledPreparedContent({ root: catalogRoot, frameworkId: 'project-basics' });
+  assert.equal(prepared.valid, true, JSON.stringify(prepared.diagnostics));
+  const materials = await Promise.all(prepared.release.items.flatMap(item => item.materials).map(async material => ({
+    ...material, path: material.packagePath, bytes: new Uint8Array(await readFile(join(catalogRoot, material.packagePath))),
+  })));
+  const inventory = { family: 'Project basics', release: prepared.release, materialSource: { kind: 'local', input: 'maintained' }, materials };
+  const item = prepared.release.items.find(item => item.kind === 'rule' && item.payload?.placement === 'entry-block');
+  const root = { releaseSha256: prepared.release.sha256, itemId: item.id, itemSha256: item.itemSha256, scope: 'project', configuration: {}, originIds: ['direct'] };
+  const intent = freshAuthoring(); intent.roots.push(root);
+  const projectFacts = { facts: [{ field: 'stack', value: 'node', confidence: 'detected' }, { field: 'packageManager', value: 'npm', confidence: 'inferred' }] };
+  const composed = await composeAuthoring({ intent, inventories: [inventory], tool: 'claude', projectFacts });
+  assert.equal(composed.status, 'ok', JSON.stringify(composed.diagnostics ?? []));
+  const selection = composed.value.policy.selections.find(candidate => candidate.item?.itemId === item.id);
+  assert.deepEqual(selection.projectFacts, projectFacts.facts);
+  const reopened = await readAuthoring({ policyBytes: composed.value.policyBytes, inventories: [inventory] });
+  assert.equal(reopened.value.editing, 'available', JSON.stringify(reopened.value.diagnostics ?? []));
+  assert.deepEqual(reopened.value.policy.selections.find(candidate => candidate.item?.itemId === item.id).projectFacts, projectFacts.facts);
 });

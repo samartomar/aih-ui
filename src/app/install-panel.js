@@ -177,30 +177,22 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
     for (const entry of excluded) nodes.push(el('li', 'text-[11px]', `Left out: ${entry.item.itemId} — ${entry.reason}`));
     return nodes;
   }
-  async function showProjectFacts() {
-    const selected = (client.intent?.roots ?? []).some(root => root.itemId.startsWith('project-basics.'));
+  function showProjectFacts(review) {
+    const selected = (review?.selections ?? []).some(row => row.framework === 'project-basics' || row.item?.framework === 'project-basics');
     if (!selected) { projectFacts.replaceChildren(); return; }
-    projectFacts.replaceChildren(el('li', '', 'Loading project facts…'));
-    try {
-      const result = await client.request('project-facts');
-      if (!Array.isArray(result.facts)) {
-        projectFacts.replaceChildren(el('li', '', `Project facts unavailable: ${(result.diagnostics ?? []).map(diagnostic => diagnostic.message).join(' ') || result.status}.`)); return;
-      }
-      const rows = result.facts.map(fact => el('li', '', `${fact.confidence === 'detected' ? 'Detected' : 'Inferred'}: ${fact.field} = ${fact.value}`));
-      if (!rows.length) rows.push(el('li', '', 'No project facts detected or inferred.'));
-      for (const diagnostic of result.diagnostics ?? []) rows.push(el('li', '', `Project facts diagnostic: ${diagnostic.message}`));
-      projectFacts.replaceChildren(...rows);
-    } catch (error) { projectFacts.replaceChildren(el('li', '', `Project facts failed: ${error.message}`)); }
+    const facts = (review?.selections ?? []).flatMap(row => row.projectFacts ?? []);
+    if (!facts.length) { projectFacts.replaceChildren(el('li', '', 'No project facts found')); return; }
+    projectFacts.replaceChildren(...facts.map(fact => el('li', '', `${fact.confidence === 'detected' ? 'Detected' : 'Inferred'}: ${fact.field} = ${fact.value}`)));
   }
   async function loadPreview() {
     if (previewing || installing) return;
     previewing = true; preview = undefined; install.disabled = true; message.textContent = 'Checking which files will be added…';
     try {
-      await showProjectFacts();
       const result = recoveryManagementId ? await client.requestHost('finish', { managementId: recoveryManagementId }) : await client.requestHost('prepare');
       if (result.status === 'superseded') { message.textContent = ''; return; }
       const preparation = readyPreparation(result);
       if (preparation) {
+        showProjectFacts(preparation.review);
         preview = preparation; const rows = show(preparation.review, preparation.operationSelections ?? []);
         const reason = nothingToInstall({ roots: client.intent?.roots ?? [], rows });
         install.disabled = Boolean(reason); message.textContent = reason || installSummary(rows, { managed }).message;
@@ -210,8 +202,8 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
         // A non-ready preparation can still carry a review with useful per-item facts; they are shown, and
         // the reason the run is not ready is said alongside — no executable session is implied (#165).
         const review = result?.preparation?.review ?? result?.review;
-        if (review) named.replaceChildren(...namedRows(review, result?.preparation?.operationSelections ?? result?.operationSelections ?? [], review?.target?.project));
-        else named.replaceChildren();
+        if (review) { showProjectFacts(review); named.replaceChildren(...namedRows(review, result?.preparation?.operationSelections ?? result?.operationSelections ?? [], review?.target?.project)); }
+        else { projectFacts.replaceChildren(); named.replaceChildren(); }
         message.textContent = `Can't install yet: ${refusal(result)}`;
       }
     } catch (error) { message.textContent = `Can't install yet: ${error.message}`; }

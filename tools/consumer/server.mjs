@@ -265,10 +265,6 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
         }
         // Host-configured source and controls only; the request body is ignored and needs no project root.
         if (operation === 'authority-source') return send(response, 200, await readAuthoritySource({ organizationSource, controls }));
-        if (operation === 'project-facts') {
-          if (!folder.project) return send(response, 409, { status: 'unavailable', diagnostics: [{ code: 'HOST_UNAVAILABLE', message: 'Choose a project folder before reading its facts.' }] });
-          return send(response, 200, await detectProjectFacts({ project: folder.project }));
-        }
         if (operation === 'timings') {
           if (!client.host) return send(response, 409, { status: 'unavailable', diagnostics: [{ code: 'HOST_UNAVAILABLE', message: 'Choose a project folder before reading install timings.' }] });
           const record = client.host.installTimings(body.runId);
@@ -306,7 +302,10 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
           result = await inspectAuthenticatedReviewEvidence({ evidenceBytes: Uint8Array.from((Number.isSafeInteger(body.evidenceIndex) ? body.reviewEvidence?.[body.evidenceIndex] : body.evidenceBytes) ?? []), inventory: mixedService.inventories.find(entry => entry.release.sha256 === body.target?.releaseSha256), itemId: body.target?.itemId, recipe: reviewPin?.recipe, configuration: reviewIntent?.roots.find(root => root.releaseSha256 === body.target?.releaseSha256 && root.itemId === body.target?.itemId)?.configuration, trust: reviewTrust });
         } else {
           const phase = operation === 'compose' ? 'render' : ['edit', 'draft-edit', 'draft-compile'].includes(operation) ? 'resolve' : null;
-          const run = () => mixedService.run(operation, body);
+          const run = async () => {
+            if (folder.project && ['compose', 'edit'].includes(operation)) body = { ...body, projectFacts: await detectProjectFacts({ project: folder.project }) };
+            return mixedService.run(operation, body);
+          };
           result = phase && client.host ? await client.host.measure(phase, run) : await run();
         }
         // JSON transport represents bytes as arrays, never serialized handles.

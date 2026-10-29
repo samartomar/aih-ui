@@ -31,7 +31,7 @@ const projected = selections => sorted(selections.map(({ id, managementId, organ
       ...(scanRecords !== undefined ? { scanRecords } : {}), ...(itemMaterials !== undefined ? { itemMaterials } : {}),
       ...(projectFacts !== undefined ? { projectFacts } : {}) } : {}) })));
 
-async function build({ intent, inventories, base, capture = false, historicalV2 = false, tool = undefined, grantApproval = undefined, revokeApproval = undefined, strictOrigins = true }) {
+async function build({ intent, inventories, base, capture = false, historicalV2 = false, tool = undefined, grantApproval = undefined, revokeApproval = undefined, strictOrigins = true, projectFacts = undefined }) {
   if (intent && new TextEncoder().encode(JSON.stringify(intent)).length > 850_000) return refuse('POLICY_BOUND_EXCEEDED', '/metadata/aih.workbench', 'Intent exceeds 850,000 UTF-8 bytes; reduce selected state.');
   if (intent?.reviews?.schema && intent.reviews.schema !== REVIEW_SCHEMA) return refuse('INTENT_VERSION_UNSUPPORTED', '/metadata/aih.workbench/reviews/schema', 'Unsupported review document version.');
   if (!checkIntentShape(intent)) return refuse('FIELD_SEMANTICS_UNSUPPORTED', '/metadata/aih.workbench', 'Malformed, oversized or unknown authoring semantics.');
@@ -122,17 +122,23 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
           return other ? index.items.get(pinKey(other.item)).item : undefined;
         }) : [];
       if (requirers.some(required => !required)) return refuse('PREREQUISITE_UNAVAILABLE', '/selections', 'Catalog could not name the item requiring this document.');
+      const contents = Object.fromEntries((entry.materials ?? []).filter(material => material.id && material.bytes)
+        .map(material => [material.id, new TextDecoder().decode(material.bytes)]));
       const deliveries = (requirers.length ? requirers : [undefined]).map(requiredBy =>
-        harness.renderDelivery({ tool: renderTool, item, binding, scope: selection.scope, ...(ticked ? { grantApproval } : {}), ...(requiredBy ? { requiredBy } : {}) }));
+        harness.renderDelivery({ tool: renderTool, item, binding, scope: selection.scope, contents, ...(ticked ? { grantApproval } : {}), ...(requiredBy ? { requiredBy } : {}) }));
       const refused = deliveries.find(delivery => delivery.status !== 'rendered');
       if (refused) return refuse('PREREQUISITE_UNAVAILABLE', ticked ? '/grantApproval' : '/selections',
         refused.guidance ?? refused.message ?? refused.reason ?? 'Core refused the content delivery.', undefined,
         { owner: 'core', diagnostics: refused.diagnostics ?? (refused.code ? [{ code: refused.code, message: refused.reason ?? refused.message }] : []) });
       rendered = deliveries[0];
+      const unique = deliveries.map((delivery, index) => ({ ...delivery, recipe: { ...delivery.recipe,
+        operations: delivery.recipe.operations.map(operation => ({ ...operation, id: `${operation.id}-${index + 1}`,
+          requires: (operation.requires ?? []).map(required => `${required}-${index + 1}`), checks: (operation.checks ?? []).map(check => `${check}-${index + 1}`) })),
+        checks: delivery.recipe.checks.map(check => ({ ...check, id: `${check.id}-${index + 1}` })) } }));
       const combined = deliveries.length === 1 ? rendered.recipe : { ...rendered.recipe,
-        materials: [...new Map(deliveries.flatMap(delivery => delivery.recipe.materials).map(material => [`${material.id}/${material.path}/${material.sha256}`, material])).values()],
-        targets: [...new Set(deliveries.flatMap(delivery => delivery.recipe.targets))], prerequisites: [...new Set(deliveries.flatMap(delivery => delivery.recipe.prerequisites))],
-        operations: deliveries.flatMap(delivery => delivery.recipe.operations), checks: deliveries.flatMap(delivery => delivery.recipe.checks) };
+        materials: [...new Map(unique.flatMap(delivery => delivery.recipe.materials).map(material => [`${material.id}/${material.path}/${material.sha256}`, material])).values()],
+        targets: [...new Set(unique.flatMap(delivery => delivery.recipe.targets))], prerequisites: [...new Set(unique.flatMap(delivery => delivery.recipe.prerequisites))],
+        operations: unique.flatMap(delivery => delivery.recipe.operations), checks: unique.flatMap(delivery => delivery.recipe.checks) };
       recipe = { inline: combined };
       if (ticked) approvalRendered = true;
     }
@@ -150,6 +156,7 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
     }
     selections.push({ ...prior, id: prior?.id ?? selection.id, managementId, scope: selection.scope, configuration: configured.selection.configuration,
       ...(bundle ? { item: bundle.item, tool: bundle.tool, name: bundle.name, kind: bundle.kind, origins: bundle.origins } : {}),
+      ...(bundle?.item.framework === 'project-basics' && Array.isArray(projectFacts?.facts) ? { projectFacts: structuredClone(projectFacts.facts) } : {}),
       ...(rendered ? { bindingDigest: rendered.bindingDigest,
         ...(item.scan?.length ? { scanRecords: structuredClone(item.scan), itemMaterials: item.materials.map(material => ({ materialId: material.id, relPath: material.relPath, path: material.packagePath,
           sha256: material.sha256, byteLength: material.byteLength, role: material.role })) } : {}) } : {}),
@@ -294,7 +301,7 @@ export async function reconcileAuthoring({ savedPolicyBytes, inventories, candid
   return { ...ok({ status: choices.length ? 'needs-decisions' : 'unchanged', affectedRoots, retainedRoots, choices }), originalBytes: savedPolicyBytes.slice() };
 }
 export async function composeAuthoring(options) { return composeReviewed(options); }
-async function composeReviewed({ basePolicyBytes, intent, inventories, reviewEvidence = [], comparisons = [], recipient, tool = undefined, grantApproval = undefined, revokeApproval = undefined, strictOrigins = false }, reviewTransition = false) {
+async function composeReviewed({ basePolicyBytes, intent, inventories, reviewEvidence = [], comparisons = [], recipient, tool = undefined, grantApproval = undefined, revokeApproval = undefined, strictOrigins = false, projectFacts = undefined }, reviewTransition = false) {
   if (intent && new TextEncoder().encode(JSON.stringify(intent)).length > 850_000) return refuse('POLICY_BOUND_EXCEEDED', '/metadata/aih.workbench', 'Intent exceeds 850,000 UTF-8 bytes; reduce selected state.', basePolicyBytes);
   if (intent?.reviews?.schema && intent.reviews.schema !== REVIEW_SCHEMA) return refuse('INTENT_VERSION_UNSUPPORTED', '/metadata/aih.workbench/reviews/schema', 'Unsupported review document version.', basePolicyBytes);
   if (!checkIntentShape(intent)) return refuse('FIELD_SEMANTICS_UNSUPPORTED', '/metadata/aih.workbench', 'Malformed or unknown authoring semantics.', basePolicyBytes);
@@ -306,15 +313,15 @@ async function composeReviewed({ basePolicyBytes, intent, inventories, reviewEvi
     base = original.value.policy;
     if (!reviewTransition && stable(intent.reviews) !== stable(original.value.intent.reviews)) return refuse('REVIEW_BINDING_UNAVAILABLE', '/reviews', 'Use the checked evidence review workflow to change decisions.', basePolicyBytes);
   }
-  return buildReviewed({ intent, inventories, base, originalBytes: basePolicyBytes, reviewEvidence, comparisons, recipient, tool, grantApproval, revokeApproval, strictOrigins });
+  return buildReviewed({ intent, inventories, base, originalBytes: basePolicyBytes, reviewEvidence, comparisons, recipient, tool, grantApproval, revokeApproval, strictOrigins, projectFacts });
 }
 // Saved judgments are never refused or converted here: their applicability is reported beside the result.
-async function buildReviewed({ intent, inventories, base, originalBytes, reviewEvidence, comparisons, recipient, tool = undefined, grantApproval = undefined, revokeApproval = undefined, strictOrigins = false }) {
-  const result = await build({ intent, inventories, base, capture: true, tool, grantApproval, revokeApproval, strictOrigins });
+async function buildReviewed({ intent, inventories, base, originalBytes, reviewEvidence, comparisons, recipient, tool = undefined, grantApproval = undefined, revokeApproval = undefined, strictOrigins = false, projectFacts = undefined }) {
+  const result = await build({ intent, inventories, base, capture: true, tool, grantApproval, revokeApproval, strictOrigins, projectFacts });
   if (result.status === 'ok') return ok({ ...result.value, ...await reviewView({ intent: result.value.intent, inventories, reviewEvidence, comparisons, recipient }) });
   return originalBytes ? { ...result, originalBytes: originalBytes.slice() } : result;
 }
-export async function editAuthoring({ policyBytes, inventories, operation, reviewEvidence = [], comparisons = [], recipient, tool = undefined, grantApproval = undefined, revokeApproval = undefined }) {
+export async function editAuthoring({ policyBytes, inventories, operation, reviewEvidence = [], comparisons = [], recipient, tool = undefined, grantApproval = undefined, revokeApproval = undefined, projectFacts = undefined }) {
   const original = await readAuthoring({ policyBytes, inventories });
   if (original.status !== 'ok') return original;
   if (original.value.editing !== 'available') return { status: 'refused', diagnostics: refusalDiagnostics(original.value), originalBytes: policyBytes.slice() };
@@ -327,7 +334,7 @@ export async function editAuthoring({ policyBytes, inventories, operation, revie
     const item = entry?.release.items.find(candidate => candidate.id === root.itemId);
     if (!item || (item.kind !== 'mcp-server' && item.kind !== 'mcp')) return refuse('INPUT_INVALID', '/operation/root', 'Only an MCP server can be allowed this way.', policyBytes);
     if (!entry.release.framework?.id) return refuse('SOURCE_REVISION_UNAVAILABLE', '/operation/root', 'This exact source publishes no framework identity to name the approval.', policyBytes);
-    return composeAuthoring({ basePolicyBytes: policyBytes, intent: original.value.intent, inventories, reviewEvidence, comparisons, recipient, tool,
+    return composeAuthoring({ basePolicyBytes: policyBytes, intent: original.value.intent, inventories, reviewEvidence, comparisons, recipient, tool, projectFacts,
       ...(operation.granted ? { grantApproval: { framework: entry.release.framework.id, itemId: item.id } } : { revokeApproval: { framework: entry.release.framework.id, itemId: item.id } }) });
   }
   // An omitted hash is filled from the checked inventory; a supplied one is verified by composition.
@@ -340,7 +347,7 @@ export async function editAuthoring({ policyBytes, inventories, operation, revie
     try {
       const selected = selectSetChoices({ intent, policy: original.value.policy, inventories, sets: operation.sets, tool: operation.tool, releaseSha256: operation.releaseSha256, configurations: operation.configurations });
       if (selected.status !== 'ok') return { ...selected, originalBytes: policyBytes.slice() };
-      return buildReviewed({ intent: selected.value.intent, inventories, base: original.value.policy, originalBytes: policyBytes, reviewEvidence, comparisons, recipient, tool });
+      return buildReviewed({ intent: selected.value.intent, inventories, base: original.value.policy, originalBytes: policyBytes, reviewEvidence, comparisons, recipient, tool, projectFacts });
     } catch (error) { return refuse('INPUT_INVALID', '/operation/sets', error.message, policyBytes); }
   }
   const add = root => {
@@ -379,7 +386,7 @@ export async function editAuthoring({ policyBytes, inventories, operation, revie
       add({ ...ref, itemSha256: pin.itemSha256, configuration: selection.configuration, originIds: ['direct'] });
     }
   } catch (error) { return refuse('INTENT_POLICY_CONTRADICTION', '/operation', error.message, policyBytes); }
-  return composeAuthoring({ basePolicyBytes: policyBytes, intent, inventories, reviewEvidence, comparisons, recipient, tool, revokeApproval });
+  return composeAuthoring({ basePolicyBytes: policyBytes, intent, inventories, reviewEvidence, comparisons, recipient, tool, revokeApproval, projectFacts });
 }
 
 // These are the only mutation paths for reviews on an existing document.
