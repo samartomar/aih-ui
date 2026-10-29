@@ -7,6 +7,16 @@ import { pinSelectedRecipes } from './selected-recipe.mjs';
 export const SET_CHOICES_KEY = 'workbenchSetChoices';
 export const setChoicesOf = intent => (intent?.provenance ?? []).flatMap(source => source.materialSource?.[SET_CHOICES_KEY]?.choices ?? []);
 export const setChoiceSources = intent => (intent?.provenance ?? []).filter(source => source.materialSource?.[SET_CHOICES_KEY]?.choices?.length).map(source => source.releaseSha256);
+// Catalog records a `chosen` origin for every root. A root whose every origin is a saved set choice exists only to
+// pin and configure that set's member, so its `chosen` origin is dropped and the set origins alone own it. A root
+// with any other origin (the user also picked it) keeps `chosen`.
+export function setOwnedOrigins(intent, selection) {
+  const setOrigins = new Set(setChoicesOf(intent).map(choice => choice.originId));
+  const roots = (intent?.roots ?? []).filter(root => root.releaseSha256 === selection.item.releaseSha256 && root.itemId === selection.item.itemId && root.scope === selection.scope);
+  if (!roots.length || roots.some(root => root.originIds.some(id => !setOrigins.has(id)))) return selection.origins;
+  const owned = selection.origins.filter(origin => origin.reasonIncluded !== 'chosen');
+  return owned.length ? owned : selection.origins;
+}
 // Ask Catalog which configured roots belong to these choices. Do not expand sets
 // here, or let a remembered input make an excluded/unrelated item a new choice.
 export function resolveConfiguredSets({ releases, sets, configurations = [] }) {

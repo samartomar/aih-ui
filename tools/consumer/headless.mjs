@@ -1,5 +1,5 @@
 // Supported consumer boundary. No host acquisition or execution authority.
-import { selectSetChoices, checkRecordedSetChoices, setChoicesOf, setChoiceSources, SET_CHOICES_KEY } from './set-choices.mjs';
+import { selectSetChoices, checkRecordedSetChoices, setChoicesOf, setChoiceSources, setOwnedOrigins, SET_CHOICES_KEY } from './set-choices.mjs';
 import { configurePinned, pinSelectedRecipes, recipeDescriptor } from './selected-recipe.mjs';
 import { parsePolicy } from '@aihq/core/contracts';
 import * as harness from '@aihq/core/harness';
@@ -66,17 +66,14 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
     if (!entry) return refuse('SOURCE_REVISION_UNAVAILABLE', '/inputs', 'Exact input release unavailable.');
     if (stable(entry.input) !== stable(input)) return refuse('SOURCE_IDENTITY_MISMATCH', '/inputs', 'Acquired input identity differs from the saved snapshot.');
   }
-  // A root that only a saved set put there is the set's member, not a direct choice: Catalog expands it from the
-  // set request, so its recorded origin is that set alone and removing the set removes it. A configured member
-  // stays a root, since only a root carries configuration.
-  const setOriginIds = new Set(setChoicesOf(intent).map(choice => choice.originId));
   const resolution = resolveSelections({ releases: index.releases,
     sets: setChoicesOf(intent).map(choice => choice.request),
-    roots: intent.roots.filter(root => Object.keys(root.configuration ?? {}).length || root.originIds.some(id => !setOriginIds.has(id)))
-      .map(({ releaseSha256, itemId, scope, configuration }) => ({ releaseSha256, itemId, scope, configuration })),
+    roots: intent.roots.map(({ releaseSha256, itemId, scope, configuration }) => ({ releaseSha256, itemId, scope, configuration })),
     skips: intent.exclusions.map(({ releaseSha256, itemId, scope }) => ({ releaseSha256, itemId, scope })) });
   if (resolution.status !== 'ok') return resolution;
-  const resolved = resolution.value;
+  // Every root reaches Catalog, so a set member keeps its configuration; a root that only saved sets put there is
+  // owned by those sets, not chosen directly, so it records only their origins and leaves with them.
+  const resolved = { ...resolution.value, selections: resolution.value.selections.map(selection => ({ ...selection, origins: setOwnedOrigins(intent, selection) })) };
   // Preserve existing selection identity for unchanged recipe/source/scope; a
   // historical v1 selection id is not a reason to rewrite execution semantics.
   const selections = [], pins = new Map(), sourceIds = new Set([...setChoiceSources(intent), ...intent.exclusions.map(r => r.releaseSha256), ...intent.origins.filter(o => o.kind === 'template').map(o => o.releaseSha256)]);
