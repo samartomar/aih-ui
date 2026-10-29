@@ -68,14 +68,37 @@ async function liveTool() {
   await done(value);
 }
 
-async function failedInspection() {
+async function dedupeNotifications() {
+  const bodies = [];
   const value = await scenario(() => async route => {
-    await route.fulfill({ status: 500, json: { error: 'inspection rejected' } });
+    bodies.push(route.request().postDataJSON());
+    await route.fulfill({ json: warning });
+  });
+  const { page } = value;
+  await page.locator('#setup-choices-host-copies').filter({ hasText: /Second copy/ }).waitFor();
+  const before = bodies.length;
+  await page.locator('#your-tool-trigger').click();
+  await page.locator('.your-tool-option').filter({ hasText: 'Claude Code' }).click();
+  await page.waitForTimeout(150);
+  assert.equal(bodies.length, before, 'reselecting the same tool does not inspect the host again');
+  await done(value);
+}
+
+async function failedInspection() {
+  let calls = 0, fail = true;
+  const value = await scenario(() => async route => {
+    calls++;
+    if (fail) return route.fulfill({ status: 500, json: { error: 'inspection rejected' } });
+    await route.fulfill({ json: warning });
   });
   const { page } = value;
   const line = page.locator('#setup-choices-host-copies');
   await line.filter({ hasText: /Couldn't check[\s\S]*inspection rejected/ }).waitFor();
   assert.doesNotMatch(await line.textContent(), /^Checking/);
+  const before = calls;
+  await closePolicyDrawer(page); fail = false; await openPolicyDrawer(page);
+  await line.filter({ hasText: /Second copy/ }).waitFor();
+  assert.ok(calls > before, 'an explicit drawer retry is not skipped after a failed inspection');
   await done(value);
 }
 
@@ -142,6 +165,7 @@ async function folderInvalidation() {
 
 try {
   if (!only || only === 'tool') { await liveTool(); passed++; console.log('✔ drawer inspection uses the live tool'); }
+  if (!only || only === 'dedupe') { await dedupeNotifications(); passed++; console.log('✔ unrelated notifications do not repeat drawer inspection'); }
   if (!only || only === 'failed') { await failedInspection(); passed++; console.log('✔ failed drawer inspection reaches a terminal failed state'); }
   if (!only || only === 'unavailable') { await unavailableCopies(); passed++; console.log('✔ unavailable per-item copy facts never look clean'); }
   if (!only || only === 'folder') { await folderInvalidation(); passed++; console.log('✔ folder invalidation rejects the old drawer reply synchronously'); }

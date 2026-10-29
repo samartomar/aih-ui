@@ -148,18 +148,22 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   // What the host inspection saw about second copies, for the Your choices drawer (#163). One bounded
   // read-only check over exactly the chosen items, after the chosen set or the folder changes. The page
   // names the tool it already chose; nothing is launched and nothing is written.
-  let hostCopies, hostCopiesAttempt = 0;
-  const refreshHostFacts = async () => {
-    const attempt = ++hostCopiesAttempt;
-    // Old facts are cleared while the new read is pending (Q6-R2): never pair new choices with the
-    // previous tool/folder answer.
-    hostCopies = undefined; choicesView.render();
+  let hostCopies, hostCopiesAttempt = 0, hostFactsKey;
+  const refreshHostFacts = async ({ force = false } = {}) => {
     // One snapshot with the catalog controller and compileDraft: an open draft's LIVE intent roots win (Q6-R).
     const roots = (client.draft ? client.draft.intent?.roots : client.intent?.roots) ?? [];
     const tool = client.tool ?? undefined;
     const items = roots.map(root => ({ releaseSha256: root.releaseSha256, itemId: root.itemId }));
+    const key = JSON.stringify([client.folderRevision, tool, items]);
+    if (!force && key === hostFactsKey) return;
+    hostFactsKey = key;
+    const attempt = ++hostCopiesAttempt;
+    // Old facts are cleared while the new read is pending (Q6-R2): never pair new choices with the
+    // previous tool/folder answer. Unrelated record writes make no new host request.
+    hostCopies = undefined; choicesView.render();
     const result = await client.request('tool-host', { tool, items }).catch(error => ({ status: 'failed', reason: error.message }));
     if (attempt !== hostCopiesAttempt) return;
+    if (hostFactsKey === key && (result.status === 'failed' || result.status === 'unavailable')) hostFactsKey = undefined;
     hostCopies = result;
     choicesView.render();
   };
@@ -172,7 +176,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     showStatus(`Removed ${name} from your ${setupWord()}. Files already installed stay in the project folder until you Remove them under Installed in this project.`);
   } });
   void refreshHostFacts();
-  document.addEventListener('aih:policy-review-open', () => { void folderRow.refresh(); void installedPanel.refresh(); void refreshHostFacts(); });
+  document.addEventListener('aih:policy-review-open', () => { void folderRow.refresh(); void installedPanel.refresh(); void refreshHostFacts({ force: true }); });
   review.after(button('Open policy choices and review', () => reviewPanel.open(), true));
   const pageContext = el('p', 'text-on-surface-variant'); choices.after(pageContext);
   const canReplace = () => !(client.dirty || client.candidate) || window.confirm('This policy has accepted changes that have not been downloaded or a proposal awaiting acceptance. Replace them with another artifact?');
