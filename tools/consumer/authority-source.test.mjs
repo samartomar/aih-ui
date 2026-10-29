@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startConsumer } from './server.mjs';
@@ -80,4 +80,52 @@ test('Enterprise authority and prepare ignore redirects; changed authority rejec
     assert.deepEqual(await readdir(projectRoot, { recursive: true }), []);
     onlyFixture(fixture);
   } finally { if (started) await new Promise(resolve => started.server.close(resolve)); fixture.restore(); await rm(projectRoot, { recursive: true, force: true }); }
+});
+test('a local source reaches the page by its file name only, never its folder', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'authority-local-')), projectRoot = await mkdtemp(join(tmpdir(), 'authority-source-'));
+  const enterprise = await enterpriseFixture(), path = join(folder, 'organization.json');
+  await writeFile(path, JSON.stringify(enterprise.document));
+  const local = { provider: 'local', path }, shown = { provider: 'local', fileName: 'organization.json' };
+  const unreadable = { provider: 'local', path: join(folder, 'missing.json') };
+  const started = [];
+  try {
+    const host = await startConsumer({ organizationSource: local, projectRoot, controls: { logging: 'off' } }); started.push(host);
+    const policyBytes = [...new TextEncoder().encode(JSON.stringify(enterprise.policy))];
+    const catalog = await (await fetch(host.origin + '/api/authoring-catalog')).json();
+    const read = await post(host, 'authority-source'), authority = await post(host, 'authority', { policyBytes }), ready = await post(host, 'prepare', { policyBytes });
+    assert.equal(read.status, 'ok', JSON.stringify(read)); assert.equal(authority.status, 'ok', JSON.stringify(authority)); assert.equal(ready.status, 'ready', JSON.stringify(ready));
+    assert.deepEqual(catalog.organizationSource, shown); assert.deepEqual(read.source, shown); assert.deepEqual(read.authority.source, shown);
+    assert.deepEqual(authority.value.authority.source, shown);
+    for (const value of [catalog, read, authority, ready]) assert.ok(!JSON.stringify(value).includes(folder), JSON.stringify(value));
+    const missing = await startConsumer({ organizationSource: unreadable, projectRoot, controls: { logging: 'off' } }); started.push(missing);
+    const refused = await post(missing, 'authority-source'), refusedAuthority = await post(missing, 'authority', { policyBytes });
+    assert.equal(refused.status, 'refused'); assert.equal(refusedAuthority.status, 'refused');
+    assert.deepEqual(refused.source, { provider: 'local', fileName: 'missing.json' });
+    for (const value of [refused, refusedAuthority]) assert.ok(!JSON.stringify(value).includes(folder), JSON.stringify(value));
+  } finally {
+    for (const host of started) await new Promise(resolve => host.server.close(resolve));
+    await rm(folder, { recursive: true, force: true }); await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+test('Enterprise removal of one installed selection is prepared with a local source', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'authority-local-')), projectRoot = await mkdtemp(join(tmpdir(), 'authority-source-'));
+  const enterprise = await enterpriseFixture(), path = join(folder, 'organization.json');
+  await writeFile(path, JSON.stringify(enterprise.document));
+  let started;
+  try {
+    started = await startConsumer({ organizationSource: { provider: 'local', path }, projectRoot, controls: { logging: 'off' } });
+    const policyBytes = [...new TextEncoder().encode(JSON.stringify(enterprise.policy))];
+    const ready = await post(started, 'prepare', { policyBytes });
+    assert.equal(ready.status, 'ready', JSON.stringify(ready));
+    const applied = await post(started, 'apply', { sessionId: ready.sessionId, reviewDigest: ready.review.reviewDigest });
+    assert.equal(applied.completion, 'complete', JSON.stringify(applied));
+    // The Policy drawer's "Review removal" names one managementId.
+    const { managementId, scope } = enterprise.policy.selections[0];
+    const removal = await post(started, 'remove', { managementId, scope, mode: 'enterprise' });
+    assert.equal((removal.preparation ?? removal).status, 'ready', JSON.stringify(removal));
+    assert.ok(!JSON.stringify(removal).includes(folder), JSON.stringify(removal));
+  } finally {
+    if (started) await new Promise(resolve => started.server.close(resolve));
+    await rm(folder, { recursive: true, force: true }); await rm(projectRoot, { recursive: true, force: true });
+  }
 });

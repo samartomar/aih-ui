@@ -45,13 +45,20 @@ try {
   await context.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
   page = await context.newPage(); page.setDefaultTimeout(30_000);
   const errors = []; page.on('pageerror', error => errors.push(error.message));
+  // The file's folder stays on the host: no response the page receives names it.
+  const folder = dirname(organizationPath), leaks = [];
+  page.on('response', async response => { const text = await response.text().catch(() => ''); if (text.includes(folder)) leaks.push(new URL(response.url()).pathname); });
   const origin = `http://127.0.0.1:${address.port}`;
-  const post = async (operation, body) => (await fetch(`${origin}/api/authoring-${operation}`, { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify(body) })).json();
+  const post = async (operation, body) => {
+    const text = await (await fetch(`${origin}/api/authoring-${operation}`, { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify(body) })).text();
+    if (text.includes(folder)) leaks.push(`/api/authoring-${operation}`);
+    return JSON.parse(text);
+  };
   // The host names the source; the page reads it as configured and labels the file.
   const authority = await post('authority-source', {});
   facts.authority = { status: authority.status, diagnostics: authority.diagnostics };
   assert.equal(authority.status, 'ok', JSON.stringify(authority.diagnostics));
-  assert.equal(authority.source?.provider, 'local');
+  assert.deepEqual(authority.source, { provider: 'local', fileName: organizationPath.split(/[\\/]/).pop() });
   await page.goto(origin + '/');
   await page.locator('#browse-family option[value="Superpowers"]').waitFor({ state: 'attached' });
   // An Enterprise Developer: the organisation's policy governs what is installed.
@@ -91,14 +98,19 @@ try {
   await writeFile(organizationPath, JSON.stringify({ ...organization, metadata: { revision: 'changed after preview' } }, null, 2) + '\n');
   await page.locator('#install-button').click();
   await page.locator('#install-message[data-outcome="stale"]').filter({ hasText: STALE_POLICY }).waitFor({ timeout: 120_000 });
+  // Core's sentence exactly, as the contract words it.
+  facts.staleMessage = (await page.locator('#install-message').innerText()).trim();
+  assert.equal(facts.staleMessage, STALE_POLICY);
   // Once the fresh preview is back, Core's words are still what the page says.
   await page.locator('#install-button:not([disabled])').waitFor({ timeout: 120_000 });
   facts.message = (await page.locator('#install-message').innerText()).trim();
-  assert.ok(facts.message.startsWith(STALE_POLICY), facts.message);
+  assert.equal(facts.message, STALE_POLICY);
   const written = (await readdir(project, { recursive: true })).filter(path => path.startsWith('.claude'));
   facts.written = written;
   assert.deepEqual(written, [], 'nothing was installed');
   assert.deepEqual(errors, []);
+  facts.leaks = leaks;
+  assert.deepEqual(leaks, [], 'the policy file\'s folder reached the page');
   await page.screenshot({ path: join(output, 'stale-policy.png'), fullPage: true });
   await context.close();
   await writeFile(join(output, 'result.json'), JSON.stringify({ status: 'passed', ...facts }, null, 2));
