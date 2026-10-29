@@ -93,7 +93,7 @@ try {
   };
   const fresh = await post('new', { mode: 'vibe', tool: 'claude' });
   assert.equal(fresh.status, 'ok', JSON.stringify(fresh.diagnostics));
-  const addedResult = await post('edit', { policyBytes: fresh.value.policyBytes,
+  const addedResult = await post('edit', { policyBytes: fresh.value.policyBytes, tool: 'claude',
     operation: { type: 'select-sets', sets: fixture.expected.ecc.requests, configurations, tool: 'claude' } });
   assert.equal(addedResult.status, 'ok', JSON.stringify(addedResult.diagnostics));
   await page.reload();
