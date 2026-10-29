@@ -6,7 +6,7 @@ import { createServer } from 'node:http';
 import { readFile, mkdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { basename, delimiter, dirname, join, resolve, sep } from 'node:path';
+import { delimiter, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { listItems, isCheckedRelease } from '@aihq/catalog/reader';
@@ -16,7 +16,7 @@ import * as core from '@aihq/core';
 import { detectProjectFacts } from '@aihq/core/harness/runtime';
 import { createHost } from './host.mjs';
 import { createProjectFolder, shared } from './project-folder.mjs';
-import { readAuthoritySource, readOrganization } from './authority-source.mjs';
+import { pageSource, readAuthoritySource, readOrganization } from './authority-source.mjs';
 import { editSetup, reopenSetup, reviewSetupUpdate } from './setup.mjs';
 import { presentReport, readScanBytes } from './report-view.mjs';
 import { createIntentService } from './intent-service.mjs';
@@ -150,7 +150,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   // Only the declared source fields reach the page; extra host-file members never do.
   // A local file is named by its file name only; its folder stays on the host.
   const publicSource = organizationSource === undefined ? null : organizationSource?.provider === 'local'
-    ? { provider: 'local', fileName: basename(String(organizationSource.path ?? '')) } : {
+    ? pageSource(organizationSource) : {
     provider: organizationSource?.provider, repository: { owner: organizationSource?.repository?.owner, name: organizationSource?.repository?.name },
     path: organizationSource?.path, revision: { kind: organizationSource?.revision?.kind, value: organizationSource?.revision?.value } };
   const staticFiles = new Map([['/', ['consumer.html', 'text/html']], ['/intent', ['intent.html', 'text/html']], ['/intent.js', ['intent.js', 'text/javascript']], ['/consumer.js', ['consumer.js', 'text/javascript']], ['/consumer.css', ['consumer.css', 'text/css']], ['/tokens.css', ['tokens.css', 'text/css']]]);

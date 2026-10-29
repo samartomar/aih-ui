@@ -112,7 +112,8 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
   node.append(title, action, message, firstRunLine, timings);
 
   let preview, previewing = false, installing = false, shownFor, managed = false, again = false, recoveryManagementId;
-  // Core's reason a shown review went stale stays on screen through the fresh preview that follows, until the next Install.
+  // Core's reason a shown review went stale stays on screen, in the contract's words alone, through the fresh preview that
+  // follows, until the next Install. The refreshed list and the Install button's title carry the rest.
   let notice;
   const itemOf = ref => client.catalog?.items.find(item => item.id === ref.itemId && item.root.releaseSha256 === ref.releaseSha256);
   const label = ref => { const item = itemOf(ref); return item ? item.label ?? item.id : ref.itemId; };
@@ -198,7 +199,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
         preview = preparation; const rows = show(preparation.review, preparation.operationSelections ?? []);
         const reason = nothingToInstall({ roots: client.intent?.roots ?? [], rows });
         const summary = reason || installSummary(rows, { managed }).message;
-        install.disabled = Boolean(reason); message.textContent = notice ? `${notice} ${summary}` : summary;
+        install.disabled = Boolean(reason); message.textContent = notice ?? summary;
         if (notice) message.dataset.outcome = 'stale';
         install.title = reason || 'Install your setup into this project folder.';
       } else {
@@ -249,7 +250,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
       if (attemptResult.state === 'stale') {
         preview = preparation; const rows = show(preparation.review, preparation.operationSelections ?? []); install.disabled = Boolean(nothingToInstall({ roots: client.intent?.roots ?? [], rows }));
         notice = attemptResult.reason; message.dataset.outcome = 'stale';
-        message.textContent = `${notice} The list now shows what would happen — check it and click Install again.`; return;
+        message.textContent = notice; return;
       }
       runId = preparation.runId;
       const outcome = installOutcome(attemptResult.run, installFiles(preparation.review), preparation.review.target?.project);
