@@ -131,7 +131,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
   // Named prepared-work 1.6 rows: Core's selections name them; operations attach by published selectionId;
   // blockers and global lines are Core's words, verbatim (#165).
   function namedRows(review, operationSelections, project) {
-    const { rows, global, excluded } = reviewRows(review, { operationSelections });
+    const { rows, global, excluded } = reviewRows(review, { operationSelections, items: client.catalog?.items ?? [] });
     const rowNode = row => {
       const item = el('li', 'space-y-0.5'); item.dataset.reviewSelection = row.selectionId;
       const head = el('div', 'flex flex-wrap items-center gap-x-2');

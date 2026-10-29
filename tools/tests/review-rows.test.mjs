@@ -42,6 +42,12 @@ test('prepared-work 1.6 selections name the rows; operations attach by published
   assert.deepEqual(global, []);
 });
 
+test('prepared review names use the Catalog namespace when Core returns a bare name', () => {
+  const r = review({ selections: [{ selectionId: 's1', managementId: 'm1', scope: 'project', name: 'coding-style', item: { framework: 'ecc', itemId: 'ecc.rule.typescript.coding-style' } }] });
+  const { rows } = reviewRows(r, { items: [{ id: 'ecc.rule.typescript.coding-style', payload: { namespace: 'typescript' } }] });
+  assert.equal(rows[0].heading, 'coding-style (typescript)');
+});
+
 test('operationSelections links operations that carry no selectionId; path-linked conflicts join their row verbatim', () => {
   const r = review({
     selections: [{ selectionId: 's1', managementId: 'm1', scope: 'project', name: 'A' }],

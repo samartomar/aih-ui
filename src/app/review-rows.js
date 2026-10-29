@@ -10,7 +10,7 @@ const words = diagnostic => diagnostic?.message ?? diagnostic?.code ?? '';
  *   effects: [{ purpose, target, effect }], blockers: [Core's words] }], plus global: [Core's words].
  * `size` is the review's deliveredSize or null — null means Core reported no size, never zero.
  */
-export function reviewRows(review, { operationSelections = [] } = {}) {
+export function reviewRows(review, { operationSelections = [], items = [] } = {}) {
   const bySelection = new Map();
   for (const operation of review?.operations ?? []) {
     let selectionId = operation.selectionId ?? null;
@@ -31,7 +31,7 @@ export function reviewRows(review, { operationSelections = [] } = {}) {
       : origin.reasonIncluded === 'required-by' ? `Required by ${origin.requiredBy?.itemId ?? 'another item'}` : '').filter(Boolean);
     return {
       selectionId: row.selectionId, managementId: row.managementId, scope: row.scope,
-      heading: row.name ? itemDisplayName(row) : `Selection ${row.selectionId} (its recorded metadata is unavailable)`,
+      heading: row.name ? itemDisplayName({ ...row, payload: items.find(item => item.id === row.item?.itemId)?.payload ?? row.payload }) : `Selection ${row.selectionId} (its recorded metadata is unavailable)`,
       item: row.item ?? null, tool: row.tool ?? null, kind: row.kind ?? null,
       framework: row.framework ?? row.item?.framework ?? null,
       layout: row.layout ?? null, scanState: row.scanState ?? null, coverage: row.coverage ?? null,
