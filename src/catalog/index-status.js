@@ -10,7 +10,6 @@ const WORDS = {
   conflict: ({ framework, version }) => `Sources disagree about ${framework} ${version}; neither is used`,
 };
 export const indexStatusCodes = Object.keys(WORDS);
-export const indexStatusText = (code, values = {}) => WORDS[code](values);
 
 // One line per distinct status, in the order Catalog reported them; `unsigned` is said once for the whole list.
 export function indexStatuses(catalog) {

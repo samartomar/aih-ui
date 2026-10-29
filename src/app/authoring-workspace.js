@@ -17,7 +17,6 @@ import { createInstalledPanel } from './installed-panel.js';
 import { createProjectFolderRow } from './project-folder.js';
 import { createSetupChoices } from './setup-choices.js';
 import { rememberOpen } from './advanced.js';
-import { indexStatusText } from '../catalog/index-status.js';
 
 const buttonClass = 'px-3 py-1.5 rounded bg-surface-container text-on-surface border border-wb-border hover:bg-surface-container-high';
 function button(label, action, primary = false) {
@@ -47,12 +46,8 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   const review = document.getElementById('policy-review-description');
   const controls = el('div', 'flex flex-wrap gap-2'); start.after(controls);
   const roots = el('div', 'space-y-2'); choices.after(roots);
-  // The content identity stays readable without opening anything: the summary names the exact Catalog archive the
-  // page loaded; opening it shows the exact saved source and choice.
   const internalNotice = el('details', 'text-on-surface-variant'); internalNotice.id = 'policy-internal-content';
   const internalSummary = el('summary', '', 'Internal content · not verified');
-  const internalArchives = el('span', 'block font-mono text-[11px] break-all'); internalArchives.id = 'policy-internal-archives';
-  internalSummary.append(internalArchives);
   const internalProvenance = el('pre', 'whitespace-pre-wrap break-words'); internalNotice.append(internalSummary, internalProvenance);
   const proposal = el('div', 'space-y-2'); proposal.id = 'policy-proposal'; proposal.setAttribute('role', 'status'); review.after(proposal);
   const status = el('p', 'wb-status-area text-on-surface-variant'); status.id = 'policy-status'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite'); controls.after(status);
@@ -545,11 +540,6 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     if (persistentContext) persistentContext.textContent = `${draft ? 'Working draft' : 'Your setup'} · ${current.length} chosen ${current.length === 1 ? 'item' : 'items'}${client.candidate ? ' · A change is waiting in Your setup' : ''}${client.dirty ? ' · Changes not downloaded' : ' · No changes waiting to download'}${client.recoveryAvailable === false ? ' · Browser recovery unavailable' : ''}`;
     const internalSources = (client.intent?.provenance ?? client.draft?.intent?.provenance ?? []).filter(source => source.materialSource?.internalContent);
     internalNotice.hidden = internalSources.length === 0;
-    const archives = new Map(internalSources.map(source => source.materialSource.internalContent).map(content => [content.archiveSha256, content.provenance?.package]));
-    // Catalog labels prepared content unauthenticated: the release list it came from is not signed yet.
-    const unsigned = internalSources.some(source => source.materialSource.internalContent.status?.authenticated === false);
-    internalArchives.replaceChildren(...(unsigned ? [el('span', 'block', indexStatusText('unsigned'))] : []),
-      ...[...archives].map(([digest, pack]) => el('span', 'block', `From ${pack ? `${pack.name} ${pack.version}` : 'the Catalog package'} · archive sha256 ${digest}`)));
     internalProvenance.textContent = internalSources.length ? 'Baseline unbound; unauthenticated, non-production. Exact saved source and choice:\n' + JSON.stringify(internalSources, null, 2) : '';
     pageContext.textContent = `${draft ? 'Working draft' : 'Current project policy'}: ${current.length} accepted choices${client.dirty ? ' · Changes not downloaded' : ''}${client.startupSource === 'recovery' ? ' · Recovered from this browser session' : ''}. Open policy choices and review to edit, download or reopen an artifact.`;
     summary.textContent = draft ? (intent
