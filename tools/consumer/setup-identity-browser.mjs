@@ -1,0 +1,93 @@
+// Your setup's content identity and the release list's index status, on the running page. Sources are host
+// configuration built only from the installed Catalog package: its prepared content bound to the exact Catalog archive,
+// and Catalog's own published release-index fixtures, read by Catalog's reader in the host.
+import assert from 'node:assert/strict';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
+import { stable } from './primitives.mjs';
+import { readRelease } from '@aihq/catalog/reader';
+import { chooseCatalogFamily, openPolicyDrawer } from './policy-drawer.mjs';
+
+const bytes = async specifier => readFile(fileURLToPath(import.meta.resolve(specifier)));
+const sha = value => createHash('sha256').update(value).digest('hex');
+// The prepared frameworks a person picks from in the journey, each bound to the exact Catalog archive.
+const PREPARED = ['ecc', 'superpowers', 'extensions'];
+const INDEX_FIXTURES = { expired: 'expired-index', 'rollback-refused': 'rollback-refused', conflict: 'conflict-two-sources' };
+
+export async function setupIdentitySources({ directory, scenario, archivePath, archiveSha256 }) {
+  await mkdir(directory, { recursive: true });
+  const root = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
+  const prepared = PREPARED.map(frameworkId => ({ root, frameworkId, archivePath, archiveSha256 }));
+  if (['identity', 'prepared'].includes(scenario)) return { prepared };
+  const indexStatePath = join(directory, 'index-state.json');
+  if (scenario === 'unsigned') {
+    // One index naming Catalog's published Project basics release, with no TUF root selected.
+    const golden = await bytes('@aihq/catalog/fixtures/release-1-7/project-basics-release-1.7.0.json');
+    const checked = readRelease(golden, { expectedSha256: sha(golden) });
+    if (!checked.valid) throw new Error('Public golden release fixture is refused.');
+    const releasePath = join(directory, 'release.json'); await writeFile(releasePath, golden);
+    const entry = { frameworkId: checked.release.framework.id, name: checked.release.framework.name, version: checked.release.framework.version,
+      schema: checked.release.schema, sha256: checked.release.sha256, status: 'current', evidence: [], source: { id: 'catalog-public', kind: 'public' }, location: { kind: 'local', input: 'fixture-release' } };
+    const index = { schema: 'urn:aihq:catalog:release-index:1.0.0', sourceId: 'catalog-public', version: 1, issuedAt: '2026-01-01T00:00:00Z', expires: '2999-01-01T00:00:00Z', entries: [entry] };
+    const indexPath = join(directory, 'index.json'); await writeFile(indexPath, stable(index) + '\n');
+    return { indexes: [{ sourceId: index.sourceId, trust: 'none', path: indexPath, authorizedFrameworks: [entry.frameworkId], releases: [{ sha256: entry.sha256, path: releasePath, root }] }], indexStatePath };
+  }
+  const fixture = JSON.parse(await bytes(`@aihq/catalog/fixtures/release-index/${INDEX_FIXTURES[scenario]}.json`));
+  // The recorded state is the fixture's own (rollback-refused needs the higher version Catalog last accepted).
+  await writeFile(indexStatePath, JSON.stringify(fixture.state));
+  return { indexes: await Promise.all(fixture.sources.map(async (source, i) => {
+    const path = join(directory, `index-${i}.json`); await writeFile(path, stable(source.index) + '\n');
+    return { sourceId: source.sourceId, trust: source.trust, authorizedFrameworks: source.authorizedFrameworks, path };
+  })), indexStatePath };
+}
+
+async function openPage(browser, origin, theme, errors) {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  await context.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
+  const page = await context.newPage(); page.setDefaultTimeout(30000); page.on('pageerror', error => errors.push(error.message));
+  await page.goto(origin + '/');
+  await page.locator('#framework-navigation').filter({ hasNotText: 'Loading frameworks' }).waitFor();
+  if (await page.locator('#setup-dialog').isVisible()) {
+    await page.getByRole('radio', { name: /Vibe coder/ }).check();
+    for (let i = 0; i < 4; i++) await page.locator('#setup-next').click();
+    await page.locator('#setup-dialog').waitFor({ state: 'hidden' });
+  }
+  const toggle = page.getByRole('button', { name: `Switch to ${theme} mode`, exact: true }); if (await toggle.count()) await toggle.click();
+  return { context, page };
+}
+
+export async function runSetupIdentityBrowser({ origin, output, playwrightModule, scenario, catalogSha256 }) {
+  const { chromium } = await import(playwrightModule);
+  const browser = await chromium.launch({ headless: true }); await mkdir(output, { recursive: true });
+  const errors = [], outcomes = [];
+  try {
+    for (const theme of ['dark', 'light']) {
+      const { context, page } = await openPage(browser, origin, theme, errors);
+      if (scenario === 'identity') {
+        // A person adds prepared content, then opens Your setup: the content identity is shown without opening anything,
+        // with the digest of the exact Catalog archive the page loaded.
+        await chooseCatalogFamily(page, 'Extensions');
+        // Extensions' own pre-ticked starting sets, added the way a person adds them.
+        const added = page.waitForResponse(response => /authoring-(?:draft-edit|edit)$/.test(response.url()));
+        await page.locator('[data-add-sets]').click();
+        assert.equal((await (await added).json()).status, 'ok', 'Catalog resolves the chosen Extensions sets');
+        await page.waitForFunction(() => document.getElementById('framework-guidance').textContent.includes('Chosen sets added'));
+        await openPolicyDrawer(page);
+        const identity = page.locator('#policy-internal-content');
+        assert.ok(await identity.isVisible(), 'Your setup shows the content identity of the chosen prepared content');
+        const shown = await page.locator('#policy-review-panel').innerText();
+        assert.ok(shown.includes('Internal content · not verified'), 'The identity says the content is not verified');
+        assert.ok(shown.includes(catalogSha256), `Your setup shows the loaded Catalog archive digest ${catalogSha256}`);
+        const line = identity.locator('summary').getByText(catalogSha256, { exact: false });
+        assert.ok(await line.count() && await line.first().isVisible(), 'The Catalog digest is visible, not folded away');
+        await page.screenshot({ animations: 'disabled', path: join(output, `${theme}-setup-identity.png`) });
+      }
+      outcomes.push({ theme, scenario }); await context.close();
+    }
+    assert.deepEqual(errors, []);
+    await writeFile(join(output, 'browser-result.json'), JSON.stringify({ status: 'passed', scenario, outcomes }, null, 2));
+    return { status: 'passed', scenario, outcomes };
+  } finally { await browser.close(); }
+}
