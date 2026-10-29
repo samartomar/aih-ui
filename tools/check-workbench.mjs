@@ -5,7 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { installConsumer, resolvePackage } from './packages.mjs';
-import { serviceAssets } from './server/assets.mjs';
+import { pageAssets, serviceAssets } from './server/assets.mjs';
 import { homeEnvironment } from './consumer/home-environment.mjs';
 import { snapshotCoreHome, compareCoreHome, describeCoreHomeChange } from './core-home-guard.mjs';
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -19,8 +19,7 @@ const extraFiles = Object.fromEntries(readdirSync(join(repo, 'tools/consumer'))
   .map(name => [`consumer/${name}`, join(repo, 'tools/consumer', name)]));
 // The backend worker callService runs inside the consumer.
 for (const asset of serviceAssets(repo)) if (asset.to.startsWith('service/') || asset.to.startsWith('workbench/')) extraFiles[asset.to] = join(repo, asset.from);
-for (const name of ['consumer.html', 'consumer.js', 'intent.html', 'intent.js', 'authoring.html', 'authoring.js', 'policy-file.js', 'app/dom.js', 'app/configuration-editor.js', 'app/claims-view.js']) extraFiles[`page/${name}`] = join(repo, 'src', name);
-for (const name of ['consumer.css', 'tokens.css']) extraFiles[`page/${name}`] = join(repo, 'src/styles', name);
+for (const asset of pageAssets(repo)) extraFiles[`page/${asset.to}`] = join(repo, asset.from);
 for (const name of readdirSync(join(repo, 'schemas'))) extraFiles[`schemas/${name}`] = join(repo, 'schemas', name);
 // npm run exports user allow-scripts as an environment option. npm rejects that
 // option for nested project installs; this isolated install always ignores scripts.
@@ -46,7 +45,7 @@ process.on('exit', () => {
 // The real-Core batch group has its own bounded budget: its serial Windows
 // filesystem work measured 115s before the final concurrent-consent regression.
 const testGroups = [
-  ['ordinary-families', 'authoring-page', 'authoring-v3', 'reviews', 'personal-folder', 'journey', 'readiness', 'readiness-host', 'claims', 'friction', 'authority-source', 'organization-author', 'guided-setup', 'core-targets', 'workspace', 'project-folder', 'approval-binding', 'draft-approval-preservation', 'origins-exclusions', 'browse-chosen'],
+  ['ordinary-families', 'installed-families', 'authoring-page', 'authoring-v3', 'reviews', 'personal-folder', 'journey', 'readiness', 'readiness-host', 'claims', 'friction', 'authority-source', 'organization-author', 'guided-setup', 'core-targets', 'workspace', 'project-folder', 'approval-binding', 'draft-approval-preservation', 'origins-exclusions', 'browse-chosen'],
   ['source-facts', 'scan-evidence', 'release-order', 'update-source', 'maintenance', 'improvements', 'trials'],
   ['batch'],
   ['intent-http', 'intent-page', 'organization', 'saved-intent', 'setup']

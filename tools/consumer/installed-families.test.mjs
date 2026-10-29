@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { listItems } from '@aihq/catalog/reader';
-import { installedFamilies } from '../consumer/installed-families.mjs';
+import { installedFamilies } from './installed-families.mjs';
 
 // Runs inside the installed consumer, where @aihq/catalog resolves (the owning suite for installed-families).
 const root = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));

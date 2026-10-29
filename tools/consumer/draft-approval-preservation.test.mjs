@@ -16,7 +16,7 @@ import { writeJourneyEnvelope, DRAFT_RECORD_SCHEMA } from './journey.mjs';
 import { MAINTENANCE_CHECK_RECORD_SCHEMA, MAINTENANCE_CHECK_RECORD_ID } from './maintenance-record.mjs';
 import { renderDelivery, toolBindings } from '@aihq/core/harness';
 import { resolveSelections } from '@aihq/catalog/reader';
-import { createAuthoringClient } from '../../src/app/authoring-client.js';
+import { createAuthoringClient } from '../page/app/authoring-client.js';
 
 const catalogRoot = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
 const prepared = await readInstalledPreparedContent({ root: catalogRoot, frameworkId: 'ecc', sourceInput: 'draft-approval-preservation' });
