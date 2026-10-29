@@ -119,13 +119,22 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
     // place each row under its recorded exact set identity (Q7-R). Simultaneous memberships render in
     // their first set with an "Also in" note (actions are never duplicated); no-origin rows stay explicit.
     const pending = new Map();
+    const states = new Map(view.groups.flatMap(group => [[group.managementId, group.state], ...group.needed.map(item => [item.managementId, item.state])]));
     for (const group of view.groups) {
       const row = el('li', 'space-y-1'); row.dataset.installedItem = group.itemId; row.title = group.managementId;
       const { remove, area } = removeControl(group.removes, group.kept);
       const head = el('div', 'flex flex-wrap items-center gap-2'); head.append(el('span', 'font-medium', group.name));
       head.append(...stateBadges(group.state, el));
       if (group.sets?.length) head.append(el('span', 'text-on-surface-variant text-[11px]', `From set ${group.sets.map(set => set.setId).join(', ')}`));
-      if (group.needed.length) head.append(el('span', 'text-on-surface-variant', `+ ${group.needed.length} it needs: ${group.needed.map(item => item.name).join(', ')}`));
+      if (group.needed.length) {
+        const fold = el('details', 'text-on-surface-variant'); fold.append(el('summary', '', `+ ${group.needed.length} it needs`));
+        const members = el('ul', 'pl-3 space-y-0.5');
+        for (const item of group.needed) {
+          const member = el('li', 'flex flex-wrap items-center gap-2 text-[11px]', ''); member.dataset.installedNeeded = item.managementId;
+          member.append(el('span', '', item.name), ...stateBadges(item.state, el)); members.append(member);
+        }
+        fold.append(members); head.append(fold);
+      }
       head.append(remove); row.append(head, area);
       pending.set(group.managementId, { row, kind: 'chosen' });
     }
@@ -139,6 +148,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       if (item.sets?.length) head.append(el('span', 'text-on-surface-variant text-[11px]', `From set ${item.sets.map(set => set.setId).join(', ')}`));
       if (!item.inSetup) head.append(el('span', 'text-on-surface-variant', 'Not in your setup'));
       head.append(remove); row.append(head, area);
+      states.set(item.managementId, item.state);
       pending.set(item.managementId, { row, kind: 'other' });
     }
     const memberships = new Map();
@@ -166,7 +176,8 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
           // No interactive row here (folded under a chosen root, or already placed in another set):
           // keep a visible named read-only reference so the exact group/member identity never vanishes.
           const member = (group.members ?? []).find(candidate => candidate.managementId === id);
-          const ref = el('li', 'text-[11px] text-on-surface-variant', member?.name ?? id);
+          const ref = el('li', 'text-[11px] text-on-surface-variant');
+          ref.append(el('span', '', member?.name ?? id), ...stateBadges(states.get(id), el));
           ref.title = id; ref.dataset.setReference = id; any = true;
           rows.append(ref);
         }

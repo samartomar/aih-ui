@@ -17,7 +17,7 @@ const lostResult = () => ({
 });
 
 // organizationSource (Enterprise only) is host configuration, never browser input.
-export function createHost({ projectRoot, materialRoots, organizationSource, recipeMaterials = [], controls: hostControls } = {}) {
+export function createHost({ projectRoot, materialRoots, organizationSource, recipeMaterials = [], controls: hostControls, inventories } = {}) {
   if (typeof projectRoot !== 'string' || projectRoot.length === 0) {
     throw new TypeError('createHost requires a host-configured projectRoot');
   }
@@ -40,6 +40,20 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
     }
     return result;
   };
+  const currentIndex = () => {
+    if (inventories === undefined) return undefined;
+    if (!inventories.length) return { offered: [] };
+    const candidates = inventories.filter(entry => entry.release.framework?.id);
+    if (!candidates.length || !candidates.every(entry => entry.release.items.every(item =>
+      typeof item.contentSha256 === 'string' && item.contentSha256 && typeof item.behaviourSha256 === 'string' && item.behaviourSha256))) return undefined;
+    const offered = candidates.flatMap(entry => entry.release.items.map(item => ({
+      framework: entry.release.framework.id, itemId: item.id, contentSha256: item.contentSha256, behaviourSha256: item.behaviourSha256,
+    })));
+    const superseded = candidates.flatMap(entry => entry.release.items.flatMap(item => (item.supersedes ?? [])
+      .filter(earlier => typeof earlier.itemId === 'string')
+      .map(earlier => ({ item: { framework: entry.release.framework.id, itemId: earlier.itemId }, by: { framework: entry.release.framework.id, itemId: item.id } }))));
+    return { offered, ...(superseded.length ? { superseded } : {}) };
+  };
   async function inspectAuthority({ policyText, controls } = {}) {
     const parsed = parsePolicy(policyText);
     if (!parsed.valid) return { status: 'refused', diagnostics: parsed.diagnostics };
@@ -55,8 +69,9 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
     // Session ids still held, so a host replaced for another project folder can name what it discarded.
     heldSessions: () => [...sessions.keys()],
     // The redacted 1.1 projection is requested explicitly; without the format the 1.0 default would silently
-    // drop recorded names/origins and the per-selection states the installed list renders (UI167).
-    managedInventory() { return listManagedSelections({ target: { project: projectRoot }, scope: 'project', format: 'urn:aihq:core:managed-inventory-result:1.1.0' }); },
+    // drop recorded names/origins and the per-selection states the installed list renders (UI167). Core derives
+    // update state only from this host's complete current index; absent/incomplete input remains unknown.
+    managedInventory() { const index = currentIndex(); return listManagedSelections({ target: { project: projectRoot }, scope: 'project', format: 'urn:aihq:core:managed-inventory-result:1.1.0', ...(index ? { index } : {}) }); },
     async prepareRemovalSession({ managementId, scope, mode, controls } = {}) {
       // Removal reads Core's retained custody; it does not acquire recipe material.
       const { authentication, signal, logging } = controlsFor(controls);

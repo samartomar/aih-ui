@@ -190,6 +190,37 @@ async function setupChoices() {
   await page.close();
 }
 
+async function installedStates() {
+  const page = await browser.newPage(); page.setDefaultTimeout(5_000); page.on('pageerror', error => errors.push(error.message));
+  await page.goto(origin, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(async () => {
+    const [{ createInstalledPanel }, { el }] = await Promise.all([import('/app/installed-panel.js'), import('/app/dom.js')]);
+    const set = { framework: 'ecc', setId: 'alpha', setSha256: 'a'.repeat(64) };
+    const policy = { selections: [
+      { id: 'root', managementId: 'm-1', scope: 'project', requires: ['dep'], recipe: { reference: { sha256: 'r-1' } } },
+      { id: 'dep', managementId: 'm-2', scope: 'project', requires: [], recipe: { reference: { sha256: 'r-2' } } },
+    ] };
+    const intent = { roots: [{ itemId: 'one' }], pins: [{ itemId: 'one', recipe: { sha256: 'r-1' } }, { itemId: 'two', recipe: { sha256: 'r-2' } }] };
+    const inventory = { status: 'complete', selections: [
+      { managementId: 'm-1', name: 'One', origins: [{ reasonIncluded: 'in-set', set }], members: [{ fileState: 'matches' }], updateState: 'current' },
+      { managementId: 'm-2', name: 'Two', origins: [{ reasonIncluded: 'in-set', set }], members: [{ fileState: 'block-changed' }], updateState: 'superseded' },
+    ] };
+    const client = { catalog: { executionAvailable: true, items: [] }, requestCurrent: async () => inventory, intent, bytes: new TextEncoder().encode(JSON.stringify(policy)) };
+    const panel = createInstalledPanel({ client, el, button: (label, action) => { const node = el('button', '', label); node.type = 'button'; node.addEventListener('click', action); return node; } });
+    document.body.append(panel.node); await panel.refresh();
+  });
+  const needed = page.locator('[data-installed-needed="m-2"]'); await needed.waitFor({ state: 'attached' });
+  await page.locator('[data-installed-item="one"] details summary').click(); await needed.waitFor();
+  assert.equal(await needed.locator('[data-installed-state="superseded"]').count(), 1);
+  assert.equal(await needed.locator('[data-installed-state="block-changed"]').count(), 1);
+  const reference = page.locator('[data-set-reference="m-2"]');
+  assert.equal(await reference.locator('[data-installed-state="superseded"]').count(), 1);
+  assert.equal(await reference.locator('[data-installed-state="block-changed"]').count(), 1);
+  assert.equal(await reference.getByRole('button', { name: 'Remove', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Remove', exact: true }).count(), 1, 'only the chosen root owns a Remove control');
+  await page.close();
+}
+
 function approvalBrowseResult(item) {
   return {
     status: 'read', approvalShape: 'config',
@@ -250,6 +281,7 @@ try {
   if (!only || only === 'no-framework') { await noFramework(); passed++; console.log('✔ no-framework navigation invalidates real DOM facts without recursion'); }
   if (!only || only === 'folder') { await folderOrdering(); passed++; console.log('✔ a late old-folder reply cannot replace current real DOM facts'); }
   if (!only || only === 'setup-choices') { await setupChoices(); passed++; console.log('✔ left-out rows preserve real member identity, scope and deduplication'); }
+  if (!only || only === 'installed-states') { await installedStates(); passed++; console.log('✔ folded installed members keep their state badges without duplicate actions'); }
   if (!only || only === 'approval-identity') { await approvalIdentity(); passed++; console.log('✔ approval ticks bind exact item, scope and tool'); }
   if (!only || only === 'approval-failure') { await approvalFailure(); passed++; console.log('✔ approval failures restore ticks and show exact reasons'); }
   assert.deepEqual(errors, []);

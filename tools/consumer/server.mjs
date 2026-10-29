@@ -96,12 +96,12 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   });
   if (projectRoot) await stageAuthoringRoots();
   const hostFor = project => project ? createExecutionHost({ projectRoot: project, materialRoots: authoringRoots, organizationSource,
-    recipeMaterials: mixedService.inventories.flatMap(i => i.materials ?? []), controls }) : null;
+    recipeMaterials: mixedService.inventories.flatMap(i => i.materials ?? []), controls, inventories: mixedService.currentInventories }) : null;
   let host = hostFor(projectRoot);
   // Client tokens exist only in the live page. No cookie, saved intent or imported
   // snapshot restores a client's inventory, material grants or prepared handles.
   const clients = new Map(), clientStages = new Set();
-  const clientHost = client => folder.project ? createExecutionHost({ projectRoot: folder.project, materialRoots: client.roots, organizationSource, recipeMaterials: client.recipeMaterials, controls }) : null;
+  const clientHost = client => folder.project ? createExecutionHost({ projectRoot: folder.project, materialRoots: client.roots, organizationSource, recipeMaterials: client.recipeMaterials, controls, inventories: client.mixed.currentInventories }) : null;
   // Session ids prepared for an earlier project folder, so applying one is refused by name. Bounded; older ones read as lost.
   const retired = new Set();
   const retire = old => { for (const id of old?.heldSessions() ?? []) { retired.add(id); if (retired.size > 1024) retired.delete(retired.values().next().value); } };

@@ -78,6 +78,7 @@ export async function createMixedService(maintained, { suppliedInventories, fami
   }
   return {
     inventories: all,
+    currentInventories: current,
     addInventory(inventory) {
       if (!all.some(entry => entry.release.sha256 === inventory.release.sha256)) all.push(inventory);
       if (!current.some(entry => entry.release.sha256 === inventory.release.sha256)) current.push(inventory);
