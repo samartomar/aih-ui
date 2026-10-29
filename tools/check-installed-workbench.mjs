@@ -11,6 +11,10 @@ import { listen } from './server/static.mjs';
 import { runInstalledPanelBrowser } from './consumer/installed-panel-browser.mjs';
 import { runFirstRunBrowser, runRestartInstallBrowser, runRestartVerifyBrowser, runMcpFailedApplyBrowser, runMcpApplyBrowser, runStaleReviewBrowser } from './consumer/ui165-acceptance-browser.mjs';
 import { runProjectFolderBrowser } from './consumer/project-folder-browser.mjs';
+import { noteInventory, runUi168UpdateInstallBrowser, runUi168UpdateVerifyBrowser } from './consumer/ui168-update-browser.mjs';
+import { runUi168ProjectBasicsBrowser, runUi168BlockDriftBrowser } from './consumer/ui168-project-basics-browser.mjs';
+import { runUi168SetRemovalBrowser } from './consumer/ui168-set-removal-browser.mjs';
+import { runUi168InterruptStartBrowser, runUi168InterruptedVerifyBrowser } from './consumer/ui168-interrupted-browser.mjs';
 
 // Runs after the ordinary integrated check has assembled the packed consumer and page. Only this
 // server gets a disposable execution target; the existing unconfigured-host journeys stay as they are.
@@ -42,7 +46,7 @@ try {
 // on the same target, account home and settings. An in-process server recreation is not a process restart and
 // is never described as one. A case the public fixtures cannot truthfully produce reports 'incomplete' and
 // exits 2, never a silent pass.
-async function withHost(project, { sources = undefined } = {}, run) {
+async function withHost(project, { sources = undefined, noteVariant = undefined, interrupt = false, kill = false } = {}, run) {
   await mkdir(project, { recursive: true });
   const caseRunDir = join(project, 'page');
   for (const asset of pageAssets(repo)) {
@@ -53,7 +57,7 @@ async function withHost(project, { sources = undefined } = {}, run) {
   await writeFile(summaryPath, JSON.stringify(summary));
   const portPath = join(project, 'host.port'), configPath = join(project, 'host-config.json');
   await writeFile(configPath, JSON.stringify({
-    consumerDir, runDir: caseRunDir, summaryPath, settingsPath: join(project, 'settings.json'), portPath,
+    consumerDir, runDir: caseRunDir, summaryPath, settingsPath: join(project, 'settings.json'), portPath, noteVariant, interrupt,
     env: { AIH_CONSUMER_PROJECT: project, ...(sources ? { AIH_FRAMEWORK_SOURCES: sources } : {}) },
   }));
   await rm(portPath, { force: true });
@@ -80,17 +84,17 @@ async function withHost(project, { sources = undefined } = {}, run) {
       await new Promise(done => setTimeout(done, 100));
     }
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`host did not write a valid port within 30s: ${log.join('').slice(-2000)}`);
-    await run(`http://127.0.0.1:${port}`);
+    host.result = await run(`http://127.0.0.1:${port}`);
   } finally {
     if (child.pid && !spawnError) {
-      if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
+      if (child.exitCode === null && child.signalCode === null) child.kill(kill ? 'SIGKILL' : 'SIGTERM');
       host.exit = await waitExit(5000);
       if (!host.exit) {
         child.kill('SIGKILL');
         host.exit = await waitExit(5000);
         throw new Error(`host required forced shutdown: ${JSON.stringify(host.exit)}`);
       }
-      if (host.exit.code !== 0) throw new Error(`host did not exit cleanly: ${JSON.stringify(host.exit)}`);
+      if (!kill && host.exit.code !== 0) throw new Error(`host did not exit cleanly: ${JSON.stringify(host.exit)}`);
     }
   }
   host.log = log.join('').slice(-2000);
@@ -152,4 +156,32 @@ for (const theme of THEMES) {
     await caseOutcome(`MCP obstacle case: preparation refusal proven, failed-run unproven (${theme})`, await runMcpFailedApplyBrowser({ origin, output: join(consumerDir, `mcp-failed-apply-evidence-${theme}`), project: mcpProject, playwrightModule: playwrightPath, theme })));
   await withHost(mcpProject, { sources: mcpSources }, async origin =>
     await caseOutcome(`MCP ticked Apply case (${theme})`, await runMcpApplyBrowser({ origin, output: join(consumerDir, `mcp-apply-evidence-${theme}`), project: mcpProject, playwrightModule: playwrightPath, theme })));
+
+  for (const edited of [false, true]) {
+    const updateProject = join(consumerDir, `ui168-update-${theme}-${edited}-${randomUUID().slice(0, 8)}`);
+    await withHost(updateProject, { noteVariant: 'current' }, async origin =>
+      await caseOutcome(`UI168 update install (${theme}, edited=${edited})`, await runUi168UpdateInstallBrowser({ origin, output: join(consumerDir, `ui168-update-install-${theme}-${edited}`), playwrightModule: playwrightPath, theme })));
+    await withHost(updateProject, { noteVariant: 'updated' }, async origin =>
+      await caseOutcome(`UI168 reviewed update (${theme}, edited=${edited})`, await runUi168UpdateVerifyBrowser({ origin, output: join(consumerDir, `ui168-update-verify-${theme}-${edited}`), project: updateProject, playwrightModule: playwrightPath, theme, edited })));
+  }
+
+  const basicsProject = join(consumerDir, `ui168-basics-${theme}-${randomUUID().slice(0, 8)}`);
+  await mkdir(basicsProject, { recursive: true });
+  await writeFile(join(basicsProject, 'package.json'), JSON.stringify({ name: 'ui168-facts-fixture', private: true, type: 'module', engines: { node: '>=26 <27' }, scripts: { test: 'node --test' } }, null, 2));
+  await withHost(basicsProject, { sources: mcpSources }, async origin =>
+    await caseOutcome(`UI168 project facts and install (${theme})`, await runUi168ProjectBasicsBrowser({ origin, output: join(consumerDir, `ui168-basics-evidence-${theme}`), playwrightModule: playwrightPath, theme })));
+  const driftProject = join(consumerDir, `ui168-drift-${theme}-${randomUUID().slice(0, 8)}`);
+  await withHost(driftProject, { sources: mcpSources }, async origin =>
+    await caseOutcome(`UI168 managed block drift (${theme})`, await runUi168BlockDriftBrowser({ origin, output: join(consumerDir, `ui168-drift-evidence-${theme}`), project: driftProject, playwrightModule: playwrightPath, theme })));
+  const setProject = join(consumerDir, `ui168-set-${theme}-${randomUUID().slice(0, 8)}`);
+  await withHost(setProject, { sources: mcpSources }, async origin =>
+    await caseOutcome(`UI168 grouped set removal with kept members (${theme})`, await runUi168SetRemovalBrowser({ origin, output: join(consumerDir, `ui168-set-evidence-${theme}`), playwrightModule: playwrightPath, theme })));
+
+  for (const action of ['finish', 'remove']) {
+    const interruptedProject = join(consumerDir, `ui168-interrupted-${theme}-${action}-${randomUUID().slice(0, 8)}`);
+    const interrupted = await withHost(interruptedProject, { interrupt: true, kill: true }, async origin =>
+      await runUi168InterruptStartBrowser({ origin, output: join(consumerDir, `ui168-interrupted-evidence-${theme}-${action}`), playwrightModule: playwrightPath, theme }));
+    await withHost(interruptedProject, {}, async origin =>
+      await caseOutcome(`UI168 interrupted install ${action} (${theme})`, await runUi168InterruptedVerifyBrowser({ origin, output: join(consumerDir, `ui168-interrupted-evidence-${theme}-${action}`), saved: interrupted.result.saved, action, playwrightModule: playwrightPath, theme })));
+  }
 }

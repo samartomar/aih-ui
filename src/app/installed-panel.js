@@ -1,9 +1,10 @@
-// "Installed in this project": Core's managed inventory grouped by chosen item (installed-list.js), each with
-// a two-step Remove (installed-removal.js). It reads the inventory itself; Install and Remove refresh it, and
-// it tells the Install panel whether Core lists the whole setup as installed.
+// "Installed in this project": Core's managed inventory grouped by chosen item (installed-list.js), with
+// reviewed Update and Remove lifecycle operations. It reads the inventory itself; lifecycle results refresh it,
+// and it tells the Install panel whether Core lists the whole setup as installed.
 
 import { groupInstalled } from './installed-list.js';
 import { cancelRemoval, confirmRemoval, previewRemoval } from './installed-removal.js';
+import { confirmUpdate, previewUpdate } from './installed-update.js';
 import { compact } from './compact.js';
 import { iconSpan } from './icons.js';
 import { attachTooltip } from './tooltip.js';
@@ -39,7 +40,7 @@ function stateBadges(state = {}, el) {
   return chips;
 }
 
-export function createInstalledPanel({ client, el, button, onRemoved = () => {}, onInventory = () => {} }) {
+export function createInstalledPanel({ client, el, button, onRemoved = () => {}, onFinish = () => {}, onInventory = () => {} }) {
   const node = el('section', 'p-3 rounded border border-wb-border bg-surface-container-low space-y-2'); node.id = 'installed-panel'; node.hidden = true;
   const title = el('h3', 'text-sm font-semibold text-on-surface', 'Installed in this project');
   const note = el('p', 'text-on-surface-variant'); note.id = 'installed-note'; note.setAttribute('role', 'status'); note.setAttribute('aria-live', 'polite');
@@ -90,7 +91,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       }, true);
       confirm.disabled = !preview.canConfirm;
       actions.append(confirm, cancel);
-      area.replaceChildren(...stepRows(preview), ...kept.map(item => el('p', 'text-on-surface-variant', `Kept: ${item.name}, still needed by ${item.neededBy.join(', ')}.`)),
+      area.replaceChildren(...stepRows(preview), ...[...kept, ...(preview.kept ?? [])].map(item => el('p', 'text-on-surface-variant', `Kept: ${item.name}: ${item.reason ?? `still needed by ${(item.neededBy ?? []).join(', ')}`}.`)),
         el('p', 'text-on-surface-variant', preview.note), actions);
       area.hidden = false;
     }
@@ -108,6 +109,49 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       finally { removing = false; remove.disabled = false; remove.removeAttribute('aria-busy'); }
     }), 'ml-auto');
     return { remove, area };
+  }
+
+  function finishControl(item) {
+    if (item.state.install !== 'interrupted') return null;
+    return compact(button('Finish', () => { message.textContent = 'Review finishing the interrupted install. Nothing is applied yet.'; onFinish(); }));
+  }
+
+  function updateControl(item) {
+    const area = el('div', 'space-y-2'); area.hidden = true; area.dataset.updatePreview = '';
+    if (item.state.update !== 'update-available') return { update: null, area: null };
+    const update = compact(button('Update', async () => {
+      if (removing) return;
+      const offered = client.catalog?.items.find(candidate => candidate.id === item.itemId);
+      if (!offered) { message.textContent = `Update unavailable: the current Catalog does not publish ${item.itemId}.`; message.dataset.outcome = 'unavailable'; return; }
+      removing = true; update.disabled = true; update.setAttribute('aria-busy', 'true'); message.textContent = 'Checking the replacement…'; delete message.dataset.outcome;
+      try {
+        const entry = { name: item.name, managementId: item.managementId, scope: item.scope,
+          replacement: { ...offered.root, scope: item.scope, configuration: {} } };
+        const preview = await previewUpdate({ entries: [entry], request: requestHost, tool: client.tool });
+        const actions = el('div', 'flex flex-wrap gap-2');
+        const confirm = button('Confirm update', async () => {
+          if (removing) return;
+          removing = true; confirm.disabled = true; message.textContent = 'Updating…';
+          try {
+            const done = await confirmUpdate({ preview, request: requestHost, tool: client.tool });
+            message.textContent = done.message; message.dataset.outcome = done.outcome;
+            if (done.outcome === 'updated') { area.hidden = true; await refresh({ keepMessage: true }); onRemoved(); }
+          } catch (error) { message.textContent = `Update did not finish: ${error.message}`; message.dataset.outcome = 'failed'; }
+          finally { removing = false; }
+        }, true);
+        confirm.disabled = !preview.canConfirm;
+        const cancel = button('Cancel', () => { area.hidden = true; area.replaceChildren(); message.textContent = ''; });
+        actions.append(confirm, cancel);
+        area.replaceChildren(...preview.steps.flatMap(step => [
+          el('p', 'font-medium', `${step.entry.name}: ${step.message}`),
+          ...step.members.map(member => el('p', 'text-on-surface-variant text-[11px]', `${member.action} ${member.path}${member.reason ? ` — ${member.reason}` : ''}`))
+        ]), actions);
+        area.hidden = false;
+        message.textContent = preview.canConfirm ? 'Nothing has been updated yet. Check the replacement, then confirm.' : 'Update cannot go ahead.';
+      } catch (error) { message.textContent = `Update did not start: ${error.message}`; message.dataset.outcome = 'failed'; }
+      finally { removing = false; update.disabled = false; update.removeAttribute('aria-busy'); }
+    }));
+    return { update, area };
   }
 
   function show(view) {
@@ -135,19 +179,25 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
         }
         fold.append(members); head.append(fold);
       }
-      head.append(remove); row.append(head, area);
+      const finish = finishControl(group), { update, area: updateArea } = updateControl(group);
+      if (finish) head.append(finish);
+      if (update) head.append(update);
+      head.append(remove); row.append(head, ...(updateArea ? [updateArea] : []), area);
       pending.set(group.managementId, { row, kind: 'chosen' });
     }
     for (const item of view.others) {
       const row = el('div', 'space-y-1'); row.dataset.installedOther = item.managementId;
       const { remove, area } = removeControl([item]);
+      const finish = finishControl(item), { update, area: updateArea } = updateControl(item);
       // The full installed id stays in the tooltip (#137).
       const name = el('span', 'font-medium break-all', item.name); name.title = item.managementId;
       const head = el('div', 'flex flex-wrap items-center gap-2'); head.append(name);
       head.append(...stateBadges(item.state, el));
       if (item.sets?.length) head.append(el('span', 'text-on-surface-variant text-[11px]', `From set ${item.sets.map(set => set.setId).join(', ')}`));
       if (!item.inSetup) head.append(el('span', 'text-on-surface-variant', 'Not in your setup'));
-      head.append(remove); row.append(head, area);
+      if (finish) head.append(finish);
+      if (update) head.append(update);
+      head.append(remove); row.append(head, ...(updateArea ? [updateArea] : []), area);
       states.set(item.managementId, item.state);
       pending.set(item.managementId, { row, kind: 'other' });
     }
@@ -162,6 +212,9 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       const section = el('li', 'space-y-1'); section.dataset.installedSet = `${group.set.setId}/${group.set.setSha256}`;
       const heading = el('p', 'text-[11px] font-medium text-on-surface-variant', `${group.set.setId} · exact set ${group.set.setSha256}`);
       heading.title = `${group.set.framework}/${group.set.setId}/${group.set.setSha256}`;
+      const { remove: removeSet, area: setArea } = removeControl(group.members.map(member => ({ ...member, origin: { set: group.set } })));
+      removeSet.setAttribute('aria-label', `Remove set ${group.set.setId}`);
+      const setHead = el('div', 'flex flex-wrap items-center gap-2'); setHead.append(heading, removeSet);
       const rows = el('ul', 'space-y-1');
       let any = false;
       for (const id of group.items) {
@@ -182,7 +235,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
           rows.append(ref);
         }
       }
-      if (any) { section.append(heading, rows); list.append(section); }
+      if (any) { section.append(setHead, setArea, rows); list.append(section); }
     }
     const leftoverChosen = [...pending.entries()].filter(([id, entry]) => !rendered.has(id) && entry.kind === 'chosen');
     const leftoverOther = [...pending.entries()].filter(([id, entry]) => !rendered.has(id) && entry.kind === 'other');

@@ -1,249 +1,89 @@
-// Restored behavioral coverage (11 tests) from the pre-review file, adapted only where the shown-held-handle
-// flow genuinely changes the call pattern, plus the three connected held-apply regressions below.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { confirmRemoval, previewRemoval, removalOutcome } from '../../src/app/installed-removal.js';
+import { confirmRemoval, previewRemoval } from '../../src/app/installed-removal.js';
 
-// A fake host that behaves like Core's managed removal: an item is retained while another installed item requires it.
-const project = 'C:\\Temp\\proof\\sample-js-app';
-function fakeHost({ requires = {}, members = {}, applyResult, script = {} } = {}) {
-  const installed = new Set(Object.keys(members)), calls = [];
-  let session = 0, preparedCounts = new Map();
-  const sessions = new Map();
-  const review = id => ({ target: { project }, reviewDigest: `d-${id}-${session}`, operations: members[id].map((path, index) => ({
-    id: `lifecycle/remove-${index}`, kind: 'file.remove', effects: 'remove-file', details: { target: `${project}\\${path}` } })) });
+const entries = [
+  { name: 'chosen', managementId: 'm-chosen', scope: 'project' },
+  { name: 'needed', managementId: 'm-needed', scope: 'project' },
+];
+const ready = (overrides = {}) => ({
+  disposition: 'prepared', diagnostics: [],
+  removals: entries.map((entry, index) => ({ managementId: entry.managementId, disposition: 'prepared', change: 'remove-selection', diagnostics: [],
+    members: [{ kind: 'file', path: `/project/${index}.md`, action: 'remove', operationId: `lifecycle/remove-${index}` }] })),
+  preparation: { status: 'ready', sessionId: 'session-1', review: { reviewDigest: 'digest-1', operations: [] } },
+  ...overrides,
+});
+
+test('several items are prepared once through removal 1.2 and applied once with absent outcomes', async () => {
+  const calls = [];
   const request = async (operation, body) => {
-    calls.push([operation, body.managementId ?? body.sessionId]);
-    const scripted = script[`${operation}:${body.managementId ?? ''}`]; if (scripted) return scripted();
-    if (operation === 'remove') {
-      const id = body.managementId;
-      if (!installed.has(id)) return { disposition: 'absent', diagnostics: [] };
-      if ([...installed].some(other => requires[other]?.includes(id))) return { disposition: 'retained', diagnostics: [{ reason: 'dependency-retained', message: 'Another managed selection still requires this one, so its claim is retained.' }] }
-      // Core is the stale authority (#165): when the reviewed files changed since this item was last prepared,
-      // the fresh preparation carries Core's own REVIEW_STALE reason; the Workbench never compares effects.
-      const stale = preparedCounts.has(id) && preparedCounts.get(id) !== members[id].length;
-      preparedCounts.set(id, members[id].length);
-      session++; const sessionId = `s${session}`, prepared = review(id); sessions.set(sessionId, { id, prepared });
-      return { disposition: 'prepared', diagnostics: [],
-        preparation: { status: 'ready', sessionId, review: prepared,
-          ...(stale ? { diagnostics: [{ code: 'REVIEW_STALE', message: 'A reviewed file changed since this list was shown.', changed: { reason: 'binding-changed' } }] } : {}) } };
-    }
-    const held = sessions.get(body.sessionId);
-    if (!held || held.prepared.reviewDigest !== body.reviewDigest) return { status: 'rejected', diagnostics: [{ message: 'digest-mismatch' }] };
-    // Core is the stale authority at Apply time too (#165): the shown handle is applied as-is, and Core
-    // itself reports REVIEW_STALE when the reviewed files changed since that preparation.
-    if (members[held.id].length !== held.prepared.operations.length)
-      return { status: 'refused', diagnostics: [{ code: 'REVIEW_STALE', message: 'A reviewed file changed since this list was shown.', changed: { reason: 'binding-changed' } }] };
-    installed.delete(held.id);
-    if (applyResult) return applyResult(held);
-    return { completion: 'complete', diagnostics: [], operations: held.prepared.operations.map(operation => ({ id: operation.id, application: 'applied', verification: { status: 'passed' } })) };
+    calls.push([operation, body]);
+    if (operation === 'remove') return ready();
+    return { completion: 'complete', diagnostics: [], members: entries.flatMap((entry, index) => [
+      { managementId: entry.managementId, path: `/project/${index}.md`, intent: 'remove', outcome: 'claim-removed', check: 'absent' },
+    ]) };
   };
-  return { request, calls, installed };
-}
-const entry = name => ({ name, managementId: `m-${name}`, scope: 'project' });
-const members = () => ({ 'm-grill-me': ['.claude\\skills\\grill-me\\SKILL.md', '.claude\\skills\\grill-me\\LICENSE'], 'm-grilling': ['.claude\\skills\\grilling\\SKILL.md', '.claude\\skills\\grilling\\LICENSE'] });
-const grill = () => ({ members: members(), requires: { 'm-grill-me': ['m-grilling'] } });
-const confirmAll = async (preview, request) => {
-  let done = await confirmRemoval({ preview, request, mode: 'vibe' });
-  while (done.next) done = await confirmRemoval({ preview: done.next, request, mode: 'vibe', results: done.results });
-  return done;
-};
-
-test('the preview shows the first item\'s files, says needed items are shown after it, and that Core keeps what others need', async () => {
-  const { request, installed } = fakeHost(grill());
-  const preview = await previewRemoval({ entries: [entry('grill-me'), entry('grilling')], request, mode: 'vibe' });
+  const preview = await previewRemoval({ entries, request, mode: 'vibe' });
   assert.equal(preview.canConfirm, true);
-  assert.deepEqual(preview.steps.map(step => step.state), ['ready', 'after']);
-  assert.deepEqual(preview.steps[0].files.map(file => file.path), ['.claude/skills/grill-me/SKILL.md', '.claude/skills/grill-me/LICENSE']);
-  assert.match(preview.steps[1].message, /after grill-me is removed.*its files are shown/);
-  assert.doesNotMatch(preview.steps[1].message, /\d+ files?/, 'no count is promised for files the page has not seen');
-  assert.match(preview.note, /Core keeps anything another installed item still needs, including items outside your current setup/);
-  assert.equal(installed.size, 2, 'the preview removes nothing');
-});
-
-test('a needed item\'s own files are shown and confirmed before it is removed', async () => {
-  const { request, calls, installed } = fakeHost(grill());
-  const preview = await previewRemoval({ entries: [entry('grill-me'), entry('grilling')], request, mode: 'vibe' });
-  const first = await confirmRemoval({ preview, request, mode: 'vibe' });
-  assert.deepEqual(first.results.map(result => [result.name, result.state]), [['grill-me', 'removed']]);
-  assert.equal(first.outcome, 'needs-confirm');
-  assert.deepEqual(first.next.steps.map(step => step.state), ['ready']);
-  assert.deepEqual(first.next.steps[0].files.map(file => file.path), ['.claude/skills/grilling/SKILL.md', '.claude/skills/grilling/LICENSE']);
-  assert.equal(installed.has('m-grilling'), true, 'nothing is applied for an item whose files were not shown');
-  assert.match(first.message, /Removed grill-me\. Check the files of grilling, then confirm again\./);
-  const second = await confirmRemoval({ preview: first.next, request, mode: 'vibe', results: first.results });
-  assert.deepEqual(second.results.map(result => [result.name, result.state]), [['grill-me', 'removed'], ['grilling', 'removed']]);
-  assert.equal(second.outcome, 'removed');
-  assert.equal(installed.size, 0);
-  // Each shown preparation is applied by its own handle (no fresh, unseen prepare); the waiting item
-  // is prepared exactly once, when its files are shown for confirmation.
-  assert.deepEqual(calls.slice(2).map(call => call[0]), ['apply', 'remove', 'apply']);
-  assert.match(second.message, /^Removed grill-me and grilling\.$/);
-});
-
-test('an item Core retains is reported as kept in words, never as removed', async () => {
-  const { request } = fakeHost({ members: { ...members(), 'm-notices': ['n'], 'm-kiro': ['k'] }, requires: { 'm-grill-me': ['m-grilling'], 'm-grilling': ['m-notices'], 'm-kiro': ['m-notices'] } });
-  const preview = await previewRemoval({ entries: [entry('grill-me'), entry('grilling'), entry('notices')], request, mode: 'vibe' });
-  const done = await confirmAll(preview, request);
-  assert.deepEqual(done.results.map(result => result.state), ['removed', 'removed', 'kept']);
-  assert.match(done.message, /Removed grill-me and grilling\. Kept notices: Core says another installed item still needs it\./);
-});
-
-test('when nothing is removed the outcome says so, even if every item was kept or already gone', async () => {
-  const { request } = fakeHost({ members: { 'm-notices': ['n'], 'm-kiro': ['k'] }, requires: { 'm-kiro': ['m-notices'] } });
-  const kept = await previewRemoval({ entries: [entry('notices')], request, mode: 'vibe' });
-  assert.deepEqual(kept.steps.map(step => step.state), ['kept']);
-  assert.equal(kept.canConfirm, false);
-  const done = await confirmRemoval({ preview: { steps: [...kept.steps, { entry: entry('gone'), state: 'absent', files: [] }] }, request, mode: 'vibe' });
-  assert.equal(done.outcome, 'nothing-removed');
-  assert.match(done.message, /^Nothing was removed\./);
-});
-
-test('Remove stops at the first failure and says what was and was not removed', async () => {
-  const { request } = fakeHost({ members: { ...members(), 'm-other': ['o'] } });
-  const preview = await previewRemoval({ entries: [entry('grill-me'), entry('grilling'), entry('other')], request, mode: 'vibe' });
-  let applies = 0;
-  const failing = async (operation, body) => operation === 'apply' && ++applies === 2
-    ? { completion: 'partial', diagnostics: [{ message: 'Disk busy.' }], operations: [{ id: 'a', application: 'applied', verification: { status: 'passed' } }, { id: 'b', application: 'not-applied', verification: { status: 'not-run' } }] }
-    : request(operation, body);
-  const done = await confirmRemoval({ preview, request: failing, mode: 'vibe' });
-  assert.deepEqual(done.results.map(result => result.state), ['removed', 'failed', 'not-attempted']);
-  assert.equal(done.outcome, 'failed');
-  assert.match(done.message, /Removed grill-me\. grilling did not finish: 1 of 2 removed, 1 verified\. Disk busy\. Not removed: other\./);
-});
-
-test('a superseded Apply cannot tell whether files were removed', async () => {
-  const { request } = fakeHost(grill());
-  const preview = await previewRemoval({ entries: [entry('grill-me'), entry('grilling')], request, mode: 'vibe' });
-  const done = await confirmRemoval({ preview, request: async (operation, body) => operation === 'apply' ? { status: 'superseded' } : request(operation, body), mode: 'vibe' });
-  assert.deepEqual(done.results.map(result => result.state), ['superseded', 'not-attempted']);
-  assert.match(done.results[0].message, /cannot tell whether files were removed; check the list/);
-});
-
-test('files that changed since they were shown stop Remove before anything is applied', async () => {
-  const host = grill(), { request, installed } = fakeHost(host);
-  const preview = await previewRemoval({ entries: [entry('grill-me'), entry('grilling')], request, mode: 'vibe' });
-  host.members['m-grill-me'].push('.claude\\skills\\grill-me\\extra.md');
-  const done = await confirmRemoval({ preview, request, mode: 'vibe' });
-  assert.deepEqual(done.results.map(result => result.state), ['changed', 'not-attempted']);
-  assert.equal(installed.size, 2);
-});
-
-test('Core refusals are said in words and offer no Confirm', async () => {
-  const { request } = fakeHost({ ...grill(), script: { 'remove:m-grill-me': async () => ({ disposition: 'reconcile-required', diagnostics: [{ message: 'A file was edited.' }] }) } });
-  const preview = await previewRemoval({ entries: [entry('grill-me'), entry('grilling')], request, mode: 'vibe' });
-  assert.equal(preview.canConfirm, false);
-  assert.match(preview.steps[0].message, /needs reconciling.*A file was edited\./);
-});
-
-test('a complete removal Core did not verify is said as deleted but unverified, never as removed', async () => {
-  // Core's removal operations carry no checks, so a finished run reports each operation applied but unverified.
-  const unverified = held => ({ completion: 'complete', diagnostics: [], operations: held.prepared.operations.map(operation => ({ id: operation.id, application: 'applied', verification: { status: 'unverified' } })) });
-  const fake = fakeHost({ ...grill(), applyResult: unverified });
-  const preview = await previewRemoval({ entries: [entry('grill-me'), entry('grilling')], request: fake.request, mode: 'vibe' });
-  const done = await confirmAll(preview, fake.request);
-  assert.deepEqual(done.results.map(result => result.state), ['unverified', 'unverified']);
-  assert.equal(done.outcome, 'unverified');
-  assert.equal(fake.installed.size, 0);
-  assert.match(done.message, /^Core deleted the files of grill-me and grilling but did not verify the removal\. Check the list below\.$/);
-  assert.doesNotMatch(done.message, /Removed|Nothing was removed/);
-});
-
-test('a removal counts only when every operation was applied and verified', () => {
-  const files = [{ path: 'a' }, { path: 'b' }];
-  const op = (application, status) => ({ application, verification: { status } });
-  assert.equal(removalOutcome({ completion: 'complete', operations: [op('applied', 'passed'), op('applied', 'passed')] }, files).state, 'removed');
-  assert.equal(removalOutcome({ completion: 'complete', operations: [op('applied', 'unverified'), op('applied', 'passed')] }, files).state, 'unverified');
-  assert.equal(removalOutcome({ completion: 'complete', operations: [op('applied', 'passed'), op('applied', 'failed')] }, files).state, 'failed');
-  assert.equal(removalOutcome({ completion: 'complete', operations: [op('applied', 'passed')] }, files).state, 'failed');
-  assert.equal(removalOutcome(undefined, files).state, 'failed');
-});
-
-test('in a later round a needed item still waiting names only what is still to be removed', async () => {
-  const { request } = fakeHost({ members: { ...members(), 'm-notices': ['n'], 'm-kiro': ['k'] }, requires: { 'm-grill-me': ['m-grilling'], 'm-grilling': ['m-notices'], 'm-kiro': ['m-notices'] } });
-  const preview = await previewRemoval({ entries: [entry('grill-me'), entry('grilling'), entry('notices')], request, mode: 'vibe' });
-  assert.match(preview.steps[2].message, /after grill-me and grilling are removed/);
-  const first = await confirmRemoval({ preview, request, mode: 'vibe' });
-  assert.deepEqual(first.next.steps.map(step => [step.entry.name, step.state]), [['grilling', 'ready'], ['notices', 'after']]);
-  assert.match(first.next.steps[1].message, /after grilling is removed/);
-  assert.doesNotMatch(first.next.steps[1].message, /grill-me/, 'grill-me is already gone');
-});
-
-
-// --- Connected held-apply regressions (shown handle, full review, stale re-review) ----------------
-const plainEntry = name => ({ name, managementId: `mgmt-${name}`, scope: 'project' });
-const plainPrepared = (sessionId, digest, operations = [{ effects: 'remove-file', details: { target: '/p/a' }, purpose: 'remove a' }]) =>
-  ({ disposition: 'prepared', preparation: { status: 'ready', sessionId, review: { reviewDigest: digest, operations } } });
-
-test('held: one-item removal applies the shown handle and digest, verifies fully, and prepares nothing fresh', async () => {
-  const applied = [], requests = [];
-  const request = async (operation, body) => {
-    requests.push(operation);
-    if (operation === 'remove') return plainPrepared('s1', 'd1');
-    if (operation === 'apply') { applied.push(body); return { status: 'ok', completion: 'complete', operations: [{ application: 'applied', verification: { status: 'passed' } }] }; }
-    throw new Error('unexpected ' + operation);
-  };
-  const preview = await previewRemoval({ entries: [plainEntry('a')], request, mode: 'all' });
-  const step = preview.steps[0];
-  assert.equal(step.sessionId, 's1');
-  assert.ok(step.review?.operations?.length, 'the displayed step keeps the full shown review');
-  const result = await confirmRemoval({ preview, request, mode: 'all' });
-  assert.deepEqual(applied, [{ sessionId: 's1', reviewDigest: 'd1' }]);
-  assert.equal(requests.filter(op => op === 'remove').length, 1);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0][1].removals.map(entry => entry.managementId), ['m-chosen', 'm-needed']);
+  const result = await confirmRemoval({ preview, request, mode: 'vibe' });
+  assert.equal(calls.filter(([operation]) => operation === 'apply').length, 1);
   assert.equal(result.outcome, 'removed');
+  assert.match(result.message, /chosen: absent.*needed: absent/);
+  assert.doesNotMatch(result.message, /unverified/i);
 });
 
-test('held: a Core REVIEW_STALE apply answer re-prepares for display and stops without applying', async () => {
-  const applied = [];
-  let removes = 0;
-  const request = async (operation, body) => {
-    if (operation === 'remove') { removes += 1; return removes === 1 ? plainPrepared('s1', 'd1') : plainPrepared('s2', 'd2'); }
-    if (operation === 'apply') { applied.push(body); return { status: 'refused', diagnostics: [{ code: 'REVIEW_STALE', message: 'The reviewed setup changed.' }] }; }
-    throw new Error('unexpected ' + operation);
-  };
-  const preview = await previewRemoval({ entries: [plainEntry('a')], request, mode: 'all' });
-  const result = await confirmRemoval({ preview, request, mode: 'all' });
-  assert.equal(result.outcome, 'failed');
-  assert.match(result.message, /changed/);
-  assert.deepEqual(applied, [{ sessionId: 's1', reviewDigest: 'd1' }]);
-  assert.equal(removes, 2);
-});
-
-test('held: a stale removal keeps the original reason beside a failed replacement preparation', async () => {
-  let removes = 0;
+test('set origins and kept members retain their exact Core actions and reasons', async () => {
+  const origin = { set: { framework: 'extensions', setId: 'productivity', setSha256: 'a'.repeat(64) } };
   const request = async operation => {
-    if (operation === 'remove') {
-      removes += 1;
-      if (removes === 1) return plainPrepared('s1', 'd1');
-      return { disposition: 'prepared', preparation: { status: 'partial', review: { reviewDigest: 'd2', operations: [] }, diagnostics: [{ message: 'Fresh disk conflict.' }] } };
-    }
-    if (operation === 'apply') return { status: 'refused', diagnostics: [{ code: 'REVIEW_STALE', message: 'Original stale reason.' }] };
-    throw new Error('unexpected ' + operation);
+    if (operation === 'remove') return ready({ removals: entries.map((entry, index) => ({ managementId: entry.managementId, disposition: 'prepared', change: 'remove-origin', diagnostics: [],
+      members: [{ kind: 'file', path: `/project/${index}.md`, action: 'keep-shared', reason: 'shared-content', operationId: null }] })) });
+    return { completion: 'complete', diagnostics: [], members: entries.map((entry, index) => ({ managementId: entry.managementId, path: `/project/${index}.md`, outcome: 'kept', check: 'unchecked' })) };
   };
-  const preview = await previewRemoval({ entries: [plainEntry('a')], request, mode: 'all' });
-  const result = await confirmRemoval({ preview, request, mode: 'all' });
-  assert.equal(result.outcome, 'failed');
-  assert.match(result.message, /Original stale reason/);
-  assert.match(result.message, /Fresh disk conflict/);
+  const withOrigins = entries.map(entry => ({ ...entry, origin }));
+  const preview = await previewRemoval({ entries: withOrigins, request, mode: 'vibe' });
+  assert.deepEqual(preview.selectors.map(entry => entry.origin), [origin, origin]);
+  assert.deepEqual(preview.kept.map(item => item.reason), ['shared-content', 'shared-content']);
+  const result = await confirmRemoval({ preview, request, mode: 'vibe' });
+  assert.equal(result.outcome, 'nothing-removed');
+  assert.match(result.message, /chosen: kept \(shared-content\)/);
 });
 
-test('held: a dependency-held later step applies its own shown handle on the second confirmation', async () => {
-  const applied = [];
-  let removes = 0;
+test('a complete interrupted cleanup with no touched members is absent, not unverified', async () => {
+  const request = async operation => operation === 'remove' ? ready() : { completion: 'complete', diagnostics: [], members: [] };
+  const preview = await previewRemoval({ entries: [entries[0]], request, mode: 'vibe' });
+  const result = await confirmRemoval({ preview, request, mode: 'vibe' });
+  assert.equal(result.outcome, 'removed');
+  assert.equal(result.results[0].state, 'absent');
+});
+
+test('restored members are reported from run result 1.4', async () => {
+  const request = async operation => operation === 'remove' ? ready() : { completion: 'complete', diagnostics: [], members: [{ managementId: 'm-chosen', path: '/project/0.md', outcome: 'restored', check: 'present-matching' }] };
+  const preview = await previewRemoval({ entries: [entries[0]], request, mode: 'vibe' });
+  const result = await confirmRemoval({ preview, request, mode: 'vibe' });
+  assert.equal(result.results[0].state, 'restored');
+});
+
+test('a blocked removal has no Apply and preserves Core diagnostics', async () => {
+  const calls = [];
   const request = async (operation, body) => {
-    if (operation === 'remove') {
-      removes += 1;
-      if (removes === 2) return { disposition: 'retained' };
-      return plainPrepared(removes === 1 ? 's1' : 's3', removes === 1 ? 'd1' : 'd3');
-    }
-    if (operation === 'apply') { applied.push(body); return { status: 'ok', completion: 'complete', operations: [{ application: 'applied', verification: { status: 'passed' } }] }; }
-    throw new Error('unexpected ' + operation);
+    calls.push(operation);
+    return { disposition: 'not-prepared', diagnostics: [{ message: 'Edited files need reconciliation.' }], removals: entries.map(entry => ({ managementId: entry.managementId, disposition: 'reconcile-required', diagnostics: [{ message: 'Edited files need reconciliation.' }], members: [] })) };
   };
-  const preview = await previewRemoval({ entries: [plainEntry('a'), plainEntry('b')], request, mode: 'all' });
-  const first = await confirmRemoval({ preview, request, mode: 'all' });
-  assert.equal(first.outcome, 'needs-confirm');
-  assert.equal(first.next.steps[0].sessionId, 's3');
-  const second = await confirmRemoval({ preview: first.next, request, mode: 'all', results: first.results });
-  assert.deepEqual(applied.map(a => a.sessionId), ['s1', 's3']);
-  assert.equal(second.outcome, 'removed');
+  const preview = await previewRemoval({ entries, request, mode: 'vibe' });
+  assert.equal(preview.canConfirm, false);
+  const result = await confirmRemoval({ preview, request, mode: 'vibe' });
+  assert.equal(result.outcome, 'nothing-removed');
+  assert.match(result.message, /Edited files need reconciliation/);
+  assert.equal(calls.includes('apply'), false);
+});
+
+test('stale Apply is not retried silently and keeps the original reason', async () => {
+  const request = async operation => operation === 'remove' ? ready()
+    : { status: 'refused', diagnostics: [{ code: 'REVIEW_STALE', message: 'The reviewed files changed.' }] };
+  const preview = await previewRemoval({ entries: [entries[0]], request, mode: 'vibe' });
+  const result = await confirmRemoval({ preview, request, mode: 'vibe' });
+  assert.equal(result.outcome, 'failed');
+  assert.match(result.message, /The reviewed files changed/);
 });

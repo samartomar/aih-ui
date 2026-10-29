@@ -13,6 +13,7 @@ import { listItems, isCheckedRelease } from '@aihq/catalog/reader';
 import { parsePolicy } from '@aihq/core/contracts';
 import * as coreContracts from '@aihq/core/contracts';
 import * as core from '@aihq/core';
+import { detectProjectFacts } from '@aihq/core/harness/runtime';
 import { createHost } from './host.mjs';
 import { createProjectFolder, shared } from './project-folder.mjs';
 import { readAuthoritySource, readOrganization } from './authority-source.mjs';
@@ -215,7 +216,8 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
           body.reviewEvidence = [...(body.reviewEvidence ?? []), ...retained.map(value => value.bytes)];
         }
         if (operation === 'browse-content') {
-          const result = await browseContent(mixedService.inventories, body, folder.project, (inventory, itemId) => client.scanEvidence.check({ inventory, itemId, supplied: (body.reviewEvidence ?? []).map(bytes => Uint8Array.from(bytes)), evaluationTime: new Date().toISOString(), withSummary: true }));
+          const browse = () => browseContent(mixedService.inventories, body, folder.project, (inventory, itemId) => client.scanEvidence.check({ inventory, itemId, supplied: (body.reviewEvidence ?? []).map(bytes => Uint8Array.from(bytes)), evaluationTime: new Date().toISOString(), withSummary: true }));
+          const result = client.host ? await client.host.measure('compatibility', browse) : await browse();
           if (body.enterprise === true && result.compatibility) {
             const inventory = mixedService.inventories.find(entry => entry.release.sha256 === body.releaseSha256);
             const source = organizationSource ? await readOrganization({ organizationSource, controls }) : {};
@@ -262,13 +264,22 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
         }
         // Host-configured source and controls only; the request body is ignored and needs no project root.
         if (operation === 'authority-source') return send(response, 200, await readAuthoritySource({ organizationSource, controls }));
-        if (['authority', 'prepare', 'apply', 'managed', 'remove'].includes(operation)) {
-          if (!client.host) return send(response, 409, { status: 'unavailable', diagnostics: [{ code: 'HOST_UNAVAILABLE', message: 'No project folder is set. Choose one to install or remove.' }] });
+        if (operation === 'project-facts') {
+          if (!folder.project) return send(response, 409, { status: 'unavailable', diagnostics: [{ code: 'HOST_UNAVAILABLE', message: 'Choose a project folder before reading its facts.' }] });
+          return send(response, 200, await detectProjectFacts({ project: folder.project }));
+        }
+        if (operation === 'timings') {
+          if (!client.host) return send(response, 409, { status: 'unavailable', diagnostics: [{ code: 'HOST_UNAVAILABLE', message: 'Choose a project folder before reading install timings.' }] });
+          const record = client.host.installTimings(body.runId);
+          return send(response, 200, record ? { status: 'ok', value: record } : { status: 'unavailable', reason: 'No consumer timings are recorded for that Core run id.' });
+        }
+        if (['authority', 'prepare', 'apply', 'managed', 'remove', 'update'].includes(operation)) {
+          if (!client.host) return send(response, 409, { status: 'unavailable', diagnostics: [{ code: 'HOST_UNAVAILABLE', message: 'No project folder is set. Choose one to install, update or remove.' }] });
           if (operation === 'apply' && retired.has(body.sessionId)) return send(response, 200, folderChanged());
-          // Install and Remove hold the current folder until they finish; the host is read once they hold it.
-          const work = ['prepare', 'apply', 'remove'].includes(operation) ? folder.run : action => action();
+          // Lifecycle operations hold the current folder until they finish; the host is read once they hold it.
+          const work = ['prepare', 'apply', 'remove', 'update'].includes(operation) ? folder.run : action => action();
           return send(response, 200, await work(async () => {
-            const moved = operation === 'prepare' || operation === 'apply' || operation === 'remove' ? await folderMoved() : undefined;
+            const moved = operation === 'prepare' || operation === 'apply' || operation === 'remove' || operation === 'update' ? await folderMoved() : undefined;
             if (moved) return moved;
             const policyText = new TextDecoder().decode(Uint8Array.from(body.policyBytes ?? []));
             if (operation === 'prepare' && historicalOnly.size) {
@@ -280,16 +291,22 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
             const host = client.host;
             return operation === 'authority' ? await host.inspectAuthority({ policyText })
               : operation === 'prepare' ? await host.prepareSession({ policyText, resolutions: body.resolutions })
-              : operation === 'apply' ? await host.applyApproved({ sessionId: body.sessionId, reviewDigest: body.reviewDigest })
+              : operation === 'apply' ? await host.applyApproved({ sessionId: body.sessionId, reviewDigest: body.reviewDigest, allowPartial: body.allowPartial === true })
               : operation === 'managed' ? await host.managedInventory()
-              : await host.prepareRemovalSession({ managementId: body.managementId, scope: body.scope, mode: body.mode });
+              : operation === 'update' ? await host.prepareUpdateSession({ updates: body.updates, scope: body.scope, tool: body.tool })
+              : await host.prepareRemovalSession({ managementId: body.managementId, removals: body.removals, scope: body.scope, mode: body.mode });
           }));
         }
         const reviewIntent = pathname === '/api/authoring-inspect-review' && reviewTrust && body.policyBytes ? (await mixedService.run('read', body)).value?.intent : undefined;
         const reviewPin = reviewIntent?.pins.find(pin => pin.releaseSha256 === body.target?.releaseSha256 && pin.itemId === body.target?.itemId);
-        const result = pathname === '/api/authoring-inspect-review' && reviewTrust
-          ? await inspectAuthenticatedReviewEvidence({ evidenceBytes: Uint8Array.from((Number.isSafeInteger(body.evidenceIndex) ? body.reviewEvidence?.[body.evidenceIndex] : body.evidenceBytes) ?? []), inventory: mixedService.inventories.find(entry => entry.release.sha256 === body.target?.releaseSha256), itemId: body.target?.itemId, recipe: reviewPin?.recipe, configuration: reviewIntent?.roots.find(root => root.releaseSha256 === body.target?.releaseSha256 && root.itemId === body.target?.itemId)?.configuration, trust: reviewTrust })
-          : await mixedService.run(pathname.slice('/api/authoring-'.length), body);
+        let result;
+        if (pathname === '/api/authoring-inspect-review' && reviewTrust) {
+          result = await inspectAuthenticatedReviewEvidence({ evidenceBytes: Uint8Array.from((Number.isSafeInteger(body.evidenceIndex) ? body.reviewEvidence?.[body.evidenceIndex] : body.evidenceBytes) ?? []), inventory: mixedService.inventories.find(entry => entry.release.sha256 === body.target?.releaseSha256), itemId: body.target?.itemId, recipe: reviewPin?.recipe, configuration: reviewIntent?.roots.find(root => root.releaseSha256 === body.target?.releaseSha256 && root.itemId === body.target?.itemId)?.configuration, trust: reviewTrust });
+        } else {
+          const phase = operation === 'compose' ? 'render' : ['edit', 'draft-edit', 'draft-compile'].includes(operation) ? 'resolve' : null;
+          const run = () => mixedService.run(operation, body);
+          result = phase && client.host ? await client.host.measure(phase, run) : await run();
+        }
         // JSON transport represents bytes as arrays, never serialized handles.
         return send(response, 200, JSON.parse(JSON.stringify(result, (_key, value) => value instanceof Uint8Array ? [...value] : value)));
       }

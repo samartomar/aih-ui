@@ -57,7 +57,7 @@ export function originGroups(inventory) {
   const groups = new Map();
   for (const entry of inventory?.selections ?? []) {
     const sets = recordedSets(entry);
-    const member = { managementId: entry.managementId, name: entry.name ?? entry.item?.itemId ?? entry.managementId };
+    const member = { managementId: entry.managementId, scope: entry.scope, name: entry.name ?? entry.item?.itemId ?? entry.managementId };
     if (!sets.length) {
       const key = 'null';
       if (!groups.has(key)) groups.set(key, { set: null, items: [], members: [] });
@@ -121,7 +121,7 @@ export function groupInstalled({ inventory, policy, intent, label = () => undefi
   const known = new Map([...byId.values()].map(entry => [entry.managementId, describe(entry)]));
   const others = inventory.selections.filter(entry => !grouped.has(entry.managementId)).map(entry => {
     const item = known.get(entry.managementId);
-    return withState({ managementId: entry.managementId, scope: entry.scope,
+    return withState({ managementId: entry.managementId, scope: entry.scope, itemId: entry.item?.itemId ?? item?.itemId,
       name: entry.name ?? item?.name ?? entry.managementId, inSetup: Boolean(item),
       sets: recordedSets(entry) });
   });

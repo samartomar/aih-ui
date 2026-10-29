@@ -103,11 +103,15 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
   const details = el('details', 'install-details text-on-surface-variant'); details.id = 'install-details';
   const detailsSummary = el('summary', 'cursor-pointer'); detailsSummary.append(filesHeading);
   const folders = el('p', 'font-mono text-[11px] text-outline break-all'); folders.id = 'install-folders';
+  const projectFacts = el('ul', 'space-y-0.5 text-[11px]'); projectFacts.id = 'install-project-facts';
   const named = el('ul', 'space-y-2 text-on-surface'); named.id = 'install-review-rows';
-  details.append(detailsSummary, where, folders, items, named, files);
+  details.append(detailsSummary, where, folders, projectFacts, items, named, files);
   const action = el('div', 'flex flex-wrap items-center gap-x-3 gap-y-1'); action.append(install, details);
   const firstRunLine = el('p', 'text-on-surface-variant text-[11px]'); firstRunLine.id = 'install-first-run'; firstRunLine.setAttribute('role', 'status');
-  node.append(title, action, message, firstRunLine);
+  const timings = el('details', 'text-on-surface-variant text-[11px]'); timings.id = 'install-timings'; timings.hidden = true;
+  const timingsList = el('ul', 'space-y-0.5'); timingsList.id = 'install-timing-rows';
+  timings.append(el('summary', '', 'Install time'), timingsList);
+  node.append(title, action, message, firstRunLine, timings);
 
   let preview, previewing = false, installing = false, shownFor, managed = false, again = false;
   const itemOf = ref => client.catalog?.items.find(item => item.id === ref.itemId && item.root.releaseSha256 === ref.releaseSha256);
@@ -173,10 +177,26 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
     for (const line of global) nodes.push(el('li', 'text-[11px]', line));
     return nodes;
   }
+  async function showProjectFacts() {
+    const selected = (client.intent?.roots ?? []).some(root => root.itemId.startsWith('project-basics.'));
+    if (!selected) { projectFacts.replaceChildren(); return; }
+    projectFacts.replaceChildren(el('li', '', 'Loading project facts…'));
+    try {
+      const result = await client.request('project-facts');
+      if (!Array.isArray(result.facts)) {
+        projectFacts.replaceChildren(el('li', '', `Project facts unavailable: ${(result.diagnostics ?? []).map(diagnostic => diagnostic.message).join(' ') || result.status}.`)); return;
+      }
+      const rows = result.facts.map(fact => el('li', '', `${fact.confidence === 'detected' ? 'Detected' : 'Inferred'}: ${fact.field} = ${fact.value}`));
+      if (!rows.length) rows.push(el('li', '', 'No project facts detected or inferred.'));
+      for (const diagnostic of result.diagnostics ?? []) rows.push(el('li', '', `Project facts diagnostic: ${diagnostic.message}`));
+      projectFacts.replaceChildren(...rows);
+    } catch (error) { projectFacts.replaceChildren(el('li', '', `Project facts failed: ${error.message}`)); }
+  }
   async function loadPreview() {
     if (previewing || installing) return;
     previewing = true; preview = undefined; install.disabled = true; message.textContent = 'Checking which files will be added…';
     try {
+      await showProjectFacts();
       const result = await client.requestHost('prepare');
       if (result.status === 'superseded') { message.textContent = ''; return; }
       const preparation = readyPreparation(result);
@@ -201,9 +221,19 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
       if (again) { again = false; shownFor = undefined; render(); }
     }
   }
+  async function showTimings(runId) {
+    if (!runId) { timings.hidden = true; return; }
+    timings.hidden = false; timingsList.replaceChildren(el('li', '', `Loading timings for run ${runId}…`));
+    try {
+      const result = await client.request('timings', { runId });
+      if (result.status !== 'ok') { timingsList.replaceChildren(el('li', '', `Timings unavailable for run ${runId}: ${result.reason ?? 'not recorded'}.`)); return; }
+      timingsList.replaceChildren(...['resolve', 'compatibility', 'render', 'prepare', 'apply', 'inventory'].map(phase =>
+        el('li', '', `${phase}: ${result.value[phase].toFixed(3)} ms · run ${runId}`)));
+    } catch (error) { timingsList.replaceChildren(el('li', '', `Timings failed for run ${runId}: ${error.message}`)); }
+  }
   async function run() {
     if (!preview || installing || install.disabled) return;
-    let sent = false;
+    let sent = false, runId;
     installing = true; install.disabled = true; install.setAttribute('aria-busy', 'true'); message.textContent = 'Installing…';
     try {
       // Apply the review the person was shown; Core alone calls it stale. What needs re-showing comes back
@@ -223,6 +253,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
         preview = preparation; const rows = show(preparation.review, preparation.operationSelections ?? []); install.disabled = Boolean(nothingToInstall({ roots: client.intent?.roots ?? [], rows }));
         message.textContent = `The reviewed setup changed: ${attemptResult.reason} The list now shows what would happen — check it and click Install again.`; return;
       }
+      runId = attemptResult.run?.runId ?? preparation.runId;
       const outcome = installOutcome(attemptResult.run, installFiles(preparation.review), preparation.review.target?.project);
       message.textContent = outcome.message + (outcome.policyChanged ? ' Core also reports this run changed the setup policy.' : '');
       message.dataset.outcome = outcome.ok ? 'installed' : outcome.state ?? 'failed';
@@ -232,7 +263,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
       if (outcome.ok) filesHeading.textContent = 'What was installed';
       preview = undefined;
     } catch (error) { message.textContent = `Install did not finish: ${error.message}`; message.dataset.outcome = 'failed'; }
-    finally { installing = false; install.removeAttribute('aria-busy'); if (sent) onInstalled(); }
+    finally { installing = false; install.removeAttribute('aria-busy'); if (sent) { await onInstalled(); await showTimings(runId); } }
   }
   function render() {
     node.hidden = !ready();
@@ -259,8 +290,9 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
   // After a removal elsewhere or a change of project folder: the earlier preview and outcome no longer describe the
   // folder, so they are dropped and it is checked again (once the preview already out has come back).
   function recheck() {
+    install.textContent = 'Install';
     message.textContent = ''; delete message.dataset.outcome; shownFor = undefined; preview = undefined; install.disabled = true;
-    firstRunLine.textContent = ''; named.replaceChildren();
+    firstRunLine.textContent = ''; named.replaceChildren(); projectFacts.replaceChildren();
     files.replaceChildren(); where.textContent = ''; title.textContent = 'Install your setup into your project';
     if (previewing) { again = true; return; }
     render();
@@ -272,5 +304,6 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
     const rows = installFiles(preview.review), summary = installSummary(rows, { managed });
     filesHeading.textContent = summary.heading; message.textContent = nothingToInstall({ roots: client.intent?.roots ?? [], rows }) || summary.message;
   }
-  return { node, heading: title, render, recheck, setManaged, get busy() { return installing; } };
+  function finish() { recheck(); install.textContent = 'Finish'; }
+  return { node, heading: title, render, recheck, finish, setManaged, get busy() { return installing; } };
 }

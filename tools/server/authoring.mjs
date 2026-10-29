@@ -71,11 +71,11 @@ export async function journalFrictionEvidence(consumerDir, records) {
 }
 
 // `frictionEvidence` (optional) is the host's own provider of stored Core results (journalFrictionEvidence). The demo file, when set, keeps precedence and stays fixture-labelled.
-export async function createAuthoringAdapter(consumerDir, { frictionEvidence, coreState, frameworkFixtureInventories } = {}) {
+export async function createAuthoringAdapter(consumerDir, { frictionEvidence, coreState, frameworkFixtureInventories, suppliedInventories, createExecutionHost } = {}) {
   const { startConsumer } = await import(pathToFileURL(join(consumerDir, 'consumer/server.mjs')).href);
   const selectedJson = async name => process.env[name] ? JSON.parse(await readFile(process.env[name], 'utf8')) : undefined;
   const evidence = process.env.AIH_FRICTION_EVIDENCE ? await fileFrictionEvidence(consumerDir, process.env.AIH_FRICTION_EVIDENCE) : frictionEvidence;
-  const host = await startConsumer({ coreState, frameworkFixtureInventories, projectRoot: process.env.AIH_CONSUMER_PROJECT,
+  const host = await startConsumer({ coreState, frameworkFixtureInventories, suppliedInventories, createExecutionHost, projectRoot: process.env.AIH_CONSUMER_PROJECT,
     controls: await selectedJson('AIH_CONSUMER_CONTROLS'),
     frameworkSources: await selectedJson('AIH_FRAMEWORK_SOURCES'),
     organizationSource: await selectedJson('AIH_ORGANIZATION_SOURCE'),

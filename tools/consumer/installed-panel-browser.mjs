@@ -56,9 +56,18 @@ export async function runInstalledPanelBrowser({ origin, output, playwrightModul
       await page.locator('#install-button').click();
       await page.locator('#install-message[data-outcome="installed"]').waitFor({ timeout: 120_000 });
       const group = page.locator('[data-installed-item="extensions.matt.grill-me"]');
-      await group.waitFor(); assert.match(await group.innerText(), /it needs:.*grilling/);
+      await group.waitFor();
+      if (!await group.locator('details').evaluate(details => details.open)) await group.locator('details > summary').click();
+      assert.match(await group.innerText(), /it needs[\s\S]*grilling/);
       // UI166: only the strict complete run claims confirmed on disk.
       assert.match(await page.locator('#install-message').innerText(), /Confirmed on disk/);
+      await page.locator('#install-timing-rows').getByText(/inventory:/).waitFor({ state: 'attached' });
+      await page.locator('#install-timings > summary').click();
+      const timingText = await page.locator('#install-timing-rows').innerText();
+      const runId = /run ([0-9a-f-]{36})/.exec(timingText)?.[1];
+      assert.ok(runId, timingText);
+      for (const phase of ['resolve', 'compatibility', 'render', 'prepare', 'apply', 'inventory'])
+        assert.match(timingText, new RegExp(`${phase}: \\d+\\.\\d{3} ms · run ${runId}`), `${phase} timing missing for ${runId}`);
       // UI166-AC04: a directly added item has no set-owned first step, so the guidance line stays empty.
       assert.equal(await page.locator('#install-first-run').textContent(), '');
       await page.screenshot({ path: join(output, `${theme}-installed.png`), fullPage: true });
@@ -78,61 +87,36 @@ export async function runInstalledPanelBrowser({ origin, output, playwrightModul
       }
       const installed = page.locator('[data-installed-item="extensions.matt.grill-me"]');
       await installed.waitFor();
-      assert.match(await installed.innerText(), /it needs:.*grilling/, 'recorded names and the needed-by grouping survive a fresh page reopen against the on-disk receipts');
+      if (!await installed.locator('details').evaluate(details => details.open)) await installed.locator('details > summary').click();
+      assert.match(await installed.innerText(), /it needs[\s\S]*grilling/, 'recorded names and the needed-by grouping survive a fresh page reopen against the on-disk receipts');
       if (cancelAfterFirst) assert.equal(await page.locator('#install-message').getAttribute('data-outcome'), 'installed');
       else await page.locator('#install-message').filter({ hasText: 'Already installed:' }).waitFor();
       await installed.getByRole('button', { name: 'Remove', exact: true }).click();
-      await installed.getByText(/grill-me:.*files/).waitFor();
+      await installed.getByText(/members are reviewed for removal/).first().waitFor();
       assert.match(await page.locator('#installed-message').innerText(), /Nothing has been removed yet/);
       const beforeCancel = await page.locator('#install-message').innerText();
       await installed.getByRole('button', { name: 'Cancel', exact: true }).click();
       assert.ok(await installed.isVisible(), 'Cancel before confirmation keeps the installed item.');
       assert.equal(await page.locator('#install-message').innerText(), beforeCancel, 'Cancel before confirmation leaves Install unchanged.');
+      const lifecycleCalls = [];
+      page.on('request', request => { if (/\/api\/authoring-(remove|apply)$/.test(request.url())) lifecycleCalls.push(request.url().split('authoring-')[1]); });
       await installed.getByRole('button', { name: 'Remove', exact: true }).click();
       await installed.getByRole('button', { name: 'Confirm remove', exact: true }).waitFor();
       await page.screenshot({ path: join(output, `${theme}-remove-preview.png`), fullPage: true });
-      let rounds = 0;
-      while (rounds < 5) {
-        await installed.getByRole('button', { name: 'Confirm remove', exact: true }).click(); rounds++;
-        await page.locator('#installed-message').filter({ hasNotText: /^Removing…$/ }).waitFor({ timeout: 120_000 });
-        await page.waitForFunction(() => ['needs-confirm', 'removed', 'unverified', 'nothing-removed', 'failed'].includes(document.getElementById('installed-message').dataset.outcome));
-        const outcome = await page.locator('#installed-message').getAttribute('data-outcome');
-        if (outcome !== 'needs-confirm') break;
-        assert.match(await installed.innerText(), /files? will be removed/);
-        assert.ok(await installed.locator('ul li').count(), 'The next confirmation shows actual file rows.');
-        await page.screenshot({ path: join(output, `${theme}-needed-files-${rounds}.png`), fullPage: true });
-        if (cancelAfterFirst) {
-          await installed.getByRole('button', { name: 'Cancel', exact: true }).click();
-          await installed.waitFor({ state: 'hidden' });
-          const stopped = await page.locator('#installed-message').innerText();
-          assert.match(stopped, /Removal stopped.*did not verify.*Not removed:.*grilling/s);
-          assert.doesNotMatch(stopped, /confirm again/i);
-          assert.equal(await page.locator('#installed-message').getAttribute('data-outcome'), 'unverified');
-          await page.locator('#install-message').filter({ hasText: 'Not fully installed:' }).waitFor();
-          assert.equal(await page.locator('#install-message').getAttribute('data-outcome'), null);
-          assert.equal(await page.locator('[data-installed-other]').count(), 2, 'Only the two dependencies remain in inventory.');
-          await page.screenshot({ path: join(output, `${theme}-cancelled-after-progress.png`), fullPage: true });
-          // Clean up the remaining dependencies through their own real reviewed controls.
-          for (let remaining = 2; remaining > 0; remaining--) {
-            const other = page.locator('[data-installed-other]').first();
-            await other.getByRole('button', { name: 'Remove', exact: true }).click();
-            await other.getByRole('button', { name: 'Confirm remove', exact: true }).click();
-            await page.locator('#installed-message').filter({ hasNotText: /^Removing…$/ }).waitFor({ timeout: 120_000 });
-            await page.waitForFunction(count => document.querySelectorAll('[data-installed-other]').length === count, remaining - 1);
-          }
-          break;
-        }
-      }
-      assert.ok(cancelAfterFirst ? rounds === 1 : rounds > 1 && rounds < 5, 'The requested confirmation rounds completed.');
+      await installed.getByRole('button', { name: 'Confirm remove', exact: true }).click();
+      await page.locator('#installed-note').filter({ hasText: 'Nothing from Workbench is installed' }).waitFor({ timeout: 120_000 });
+      assert.deepEqual(lifecycleCalls, ['remove', 'apply'], 'set/member/needed removal is one reviewed removal 1.2 step and one Apply');
       const outcome = await page.locator('#installed-message').getAttribute('data-outcome');
-      assert.ok(['removed', 'unverified'].includes(outcome), await page.locator('#installed-message').innerText());
-      if (outcome === 'unverified') assert.match(await page.locator('#installed-message').innerText(), /did not verify/);
-      await page.locator('#installed-note').filter({ hasText: 'Nothing from Workbench is installed' }).waitFor();
+      assert.equal(outcome, 'removed', await page.locator('#installed-message').innerText());
+      const removalMessage = await page.locator('#installed-message').innerText();
+      assert.match(removalMessage, /grill-me: absent/);
+      assert.match(removalMessage, /grilling: absent/);
+      assert.doesNotMatch(removalMessage, /unverified/i, 'Core run result 1.4 confirms each item absent');
       assert.equal(await page.locator('#installed-list [data-installed-item]').count(), 0);
       await page.locator('#install-message').filter({ hasText: 'Nothing has been installed yet' }).waitFor();
       assert.equal(await page.locator('#install-message').getAttribute('data-outcome'), null, 'Removal clears the old install outcome.');
       await page.screenshot({ path: join(output, `${theme}-removed.png`), fullPage: true });
-      outcomes.push({ theme, rounds, cancelAfterFirst, outcome, message: await page.locator('#installed-message').innerText() });
+      outcomes.push({ theme, rounds: 1, cancelAfterFirst, outcome, message: removalMessage, lifecycleCalls });
       await reopened.close();
     }
     assert.deepEqual(errors, []);
