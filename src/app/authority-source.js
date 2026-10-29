@@ -4,18 +4,25 @@ const REVISION_KEYS = ['resolvedCommit', 'blobId', 'contentDigest'];
 
 export function sourceRows(source) {
   if (!source) return {};
+  if (source.provider === 'local') return { provider: 'local', path: source.fileName };
   return { provider: source.provider, repository: `${source.repository?.owner}/${source.repository?.name}`,
     path: source.path, ref: `${source.revision?.kind} ${source.revision?.value}` };
 }
+// "Policy from {file}" for a local source; a GitHub source keeps its rows.
+export const sourceLabel = source => source?.provider === 'local' ? `Policy from ${source.fileName}` : '';
+// A GitHub read names a commit, blob and content digest; a local file read names its content digest only.
 export function revisionOf(value) {
-  if (!value || REVISION_KEYS.some(key => typeof value[key] !== 'string')) return undefined;
-  return { resolvedCommit: value.resolvedCommit, blobId: value.blobId, contentDigest: value.contentDigest };
+  if (!value || typeof value.contentDigest !== 'string') return undefined;
+  const git = REVISION_KEYS.every(key => typeof value[key] === 'string');
+  if (!git && (value.resolvedCommit !== undefined || value.blobId !== undefined)) return undefined;
+  return git ? { resolvedCommit: value.resolvedCommit, blobId: value.blobId, contentDigest: value.contentDigest } : { contentDigest: value.contentDigest };
 }
 export function compareRevision(previous, next) {
   if (!previous) return 'first';
   return REVISION_KEYS.every(key => previous[key] === next?.[key]) ? 'unchanged' : 'changed';
 }
-const identity = revision => `commit ${revision.resolvedCommit}, blob ${revision.blobId}, digest ${revision.contentDigest}`;
+const identity = revision => revision.resolvedCommit === undefined ? `digest ${revision.contentDigest}`
+  : `commit ${revision.resolvedCommit}, blob ${revision.blobId}, digest ${revision.contentDigest}`;
 export function changeSummary(change, previous, next) {
   if (change === 'changed') return `The organization policy revision changed. Was ${identity(previous)}. Now ${identity(next)}.`;
   if (change === 'unchanged') return `The organization policy revision is unchanged: ${identity(next)}.`;
@@ -41,6 +48,8 @@ export function setupInstructions() {
     '{ "provider": "github", "repository": { "owner": "<owner>", "name": "<repository>" },',
     '  "path": "<path to the organization policy>", "revision": { "kind": "branch", "value": "<name>" } }',
     'revision.kind is branch, tag or commit.',
+    'Or name a local organization policy file:',
+    '{ "provider": "local", "path": "<absolute path to the organization policy file>" }',
     '',
     'Optional credentials go only in the host controls file named by AIH_CONSUMER_CONTROLS:',
     '{ "authentication": { "kind": "bearer", "token": "<token>" } }',

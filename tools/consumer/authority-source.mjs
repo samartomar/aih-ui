@@ -1,12 +1,13 @@
-// Reads the host-configured organization source through Core's reader. The source is
-// host configuration only; callers pass the value given to startConsumer/createHost.
+// Reads the host-configured organization source through Core's reader for its provider: GitHub, or a
+// local file. The source is host configuration only; callers pass the value given to startConsumer/createHost.
 import { parseOrganizationPolicy } from '@aihq/core/contracts';
-import { readGitHubPolicy } from '@aihq/core/harness/runtime';
+import { readGitHubPolicy, readLocalPolicy } from '@aihq/core/harness/runtime';
 
 // Shared with host.inspectAuthority, which also needs the parsed document and reader facts.
 export async function readOrganization({ organizationSource, controls } = {}) {
   const { authentication, signal } = controls ?? {};
-  const read = await readGitHubPolicy(organizationSource, { ...(authentication ? { authentication } : {}), ...(signal ? { signal } : {}) });
+  const read = organizationSource?.provider === 'local' ? await readLocalPolicy(organizationSource, { ...(signal ? { signal } : {}) })
+    : await readGitHubPolicy(organizationSource, { ...(authentication ? { authentication } : {}), ...(signal ? { signal } : {}) });
   if (read.status !== 'read') return { status: 'unreadable', read, diagnostics: [{ code: read.code, reason: read.reason, message: read.message }] };
   const organization = parseOrganizationPolicy(new TextDecoder().decode(read.bytes));
   if (!organization.valid) return { status: 'invalid', read, diagnostics: organization.diagnostics };
