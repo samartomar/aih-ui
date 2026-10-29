@@ -10,6 +10,7 @@ import { readAuthoring, composeAuthoring, editAuthoring, freshAuthoring } from '
 import { pinSelectedRecipes } from './selected-recipe.mjs';
 import { readInstalledPreparedContent } from '@aihq/catalog/node';
 import { parsePolicy, validateRecipe } from '@aihq/core/contracts';
+import { toolBindings } from '@aihq/core/harness';
 
 const catalogRoot = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
 const prepared = await readInstalledPreparedContent({ root: catalogRoot, frameworkId: 'ecc', sourceInput: 'approval-binding-test' });
@@ -20,6 +21,8 @@ const inventories = [{ release: prepared.release, family: prepared.release.frame
 const root = { releaseSha256: prepared.release.sha256, itemId: mcp.id, itemSha256: mcp.itemSha256, scope: 'project', configuration: {}, originIds: ['direct'] };
 // A rendered policy (1.5) renders each per-client recipe for the composing tool, so every composition here names one.
 const freshIntent = () => { const intent = freshAuthoring(); intent.roots.push(structuredClone(root)); pinSelectedRecipes(intent, inventories, root, 'claude'); return intent; };
+// The scopes where Core's published binding places a tool's MCP servers; Core refuses any other (scope-not-bound).
+const mcpScopes = tool => Object.keys(toolBindings.find(binding => binding.tool === tool)?.layouts?.['mcp-server']?.roots ?? {});
 const approvalOp = granted => ({ type: 'mcp-approval', root: { releaseSha256: prepared.release.sha256, itemId: mcp.id, scope: 'project' }, granted });
 
 test('a ticked one-server approval is renderer-produced, retained unchanged on read, and revocable', async () => {
@@ -74,7 +77,9 @@ test('a schema-valid same-ID recipe with altered executable content is not retai
     'the tampered executable content must never ride the id-match into an editable policy');
 });
 
-test('a supported scope transition does not transplant the saved approval', async () => {
+test('a supported scope transition does not transplant the saved approval', {
+  skip: mcpScopes('claude').includes('user') ? false : `Core's claude binding places MCP servers only at ${mcpScopes('claude').join(', ') || 'no'} scope, so no scope transition is supported`,
+}, async () => {
   // Genuine connected transition (Q2 residual): the supported operations change scope by dropping the
   // project root and selecting the same item at user scope - never an invented in-place edit.
   const composed = await composeAuthoring({ intent: freshIntent(), inventories, tool: 'claude', grantApproval: { framework: prepared.release.framework.id, itemId: mcp.id } });
@@ -109,8 +114,14 @@ test('exact unchanged approval survives; a fresh policy under another tool carri
   assert.equal(read.value.editing, 'available', JSON.stringify(read.value.diagnostics));
   // Changed composing tool: the saved selection keeps its recorded claude identity (no rebind), and a
   // fresh compose under another tool carries no claude approval.
-  const other = await composeAuthoring({ intent: freshIntent(), inventories, tool: 'codex' });
-  assert.equal(other.status, 'ok');
+  // Composed where Core's codex binding places MCP servers.
+  const [codexScope] = mcpScopes('codex');
+  assert.ok(codexScope, 'Core binds codex MCP servers at some scope');
+  const otherIntent = freshIntent();
+  otherIntent.roots = otherIntent.roots.map(root => ({ ...root, scope: codexScope }));
+  const other = await composeAuthoring({ intent: otherIntent, inventories, tool: 'codex' });
+  assert.equal(other.status, 'ok', JSON.stringify(other.diagnostics ?? []));
   const foreign = other.value.policy.selections.find(entry => entry.item?.itemId === mcp.id);
+  assert.deepEqual([foreign?.tool, foreign?.scope], ['codex', codexScope]);
   assert.ok(!JSON.stringify(foreign?.recipe ?? {}).includes('approve-server'), 'a fresh policy under another tool carries no approval');
 });
