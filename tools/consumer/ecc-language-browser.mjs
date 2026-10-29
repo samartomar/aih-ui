@@ -22,8 +22,9 @@ await writeFile(sources, JSON.stringify(fixture.scenarios.browse));
 
 const catalogRoot = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
 const inventory = (await installedFamilies({ root: catalogRoot })).find(entry => entry.family === 'ECC');
-const npmCache = await mkdtemp(join(tmpdir(), 'aih-ecc-npm-cache-'));
+const npmCache = process.env.AIH_TEST_NPM_CACHE;
 const npmCli = process.env.npm_execpath;
+assert.ok(npmCache, 'Set AIH_TEST_NPM_CACHE to an existing integrity-verified npm cache');
 assert.ok(npmCli, 'The running npm supplies its actual CLI path');
 const configurations = inventory.release.items.filter(item => item.inputs?.npmCache || item.inputs?.npmCli).map(item => ({
   releaseSha256: inventory.release.sha256, itemId: item.id, scope: 'project',
