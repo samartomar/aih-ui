@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { stable, digestBytes } from './primitives.mjs';
 import { freshAuthoring, composeAuthoring, openDraft, editDraft } from './headless.mjs';
+import { pinSelectedRecipes } from './selected-recipe.mjs';
 import { managementIdOf } from './intent-shape.mjs';
 import * as publicApi from './improvements.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
@@ -1550,13 +1551,14 @@ async function familyScenario(itemId, configuration = {}) {
   const entry = families.find(family => family.release.items.some(i => i.id === itemId)), offered = entry?.release.items.find(i => i.id === itemId);
   assert.ok(offered, `${itemId} is offered by an installed family release.`); assert.ok(found.release.items.some(i => i.id === DIAGNOSING), `${DIAGNOSING} is offered by the maintained release.`);
   const intent = { ...freshAuthoring(), roots: [{ releaseSha256: entry.release.sha256, itemId, itemSha256: offered.itemSha256, scope: offered.scopes[0], configuration, originIds: ['direct'] }] };
-  const base = valueOf(await composeAuthoring({ intent: freshAuthoring(), inventories })), composed = valueOf(await composeAuthoring({ basePolicyBytes: base.policyBytes, intent, inventories }));
+  pinSelectedRecipes(intent, inventories, intent.roots[0], 'claude');
+  const base = valueOf(await composeAuthoring({ intent: freshAuthoring(), inventories })), composed = valueOf(await composeAuthoring({ basePolicyBytes: base.policyBytes, intent, inventories, tool: 'claude' }));
   return { inventories, offered, scope: offered.scopes[0], envelopeBytes: valueOf(await openDraft({ bytes: composed.policyBytes, inventories })).envelopeBytes };
 }
 
 test('an installed ECC family item that runs node ties the node check through the public check; recovery alone and another target give no suggestion', async () => {
   // Composition-only caller inputs; these synthetic paths are never opened or executed.
-  const s = await familyScenario('ecc.claude.mcp.context7', {
+  const s = await familyScenario('ecc.mcp.context7', {
     npmCli: fileURLToPath(new URL('./fixtures/npm-cli.js', import.meta.url)),
     npmCache: fileURLToPath(new URL('./fixtures/npm-cache/', import.meta.url)),
   }), { label } = s.offered, readings = [journalCheck(1, 'failed', 'failed'), journalRepair(2, 'passed'), journalCheck(3, 'failed', 'passed'), journalCheck(4, 'failed', 'failed')];
