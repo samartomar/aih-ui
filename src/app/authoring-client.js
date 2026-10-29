@@ -27,13 +27,13 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
   const headers = { 'x-aih-client': crypto.randomUUID() };
   const listeners = new Set();
   let catalog, bytes = new Uint8Array(), intent, candidate, draftValue, compiled, revision = 0, catalogRevision = 0, hostRevision = 0, folderRevision = 0, reviewEvidence = [], evidenceRevision = 0, recipient, judgments = [], judgmentSummary;
-  let dirty = false, checkpoint, recoveryAvailable, startupSource, selectedTool;
+  let dirty = false, checkpoint, recoveryAvailable, startupSource, selectedTool, selectedToolLabel;
   // The header's canonical tool as ephemeral page context: it rides composing/editing/compiling requests,
   // never the saved policy bytes, and never rebinding a recorded selection's own tool identity. The header
   // hands over the registry entry; requests carry its canonical id string (Core's selectTool names ids only).
   // Tool changes participate in every surface's snapshot (Q6-R2): subscribers (drawer host facts,
   // catalog re-read) must see the new tool, so setTool notifies like any other identity change.
-  const setTool = tool => { selectedTool = typeof tool === 'string' ? tool : tool?.id ?? null; notify(); };
+  const setTool = tool => { selectedTool = typeof tool === 'string' ? tool : tool?.id ?? null; selectedToolLabel = typeof tool === 'string' ? null : tool?.label ?? null; notify(); };
   const artifactBytes = () => draftValue?.envelopeBytes ?? bytes;
   const notify = () => {
     const current = artifactBytes();
@@ -104,7 +104,7 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
   return {
     get dirty() { return dirty; }, get recoveryAvailable() { return recoveryAvailable; }, get startupSource() { return startupSource; },
     get folderRevision() { return folderRevision; },
-    setTool, get tool() { return selectedTool; },
+    setTool, get tool() { return selectedTool; }, get toolLabel() { return selectedToolLabel; },
     markDownloaded(downloaded = bytes) { const current = artifactBytes(); if (current.length !== downloaded.length || current.some((byte, index) => byte !== downloaded[index])) return; dirty = false; checkpoint = current.slice(); notify(); },
     discard() { revision++; candidate = undefined; notify(); },
     get catalog() { return catalog; }, get intent() { return intent; },

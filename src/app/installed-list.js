@@ -29,6 +29,8 @@ export function inventoryState(entry) {
   // exactly; a mixed set degrades to the generic 'changed'.
   const fileStates = (entry.members ?? []).map(member => member.fileState);
   const differing = ['changed', 'missing', 'block-changed', 'block-missing'].filter(state => fileStates.includes(state));
+  // The files whose AIH block was edited or is gone, so the wording can name them.
+  const blockFiles = [...new Set((entry.members ?? []).filter(member => ['block-changed', 'block-missing'].includes(member.fileState)).map(member => member.path))];
   const file = differing.length === 1 ? differing[0]
     : differing.length ? 'changed'
     : fileStates.includes('unchecked') ? 'unchecked'
@@ -39,6 +41,7 @@ export function inventoryState(entry) {
     // block edit is never erased by a sibling changed/missing member. Single-state sets keep their
     // existing exact shape.
     ...(differing.length > 1 ? { files: differing } : {}),
+    ...(blockFiles.length ? { blockFiles } : {}),
     update: entry.updateState ?? 'unknown',
     policy: entry.policyState ?? null,
     approval: entry.approval ?? null,
@@ -50,15 +53,18 @@ export function inventoryState(entry) {
 /** Every in-set origin a selection recorded, all simultaneous memberships retained. */
 export const recordedSets = entry => (entry.origins ?? []).map(origin => origin.set).filter(Boolean);
 
+/** Core's recorded name, or the contract's words for a receipt from before names were recorded. */
+export const recordedName = entry => entry.name ?? `Installed before names were recorded (${entry.managementId})`;
+
 /**
  * Grouping by the recorded set origins of the installed selections, independent of any draft. Selections with
  * no recorded set origin (legacy metadata or direct installs) fall under `set: null`, said explicitly.
  */
-export function originGroups(inventory) {
+export function originGroups(inventory, { name = recordedName } = {}) {
   const groups = new Map();
   for (const entry of inventory?.selections ?? []) {
     const sets = recordedSets(entry);
-    const member = { managementId: entry.managementId, scope: entry.scope, name: entry.name ?? entry.item?.itemId ?? entry.managementId };
+    const member = { managementId: entry.managementId, scope: entry.scope, name: name(entry) };
     if (!sets.length) {
       const key = 'null';
       if (!groups.has(key)) groups.set(key, { set: null, items: [], members: [] });
@@ -85,6 +91,8 @@ export function originGroups(inventory) {
  * each with `neededBy`, the names of those chosen items.
  */
 export function groupInstalled({ inventory, policy, intent, label = () => undefined }) {
+  // Catalog's display name for the recorded item when this page's Catalog still publishes it, else Core's record.
+  const nameOf = entry => (entry.item?.itemId && label(entry.item.itemId)) ?? recordedName(entry);
   if (!inventory || !['complete', 'incomplete'].includes(inventory.status)) {
     const reason = (inventory?.diagnostics ?? []).map(diagnostic => diagnostic.message ?? diagnostic.code).filter(Boolean).join(' ');
     return { readable: false, reason: reason || 'Core did not return the installed list.', partial: true, groups: [], others: [], notInstalled: [], setupInstalled: false };
@@ -98,7 +106,7 @@ export function groupInstalled({ inventory, policy, intent, label = () => undefi
     const itemId = itemByRecipe.get(entry.recipe?.reference?.sha256);
     const recorded = installed.get(entry.managementId);
     return { ...recorded, id: entry.id, itemId: recorded?.item?.itemId ?? itemId, managementId: entry.managementId, scope: entry.scope,
-      name: recorded?.name ?? (itemId && label(itemId)) ?? itemId ?? entry.managementId };
+      name: recorded ? nameOf(recorded) : (itemId && label(itemId)) ?? itemId ?? entry.managementId };
   };
   const withState = item => ({ ...item, state: inventoryState(installed.get(item.managementId) ?? {}) });
   const rootIds = new Set((intent?.roots ?? []).map(root => root.itemId));
@@ -123,12 +131,11 @@ export function groupInstalled({ inventory, policy, intent, label = () => undefi
   const others = inventory.selections.filter(entry => !grouped.has(entry.managementId)).map(entry => {
     const item = known.get(entry.managementId);
     return withState({ ...entry, managementId: entry.managementId, scope: entry.scope, itemId: entry.item?.itemId ?? item?.itemId,
-      name: entry.name ?? item?.name ?? entry.managementId, inSetup: Boolean(item),
-      sets: recordedSets(entry) });
+      name: nameOf(entry), sets: recordedSets(entry) });
   });
   // Core lists every selection of the current setup as installed (matching bytes alone do not show this).
   const setupInstalled = byId.size > 0 && [...byId.values()].every(entry => installed.has(entry.managementId));
   return { readable: true, partial: inventory.status !== 'complete', groups, others, notInstalled: chosen.filter(item => !isInstalled(item)), setupInstalled,
     // Grouping purely from recorded origins, independent of the draft; legacy rows stay explicit under set:null.
-    originGroups: originGroups(inventory) };
+    originGroups: originGroups(inventory, { name: nameOf }) };
 }
