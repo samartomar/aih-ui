@@ -84,7 +84,7 @@ export async function runUi168BlockDriftBrowser({ origin, output, project, playw
     await closePolicyDrawer(page); await openPolicyDrawer(page);
     const drift = page.locator('[data-installed-state="block-changed"]');
     await drift.waitFor();
-    assert.match(await drift.innerText(), /AIH block edited/);
+    assert.match(await drift.innerText(), /The AIH block in AGENTS\.md was edited/);
     assert.ok(await drift.getAttribute('title') ?? await drift.locator('[title]').first().getAttribute('title'));
     await page.screenshot({ path: join(output, `project-basics-drift-${theme}.png`), fullPage: true });
     await writeFile(join(output, `project-basics-drift-${theme}.json`), JSON.stringify({ status: 'passed', drift: await drift.innerText(), errors }, null, 2));

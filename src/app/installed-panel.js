@@ -232,7 +232,10 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       const name = setName(group.set);
       const heading = el('p', 'text-[11px] font-medium text-on-surface-variant', name);
       heading.title = `${group.set.framework}/${group.set.setId}/${group.set.setSha256}`;
-      const { remove: removeSet, area: setArea } = removeControl(group.members.map(member => ({ ...member, origin: { set: group.set } })), [], 'Remove this set');
+      // Core removes only this set's origin: a member another set or a direct choice still owns is kept for it,
+      // and what only this set's own members need goes with them.
+      const alsoPartOf = member => member.alsoIn.length ? `Kept; also part of ${member.alsoIn.map(origin => origin.set ? setName(origin.set) : 'your own choices').join(', ')}` : undefined;
+      const { remove: removeSet, area: setArea } = removeControl([...group.members.map(member => ({ ...member, origin: { set: group.set }, kept: alsoPartOf(member) })), ...group.needs], [], 'Remove this set');
       removeSet.setAttribute('aria-label', `Remove this set: ${name}`);
       const setHead = el('div', 'flex flex-wrap items-center gap-2'); setHead.append(heading, removeSet);
       const rows = el('ul', 'space-y-1');

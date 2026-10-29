@@ -4,7 +4,7 @@ const readyPreparation = result => result?.disposition === 'prepared' && result.
   ? result.preparation : undefined;
 
 export function removalMemberWords(member, entry) {
-  if (member.action === 'keep-shared' || member.reason === 'another-origin') return `Kept; also part of ${entry.origin?.set?.setId ?? 'another set'}`;
+  if (member.action === 'keep-shared' || member.reason === 'another-origin') return entry?.kept ?? 'Kept; also part of another set';
   if (member.action === 'keep-changed' || member.reason === 'managed-content-changed') return 'Kept; changed since install';
   if (member.action === 'keep-required') return 'Kept; still required';
   return member.reason ?? member.action ?? 'Kept';
@@ -16,6 +16,9 @@ function present(entries, result) {
     if (!removal) return { entry, state: 'blocked', files: [], message: 'Core returned no removal for this item.' };
     const files = (removal.members ?? []).map(member => ({ path: member.path, action: member.action, reason: member.reason }));
     const reason = diagnosticWords(removal, result);
+    // Only this origin is released: Core keeps the item, and its files, for the other owner.
+    if (removal.disposition === 'prepared' && removal.change === 'remove-origin')
+      return { entry, state: 'kept-shared', change: removal.change, files, message: entry.kept ?? 'Kept; also part of another set' };
     const state = removal.disposition === 'prepared' ? 'ready'
       : removal.disposition === 'retained' ? 'kept'
       : removal.disposition === 'absent' ? 'absent' : 'blocked';
@@ -25,9 +28,11 @@ function present(entries, result) {
       : `Cannot remove: ${reason || removal.disposition}.`;
     return { entry, state, files, message };
   });
-  const kept = (result.removals ?? []).flatMap((removal, index) => (removal.members ?? [])
+  // One line per kept item and reason (an item's every kept file shares it); an origin-only release is its step's message.
+  const kept = [...new Map((result.removals ?? []).flatMap((removal, index) => removal.change === 'remove-origin' ? [] : (removal.members ?? [])
     .filter(member => member.action?.startsWith('keep-'))
-    .map(member => ({ name: entries[index]?.name ?? removal.managementId, path: member.path, reason: removalMemberWords(member, entries[index]) })));
+    .map(member => ({ name: entries[index]?.name ?? 'An installed item', reason: removalMemberWords(member, entries[index]) })))
+    .map(item => [`${item.name}\u0000${item.reason}`, item])).values()];
   const preparation = readyPreparation(result);
   return { steps, kept, canConfirm: Boolean(preparation) && !steps.some(step => step.state === 'blocked'),
     note: 'Core reviews every requested item together. Shared, changed or required members stay when Core says so.',
@@ -47,13 +52,16 @@ export async function previewRemoval({ entries, request, mode }) {
 
 function memberOutcome(entry, run) {
   if (entry.state === 'kept') return { name: entry.entry.name, state: 'kept', message: entry.message };
-  if (entry.state === 'absent') return { name: entry.entry.name, state: 'absent', message: `${entry.entry.name}: absent` };
+  if (entry.state === 'absent') return { name: entry.entry.name, state: 'absent', message: `${entry.entry.name}: Removed` };
+  if (entry.state === 'kept-shared') return run?.completion === 'complete'
+    ? { name: entry.entry.name, state: 'kept', message: `${entry.entry.name}: ${entry.message}` }
+    : { name: entry.entry.name, state: 'failed', message: `${entry.entry.name}: Couldn't confirm it's kept.${diagnosticWords(run) ? ` ${diagnosticWords(run)}` : ''}` };
   const members = (run?.members ?? []).filter(member => member.managementId === entry.entry.managementId);
   const keptFiles = entry.files.filter(file => file.action?.startsWith('keep-'));
   const keptPaths = new Set(keptFiles.map(file => file.path));
   if (run?.completion === 'complete' && members.length) {
     if (members.every(member => member.outcome === 'restored' && member.check === 'present-matching'))
-      return { name: entry.entry.name, state: 'restored', message: `${entry.entry.name}: restored` };
+      return { name: entry.entry.name, state: 'restored', message: `${entry.entry.name}: Restored` };
     if (members.every(member => member.check === 'absent' || (member.outcome === 'restored' && member.check === 'present-matching') || (keptPaths.has(member.path) && member.outcome === 'kept'))) {
       const kept = members.filter(member => keptPaths.has(member.path) && member.outcome === 'kept');
       if (kept.length) {
@@ -63,7 +71,7 @@ function memberOutcome(entry, run) {
         return { name: entry.entry.name, state: 'kept', message: `${entry.entry.name}: ${[...new Set(reasons)].join('; ') || 'Kept'}` };
       }
       const restored = members.some(member => member.outcome === 'restored');
-      return { name: entry.entry.name, state: restored ? 'restored' : 'absent', message: `${entry.entry.name}: ${restored ? 'restored' : 'absent'}` };
+      return { name: entry.entry.name, state: restored ? 'restored' : 'absent', message: `${entry.entry.name}: ${restored ? 'Restored' : 'Removed'}` };
     }
   }
   const reason = diagnosticWords(run);

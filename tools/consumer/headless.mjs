@@ -66,9 +66,14 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
     if (!entry) return refuse('SOURCE_REVISION_UNAVAILABLE', '/inputs', 'Exact input release unavailable.');
     if (stable(entry.input) !== stable(input)) return refuse('SOURCE_IDENTITY_MISMATCH', '/inputs', 'Acquired input identity differs from the saved snapshot.');
   }
+  // A root that only a saved set put there is the set's member, not a direct choice: Catalog expands it from the
+  // set request, so its recorded origin is that set alone and removing the set removes it. A configured member
+  // stays a root, since only a root carries configuration.
+  const setOriginIds = new Set(setChoicesOf(intent).map(choice => choice.originId));
   const resolution = resolveSelections({ releases: index.releases,
     sets: setChoicesOf(intent).map(choice => choice.request),
-    roots: intent.roots.map(({ releaseSha256, itemId, scope, configuration }) => ({ releaseSha256, itemId, scope, configuration })),
+    roots: intent.roots.filter(root => Object.keys(root.configuration ?? {}).length || root.originIds.some(id => !setOriginIds.has(id)))
+      .map(({ releaseSha256, itemId, scope, configuration }) => ({ releaseSha256, itemId, scope, configuration })),
     skips: intent.exclusions.map(({ releaseSha256, itemId, scope }) => ({ releaseSha256, itemId, scope })) });
   if (resolution.status !== 'ok') return resolution;
   const resolved = resolution.value;

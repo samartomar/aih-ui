@@ -67,22 +67,37 @@ export function originGroups(inventory, { name = recordedName } = {}) {
     const member = { managementId: entry.managementId, scope: entry.scope, name: name(entry) };
     if (!sets.length) {
       const key = 'null';
-      if (!groups.has(key)) groups.set(key, { set: null, items: [], members: [] });
+      if (!groups.has(key)) groups.set(key, { set: null, items: [], members: [], needs: [] });
       groups.get(key).items.push(entry.managementId);
       groups.get(key).members.push(member);
     }
     for (const set of sets) {
       // Exact set provenance identity includes the set digest (Q7): distinct recorded revisions never merge.
       const key = `${set.framework}/${set.setId}/${set.setSha256}`;
-      if (!groups.has(key)) groups.set(key, { set, items: [], members: [] });
+      if (!groups.has(key)) groups.set(key, { set, items: [], members: [], needs: [] });
       if (!groups.get(key).items.includes(entry.managementId)) {
         groups.get(key).items.push(entry.managementId);
-        groups.get(key).members.push(member);
+        // The member's other recorded owners, so a kept member can say which set still has it.
+        groups.get(key).members.push({ ...member, alsoIn: owners(entry).filter(origin => !sameSet(origin.set, set)) });
       }
     }
   }
+  // What removing a set takes besides its members: the items only required by members that this set alone owns.
+  const selections = inventory?.selections ?? [];
+  for (const group of groups.values()) {
+    if (!group.set) continue;
+    const leaving = new Set(selections.filter(entry => recordedSets(entry).some(set => sameSet(set, group.set)) && owners(entry).every(origin => sameSet(origin.set, group.set)))
+      .map(entry => itemKey(entry.item)));
+    group.needs = selections.filter(entry => !owners(entry).length && (entry.origins ?? []).length
+      && entry.origins.every(origin => origin.reasonIncluded === 'required-by' && leaving.has(itemKey(origin.requiredBy))))
+      .map(entry => ({ managementId: entry.managementId, scope: entry.scope, name: name(entry) }));
+  }
   return [...groups.values()];
 }
+// A recorded origin that owns the item (a set or a direct choice), not one that only requires it.
+const owners = entry => (entry.origins ?? []).filter(origin => origin.reasonIncluded !== 'required-by');
+const sameSet = (a, b) => Boolean(a && b) && a.framework === b.framework && a.setId === b.setId && a.setSha256 === b.setSha256;
+const itemKey = item => `${item?.framework}/${item?.itemId}`;
 
 /**
  * {readable, reason?, partial, groups, others, notInstalled, setupInstalled}

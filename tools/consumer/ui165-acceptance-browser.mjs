@@ -136,14 +136,14 @@ export async function runRestartVerifyBrowser({ origin, output, playwrightModule
     await installed.waitFor();
     assert.equal(await installed.count(), 1, 'one recorded Extensions row survives the fresh host');
     assert.ok(await installed.getAttribute('data-installed-other'), 'the Extensions row retains its recorded management id');
-    assert.match(await installed.innerText(), /Not in your setup/, 'recorded inventory is independent of an open draft');
+    assert.doesNotMatch(await installed.innerText(), /Not in your setup/, 'recorded inventory is shown as Core recorded it, never compared with an open draft');
     assert.equal(await list.locator('[data-installed-item]').count(), 0, 'no draft-derived chosen groups are invented');
     if (extraItem) {
       const mixed = recorded(extraName ?? extraItem);
       await mixed.waitFor();
       assert.equal(await mixed.count(), 1, 'one recorded ECC row survives the fresh host');
       assert.ok(await mixed.getAttribute('data-installed-other'), 'the ECC row retains its recorded management id');
-      assert.match(await mixed.innerText(), /Not in your setup/);
+      assert.doesNotMatch(await mixed.innerText(), /Not in your setup/);
     }
     assert.equal(await page.locator('[data-installed-state]').count(), 0, 'a fresh complete install carries no adverse state chips');
     if (project) {
@@ -154,7 +154,7 @@ export async function runRestartVerifyBrowser({ origin, output, playwrightModule
       await closePolicyDrawer(page); await openPolicyDrawer(page);
       const changed = page.locator('[data-installed-state="changed"]');
       await changed.waitFor();
-      assert.match(await changed.innerText(), /Changed since install/);
+      assert.match(await changed.innerText(), /Changed since install \(your tool already uses the changed copy\)/);
       assert.ok(await changed.getAttribute('title') ?? await changed.locator('[title]').first().getAttribute('title'), 'the state chip carries its explanation');
       await page.screenshot({ path: join(output, `adverse-changed-${theme}.png`), fullPage: true });
     }

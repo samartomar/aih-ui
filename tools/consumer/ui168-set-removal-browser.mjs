@@ -55,11 +55,11 @@ export async function runUi168SetRemovalBrowser({ origin, output, playwrightModu
     await set.waitFor();
     const calls = [];
     page.on('request', request => { if (/\/api\/authoring-(remove|apply)$/.test(request.url())) calls.push(request.url().split('authoring-')[1]); });
-    await set.getByRole('button', { name: 'Remove set engineering', exact: true }).click();
+    await set.getByRole('button', { name: 'Remove this set: Engineering', exact: true }).click();
     const preview = set.locator('div').filter({ has: set.getByRole('button', { name: 'Confirm remove', exact: true }) });
     await set.getByRole('button', { name: 'Confirm remove', exact: true }).waitFor();
     const review = await set.innerText();
-    assert.match(review, /Kept:/i, review);
+    assert.match(review, /Kept[;:]/i, review);
     assert.match(review, /keep-(shared|required)|still needed|another installed/i, review);
     await set.getByRole('button', { name: 'Confirm remove', exact: true }).click();
     await page.locator('#installed-message[data-outcome="removed"], #installed-message[data-outcome="nothing-removed"], #installed-message[data-outcome="failed"]').waitFor({ timeout: 120_000 });
