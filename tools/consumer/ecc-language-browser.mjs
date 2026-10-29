@@ -5,7 +5,6 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readInstalledPreparedContent } from '@aihq/catalog/node';
 import { resolveSelections } from '@aihq/catalog/reader';
-import { checkCompatibility, toolBindings } from '@aihq/core/harness';
 import { frameworkFixtures } from './framework-fixtures.mjs';
 import { installedFamilies } from './installed-families.mjs';
 import { addFromCatalog, chooseCatalogFamily, openPolicyDrawer } from './policy-drawer.mjs';
@@ -33,11 +32,6 @@ const configurations = inventory.release.items.filter(item => item.inputs?.npmCa
 }));
 const resolved = resolveSelections({ releases: { [inventory.release.sha256]: inventory.release }, sets: fixture.expected.ecc.requests, roots: configurations, skips: [] });
 assert.equal(resolved.status, 'ok', JSON.stringify(resolved.diagnostics));
-const compatibility = checkCompatibility({ tool: 'claude', platform: { os: process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'macos' : 'linux', arch: process.arch },
-  binding: toolBindings.find(binding => binding.tool === 'claude'), items: resolved.value.selections.map(selection => ({ item: inventory.release.items.find(item => item.id === selection.item.itemId) })) });
-const excluded = compatibility.items.filter(fit => fit.support === 'none' || fit.notRendered || fit.staticBlockers?.length).map(fit => fit.item);
-const requests = fixture.expected.ecc.requests.map(request => ({ ...request,
-  members: [...(request.members ?? []), ...excluded.map(item => ({ item, include: false }))] }));
 const privateInputs = {};
 for (const selection of resolved.value.selections) {
   const item = inventory.release.items.find(candidate => candidate.id === selection.item.itemId);
@@ -99,9 +93,13 @@ try {
   };
   const fresh = await post('new', { mode: 'vibe', tool: 'claude' });
   assert.equal(fresh.status, 'ok', JSON.stringify(fresh.diagnostics));
-  const addedResult = await post('edit', { policyBytes: fresh.value.policyBytes, tool: 'claude',
-    operation: { type: 'select-sets', sets: requests, configurations, tool: 'claude' } });
-  assert.equal(addedResult.status, 'ok', JSON.stringify(addedResult.diagnostics));
+  for (const selection of expectedRules) {
+    const item = inventory.release.items.find(candidate => candidate.id === selection.item.itemId);
+    const addedResult = await post('edit', { policyBytes: fresh.value.policyBytes, tool: 'claude',
+      operation: { type: 'select', root: { releaseSha256: inventory.release.sha256, itemId: item.id, itemSha256: item.itemSha256, scope: 'project', configuration: {}, originIds: ['direct'] }, tool: 'claude' });
+    assert.equal(addedResult.status, 'ok', JSON.stringify(addedResult.diagnostics));
+    fresh.value = addedResult.value;
+  }
   await page.reload();
   await openPolicyDrawer(page);
   const review = await page.locator('#install-review-rows').innerText();
