@@ -82,14 +82,28 @@ export function originGroups(inventory, { name = recordedName } = {}) {
       }
     }
   }
-  // What removing a set takes besides its members: the items only required by members that this set alone owns.
+  // What removing a set takes: every selection whose each recorded origin is this set or a requirement of
+  // something else leaving, found until nothing more leaves. Those go whole; any other member keeps its other
+  // owners and loses only this set's origin.
   const selections = inventory?.selections ?? [];
+  const nameOfItem = item => { const found = selections.find(entry => itemKey(entry.item) === itemKey(item)); return found ? name(found) : item?.itemId; };
   for (const group of groups.values()) {
     if (!group.set) continue;
-    const leaving = new Set(selections.filter(entry => recordedSets(entry).some(set => sameSet(set, group.set)) && owners(entry).every(origin => sameSet(origin.set, group.set)))
-      .map(entry => itemKey(entry.item)));
-    group.needs = selections.filter(entry => !owners(entry).length && (entry.origins ?? []).length
-      && entry.origins.every(origin => origin.reasonIncluded === 'required-by' && leaving.has(itemKey(origin.requiredBy))))
+    const leaving = new Set();
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const entry of selections) {
+        if (leaving.has(itemKey(entry.item)) || !(entry.origins ?? []).length) continue;
+        if (entry.origins.every(origin => sameSet(origin.set, group.set) || (origin.reasonIncluded === 'required-by' && leaving.has(itemKey(origin.requiredBy))))) { leaving.add(itemKey(entry.item)); grew = true; }
+      }
+    }
+    group.members = group.members.map(member => {
+      const entry = selections.find(candidate => candidate.managementId === member.managementId);
+      if (leaving.has(itemKey(entry.item))) return { ...member, leaves: true };
+      const neededBy = (entry.origins ?? []).filter(origin => origin.reasonIncluded === 'required-by' && !leaving.has(itemKey(origin.requiredBy))).map(origin => nameOfItem(origin.requiredBy));
+      return { ...member, neededBy };
+    });
+    group.needs = selections.filter(entry => leaving.has(itemKey(entry.item)) && !group.items.includes(entry.managementId))
       .map(entry => ({ managementId: entry.managementId, scope: entry.scope, name: name(entry) }));
   }
   return [...groups.values()];

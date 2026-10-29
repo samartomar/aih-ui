@@ -59,13 +59,18 @@ export async function runUi168SetRemovalBrowser({ origin, output, playwrightModu
     const preview = set.locator('div').filter({ has: set.getByRole('button', { name: 'Confirm remove', exact: true }) });
     await set.getByRole('button', { name: 'Confirm remove', exact: true }).waitFor();
     const review = await set.innerText();
-    assert.match(review, /Kept[;:]/i, review);
-    assert.match(review, /keep-(shared|required)|still needed|another installed/i, review);
+    // Engineering and Productivity share no member, and what one Engineering member requires of another leaves
+    // with it; anything Core still keeps is named with its reason, never a bare "Kept".
+    const keptLines = review.split('\n').filter(line => /Kept/.test(line));
+    assert.ok(keptLines.every(line => /Kept; (also part of \S|still needed by \S|still required|changed since install)/.test(line)), review);
+    assert.match(review, /: \d+ members are reviewed for removal\./, review);
     await set.getByRole('button', { name: 'Confirm remove', exact: true }).click();
     await page.locator('#installed-message[data-outcome="removed"], #installed-message[data-outcome="nothing-removed"], #installed-message[data-outcome="failed"]').waitFor({ timeout: 120_000 });
     assert.ok(['removed', 'nothing-removed'].includes(await page.locator('#installed-message').getAttribute('data-outcome')), await page.locator('#installed-message').innerText());
     assert.deepEqual(calls, ['remove', 'apply']);
-    assert.match(await page.locator('#installed-message').innerText(), /kept/i);
+    const result = await page.locator('#installed-message').innerText();
+    assert.match(result, /: Removed/, result);
+    assert.doesNotMatch(result, /unverified|Couldn't confirm|: absent/i, result);
     await page.locator('#install-timings > summary').click();
     await assertLifecycleContrast(page);
     await page.screenshot({ path: join(output, `set-removal-${theme}.png`), fullPage: true });
