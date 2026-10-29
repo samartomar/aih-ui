@@ -4,6 +4,7 @@
 // Catalog archive, and, for the index scenarios, Catalog's own published release-index fixtures read by its reader.
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { homeEnvironment } from './consumer/home-environment.mjs';
@@ -18,6 +19,8 @@ Object.assign(process.env, homeEnvironment(join(output, 'home')), { TMPDIR: temp
 delete process.env.AIH_CONSUMER_PROJECT;
 const supplied = { core: resolve(core), scan: resolve(scan), catalog: resolve(catalog) };
 const catalogSha256 = createHash('sha256').update(await readFile(supplied.catalog)).digest('hex');
+const { name, version } = JSON.parse(execFileSync('tar', ['-xzOf', supplied.catalog, 'package/package.json'], { maxBuffer: 1_048_576 }).toString('utf8'));
+const catalogPackage = { name, version };
 const playwrightModule = import.meta.resolve('playwright');
 const scenarios = selected.length ? selected : ['identity', 'prepared', 'unsigned', 'expired', 'rollback-refused', 'conflict'];
 // The first scenario installs the three archives into one consumer; later scenarios reuse those verified packages.
@@ -36,7 +39,7 @@ for (const scenario of scenarios) {
   consumerDir ??= preview.consumerDir;
   try {
     const { runSetupIdentityBrowser } = await import(pathToFileURL(join(preview.consumerDir, 'consumer/setup-identity-browser.mjs')).href);
-    results.push(await runSetupIdentityBrowser({ origin: preview.url.replace(/\/$/, ''), output: directory, playwrightModule, scenario, catalogSha256 }));
+    results.push(await runSetupIdentityBrowser({ origin: preview.url.replace(/\/$/, ''), output: directory, playwrightModule, scenario, catalogSha256, catalogPackage }));
     console.log(`passed: ${scenario}`);
   } catch (error) {
     // Every scenario runs, so one result names each state that fails.

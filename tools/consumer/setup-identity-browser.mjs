@@ -82,7 +82,7 @@ async function openPage(browser, origin, theme, errors) {
   return { context, page };
 }
 
-export async function runSetupIdentityBrowser({ origin, output, playwrightModule, scenario, catalogSha256 }) {
+export async function runSetupIdentityBrowser({ origin, output, playwrightModule, scenario, catalogSha256, catalogPackage }) {
   const { chromium } = await import(playwrightModule);
   const browser = await chromium.launch({ headless: true }); await mkdir(output, { recursive: true });
   const errors = [], outcomes = [];
@@ -90,8 +90,8 @@ export async function runSetupIdentityBrowser({ origin, output, playwrightModule
     for (const theme of ['dark', 'light']) {
       const { context, page } = await openPage(browser, origin, theme, errors);
       if (scenario === 'identity') {
-        // A person adds prepared content, then opens Your setup: the content identity is shown without opening anything,
-        // with the digest of the exact Catalog archive the page loaded.
+        // A person adds prepared content, then opens Your setup: the contract's label is shown as is, and the exact
+        // package, version and digest of the Catalog archive the page loaded are in its details, as data.
         await chooseCatalogFamily(page, 'Extensions');
         // Extensions' own pre-ticked starting sets, added the way a person adds them.
         const added = page.waitForResponse(response => /authoring-(?:draft-edit|edit)$/.test(response.url()));
@@ -99,13 +99,22 @@ export async function runSetupIdentityBrowser({ origin, output, playwrightModule
         assert.equal((await (await added).json()).status, 'ok', 'Catalog resolves the chosen Extensions sets');
         await page.waitForFunction(() => document.getElementById('framework-guidance').textContent.includes('Chosen sets added'));
         await openPolicyDrawer(page);
-        const identity = page.locator('#policy-internal-content');
+        const identity = page.locator('#policy-internal-content'), summary = identity.locator('> summary');
         assert.ok(await identity.isVisible(), 'Your setup shows the content identity of the chosen prepared content');
-        const shown = await page.locator('#policy-review-panel').innerText();
-        assert.ok(shown.includes('Internal content · not verified'), 'The identity says the content is not verified');
-        assert.ok(shown.includes(catalogSha256), `Your setup shows the loaded Catalog archive digest ${catalogSha256}`);
-        const line = identity.locator('summary').getByText(catalogSha256, { exact: false });
-        assert.ok(await line.count() && await line.first().isVisible(), 'The Catalog digest is visible, not folded away');
+        assert.equal((await summary.innerText()).trim(), 'Internal content · not verified', 'The identity reads exactly the contract label');
+        // No wording the contract does not have, and no index status, which belongs to the release index alone.
+        const panel = await page.locator('#policy-review-panel').innerText();
+        for (const invented of [/archive sha256/i, /From @aihq\/catalog/, /the Catalog package/, /Release list not signed yet/]) assert.doesNotMatch(panel, invented, `Your setup shows no ${invented}`);
+        if (!await identity.evaluate(node => node.open)) await summary.click();
+        const details = await identity.locator('pre').innerText();
+        const recorded = JSON.parse(details.slice(details.indexOf('\n') + 1)).map(source => source.materialSource.internalContent);
+        assert.ok(recorded.length > 0, 'The details name the recorded internal content');
+        for (const content of recorded) {
+          assert.equal(content.archiveSha256, catalogSha256, 'The details carry the loaded Catalog archive digest');
+          assert.equal(content.provenance.package.name, catalogPackage.name, 'The details carry the Catalog package name');
+          assert.equal(content.provenance.package.version, catalogPackage.version, 'The details carry the Catalog package version');
+        }
+        assert.ok((await page.locator('#policy-review-panel').innerText()).includes(catalogSha256), 'The opened details show the digest');
         await page.screenshot({ animations: 'disabled', path: join(output, `${theme}-setup-identity.png`) });
       }
       if (scenario in EXPECTED_STATUSES) {
