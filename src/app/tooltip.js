@@ -53,22 +53,36 @@ function host(doc) {
   return node;
 }
 
-/* Drop descriptions nothing on the page refers to any more. */
+/*
+ * Drop descriptions nothing on the page refers to any more. One pass reads every reference on the page, and it runs
+ * once after the current task, when a grid built off-page has been attached; pruning on every new text, with one page
+ * query per description, made a large grid quadratic.
+ */
+let pruneQueued = false;
 function prune(doc) {
+  pruneQueued = false;
   if (nodesByText.size < PRUNE_AT) return;
+  const referenced = new Set();
+  for (const element of doc.querySelectorAll("[aria-describedby]")) for (const id of element.getAttribute("aria-describedby").split(/\s+/)) referenced.add(id);
   for (const [text, node] of nodesByText) {
-    if (!doc.querySelector(`[aria-describedby~="${node.id}"]`)) {
+    if (!referenced.has(node.id)) {
       node.remove();
       nodesByText.delete(text);
     }
   }
 }
 
+function schedulePrune(doc) {
+  if (pruneQueued || nodesByText.size < PRUNE_AT) return;
+  pruneQueued = true;
+  setTimeout(() => prune(doc), 0);
+}
+
 function descriptionId(doc, text) {
   const container = host(doc);
   const known = nodesByText.get(text);
   if (known && known.isConnected) return known.id;
-  prune(doc);
+  schedulePrune(doc);
   const node = doc.createElement("span");
   node.id = `wb-tip-${++sequence}`;
   node.textContent = text;
