@@ -34,3 +34,14 @@ test('no status is guessed: other codes, signed content and an undated offline c
   assert.equal(onlyIndexStatuses(source('a', { code: 'unsigned' }, { code: 'INPUT_INVALID' })), false);
   assert.equal(onlyIndexStatuses(source('a')), false);
 });
+
+test('the status lines and the covered-source rule agree: an undated offline source keeps its own line', () => {
+  const undated = source('mirror', { code: 'offline', message: 'm' });
+  const dated = { ...undated, lastVerifiedAt: '2026-10-01T00:00:00Z' };
+  assert.deepEqual(indexStatuses({ frameworkSources: [undated] }), [], 'no guessed date');
+  assert.equal(onlyIndexStatuses(undated), false, 'so the source is not covered and its failure line is shown');
+  assert.equal(indexStatuses({ frameworkSources: [dated] }).length, 1);
+  assert.equal(onlyIndexStatuses(dated), true, 'a dated offline copy is covered by its status line');
+  for (const value of [undated, dated, source('a', { code: 'expired' }), source('b', { code: 'unsigned' }, { code: 'INPUT_INVALID' })])
+    assert.equal(onlyIndexStatuses(value), value.diagnostics.every(diagnostic => indexStatuses({ frameworkSources: [{ ...value, diagnostics: [diagnostic] }] }).length === 1), 'one rule for both');
+});

@@ -22,7 +22,7 @@ const catalogSha256 = createHash('sha256').update(await readFile(supplied.catalo
 const { name, version } = JSON.parse(execFileSync('tar', ['-xzOf', supplied.catalog, 'package/package.json'], { maxBuffer: 1_048_576 }).toString('utf8'));
 const catalogPackage = { name, version };
 const playwrightModule = import.meta.resolve('playwright');
-const scenarios = selected.length ? selected : ['identity', 'prepared', 'signed', 'unsigned', 'expired', 'rollback-refused', 'conflict'];
+const scenarios = selected.length ? selected : ['identity', 'prepared', 'signed', 'offline-undated', 'unsigned', 'expired', 'rollback-refused', 'conflict'];
 // The first scenario installs the three archives into one consumer; later scenarios reuse those verified packages.
 let consumerDir;
 const results = [];

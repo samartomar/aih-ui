@@ -34,15 +34,17 @@ export async function setupIdentitySources({ directory, scenario, archivePath, a
     const indexPath = join(directory, 'index.json'); await writeFile(indexPath, stable(index) + '\n');
     return { indexes: [{ sourceId: index.sourceId, trust: 'none', path: indexPath, authorizedFrameworks: [entry.frameworkId], releases: [{ sha256: entry.sha256, path: releasePath, root }] }], indexStatePath };
   }
-  if (scenario === 'signed') {
+  if (scenario === 'signed' || scenario === 'offline-undated') {
     // Catalog's published TUF fixture: an index signed under a fixture root, with its timestamp, snapshot and targets
     // metadata. The host verifies it through Catalog's public verifier; the prepared content sits beside it.
-    const tuf = JSON.parse(await bytes('@aihq/catalog/fixtures/release-index/tuf-local.json'));
+    // offline-undated uses the fixture's expired metadata: verification fails, so Catalog reports the source offline with
+    // no verified copy and no date.
+    const tuf = JSON.parse(await bytes('@aihq/catalog/fixtures/release-index/tuf-local.json')), metadata = scenario === 'signed' ? tuf.initial : tuf.expired;
     const file = async (name, value) => { const path = join(directory, name); await writeFile(path, stable(value) + '\n'); return path; };
     await writeFile(indexStatePath, JSON.stringify([{ sourceId: tuf.index.sourceId, lastVersion: 0, lastVerifiedAt: null, lastIndexSha256: null }]));
     return { prepared, indexStatePath, indexes: [{ sourceId: tuf.index.sourceId, path: await file('index.json', tuf.index), authorizedFrameworks: tuf.index.entries.map(entry => entry.frameworkId),
-      tuf: { rootPath: await file('root.json', tuf.root), timestampPath: await file('timestamp.json', tuf.initial.timestamp), snapshotPath: await file('snapshot.json', tuf.initial.snapshot),
-        targetsPath: await file('targets.json', tuf.initial.targets), targetPath: Object.keys(tuf.initial.targets.signed.targets)[0] } }] };
+      tuf: { rootPath: await file('root.json', tuf.root), timestampPath: await file('timestamp.json', metadata.timestamp), snapshotPath: await file('snapshot.json', metadata.snapshot),
+        targetsPath: await file('targets.json', metadata.targets), targetPath: Object.keys(metadata.targets.signed.targets)[0] } }] };
   }
   const fixture = JSON.parse(await bytes(`@aihq/catalog/fixtures/release-index/${INDEX_FIXTURES[scenario]}.json`));
   // The recorded state is the fixture's own (rollback-refused needs the higher version Catalog last accepted).
@@ -67,6 +69,8 @@ const EXPECTED_STATUSES = {
   prepared: {},
   // A TUF-verified index: no status, and never "not signed yet" for prepared content beside it.
   signed: {},
+  // Offline with no recorded date: no contract wording can be filled, so the source keeps its failure line.
+  'offline-undated': {},
   unsigned: { unsigned: 'Release list not signed yet' },
   expired: { expired: "catalog-public's list has expired; not used" },
   'rollback-refused': { 'rollback-refused': 'catalog-public offered an older list; refused' },
@@ -135,6 +139,7 @@ export async function runSetupIdentityBrowser({ origin, output, playwrightModule
         assertStatuses(await page.locator('#framework-navigation').innerText(), scenario, 'The frameworks list');
         assertStatuses(await page.locator('body').innerText(), scenario, 'The page');
         if (scenario === 'signed') assert.match(await page.locator('#framework-navigation').innerText(), /Framework Alpha/, 'The verified index was read: its framework is listed');
+        if (scenario === 'offline-undated') assert.ok((await page.locator('#framework-navigation').innerText()).split('\n').map(line => line.trim()).includes('Release index failed'), 'The undated offline source still shows a line');
         if (['prepared', 'signed'].includes(scenario)) assert.equal(await page.locator('#framework-navigation [data-index-status]').count(), 0, 'No index-status line');
         await page.screenshot({ animations: 'disabled', path: join(output, `${theme}-index-status.png`) });
       }
