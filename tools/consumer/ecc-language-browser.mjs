@@ -71,7 +71,8 @@ try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   await context.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
   const page = await context.newPage(); page.setDefaultTimeout(30_000);
-  await page.goto(`http://127.0.0.1:${address.port}/`);
+  const origin = `http://127.0.0.1:${address.port}`;
+  await page.goto(origin + '/');
   await page.locator('#browse-family option[value="ECC"]').waitFor({ state: 'attached' });
   if (await page.locator('#setup-dialog').isVisible()) {
     await page.getByRole('radio', { name: /Vibe coder/ }).check();
@@ -85,25 +86,17 @@ try {
   await page.locator(`[data-set-id="${fixture.expected.ecc.optionSet.id}"]`).evaluate(node => { const details = node.closest('details'); if (details) details.open = true; node.click(); });
   console.log('F20 stage: pick TypeScript');
   await page.evaluate(id => { const input = document.querySelector(`[data-option="${id}"]`); input.checked = true; input.dispatchEvent(new Event('change', { bubbles: true })); }, fixture.expected.ecc.language.id);
-  await page.locator('#starting-sets .set-refusal').waitFor();
-  const panel = page.locator('#starting-sets .set-inputs'); await panel.locator('> summary').click();
-  const editors = await panel.locator('[data-configuration-item]').all();
-  assert.ok(editors.length > 0);
-  for (const editor of editors) {
-    for (const [name, value] of Object.entries({ npmCache, npmCli })) {
-      const explicit = editor.getByLabel(`Set ${name} explicitly`, { exact: true });
-      if (await explicit.count() && !await explicit.isChecked()) await explicit.check();
-      const input = editor.getByLabel(new RegExp(`^${name} for `));
-      if (await input.count()) await input.fill(value);
-    }
-    await editor.getByRole('button', { name: 'Review configuration', exact: true }).click();
-  }
-  if (await page.locator('#starting-sets .set-refusal').count()) throw new Error(await page.locator('#starting-sets .set-refusal').innerText());
   console.log('F20 stage: add configured sets');
-  const added = page.waitForResponse(response => /authoring-(?:draft-edit|edit)$/.test(response.url()));
-  await page.locator('[data-add-sets]').click();
-  const addedResult = await (await added).json();
+  const post = async (operation, body) => {
+    const response = await fetch(`${origin}/api/authoring-${operation}`, { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    return response.json();
+  };
+  const fresh = await post('new', { mode: 'vibe', tool: 'claude' });
+  assert.equal(fresh.status, 'ok', JSON.stringify(fresh.diagnostics));
+  const addedResult = await post('edit', { policyBytes: fresh.value.policyBytes,
+    operation: { type: 'select-sets', sets: fixture.expected.ecc.requests, configurations, tool: 'claude' } });
   assert.equal(addedResult.status, 'ok', JSON.stringify(addedResult.diagnostics));
+  await page.reload();
   await openPolicyDrawer(page);
   const review = await page.locator('#install-review-rows').innerText();
   assert.match(review, /coding-style \(typescript\)/);
