@@ -7,6 +7,7 @@ import { isCheckedRelease, listItems, configureItem, resolveSelections, validate
 import { checkIntentShape, checkReview, rootKey, pinKey, managementIdOf, AUTHORING_SCHEMA, REVIEW_SCHEMA } from './intent-shape.mjs';
 import { migrateIntent } from './migrate-intent.mjs';
 import { inspectReviewEvidence, compareReviewBindings, describeReviewJudgments, summarizeReviewJudgments } from './review-bindings.mjs';
+import { approvalRecipeStands } from './approval-recipe.mjs';
 import { stable, ok, refuse } from './primitives.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_KINDS } from './journey.mjs';
 // The ./authoring entry: these names and the operations below. inspectReviewEvidence builds the review identities from Scan's readContentCoverage.
@@ -116,7 +117,9 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
     const approvalRecorded = Boolean(prior?.recipe?.inline && prior.tool && prior.recipe.inline.id === `${prior.tool}.${item.id}`);
     const revoked = Boolean(revokeApproval && bundle && revokeApproval.framework === bundle.item.framework && revokeApproval.itemId === item.id);
     if (revoked) approvalRevoked = true;
-    if (approvalRecorded && !ticked && !revoked) recipe = prior.recipe;
+    // Q2: the recorded approval stands only while it matches what the public renderer produces for this
+    // checked item/tool/scope now; the recipe id alone never binds executable operations.
+    if (approvalRecorded && !ticked && !revoked && approvalRecipeStands({ prior, item, scope: selection.scope, renderDelivery: harness.renderDelivery, toolBindings: harness.toolBindings })) recipe = prior.recipe;
     if (revokeApproval && revokeApproval.itemId === item.id && !revoked)
       return refuse('INPUT_INVALID', '/revokeApproval', 'Only the one MCP server being un-allowed may be named, and it must be part of this setup.');
     if (ticked) {

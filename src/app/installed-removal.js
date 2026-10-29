@@ -40,7 +40,7 @@ const waitingMessage = pending => `Core checks this after ${listNames(pending.ma
 // A later round names only the items still to be removed before a waiting one, not those already gone.
 const rewordWaiting = steps => steps.map((step, index) => step.state === 'after'
   ? { ...step, message: waitingMessage(steps.slice(0, index).filter(before => ['ready', 'after'].includes(before.state))) } : step);
-const shownStep = (entry, review) => ({ entry, state: 'ready', files: installFiles(review), message: `${fileCount(review.operations.length)} will be removed.` });
+const shownStep = (entry, review, sessionId) => ({ entry, state: 'ready', files: installFiles(review), message: `${fileCount(review.operations.length)} will be removed.`, ...(sessionId ? { sessionId, reviewDigest: review.reviewDigest } : {}) });
 
 /** The outcome of a removal Apply: removed, unverified (complete but Core ran no check) or failed. */
 export function removalOutcome(run, rows) {
@@ -68,7 +68,7 @@ export async function previewRemoval({ entries, request, mode }) {
     const result = await request('remove', { managementId: entry.managementId, scope: entry.scope, mode });
     const preparation = preparedRemoval(result);
     if (result?.status === 'superseded') { steps.push({ entry, state: 'blocked', files: [], message: 'The page changed while checking. Click Remove again.' }); break; }
-    if (preparation) steps.push(shownStep(entry, preparation.review));
+    if (preparation) steps.push(shownStep(entry, preparation.review, preparation.sessionId));
     else if (result?.disposition === 'retained' && pending.length) {
       steps.push({ entry, state: 'after', files: [], message: waitingMessage(pending) });
     } else if (result?.disposition === 'retained') steps.push({ entry, state: 'kept', files: [], message: `Kept: ${STILL_NEEDED}` });
@@ -101,10 +101,11 @@ export async function confirmRemoval({ preview, request, mode, results: earlier 
       stop(fresh?.status === 'superseded' ? 'superseded' : 'failed', fresh?.status === 'superseded' ? `${name} was not removed: the page changed before it was. Check the list.` : `${name} ${notPrepared(fresh)}`);
       continue;
     }
-    // Prepare again so the approval is for what is on disk now; Core itself decides what is stale.
-    const attempt = await applyIfUnchanged({ prepare: removal, readyPreparation: preparedRemoval, apply: approval => request('apply', approval) });
+    // Apply the removal review that was shown for this step; Core alone calls it stale.
+    const attempt = await applyIfUnchanged({ held: step.sessionId ? { sessionId: step.sessionId, review: { reviewDigest: step.reviewDigest } } : undefined, prepare: removal, readyPreparation: preparedRemoval, apply: approval => request('apply', approval) });
     if (attempt.state === 'not-ready') {
       const fresh = attempt.result;
+      if (attempt.preparation) return finish(results, { steps: rewordWaiting([shownStep(step.entry, attempt.preparation.review, attempt.preparation.sessionId), ...remaining]), canConfirm: true, note: preview.note }, name);
       if (fresh?.status === 'superseded') stop('superseded', `${name} was not removed: the page changed before it was. Check the list.`);
       else if (fresh?.disposition === 'absent') results.push({ name, state: 'absent' });
       else if (fresh?.disposition === 'retained') results.push({ name, state: 'kept', message: STILL_NEEDED });

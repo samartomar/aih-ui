@@ -49,19 +49,38 @@ export function staleReason(...results) {
 }
 
 /**
- * Prepares again and applies with the fresh review's own digest. Core itself refuses or marks stale what
- * changed; the caller shows the fresh review again when Core reports REVIEW_STALE.
+ * Applies the preparation the person actually saw and confirmed (`held`), so the approval binds to the
+ * displayed review — never to unseen fresh work. Core alone compares the held handle against what is on
+ * disk now:
+ * - Core reports REVIEW_STALE: prepare fresh, hand its review back as {state:'stale'} so the caller shows
+ *   it and requires a new confirmation.
+ * - Core refuses the held handle for any other reason: prepare fresh and return {state:'not-ready'} with
+ *   that preparation, so the caller shows a fresh review; nothing is applied.
+ * - Otherwise the held run is the result.
  * `readyPreparation(result)` returns the prepared {sessionId, review} or undefined.
- * Returns {state:'not-ready', result} | {state:'stale', preparation, reason, run?} | {state:'applied', preparation, run}.
+ * Returns {state:'not-ready', result, preparation?, reason?} | {state:'stale', preparation, reason, run?} |
+ * {state:'applied', preparation, run}.
  */
-export async function applyIfUnchanged({ prepare, readyPreparation, apply }) {
+export async function applyIfUnchanged({ held, prepare, readyPreparation, apply }) {
+  if (held?.sessionId && held?.review?.reviewDigest) {
+    const run = await apply({ sessionId: held.sessionId, reviewDigest: held.review.reviewDigest });
+    const reason = staleReason(run);
+    if (!reason && run?.status !== 'refused' && run?.status !== 'superseded') return { state: 'applied', preparation: held, run };
+    if (!reason) {
+      // The shown handle no longer applies (e.g. the session moved on): show a fresh review, ask again.
+      const result = await prepare();
+      const preparation = readyPreparation(result);
+      return { state: 'not-ready', result, preparation, reason: `The shown review could not be applied: ${diagnosticWords(run) || run?.status || 'Core refused it.'}` };
+    }
+    // Core calls the shown review stale: prepare fresh, show its review, require a new confirmation.
+    const result = await prepare();
+    const preparation = readyPreparation(result);
+    if (!preparation) return { state: 'not-ready', result };
+    return { state: 'stale', preparation, reason, run };
+  }
+  // Defensive: nothing was shown, so nothing may be applied; prepare for display only.
   const result = await prepare();
   const preparation = readyPreparation(result);
   if (!preparation) return { state: 'not-ready', result };
-  const reason = staleReason(result, preparation);
-  if (reason) return { state: 'stale', preparation, reason };
-  const run = await apply({ sessionId: preparation.sessionId, reviewDigest: preparation.review.reviewDigest });
-  const stale = staleReason(run);
-  if (stale) return { state: 'stale', preparation, reason: stale, run };
-  return { state: 'applied', preparation, run };
+  return { state: 'stale', preparation, reason: 'No reviewed preparation was shown.' };
 }

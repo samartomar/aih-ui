@@ -182,11 +182,17 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
     let sent = false;
     installing = true; install.disabled = true; install.setAttribute('aria-busy', 'true'); message.textContent = 'Installing…';
     try {
-      // Prepare again so the approval is for what is on disk now; Apply is bound to this fresh review's own
-      // digest. What is stale is Core's call: a REVIEW_STALE diagnostic shows its reason and asks to prepare again.
-      const attemptResult = await applyIfUnchanged({ prepare: () => client.requestHost('prepare'), readyPreparation,
+      // Apply the review the person was shown; Core alone calls it stale. What needs re-showing comes back
+      // as the attempt's preparation; Apply is never bound to work that was not displayed.
+      const attemptResult = await applyIfUnchanged({ held: preview, prepare: () => client.requestHost('prepare'), readyPreparation,
         apply: approval => { sent = true; return client.requestHost('apply', approval); } });
-      if (attemptResult.state === 'not-ready') { message.textContent = `Install did not start: ${refusal(attemptResult.result)}`; return; }
+      if (attemptResult.state === 'not-ready') {
+        if (attemptResult.preparation) {
+          preview = attemptResult.preparation; const rows = show(preview.review, preview.operationSelections ?? []); install.disabled = Boolean(nothingToInstall({ roots: client.intent?.roots ?? [], rows }));
+          message.textContent = `${attemptResult.reason} The list now shows a fresh review — check it and click Install again.`; return;
+        }
+        message.textContent = `Install did not start: ${refusal(attemptResult.result)}`; return;
+      }
       const { preparation } = attemptResult;
       if (attemptResult.state === 'stale') {
         preview = preparation; const rows = show(preparation.review, preparation.operationSelections ?? []); install.disabled = Boolean(nothingToInstall({ roots: client.intent?.roots ?? [], rows }));

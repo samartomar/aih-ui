@@ -245,16 +245,15 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
         try { await onRemove(item); } finally { state.busy.delete(entryId); render(); }
         if (document.activeElement === document.body || !document.activeElement?.isConnected) focusCard(state.chosenId);
       },
-      // The one-server tick: exactly this server, through the ordinary edit operation; the consumer renders
-      // the approval into the recipe. A failure leaves the box unticked and says why (#162).
+      // The one-server tick: exactly this server, through the guarded approval recording; the consumer
+      // renders the approval into the recipe. A failure leaves the box unticked and says why (#162); an
+      // open draft survives and a late reply can never replace a newly opened artifact (#165 Q3).
       approvalOf: approvalGranted,
       onApprove: async (item, granted) => {
         const framework = currentFramework();
-        const result = await authoring.request('edit', { operation: { type: 'mcp-approval', root: { releaseSha256: framework?.sha256, itemId: item.id, scope: 'project' }, granted }, tool: chosenTool?.id });
+        const result = await authoring.recordApproval({ type: 'mcp-approval', root: { releaseSha256: framework?.sha256, itemId: item.id, scope: 'project' }, granted });
+        if (result.status === 'superseded') { render(); return; }
         if (result.status !== 'ok') { render(); throw new Error(result.diagnostics?.map(value => value.message).join(' ') ?? 'The approval was not recorded.'); }
-        // Adopt the composed artifact: the tick changes execution semantics, so the page state, preview and
-        // any saved download must carry it - otherwise the approval exists only in the thrown-away response.
-        if (result.value?.policyBytes) authoring.publish({ policyBytes: result.value.policyBytes, intent: result.value.intent });
         render();
       },
     };

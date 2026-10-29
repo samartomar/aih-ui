@@ -219,6 +219,40 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
     recordImprovement(operation) {
       return recordChoice('improvements-record', operation, 'Open a draft or a saved policy before recording an improvement choice.');
     },
+    // The one-server MCP approval (#162), guarded like a recorded choice: it flows through the open draft
+    // when one exists (the draft is preserved, never discarded), it is serialized with other recordings,
+    // and a late reply can never adopt itself onto a newly opened artifact.
+    recordApproval(operation, message = 'Open a draft or a saved policy before recording the approval.') {
+      const target = artifact;
+      const run = async () => {
+        if (target !== artifact) return { status: 'superseded' };
+        const input = maintenanceInput(), draft = draftValue;
+        if (!input) return refusal('INPUT_INVALID', message);
+        const attempt = ++revision; candidate = undefined; notify();
+        let result;
+        try { result = await request(draft ? 'draft-edit' : 'edit', { ...input, operation, policyBytes: undefined }); }
+        catch (error) { if (attempt !== revision) return { status: 'superseded' }; throw error; }
+        if (attempt !== revision) return { status: 'superseded' };
+        if (result.status === 'ok') {
+          revision++;
+          if (draft) {
+            // The draft survives: the approval edits its envelope; the saved intent it carries is unchanged.
+            draftValue = { ...asDraft(result.value?.draft ?? result.value), fromPolicy: false };
+            compiled = undefined; intent = undefined; bytes = draftValue.savedIntentBytes.slice();
+          } else {
+            draftValue = undefined; compiled = undefined;
+            bytes = Uint8Array.from(result.value.policyBytes); intent = result.value.intent;
+          }
+          keepJudgments(result.value.draft ?? draftValue ?? result.value);
+          notify();
+        }
+        return result;
+      };
+      const next = recording ? recording.then(run, run) : run();
+      const settled = next.then(() => {}, () => {}).then(() => { if (recording === settled) recording = undefined; });
+      recording = settled;
+      return next;
+    },
     readWorkspace() { return workspaceRequest('workspace-read'); },
     planBinding({ memberId, root, replaces } = {}) { return workspaceRequest('workspace-plan', { memberId, root, replaces }); },
     verifyWorkspace() { return workspaceRequest('workspace-verify'); },
