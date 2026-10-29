@@ -1,6 +1,6 @@
-// The release list's index status in the contract's exact words, chosen only from what Catalog reported: per-source
-// release-index diagnostic codes, and the prepared-content status Catalog labels unauthenticated. Other codes are not
-// index statuses and are left to the caller's failure wording.
+// The release list's index status in the contract's exact words, chosen only from what Catalog's release-index reader
+// reported for each index source. Prepared content has no index entry, so it never has an index status. Other codes
+// are not index statuses and are left to the caller's failure wording.
 const WORDS = {
   unsigned: () => 'Release list not signed yet',
   expired: ({ source }) => `${source}'s list has expired; not used`,
@@ -25,9 +25,6 @@ export function indexStatuses(catalog) {
       if (diagnostic.code === 'offline' && !date) continue;
       add(diagnostic.code, words({ source: source.id, framework: diagnostic.frameworkId, version: diagnostic.version, date }), diagnostic.message);
     }
-  }
-  for (const framework of catalog?.frameworks ?? []) {
-    if (framework.kind === 'internal' && framework.internalContent?.status?.authenticated === false) add('unsigned', WORDS.unsigned(), 'Catalog labels this prepared content unauthenticated.');
   }
   return lines;
 }

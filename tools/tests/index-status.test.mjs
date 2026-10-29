@@ -20,11 +20,11 @@ test('each index status Catalog reports reads in the contract\'s exact words', (
   ]);
 });
 
-test('unsigned is said once, including for prepared content Catalog labels unauthenticated', () => {
-  const catalog = { frameworkSources: [source('a', { code: 'unsigned' }), source('b', { code: 'unsigned' })],
-    frameworks: [{ kind: 'internal', internalContent: { status: { authenticated: false } } }] };
-  assert.deepEqual(indexStatuses(catalog).map(line => line.code), ['unsigned']);
-  assert.deepEqual(indexStatuses({ frameworks: [{ kind: 'internal', internalContent: { status: { authenticated: false } } }] }).map(line => line.text), ['Release list not signed yet']);
+test('unsigned is said once, and prepared content never adds an index status', () => {
+  const prepared = [{ kind: 'internal', internalContent: { status: { authenticated: false } } }];
+  assert.deepEqual(indexStatuses({ frameworkSources: [source('a', { code: 'unsigned' }), source('b', { code: 'unsigned' })], frameworks: prepared }).map(line => line.code), ['unsigned']);
+  assert.deepEqual(indexStatuses({ frameworks: prepared }), [], 'prepared-only shows no index status');
+  assert.deepEqual(indexStatuses({ frameworkSources: [{ id: 'signed', state: 'read', diagnostics: [] }], frameworks: prepared }), [], 'a verified index beside prepared content shows none');
 });
 
 test('no status is guessed: other codes, signed content and an undated offline copy show nothing', () => {
