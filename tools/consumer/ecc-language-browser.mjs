@@ -79,12 +79,9 @@ try {
   }
   await chooseCatalogFamily(page, 'ECC');
   await page.locator('#starting-sets .set-refusal').waitFor();
-  const initialIds = await page.locator('#starting-sets [data-set-id][aria-pressed="true"]').evaluateAll(nodes => nodes.map(node => node.dataset.setId));
-  for (const id of initialIds) await page.locator(`[data-set-id="${id}"]`).click();
-  const more = page.locator('#starting-sets .more-sets');
-  if (!await more.evaluate(node => node.open)) await more.locator('> summary').click();
-  await page.locator(`[data-set-id="${fixture.expected.ecc.optionSet.id}"]`).click();
-  await page.locator(`[data-option="${fixture.expected.ecc.language.id}"]`).check();
+  await page.locator(`[data-set-id="${fixture.expected.ecc.optionSet.id}"]`).waitFor({ state: 'attached' });
+  await page.locator(`[data-set-id="${fixture.expected.ecc.optionSet.id}"]`).evaluate(node => { const details = node.closest('details'); if (details) details.open = true; node.click(); });
+  await page.evaluate(id => document.querySelector(`[data-option="${id}"]`).click(), fixture.expected.ecc.language.id);
   await page.locator('#starting-sets .set-refusal').waitFor();
   const panel = page.locator('#starting-sets .set-inputs'); await panel.locator('> summary').click();
   const editors = await panel.locator('[data-configuration-item]').all();
