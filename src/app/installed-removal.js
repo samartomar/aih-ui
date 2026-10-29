@@ -3,6 +3,13 @@ import { applyIfUnchanged, diagnosticWords } from './host-review.js';
 const readyPreparation = result => result?.disposition === 'prepared' && result.preparation?.status === 'ready' && result.preparation.sessionId && result.preparation.review
   ? result.preparation : undefined;
 
+export function removalMemberWords(member, entry) {
+  if (member.action === 'keep-shared' || member.reason === 'another-origin') return `Kept; also part of ${entry.origin?.set?.setId ?? 'another set'}`;
+  if (member.action === 'keep-changed' || member.reason === 'managed-content-changed') return 'Kept; changed since install';
+  if (member.action === 'keep-required') return 'Kept; still required';
+  return member.reason ?? member.action ?? 'Kept';
+}
+
 function present(entries, result) {
   const steps = entries.map((entry, index) => {
     const removal = result.removals?.[index];
@@ -19,8 +26,8 @@ function present(entries, result) {
     return { entry, state, files, message };
   });
   const kept = (result.removals ?? []).flatMap((removal, index) => (removal.members ?? [])
-    .filter(member => member.action.startsWith('keep-'))
-    .map(member => ({ name: entries[index]?.name ?? removal.managementId, path: member.path, reason: member.reason ?? member.action ?? removal.diagnostics?.map(diagnostic => diagnostic.message).filter(Boolean).join(' ') })));
+    .filter(member => member.action?.startsWith('keep-'))
+    .map(member => ({ name: entries[index]?.name ?? removal.managementId, path: member.path, reason: removalMemberWords(member, entries[index]) })));
   const preparation = readyPreparation(result);
   return { steps, kept, canConfirm: Boolean(preparation) && !steps.some(step => step.state === 'blocked'),
     note: 'Core reviews every requested item together. Shared, changed or required members stay when Core says so.',
@@ -42,23 +49,25 @@ function memberOutcome(entry, run) {
   if (entry.state === 'kept') return { name: entry.entry.name, state: 'kept', message: entry.message };
   if (entry.state === 'absent') return { name: entry.entry.name, state: 'absent', message: `${entry.entry.name}: absent` };
   const members = (run?.members ?? []).filter(member => member.managementId === entry.entry.managementId);
-  const keptPaths = new Set(entry.files.filter(file => file.action.startsWith('keep-')).map(file => file.path));
-  const keptReasons = entry.files.filter(file => file.action.startsWith('keep-')).map(file => file.reason).filter(Boolean);
-  if (run?.completion === 'complete' && !members.length && keptPaths.size)
-    return { name: entry.entry.name, state: 'kept', message: `${entry.entry.name}: kept${keptReasons.length ? ` (${keptReasons.join('; ')})` : ''}` };
-  if (run?.completion === 'complete' && !members.length) return { name: entry.entry.name, state: 'absent', message: `${entry.entry.name}: absent` };
+  const keptFiles = entry.files.filter(file => file.action?.startsWith('keep-'));
+  const keptPaths = new Set(keptFiles.map(file => file.path));
   if (run?.completion === 'complete' && members.length) {
     if (members.every(member => member.outcome === 'restored' && member.check === 'present-matching'))
       return { name: entry.entry.name, state: 'restored', message: `${entry.entry.name}: restored` };
     if (members.every(member => member.check === 'absent' || (member.outcome === 'restored' && member.check === 'present-matching') || (keptPaths.has(member.path) && member.outcome === 'kept'))) {
-      const kept = members.some(member => keptPaths.has(member.path) && member.outcome === 'kept');
-      if (kept) return { name: entry.entry.name, state: 'kept', message: `${entry.entry.name}: kept${keptReasons.length ? ` (${keptReasons.join('; ')})` : ''}` };
+      const kept = members.filter(member => keptPaths.has(member.path) && member.outcome === 'kept');
+      if (kept.length) {
+        const reasons = keptFiles.map(file => removalMemberWords(file, entry.entry));
+        const message = `${kept.map(member => member.path).join(', ')}${reasons.length ? ` (${[...new Set(reasons)].join('; ')})` : ''}`;
+        if (members.length > kept.length) return { name: entry.entry.name, state: 'partially-removed', message: `${entry.entry.name}: Partly removed; kept: ${message}` };
+        return { name: entry.entry.name, state: 'kept', message: `${entry.entry.name}: ${[...new Set(reasons)].join('; ') || 'Kept'}` };
+      }
       const restored = members.some(member => member.outcome === 'restored');
       return { name: entry.entry.name, state: restored ? 'restored' : 'absent', message: `${entry.entry.name}: ${restored ? 'restored' : 'absent'}` };
     }
   }
   const reason = diagnosticWords(run);
-  return { name: entry.entry.name, state: 'failed', message: `${entry.entry.name}: Core did not confirm absence or restoration.${reason ? ` ${reason}` : ''}` };
+  return { name: entry.entry.name, state: 'failed', message: `${entry.entry.name}: Couldn't confirm it's gone.${reason ? ` ${reason}` : ''}` };
 }
 
 export async function confirmRemoval({ preview, request, mode }) {
@@ -76,7 +85,7 @@ export async function confirmRemoval({ preview, request, mode }) {
   }
   const results = preview.steps.map(step => memberOutcome(step, attempt.run));
   const failed = results.some(result => result.state === 'failed');
-  return { results, outcome: failed ? 'failed' : results.some(result => ['absent', 'restored'].includes(result.state)) ? 'removed' : 'nothing-removed',
+  return { results, outcome: failed ? 'failed' : results.some(result => ['absent', 'restored', 'partially-removed'].includes(result.state)) ? 'removed' : 'nothing-removed',
     message: results.map(result => result.message).join(' ') };
 }
 

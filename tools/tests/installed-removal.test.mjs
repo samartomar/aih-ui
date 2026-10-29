@@ -44,18 +44,47 @@ test('set origins and kept members retain their exact Core actions and reasons',
   const withOrigins = entries.map(entry => ({ ...entry, origin }));
   const preview = await previewRemoval({ entries: withOrigins, request, mode: 'vibe' });
   assert.deepEqual(preview.selectors.map(entry => entry.origin), [origin, origin]);
-  assert.deepEqual(preview.kept.map(item => item.reason), ['shared-content', 'shared-content']);
+  assert.deepEqual(preview.kept.map(item => item.reason), ['Kept; also part of productivity', 'Kept; also part of productivity']);
   const result = await confirmRemoval({ preview, request, mode: 'vibe' });
   assert.equal(result.outcome, 'nothing-removed');
-  assert.match(result.message, /chosen: kept \(shared-content\)/);
+  assert.match(result.message, /chosen: Kept; also part of productivity/);
 });
 
-test('a complete interrupted cleanup with no touched members is absent, not unverified', async () => {
+test('a complete run with no member evidence cannot confirm absence', async () => {
   const request = async operation => operation === 'remove' ? ready() : { completion: 'complete', diagnostics: [], members: [] };
   const preview = await previewRemoval({ entries: [entries[0]], request, mode: 'vibe' });
   const result = await confirmRemoval({ preview, request, mode: 'vibe' });
+  assert.equal(result.outcome, 'failed');
+  assert.equal(result.results[0].state, 'failed');
+  assert.match(result.results[0].message, /Couldn't confirm it's gone\./);
+});
+
+test('mixed absent and kept members are partly removed and name the kept member', async () => {
+  const origin = { set: { framework: 'extensions', setId: 'productivity', setSha256: 'a'.repeat(64) } };
+  const request = async operation => {
+    if (operation === 'remove') return ready({ removals: [{ managementId: 'm-chosen', disposition: 'prepared', diagnostics: [], members: [
+      { kind: 'file', path: '/project/gone.md', action: 'remove' },
+      { kind: 'file', path: '/project/shared.md', action: 'keep-shared', reason: 'another-origin' },
+    ] }] });
+    return { completion: 'complete', diagnostics: [], members: [
+      { managementId: 'm-chosen', path: '/project/gone.md', outcome: 'removed', check: 'absent' },
+      { managementId: 'm-chosen', path: '/project/shared.md', outcome: 'kept', check: 'unchecked' },
+    ] };
+  };
+  const preview = await previewRemoval({ entries: [{ ...entries[0], origin }], request, mode: 'vibe' });
+  const result = await confirmRemoval({ preview, request, mode: 'vibe' });
   assert.equal(result.outcome, 'removed');
-  assert.equal(result.results[0].state, 'absent');
+  assert.equal(result.results[0].state, 'partially-removed');
+  assert.match(result.results[0].message, /Partly removed; kept: \/project\/shared\.md \(Kept; also part of productivity\)/);
+});
+
+test('a member without an action remains readable and unconfirmed', async () => {
+  const request = async operation => operation === 'remove'
+    ? ready({ removals: [{ managementId: 'm-chosen', disposition: 'prepared', diagnostics: [], members: [{ kind: 'file', path: '/project/unknown.md' }] }] })
+    : { completion: 'complete', diagnostics: [], members: [{ managementId: 'm-chosen', path: '/project/unknown.md', outcome: 'kept', check: 'unchecked' }] };
+  const preview = await previewRemoval({ entries: [entries[0]], request, mode: 'vibe' });
+  const result = await confirmRemoval({ preview, request, mode: 'vibe' });
+  assert.equal(result.results[0].state, 'failed');
 });
 
 test('restored members are reported from run result 1.4', async () => {

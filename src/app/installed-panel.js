@@ -3,7 +3,7 @@
 // and it tells the Install panel whether Core lists the whole setup as installed.
 
 import { groupInstalled } from './installed-list.js';
-import { cancelRemoval, confirmRemoval, previewRemoval } from './installed-removal.js';
+import { cancelRemoval, confirmRemoval, previewRemoval, removalMemberWords } from './installed-removal.js';
 import { confirmUpdate, previewUpdate } from './installed-update.js';
 import { compact } from './compact.js';
 import { iconSpan } from './icons.js';
@@ -59,7 +59,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
     return preview.steps.map(step => {
       const row = el('div', 'space-y-0.5');
       row.append(el('p', 'font-medium', `${step.entry.name}: ${step.message}`));
-      if (step.files?.length) { const paths = el('ul', 'space-y-0.5 font-mono text-[11px]'); paths.append(...step.files.map(file => el('li', '', `${file.action}  ${file.path}`))); row.append(paths); }
+      if (step.files?.length) { const paths = el('ul', 'space-y-0.5 font-mono text-[11px]'); paths.append(...step.files.map(file => el('li', '', `${file.action?.startsWith('keep-') ? removalMemberWords(file, step.entry) : file.action}  ${file.path}`))); row.append(paths); }
       return row;
     });
   }
@@ -91,7 +91,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       }, true);
       confirm.disabled = !preview.canConfirm;
       actions.append(confirm, cancel);
-      area.replaceChildren(...stepRows(preview), ...[...kept, ...(preview.kept ?? [])].map(item => el('p', 'text-on-surface-variant', `Kept: ${item.name}: ${item.reason ?? `still needed by ${(item.neededBy ?? []).join(', ')}`}.`)),
+      area.replaceChildren(...stepRows(preview), ...[...kept, ...(preview.kept ?? [])].map(item => el('p', 'text-on-surface-variant', item.reason ? `${item.name}: ${item.reason}` : `${item.name}: Kept; still needed by ${(item.neededBy ?? []).join(', ')}`)),
         el('p', 'text-on-surface-variant', preview.note), actions);
       area.hidden = false;
     }
