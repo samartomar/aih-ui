@@ -89,7 +89,9 @@ async function openPage(browser, origin, theme, errors) {
   await context.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
   const page = await context.newPage(); page.setDefaultTimeout(30000); page.on('pageerror', error => errors.push(error.message));
   await page.goto(origin + '/');
-  await page.locator('#framework-navigation').filter({ hasNotText: 'Loading frameworks' }).waitFor();
+  // The page's first render after setup takes 20-40s on this content (client-side work after the API calls return, on
+  // D1 and on this branch alike), so it gets its own budget; the assertions below keep the default.
+  await page.locator('#framework-navigation').filter({ hasNotText: 'Loading frameworks' }).waitFor({ timeout: 90000 });
   if (await page.locator('#setup-dialog').isVisible()) {
     await page.getByRole('radio', { name: /Vibe coder/ }).check();
     for (let i = 0; i < 4; i++) await page.locator('#setup-next').click();
