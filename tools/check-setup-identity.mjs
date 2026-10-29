@@ -19,7 +19,7 @@ delete process.env.AIH_CONSUMER_PROJECT;
 const supplied = { core: resolve(core), scan: resolve(scan), catalog: resolve(catalog) };
 const catalogSha256 = createHash('sha256').update(await readFile(supplied.catalog)).digest('hex');
 const playwrightModule = import.meta.resolve('playwright');
-const scenarios = selected.length ? selected : ['prepared', 'unsigned', 'expired', 'rollback-refused', 'conflict'];
+const scenarios = selected.length ? selected : ['identity', 'prepared', 'unsigned', 'expired', 'rollback-refused', 'conflict'];
 // The first scenario installs the three archives into one consumer; later scenarios reuse those verified packages.
 let consumerDir;
 const results = [];
@@ -38,9 +38,15 @@ for (const scenario of scenarios) {
     const { runSetupIdentityBrowser } = await import(pathToFileURL(join(preview.consumerDir, 'consumer/setup-identity-browser.mjs')).href);
     results.push(await runSetupIdentityBrowser({ origin: preview.url.replace(/\/$/, ''), output: directory, playwrightModule, scenario, catalogSha256 }));
     console.log(`passed: ${scenario}`);
+  } catch (error) {
+    // Every scenario runs, so one result names each state that fails.
+    results.push({ status: 'failed', scenario, error: error.message });
+    console.log(`failed: ${scenario}: ${error.message}`);
   } finally { await preview.close(); }
 }
-await writeFile(join(output, 'result.json'), JSON.stringify({ status: 'passed', catalogSha256, results }, null, 2));
+const status = results.every(result => result.status === 'passed') ? 'passed' : 'failed';
+await writeFile(join(output, 'result.json'), JSON.stringify({ status, catalogSha256, results }, null, 2));
+if (status !== 'passed') process.exitCode = 1;
 
 async function freePort() {
   const { createServer } = await import('node:net');

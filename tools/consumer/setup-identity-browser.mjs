@@ -43,6 +43,30 @@ export async function setupIdentitySources({ directory, scenario, archivePath, a
   })), indexStatePath };
 }
 
+// The contract's index-status wordings. A scenario names the exact lines it expects; every other wording must be absent.
+const STATUS_WORDINGS = {
+  unsigned: /Release list not signed yet/,
+  expired: /'s list has expired; not used/,
+  'rollback-refused': / offered an older list; refused/,
+  offline: /Can't reach .+; using the copy from /,
+  'root-revoked': /'s keys were withdrawn; its releases are hidden/,
+  conflict: /Sources disagree about .+; neither is used/,
+};
+const EXPECTED_STATUSES = {
+  prepared: { unsigned: 'Release list not signed yet' },
+  unsigned: { unsigned: 'Release list not signed yet' },
+  expired: { expired: "catalog-public's list has expired; not used" },
+  'rollback-refused': { 'rollback-refused': 'catalog-public offered an older list; refused' },
+  conflict: { unsigned: 'Release list not signed yet', conflict: 'Sources disagree about framework-alpha 1.0.0; neither is used' },
+};
+function assertStatuses(text, scenario, where) {
+  const expected = EXPECTED_STATUSES[scenario], lines = text.split('\n').map(line => line.trim());
+  for (const [code, words] of Object.entries(expected)) assert.ok(lines.includes(words), `${where} says exactly "${words}" for ${code}`);
+  for (const [code, pattern] of Object.entries(STATUS_WORDINGS)) if (!(code in expected)) assert.doesNotMatch(text, pattern, `${where} shows no ${code} wording`);
+  // A release list Catalog read, signed or not, is never called unavailable.
+  assert.doesNotMatch(text, /Release index unavailable/, `${where} does not call the release list unavailable`);
+}
+
 async function openPage(browser, origin, theme, errors) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   await context.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
@@ -83,6 +107,12 @@ export async function runSetupIdentityBrowser({ origin, output, playwrightModule
         const line = identity.locator('summary').getByText(catalogSha256, { exact: false });
         assert.ok(await line.count() && await line.first().isVisible(), 'The Catalog digest is visible, not folded away');
         await page.screenshot({ animations: 'disabled', path: join(output, `${theme}-setup-identity.png`) });
+      }
+      if (scenario in EXPECTED_STATUSES) {
+        // The status is chosen from what Catalog's reader reported for these sources, in the contract's exact words.
+        assertStatuses(await page.locator('#framework-navigation').innerText(), scenario, 'The frameworks list');
+        assertStatuses(await page.locator('body').innerText(), scenario, 'The page');
+        await page.screenshot({ animations: 'disabled', path: join(output, `${theme}-index-status.png`) });
       }
       outcomes.push({ theme, scenario }); await context.close();
     }
