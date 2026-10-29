@@ -2,45 +2,49 @@
 // reviewed Update and Remove lifecycle operations. It reads the inventory itself; lifecycle results refresh it,
 // and it tells the Install panel whether Core lists the whole setup as installed.
 
-import { groupInstalled } from './installed-list.js';
+import { groupInstalled, setRemovalEntries } from './installed-list.js';
 import { cancelRemoval, confirmRemoval, previewRemoval, removalMemberWords } from './installed-removal.js';
 import { confirmUpdate, previewUpdate } from './installed-update.js';
 import { compact } from './compact.js';
 import { iconSpan } from './icons.js';
 import { attachTooltip } from './tooltip.js';
 
-// What Core's redacted 1.1 projection said about one installed selection, each state with its own icon,
-// tooltip and the contract's wording. Core owns these states; nothing here recomputes them (#167). A selection
-// in none of these states shows no state: the list itself is what Core installed, so no row says a bare
-// "Installed".
+// What Core's redacted 1.1 projection said about one installed selection, each state with its own icon and the
+// contract's sentence (workbench-reads, "Your setup"). Core owns these states; nothing here recomputes them (#167).
+// Where the contract has no sentence, or Core does not return the field its sentence needs, the chip shows Core's
+// own value and no made-up words. A selection in none of these states shows no state: the list itself is what Core
+// installed, so no row says a bare "Installed". Each chip's tooltip names the Core field and value it shows.
 const STATE_WORDS = {
-  'update-available': ['update-available', () => 'Update available', 'Core reports a newer offered version of this item.'],
-  'no-longer-offered': ['no-longer-offered', () => 'No longer offered; still installed', 'Core no longer finds this item in the offered index supplied to it.'],
-  superseded: ['no-longer-offered', () => 'Replaced by a newer item', 'Core reports this item replaced by another.'],
-  revoked: ['no-longer-offered', () => 'Withdrawn from the release index; still installed', 'Core reports this item withdrawn from the release index.'],
-  changed: ['changed-since-install', () => 'Changed since install (your tool already uses the changed copy)', 'Core found installed files that differ from what was reviewed.'],
-  missing: ['changed-since-install', () => 'Missing since install', 'Core found installed files missing.'],
-  unchecked: ['changed-since-install', () => 'Not checked yet', 'Core has not checked these files yet.'],
-  'block-changed': ['block-edited', state => `The AIH block in ${blockFiles(state)} was edited`, 'Core found a managed text block edited by hand.'],
-  'block-missing': ['changed-since-install', state => `The AIH block in ${blockFiles(state)} is gone`, 'Core found a managed text block missing.'],
-  interrupted: ['interrupted', state => `Install didn't finish; ${state.written ?? 0} files written`, 'Core reports this selection’s installation was interrupted.'],
-  'granted-by-aih': ['needs-ok', state => `Allowed by AIH in ${state.toolLabel}; removed with the server`, 'The one-server approval was written by AIH as reviewed.'],
-  needed: ['needs-ok', state => `Installed; still needs your OK in ${state.toolLabel}`, 'The tool still needs your OK for this item.'],
-  'policy-refused': ['policy-refused', () => 'Doesn’t meet your organisation’s policy', 'Organization policy state for this item; it is not an offered-index answer.'],
+  'update-available': ['updateState', 'update-available', () => 'Update available'],
+  // "No longer offered ({reason}); still installed", "Replaced by {names}" and "Withdrawn from the release index
+  // ({reason}); still installed" need a reason or names that inventory 1.1 does not return.
+  'no-longer-offered': ['updateState', 'no-longer-offered'],
+  superseded: ['updateState', 'no-longer-offered'],
+  revoked: ['updateState', 'no-longer-offered'],
+  changed: ['fileState', 'changed-since-install', () => 'Changed since install (your tool already uses the changed copy)'],
+  // The contract lists `missing` with no sentence.
+  missing: ['fileState', 'changed-since-install'],
+  unchecked: ['fileState', 'changed-since-install', () => 'Not checked yet'],
+  'block-changed': ['fileState', 'block-edited', state => state.blockFiles?.length ? `The AIH block in ${blockFiles(state)} was edited` : undefined],
+  'block-missing': ['fileState', 'changed-since-install', state => state.blockFiles?.length ? `The AIH block in ${blockFiles(state)} is gone` : undefined],
+  interrupted: ['installState', 'interrupted', state => `Install didn't finish; ${state.written ?? 0} files written`],
+  'granted-by-aih': ['approval', 'needs-ok', state => `Allowed by AIH in ${state.toolLabel}; removed with the server`],
+  needed: ['approval', 'needs-ok', state => `Installed; still needs your OK in ${state.toolLabel}`],
+  'non-compliant': ['policyState', 'policy-refused', () => 'Doesn’t meet your organisation’s policy'],
 };
-const blockFiles = state => (state.blockFiles ?? []).map(path => path.split(/[\\/]/).pop()).join(', ') || 'a file';
+const blockFiles = state => state.blockFiles.map(path => path.split(/[\\/]/).pop()).join(', ');
 function stateBadges(state = {}, el) {
   const chips = [];
-  const add = (key, extra) => { const words = STATE_WORDS[key]; if (!words) return;
+  const add = (key, field = STATE_WORDS[key]?.[0]) => { const words = STATE_WORDS[key]; if (!words) return;
     const chip = el('span', 'inline-flex items-center gap-1 text-[11px]', ''); chip.dataset.installedState = key;
-    chip.append(iconSpan('state', words[0]), el('span', '', words[1](state))); attachTooltip(chip, `${words[2]}${extra ? ` ${extra}` : ''}`); chips.push(chip); };
+    chip.append(iconSpan('state', words[1]), el('span', '', words[2]?.(state) ?? key)); attachTooltip(chip, `Core ${field}: ${key}`); chips.push(chip); };
   if (state.update && state.update !== 'current' && state.update !== 'unknown') add(state.update);
   for (const distinct of state.files ?? (state.file && !['matches', 'unknown'].includes(state.file) ? [state.file] : [])) add(distinct);
   if (state.install === 'interrupted') add('interrupted');
   if (state.approval === 'granted-by-aih') add('granted-by-aih');
   else if (state.approval === 'needed') add('needed');
   // A policy refusal is an organization answer, never 'no longer offered' (Q8).
-  if (state.policy && !['compliant', 'permitted', 'recommended', 'unknown'].includes(state.policy)) add('policy-refused', `Organization policy: ${state.policy}.`);
+  if (state.policy === 'non-compliant') add('non-compliant');
   return chips;
 }
 
@@ -63,7 +67,6 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
   // The name Catalog publishes for the exact recorded set; the set id when this Catalog no longer offers it.
   const setName = set => (client.catalog?.frameworks ?? []).filter(framework => framework.id === set.framework).flatMap(framework => framework.sets ?? [])
     .find(candidate => candidate.id === set.setId && (candidate.setSha256 === undefined || candidate.setSha256 === set.setSha256))?.name ?? set.setId;
-  const fromSets = sets => `From set ${sets.map(setName).join(', ')}`;
   // The recorded tool's label for the approval wording.
   const toolLabel = tool => (tool === client.tool ? client.toolLabel : undefined) ?? tool ?? 'your tool';
   const requestHost = (operation, body) => client.requestHost(operation, body);
@@ -106,7 +109,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       }, true);
       confirm.disabled = !preview.canConfirm;
       actions.append(confirm, cancel);
-      area.replaceChildren(...stepRows(preview), ...[...kept, ...(preview.kept ?? [])].map(item => el('p', 'text-on-surface-variant', item.reason ? `${item.name}: ${item.reason}` : `${item.name}: Kept; still needed by ${(item.neededBy ?? []).join(', ')}`)),
+      area.replaceChildren(...stepRows(preview), ...[...kept, ...(preview.kept ?? [])].map(item => el('p', 'text-on-surface-variant', item.reason ? `${item.name}: ${item.reason}` : `${item.name}: keep-required`)),
         el('p', 'text-on-surface-variant', preview.note), actions);
       area.hidden = false;
     }
@@ -178,7 +181,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
     if (!view.groups.length && !view.others.length) { note.textContent = [note.textContent, 'Nothing from Workbench is installed in this project.'].filter(Boolean).join(' '); return; }
     // Build every interactive row once - badges, removal controls and preview areas unchanged - then
     // place each row under its recorded exact set identity (Q7-R). Simultaneous memberships render in
-    // their first set with an "Also in" note (actions are never duplicated); no-origin rows stay explicit.
+    // their first set, and as a named reference under each further set (actions are never duplicated); no-origin rows stay explicit.
     const pending = new Map();
     // Each state with the label of the tool Core recorded the selection for, which the approval wording names.
     const stated = item => item.state && { ...item.state, toolLabel: toolLabel(item.tool) };
@@ -188,7 +191,6 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       const { remove, area } = removeControl(group.removes, group.kept);
       const head = el('div', 'flex flex-wrap items-center gap-2'); head.append(el('span', 'font-medium', group.name));
       head.append(...stateBadges(stated(group), el));
-      if (group.sets?.length) head.append(el('span', 'text-on-surface-variant text-[11px]', fromSets(group.sets)));
       if (group.needed.length) {
         const fold = el('details', 'text-on-surface-variant'); fold.append(el('summary', '', `+ ${group.needed.length} it needs`));
         const members = el('ul', 'pl-3 space-y-0.5');
@@ -212,17 +214,11 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       const name = el('span', 'font-medium break-all', item.name); name.title = item.managementId;
       const head = el('div', 'flex flex-wrap items-center gap-2'); head.append(name);
       head.append(...stateBadges(stated(item), el));
-      if (item.sets?.length) head.append(el('span', 'text-on-surface-variant text-[11px]', fromSets(item.sets)));
       if (finish) head.append(finish);
       if (update) head.append(update);
       head.append(remove); row.append(head, ...(updateArea ? [updateArea] : []), area);
       states.set(item.managementId, stated(item));
       pending.set(item.managementId, { row, kind: 'other' });
-    }
-    const memberships = new Map();
-    for (const group of view.originGroups ?? []) {
-      if (!group.set) continue;
-      for (const id of group.items) memberships.set(id, [...(memberships.get(id) ?? []), group.set]);
     }
     const rendered = new Set();
     for (const group of view.originGroups ?? []) {
@@ -232,12 +228,11 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       const name = setName(group.set);
       const heading = el('p', 'text-[11px] font-medium text-on-surface-variant', name);
       heading.title = `${group.set.framework}/${group.set.setId}/${group.set.setSha256}`;
-      // Core removes only this set's origin: a member another set or a direct choice still owns is kept for it,
-      // and what only this set's own members need goes with them.
-      const keptWords = member => member.alsoIn.length ? `Kept; also part of ${member.alsoIn.map(origin => origin.set ? setName(origin.set) : 'your own choices').join(', ')}`
-        : member.neededBy?.length ? `Kept; still needed by ${member.neededBy.join(', ')}` : undefined;
-      const removals = group.members.map(({ leaves, neededBy, alsoIn, ...member }) => leaves ? member : { ...member, origin: { set: group.set }, kept: keptWords({ alsoIn, neededBy }) });
-      const { remove: removeSet, area: setArea } = removeControl([...removals, ...group.needs], [], 'Remove this set');
+      // Core removes only this set's origin from a member another set or a direct choice still owns, and what only
+      // this set's own members need goes with them. The contract's sentence names the other set; a member kept only
+      // for a direct choice or a requirement has no sentence, so its removal shows Core's action.
+      const removals = setRemovalEntries(group).map(({ keptFor, ...entry }) => keptFor?.length ? { ...entry, kept: `Kept; also part of ${keptFor.map(setName).join(', ')}` } : entry);
+      const { remove: removeSet, area: setArea } = removeControl(removals, [], 'Remove this set');
       removeSet.setAttribute('aria-label', `Remove this set: ${name}`);
       const setHead = el('div', 'flex flex-wrap items-center gap-2'); setHead.append(heading, removeSet);
       const rows = el('ul', 'space-y-1');
@@ -246,9 +241,6 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
         const entry = pending.get(id);
         if (entry && !rendered.has(id)) {
           rendered.add(id); any = true;
-          const all = memberships.get(id) ?? [];
-          // Q7-R2: every further membership keeps its exact identity, not a bare id.
-          if (all.length > 1) entry.row.children[0].append(el('span', 'text-on-surface-variant text-[11px]', `Also in set ${all.slice(1).map(setName).join(', ')}`));
           rows.append(entry.row);
         } else {
           // No interactive row here (folded under a chosen root, or already placed in another set):

@@ -3,11 +3,11 @@ import { applyIfUnchanged, diagnosticWords } from './host-review.js';
 const readyPreparation = result => result?.disposition === 'prepared' && result.preparation?.status === 'ready' && result.preparation.sessionId && result.preparation.review
   ? result.preparation : undefined;
 
+// The contract's sentence for a kept member ("Kept; also part of {set}") when the other owner is a named set; for any
+// other kept member the contract has no sentence, so Core's action is shown as it is.
 export function removalMemberWords(member, entry) {
-  if (member.action === 'keep-shared' || member.reason === 'another-origin') return entry?.kept ?? 'Kept; also part of another set';
-  if (member.action === 'keep-changed' || member.reason === 'managed-content-changed') return 'Kept; changed since install';
-  if (member.action === 'keep-required') return 'Kept; still required';
-  return member.reason ?? member.action ?? 'Kept';
+  if ((member.action === 'keep-shared' || member.reason === 'another-origin') && entry?.kept) return entry.kept;
+  return member.action ?? member.reason ?? 'keep-shared';
 }
 
 function present(entries, result) {
@@ -18,7 +18,7 @@ function present(entries, result) {
     const reason = diagnosticWords(removal, result);
     // Only this origin is released: Core keeps the item, and its files, for the other owner.
     if (removal.disposition === 'prepared' && removal.change === 'remove-origin')
-      return { entry, state: 'kept-shared', change: removal.change, files, message: entry.kept ?? 'Kept; also part of another set' };
+      return { entry, state: 'kept-shared', change: removal.change, files, message: entry.kept ?? 'keep-shared' };
     const state = removal.disposition === 'prepared' ? 'ready'
       : removal.disposition === 'retained' ? 'kept'
       : removal.disposition === 'absent' ? 'absent' : 'blocked';
@@ -52,26 +52,26 @@ export async function previewRemoval({ entries, request, mode }) {
 
 function memberOutcome(entry, run) {
   if (entry.state === 'kept') return { name: entry.entry.name, state: 'kept', message: entry.message };
-  if (entry.state === 'absent') return { name: entry.entry.name, state: 'absent', message: `${entry.entry.name}: Removed` };
+  // `removed` is the contract's state for a member whose absence Core confirmed; it has no sentence of its own.
+  if (entry.state === 'absent') return { name: entry.entry.name, state: 'absent', message: `${entry.entry.name}: removed` };
   if (entry.state === 'kept-shared') return run?.completion === 'complete'
     ? { name: entry.entry.name, state: 'kept', message: `${entry.entry.name}: ${entry.message}` }
-    : { name: entry.entry.name, state: 'failed', message: `${entry.entry.name}: Couldn't confirm it's kept.${diagnosticWords(run) ? ` ${diagnosticWords(run)}` : ''}` };
+    : { name: entry.entry.name, state: 'failed', message: `${entry.entry.name}: ${run?.completion ?? 'not-applied'}${diagnosticWords(run) ? ` ${diagnosticWords(run)}` : ''}` };
   const members = (run?.members ?? []).filter(member => member.managementId === entry.entry.managementId);
   const keptFiles = entry.files.filter(file => file.action?.startsWith('keep-'));
   const keptPaths = new Set(keptFiles.map(file => file.path));
   if (run?.completion === 'complete' && members.length) {
     if (members.every(member => member.outcome === 'restored' && member.check === 'present-matching'))
-      return { name: entry.entry.name, state: 'restored', message: `${entry.entry.name}: Restored` };
+      return { name: entry.entry.name, state: 'restored', message: `${entry.entry.name}: restored` };
     if (members.every(member => member.check === 'absent' || (member.outcome === 'restored' && member.check === 'present-matching') || (keptPaths.has(member.path) && member.outcome === 'kept'))) {
       const kept = members.filter(member => keptPaths.has(member.path) && member.outcome === 'kept');
       if (kept.length) {
         const reasons = keptFiles.map(file => removalMemberWords(file, entry.entry));
-        const message = `${kept.map(member => member.path).join(', ')}${reasons.length ? ` (${[...new Set(reasons)].join('; ')})` : ''}`;
-        if (members.length > kept.length) return { name: entry.entry.name, state: 'partially-removed', message: `${entry.entry.name}: Partly removed; kept: ${message}` };
-        return { name: entry.entry.name, state: 'kept', message: `${entry.entry.name}: ${[...new Set(reasons)].join('; ') || 'Kept'}` };
+        if (members.length > kept.length) return { name: entry.entry.name, state: 'partially-removed', message: `${entry.entry.name}: Partly removed; kept: ${kept.map(member => member.path).join(', ')}` };
+        return { name: entry.entry.name, state: 'kept', message: `${entry.entry.name}: ${[...new Set(reasons)].join('; ')}` };
       }
       const restored = members.some(member => member.outcome === 'restored');
-      return { name: entry.entry.name, state: restored ? 'restored' : 'absent', message: `${entry.entry.name}: ${restored ? 'Restored' : 'Removed'}` };
+      return { name: entry.entry.name, state: restored ? 'restored' : 'absent', message: `${entry.entry.name}: ${restored ? 'restored' : 'removed'}` };
     }
   }
   const reason = diagnosticWords(run);
