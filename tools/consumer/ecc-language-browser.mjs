@@ -96,8 +96,8 @@ try {
       const input = editor.getByLabel(new RegExp(`^${name} for `));
       if (await input.count()) await input.fill(value);
     }
+    await editor.getByRole('button', { name: 'Review configuration', exact: true }).click();
   }
-  await editors.at(-1).getByRole('button', { name: 'Review configuration', exact: true }).click();
   await page.locator('#starting-sets .set-refusal').waitFor({ state: 'detached' });
   console.log('F20 stage: add configured sets');
   const added = page.waitForResponse(response => /authoring-(?:draft-edit|edit)$/.test(response.url()));
