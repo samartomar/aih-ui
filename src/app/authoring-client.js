@@ -219,31 +219,40 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
     recordImprovement(operation) {
       return recordChoice('improvements-record', operation, 'Open a draft or a saved policy before recording an improvement choice.');
     },
-    // The one-server MCP approval (#162), guarded like a recorded choice: it flows through the open draft
-    // when one exists (the draft is preserved, never discarded), it is serialized with other recordings,
-    // and a late reply can never adopt itself onto a newly opened artifact.
+    // The one-server MCP approval (#162), guarded like a recorded choice: serialized with other recordings,
+    // artifact/revision-guarded so a late reply returns superseded and is never adopted. The ordinary edit
+    // endpoint is the supported mcp-approval route; for an open draft, the draft's saved intent is edited
+    // through it and rewrapped into a fresh envelope (draft-open), preserving the recorded choices the
+    // edited intent carries — draft-edit has no mcp-approval operation and the draft is never discarded.
     recordApproval(operation, message = 'Open a draft or a saved policy before recording the approval.') {
       const target = artifact;
       const run = async () => {
         if (target !== artifact) return { status: 'superseded' };
-        const input = maintenanceInput(), draft = draftValue;
-        if (!input) return refusal('INPUT_INVALID', message);
+        if (!bytes.length && !draftValue) return refusal('INPUT_INVALID', message);
+        const draft = draftValue;
         const attempt = ++revision; candidate = undefined; notify();
         let result;
-        try { result = await request(draft ? 'draft-edit' : 'edit', { ...input, operation, policyBytes: undefined }); }
+        // No `...input` spread: the edit contract reads body.policyBytes, which request() supplies from the
+        // open artifact (for a draft that is its saved intent); body.bytes is not the service contract.
+        try { result = await request('edit', { operation }); }
         catch (error) { if (attempt !== revision) return { status: 'superseded' }; throw error; }
         if (attempt !== revision) return { status: 'superseded' };
         if (result.status === 'ok') {
           revision++;
           if (draft) {
-            // The draft survives: the approval edits its envelope; the saved intent it carries is unchanged.
-            draftValue = { ...asDraft(result.value?.draft ?? result.value), fromPolicy: false };
-            compiled = undefined; intent = undefined; bytes = draftValue.savedIntentBytes.slice();
+            const reopenAttempt = ++revision;
+            const reopened = await request('draft-open', { bytes: [...result.value.policyBytes], policyBytes: undefined });
+            if (reopenAttempt !== revision) return { status: 'superseded' };
+            if (reopened.status !== 'ok') return reopened;
+            draftValue = { ...asDraft(reopened.value), fromPolicy: false };
+            compiled = undefined; intent = undefined;
+            bytes = draftValue.savedIntentBytes.slice();
+            keepJudgments(draftValue);
           } else {
             draftValue = undefined; compiled = undefined;
             bytes = Uint8Array.from(result.value.policyBytes); intent = result.value.intent;
+            keepJudgments(result.value);
           }
-          keepJudgments(result.value.draft ?? draftValue ?? result.value);
           notify();
         }
         return result;
