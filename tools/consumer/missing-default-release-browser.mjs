@@ -42,12 +42,14 @@ export async function runMissingDefaultReleaseBrowser({ origin, baselineOrigin, 
   const [installedDefault, installed, fixture] = [await readInstalledRelease({ root: installedRoot(), sourceInput: 'maintained' }), await installedFamilies(), await installedFamilies({ root: fixtureRoot })];
   assert.deepEqual(fixture.map(entry => [entry.family, entry.release.sha256]), installed.map(entry => [entry.family, entry.release.sha256]), 'The installed families read from the root without a default release.');
   // Without a default release, a root's first release read is its first family release.
-  const firstFamily = installed[0].release.sha256;
+  const firstFamily = (await readInstalledRelease({ root: installedRoot(), release: './release-extensions.json', sourceInput: 'maintained' })).release.sha256;
 
   const browser = await chromium.launch({ headless: true });
   const errors = [], consoleErrors = [];
   const open = async at => {
-    const page = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    await context.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
+    const page = await context.newPage();
     page.setDefaultTimeout(30_000);
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });

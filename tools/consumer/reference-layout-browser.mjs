@@ -15,7 +15,7 @@ export async function runReferenceLayoutBrowser({origin,output,playwrightModule,
   };
   try {
     for(const theme of ['dark','light']) {
-      const context=await browser.newContext({viewport:{width:1440,height:1100}});const page=await context.newPage();page.setDefaultTimeout(30000);page.on('pageerror',e=>errors.push(e.message));await ready(page);
+      const context=await browser.newContext({viewport:{width:1440,height:1100}});await context.addInitScript(()=>localStorage.setItem('wb-your-tool','claude'));const page=await context.newPage();page.setDefaultTimeout(30000);page.on('pageerror',e=>errors.push(e.message));await ready(page);
       const toggle=page.getByRole('button',{name:`Switch to ${theme} mode`,exact:true});if(await toggle.count())await toggle.click();
       assert.equal(await page.evaluate(()=>document.documentElement.dataset.mode),theme);
       const header=await page.locator('body > header').boundingBox();assert.ok(header.height<=64,'Desktop has one compact primary header');

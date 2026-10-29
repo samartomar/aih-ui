@@ -39,7 +39,9 @@ export async function runIntegratedBrowser({ origin, output, playwrightModule })
     return page;
   };
   try {
-    const page = await pageSetup(await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 1000 } }));
+    const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 1000 } });
+    await context.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
+    const page = await pageSetup(context);
     const policy = async p => JSON.parse(await p.locator('#policy-bytes').textContent());
     assert.deepEqual((await policy(page)).metadata['aih.workbench'].roots, []);
     for (const family of ['Extensions', 'ECC', 'Superpowers', 'Anthropic']) assert.equal(await page.locator(`#browse-family option[value="${family}"]`).count(), 1);

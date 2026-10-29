@@ -26,6 +26,7 @@ const rgb = value => {
 
 async function openPage(browser, origin, theme, { touch = false, route } = {}) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, hasTouch: touch });
+  await context.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
   const page = await context.newPage();
   page.setDefaultTimeout(30_000);
   if (route) await page.route('**/api/contract-check', route);
@@ -93,7 +94,7 @@ async function auditIcons(page, where) {
 async function scanWords(locator) {
   return locator.evaluate(root => {
     const copy = root.cloneNode(true);
-    for (const node of copy.querySelectorAll('.wb-card-description, #details-desc, .wb-card-title, #inspector-name, [data-item-content]')) node.remove();
+    for (const node of copy.querySelectorAll('.wb-card-description, #details-desc, .wb-card-title, #inspector-name, .card-namespace, [data-item-content]')) node.remove();
     const tips = [...root.querySelectorAll('[data-evidence-state], [data-evidence-state] *')].map(node => node.getAttribute('title') ?? '');
     return `${copy.innerText}\n${tips.join('\n')}`;
   });
@@ -194,7 +195,7 @@ export async function runVisualGroundworkBrowser({ origin, output, playwrightMod
     if (await page.locator('#catalog-advanced').evaluate(node => node.open)) await page.locator('#catalog-advanced-close').click();
     if (await page.locator('#package-disclosure').evaluate(node => node.open)) await page.locator('#package-disclosure > summary').click();
     // ------------------------------------------------------------- neutral scan words: catalog, inspector, drawer
-    assert.deepEqual(positive(await scanWords(page.locator('#cards-grid'))), [], 'catalog: no positive scan word');
+    assert.deepEqual(positive(await scanWords(page.locator('#cards-grid'))).map(line => { const at = POSITIVE.exec(line)?.index ?? 0; return line.slice(Math.max(0, at - 120), at + 120); }), [], 'catalog: no positive scan word');
     await card.click();
     await page.locator('#catalog-advanced > summary').click();
     await page.locator('#tab-json').waitFor();

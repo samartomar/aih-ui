@@ -114,7 +114,14 @@ try {
     }
   } finally { await new Promise(resolve => missingDefault.server.close(resolve)); }
   const { runSourceFactsBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/source-facts-browser.mjs')));
-  starting('runSourceFactsBrowser'); await runSourceFactsBrowser({ origin, output: join(consumerDir, 'source-facts-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
+  const { installedReleaseInventory } = await import(pathToFileURL(join(consumerDir, 'consumer/installed-families.mjs')));
+  const sourceFactsFixtures = await Promise.all([['Extensions', 'extensions'], ['ECC', 'ecc'], ['Superpowers', 'superpowers'], ['Anthropic', 'anthropic']].map(async ([family, id]) =>
+    ({ family, ...await installedReleaseInventory({ root: catalogRoot, releaseExport: `./release-${id}.json` }) })));
+  const sourceFactsHost = await createWorkbench({ consumerDir, runDir, summary, settingsPath: join(consumerDir, 'source-facts-settings.json'), installedFamilyInventories: sourceFactsFixtures });
+  try {
+    const sourceFactsOrigin = `http://127.0.0.1:${(await listen(sourceFactsHost.server, 0)).port}`;
+    starting('runSourceFactsBrowser'); await runSourceFactsBrowser({ origin: sourceFactsOrigin, output: join(consumerDir, 'source-facts-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href, inventories: sourceFactsFixtures });
+  } finally { await new Promise(resolve => sourceFactsHost.server.close(resolve)); }
   const { runUnresolvedDraftBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/unresolved-draft-browser.mjs')));
   starting('runUnresolvedDraftBrowser'); await runUnresolvedDraftBrowser({ origin, output: join(consumerDir, 'unresolved-draft-evidence'), playwrightModule: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href });
   const { runMaintenanceBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/maintenance-browser.mjs')));

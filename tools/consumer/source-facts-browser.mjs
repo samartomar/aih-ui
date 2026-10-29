@@ -1,4 +1,4 @@
-import { chooseCatalogFamily, chooseCatalogSupport, setPersonalFolder } from './policy-drawer.mjs';
+import { chooseCatalogFamily, setPersonalFolder } from './policy-drawer.mjs';
 // Browser proof uses the ordinary application, public intake and exact installed facts.
 import assert from 'node:assert/strict';
 import { mkdir, writeFile, readFile } from 'node:fs/promises';
@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { addFromCatalog, closePolicyDrawer, drawer, openPolicyDrawer, openSourceDetails } from './policy-drawer.mjs';
 import { openPolicyWorkspace, openScanReview, openSetupAdvanced } from './advanced-browser.mjs';
-export async function runSourceFactsBrowser({ origin, output, playwrightModule }) {
+export async function runSourceFactsBrowser({ origin, output, playwrightModule, inventories = undefined }) {
   const began = performance.now();
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
@@ -28,13 +28,12 @@ export async function runSourceFactsBrowser({ origin, output, playwrightModule }
       for (let step = 0; step < 4; step++) await page.locator('#setup-next').click();
       await page.locator('#setup-dialog').waitFor({ state: 'hidden' });
     }
-    await chooseCatalogSupport(page, 'all');
     await chooseCatalogFamily(page, 'ECC');
     const first = page.locator('#cards-grid [data-card-id]').first();
     await first.click();
     const key = await first.getAttribute('data-card-id');
-    const maintained = (await installedFamilies()).flatMap(entry => entry.release.items.map(item => ({ key: `${entry.release.sha256}/${item.id}`, item }))).find(value => value.key === key)?.item;
-    assert.ok(maintained?.metadata.sourceFacts);
+    const maintained = (inventories ?? await installedFamilies()).flatMap(entry => entry.release.items.map(item => ({ key: `${entry.release.sha256}/${item.id}`, item }))).find(value => value.key === key)?.item;
+    assert.ok(maintained?.metadata.sourceFacts, `source facts not found for card ${key}`);
     assert.equal(await page.locator('#details-desc').textContent(), maintained.metadata.sourceFacts.description.value);
     observed.push({ id: 'maintained', facts: maintained.metadata.sourceFacts, key });
     assert.match(await page.locator('#details-source').textContent(), /Source profile/);

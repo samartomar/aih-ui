@@ -14,7 +14,9 @@ export async function runSimplePathBrowser({ origin, output, playwrightModule, t
   const browser = await chromium.launch({ headless: true });
   const errors = [];
   try {
-    const page = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    await context.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
+    const page = await context.newPage();
     page.setDefaultTimeout(30_000);
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(origin + '/');
@@ -69,7 +71,7 @@ export async function runSimplePathBrowser({ origin, output, playwrightModule, t
     await drawer.waitFor();
     assert.equal(await drawer.locator('#policy-review-panel-title').innerText(), 'Your setup');
     assert.equal(await drawer.locator('#policy-proposal-actions').isVisible(), false, 'Nothing is left waiting to be accepted.');
-    const choice = drawer.locator(`#setup-choices-list > li[data-choice-item="${item}"]`);
+    const choice = drawer.locator(`#setup-choices-list [data-choice-item="${item}"]`);
     await choice.waitFor();
     assert.match(await choice.locator('summary').innerText(), /^\+ \d+ it needs$/);
     const setupAdvanced = drawer.locator('#setup-advanced');
