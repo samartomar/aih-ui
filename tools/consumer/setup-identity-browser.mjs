@@ -34,6 +34,16 @@ export async function setupIdentitySources({ directory, scenario, archivePath, a
     const indexPath = join(directory, 'index.json'); await writeFile(indexPath, stable(index) + '\n');
     return { indexes: [{ sourceId: index.sourceId, trust: 'none', path: indexPath, authorizedFrameworks: [entry.frameworkId], releases: [{ sha256: entry.sha256, path: releasePath, root }] }], indexStatePath };
   }
+  if (scenario === 'signed') {
+    // Catalog's published TUF fixture: an index signed under a fixture root, with its timestamp, snapshot and targets
+    // metadata. The host verifies it through Catalog's public verifier; the prepared content sits beside it.
+    const tuf = JSON.parse(await bytes('@aihq/catalog/fixtures/release-index/tuf-local.json'));
+    const file = async (name, value) => { const path = join(directory, name); await writeFile(path, stable(value) + '\n'); return path; };
+    await writeFile(indexStatePath, JSON.stringify([{ sourceId: tuf.index.sourceId, lastVersion: 0, lastVerifiedAt: null, lastIndexSha256: null }]));
+    return { prepared, indexStatePath, indexes: [{ sourceId: tuf.index.sourceId, path: await file('index.json', tuf.index), authorizedFrameworks: tuf.index.entries.map(entry => entry.frameworkId),
+      tuf: { rootPath: await file('root.json', tuf.root), timestampPath: await file('timestamp.json', tuf.initial.timestamp), snapshotPath: await file('snapshot.json', tuf.initial.snapshot),
+        targetsPath: await file('targets.json', tuf.initial.targets), targetPath: Object.keys(tuf.initial.targets.signed.targets)[0] } }] };
+  }
   const fixture = JSON.parse(await bytes(`@aihq/catalog/fixtures/release-index/${INDEX_FIXTURES[scenario]}.json`));
   // The recorded state is the fixture's own (rollback-refused needs the higher version Catalog last accepted).
   await writeFile(indexStatePath, JSON.stringify(fixture.state));
@@ -53,7 +63,10 @@ const STATUS_WORDINGS = {
   conflict: /Sources disagree about .+; neither is used/,
 };
 const EXPECTED_STATUSES = {
-  prepared: { unsigned: 'Release list not signed yet' },
+  // Prepared content is not a release list: with no index there is no index status at all.
+  prepared: {},
+  // A TUF-verified index: no status, and never "not signed yet" for prepared content beside it.
+  signed: {},
   unsigned: { unsigned: 'Release list not signed yet' },
   expired: { expired: "catalog-public's list has expired; not used" },
   'rollback-refused': { 'rollback-refused': 'catalog-public offered an older list; refused' },
@@ -121,6 +134,8 @@ export async function runSetupIdentityBrowser({ origin, output, playwrightModule
         // The status is chosen from what Catalog's reader reported for these sources, in the contract's exact words.
         assertStatuses(await page.locator('#framework-navigation').innerText(), scenario, 'The frameworks list');
         assertStatuses(await page.locator('body').innerText(), scenario, 'The page');
+        if (scenario === 'signed') assert.match(await page.locator('#framework-navigation').innerText(), /Framework Alpha/, 'The verified index was read: its framework is listed');
+        if (['prepared', 'signed'].includes(scenario)) assert.equal(await page.locator('#framework-navigation [data-index-status]').count(), 0, 'No index-status line');
         await page.screenshot({ animations: 'disabled', path: join(output, `${theme}-index-status.png`) });
       }
       outcomes.push({ theme, scenario }); await context.close();
