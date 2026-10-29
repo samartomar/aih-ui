@@ -75,6 +75,16 @@ if (process.exitCode === 0) {
   process.exitCode = browser.status ?? 1;
 }
 if (process.exitCode === 0) {
+  const controller = spawnSync(process.execPath, [join(output, 'consumer/catalog-controller-browser.mjs')], {
+    cwd: output, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 180_000,
+    env: { ...isolated, PLAYWRIGHT_MODULE: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href }
+  });
+  writeFileSync(join(output, 'catalog-controller-browser.log'), `${controller.stdout ?? ''}${controller.stderr ?? ''}`);
+  process.stdout.write(controller.stdout ?? ''); process.stderr.write(controller.stderr ?? '');
+  if (controller.error) throw controller.error;
+  process.exitCode = controller.status ?? 1;
+}
+if (process.exitCode === 0) {
   // The reviewed-batch journey runs several fresh Core prepares and applies, in a disposable account home, so this stage takes longer.
   // The visual-groundwork journey adds about 50s per theme on a hosted runner (and as much again for its real-engine
   // "can't read" run once Core publishes checkContracts), and the Your tool journey about 65s per theme, so the stage
