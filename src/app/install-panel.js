@@ -109,7 +109,9 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
   const timings = el('details', 'text-on-surface-variant text-[11px]'); timings.id = 'install-timings'; timings.hidden = true;
   const timingsList = el('ul', 'space-y-0.5'); timingsList.id = 'install-timing-rows';
   timings.append(el('summary', '', 'Install time'), timingsList);
-  node.append(title, action, message, firstRunLine, timings);
+  // Items whose required inputs this host cannot supply, each named with "Needs {input}"; Install is not offered for them.
+  const needsList = el('ul', 'space-y-0.5 text-[11px] text-on-surface'); needsList.id = 'install-needs';
+  node.append(title, action, message, needsList, firstRunLine, timings);
 
   let preview, previewing = false, installing = false, shownFor, managed = false, again = false, recoveryManagementId;
   const itemOf = ref => client.catalog?.items.find(item => item.id === ref.itemId && item.root.releaseSha256 === ref.releaseSha256);
@@ -186,7 +188,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
   }
   async function loadPreview() {
     if (previewing || installing) return;
-    previewing = true; preview = undefined; install.disabled = true; message.textContent = 'Checking which files will be added…';
+    previewing = true; preview = undefined; install.disabled = true; message.textContent = 'Checking which files will be added…'; needsList.replaceChildren();
     try {
       const result = recoveryManagementId ? await client.requestHost('finish', { managementId: recoveryManagementId }) : await client.requestHost('prepare');
       if (result.status === 'superseded') { message.textContent = ''; return; }
@@ -204,7 +206,19 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
         const review = result?.preparation?.review ?? result?.review;
         if (review) { showProjectFacts(review); named.replaceChildren(...namedRows(review, result?.preparation?.operationSelections ?? result?.operationSelections ?? [], review?.target?.project)); }
         else { projectFacts.replaceChildren(); named.replaceChildren(); }
-        message.textContent = `Can't install yet: ${refusal(result)}`;
+        const needs = Array.isArray(result?.needs) ? result.needs : [];
+        needsList.replaceChildren(...needs.map(entry => {
+          const row = el('li', ''); row.dataset.needsItem = entry.itemId;
+          row.append(el('span', '', `${entry.name}: `));
+          entry.inputs.forEach((input, index) => {
+            if (index) row.append(el('span', '', ', '));
+            const words = el('span', 'font-medium', `Needs ${input}`); words.dataset.needsInput = input; row.append(words);
+          });
+          return row;
+        }));
+        message.textContent = needs.length
+          ? `Can't install yet: ${needs.length === 1 ? 'this item needs' : `these ${needs.length} items need`} inputs this Workbench can't supply. Nothing was written. Remove ${needs.length === 1 ? 'it' : 'them'} from your setup, or the sets that bring ${needs.length === 1 ? 'it' : 'them'} in.`
+          : `Can't install yet: ${refusal(result)}`;
       }
     } catch (error) { message.textContent = `Can't install yet: ${error.message}`; }
     finally {

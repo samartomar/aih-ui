@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { apply, prepare, prepareManagedRemoval, prepareUpdate, listManagedSelections } from '@aihq/core';
 import { parsePolicy } from '@aihq/core/contracts';
-import { composeAuthoring, freshAuthoring, inlineRecipelessSelections } from './headless.mjs';
+import { composeAuthoring, freshAuthoring, inlineRecipelessSelections, unsuppliedInputs } from './headless.mjs';
 import { pinSelectedRecipes } from './selected-recipe.mjs';
 import { readOrganization } from './authority-source.mjs';
 import { previewPolicyAuthority } from './organization.mjs';
@@ -144,12 +144,21 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
     async prepareSession({ policyText, resolutions, controls } = {}) {
       const parsed = parsePolicy(policyText);
       if (!parsed.valid) return { status: 'invalid', diagnostics: parsed.diagnostics };
+      // The host's private inputs are offered for the selections of this policy only, so a narrower setup or one finished
+      // selection is not refused for values it does not use.
+      const held = controlsFor(controls).privateInputs ?? {};
+      const privateInputs = Object.fromEntries(Object.entries(held).filter(([id]) => parsed.document.selections.some(selection => selection.id === id)));
+      // An item whose required inputs cannot be supplied is named before Core is asked, and nothing is prepared or written.
+      const needs = unsuppliedInputs({ policy: parsed.document, inventories, privateInputs });
+      if (needs.length) return { status: 'invalid', needs, diagnostics: needs.map(entry => ({ code: 'INPUT_INVALID', reason: 'input-needed',
+        path: `/selections/${parsed.document.selections.findIndex(selection => selection.id === entry.selectionId)}`,
+        message: `${entry.name}: ${entry.inputs.map(input => `Needs ${input}`).join(', ')}` })) };
       const authority = await inspectAuthority({ policyText, controls });
       const started = performance.now(), preparation = await prepare(
         { useCase: 'policy', policy: parsed.document, target: { project: projectRoot },
           ...(resolutions ? { resolutions } : {}),
           ...(parsed.document.mode === 'enterprise' ? { organizationSource } : {}) },
-        { ...controlsFor(controls), ...(currentIndex() ? { index: currentIndex() } : {}) }
+        { ...controlsFor(controls), privateInputs, ...(currentIndex() ? { index: currentIndex() } : {}) }
       );
       for (const phase of Object.keys(pending)) { addTiming(preparation.runId, phase, pending[phase]); pending[phase] = 0; }
       addTiming(preparation.runId, 'prepare', performance.now() - started);

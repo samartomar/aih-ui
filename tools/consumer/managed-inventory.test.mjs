@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -103,6 +103,31 @@ test('a recipe-less supporting document finished on its own is prepared beside t
   assert.ok(of(finished.review, notices.id).length > 0);
   assert.deepEqual(of(finished.review, notices.id), of(whole.review, notices.id));
   assert.equal(finished.review.operations.length, of(finished.review, notices.id).length, 'only the document is prepared');
+});
+
+test('an item whose required inputs cannot be supplied is named with "Needs {input}" and nothing is prepared', async t => {
+  const scratch = await mkdtemp(join(tmpdir(), 'aih-needs-inputs-')), projectRoot = join(scratch, 'project');
+  await mkdir(projectRoot, { recursive: true });
+  t.after(async () => { await rm(scratch, { recursive: true, force: true }); });
+  const jira = source.release.items.find(candidate => candidate.id === 'ecc.mcp.jira');
+  const inputs = Object.entries(jira.requirements.inputs);
+  assert.ok(inputs.some(([, input]) => input.sensitive) && inputs.some(([, input]) => !input.sensitive), 'the real jira server reads a secret and plain values');
+  const jiraRoot = { releaseSha256: source.release.sha256, itemId: jira.id, itemSha256: jira.itemSha256, scope: 'project', configuration: {}, originIds: ['direct'] };
+  const intent = freshAuthoring(); intent.roots.push(jiraRoot); pinSelectedRecipes(intent, inventories, jiraRoot, 'claude');
+  const composed = await composeAuthoring({ intent, inventories, tool: 'claude' });
+  assert.equal(composed.status, 'ok', JSON.stringify(composed.diagnostics ?? []));
+  const selection = composed.value.policy.selections.find(candidate => candidate.item?.itemId === jira.id);
+  // The host supplies the secret, and an unrelated selection's private input is not offered to Core.
+  const secrets = Object.fromEntries(inputs.filter(([, input]) => input.sensitive).map(([name]) => [name, `fixture-${name}`]));
+  const supplied = createHost({ projectRoot, materialRoots: { catalog: catalogRoot, 'managed-inventory-index': catalogRoot }, inventories,
+    controls: { logging: 'off', privateInputs: { [selection.id]: secrets, 'catalog-not-in-this-policy': { OTHER: 'x' } } } });
+  const prepared = await supplied.prepareSession({ policyText: new TextDecoder().decode(composed.value.policyBytes) });
+  const plain = inputs.filter(([, input]) => !input.sensitive).map(([name]) => name);
+  assert.equal(prepared.status, 'invalid');
+  assert.deepEqual(prepared.needs, [{ selectionId: selection.id, managementId: selection.managementId, itemId: jira.id, framework: 'ecc', name: selection.name, inputs: plain }]);
+  assert.deepEqual(prepared.diagnostics.map(entry => entry.message), [`${selection.name}: ${plain.map(name => `Needs ${name}`).join(', ')}`]);
+  assert.equal(prepared.sessionId, undefined);
+  assert.deepEqual(await readdir(projectRoot), [], 'nothing is written');
 });
 
 test('all six positive timings stay on the prepare run id and later inventory reads do not accumulate', async t => {

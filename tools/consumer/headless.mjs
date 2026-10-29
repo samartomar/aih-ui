@@ -53,6 +53,18 @@ const itemFor = (inventories, ref) => {
   }
   return undefined;
 };
+// The required inputs Core cannot be given for each selection, by Catalog's `requirements.inputs`. The host supplies a secret
+// as a private input by selection id; any other value could only be the selection's configuration, which Catalog accepts
+// for the item inputs it declares and the selection then carries. Names only: a value is never read or returned here.
+export function unsuppliedInputs({ policy, inventories, privateInputs = {} }) {
+  return (policy?.selections ?? []).flatMap(selection => {
+    const item = selection.item && itemFor(inventories, selection.item)?.item;
+    const missing = Object.entries(item?.requirements?.inputs ?? {}).filter(([name, input]) => input?.required !== false
+      && !(input?.sensitive ? Object.hasOwn(privateInputs[selection.id] ?? {}, name) : Object.hasOwn(selection.configuration ?? {}, name))).map(([name]) => name);
+    return missing.length ? [{ selectionId: selection.id, managementId: selection.managementId, itemId: selection.item.itemId,
+      framework: selection.item.framework, name: selection.name ?? selection.item.itemId, inputs: missing }] : [];
+  });
+}
 // A policy whose recipe-less selections carry the recipes Core renders for them, from the same inventories they were composed
 // from. Core's update and organization admission read inline recipes, and a single selection finished on its own keeps a
 // supporting document's rendering beside items that are not in its policy. A selection that cannot be rendered stays as it is.
