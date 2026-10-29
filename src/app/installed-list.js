@@ -30,7 +30,7 @@ export function inventoryState(entry) {
   const fileStates = (entry.members ?? []).map(member => member.fileState);
   const differing = ['changed', 'missing', 'block-changed', 'block-missing'].filter(state => fileStates.includes(state));
   // The files whose AIH block was edited or is gone, so the wording can name them.
-  const blockFiles = [...new Set((entry.members ?? []).filter(member => ['block-changed', 'block-missing'].includes(member.fileState)).map(member => member.path))];
+  const blockFiles = [...new Set((entry.members ?? []).filter(member => ['block-changed', 'block-missing'].includes(member.fileState)).map(member => member.path).filter(path => typeof path === 'string'))];
   const file = differing.length === 1 ? differing[0]
     : differing.length ? 'changed'
     : fileStates.includes('unchecked') ? 'unchecked'
