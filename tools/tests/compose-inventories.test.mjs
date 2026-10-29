@@ -36,6 +36,16 @@ test('a catalog entry duplicating a KEPT installed sha is deduplicated to one', 
   assert.deepEqual(tags(out), ['installed-ecc', 'ext']);
 });
 
+test('a deduplicated internal-content twin hands its archive identity to the kept installed entry', () => {
+  const internalContent = { archiveSha256: 'archive-sha' };
+  const installed = [entry('ecc', '1.0.0', 'sha-ecc'), entry('extensions', '1.0.0', 'sha-ext')];
+  const catalog = [{ ...entry('ecc', '1.0.0', 'sha-ecc', 'catalog-dup'), internalContent }];
+  const out = composeFamilyInventories({ installed, catalog, fixtures: [] });
+  assert.deepEqual(tags(out), ['installed-ecc', 'installed-extensions']);
+  assert.deepEqual(out[0].internalContent, internalContent);
+  assert.equal(out[1].internalContent, undefined, 'a release without a configured twin gains no identity');
+});
+
 test('two non-fixture releases sharing a framework+version are BOTH kept - genuine ambiguity is never hidden', () => {
   const installed = [entry('ecc', '1.0.0', 'sha-ecc-a')];
   const catalog = [entry('ecc', '1.0.0', 'sha-ecc-b', 'second')];
