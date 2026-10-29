@@ -39,8 +39,21 @@ export async function readFrameworkSources(configuration) {
   const inventories = [], frameworks = [], sources = [];
   if (!configuration) return { inventories, frameworks, sources: [{ state: 'unavailable', message: 'Release index unavailable: no source configured.' }] };
   if (!Array.isArray(configuration.indexes ?? []) || !Array.isArray(configuration.prepared ?? []) || (configuration.indexes?.length ?? 0) > 16 || (configuration.prepared?.length ?? 0) > 16) throw new Error('Supply bounded host source lists.');
+  // One evaluation instant: a TUF proof is bound to the instant it was verified at, and the reader checks it there.
+  const evaluatedAt = new Date().toISOString();
   const requests = await Promise.all((configuration.indexes ?? []).map(async source => {
-    try { return { sourceId: source.sourceId, trust: source.trust, authorizedFrameworks: source.authorizedFrameworks, indexBytes: await bounded(source.path, 1_048_576) }; }
+    try {
+      const indexBytes = await bounded(source.path, 1_048_576);
+      if (!source.tuf) return { sourceId: source.sourceId, trust: source.trust, authorizedFrameworks: source.authorizedFrameworks, indexBytes };
+      // A host-selected TUF root: Catalog's verifier checks the metadata and the index target; only its proof counts.
+      // The proof binds these exact byte arrays, so the reader gets the same ones the verifier checked.
+      const { tuf } = source, trust = { tufRoot: new Uint8Array(await bounded(tuf.rootPath, 1_048_576)) }, exact = new Uint8Array(indexBytes);
+      const metadata = { roots: await Promise.all((tuf.rotationPaths ?? []).map(async path => new Uint8Array(await bounded(path, 1_048_576)))),
+        timestamp: new Uint8Array(await bounded(tuf.timestampPath, 1_048_576)), snapshot: new Uint8Array(await bounded(tuf.snapshotPath, 1_048_576)), targets: new Uint8Array(await bounded(tuf.targetsPath, 1_048_576)) };
+      const verified = typeof catalogNode.verifyReleaseIndexTuf === 'function'
+        ? catalogNode.verifyReleaseIndexTuf({ sourceId: source.sourceId, trust, indexBytes: exact, targetPath: tuf.targetPath, evaluatedAt, metadata }) : { valid: false };
+      return { sourceId: source.sourceId, trust, authorizedFrameworks: source.authorizedFrameworks, indexBytes: exact, ...(verified.valid ? { verification: verified.verification } : {}) };
+    }
     catch { return { sourceId: source.sourceId, trust: source.trust, authorizedFrameworks: source.authorizedFrameworks }; }
   }));
   if (requests.length && typeof reader.readReleaseIndex !== 'function') sources.push({ state: 'unavailable', message: 'Release index unavailable: this Catalog does not publish readReleaseIndex.' });
@@ -51,7 +64,7 @@ export async function readFrameworkSources(configuration) {
       if (!isAbsolute(configuration.indexStatePath ?? '')) throw new Error('A host-owned index state store is required.');
       try { state = JSON.parse(await bounded(configuration.indexStatePath, 1_048_576)); }
       catch (error) { if (error.code !== 'ENOENT') throw error; }
-      result = reader.readReleaseIndex({ evaluatedAt: new Date().toISOString(), state, sources: requests });
+      result = reader.readReleaseIndex({ evaluatedAt, state, sources: requests });
       if (result.sources?.length) {
         const path = configuration.indexStatePath;
         await writeFile(`${path}.next`, JSON.stringify(result.sources.map(source => source.state)));
@@ -60,7 +73,7 @@ export async function readFrameworkSources(configuration) {
     } catch { result = { valid: false, entries: [], sources: [], diagnostics: [{ code: 'INPUT_INVALID', reason: 'state-unavailable' }] }; }
     for (const source of result.sources ?? []) {
       const codes = source.diagnostics.map(value => value.code);
-      sources.push({ id: source.sourceId, state: codes.some(code => code !== 'unsigned') ? 'failed' : 'read',
+      sources.push({ id: source.sourceId, lastVerifiedAt: source.state?.lastVerifiedAt ?? null, state: codes.some(code => code !== 'unsigned') ? 'failed' : 'read',
         message: codes.length ? `Release index: ${codes.includes('unsigned') ? 'not verified (unsigned). ' : ''}${source.diagnostics.filter(value => value.code !== 'unsigned').map(value => `${value.code}: ${value.message}`).join(' ')}` : 'Release index read.', diagnostics: source.diagnostics });
     }
     if (!result.valid && !result.sources?.length) sources.push({ state: 'failed', message: 'Release index failed.', diagnostics: result.diagnostics });
@@ -79,7 +92,8 @@ export async function readFrameworkSources(configuration) {
         inventories.push(inventory); Object.assign(row, { sources: checked.release.sources, description: checked.release.framework.description, sets: checked.release.sets ?? [] }); row.state = 'ready'; row.observations = observation(checked.release);
       } catch { row.state = 'failed'; row.reason = 'Release failed its exact identity or member checks.'; }
     }
-  } else sources.push({ state: 'unavailable', message: 'Release index unavailable: no source configured.' });
+  // With no index, the release list is the configured prepared content, whose status Catalog reports per framework.
+  } else if (!(configuration.prepared?.length)) sources.push({ state: 'unavailable', message: 'Release index unavailable: no source configured.' });
   for (const selected of configuration.prepared ?? []) {
     try {
       if (typeof catalogNode.readInstalledPreparedContent !== 'function') { sources.push({ kind: 'internal', state: 'unavailable', message: 'Internal content unavailable: this Catalog does not publish its installed prepared-content reader.' }); continue; }

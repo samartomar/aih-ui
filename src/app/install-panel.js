@@ -114,6 +114,9 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
   node.append(title, action, message, needsList, firstRunLine, timings);
 
   let preview, previewing = false, installing = false, shownFor, managed = false, again = false, recoveryManagementId;
+  // Core's reason a shown review went stale stays on screen, in the contract's words alone, through the fresh preview that
+  // follows, until the next Install. The refreshed list and the Install button's title carry the rest.
+  let notice;
   const itemOf = ref => client.catalog?.items.find(item => item.id === ref.itemId && item.root.releaseSha256 === ref.releaseSha256);
   const label = ref => { const item = itemOf(ref); return item ? item.label ?? item.id : ref.itemId; };
   const ready = () => Boolean(client.catalog && client.intent && !client.candidate && !(client.draft && !client.compiled));
@@ -197,7 +200,9 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
         showProjectFacts(preparation.review);
         preview = preparation; const rows = show(preparation.review, preparation.operationSelections ?? []);
         const reason = nothingToInstall({ roots: client.intent?.roots ?? [], rows });
-        install.disabled = Boolean(reason); message.textContent = reason || installSummary(rows, { managed }).message;
+        const summary = reason || installSummary(rows, { managed }).message;
+        install.disabled = Boolean(reason); message.textContent = notice ?? summary;
+        if (notice) message.dataset.outcome = 'stale';
         install.title = reason || 'Install your setup into this project folder.';
       } else {
         files.replaceChildren(); filesHeading.textContent = 'What will be installed';
@@ -240,7 +245,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
   async function run() {
     if (!preview || installing || install.disabled) return;
     let sent = false, runId;
-    installing = true; install.disabled = true; install.setAttribute('aria-busy', 'true'); message.textContent = 'Installing…';
+    installing = true; install.disabled = true; install.setAttribute('aria-busy', 'true'); message.textContent = 'Installing…'; notice = undefined;
     try {
       // Apply the review the person was shown; Core alone calls it stale. What needs re-showing comes back
       // as the attempt's preparation; Apply is never bound to work that was not displayed.
@@ -258,7 +263,8 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
       if (attemptResult.state === 'superseded') { message.textContent = 'Install was sent, but the page changed before its result arrived, so this page cannot determine whether files were written. Inspect what is installed in this project before trying again.'; message.dataset.outcome = 'superseded'; return; }
       if (attemptResult.state === 'stale') {
         preview = preparation; const rows = show(preparation.review, preparation.operationSelections ?? []); install.disabled = Boolean(nothingToInstall({ roots: client.intent?.roots ?? [], rows }));
-        message.textContent = `The reviewed setup changed: ${attemptResult.reason} The list now shows what would happen — check it and click Install again.`; return;
+        notice = attemptResult.reason; message.dataset.outcome = 'stale';
+        message.textContent = notice; return;
       }
       runId = preparation.runId;
       const outcome = installOutcome(attemptResult.run, installFiles(preparation.review), preparation.review.target?.project);

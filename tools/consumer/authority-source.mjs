@@ -1,16 +1,21 @@
-// Reads the host-configured organization source through Core's reader. The source is
-// host configuration only; callers pass the value given to startConsumer/createHost.
+// Reads the host-configured organization source through Core's reader for its provider: GitHub, or a
+// local file. The source is host configuration only; callers pass the value given to startConsumer/createHost.
 import { parseOrganizationPolicy } from '@aihq/core/contracts';
-import { readGitHubPolicy } from '@aihq/core/harness/runtime';
+import { readGitHubPolicy, readLocalPolicy } from '@aihq/core/harness/runtime';
+import { basename } from 'node:path';
+
+// What the page may see of a source: a local file by its file name only; its folder stays on the host.
+export const pageSource = source => source?.provider === 'local' ? { provider: 'local', fileName: basename(String(source.path ?? '')) } : source;
 
 // Shared with host.inspectAuthority, which also needs the parsed document and reader facts.
 export async function readOrganization({ organizationSource, controls } = {}) {
   const { authentication, signal } = controls ?? {};
-  const read = await readGitHubPolicy(organizationSource, { ...(authentication ? { authentication } : {}), ...(signal ? { signal } : {}) });
+  const read = organizationSource?.provider === 'local' ? await readLocalPolicy(organizationSource, { ...(signal ? { signal } : {}) })
+    : await readGitHubPolicy(organizationSource, { ...(authentication ? { authentication } : {}), ...(signal ? { signal } : {}) });
   if (read.status !== 'read') return { status: 'unreadable', read, diagnostics: [{ code: read.code, reason: read.reason, message: read.message }] };
   const organization = parseOrganizationPolicy(new TextDecoder().decode(read.bytes));
   if (!organization.valid) return { status: 'invalid', read, diagnostics: organization.diagnostics };
-  const authority = { source: read.source, resolvedCommit: read.resolvedCommit, blobId: read.blobId, contentDigest: read.contentDigest,
+  const authority = { source: pageSource(read.source), resolvedCommit: read.resolvedCommit, blobId: read.blobId, contentDigest: read.contentDigest,
     policyId: organization.document.id, retrievedAt: read.retrievedAt, helper: read.helper, accounting: read.accounting };
   return { status: 'ok', read, organization: organization.document, authority, diagnostics: [] };
 }
@@ -18,6 +23,6 @@ export async function readOrganization({ organizationSource, controls } = {}) {
 export async function readAuthoritySource({ organizationSource, controls } = {}) {
   if (organizationSource === undefined) return { status: 'not-configured', source: null, authority: null, diagnostics: [] };
   const result = await readOrganization({ organizationSource, controls });
-  if (result.status === 'ok') return { status: 'ok', source: result.read.source, authority: result.authority, diagnostics: [] };
-  return { status: 'refused', source: result.read.source ?? null, authority: null, diagnostics: result.diagnostics };
+  if (result.status === 'ok') return { status: 'ok', source: pageSource(result.read.source), authority: result.authority, diagnostics: [] };
+  return { status: 'refused', source: pageSource(result.read.source ?? null), authority: null, diagnostics: result.diagnostics };
 }
