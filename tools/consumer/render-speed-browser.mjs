@@ -35,7 +35,8 @@ export async function runRenderSpeedBrowser({ origin, output, playwrightModule, 
       const apiDone = Math.max(started, ...answered.map(response => response.at));
       const tasks = await page.evaluate(() => window.__longTasks);
       const mainThreadMs = Math.round(tasks.filter(task => task.at >= started && task.at <= done).reduce((sum, task) => sum + task.ms, 0));
-      steps.push({ name, totalMs: done - started, afterApiMs: done - apiDone, mainThreadMs, apiCalls: answered.length });
+      steps.push({ name, totalMs: done - started, afterApiMs: done - apiDone, mainThreadMs, apiCalls: answered.length,
+        api: answered.map(response => ({ op: response.op, atMs: response.at - started })) });
     };
     await step('first load', () => page.goto(origin + '/'), async () => {
       await page.locator('#framework-navigation').filter({ hasNotText: 'Loading frameworks' }).waitFor();
