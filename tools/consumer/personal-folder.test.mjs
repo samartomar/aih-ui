@@ -110,7 +110,7 @@ const approvalChild = `import os from 'node:os'; import { readFileSync } from 'n
 const [hostUrl, familiesUrl, inputPath] = process.argv.slice(1), input = JSON.parse(readFileSync(inputPath, 'utf8'));
 if (os.homedir() !== input.home) throw new Error('Child home must be the disposable fixture home.');
 const { createHost } = await import(hostUrl), { installedFamilies } = await import(familiesUrl);
-const host = createHost({ projectRoot: input.projectRoot, materialRoots: { maintained: input.maintainedRoot }, recipeMaterials: (await installedFamilies()).flatMap(entry => entry.materials), controls: { logging: 'off' } });
+const host = createHost({ projectRoot: input.projectRoot, materialRoots: { maintained: input.maintainedRoot, catalog: input.maintainedRoot }, recipeMaterials: (await installedFamilies()).flatMap(entry => entry.materials), controls: { logging: 'off' } });
 const prepared = await host.prepareSession({ policyText: input.policyText });
 const applied = prepared.sessionId ? await host.applyApproved({ sessionId: prepared.sessionId, reviewDigest: prepared.review.reviewDigest }) : undefined;
 process.stdout.write(JSON.stringify({ home: os.homedir(), prepared, applied }));`;
@@ -130,12 +130,16 @@ test('one approval applies a selected item and its displayed required dependency
   assert.ok(dependencies.every(inclusion => inclusion.root.itemId === item.id));
   assert.deepEqual(intent.pins.map(pin => pin.itemId).sort(), [item.id, ...dependencies.map(inclusion => inclusion.item.itemId)].sort());
   assert.equal(policy.selections.length, intent.pins.length);
-  const rootPin = intent.pins.find(pin => pin.itemId === item.id);
-  const rootSelection = policy.selections.find(selection => selection.recipe.reference.sha256 === rootPin.recipe.sha256);
-  const dependencySelections = dependencies.map(({ item: ref }) => {
-    const pin = intent.pins.find(pin => pin.itemId === ref.itemId && pin.releaseSha256 === ref.releaseSha256);
-    return policy.selections.find(selection => selection.recipe.reference.sha256 === pin.recipe.sha256);
-  });
+  // A rendered policy (1.5) carries each selection's recipe inline, so a selection is found by the exact item it records.
+  const selectionOf = (releaseSha256, itemId) => {
+    const release = inventories.find(entry => entry.release.sha256 === releaseSha256).release, published = release.items.find(candidate => candidate.id === itemId);
+    const found = policy.selections.filter(selection => selection.item?.framework === release.framework.id && selection.item.itemId === itemId
+      && selection.item.contentSha256 === published.contentSha256 && selection.item.behaviourSha256 === published.behaviourSha256);
+    assert.equal(found.length, 1, `one selection records ${itemId}`);
+    return found[0];
+  };
+  const rootSelection = selectionOf(entry.release.sha256, item.id);
+  const dependencySelections = dependencies.map(({ item: ref }) => selectionOf(ref.releaseSha256, ref.itemId));
   assert.deepEqual(rootSelection.requires.slice().sort(), dependencySelections.map(selection => selection.id).sort());
   const scratch = await mkdtemp(join(tmpdir(), 'aih-single-approval-')), home = join(scratch, 'home'), projectRoot = join(scratch, 'project');
   for (const directory of [projectRoot, join(home, 'AppData', 'Local'), join(home, 'AppData', 'Roaming'), join(home, '.config'), join(home, '.local', 'state'), join(home, '.local', 'share'), join(home, '.cache')]) await mkdir(directory, { recursive: true });

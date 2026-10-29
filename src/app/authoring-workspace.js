@@ -7,7 +7,7 @@ import { createTrialsView } from './trials-view.js';
 import { createImprovementsView } from './improvements-view.js';
 import { createWorkspaceView } from './workspace-view.js';
 import { createOrganizationAuthorView } from './organization-author.js';
-import { authorityFromResult, changeSummary, compareRevision, reviewFreshness, revisionOf, setupInstructions, sourceRows, staleReviewMessage } from './authority-source.js';
+import { authorityFromResult, changeSummary, compareRevision, reviewFreshness, revisionOf, setupInstructions, sourceLabel, sourceRows, staleReviewMessage } from './authority-source.js';
 import { isJourneyEnvelope, importLimitError } from './authoring-client.js';
 import { dependencyRows } from './dependency-set.js';
 import { createInstallPanel } from './install-panel.js';
@@ -245,7 +245,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     sourceSetup.hidden = sourceCopy.hidden = !none;
     sourceNote.textContent = sourceState === undefined ? 'Reading host configuration…'
       : none ? 'No organization authority source is configured by the host. Enterprise policies cannot be admitted until one is.'
-      : 'Read-only. The host configures this source; this page can only read it again.';
+      : [sourceLabel(configured), 'Read-only. The host configures this source; this page can only read it again.'].filter(Boolean).join('. ');
     // A failed read keeps the last known revision: an established stale review stays stale.
     const freshness = reviewFreshness(prepared?.review, known);
     sourceReview.dataset.review = freshness;

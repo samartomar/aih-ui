@@ -35,6 +35,13 @@ export async function runUi168SetRemovalBrowser({ origin, output, playwrightModu
     await context.addInitScript(() => localStorage.setItem('wb-your-tool', 'claude'));
     const page = await context.newPage(); page.setDefaultTimeout(30_000);
     page.on('pageerror', error => errors.push(error.message));
+    // The page's own Catalog and latest Core inventory, for the exact expected outcome lines.
+    const answers = {};
+    page.on('response', async response => {
+      const operation = response.url().match(/\/api\/authoring-(catalog|managed)$/)?.[1]; if (!operation) return;
+      const body = await response.json().catch(() => undefined);
+      if (operation === 'catalog' && body?.items) answers.catalog = body; else if (operation === 'managed' && body?.selections) answers.inventory = body;
+    });
     await page.goto(origin + '/');
     await page.locator('#browse-family option[value="Extensions"]').waitFor({ state: 'attached' });
     if (await page.locator('#setup-dialog').isVisible()) {
@@ -55,21 +62,48 @@ export async function runUi168SetRemovalBrowser({ origin, output, playwrightModu
     await set.waitFor();
     const calls = [];
     page.on('request', request => { if (/\/api\/authoring-(remove|apply)$/.test(request.url())) calls.push(request.url().split('authoring-')[1]); });
-    await set.getByRole('button', { name: 'Remove set engineering', exact: true }).click();
+    // Engineering's members leave, then what Core records as required only by selections that leave; a member
+    // with another owner would be kept, named for that owner's set.
+    for (let attempt = 0; attempt < 300 && !(answers.catalog && answers.inventory?.selections?.length); attempt++) await page.waitForTimeout(100);
+    const catalog = answers.catalog, before = answers.inventory.selections;
+    const engineering = catalog.frameworks.flatMap(framework => framework.id === 'extensions' ? framework.sets ?? [] : []).find(candidate => candidate.id === 'engineering');
+    const ids = engineering.members.filter(member => member.defaultOn).map(member => member.item.itemId);
+    const inSet = selection => selection.origins.some(origin => origin.reasonIncluded === 'in-set' && origin.set?.setId === 'engineering');
+    const requirer = (selection, origin) => before.find(candidate => candidate.scope === selection.scope && candidate.item.itemId === origin.requiredBy?.itemId);
+    const leaving = new Set();
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const selection of before) {
+        if (leaving.has(selection.managementId) || !selection.origins.length) continue;
+        if (selection.origins.every(origin => (origin.reasonIncluded === 'in-set' && origin.set?.setId === 'engineering') || (origin.reasonIncluded === 'required-by' && leaving.has(requirer(selection, origin)?.managementId)))) { leaving.add(selection.managementId); grew = true; }
+      }
+    }
+    const nameOf = selection => catalog.items.find(item => item.id === selection.item.itemId)?.name;
+    const expectedRemoved = before.filter(selection => leaving.has(selection.managementId)).map(selection => `${nameOf(selection)}: removed`).sort();
+    const expectedKept = before.filter(selection => inSet(selection) && !leaving.has(selection.managementId)).map(nameOf).sort();
+    assert.deepEqual(before.filter(inSet).map(selection => selection.item.itemId).sort(), [...ids].sort(), 'Core lists exactly the default-on Engineering members');
+    assert.ok(expectedRemoved.length >= ids.length, 'every Engineering member leaves: Engineering and Productivity share no member');
+    assert.deepEqual(expectedKept, [], 'no Engineering member has another owner');
+    await set.getByRole('button', { name: 'Remove this set: Engineering', exact: true }).click();
     const preview = set.locator('div').filter({ has: set.getByRole('button', { name: 'Confirm remove', exact: true }) });
     await set.getByRole('button', { name: 'Confirm remove', exact: true }).waitFor();
     const review = await set.innerText();
-    assert.match(review, /Kept:/i, review);
-    assert.match(review, /keep-(shared|required)|still needed|another installed/i, review);
+    const reviewLines = review.split('\n').map(line => line.trim());
+    assert.equal(reviewLines.filter(line => /^[^:]+: \d+ members are reviewed for removal\.$/.test(line)).length, expectedRemoved.length, review);
+    assert.deepEqual(reviewLines.filter(line => /^[^:]+: Kept; /.test(line)), [], review);
     await set.getByRole('button', { name: 'Confirm remove', exact: true }).click();
     await page.locator('#installed-message[data-outcome="removed"], #installed-message[data-outcome="nothing-removed"], #installed-message[data-outcome="failed"]').waitFor({ timeout: 120_000 });
     assert.ok(['removed', 'nothing-removed'].includes(await page.locator('#installed-message').getAttribute('data-outcome')), await page.locator('#installed-message').innerText());
     assert.deepEqual(calls, ['remove', 'apply']);
-    assert.match(await page.locator('#installed-message').innerText(), /kept/i);
+    const result = await page.locator('#installed-message').innerText();
+    const escape = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    for (const line of expectedRemoved) assert.equal((result.match(new RegExp(escape(line), 'g')) ?? []).length, 1, `"${line}" reported once\n${result}`);
+    assert.equal((result.match(/: removed/g) ?? []).length, expectedRemoved.length, result);
+    assert.doesNotMatch(result, /unverified|Couldn't confirm|: absent|Kept; /i, result);
     await page.locator('#install-timings > summary').click();
     await assertLifecycleContrast(page);
     await page.screenshot({ path: join(output, `set-removal-${theme}.png`), fullPage: true });
-    await writeFile(join(output, `set-removal-${theme}.json`), JSON.stringify({ status: 'passed', review, message: await page.locator('#installed-message').innerText(), calls, errors }, null, 2));
+    await writeFile(join(output, `set-removal-${theme}.json`), JSON.stringify({ status: 'passed', removed: expectedRemoved, review, message: result, calls, errors }, null, 2));
     assert.deepEqual(errors, []);
     await context.close();
     return { status: 'passed' };

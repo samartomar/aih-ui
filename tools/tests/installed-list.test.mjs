@@ -11,38 +11,41 @@ const policy = { selections: [selection('grill-me', ['notices', 'grilling']), se
 const intent = { roots: [{ itemId: 'grill-me' }, { itemId: 'tdd' }], pins: ['grill-me', 'grilling', 'notices', 'tdd'].map(pin) };
 const label = itemId => ({ 'grill-me': 'grill-me', grilling: 'grilling', notices: 'Extensions notices', tdd: 'TDD' })[itemId];
 const inventory = (...names) => ({ status: 'complete', selections: names.map(name => ({ managementId: name.startsWith('m-') ? name : `m-${name}`, scope: 'project' })) });
+// These receipts record no name or item, so every row carries the contract's words for them; the draft's labels never name an installed row.
+const unnamed = managementId => `Installed before names were recorded (${managementId})`;
 
 test('groups installed items under the chosen item, naming the needed items it brought in', () => {
   const view = groupInstalled({ inventory: inventory('grill-me', 'grilling', 'notices'), policy, intent, label });
   assert.equal(view.partial, false);
   assert.deepEqual(view.groups.map(group => ({ name: group.name, needed: group.needed.map(item => item.name) })),
-    [{ name: 'grill-me', needed: ['grilling', 'Extensions notices'] }]);
+    [{ name: unnamed('m-grill-me'), needed: [unnamed('m-grilling'), unnamed('m-notices')] }]);
   assert.deepEqual(view.notInstalled.map(item => item.name), ['TDD']);
   assert.deepEqual(view.others, []);
 });
 
 test('Remove takes the chosen item and only the needed items nothing else installed still needs', () => {
   const view = groupInstalled({ inventory: inventory('grill-me', 'grilling', 'notices', 'tdd'), policy, intent, label });
-  const grill = view.groups.find(group => group.name === 'grill-me');
+  const grill = view.groups.find(group => group.managementId === 'm-grill-me');
   // notices is still needed by TDD, so it stays; grill-me goes before grilling, which it requires.
   assert.deepEqual(grill.removes.map(item => item.managementId), ['m-grill-me', 'm-grilling']);
-  assert.deepEqual(grill.kept.map(item => item.name), ['Extensions notices']);
-  const tdd = view.groups.find(group => group.name === 'TDD');
+  assert.deepEqual(grill.kept.map(item => item.name), [unnamed('m-notices')]);
+  const tdd = view.groups.find(group => group.managementId === 'm-tdd');
   assert.deepEqual(tdd.removes.map(item => item.managementId), ['m-tdd']);
 });
 
 test('installed items outside the current setup are listed apart by their management id', () => {
   const view = groupInstalled({ inventory: inventory('m-project--kiro.grill-me', 'grill-me', 'grilling', 'notices'), policy, intent, label });
   assert.equal(view.others.length, 1);
-  assert.deepEqual(view.others.map(item => ({ managementId: item.managementId, scope: item.scope, name: item.name, inSetup: item.inSetup })),
-    [{ managementId: 'm-project--kiro.grill-me', scope: 'project', name: 'm-project--kiro.grill-me', inSetup: false }]);
+  // The row is what Core recorded, never compared with the draft, so it carries no in-setup claim.
+  assert.deepEqual(view.others.map(item => ({ managementId: item.managementId, scope: item.scope, name: item.name, inSetup: Object.hasOwn(item, 'inSetup') })),
+    [{ managementId: 'm-project--kiro.grill-me', scope: 'project', name: unnamed('m-project--kiro.grill-me'), inSetup: false }]);
   assert.deepEqual(view.others[0].state, { file: 'unknown', update: 'unknown', policy: null, approval: null, install: null });
 });
 
 test('a needed item whose chosen item is no longer installed is listed apart with its name', () => {
   const view = groupInstalled({ inventory: inventory('grilling'), policy, intent, label });
   assert.deepEqual(view.groups, []);
-  assert.deepEqual(view.others.map(item => [item.name, item.inSetup]), [['grilling', true]]);
+  assert.deepEqual(view.others.map(item => [item.name, Object.hasOwn(item, 'inSetup')]), [[unnamed('m-grilling'), false]]);
   assert.deepEqual(view.notInstalled.map(item => item.name), ['grill-me', 'TDD']);
 });
 
@@ -56,7 +59,7 @@ test('an incomplete inventory is reported as possibly partial, and an unreadable
 test('without a policy every installed item is listed apart', () => {
   const view = groupInstalled({ inventory: inventory('grill-me'), policy: undefined, intent: undefined, label });
   assert.deepEqual(view.groups, []);
-  assert.deepEqual(view.others.map(item => item.name), ['m-grill-me']);
+  assert.deepEqual(view.others.map(item => item.name), [unnamed('m-grill-me')]);
 });
 
 test('removal order puts every item before the items it requires', () => {
@@ -66,7 +69,7 @@ test('removal order puts every item before the items it requires', () => {
 
 test('a kept needed item names the installed chosen items that still need it', () => {
   const view = groupInstalled({ inventory: inventory('grill-me', 'grilling', 'notices', 'tdd'), policy, intent, label });
-  assert.deepEqual(view.groups.find(group => group.name === 'grill-me').kept.map(item => [item.name, item.neededBy]), [['Extensions notices', ['TDD']]]);
+  assert.deepEqual(view.groups.find(group => group.managementId === 'm-grill-me').kept.map(item => [item.name, item.neededBy]), [[unnamed('m-notices'), [unnamed('m-tdd')]]]);
 });
 
 test('the whole setup counts as installed only when Core lists every one of its selections', () => {
@@ -98,7 +101,7 @@ test('items outside the current setup keep every redacted fact needed for a fait
   const inv = { status: 'complete', selections: [recorded('m-elsewhere', { name: 'Outside item', framework: 'ecc', tool: 'claude',
     item: { framework: 'ecc', itemId: 'ecc.other' }, configuration: { tone: 'terse' }, origins, approval: 'granted-by-aih' })] };
   const view = groupInstalled({ inventory: inv, policy: undefined, intent: undefined, label });
-  assert.deepEqual(view.others.map(item => [item.name, item.inSetup]), [['Outside item', false]]);
+  assert.deepEqual(view.others.map(item => [item.name, Object.hasOwn(item, 'inSetup')]), [['Outside item', false]]);
   assert.equal(view.others[0].framework, 'ecc');
   assert.equal(view.others[0].tool, 'claude');
   assert.equal(view.others[0].configuration.tone, 'terse');

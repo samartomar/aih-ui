@@ -76,7 +76,7 @@ export async function runUi168InterruptedVerifyBrowser({ origin, output, saved, 
       await group.getByRole('button', { name: 'Confirm remove', exact: true }).click();
       await page.locator('#installed-message[data-outcome="removed"], #installed-message[data-outcome="failed"]').waitFor({ timeout: 120_000 });
       assert.equal(await page.locator('#installed-message').getAttribute('data-outcome'), 'removed', `${await page.locator('#installed-message').innerText()} ${JSON.stringify(applies)}`);
-      assert.match(await page.locator('#installed-message').innerText(), /grill-me: absent/);
+      assert.match(await page.locator('#installed-message').innerText(), /grill-me: removed/);
     }
     await page.screenshot({ path: join(output, `interrupted-${action}-${theme}.png`), fullPage: true });
     await writeFile(join(output, `interrupted-${action}-${theme}.json`), JSON.stringify({ status: 'passed', action, errors }, null, 2));

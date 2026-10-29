@@ -122,8 +122,8 @@ export async function runInstalledPanelBrowser({ origin, output, playwrightModul
       const outcome = await page.locator('#installed-message').getAttribute('data-outcome');
       assert.equal(outcome, 'removed', await page.locator('#installed-message').innerText());
       const removalMessage = await page.locator('#installed-message').innerText();
-      assert.match(removalMessage, /grill-me: absent/);
-      assert.match(removalMessage, /grilling: absent/);
+      assert.match(removalMessage, /grill-me: removed/);
+      assert.match(removalMessage, /grilling: removed/);
       assert.doesNotMatch(removalMessage, /unverified/i, 'Core run result 1.4 confirms each item absent');
       assert.equal(await page.locator('#installed-list [data-installed-item]').count(), 0);
       await page.locator('#install-message').filter({ hasText: 'Nothing has been installed yet' }).waitFor();

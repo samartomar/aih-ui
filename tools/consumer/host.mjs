@@ -8,7 +8,7 @@ import { apply, prepare, prepareManagedRemoval, prepareUpdate, listManagedSelect
 import { parsePolicy } from '@aihq/core/contracts';
 import { composeAuthoring, freshAuthoring } from './headless.mjs';
 import { pinSelectedRecipes } from './selected-recipe.mjs';
-import { readOrganization } from './authority-source.mjs';
+import { pageSource, readOrganization } from './authority-source.mjs';
 import { previewPolicyAuthority } from './organization.mjs';
 
 const lostResult = () => ({
@@ -77,7 +77,7 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
     if (!parsed.valid) return { status: 'refused', diagnostics: parsed.diagnostics };
     if (parsed.document.mode === 'vibe') return { status: 'ok', value: { mode: 'vibe', advisory: true, authority: null, affectedChoices: [], stillValidChoices: [] }, diagnostics: [] };
     const read = await readOrganization({ organizationSource, controls: controlsFor(controls) });
-    if (read.status === 'unreadable') return { status: 'refused', diagnostics: read.diagnostics, authority: { source: read.read.source, helper: read.read.helper, accounting: read.read.accounting } };
+    if (read.status === 'unreadable') return { status: 'refused', diagnostics: read.diagnostics, authority: { source: pageSource(read.read.source), helper: read.read.helper, accounting: read.read.accounting } };
     if (read.status === 'invalid') return { status: 'refused', diagnostics: read.diagnostics };
     const result = await previewPolicyAuthority({ policy: parsed.document, organization: read.organization, recipeMaterials, privateInputs: controlsFor(controls).privateInputs });
     return result.status === 'ok' ? { ...result, value: { ...result.value, authority: read.authority } } : { ...result, authority: read.authority };
@@ -104,8 +104,10 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
       // every selected item or exact set origin is prepared in one review and applied with one digest.
       const { authentication, signal, logging } = controlsFor(controls);
       const removalControls = { ...(authentication ? { authentication } : {}), ...(signal ? { signal } : {}), ...(logging ? { logging } : {}) };
-      const request = removals
-        ? { target: { project: projectRoot }, removals, scope, mode, ...(mode === 'enterprise' ? { organizationSource } : {}) }
+      // Core accepts a local organization source only in the array form, so one managementId is sent as a one-entry array then.
+      const local = mode === 'enterprise' && organizationSource?.provider === 'local' && managementId !== undefined;
+      const request = removals || local
+        ? { target: { project: projectRoot }, removals: removals ?? [{ managementId }], scope, mode, ...(mode === 'enterprise' ? { organizationSource } : {}) }
         : { target: { project: projectRoot }, managementId, scope, mode, ...(mode === 'enterprise' ? { organizationSource } : {}) };
       const result = await prepareManagedRemoval(request, removalControls);
       return { ...result, ...(result.preparation ? { preparation: retain(result.preparation) } : {}) };
