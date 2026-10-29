@@ -85,8 +85,16 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   // Input values belong in explicitly saved intent, not the browsing cache.
   function saveBrowsing() { try { sessionStorage.setItem('aih-ui-set-browsing', JSON.stringify([...choices].map(([key, { requests, allItems }]) => [key, { requests, allItems }]))); } catch { state.browsingStorageUnavailable = true; } }
   try { for (const [key, value] of JSON.parse(sessionStorage.getItem('aih-ui-set-browsing') ?? '[]')) if (Array.isArray(value.requests)) choices.set(key, value); } catch { choices.clear(); }
+  // The single qualified chosen-root snapshot (Q6-R): an open uncompiled draft's LIVE roots win over the
+  // executable intent; an explicit empty list stays empty (no fallback to the set request).
+  const chosenRoots = framework => {
+    const roots = (authoring.draft ? authoring.draft.intent?.roots : authoring.intent?.roots) ?? [];
+    return roots.filter(root => root.releaseSha256 === framework.sha256).map(root => root.itemId);
+  };
   async function readBrowse(framework, choice, inspect = false) {
-    const contentKey = JSON.stringify([framework?.sha256, chosenTool?.id, choice.requests, choice.configurations ?? [], enterprise, authoring.evidenceRevision]);
+    // Root/tool/artifact-identity changes participate in the refresh identity: an unchanged browse set with
+    // changed roots is a new request, and stale replies cannot satisfy it.
+    const contentKey = JSON.stringify([framework?.sha256, chosenTool?.id, choice.requests, choice.configurations ?? [], enterprise, authoring.evidenceRevision, chosenRoots(framework), authoring.revision]);
     const inspectedItem = inspect ? selectedEntry()?.authoringItem : undefined;
     const itemId = inspectedItem && framework && inspectedItem.root.releaseSha256 === framework.sha256 ? inspectedItem.id : undefined;
     const key = JSON.stringify([contentKey, inspect, itemId]);
@@ -95,7 +103,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     browseKey = key; browseContentKey = contentKey; const attempt = ++browseAttempt; if (!factsOnly) browseResult = undefined;
     if (!framework) return;
     // The host read reflects the artifact's actual roots, like the drawer, not the current set request (#165 Q6).
-    try { const result = await authoring.request('browse-content', { releaseSha256: framework.sha256, tool: chosenTool?.id, sets: choice.requests, configurations: choice.configurations, inspect, itemId, enterprise, chosen: (authoring.intent?.roots ?? []).filter(root => root.releaseSha256 === framework.sha256).map(root => root.itemId), policyBytes: undefined });
+    try { const result = await authoring.request('browse-content', { releaseSha256: framework.sha256, tool: chosenTool?.id, sets: choice.requests, configurations: choice.configurations, inspect, itemId, enterprise, chosen: chosenRoots(framework), policyBytes: undefined });
       if (attempt !== browseAttempt) return; browseResult = result;
     } catch { if (attempt !== browseAttempt) return; browseResult = { status: 'failed', reason: 'Could not read this source’s sets or tool fit. Your choices are unchanged.' }; }
     if (factsOnly) { cards.updateFacts(cardsModel()); details.render(detailsModel(selectedEntry())); } else render();

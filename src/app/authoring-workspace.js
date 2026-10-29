@@ -567,6 +567,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   let handoffAnnounced = false;
   syncSource();
   client.subscribe(() => {
+    void refreshHostFacts(); // chosen roots/tool changes refresh the drawer's duplicate facts too (Q6-R)
     prepared = undefined; apply.disabled = true;
     managedRows.replaceChildren();
     for (const control of [authority, prepare, managed]) control.disabled = !client.catalog?.executionAvailable || !client.intent;

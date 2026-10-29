@@ -103,14 +103,17 @@ test('origin groups come from recorded in-set origins, keep simultaneous members
   const starter = { framework: 'ecc', setId: 'starter', setSha256: 'a'.repeat(64) };
   const extra = { framework: 'ecc', setId: 'extra', setSha256: 'b'.repeat(64) };
   const inv = { status: 'complete', selections: [
-    recorded('m-a', { origins: [{ reasonIncluded: 'in-set', set: starter }, { reasonIncluded: 'in-set', set: extra }] }),
-    recorded('m-b', { origins: [{ reasonIncluded: 'in-set', set: starter }] }),
+    recorded('m-a', { name: 'Alpha', origins: [{ reasonIncluded: 'in-set', set: starter }, { reasonIncluded: 'in-set', set: extra }] }),
+    recorded('m-b', { name: 'Beta', origins: [{ reasonIncluded: 'in-set', set: starter }] }),
     recorded('m-legacy', { origins: [{ reasonIncluded: 'chosen' }] }),
   ] };
   const view = groupInstalled({ inventory: inv, policy: undefined, intent: undefined, label });
   const byKey = new Map(view.originGroups.map(group => [group.set ? `${group.set.framework}/${group.set.setId}/${group.set.setSha256}` : 'null', group.items]));
   assert.deepEqual(byKey.get(`ecc/starter/${'a'.repeat(64)}`), ['m-a', 'm-b'], 'overlapping sets keep every membership');
   assert.deepEqual(byKey.get(`ecc/extra/${'b'.repeat(64)}`), ['m-a']);
+  const starterGroup = view.originGroups.find(group => group.set?.setId === 'starter');
+  assert.deepEqual(starterGroup.members.map(member => member.name), ['Alpha', 'Beta'], 'named members render under the exact set identity (Q7-R)');
+  assert.equal(starterGroup.members.length, 2, 'simultaneous memberships stay');
   assert.deepEqual(byKey.get('null'), ['m-legacy'], 'a row without recorded set origin stays explicit, never inferred');
 });
 
@@ -124,5 +127,6 @@ test('update and install states Core reports are never recomputed here', () => {
   assert.equal(blockyView.others[0].state.file, 'block-changed', 'a uniform block-changed set keeps its distinct literal state (Q8)');
   const mixed = { status: 'complete', selections: [recorded('m-z', { members: [{ fileState: 'block-changed' }, { fileState: 'missing' }] })] };
   const mixedView = groupInstalled({ inventory: mixed, policy: undefined, intent: undefined, label });
-  assert.equal(mixedView.others[0].state.file, 'changed', 'a mixed differing set degrades to the generic changed');
+  assert.equal(mixedView.others[0].state.file, 'changed', 'the summary stays generic for a mixed set');
+  assert.deepEqual(mixedView.others[0].state.files, ['missing', 'block-changed'], 'every distinct literal member state survives (Q8-R): the block edit is not erased');
 });

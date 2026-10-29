@@ -30,7 +30,7 @@ function stateBadges(state = {}, el) {
     const chip = el('span', 'inline-flex items-center gap-1 text-[11px]', ''); chip.dataset.installedState = key;
     chip.append(iconSpan('state', words[0]), el('span', '', words[1])); attachTooltip(chip, `${words[2]}${extra ? ` ${extra}` : ''}`); chips.push(chip); };
   if (state.update && state.update !== 'current' && state.update !== 'unknown') add(state.update);
-  if (state.file && !['matches', 'unchecked', 'unknown'].includes(state.file)) add(state.file);
+  for (const distinct of state.files ?? (state.file && !['matches', 'unchecked', 'unknown'].includes(state.file) ? [state.file] : [])) add(distinct);
   if (state.install === 'interrupted') add('interrupted');
   if (state.approval === 'granted-by-aih') add('granted-by-aih');
   else if (state.approval === 'needed') add('needed');
@@ -134,8 +134,12 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
           line.textContent = `${group.set.setId} · exact set ${group.set.setSha256}`;
           line.title = `${group.set.framework}/${group.set.setId}/${group.set.setSha256}`;
         } else line.textContent = 'Items with no recorded set origin';
-        line.append(` — ${group.items.length} installed`);
         sets.append(line);
+        // The actual named installed members of each set (Q7-R): simultaneous memberships appear under every
+        // set they belong to; counts are never a substitute for item grouping.
+        const names = el('ul', 'pl-4 text-[11px] text-on-surface-variant');
+        names.append(...(group.members ?? []).map(member => { const item = el('li', '', member.name); item.title = member.managementId; item.dataset.setMember = member.managementId; return item; }));
+        sets.append(names);
       }
       list.append(sets);
     }

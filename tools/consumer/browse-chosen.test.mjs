@@ -31,6 +31,13 @@ test('chosen for the host read comes from the artifact roots, not the set reques
   }
 });
 
+test('an explicit empty chosen list inspects nothing, never falling back to the set request (Q6-R)', async () => {
+  const result = await browseContent(inventories, { tool: 'claude', releaseSha256: prepared.release.sha256, sets: [], configurations: [], chosen: [] }, '/nonexistent-test-project', undefined);
+  assert.equal(result.status, 'read');
+  assert.deepEqual(result.chosenItemIds, []);
+  assert.match(result.host.reason, /Nothing is chosen/, 'explicit emptiness is honored, not replaced by set members');
+});
+
 test('the fallback (no artifact roots supplied) keeps the previous set-request behavior', async () => {
   const result = await browseContent(inventories, { tool: 'claude', releaseSha256: prepared.release.sha256, sets: [], configurations: [] }, undefined, undefined);
   assert.equal(result.status, 'read');

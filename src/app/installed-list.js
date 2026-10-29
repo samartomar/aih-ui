@@ -35,6 +35,10 @@ export function inventoryState(entry) {
     : fileStates.length ? 'matches' : 'unknown';
   return {
     file,
+    // Every distinct literal member state survives a mixed set (Q8-R): the view renders each, so a
+    // block edit is never erased by a sibling changed/missing member. Single-state sets keep their
+    // existing exact shape.
+    ...(differing.length > 1 ? { files: differing } : {}),
     update: entry.updateState ?? 'unknown',
     policy: entry.policyState ?? null,
     approval: entry.approval ?? null,
@@ -53,16 +57,21 @@ export function originGroups(inventory) {
   const groups = new Map();
   for (const entry of inventory?.selections ?? []) {
     const sets = recordedSets(entry);
+    const member = { managementId: entry.managementId, name: entry.name ?? entry.item?.itemId ?? entry.managementId };
     if (!sets.length) {
       const key = 'null';
-      if (!groups.has(key)) groups.set(key, { set: null, items: [] });
+      if (!groups.has(key)) groups.set(key, { set: null, items: [], members: [] });
       groups.get(key).items.push(entry.managementId);
+      groups.get(key).members.push(member);
     }
     for (const set of sets) {
       // Exact set provenance identity includes the set digest (Q7): distinct recorded revisions never merge.
       const key = `${set.framework}/${set.setId}/${set.setSha256}`;
-      if (!groups.has(key)) groups.set(key, { set, items: [] });
-      if (!groups.get(key).items.includes(entry.managementId)) groups.get(key).items.push(entry.managementId);
+      if (!groups.has(key)) groups.set(key, { set, items: [], members: [] });
+      if (!groups.get(key).items.includes(entry.managementId)) {
+        groups.get(key).items.push(entry.managementId);
+        groups.get(key).members.push(member);
+      }
     }
   }
   return [...groups.values()];

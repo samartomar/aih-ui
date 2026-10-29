@@ -34,6 +34,19 @@ test('a changed caller snapshot never reaches apply: a REVIEW_STALE held apply p
   assert.deepEqual(calls, ['apply:held-session', 'prepare']); // exactly one apply, with the held handle
 });
 
+test('a superseded Apply answer keeps the outcome unknown: the run may have completed (AF1)', async () => {
+  const applied = [];
+  const result = await applyIfUnchanged({
+    held,
+    prepare: async () => { throw new Error('prepare must not run for a superseded apply'); },
+    readyPreparation: value => value?.preparation?.status === 'ready' ? value.preparation : undefined,
+    apply: async approval => { applied.push(approval); return { status: 'superseded' }; },
+  });
+  assert.equal(result.state, 'superseded');
+  assert.equal(result.preparation.sessionId, 'held-session');
+  assert.deepEqual(applied, [{ sessionId: 'held-session', reviewDigest: 'held-digest' }]);
+});
+
 test('a non-stale refusal of the held handle shows a fresh review without applying it', async () => {
   const calls = [];
   const result = await applyIfUnchanged({

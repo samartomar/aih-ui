@@ -39,7 +39,9 @@ export async function browseContent(inventories, { tool, releaseSha256, sets = [
   // What counts as chosen for the host read is the ARTIFACT's roots (Q6), not the current set-request
   // resolution: a directly added item after clearing set choices must be checked, and an unadded
   // starting-set member must not be. The caller supplies the artifact root ids for this release.
-  const chosenItems = Array.isArray(chosen) && chosen.length
+  // An explicit chosen:[] means the artifact names nothing from this source (Q6-R): nothing is inspected.
+  // Only an ABSENT chosen argument falls back to the set-request resolution.
+  const chosenItems = Array.isArray(chosen)
     ? members.filter(({ item }) => chosen.includes(item.id)).map(({ item }) => item)
     : members.filter(({ item }) => selections.some(selection => selection.item.releaseSha256 === release.sha256 && selection.item.itemId === item.id)).map(({ item }) => item);
   let host;

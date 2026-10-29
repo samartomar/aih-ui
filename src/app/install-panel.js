@@ -196,7 +196,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
         message.textContent = `Install did not start: ${refusal(attemptResult.result)}`; return;
       }
       const { preparation } = attemptResult;
-      if (attemptResult.state === 'superseded') { message.textContent = 'Install did not finish: the page changed before it. Check the list, then try again.'; message.dataset.outcome = 'failed'; return; }
+      if (attemptResult.state === 'superseded') { message.textContent = 'Install was sent, but the page changed before its result arrived, so this page cannot determine whether files were written. Inspect what is installed in this project before trying again.'; message.dataset.outcome = 'superseded'; return; }
       if (attemptResult.state === 'stale') {
         preview = preparation; const rows = show(preparation.review, preparation.operationSelections ?? []); install.disabled = Boolean(nothingToInstall({ roots: client.intent?.roots ?? [], rows }));
         message.textContent = `The reviewed setup changed: ${attemptResult.reason} The list now shows what would happen — check it and click Install again.`; return;
