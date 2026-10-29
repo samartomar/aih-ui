@@ -29,7 +29,7 @@ import { createCatalogUpdateSource } from './update-source.mjs';
 import { inspectorSummary } from './scan-evidence.mjs';
 import { createScanEvidenceHost } from './scan-evidence-host.mjs';
 
-export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, updateSourceCatalogRoots, evidenceSources, evidenceDetectorIds, frameworkSources, frameworkFixtureInventories, port = 0, createExecutionHost = createHost, coreState = { resolveStateLocation: core.resolveStateLocation, stateLocation: coreContracts.stateLocation } } = {}) {
+export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, updateSourceCatalogRoots, evidenceSources, evidenceDetectorIds, frameworkSources, frameworkFixtureInventories, installedFamilyInventories: suppliedFamilyInventories, port = 0, createExecutionHost = createHost, coreState = { resolveStateLocation: core.resolveStateLocation, stateLocation: coreContracts.stateLocation } } = {}) {
   // `createExecutionHost` is createHost; tests pass one that holds Install work while they act.
   // The fixture is a test source; a host names one update source, so both together would be ambiguous.
   if (updateSourceCatalogRoots !== undefined && maintenanceSource) throw new Error('Configure one update source: Catalog package roots or the test fixture, not both.');
@@ -60,7 +60,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   // installedFamilies now reads the same prepared releases the default catalog reader exposes; compose once
   // per exact release so the catalog never renders the same item twice, with explicit fixture
   // inventories replacing the installed default for their exact framework+version (see the module).
-  const installedFamilyInventories = await installedFamilies();
+  const installedFamilyInventories = suppliedFamilyInventories ?? await installedFamilies();
   const familyInventories = composeFamilyInventories({
     installed: installedFamilyInventories,
     catalog: frameworkCatalog.inventories,

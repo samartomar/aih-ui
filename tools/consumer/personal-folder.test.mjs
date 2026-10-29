@@ -118,10 +118,10 @@ test('one approval applies a selected item and its displayed required dependency
   const inventories = await installedFamilies(), entry = inventories.find(entry => entry.family === 'Extensions');
   const item = entry.release.items.find(item => item.id === 'extensions.matt.ask-matt');
   assert.ok(item);
-  const fresh = await composeAuthoring({ intent: freshAuthoring(), inventories });
+  const fresh = await composeAuthoring({ intent: freshAuthoring(), inventories, tool: 'claude-code' });
   assert.equal(fresh.status, 'ok', JSON.stringify(fresh));
-  const selected = await editAuthoring({ policyBytes: fresh.value.policyBytes, inventories,
-    operation: { type: 'select', root: { releaseSha256: entry.release.sha256, itemId: item.id, scope: 'project', configuration: {} } } });
+  const selected = await editAuthoring({ policyBytes: fresh.value.policyBytes, inventories, tool: 'claude-code',
+    operation: { type: 'select', tool: 'claude-code', root: { releaseSha256: entry.release.sha256, itemId: item.id, scope: 'project', configuration: {} } } });
   assert.equal(selected.status, 'ok', JSON.stringify(selected));
   const { intent, inclusions, policy } = selected.value;
   assert.equal(intent.roots.length, 1); assert.equal(intent.roots[0].itemId, item.id);
@@ -130,10 +130,11 @@ test('one approval applies a selected item and its displayed required dependency
   assert.ok(dependencies.every(inclusion => inclusion.root.itemId === item.id));
   assert.deepEqual(intent.pins.map(pin => pin.itemId).sort(), [item.id, ...dependencies.map(inclusion => inclusion.item.itemId)].sort());
   assert.equal(policy.selections.length, intent.pins.length);
-  const rootSelection = policy.selections.find(selection => selection.recipe.reference.sha256 === item.recipe.sha256);
+  const rootPin = intent.pins.find(pin => pin.itemId === item.id);
+  const rootSelection = policy.selections.find(selection => selection.recipe.reference.sha256 === rootPin.recipe.sha256);
   const dependencySelections = dependencies.map(({ item: ref }) => {
-    const required = inventories.find(entry => entry.release.sha256 === ref.releaseSha256).release.items.find(item => item.id === ref.itemId);
-    return policy.selections.find(selection => selection.recipe.reference.sha256 === required.recipe.sha256);
+    const pin = intent.pins.find(pin => pin.itemId === ref.itemId && pin.releaseSha256 === ref.releaseSha256);
+    return policy.selections.find(selection => selection.recipe.reference.sha256 === pin.recipe.sha256);
   });
   assert.deepEqual(rootSelection.requires.slice().sort(), dependencySelections.map(selection => selection.id).sort());
   const scratch = await mkdtemp(join(tmpdir(), 'aih-single-approval-')), home = join(scratch, 'home'), projectRoot = join(scratch, 'project');

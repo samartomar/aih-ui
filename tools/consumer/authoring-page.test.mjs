@@ -93,7 +93,13 @@ test('supported-first browsing preserves mixed capability facts and exposes unde
 });
 
 test('ordinary target changes refresh counts and reasons while preserving accepted exact choices', async () => {
-  const started = await startConsumer();
+  const { installedReleaseInventory } = await import('./installed-families.mjs');
+  const { dirname } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const root = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
+  const legacy = await Promise.all([['Extensions', 'extensions'], ['ECC', 'ecc'], ['Superpowers', 'superpowers'], ['Anthropic', 'anthropic']].map(async ([family, id]) =>
+    ({ family, ...await installedReleaseInventory({ root, releaseExport: `./release-${id}.json` }) })));
+  const started = await startConsumer({ installedFamilyInventories: legacy });
   try {
     const requests = [];
     const pageFetch = async (url, options) => {

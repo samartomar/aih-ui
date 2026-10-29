@@ -9,7 +9,7 @@ let evidenceBytes, inspected, evidenceFiles = [];
 let prepared;
 const reviewContext = () => ({ reviewEvidence: evidenceFiles.map(file => [...file.bytes]) });
 const invalidate = () => { revision++; candidate = undefined; prepared = undefined; $('accept').disabled = true; $('apply').disabled = true; show('execution', 'Draft or review context changed. Prepare again before Apply.'); show('authority-summary', 'Choices or review context changed. Refresh authority for this draft.'); };
-const request = async (operation, body = {}) => (await fetch(`/api/authoring-${operation}`, { method: 'POST', headers: { 'content-type': 'application/json', ...clientHeaders }, body: JSON.stringify({ policyBytes: [...documentFile.bytes()], ...reviewContext(), ...body }) })).json();
+const request = async (operation, body = {}) => (await fetch(`/api/authoring-${operation}`, { method: 'POST', headers: { 'content-type': 'application/json', ...clientHeaders }, body: JSON.stringify({ policyBytes: [...documentFile.bytes()], ...reviewContext(), tool: $('target').value, ...body }) })).json();
 const button = (label, action) => { const node = document.createElement('button'); node.textContent = label; node.onclick = action; return node; };
 const key = ref => `${ref.releaseSha256}/${ref.itemId}/${ref.scope}`;
 const keep = () => $('keep').value.split('\n').filter(v => v.trim()).map(value => { const [releaseSha256, itemId, scope] = value.trim().split('/'); return { releaseSha256, itemId, scope }; });
@@ -126,7 +126,7 @@ function render(intent = currentIntent, optional = currentOptional) {
 function publish(value) { documentFile.setBytes(Uint8Array.from(value.policyBytes)); currentIntent = value.intent; currentOptional = value.optional ?? []; currentJudgments = value.reviewJudgments ?? []; updateFolderBindings(); render(); void checkAuthority(); }
 async function propose(operation) {
   invalidate(); const attempt = revision;
-  try { const result = await request('edit', { operation }); if (attempt !== revision) return; present(result); }
+  try { const result = await request('edit', { operation: operation.type === 'select' ? { ...operation, tool: $('target').value } : operation }); if (attempt !== revision) return; present(result); }
   catch (error) { if (attempt === revision) show('proposal', error.message); }
 }
 function present(result) {

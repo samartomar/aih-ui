@@ -52,7 +52,7 @@ test('a configured previous full package resolves exact historical family pins w
     assert.equal(refused.diagnostics[0].code, 'HISTORICAL_SOURCE_UPDATE_REQUIRED');
     // Current selections still reach Core's ordinary preparation boundary.
     const fresh = await call('new', {}), current = catalog.items.find(value => value.id === 'extensions.matt.tdd');
-    const selected = await call('edit', { policyBytes: fresh.value.policyBytes, operation: { type: 'select', root: current.root } });
+    const selected = await call('edit', { tool: 'claude-code', policyBytes: fresh.value.policyBytes, operation: { type: 'select', tool: 'claude-code', root: current.root } });
     assert.equal(selected.status, 'ok');
     const prepared = await call('prepare', { policyBytes: selected.value.policyBytes });
     assert.ok(!prepared.diagnostics?.some(value => value.code === 'HISTORICAL_SOURCE_UPDATE_REQUIRED'));
@@ -125,7 +125,7 @@ test('four-family choices retain exact pins, required dependencies and Matt orig
     for (const [family, id] of expected) {
       const item = catalog.items.find(item => item.id === id && item.family === family);
       assert.ok(item, `${family}: missing representative ${id}`);
-      result = await call('edit', { policyBytes: result.value.policyBytes, operation: { type: 'select', root: item.root } });
+      result = await call('edit', { tool: 'claude-code', policyBytes: result.value.policyBytes, operation: { type: 'select', tool: 'claude-code', root: item.root } });
       assert.equal(result.status, 'ok', JSON.stringify(result.diagnostics));
     }
     const saved = result.value;

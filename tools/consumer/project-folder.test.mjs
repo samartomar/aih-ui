@@ -38,7 +38,7 @@ async function withConsumer(run, { hostDefault = true, createExecutionHost } = {
 test('a preparation made in folder A cannot be applied after switching to B, and nothing is written in either', () => withConsumer(async ({ call, get, folderA, folderB }) => {
   assert.deepEqual(await get('project'), { project: folderA, source: 'host-default' });
   const item = (await get('catalog')).items.find(value => value.id === 'extensions.matt.tdd');
-  const fresh = await call('new'), selected = await call('edit', { policyBytes: fresh.value.policyBytes, operation: { type: 'select', root: item.root } });
+  const fresh = await call('new'), selected = await call('edit', { tool: 'claude-code', policyBytes: fresh.value.policyBytes, operation: { type: 'select', tool: 'claude-code', root: item.root } });
   assert.equal(selected.status, 'ok', JSON.stringify(selected.diagnostics));
   const policyBytes = selected.value.policyBytes;
   const inA = await call('prepare', { policyBytes });
@@ -89,7 +89,7 @@ test('with no host default the page can choose the first project folder, and Ins
 async function policyFor(call, get) {
   const item = (await get('catalog')).items.find(value => value.id === 'extensions.matt.tdd');
   const fresh = await call('new');
-  return (await call('edit', { policyBytes: fresh.value.policyBytes, operation: { type: 'select', root: item.root } })).value.policyBytes;
+  return (await call('edit', { tool: 'claude-code', policyBytes: fresh.value.policyBytes, operation: { type: 'select', tool: 'claude-code', root: item.root } })).value.policyBytes;
 }
 
 test('requests without a client token use the current folder too', () => withConsumer(async ({ anonymous, call, get, folderA, folderB }) => {

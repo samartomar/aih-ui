@@ -651,9 +651,13 @@ test('export refuses, and never silently skips, a baseline whose selectors combi
 
 // ---- Authority entries do not depend on a runnable example configuration ----------------------
 const GUARD = 'extensions.claude.hook.git-guard', GUARD_SOURCE = 'extensions.hook-source.git-guard';
+async function legacyExtensionsFixture() {
+  const { installedReleaseInventory } = await import('./installed-families.mjs');
+  return { family: 'Extensions', ...await installedReleaseInventory({ root: dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'))), releaseExport: './release-extensions.json' }) };
+}
 
 test('a prohibited entry needs neither input permissions nor a configuration to export', async () => {
-  await withConsumer({}, async started => {
+  await withConsumer({ installedFamilyInventories: [await legacyExtensionsFixture()] }, async started => {
     const { ref } = await catalogRefs(started);
     const d = await startDraft(started);
     await author(d, ref, { entries: [{ id: GUARD, obligation: 'prohibited', inputs: false }] });
@@ -669,7 +673,7 @@ test('a prohibited entry needs neither input permissions nor a configuration to 
 });
 
 test('a required entry whose value only developers can declare is still part of the document and Core fulfillment', async () => {
-  await withConsumer({}, async started => {
+  await withConsumer({ installedFamilyInventories: [await legacyExtensionsFixture()] }, async started => {
     const { ref } = await catalogRefs(started);
     const d = await startDraft(started);
     await author(d, ref, { entries: [{ id: GUARD, obligation: 'required', inputs: { hookCommand: { allowDeclared: true } } }], targets: [{ scope: 'project' }] });
