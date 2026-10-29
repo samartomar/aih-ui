@@ -17,7 +17,13 @@ export function itemBrowseFacts(item, browse, tool) {
   const host = browse?.host;
   const blocked = fit?.support === 'none' || fit?.notRendered || fit?.staticBlockers?.length;
   let fitKey = blocked ? 'none' : observed ? fit.observed : 'unconfirmed';
-  let words = blocked ? `Doesn’t work in ${tool?.label ?? 'this tool'}` : observed ? `Observed in ${tool?.label ?? 'this tool'}` : 'Not yet confirmed';
+  const label = tool?.label ?? 'this tool';
+  let words = blocked ? `Doesn’t work in ${label}` : !observed ? 'Not yet confirmed'
+    : fit.stale ? `Last confirmed ${observed.observedAt} on ${observed.toolVersion}`
+    : fit.observed === 'recognised' ? `Works in ${label} (seen ${observed.observedAt}, ${observed.toolVersion}, on ${observed.os})`
+    : fit.observed === 'registered' ? `${label} lists it; not yet seen in use`
+    : fit.observed === 'listed-only' ? `${label} sees its name; not yet seen using it`
+    : `Delivered in ${label}; not yet seen in use`;
   if (!fit) words = browse?.status === 'failed' ? 'Tool fit failed' : browse?.status ? 'Tool fit unavailable' : 'Tool fit loading';
   if (fit?.boundAs) { fitKey = 'fallback'; words = `Installed as a ${fit.boundAs.kind} in ${tool?.label ?? 'this tool'}`; }
   const explanation = !fit ? (browse?.reason ?? 'Tool fit is loading or unavailable. Choose your tool; no successful use is assumed.') : `${fit.reason} ${fit.notRendered?.detail ?? ''} ${(fit.staticBlockers ?? []).map(value => value.detail).join(' ')} ${observed ? `Observed ${observed.observedAt}, ${observed.os} ${observed.arch}, tool ${observed.toolVersion}.` : `No observation on ${browse.platform?.os ?? 'unknown OS'} ${browse.platform?.arch ?? 'unknown architecture'}.`} A fallback label describes the published binding, not an installed-file check. Host facts ${host?.status ?? 'unchecked'}; static observation is not proof of use here.`;
@@ -35,8 +41,13 @@ export function renderBrowseFacts(item, browse, tool, { detailed = false, onAppr
   const size = facts.fit?.deliveredSize;
   const value = size ? `Every session: ${size.alwaysLoaded.bytes} bytes · ${size.alwaysLoaded.chars} chars; when used: ${size.bytes} bytes · ${size.chars} chars` : 'Size unknown';
   node.append(badge('state', 'size', value, value + '. Harness delivered size; not a token estimate or measured model usage.'));
-  if (item.hints?.tools?.length) node.append(badge('state', 'info', `Written for ${item.hints.tools.join(', ')}`, 'Producer-declared display hints; not tool support or a binding.'));
-  if (item.variantOf) node.append(badge('state', 'info', `Variant of ${item.variantOf.itemId ?? JSON.stringify(item.variantOf)}`, JSON.stringify(item.variantOf)));
+  const hintLabels = (item.hints?.tools ?? []).map(id => browse?.toolLabels?.[id] ?? id);
+  if (hintLabels.length) node.append(badge('state', 'info', `Written for ${hintLabels.join(', ')}`, 'Producer-declared display hints; not tool support or a binding.'));
+  if (item.variantOf) {
+    const original = browse?.items?.find(candidate => candidate.id === item.variantOf.itemId);
+    const variantName = original?.name ?? original?.label ?? item.variantOf.itemId ?? JSON.stringify(item.variantOf);
+    node.append(badge('state', 'info', `${hintLabels[0] ?? tool?.label ?? 'This tool'} version of ${variantName}`, JSON.stringify(item.variantOf)));
+  }
   const isMcp = item.kind === 'mcp-server' || item.kind === 'mcp';
   if (facts.fit?.permissionStep && !isMcp) node.append(badge('state', 'needs-ok', facts.fit.permissionStep, facts.fit.permissionStep));
   // One MCP server's own approval row: the tick is off by default, exists only when Core can write this

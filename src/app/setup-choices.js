@@ -8,6 +8,7 @@
 import { setupNeeds } from './setup-needs.js';
 import { compact } from './compact.js';
 import { copiesWords, drawerCopiesWords, secondCopyWarnings } from './tool-host-warnings.js';
+import { itemDisplayName } from '../catalog/item-name.js';
 
 const entryKey = ref => `${ref.releaseSha256}/${ref.itemId}`;
 const itemKey = item => `${item.root?.releaseSha256}/${item.id}`;
@@ -20,7 +21,7 @@ const itemKey = item => `${item.root?.releaseSha256}/${item.id}`;
 export function choiceLines({ roots = [], needs = new Map(), items = [] }) {
   const byKey = new Map(items.map(item => [itemKey(item), item]));
   const chosen = new Set(roots.map(entryKey));
-  const name = (key, fallback) => String(byKey.get(key)?.label ?? byKey.get(key)?.id ?? fallback);
+  const name = (key, fallback) => String(itemDisplayName(byKey.get(key), fallback));
   return roots.map(root => {
     const key = entryKey(root), item = byKey.get(key);
     const needed = [...needs.entries()].filter(([entry, by]) => !chosen.has(entry) && by.some(value => entryKey(value) === key))

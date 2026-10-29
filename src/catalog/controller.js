@@ -237,11 +237,15 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       return Boolean(selection?.recipe?.inline?.operations?.some(operation => operation.id === 'approve-server'));
     } catch { return false; }
   };
+  const browseContext = () => ({
+    toolLabels: publishedClients(state.summary?.coreTargets)?.labels ?? {},
+    items: state.entries.map(entry => entry.authoringItem).filter(Boolean),
+  });
   function cardsModel() {
     const scope = selectedScope(state.counts, browsingView());
     return {
       entries: visibleByTool(browseEntries()),
-      browse: { ...browseResult, enterprise },
+      browse: { ...browseResult, ...browseContext(), enterprise },
       tool: chosenTool,
       total: scopeTotal(state.entries, browsingView()),
       noun: scope === null ? "catalog entries" : "entries from this source",
@@ -296,7 +300,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   }
 
   function detailsModel(entry) {
-    return { entry, browse: { ...browseResult, enterprise }, tool: chosenTool, counts: state.counts, target: target.value,
+    return { entry, browse: { ...browseResult, ...browseContext(), enterprise }, tool: chosenTool, counts: state.counts, target: target.value,
       // Core's nativeClientIds when it published them, otherwise null (support unknown).
       coreClients: publishedClients(state.summary?.coreTargets)?.ids ?? null };
   }

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createCards, EVIDENCE_STATE } from "../../src/catalog/cards.js";
+import { itemBrowseFacts } from "../../src/catalog/browse-facts.js";
 import { ICONS } from "../../src/app/icons.js";
 
 function element(tag) {
@@ -27,7 +28,7 @@ function renderCard(t, description, evidence, model = {}) {
     else delete globalThis.document;
   });
   const entry = { entryId: "fixture.skill", subject: { id: "fixture", kind: "skill", subjectDigest: "sha256:fixture", source: { type: "github" } },
-    ...(description === null ? {} : { authoringItem: { id: "fixture", label: "Fixture", family: "fixture-family", description, root: { releaseSha256: "a".repeat(64), itemId: "fixture" } } }) };
+    ...(description === null ? {} : { authoringItem: { id: "fixture", label: "Fixture", family: "fixture-family", description, root: { releaseSha256: "a".repeat(64), itemId: "fixture" }, ...(model.authoringItem ?? {}) } }) };
   const elements = Object.fromEntries(["cardsGrid", "visibleCount", "visibleCaption", "categoryContext"].map(key => [key, element("div")]));
   const selections = [];
   createCards({ elements, onSelect: id => selections.push(id) }).render({ entries: [entry], total: 1, selectedId: null, ...model, ...(evidence ? { evidence: new Map([["fixture.skill", evidence]]) } : {}) });
@@ -171,4 +172,33 @@ test("an Add or Remove still in flight keeps its busy label when the grid is red
   assert.ok(busy); assert.equal(busy.disabled, true); assert.equal(busy.attributes['aria-busy'], 'true');
   busy.listeners.click({ stopPropagation() {} });
   assert.equal(called, false);
+});
+
+test('fit words distinguish recognised, listed-only and stale observations', () => {
+  const item = { id: 'rule' };
+  const compatibility = observed => ({ items: [{ item: { itemId: 'rule' }, support: 'native', observed, reason: '', observedOn: { observedAt: '2026-10-23', toolVersion: '2.1.0', os: 'linux', arch: 'x64' } }] });
+  assert.equal(itemBrowseFacts(item, { compatibility: compatibility('recognised') }, { label: 'Claude Code' }).words,
+    'Works in Claude Code (seen 2026-10-23, 2.1.0, on linux)');
+  assert.equal(itemBrowseFacts(item, { compatibility: compatibility('listed-only') }, { label: 'Claude Code' }).words,
+    'Claude Code sees its name; not yet seen using it');
+  const stale = compatibility('registered'); stale.items[0].stale = true;
+  assert.equal(itemBrowseFacts(item, { compatibility: stale }, { label: 'Claude Code' }).words,
+    'Last confirmed 2026-10-23 on 2.1.0');
+});
+
+test('card names include the Catalog namespace, not the raw id as a namespace', t => {
+  const { node } = renderCard(t, 'Described', undefined, { authoringItem: { name: 'coding-style', role: 'choosable', payload: { namespace: 'typescript' } } });
+  assert.equal(descendants(node).find(value => value.className.includes('wb-card-title')).textContent, 'coding-style (typescript)');
+  assert.equal(descendants(node).find(value => value.className.includes('card-namespace')).textContent, 'typescript');
+});
+
+test('tool hints use registry labels and variants name the referenced item', t => {
+  const { node } = renderCard(t, 'Described', undefined, {
+    authoringItem: { role: 'choosable', hints: { tools: ['claude-code'] }, variantOf: { framework: 'ecc', itemId: 'base-rule' } },
+    browse: { toolLabels: { 'claude-code': 'Claude Code' }, items: [{ id: 'base-rule', name: 'tdd' }] },
+  });
+  const words = descendants(node).map(value => value.textContent).join('|');
+  assert.match(words, /Written for Claude Code/);
+  assert.match(words, /Claude Code version of tdd/);
+  assert.doesNotMatch(words, /Written for claude-code|Variant of base-rule/);
 });

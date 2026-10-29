@@ -39,6 +39,7 @@ import { identity, sourceDetailRows, sourceIdentity, statementsOf } from "./entr
 import { iconFor } from "../app/icons.js";
 import { attachTooltip, clearTooltip } from "../app/tooltip.js";
 import { scopeCountOf } from "./selectors.js";
+import { itemDisplayName } from './item-name.js';
 
 /* These Catalog inspector slots have no verified per-entry scan input. */
 const DETECTOR_RUN_STATE_ABSENT =
@@ -196,7 +197,7 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
         const files = el('details'); files.append(el('summary', '', 'Files'), el('pre', 'browse-json', item.materials.map(value => value.relPath ?? value.path ?? value.packagePath).join('\n'))); context.append(files);
         elements.detailsDesc.after(context);
         }
-        elements.inspectorName.textContent = source.name;
+        elements.inspectorName.textContent = itemDisplayName({ ...item, name: source.name });
         elements.inspectorKind.setAttribute('aria-label', `Kind: ${item.kind}`);
         attachTooltip(elements.inspectorKind, `Kind: ${iconFor('kind', item.kind).label}`);
         showKindIcon(item.kind);

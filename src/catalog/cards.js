@@ -29,6 +29,7 @@ import { NOT_PUBLISHED, NOT_SUPPLIED } from "../app/absence.js";
 import { iconFor, iconSpan } from "../app/icons.js";
 import { attachTooltip } from "../app/tooltip.js";
 import { identity } from "./entry.js";
+import { itemDisplayName } from './item-name.js';
 
 const AUTHORITY = "Producer authenticity is unchecked; this is not an approval or execution authority.";
 // One entry per evidence state the host reports, worded as the neutral scan line until Scan publishes item
@@ -50,7 +51,7 @@ const chosenInSetup = (model, item) => (model.acceptedRoots ?? model.intent?.roo
 function card(entry, selectedId, onSelect, model) {
   const id = identity(entry);
   const source = entry.authoringItem ? sourcePresentation(entry.authoringItem) : null;
-  const title = source?.name ?? null;
+  const title = entry.authoringItem ? itemDisplayName({ ...entry.authoringItem, name: source?.name }, id.name) : null;
   const description = source?.description ?? null;
   const badge = entry.authoringItem ? { text: entry.authoringItem.family, value: true, title: 'Installed content family; upstream origins are shown in the inspector.', source: 'Content family' } : NO_FAMILY;
   const isSelected = selectedId === id.entryId;
@@ -156,7 +157,7 @@ function card(entry, selectedId, onSelect, model) {
   head.appendChild(toggle);
   if (entry.authoringItem?.role) {
     foot.replaceChildren(renderBrowseFacts(entry.authoringItem, model.browse, model.tool, { onApprove: (item, granted) => model.onApprove?.(item, granted), approved: model.approvalOf?.(entry.authoringItem) ?? false, approvalError: model.approvalErrorOf?.(entry.authoringItem) }));
-    const namespace = el('span', 'card-namespace', entry.authoringItem.id);
+    const namespace = el('span', 'card-namespace', entry.authoringItem.payload?.namespace ?? '');
     attachTooltip(namespace, `Namespaced Catalog identity: ${entry.authoringItem.id}`); top.append(namespace);
     const facts = itemBrowseFacts(entry.authoringItem, model.browse, model.tool);
     if (!chosenInSetup(model, entry.authoringItem) && ((facts.recipe && !facts.recipe.available) || (entry.authoringItem.recipes && !model.tool))) {

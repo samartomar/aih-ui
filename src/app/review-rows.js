@@ -1,6 +1,7 @@
 // Named rows for what the person approved, from Core's prepared work 1.6 review. The review's own
 // selections name the rows; operations attach by their published selectionId, with preparation.operationSelections
 // as the fallback linkage. Core diagnostics without a published row stay global, never invented per item (#165).
+import { itemDisplayName } from '../catalog/item-name.js';
 
 const words = diagnostic => diagnostic?.message ?? diagnostic?.code ?? '';
 
@@ -30,7 +31,7 @@ export function reviewRows(review, { operationSelections = [] } = {}) {
       : origin.reasonIncluded === 'required-by' ? `Required by ${origin.requiredBy?.itemId ?? 'another item'}` : '').filter(Boolean);
     return {
       selectionId: row.selectionId, managementId: row.managementId, scope: row.scope,
-      heading: row.name ?? `Selection ${row.selectionId} (its recorded metadata is unavailable)`,
+      heading: row.name ? itemDisplayName(row) : `Selection ${row.selectionId} (its recorded metadata is unavailable)`,
       item: row.item ?? null, tool: row.tool ?? null, kind: row.kind ?? null,
       sets, how,
       permissionStep: row.permissionStep ?? null,

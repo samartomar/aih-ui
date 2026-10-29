@@ -2,6 +2,7 @@ import { el } from '../app/dom.js';
 import { iconSpan } from '../app/icons.js';
 import { attachTooltip } from '../app/tooltip.js';
 import { createConfigurationEditor } from '../app/configuration-editor.js';
+import { itemDisplayName } from './item-name.js';
 // UI state only. All membership/option expansion is returned by Catalog.
 export function createStartingSets({ container, onChange, onAdd }) {
   let shownFramework;
@@ -113,14 +114,14 @@ export function createStartingSets({ container, onChange, onAdd }) {
         // Catalog owns refusal of excluding required members; never infer it here.
         tick.addEventListener('change', () => change(requests.map(request => entry.origins.some(origin => origin.set?.setId === request.setId && origin.set.framework === framework.id) ? ({ ...request, members: [...(request.members ?? []).filter(value => value.item.itemId !== item.id), { item: { framework: frameworks.find(value => value.sha256 === entry.item.releaseSha256)?.id ?? framework.id, itemId: item.id }, include: tick.checked }] }) : request)));
         if (!entry.origins.some(origin => origin.reasonIncluded === 'in-set')) { tick.disabled = true; attachTooltip(label, 'Included because another chosen member requires it. The exact reasons remain in Your setup.'); }
-        label.append(tick, iconSpan('kind', item.kind), document.createTextNode(item.name ?? item.label)); attachTooltip(label, JSON.stringify(entry.origins)); members.append(label);
+        label.append(tick, iconSpan('kind', item.kind), document.createTextNode(itemDisplayName(item))); attachTooltip(label, JSON.stringify(entry.origins)); members.append(label);
       }
       for (const request of requests) for (const member of sets.find(set => set.id === request.setId)?.members ?? []) if (member.optional && !selected.some(entry => entry.item.itemId === member.item.itemId)) {
         const item = items.find(item => item.id === member.item.itemId); if (!item) continue;
         const override = (request.members ?? []).find(value => value.item.itemId === member.item.itemId);
         const label = el('label', `set-member${item.kind === 'hook' ? ' set-hook' : ''}`); const tick = el('input'); tick.type = 'checkbox'; tick.checked = override?.include ?? false; tick.dataset.member = item.id;
         tick.addEventListener('change', () => change(requests.map(value => value !== request ? value : { ...value, members: [...(value.members ?? []).filter(value => value.item.itemId !== member.item.itemId), { item: { framework: member.item.framework, itemId: member.item.itemId }, include: tick.checked }] })));
-        label.append(tick, iconSpan('kind', item.kind), document.createTextNode(item.name ?? item.label)); attachTooltip(label, 'Optional member declared by this set. Catalog resolves inclusion; hooks remain separate choices. A refused choice stays reachable so you can undo it.'); members.append(label);
+        label.append(tick, iconSpan('kind', item.kind), document.createTextNode(itemDisplayName(item))); attachTooltip(label, 'Optional member declared by this set. Catalog resolves inclusion; hooks remain separate choices. A refused choice stays reachable so you can undo it.'); members.append(label);
       }
       container.append(members);
     }
