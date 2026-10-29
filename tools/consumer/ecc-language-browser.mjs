@@ -77,11 +77,13 @@ try {
     for (let step = 0; step < 4; step++) await page.locator('#setup-next').click();
     await page.locator('#setup-dialog').waitFor({ state: 'hidden' });
   }
+  console.log('F20 stage: open ECC');
   await chooseCatalogFamily(page, 'ECC');
   await page.locator('#starting-sets .set-refusal').waitFor();
   await page.locator(`[data-set-id="${fixture.expected.ecc.optionSet.id}"]`).waitFor({ state: 'attached' });
   await page.locator(`[data-set-id="${fixture.expected.ecc.optionSet.id}"]`).evaluate(node => { const details = node.closest('details'); if (details) details.open = true; node.click(); });
-  await page.evaluate(id => document.querySelector(`[data-option="${id}"]`).click(), fixture.expected.ecc.language.id);
+  console.log('F20 stage: pick TypeScript');
+  await page.evaluate(id => { const input = document.querySelector(`[data-option="${id}"]`); input.checked = true; input.dispatchEvent(new Event('change', { bubbles: true })); }, fixture.expected.ecc.language.id);
   await page.locator('#starting-sets .set-refusal').waitFor();
   const panel = page.locator('#starting-sets .set-inputs'); await panel.locator('> summary').click();
   const editors = await panel.locator('[data-configuration-item]').all();
@@ -96,6 +98,7 @@ try {
     await editor.getByRole('button', { name: 'Review configuration', exact: true }).click();
   }
   await page.locator('#starting-sets .set-refusal').waitFor({ state: 'detached' });
+  console.log('F20 stage: add configured sets');
   const added = page.waitForResponse(response => /authoring-(?:draft-edit|edit)$/.test(response.url()));
   await page.locator('[data-add-sets]').click();
   const addedResult = await (await added).json();
@@ -104,6 +107,7 @@ try {
   const review = await page.locator('#install-review-rows').innerText();
   assert.match(review, /coding-style \(typescript\)/);
   await page.locator('#install-button:not([disabled])').waitFor();
+  console.log('F20 stage: install');
   await page.locator('#install-button').click();
   await page.locator('#install-message[data-outcome="installed"]').waitFor({ timeout: 120_000 });
   const files = await relativeFiles(project);
@@ -118,6 +122,7 @@ try {
   throw error;
 } finally {
   await browser.close();
+  workbench.server.closeAllConnections();
   await new Promise(resolveClose => workbench.server.close(resolveClose));
 }
 console.log(JSON.stringify({ status: 'passed', language: 'typescript', ruleFilesWritten, expectedRuleCount: expectedRules.length }));
