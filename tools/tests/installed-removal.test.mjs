@@ -30,7 +30,8 @@ test('several items are prepared once through removal 1.2 and applied once with 
   const result = await confirmRemoval({ preview, request, mode: 'vibe' });
   assert.equal(calls.filter(([operation]) => operation === 'apply').length, 1);
   assert.equal(result.outcome, 'removed');
-  assert.match(result.message, /chosen: absent.*needed: absent/);
+  // `removed` is the contract's state for a Core-confirmed absence; it has no sentence of its own.
+  assert.equal(result.message, 'chosen: removed needed: removed');
   assert.doesNotMatch(result.message, /unverified/i);
 });
 
@@ -41,13 +42,18 @@ test('set origins and kept members retain their exact Core actions and reasons',
       members: [{ kind: 'file', path: `/project/${index}.md`, action: 'keep-shared', reason: 'shared-content', operationId: null }] })) });
     return { completion: 'complete', diagnostics: [], members: entries.map((entry, index) => ({ managementId: entry.managementId, path: `/project/${index}.md`, outcome: 'kept', check: 'unchecked' })) };
   };
-  const withOrigins = entries.map(entry => ({ ...entry, origin }));
+  // The panel supplies the contract's sentence with the other set's Catalog name.
+  const withOrigins = entries.map(entry => ({ ...entry, origin, kept: 'Kept; also part of productivity' }));
   const preview = await previewRemoval({ entries: withOrigins, request, mode: 'vibe' });
   assert.deepEqual(preview.selectors.map(entry => entry.origin), [origin, origin]);
-  assert.deepEqual(preview.kept.map(item => item.reason), ['Kept; also part of productivity', 'Kept; also part of productivity']);
+  // An origin-only release is its step's message, not a separate kept line.
+  assert.deepEqual(preview.kept, []);
+  assert.deepEqual(preview.steps.map(step => [step.state, step.change, step.message]),
+    [['kept-shared', 'remove-origin', 'Kept; also part of productivity'], ['kept-shared', 'remove-origin', 'Kept; also part of productivity']]);
+  assert.deepEqual(preview.steps.flatMap(step => step.files.map(file => [file.action, file.reason])), [['keep-shared', 'shared-content'], ['keep-shared', 'shared-content']]);
   const result = await confirmRemoval({ preview, request, mode: 'vibe' });
   assert.equal(result.outcome, 'nothing-removed');
-  assert.match(result.message, /chosen: Kept; also part of productivity/);
+  assert.equal(result.message, 'chosen: Kept; also part of productivity needed: Kept; also part of productivity');
 });
 
 test('a complete run with no member evidence cannot confirm absence', async () => {
@@ -75,7 +81,8 @@ test('mixed absent and kept members are partly removed and name the kept member'
   const result = await confirmRemoval({ preview, request, mode: 'vibe' });
   assert.equal(result.outcome, 'removed');
   assert.equal(result.results[0].state, 'partially-removed');
-  assert.match(result.results[0].message, /Partly removed; kept: \/project\/shared\.md \(Kept; also part of productivity\)/);
+  // The contract's sentence is "Partly removed; kept: {members}", with nothing after the members.
+  assert.equal(result.results[0].message, 'chosen: Partly removed; kept: /project/shared.md');
 });
 
 test('a member without an action remains readable and unconfirmed', async () => {
