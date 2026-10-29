@@ -116,7 +116,7 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     request,
     // Host results still out (an Install preview, an installed list) were for the previous project folder; they come back superseded.
-    discardHostWork() { hostRevision++; folderRevision++; },
+    discardHostWork() { hostRevision++; folderRevision++; notify(); },
     async requestHost(operation, body = {}) {
       const attempt = ++hostRevision, draft = revision, folder = folderRevision;
       const result = await request(operation, body);

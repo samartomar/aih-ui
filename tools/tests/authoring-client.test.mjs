@@ -186,8 +186,9 @@ test('Q6-R2: setTool notifies subscribers and folderRevision is observable acros
     client.subscribe(() => { notified += 1; });
     client.setTool('claude');
     assert.equal(notified, 1, 'a tool change notifies every subscribed surface (drawer host facts, catalog re-read)');
-    const before = client.folderRevision;
+    const before = client.folderRevision, beforeNotify = notified;
     client.discardHostWork();
     assert.ok(client.folderRevision > before, 'folderRevision moves on folder/host invalidation so browse keys can bind it');
+    assert.equal(notified, beforeNotify + 1, 'folder invalidation synchronously refreshes subscribed host-fact surfaces');
   } finally { globalThis.fetch = original; }
 });

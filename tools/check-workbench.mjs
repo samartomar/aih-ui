@@ -85,6 +85,16 @@ if (process.exitCode === 0) {
   process.exitCode = controller.status ?? 1;
 }
 if (process.exitCode === 0) {
+  const drawer = spawnSync(process.execPath, [join(repo, 'tools/drawer-host-browser.mjs')], {
+    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 180_000,
+    env: { ...isolated, AIH_CONSUMER_DIR: output, PLAYWRIGHT_MODULE: pathToFileURL(join(repo, 'node_modules/playwright/index.mjs')).href }
+  });
+  writeFileSync(join(output, 'drawer-host-browser.log'), `${drawer.stdout ?? ''}${drawer.stderr ?? ''}`);
+  process.stdout.write(drawer.stdout ?? ''); process.stderr.write(drawer.stderr ?? '');
+  if (drawer.error) throw drawer.error;
+  process.exitCode = drawer.status ?? 1;
+}
+if (process.exitCode === 0) {
   // The reviewed-batch journey runs several fresh Core prepares and applies, in a disposable account home, so this stage takes longer.
   // The visual-groundwork journey adds about 50s per theme on a hosted runner (and as much again for its real-engine
   // "can't read" run once Core publishes checkContracts), and the Your tool journey about 65s per theme, so the stage

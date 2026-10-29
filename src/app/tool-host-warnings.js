@@ -12,20 +12,25 @@ export function secondCopyWarnings(host) {
 }
 
 /**
- * The check's own state: 'loading' (no answer yet), 'unavailable' (no project folder, nothing chosen, or
- * this Core publishes no host inspection), 'failed' (the check itself broke), 'empty' (checked, nothing
- * chosen) or 'checked'. Only 'checked' may say anything about copies.
+ * The check's own state: 'loading' (no answer yet), 'unavailable' (no project folder, nothing chosen,
+ * this Core publishes no host inspection, or a requested per-item copy fact is unavailable), 'failed'
+ * (the check itself broke), 'empty' (checked, nothing chosen) or 'checked'. Warnings remain visible even
+ * when another portion of the inspection is unavailable; only a complete observation may claim no copy.
  */
-export function hostCopiesState(host) {
+export function hostCopiesState(host, itemId) {
   if (!host) return { state: 'loading' };
   if (host.status === 'unavailable') return { state: 'unavailable', reason: host.reason };
   if (['failed', 'invalid', 'refused', 'cancelled'].includes(host.status)) return { state: 'failed', reason: host.reason ?? host.status };
-  const inspected = host.items ?? [];
-  if (!inspected.length) return { state: 'empty' };
+  const all = host.items ?? [];
+  if (!all.length) return { state: 'empty' };
+  const inspected = all.filter(item => itemId === undefined || item.itemId === itemId);
+  const unavailable = inspected.flatMap(item => Object.values(item.copies ?? {})).find(copy => copy.state === 'unavailable');
+  if (unavailable) return { state: 'unavailable', reason: unavailable.reason };
   return { state: 'checked' };
 }
 
 const COULD_NOT = "Couldn't check whether your tool already has this.";
+const warningWords = warnings => warnings.map(warning => `Second copy: ${warning.key} is also in ${WHERE[warning.where] ?? warning.where} (${warning.path}).`).join(' ');
 
 /**
  * One item's second-copy line for card, inspector and drawer. `chosen` marks items in the inspected set;
@@ -33,23 +38,23 @@ const COULD_NOT = "Couldn't check whether your tool already has this.";
  * Workbench duplicate rule.
  */
 export function copiesWords(host, itemId, { chosen = true } = {}) {
-  const state = hostCopiesState(host);
+  const state = hostCopiesState(host, itemId);
   if (state.state === 'loading') return 'Checking whether your tool already has this…';
-  if (state.state === 'unavailable' || state.state === 'failed') return `${COULD_NOT} ${state.reason ?? ''}`.trim();
+  const warning = warningWords(secondCopyWarnings(host).filter(warning => warning.itemId === itemId));
+  if (state.state === 'unavailable' || state.state === 'failed') return [warning, `${COULD_NOT} ${state.reason ?? ''}`.trim()].filter(Boolean).join(' ');
   if (state.state === 'empty') return "Couldn't check: nothing is chosen yet.";
   if (!chosen) return "Couldn't check: only your chosen content is checked for a second copy.";
-  const mine = secondCopyWarnings(host).filter(warning => warning.itemId === itemId);
-  if (!mine.length) return 'No second copy reported by your tool.';
-  return mine.map(warning => `Second copy: ${warning.key} is also in ${WHERE[warning.where] ?? warning.where} (${warning.path}).`).join(' ');
+  if (!warning) return 'No second copy reported by your tool.';
+  return warning;
 }
 
 /** The drawer line over everything chosen: the warnings, or the explicit not-checked wording. */
 export function drawerCopiesWords(host) {
   const state = hostCopiesState(host);
   if (state.state === 'loading') return 'Checking whether your tool already has your chosen content…';
-  if (state.state === 'unavailable' || state.state === 'failed') return `${COULD_NOT} ${state.reason ?? ''}`.trim();
+  const warning = warningWords(secondCopyWarnings(host));
+  if (state.state === 'unavailable' || state.state === 'failed') return [warning, `${COULD_NOT} ${state.reason ?? ''}`.trim()].filter(Boolean).join(' ');
   if (state.state === 'empty') return "Couldn't check for a second copy: nothing is chosen yet.";
-  const warnings = secondCopyWarnings(host);
-  if (!warnings.length) return 'Your tool reported no second copies of your chosen content.';
-  return warnings.map(warning => `Second copy: ${warning.key} is also in ${WHERE[warning.where] ?? warning.where} (${warning.path}).`).join(' ');
+  if (!warning) return 'Your tool reported no second copies of your chosen content.';
+  return warning;
 }

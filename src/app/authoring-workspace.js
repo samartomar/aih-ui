@@ -16,7 +16,6 @@ import { createAddedNotice } from './added-notice.js';
 import { createInstalledPanel } from './installed-panel.js';
 import { createProjectFolderRow } from './project-folder.js';
 import { createSetupChoices } from './setup-choices.js';
-import { YOUR_TOOL_KEY } from './your-tool.js';
 import { rememberOpen } from './advanced.js';
 
 const buttonClass = 'px-3 py-1.5 rounded bg-surface-container text-on-surface border border-wb-border hover:bg-surface-container-high';
@@ -157,9 +156,9 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     hostCopies = undefined; choicesView.render();
     // One snapshot with the catalog controller and compileDraft: an open draft's LIVE intent roots win (Q6-R).
     const roots = (client.draft ? client.draft.intent?.roots : client.intent?.roots) ?? [];
-    const tool = (() => { try { return globalThis.localStorage?.getItem(YOUR_TOOL_KEY) ?? undefined; } catch { return undefined; } })();
+    const tool = client.tool ?? undefined;
     const items = roots.map(root => ({ releaseSha256: root.releaseSha256, itemId: root.itemId }));
-    const result = await client.request('tool-host', { tool, items }).catch(() => undefined);
+    const result = await client.request('tool-host', { tool, items }).catch(error => ({ status: 'failed', reason: error.message }));
     if (attempt !== hostCopiesAttempt) return;
     hostCopies = result;
     choicesView.render();

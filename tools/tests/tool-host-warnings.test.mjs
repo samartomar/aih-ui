@@ -43,3 +43,17 @@ test('the drawer line summarizes the check without inventing a clean state', () 
   assert.match(drawerCopiesWords(host('complete', { items: [{ itemId: 'skill-a' }] })), /^Your tool reported no second copies of your chosen content\./);
   assert.match(drawerCopiesWords(host('incomplete', { items: [{ itemId: 'skill-a' }], warnings: [warning('skill-a')] })), /^Second copy: grill-me is also in your user folder \(/);
 });
+
+test('unavailable per-item copy facts stay unchecked and preserve actual warnings', () => {
+  const partial = host('incomplete', { items: [{ itemId: 'skill-a', copies: {
+    user: { state: 'unavailable', reason: 'Permission denied.' },
+    parentFolders: { state: 'none' }, plugins: { state: 'none' },
+  } }] });
+  assert.equal(hostCopiesState(partial).state, 'unavailable');
+  assert.match(copiesWords(partial, 'skill-a'), /Couldn't check.*Permission denied/);
+  assert.match(drawerCopiesWords(partial), /Couldn't check.*Permission denied/);
+  assert.doesNotMatch(drawerCopiesWords(partial), /reported no second copies/);
+  const mixed = { ...partial, warnings: [warning('skill-a')] };
+  assert.match(copiesWords(mixed, 'skill-a'), /Second copy[\s\S]*Couldn't check.*Permission denied/);
+  assert.match(drawerCopiesWords(mixed), /Second copy[\s\S]*Couldn't check.*Permission denied/);
+});
