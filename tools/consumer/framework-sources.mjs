@@ -1,6 +1,7 @@
 // Host-selected sources only. Browser requests and saved choices cannot name paths or trust.
 import { readFile, stat, writeFile, rename } from 'node:fs/promises';
-import { isAbsolute, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import * as catalogNode from '@aihq/catalog/node';
@@ -112,7 +113,11 @@ export async function readFrameworkSources(configuration) {
       const archivePackage = JSON.parse(execFileSync('tar', ['-xzOf', '-', 'package/package.json'], { input: archive, maxBuffer: 1_048_576, windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] }).toString('utf8'));
       if (archivePackage.name !== read.provenance.package.name || archivePackage.version !== read.provenance.package.version) throw new Error('Archive package identity differs from installed content.');
       const internalContent = { status: read.status, provenance: read.provenance, archiveSha256: selected.archiveSha256 };
-      const inventory = { release: read.release, family: read.release.framework.name, materialSource: read.source, materials: await materials(selected.root, read.release), internalContent };
+      // Content read from the installed Catalog package names its release document for execution policy 1.6.0, read by Core at
+      // the host's `catalog` root, as the installed families do; content from any other root keeps its recipes inline.
+      const atCatalogRoot = resolve(selected.root) === resolve(dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'))));
+      const inventory = { release: read.release, family: read.release.framework.name, materialSource: read.source, materials: await materials(selected.root, read.release), internalContent,
+        ...(atCatalogRoot ? { catalogRelease: { path: read.provenance.contentPath, sha256: read.provenance.contentSha256, byteLength: read.provenance.contentByteLength } } : {}) };
       const existing = inventories.find(value => value.release.sha256 === read.release.sha256);
       if (existing) {
         if (JSON.stringify(existing.internalContent) === JSON.stringify(internalContent)) continue;
