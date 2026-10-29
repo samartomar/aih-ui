@@ -11,22 +11,25 @@ const WORDS = {
 };
 export const indexStatusCodes = Object.keys(WORDS);
 
+// The one rule: a diagnostic's line in the contract's words, or null when it is not an index status or its wording
+// cannot be filled honestly (an offline copy with no recorded date).
+function statusLine(source, diagnostic) {
+  const words = WORDS[diagnostic.code];
+  if (!words || (diagnostic.code === 'offline' && !source.lastVerifiedAt)) return null;
+  return words({ source: source.id, framework: diagnostic.frameworkId, version: diagnostic.version, date: source.lastVerifiedAt });
+}
+
 // One line per distinct status, in the order Catalog reported them; `unsigned` is said once for the whole list.
 export function indexStatuses(catalog) {
   const lines = [], seen = new Set();
-  const add = (code, text, message) => { if (!seen.has(text)) { seen.add(text); lines.push({ code, text, message }); } };
   for (const source of catalog?.frameworkSources ?? []) {
     if (source.kind === 'internal') continue;
     for (const diagnostic of source.diagnostics ?? []) {
-      const words = WORDS[diagnostic.code];
-      if (!words) continue;
-      // An offline copy names the date it was last verified; without one there is no honest wording to show.
-      const date = diagnostic.code === 'offline' ? source.lastVerifiedAt : undefined;
-      if (diagnostic.code === 'offline' && !date) continue;
-      add(diagnostic.code, words({ source: source.id, framework: diagnostic.frameworkId, version: diagnostic.version, date }), diagnostic.message);
+      const text = statusLine(source, diagnostic);
+      if (text && !seen.has(text)) { seen.add(text); lines.push({ code: diagnostic.code, text, message: diagnostic.message }); }
     }
   }
   return lines;
 }
-// True when a source's diagnostics are all index statuses, so its failure wording would only repeat them.
-export const onlyIndexStatuses = source => (source.diagnostics ?? []).length > 0 && source.diagnostics.every(value => value.code in WORDS);
+// True when every diagnostic of a source has a status line, so its failure wording would only repeat them.
+export const onlyIndexStatuses = source => (source.diagnostics ?? []).length > 0 && source.diagnostics.every(diagnostic => statusLine(source, diagnostic) !== null);
