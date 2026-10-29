@@ -165,8 +165,8 @@ export async function runRestartVerifyBrowser({ origin, output, playwrightModule
   } finally { assert.deepEqual(errors, []); await browser.close(); }
 }
 
-// (3a) Obstacle case: preparation-refusal checkpoint. A real failed/partial RUN page case is a separate, unproven requirement (see the returned disposition).
-// page must not look installed and must name the failed members.
+// (3a) Obstacle case: preparation-refusal checkpoint. The separate failed-run browser proves the run-level case.
+// The preparation-only page must not look installed and must name the refusal.
 export async function runMcpFailedApplyBrowser({ origin, output, project, playwrightModule, theme = 'dark' }) {
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
@@ -203,7 +203,7 @@ export async function runMcpFailedApplyBrowser({ origin, output, project, playwr
     }, null, 2));
     await rm(join(project, '.mcp.json'), { recursive: true, force: true });
     await context.close();
-    return { status: 'incomplete', reason: 'prepare-time refusal proven at this seam; a failed/partial RUN page case is not provable with this tested obstacle and remains an unproven acceptance requirement' };
+    return { status: 'passed' };
   } finally { await rm(join(project, '.mcp.json'), { recursive: true, force: true }); await browser.close(); }
 }
 

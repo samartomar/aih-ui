@@ -11,6 +11,7 @@ import { listen } from './server/static.mjs';
 import { runInstalledPanelBrowser } from './consumer/installed-panel-browser.mjs';
 import { runFirstRunBrowser, runRestartInstallBrowser, runRestartVerifyBrowser, runMcpFailedApplyBrowser, runMcpApplyBrowser, runStaleReviewBrowser } from './consumer/ui165-acceptance-browser.mjs';
 import { runProjectFolderBrowser } from './consumer/project-folder-browser.mjs';
+import { runMcpFailedRunBrowser } from './consumer/ui165-failed-run-browser.mjs';
 import { noteInventory, runUi168UpdateInstallBrowser, runUi168UpdateVerifyBrowser } from './consumer/ui168-update-browser.mjs';
 import { runUi168ProjectBasicsBrowser, runUi168BlockDriftBrowser } from './consumer/ui168-project-basics-browser.mjs';
 import { runUi168SetRemovalBrowser } from './consumer/ui168-set-removal-browser.mjs';
@@ -153,7 +154,10 @@ for (const theme of THEMES) {
 
   const mcpProject = join(consumerDir, `mcp-apply-project-${theme}-${randomUUID().slice(0, 8)}`);
   await withHost(mcpProject, { sources: mcpSources }, async origin =>
-    await caseOutcome(`MCP obstacle case: preparation refusal proven, failed-run unproven (${theme})`, await runMcpFailedApplyBrowser({ origin, output: join(consumerDir, `mcp-failed-apply-evidence-${theme}`), project: mcpProject, playwrightModule: playwrightPath, theme })));
+    await caseOutcome(`MCP preparation refusal case (${theme})`, await runMcpFailedApplyBrowser({ origin, output: join(consumerDir, `mcp-failed-apply-evidence-${theme}`), project: mcpProject, playwrightModule: playwrightPath, theme })));
+  const failedRunProject = join(consumerDir, `mcp-failed-run-project-${theme}-${randomUUID().slice(0, 8)}`);
+  await withHost(failedRunProject, { sources: mcpSources }, async origin =>
+    await caseOutcome(`MCP failed run case (${theme})`, await runMcpFailedRunBrowser({ origin, output: join(consumerDir, `mcp-failed-run-evidence-${theme}`), project: failedRunProject, playwrightModule: playwrightPath, theme })));
   await withHost(mcpProject, { sources: mcpSources }, async origin =>
     await caseOutcome(`MCP ticked Apply case (${theme})`, await runMcpApplyBrowser({ origin, output: join(consumerDir, `mcp-apply-evidence-${theme}`), project: mcpProject, playwrightModule: playwrightPath, theme })));
 
