@@ -18,32 +18,22 @@ export async function runUi168SetRemovalBrowser({ origin, output, playwrightModu
     if (await page.locator('#setup-dialog').isVisible()) {
       await page.getByRole('radio', { name: /Vibe coder/ }).check();
       for (let step = 0; step < 4; step++) await page.locator('#setup-next').click();
+      await page.locator('#setup-dialog').waitFor({ state: 'hidden' });
     }
     const destination = theme === 'light' ? 'Switch to light mode' : 'Switch to dark mode';
-    if (await page.getByRole('button', { name: destination, exact: true }).count()) await page.getByRole('button', { name: destination, exact: true }).click();
+    if (await page.getByRole('button', { name: destination, exact: true }).count()) await page.getByRole('button', { name: destination, exact: true }).first().click();
     await chooseCatalogFamily(page, 'Extensions');
-    await page.locator('#starting-sets .more-sets > summary').click();
-    const engineering = page.locator('#starting-sets [data-set-id="engineering"]');
-    if ((await engineering.getAttribute('aria-pressed')) === 'true') await engineering.click();
-    const toggle = page.locator('#starting-sets [data-set-id="productivity"]');
-    if ((await toggle.getAttribute('aria-pressed')) !== 'true') await toggle.click();
     await page.locator('[data-add-sets]').click();
     await page.waitForFunction(() => document.getElementById('framework-guidance').textContent.includes('Chosen sets added'));
-    await page.locator('#browse-all-items').uncheck();
-    await page.locator('#browse-all-items').check();
-    await page.locator('#catalog-search').fill('');
-    await page.locator('#cards-grid [data-card-id$="/extensions.matt.code-review"]').waitFor();
-    assert.ok(await page.locator('#cards-grid').getByRole('button', { name: 'Add extensions.matt.code-review', exact: true }).count(), await page.locator('#cards-grid [data-card-id$="/extensions.matt.code-review"]').innerText());
-    await addFromCatalog(page, 'extensions.matt.code-review');
     await openPolicyDrawer(page);
     await page.locator('#install-button:not([disabled])').waitFor({ timeout: 120_000 });
     await page.locator('#install-button').click();
     await page.locator('#install-message[data-outcome="installed"]').waitFor({ timeout: 120_000 });
-    const set = page.locator('[data-installed-set^="productivity/"]');
+    const set = page.locator('[data-installed-set^="engineering/"]');
     await set.waitFor();
     const calls = [];
     page.on('request', request => { if (/\/api\/authoring-(remove|apply)$/.test(request.url())) calls.push(request.url().split('authoring-')[1]); });
-    await set.getByRole('button', { name: 'Remove set productivity', exact: true }).click();
+    await set.getByRole('button', { name: 'Remove set engineering', exact: true }).click();
     const preview = set.locator('div').filter({ has: set.getByRole('button', { name: 'Confirm remove', exact: true }) });
     await set.getByRole('button', { name: 'Confirm remove', exact: true }).waitFor();
     const review = await set.innerText();

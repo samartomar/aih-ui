@@ -173,6 +173,8 @@ export async function runMcpFailedApplyBrowser({ origin, output, project, playwr
   const browser = await chromium.launch({ headless: true });
   try {
     const { context, page } = await openPage(browser, origin, { theme, tool: true });
+    const preparations = [];
+    page.on('response', response => { if (response.url().endsWith('/api/authoring-prepare')) void response.json().then(value => preparations.push(value)).catch(() => {}); });
     await chooseCatalogFamily(page, 'ECC');
     await page.locator('#catalog-search').fill('cloudflare-docs');
     const card = page.locator('[data-card-id$="/ecc.mcp.cloudflare-docs"]');
@@ -180,18 +182,14 @@ export async function runMcpFailedApplyBrowser({ origin, output, project, playwr
       await writeFile(join(output, 'incomplete.json'), JSON.stringify({ status: 'incomplete', reason: 'The integrated consumer catalog carries no checked ECC MCP item, so the typed MCP Apply case cannot run in this seam.' }, null, 2));
       return { status: 'incomplete', reason: 'ECC MCP item not in integrated catalog' };
     }
+    // Preparation-refusal checkpoint: the registration file's path exists as a directory before the
+    // first preview starts. Core refuses that preparation; no reviewed handle or run exists.
+    await mkdir(join(project, '.mcp.json'), { recursive: true });
     await addFromCatalog(page, 'ecc.mcp.cloudflare-docs');
     await openPolicyDrawer(page);
-    await page.locator('#install-button:not([disabled])').waitFor();
-    // Preparation-refusal checkpoint: the registration file's path exists as a directory. This TESTED
-    // obstacle makes Core refuse the fresh preparation (INPUT_INVALID: the requested work cannot be
-    // admitted) - it does NOT produce a failed or partial run; Apply never executes and no run outcome
-    // exists. A real failed/partial run page case remains a separate, unproven requirement.
-    await mkdir(join(project, '.mcp.json'), { recursive: true });
-    await page.locator('#install-button').click();
-    await page.waitForFunction(() => /Install did not start/.test(document.getElementById('install-message').textContent), null, { timeout: 60_000 });
+    await page.waitForFunction(() => /Can’t install yet|Can't install yet|Install did not start|Nothing has been installed yet/.test(document.getElementById('install-message').textContent), null, { timeout: 60_000 });
     const message = await page.locator('#install-message').innerText();
-    assert.match(message, /Install did not start: .*admit the requested work/i, 'Core names the prepare-time refusal');
+    assert.match(message, /Can.?t install yet: .*admit the requested work/i, `Core names the prepare-time refusal: ${JSON.stringify(preparations)}`);
     assert.doesNotMatch(message, /Confirmed on disk/, 'the strict success claim never appears on a refusal');
     assert.equal(await page.locator('#install-message').getAttribute('data-outcome'), null, 'a refused preparation sets no run outcome');
     await page.screenshot({ path: join(output, 'mcp-obstacle-preparation-refusal.png'), fullPage: true });

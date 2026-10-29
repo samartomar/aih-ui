@@ -13,9 +13,10 @@ async function openPage(browser, origin, theme) {
   if (await page.locator('#setup-dialog').isVisible()) {
     await page.getByRole('radio', { name: /Vibe coder/ }).check();
     for (let step = 0; step < 4; step++) await page.locator('#setup-next').click();
+    await page.locator('#setup-dialog').waitFor({ state: 'hidden' });
   }
   const destination = theme === 'light' ? 'Switch to light mode' : 'Switch to dark mode';
-  if (await page.getByRole('button', { name: destination, exact: true }).count()) await page.getByRole('button', { name: destination, exact: true }).click();
+  if (await page.getByRole('button', { name: destination, exact: true }).count()) await page.getByRole('button', { name: destination, exact: true }).first().click();
   return { context, page };
 }
 

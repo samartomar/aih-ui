@@ -60,7 +60,7 @@ async function openPage(browser, origin, theme) {
     for (let step = 0; step < 4; step++) await page.locator('#setup-next').click();
   }
   const destination = theme === 'light' ? 'Switch to light mode' : 'Switch to dark mode';
-  if (await page.getByRole('button', { name: destination, exact: true }).count()) await page.getByRole('button', { name: destination, exact: true }).click();
+  if (await page.getByRole('button', { name: destination, exact: true }).count()) await page.getByRole('button', { name: destination, exact: true }).first().click();
   return { context, page };
 }
 
