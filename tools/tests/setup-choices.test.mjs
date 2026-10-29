@@ -34,7 +34,7 @@ test('an item the installed Catalog no longer lists is named by its id, never le
   assert.deepEqual(lines.map(line => [line.name, line.needed.map(entry => entry.name)]), [['gone.item', ['other.gone']]]);
 });
 
-test('Q7-R: chosen rows group under recorded exact set identities, with simultaneous membership and explicit individuals', () => {
+test('Q7-R: chosen rows group under recorded exact set identities, with simultaneous membership and explicit individuals', async () => {
   const SHA = 's'.repeat(64);
   const originSet = `set-${REL.slice(0, 16)}-starter`;
   const roots = [
@@ -49,19 +49,52 @@ test('Q7-R: chosen rows group under recorded exact set identities, with simultan
   const view = createSetupChoices({ client, el: fake, button });
   view.render();
   const groups = new Map(walk(view.node).filter(node => node.dataset.choiceGroup).map(group => [group.dataset.choiceGroup, group]));
-  const starter = groups.get(`starter/${SHA}`);
+  const starter = groups.get(`${REL}/starter/${SHA}`);
   assert.ok(starter, 'the group key is the exact recorded set identity');
   const heading = walk(starter).find(node => node.dataset.choiceSet);
   assert.match(heading.textContent, /starter/);
-  assert.equal(heading.title, `${REL}/starter/${SHA}`);
+  assert.equal(heading.title, `${REL}/starter/${SHA}`, 'the heading identity is fully qualified');
   const members = walk(starter).filter(node => node.dataset.choiceItem).map(node => node.dataset.choiceItem).sort();
   assert.deepEqual(members, ['grill-me', 'tdd'], 'named rows belong to the correct set');
   const individual = groups.get('individual');
   assert.deepEqual(walk(individual).filter(node => node.dataset.choiceItem).map(node => node.dataset.choiceItem), ['git-guard'], 'no-origin rows stay explicit');
   assert.equal(walk(view.node).filter(node => node.dataset.choiceItem === 'tdd').length, 1, 'a simultaneous member renders once');
-  // Removal still works through the grouped row.
-  const remove = walk(starter).filter(node => node.dataset.choiceItem === 'tdd').flatMap(node => walk(node)).find(node => node.tag === 'button');
-  assert.equal(remove.attributes['aria-label'], 'Remove tdd from setup');
+  // Removal actually works through the grouped row: invoke the real callback.
+  const removed = [];
+  const removingClient = { intent, catalog: { items }, bytes: [], onRemove: (root, name) => removed.push([root.itemId, name]) };
+  const view2 = createSetupChoices({ client: removingClient, el: fake, button, onRemove: async (root, name) => removingClient.onRemove(root, name) });
+  view2.render();
+  const group2 = new Map(walk(view2.node).filter(node => node.dataset.choiceGroup).map(group => [group.dataset.choiceGroup, group]));
+  const remove = walk(group2.get(`${REL}/starter/${SHA}`)).filter(node => node.dataset.choiceItem === 'tdd').flatMap(node => walk(node)).find(node => node.tag === 'button');
+  await remove.click();
+  assert.deepEqual(removed, [['tdd', 'tdd']], 'the grouped row\'s removal invokes the real onRemove callback');
+});
+
+test('Q7-R: two recorded sets keep separate qualified groups and left-out items render with reasons', () => {
+  const SHA1 = '1'.repeat(64), SHA2 = '2'.repeat(64);
+  const originA = `set-${REL.slice(0, 16)}-alpha`, originB = `set-${REL.slice(0, 16)}-beta`;
+  const roots = [
+    { ...ref('grill-me'), originIds: [originA] },
+    { ...ref('tdd'), originIds: [originB] },
+    { ...ref('git-guard'), originIds: [] },
+  ];
+  const intent = { roots, pins: [], exclusions: [{ originId: 'direct', releaseSha256: REL, itemId: 'notices', scope: 'project', reason: 'left out by me' }],
+    provenance: [{ releaseSha256: REL, materialSource: { workbenchSetChoices: { choices: [
+      { originId: originA, request: { setId: 'alpha', setSha256: SHA1, release: { releaseSha256: REL } } },
+      { originId: originB, request: { setId: 'beta', setSha256: SHA2, release: { releaseSha256: REL } } },
+    ] } } }] };
+  const button = (label, action) => { const node = fake('button', '', label); node.addEventListener('click', action); return node; };
+  const view = createSetupChoices({ client: { intent, catalog: { items }, bytes: [] }, el: fake, button });
+  view.render();
+  const groups = new Map(walk(view.node).filter(node => node.dataset.choiceGroup).map(group => [group.dataset.choiceGroup, group]));
+  assert.ok(groups.get(`${REL}/alpha/${SHA1}`), 'first set group by full identity');
+  assert.ok(groups.get(`${REL}/beta/${SHA2}`), 'second set group by full identity');
+  assert.deepEqual(walk(groups.get(`${REL}/beta/${SHA2}`)).filter(node => node.dataset.choiceItem).map(node => node.dataset.choiceItem), ['tdd']);
+  assert.deepEqual(walk(groups.get('individual')).filter(node => node.dataset.choiceItem).map(node => node.dataset.choiceItem), ['git-guard']);
+  const left = walk(view.node).find(node => node.dataset.leftOut);
+  assert.ok(left, 'a left-out section renders');
+  const leftRow = walk(left).find(node => node.dataset.leftOutItem === 'notices');
+  assert.match(leftRow.textContent, /Extensions licenses and notices — left out by me/, 'named left-out item with its truthful reason');
 });
 
 // A small DOM: enough for the section to build its rows.

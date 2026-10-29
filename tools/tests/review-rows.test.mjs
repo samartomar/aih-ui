@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { reviewRows, sizeWords, guidanceFolder } from '../../src/app/review-rows.js';
+import { reviewRows, groupReviewRows, sizeWords, guidanceFolder } from '../../src/app/review-rows.js';
 
 const set = (setId, setSha256 = 'a'.repeat(64)) => ({ framework: 'ecc', setId, setSha256 });
 const operation = (id, over = {}) => ({ id, purpose: `Op ${id}`, kind: 'file.write', scope: 'project', effects: 'create-file',
@@ -53,6 +53,22 @@ test('size words: absent is unknown, never zero; with and without always-loaded'
   assert.match(sizeWords(null), /^Size unknown: Core reported no delivered size/);
   assert.match(sizeWords({ bytes: 100, chars: 90 }), /^When used: 100 bytes · 90 chars$/);
   assert.match(sizeWords({ bytes: 100, chars: 90, alwaysLoaded: { bytes: 5, chars: 4 } }), /every session: 5 bytes · 4 chars/);
+});
+
+test('Q7-R: groupReviewRows groups named rows under exact set identities, keeping simultaneous membership and individuals', () => {
+  const alpha = { framework: 'ecc', setId: 'alpha', setSha256: 'a'.repeat(64) };
+  const beta = { framework: 'ecc', setId: 'beta', setSha256: 'b'.repeat(64) };
+  const rows = [
+    { selectionId: 's1', heading: 'One', sets: [alpha] },
+    { selectionId: 's2', heading: 'Two', sets: [alpha, beta] },
+    { selectionId: 's3', heading: 'Three', sets: [] },
+  ];
+  const { sections, individuals } = groupReviewRows(rows);
+  assert.equal(sections.length, 2);
+  assert.equal(sections[0].key, `ecc/alpha/${'a'.repeat(64)}`);
+  assert.deepEqual(sections[0].rows.map(row => row.selectionId), ['s1', 's2']);
+  assert.deepEqual(sections[1].rows.map(row => row.selectionId), ['s2'], 'simultaneous membership appears under every set');
+  assert.deepEqual(individuals.map(row => row.selectionId), ['s3'], 'no-set rows stay explicit');
 });
 
 test('the guidance folder is a real directory: partially matching segments do not collapse to a character prefix (Q10)', () => {

@@ -3,7 +3,7 @@
 // advanced Prepare and Apply buttons stay where they are; this reuses the same host operations.
 
 import { applyIfUnchanged, diagnosticWords, fileCount, installFiles, IN_PLACE, listNames, relativeTarget, staleReason } from './host-review.js';
-import { reviewRows, sizeWords, guidanceFolder } from './review-rows.js';
+import { reviewRows, groupReviewRows, sizeWords, guidanceFolder } from './review-rows.js';
 
 export { relativeTarget } from './host-review.js';
 
@@ -130,7 +130,10 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
   // blockers and global lines are Core's words, verbatim (#165).
   function namedRows(review, operationSelections, project) {
     const { rows, global } = reviewRows(review, { operationSelections });
-    const nodes = rows.map(row => {
+    // Group the actual review rows under their recorded exact set identities (Q7-R), from the validated
+    // row.sets facts only - no inferred provenance. Blockers, effects, globals and selection identity stay
+    // on each row; simultaneous memberships appear under every set; no-set rows stay explicit.
+    const rowNode = row => {
       const item = el('li', 'space-y-0.5'); item.dataset.reviewSelection = row.selectionId;
       const head = el('div', 'flex flex-wrap items-center gap-x-2');
       head.append(el('span', 'font-medium', row.heading));
@@ -147,7 +150,26 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
       for (const effect of row.effects) item.append(el('p', 'text-[11px] text-on-surface-variant',
         `${effect.effect}: ${effect.purpose}${effect.target ? ` → ${relativeTarget(effect.target, project)}` : ''}`));
       return item;
-    });
+    };
+    const nodes = [];
+    const { sections, individuals } = groupReviewRows(rows);
+    for (const group of sections) {
+      const section = el('li', 'space-y-1'); section.dataset.reviewSet = group.key;
+      const heading = el('p', 'text-[11px] font-medium text-on-surface-variant', `${group.set.setId} · exact set ${group.set.setSha256}`);
+      heading.title = group.key;
+      const list = el('ul', 'space-y-0.5');
+      for (const row of group.rows) list.append(rowNode(row));
+      section.append(heading, list);
+      nodes.push(section);
+    }
+    if (individuals.length) {
+      const section = el('li', 'space-y-1'); section.dataset.reviewSet = 'individual';
+      if (sections.length) section.append(el('p', 'text-[11px] font-medium text-on-surface-variant', 'Individual selections'));
+      const list = el('ul', 'space-y-0.5');
+      for (const row of individuals) list.append(rowNode(row));
+      section.append(list);
+      nodes.push(section);
+    }
     for (const line of global) nodes.push(el('li', 'text-[11px]', line));
     return nodes;
   }

@@ -79,7 +79,28 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
     title.textContent = entries.length ? `Your choices (${entries.length})` : 'Your choices';
     empty.hidden = Boolean(entries.length);
     list.replaceChildren(...groupedLines(entries, source));
+    const left = leftOutSection(source, items);
+    if (left) list.append(left);
     hostLine.textContent = drawerCopiesWords(hostView());
+  }
+  // Named left-out items (Q7-R), from the live intent's recorded exclusions: truthful reasons, explicit
+  // skips visible; recovery stays with the existing draft operations, so this renders facts only.
+  function leftOutSection(source, items) {
+    const exclusions = source?.exclusions ?? [];
+    if (!exclusions.length) return null;
+    const byKey = new Map(items.map(item => [itemKey(item), item]));
+    const section = el('li', 'space-y-1'); section.dataset.leftOut = 'true';
+    section.append(el('p', 'text-[11px] font-medium text-on-surface-variant', 'Left out'));
+    const rows = el('ul', 'pl-3 space-y-1');
+    for (const exclusion of exclusions) {
+      const row = el('li', 'text-[11px] text-on-surface-variant');
+      const name = byKey.get(`${exclusion.releaseSha256}/${exclusion.itemId}`)?.label ?? exclusion.itemId;
+      row.textContent = `${name}${exclusion.scope === 'user' ? ' (your folders)' : ''}${exclusion.reason ? ` — ${exclusion.reason}` : ' — recorded left-out choice'}`;
+      row.dataset.leftOutItem = exclusion.itemId;
+      rows.append(row);
+    }
+    section.append(rows);
+    return section;
   }
   // Group the actual named choice rows under their recorded exact set identities (Q7-R): simultaneous
   // memberships appear under every set they belong to; roots with no set origin stay explicit. Removal
@@ -95,14 +116,16 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
     for (const entry of entries) {
       const sets = (entry.root.originIds ?? []).filter(id => byOrigin.has(id)).map(id => byOrigin.get(id));
       if (!sets.length) push(null, null, entry);
-      else for (const request of sets) push(`${request.setId}/${request.setSha256}`, request, entry);
+      // Fully qualified identity (Q7-R): release digest + setId + setSha256, so provenance entries from
+      // different frameworks/releases never collide.
+      else for (const request of sets) push(`${request.release?.releaseSha256}/${request.setId}/${request.setSha256}`, request, entry);
     }
     const nodes = [];
     for (const [key, group] of groups) {
       const head = el('p', 'text-[11px] font-medium text-on-surface-variant');
       if (group.request) {
         head.textContent = `${group.request.setId} · exact set ${group.request.setSha256}`;
-        head.title = `${group.request.release?.releaseSha256 ?? ''}/${group.request.setId}/${group.request.setSha256}`;
+        head.title = `${group.request.release?.releaseSha256}/${group.request.setId}/${group.request.setSha256}`;
         head.dataset.choiceSet = group.request.setId;
       } else { head.textContent = 'Individual choices'; head.dataset.choiceSet = 'individual'; }
       const rows = el('ul', 'pl-3 space-y-1');

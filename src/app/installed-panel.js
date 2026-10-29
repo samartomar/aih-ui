@@ -115,6 +115,10 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
     if (!view.readable) { note.textContent = `Cannot show what is installed: ${view.reason}`; return; }
     note.textContent = view.partial ? 'This list may be incomplete: Core could not read everything installed in this project.' : '';
     if (!view.groups.length && !view.others.length) { note.textContent = [note.textContent, 'Nothing from Workbench is installed in this project.'].filter(Boolean).join(' '); return; }
+    // Build every interactive row once - badges, removal controls and preview areas unchanged - then
+    // place each row under its recorded exact set identity (Q7-R). Simultaneous memberships render in
+    // their first set with an "Also in" note (actions are never duplicated); no-origin rows stay explicit.
+    const pending = new Map();
     for (const group of view.groups) {
       const row = el('li', 'space-y-1'); row.dataset.installedItem = group.itemId; row.title = group.managementId;
       const { remove, area } = removeControl(group.removes, group.kept);
@@ -122,42 +126,56 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       head.append(...stateBadges(group.state, el));
       if (group.sets?.length) head.append(el('span', 'text-on-surface-variant text-[11px]', `From set ${group.sets.map(set => set.setId).join(', ')}`));
       if (group.needed.length) head.append(el('span', 'text-on-surface-variant', `+ ${group.needed.length} it needs: ${group.needed.map(item => item.name).join(', ')}`));
-      head.append(remove); row.append(head, area); list.append(row);
+      head.append(remove); row.append(head, area);
+      pending.set(group.managementId, { row, kind: 'chosen' });
     }
-    if (view.originGroups?.length) {
-      // Recorded-origin grouping, independent of the draft, with exact set identity (Q7).
-      const sets = el('li', 'space-y-1'); sets.dataset.recordedSets = 'true';
-      sets.append(el('p', 'text-[11px] font-medium text-on-surface-variant', 'Recorded sets'));
-      for (const group of view.originGroups) {
-        const line = el('p', 'text-[11px] text-on-surface-variant');
-        if (group.set) {
-          line.textContent = `${group.set.setId} · exact set ${group.set.setSha256}`;
-          line.title = `${group.set.framework}/${group.set.setId}/${group.set.setSha256}`;
-        } else line.textContent = 'Items with no recorded set origin';
-        sets.append(line);
-        // The actual named installed members of each set (Q7-R): simultaneous memberships appear under every
-        // set they belong to; counts are never a substitute for item grouping.
-        const names = el('ul', 'pl-4 text-[11px] text-on-surface-variant');
-        names.append(...(group.members ?? []).map(member => { const item = el('li', '', member.name); item.title = member.managementId; item.dataset.setMember = member.managementId; return item; }));
-        sets.append(names);
+    for (const item of view.others) {
+      const row = el('div', 'space-y-1'); row.dataset.installedOther = item.managementId;
+      const { remove, area } = removeControl([item]);
+      // The full installed id stays in the tooltip (#137).
+      const name = el('span', 'font-medium break-all', item.name); name.title = item.managementId;
+      const head = el('div', 'flex flex-wrap items-center gap-2'); head.append(name);
+      head.append(...stateBadges(item.state, el));
+      if (item.sets?.length) head.append(el('span', 'text-on-surface-variant text-[11px]', `From set ${item.sets.map(set => set.setId).join(', ')}`));
+      if (!item.inSetup) head.append(el('span', 'text-on-surface-variant', 'Not in your setup'));
+      head.append(remove); row.append(head, area);
+      pending.set(item.managementId, { row, kind: 'other' });
+    }
+    const memberships = new Map();
+    for (const group of view.originGroups ?? []) {
+      if (!group.set) continue;
+      for (const id of group.items) memberships.set(id, [...(memberships.get(id) ?? []), group.set]);
+    }
+    const rendered = new Set();
+    for (const group of view.originGroups ?? []) {
+      if (!group.set) continue;
+      const section = el('li', 'space-y-1'); section.dataset.installedSet = `${group.set.setId}/${group.set.setSha256}`;
+      const heading = el('p', 'text-[11px] font-medium text-on-surface-variant', `${group.set.setId} · exact set ${group.set.setSha256}`);
+      heading.title = `${group.set.framework}/${group.set.setId}/${group.set.setSha256}`;
+      const rows = el('ul', 'space-y-1');
+      let any = false;
+      for (const id of group.items) {
+        const entry = pending.get(id);
+        if (!entry || rendered.has(id)) continue;
+        rendered.add(id); any = true;
+        const all = memberships.get(id) ?? [];
+        if (all.length > 1) entry.row.children[0].append(el('span', 'text-on-surface-variant text-[11px]', `Also in: ${all.slice(1).map(set => set.setId).join(', ')}`));
+        rows.append(entry.row);
       }
-      list.append(sets);
+      if (any) { section.append(heading, rows); list.append(section); }
     }
-    if (view.others.length) {
+    const leftoverChosen = [...pending.entries()].filter(([id, entry]) => !rendered.has(id) && entry.kind === 'chosen');
+    const leftoverOther = [...pending.entries()].filter(([id, entry]) => !rendered.has(id) && entry.kind === 'other');
+    if (leftoverChosen.length) {
+      const section = el('li', 'space-y-1');
+      if (rendered.size) section.append(el('p', 'text-[11px] font-medium text-on-surface-variant', 'Chosen items'));
+      const rows = el('ul', 'space-y-1'); rows.append(...leftoverChosen.map(([, entry]) => entry.row)); section.append(rows); list.append(section);
+    }
+    if (leftoverOther.length) {
       // Named apart only when chosen items are listed above them.
-      const others = el('li', 'space-y-1'); if (view.groups.length) others.append(el('p', 'text-[11px] font-medium text-on-surface-variant', 'Other installed items'));
-      for (const item of view.others) {
-        const row = el('div', 'space-y-1'); row.dataset.installedOther = item.managementId;
-        const { remove, area } = removeControl([item]);
-        // The full installed id stays in the tooltip (#137).
-        const name = el('span', 'font-medium break-all', item.name); name.title = item.managementId;
-        const head = el('div', 'flex flex-wrap items-center gap-2'); head.append(name);
-        head.append(...stateBadges(item.state, el));
-        if (item.sets?.length) head.append(el('span', 'text-on-surface-variant text-[11px]', `From set ${item.sets.map(set => set.setId).join(', ')}`));
-        if (!item.inSetup) head.append(el('span', 'text-on-surface-variant', 'Not in your setup'));
-        head.append(remove); row.append(head, area); others.append(row);
-      }
-      list.append(others);
+      const section = el('li', 'space-y-1');
+      if (leftoverChosen.length || rendered.size) section.append(el('p', 'text-[11px] font-medium text-on-surface-variant', 'Other installed items'));
+      const rows = el('ul', 'space-y-1'); rows.append(...leftoverOther.map(([, entry]) => entry.row)); section.append(rows); list.append(section);
     }
   }
 

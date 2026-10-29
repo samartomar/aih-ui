@@ -49,6 +49,21 @@ export function sizeWords(size) {
   return size.alwaysLoaded ? `${used}; every session: ${size.alwaysLoaded.bytes} bytes · ${size.alwaysLoaded.chars} chars` : used;
 }
 
+// Group prepared-review rows under their recorded exact set identities (Q7-R): validated row.sets facts
+// only, simultaneous memberships under every set, no-set rows explicit. Each row renders once; the caller
+// keeps blockers/effects/globals on the row itself.
+export function groupReviewRows(rows = []) {
+  const bySet = new Map();
+  for (const row of rows) for (const set of row.sets ?? []) {
+    const key = `${set.framework}/${set.setId}/${set.setSha256}`;
+    if (!bySet.has(key)) bySet.set(key, { set, rows: [] });
+    bySet.get(key).rows.push(row);
+  }
+  // Review rows carry facts, not actions: a simultaneous member appears under every set it belongs to.
+  const sections = [...bySet].map(([key, group]) => ({ key, set: group.set, rows: group.rows }));
+  return { sections, individuals: rows.filter(row => !(row.sets ?? []).length) };
+}
+
 /**
  * The guidance (user) folder this review writes, from the common directory of its user-scope operation
  * targets. Null when the setup writes no user-folder content — said explicitly, never guessed.
