@@ -13,12 +13,25 @@ import { parsePolicy } from '@aihq/core/contracts';
 import { composeAuthoring, openDraft, editDraft, editAuthoring, freshAuthoring } from './headless.mjs';
 import { pinSelectedRecipes } from './selected-recipe.mjs';
 import { writeJourneyEnvelope, DRAFT_RECORD_SCHEMA } from './journey.mjs';
+import { MAINTENANCE_CHECK_RECORD_SCHEMA, MAINTENANCE_CHECK_RECORD_ID } from './maintenance-record.mjs';
+import { renderDelivery, toolBindings } from '@aihq/core/harness';
+import { resolveSelections } from '@aihq/catalog/reader';
 import { createAuthoringClient } from '../../src/app/authoring-client.js';
 
 const catalogRoot = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
 const prepared = await readInstalledPreparedContent({ root: catalogRoot, frameworkId: 'ecc', sourceInput: 'draft-approval-preservation' });
 if (!prepared.valid) throw new Error('ECC prepared fixture unavailable');
-const mcp = prepared.release.items.find(item => item.kind === 'mcp-server');
+const claudeBinding = toolBindings.find(binding => binding.tool === 'claude');
+const renderable = item => item.kind === 'mcp-server' && renderDelivery({ tool: 'claude', item, binding: claudeBinding, scope: 'project', grantApproval: { framework: prepared.release.framework.id, itemId: item.id } }).status === 'rendered';
+const resolvableWith = (a, b) => {
+  const releases = { [prepared.release.sha256]: prepared.release };
+  const roots = [a, b].filter(Boolean).map(item => ({ releaseSha256: prepared.release.sha256, itemId: item.id, scope: 'project', configuration: {} }));
+  return resolveSelections({ releases, roots, skips: [] }).status === 'ok';
+};
+const mcpServers = prepared.release.items.filter(renderable);
+const mcp = mcpServers.find(candidate => resolvableWith(candidate, undefined));
+const secondMcp = mcpServers.find(candidate => candidate !== mcp && resolvableWith(mcp, candidate));
+if (!mcp || !secondMcp) throw new Error('ECC fixture needs two jointly resolvable renderable MCP servers');
 const plainSkills = prepared.release.items.filter(item => item.kind === 'skill' && !Object.keys(item.inputs ?? {}).length);
 const skill = plainSkills[0], skipped = plainSkills[1];
 if (!mcp || !skill || !skipped) throw new Error('ECC fixture lacks the required items');
@@ -134,6 +147,47 @@ test('the ordinary (non-draft) approval path sends policyBytes and no body.bytes
     assert.ok(Array.isArray(edit.body.policyBytes), 'policyBytes present');
     assert.equal(edit.body.bytes, undefined, 'body.bytes is not the contract');
   } finally { stub.restore(); }
+});
+
+test('ticking one server preserves the other server\'s recorded approval byte-for-byte, plus pending choices and other records', async () => {
+  // Base policy: A approved, B not; then a draft envelope carrying pending choices and a second record.
+  const intent = baseIntent();
+  intent.roots.push(rootOf(secondMcp));
+  pinSelectedRecipes(intent, inventories, rootOf(secondMcp), 'claude');
+  const saved = await composeAuthoring({ intent, inventories, tool: 'claude', grantApproval: { framework: prepared.release.framework.id, itemId: mcp.id } });
+  assert.equal(saved.status, 'ok', JSON.stringify(saved.diagnostics));
+  const baseParsed = parsePolicy(new TextDecoder().decode(saved.value.policyBytes));
+  const baseRecipeA = JSON.stringify(baseParsed.document.selections.find(entry => entry.item?.itemId === mcp.id).recipe);
+  const pending = structuredClone(intent);
+  pending.roots.push(rootOf(skill));
+  pending.exclusions.push({ originId: 'direct', releaseSha256: prepared.release.sha256, itemId: skipped.id, scope: 'project', reason: 'TEST pending exclusion' });
+  const secondRecord = { id: MAINTENANCE_CHECK_RECORD_ID, schema: MAINTENANCE_CHECK_RECORD_SCHEMA, required: false, checkedAt: '2026-10-29T00:00:00.000Z', categories: [{ category: 'content', state: 'checked' }] };
+  const written = await writeJourneyEnvelope({ savedIntentBytes: saved.value.policyBytes, records: [{ id: 'draft', schema: DRAFT_RECORD_SCHEMA, required: true, intent: pending }, secondRecord] });
+  assert.equal(written.status, 'ok', JSON.stringify(written.diagnostics));
+  const restoreStorage = stubSessionStorage(written.value.envelopeBytes);
+  const stub = stubTransport();
+  const client = createAuthoringClient();
+  try {
+    await client.start();
+    client.setTool('claude');
+    assert.ok(client.draft.intent.roots.some(root => root.itemId === skill.id), 'pending root present');
+    const tickB = await client.recordApproval({ type: 'mcp-approval', root: { releaseSha256: prepared.release.sha256, itemId: secondMcp.id, scope: 'project' }, granted: true });
+    assert.equal(tickB.status, 'ok', JSON.stringify(tickB.diagnostics));
+    const after = parsePolicy(new TextDecoder().decode(tickB.value.savedIntentBytes));
+    const recipeA = JSON.stringify(after.document.selections.find(entry => entry.item?.itemId === mcp.id).recipe);
+    const recipeB = after.document.selections.find(entry => entry.item?.itemId === secondMcp.id).recipe;
+    assert.equal(recipeA, baseRecipeA, 'the other server\'s recorded approval is preserved byte-for-byte');
+    assert.ok(recipeB?.inline?.operations?.some(operation => operation.id === 'approve-server'), 'only B gains the approval');
+    assert.ok(client.draft.intent.roots.some(root => root.itemId === skill.id), 'pending root survives');
+    assert.equal(client.draft.intent.exclusions.length, 1, 'pending exclusion survives');
+    const reloaded = await import('./journey.mjs').then(m => m.readJourneyEnvelope(client.draft.envelopeBytes));
+    assert.equal(reloaded.value.records.length, 2, 'the second envelope record is preserved');
+    const untickB = await client.recordApproval({ type: 'mcp-approval', root: { releaseSha256: prepared.release.sha256, itemId: secondMcp.id, scope: 'project' }, granted: false });
+    assert.equal(untickB.status, 'ok', JSON.stringify(untickB.diagnostics));
+    const undone = parsePolicy(new TextDecoder().decode(untickB.value.savedIntentBytes));
+    assert.equal(JSON.stringify(undone.document.selections.find(entry => entry.item?.itemId === mcp.id).recipe), baseRecipeA, 'A still byte-for-byte after B untick');
+    assert.ok(!JSON.stringify(undone.document.selections.find(entry => entry.item?.itemId === secondMcp.id).recipe).includes('approve-server'), 'B approval revoked');
+  } finally { restoreStorage(); stub.restore(); }
 });
 
 test('a stale approval reply across a newly opened artifact is refused and the draft is untouched', async () => {

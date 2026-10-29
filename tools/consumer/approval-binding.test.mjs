@@ -73,7 +73,13 @@ test('a schema-valid same-ID recipe with altered executable content is not retai
     'the tampered executable content must never ride the id-match into an editable policy');
 });
 
-test('exact unchanged approval, changed tool, and changed configuration do not leak permission', async () => {
+test('exact unchanged approval survives; a fresh policy under another tool carries no approval', async () => {
+  // Assertion gap, recorded honestly: the public Harness renderDelivery contract takes
+  // {tool, item, binding, scope, grantApproval} - no configuration parameter - so renderer-produced
+  // approvals are configuration-invariant by contract, and the supported edit operations change scope
+  // only by adding or removing roots (scope is part of root identity), not in place. A meaningful
+  // changed-target case cannot be expressed through the checked fixture's supported operations
+  // without composing a different selection; that gap stays open rather than fabricated from the title.
   const composed = await composeAuthoring({ intent: freshIntent(), inventories });
   const ticked = await editAuthoring({ policyBytes: composed.value.policyBytes, inventories, operation: approvalOp(true), tool: 'claude', grantApproval: { framework: prepared.release.framework.id, itemId: mcp.id } });
   assert.equal(ticked.status, 'ok');

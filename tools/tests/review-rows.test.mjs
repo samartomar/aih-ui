@@ -55,6 +55,14 @@ test('size words: absent is unknown, never zero; with and without always-loaded'
   assert.match(sizeWords({ bytes: 100, chars: 90, alwaysLoaded: { bytes: 5, chars: 4 } }), /every session: 5 bytes · 4 chars/);
 });
 
+test('the guidance folder is a real directory: partially matching segments do not collapse to a character prefix (Q10)', () => {
+  const review = { operations: [
+    { scope: 'user', details: { target: '/home/u/.claude/settings.json' } },
+    { scope: 'user', details: { target: '/home/u/.codex/settings.json' } },
+  ] };
+  assert.equal(guidanceFolder(review), '/home/u');
+});
+
 test('the guidance folder is the common directory of user-scope operation targets, or explicitly none', () => {
   assert.equal(guidanceFolder(review({ operations: [
     operation('u1', { scope: 'user', details: { target: 'C:\\Users\\me\\.claude\\CLAUDE.md' } }),

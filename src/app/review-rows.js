@@ -58,10 +58,14 @@ export function guidanceFolder(review) {
     .map(operation => operation.details.target);
   if (!targets.length) return null;
   const dirs = targets.map(target => target.replace(/[\\/][^\\/]*$/, ''));
+  // Common ancestry by whole path segments: a raw character prefix would claim '/home/u/.c' for
+  // '/home/u/.claude' and '/home/u/.codex', which is not the folder written.
+  const segments = value => value.split(/[\\/]/);
   const common = dirs.slice(1).reduce((prefix, dir) => {
+    const a = segments(prefix), b = segments(dir);
     let i = 0;
-    while (i < prefix.length && i < dir.length && prefix[i] === dir[i]) i++;
-    return prefix.slice(0, i);
+    while (i < a.length && i < b.length && a[i] === b[i]) i++;
+    return a.slice(0, i).join(dirs[0].includes('\\') ? '\\' : '/');
   }, dirs[0]);
   return common.replace(/[\\/]+$/, '') || null;
 }

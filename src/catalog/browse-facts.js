@@ -50,7 +50,9 @@ export function renderBrowseFacts(item, browse, tool, { detailed = false, onAppr
     const box = el('input', 'mt-0.5'); box.type = 'checkbox'; box.checked = Boolean(approved);
     box.disabled = !approval.approvable || typeof onApprove !== 'function';
     box.dataset.server = item.id; box.setAttribute('aria-label', `${approval.words} (${item.id})`);
-    row.append(box, el('span', '', `${approval.words}. ${approval.requirements}`));
+    // The needs-you state keeps the existing amber semantic token (S1): offered rows use the same tone
+    // as the needs-ok badge; no new palette.
+    row.append(box, el('span', approval.approvable ? 'text-tertiary' : '', `${approval.words}. ${approval.requirements}`));
     attachTooltip(row, approval.reason);
     if (approval.approvable && typeof onApprove === 'function') box.addEventListener('change', () => { box.disabled = true; void Promise.resolve(onApprove(item, box.checked)).finally(() => { box.disabled = false; }); });
     node.append(row);

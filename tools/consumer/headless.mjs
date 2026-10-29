@@ -31,7 +31,7 @@ const projected = selections => sorted(selections.map(({ id, managementId, organ
     // tampered item/tool/origin metadata is never ignored on read (#165).
     ...(item !== undefined ? { item, tool, name, kind, origins } : {}) })));
 
-async function build({ intent, inventories, base, capture = false, historicalV2 = false, tool = undefined, grantApproval = undefined, revokeApproval = undefined }) {
+async function build({ intent, inventories, base, capture = false, historicalV2 = false, tool = undefined, grantApproval = undefined, revokeApproval = undefined, strictOrigins = true }) {
   if (intent && new TextEncoder().encode(JSON.stringify(intent)).length > 850_000) return refuse('POLICY_BOUND_EXCEEDED', '/metadata/aih.workbench', 'Intent exceeds 850,000 UTF-8 bytes; reduce selected state.');
   if (intent?.reviews?.schema && intent.reviews.schema !== REVIEW_SCHEMA) return refuse('INTENT_VERSION_UNSUPPORTED', '/metadata/aih.workbench/reviews/schema', 'Unsupported review document version.');
   if (!checkIntentShape(intent)) return refuse('FIELD_SEMANTICS_UNSUPPORTED', '/metadata/aih.workbench', 'Malformed, oversized or unknown authoring semantics.');
@@ -99,15 +99,20 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
     // the current header never rebinds saved execution. A new bundle attaches only from the explicit
     // composing tool; legacy items without 1.6 identities stay metadata-free (valid 1.4), never fabricated.
     if (prior?.item) {
-      const mismatch = !checkedBundle
+      // The checked identity must always match: tampered or stale source metadata is refused everywhere.
+      const identityMismatch = !checkedBundle
         || prior.item.itemId !== checkedBundle.item.itemId || prior.item.framework !== checkedBundle.item.framework
         || prior.item.contentSha256 !== checkedBundle.item.contentSha256 || prior.item.behaviourSha256 !== checkedBundle.item.behaviourSha256
-        || prior.kind !== checkedBundle.kind || prior.name !== checkedBundle.name
-        || stable(prior.origins ?? null) !== stable(selection.origins);
-      if (mismatch) return refuse('INTENT_POLICY_CONTRADICTION', '/selections',
+        || prior.kind !== checkedBundle.kind || prior.name !== checkedBundle.name;
+      if (identityMismatch) return refuse('INTENT_POLICY_CONTRADICTION', '/selections',
         `Saved selection metadata for ${item.id} no longer matches the checked source and its resolved origins.`, undefined, { owner: 'core' });
+      // Origins are provenance, not executable content. On read/import they must match exactly (strict);
+      // on an authorized compose/edit the newly resolved public Catalog origins are recorded instead of
+      // refusing a legitimate choice change (overlapping sets, re-inclusion, required-origin changes).
+      if (strictOrigins && stable(prior.origins ?? null) !== stable(selection.origins)) return refuse('INTENT_POLICY_CONTRADICTION', '/selections',
+        `Saved selection origins for ${item.id} no longer match the checked source and its resolved origins.`, undefined, { owner: 'core' });
     }
-    const bundle = prior?.item ? { item: prior.item, tool: prior.tool, name: prior.name, kind: prior.kind, origins: prior.origins }
+    const bundle = prior?.item ? { item: prior.item, tool: prior.tool, name: prior.name, kind: prior.kind, origins: structuredClone(selection.origins) }
       : canonicalTool && checkedBundle ? { ...checkedBundle, tool: canonicalTool } : undefined;
     // The one-server tick renders that server's delivery through public Harness and the rendered recipe —
     // the ordinary recipe with the one approval operation — becomes the policy's recipe for this selection.
@@ -160,7 +165,9 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
   // the full metadata set (item 1.6 digests, tool, name, kind) whenever origins are present — verified against
   // the pinned public Core parser — and composition here holds no tool identity. Bare origins make Core refuse
   // the policy (dependentRequired). Origins stay available on the Catalog resolution for the review surfaces.
-  const excludedItems = [...(base?.excludedItems ?? [])];
+  // excludedItems name the CURRENT intent exclusions (#165): an unskip/reinclusion removes the intent
+  // exclusion, so the authored record must not be resurrected from the base policy forever.
+  const excludedItems = [];
   for (const exclusion of intent.exclusions) {
     const found = index.items.get(pinKey(exclusion));
     const framework = found?.entry.release.framework?.id;
@@ -212,7 +219,7 @@ export async function readAuthoring({ policyBytes, inventories, reviewEvidence =
     if (analysis?.unresolved.length) return ok({ policy, intent, editing: 'unresolved', originalBytes, diagnostics: availabilityDiagnostics(analysis.unresolved),
       unresolved: analysis.unresolved, roots: analysis.roots, ...await reviewView({ intent, inventories, reviewEvidence, comparisons, recipient }), ...note });
   }
-  const rebuilt = await build({ intent, inventories, base: policy, capture: migration?.capture === true, historicalV2: migration?.historicalV2 === true });
+  const rebuilt = await build({ intent, inventories, base: policy, capture: migration?.capture === true, historicalV2: migration?.historicalV2 === true, strictOrigins: true });
   const diagnostics = rebuilt.status === 'refused' ? rebuilt.diagnostics : stable(projected(rebuilt.value.policy.selections)) !== stable(projected(policy.selections))
     ? [{ code: 'INTENT_POLICY_CONTRADICTION', path: '/selections', message: 'Intent contradicts executable selections.' }] : [];
   const current = rebuilt.status === 'ok' ? rebuilt.value.intent : intent;
@@ -263,7 +270,7 @@ export async function reconcileAuthoring({ savedPolicyBytes, inventories, candid
   return { ...ok({ status: choices.length ? 'needs-decisions' : 'unchanged', affectedRoots, retainedRoots, choices }), originalBytes: savedPolicyBytes.slice() };
 }
 export async function composeAuthoring(options) { return composeReviewed(options); }
-async function composeReviewed({ basePolicyBytes, intent, inventories, reviewEvidence = [], comparisons = [], recipient, tool = undefined, grantApproval = undefined, revokeApproval = undefined }, reviewTransition = false) {
+async function composeReviewed({ basePolicyBytes, intent, inventories, reviewEvidence = [], comparisons = [], recipient, tool = undefined, grantApproval = undefined, revokeApproval = undefined, strictOrigins = false }, reviewTransition = false) {
   if (intent && new TextEncoder().encode(JSON.stringify(intent)).length > 850_000) return refuse('POLICY_BOUND_EXCEEDED', '/metadata/aih.workbench', 'Intent exceeds 850,000 UTF-8 bytes; reduce selected state.', basePolicyBytes);
   if (intent?.reviews?.schema && intent.reviews.schema !== REVIEW_SCHEMA) return refuse('INTENT_VERSION_UNSUPPORTED', '/metadata/aih.workbench/reviews/schema', 'Unsupported review document version.', basePolicyBytes);
   if (!checkIntentShape(intent)) return refuse('FIELD_SEMANTICS_UNSUPPORTED', '/metadata/aih.workbench', 'Malformed or unknown authoring semantics.', basePolicyBytes);
@@ -275,11 +282,11 @@ async function composeReviewed({ basePolicyBytes, intent, inventories, reviewEvi
     base = original.value.policy;
     if (!reviewTransition && stable(intent.reviews) !== stable(original.value.intent.reviews)) return refuse('REVIEW_BINDING_UNAVAILABLE', '/reviews', 'Use the checked evidence review workflow to change decisions.', basePolicyBytes);
   }
-  return buildReviewed({ intent, inventories, base, originalBytes: basePolicyBytes, reviewEvidence, comparisons, recipient, tool, grantApproval, revokeApproval });
+  return buildReviewed({ intent, inventories, base, originalBytes: basePolicyBytes, reviewEvidence, comparisons, recipient, tool, grantApproval, revokeApproval, strictOrigins });
 }
 // Saved judgments are never refused or converted here: their applicability is reported beside the result.
-async function buildReviewed({ intent, inventories, base, originalBytes, reviewEvidence, comparisons, recipient, tool = undefined, grantApproval = undefined, revokeApproval = undefined }) {
-  const result = await build({ intent, inventories, base, capture: true, tool, grantApproval, revokeApproval });
+async function buildReviewed({ intent, inventories, base, originalBytes, reviewEvidence, comparisons, recipient, tool = undefined, grantApproval = undefined, revokeApproval = undefined, strictOrigins = false }) {
+  const result = await build({ intent, inventories, base, capture: true, tool, grantApproval, revokeApproval, strictOrigins });
   if (result.status === 'ok') return ok({ ...result.value, ...await reviewView({ intent: result.value.intent, inventories, reviewEvidence, comparisons, recipient }) });
   return originalBytes ? { ...result, originalBytes: originalBytes.slice() } : result;
 }
@@ -779,7 +786,12 @@ export async function editDraft({ envelopeBytes, inventories, operation, reviewE
       if (!item || (item.kind !== 'mcp-server' && item.kind !== 'mcp')) return fail('INPUT_INVALID', '/operation/root', 'Only an MCP server can be allowed this way.');
       if (!entry.release.framework?.id) return fail('SOURCE_REVISION_UNAVAILABLE', '/operation/root', 'This exact source publishes no framework identity to name the approval.');
       const approval = { framework: entry.release.framework.id, itemId: item.id };
-      const composed = await composeAuthoring({ intent, inventories, tool,
+      // Base-aware: the draft's current saved policy is the retention base, so OTHER servers' recorded
+      // approvals, selection identities and management metadata survive byte-for-byte where unchanged;
+      // only this server's approval is rendered/removed. The base was already loaded and analyzed above
+      // (mismatches refused), so build runs directly instead of re-reading through the editing-availability
+      // gate - a draft may legitimately hold choices its saved base cannot resolve.
+      const composed = await buildReviewed({ intent, inventories, base: policy, originalBytes: read.savedIntentBytes, reviewEvidence, comparisons, recipient, tool,
         ...(operation.granted ? { grantApproval: approval } : { revokeApproval: approval }) });
       if (composed.status !== 'ok') return unchanged(composed);
       const known = read.records.filter(r => Object.hasOwn(JOURNEY_RECORD_KINDS, r.schema)).map(r => r === record ? { id: r.id, schema: r.schema, required: true, intent } : r);
