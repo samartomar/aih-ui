@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { addFromCatalog, chooseCatalogFamily, openPolicyDrawer } from './policy-drawer.mjs';
+import { chooseCatalogFamily, openPolicyDrawer } from './policy-drawer.mjs';
 
 async function openPage(context, origin, theme, errors) {
   const page = await context.newPage(); page.setDefaultTimeout(60_000);
@@ -43,7 +43,7 @@ async function newContext(browser) {
 }
 
 // Chooses exactly these starting sets of one framework through the set picker, adds them and installs.
-async function installSets(page, family, setIds, { direct } = {}) {
+async function installSets(page, family, setIds) {
   await chooseCatalogFamily(page, family);
   const more = page.locator('#starting-sets details > summary').filter({ hasText: /More sets/ });
   if (await more.count() && !await more.first().evaluate(node => node.parentElement.open)) await more.first().click();
@@ -54,12 +54,6 @@ async function installSets(page, family, setIds, { direct } = {}) {
     if ((await choice.getAttribute('aria-pressed') === 'true') !== setIds.includes(id)) await choice.click();
   }
   for (const id of setIds) assert.equal(await page.locator(`#starting-sets [data-set-id="${id}"]`).getAttribute('aria-pressed'), 'true', `set ${id} is chosen`);
-  // An item the person also picks for itself, from its own card, before the sets are added.
-  if (direct) {
-    await page.locator('#catalog-search').fill(direct.split('.').pop());
-    await addFromCatalog(page, direct);
-    await page.locator('#catalog-search').fill('');
-  }
   await page.locator('[data-add-sets]').click();
   await page.waitForFunction(() => document.getElementById('framework-guidance').textContent.includes('Chosen sets added'));
   await openPolicyDrawer(page);
@@ -165,19 +159,18 @@ export async function runInstalledListTruthBrowser({ origin, output, project, pl
   } finally { await browser.close(); }
 }
 
-// Two real overlapping Extensions sets, Misc and Extensions specialists, share one Catalog member. With `direct`, the
-// person also picked that shared member for itself. Removing Misc must take Misc's own members and what only they need,
+// Two real overlapping Extensions sets, Misc and Extensions specialists, share one Catalog member. Removing Misc must take Misc's own members and what only they need,
 // and keep the shared member for the other set. Expectations come from Catalog's sets and Core's required-by records,
 // so the "Remove this set" control is exercised before anything about recorded set ownership is checked.
-async function runSetRemoval({ origin, output, project, playwrightModule, theme, direct = false }) {
+async function runSetRemoval({ origin, output, project, playwrightModule, theme }) {
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true });
-  const errors = [], label = direct ? 'set-removal-direct' : 'set-removal';
+  const errors = [], label = 'set-removal';
   const sharedId = 'extensions.skill.setup-pre-commit';
   try {
     const installing = await newContext(browser);
-    await installSets(await openPage(installing, origin, theme, errors), 'Extensions', ['extensions.template.specialists', 'misc'], direct ? { direct: sharedId } : {});
+    await installSets(await openPage(installing, origin, theme, errors), 'Extensions', ['extensions.template.specialists', 'misc']);
     await installing.close();
     const { page, answers } = await freshInstalledList(browser, origin, theme, errors);
     const { catalog } = answers, before = answers.inventory.selections;
@@ -240,7 +233,7 @@ async function runSetRemoval({ origin, output, project, playwrightModule, theme,
     assert.equal(after.selections.length, before.length - removed.length, `exactly ${removed.length} selections removed`);
     const ownersAfter = after.selections.find(selection => selection.managementId === keptSelection.managementId).origins
       .filter(origin => origin.reasonIncluded !== 'required-by').map(origin => origin.set?.setId ?? origin.reasonIncluded).sort();
-    assert.deepEqual(ownersAfter, direct ? ['chosen', 'extensions.template.specialists'] : ['extensions.template.specialists'], 'the shared member keeps exactly its other owners');
+    assert.deepEqual(ownersAfter, ['extensions.template.specialists'], 'the shared member keeps exactly its other set');
     const gone = removed.flatMap(selection => selection.members.map(member => member.path)).filter(path => path.startsWith(project) && existsSync(path));
     assert.deepEqual(gone, [], 'every removed file is absent on disk');
     assert.equal(await page.locator(`[data-installed-set^="misc/"]`).count(), 0, 'Misc is no longer listed');
@@ -252,4 +245,3 @@ async function runSetRemoval({ origin, output, project, playwrightModule, theme,
 }
 
 export const runSetRemovalTruthBrowser = options => runSetRemoval({ theme: 'dark', ...options });
-export const runSetRemovalDirectBrowser = options => runSetRemoval({ theme: 'dark', ...options, direct: true });

@@ -16,7 +16,7 @@ import { noteInventory, runUi168UpdateInstallBrowser, runUi168UpdateVerifyBrowse
 import { runUi168ProjectBasicsBrowser, runUi168BlockDriftBrowser } from './consumer/ui168-project-basics-browser.mjs';
 import { runUi168SetRemovalBrowser } from './consumer/ui168-set-removal-browser.mjs';
 import { runUi168InterruptStartBrowser, runUi168InterruptedVerifyBrowser } from './consumer/ui168-interrupted-browser.mjs';
-import { runInstalledListTruthBrowser, runSetRemovalDirectBrowser, runSetRemovalTruthBrowser } from './consumer/installed-truth-browser.mjs';
+import { runInstalledListTruthBrowser, runSetRemovalTruthBrowser } from './consumer/installed-truth-browser.mjs';
 
 // Runs after the ordinary integrated check has assembled the packed consumer and page. Only this
 // server gets a disposable execution target; the existing unconfigured-host journeys stay as they are.
@@ -209,9 +209,6 @@ for (const theme of THEMES) {
   const truthSetProject = join(consumerDir, `installed-truth-set-${theme}-${randomUUID().slice(0, 8)}`);
   await withHost(truthSetProject, { sources: factsSources }, async origin =>
     await caseOutcome(`Remove this set with a shared member (${theme})`, await runSetRemovalTruthBrowser({ origin, output: join(consumerDir, `installed-truth-set-evidence-${theme}`), project: truthSetProject, playwrightModule: playwrightPath, theme })));
-  const truthDirectProject = join(consumerDir, `installed-truth-direct-${theme}-${randomUUID().slice(0, 8)}`);
-  await withHost(truthDirectProject, { sources: factsSources }, async origin =>
-    await caseOutcome(`Remove this set with a member also chosen directly (${theme})`, await runSetRemovalDirectBrowser({ origin, output: join(consumerDir, `installed-truth-direct-evidence-${theme}`), project: truthDirectProject, playwrightModule: playwrightPath, theme })));
 
   for (const action of ['finish', 'remove']) {
     const interruptedProject = join(consumerDir, `ui168-interrupted-${theme}-${action}-${randomUUID().slice(0, 8)}`);

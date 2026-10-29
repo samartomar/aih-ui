@@ -3,14 +3,21 @@
 // stays chosen, and the two-scope case is attempted for real and reported when this Core cannot produce it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dirname, join } from 'node:path';
+import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveSelections } from '@aihq/catalog/reader';
 import { composeAuthoring, freshAuthoring } from './headless.mjs';
 import * as setChoices from './set-choices.mjs';
 import { pinSelectedRecipes } from './selected-recipe.mjs';
 import { installedFamilies } from './installed-families.mjs';
+import { createHost } from './host.mjs';
+
+// The Workbench's own installed-list grouping, from the checkout AIH_REPO names (check-workbench sets it).
+const repo = resolve(process.env.AIH_REPO ?? join(dirname(fileURLToPath(import.meta.url)), '..', '..'));
+const installedList = await import(pathToFileURL(join(repo, 'src/app/installed-list.js')).href);
 
 const catalogRoot = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
 const inventories = await installedFamilies({ root: catalogRoot, sourceInput: 'installed-truth' });
@@ -95,4 +102,45 @@ test('a set at project scope and the same item chosen directly at user scope', a
     return;
   }
   assert.fail('Core now installs a user-scope item: add the running-page two-scope removal case');
+});
+
+test('removing a set keeps its member that the user also chose directly, for the other set and the direct choice', async t => {
+  assert.equal(typeof installedList.setRemovalEntries, 'function', 'the installed list says what "Remove this set" sends to Core');
+  const scratch = await mkdtemp(join(tmpdir(), 'aih-installed-truth-')), projectRoot = join(scratch, 'project');
+  await mkdir(projectRoot, { recursive: true });
+  t.after(async () => { await rm(scratch, { recursive: true, force: true }); });
+  const extensions = release('extensions');
+  const shared = 'extensions.skill.setup-pre-commit';
+  const intent = freshAuthoring();
+  chooseDirect(intent, directRoot(extensions, shared));
+  assert.equal(setChoices.selectSetChoices({ intent, inventories, sets: [requestFor(extensions, 'misc'), requestFor(extensions, 'extensions.template.specialists')], tool: 'claude' }).status, 'ok');
+  const composed = await composeAuthoring({ intent, inventories, tool: 'claude' });
+  assert.equal(composed.status, 'ok', JSON.stringify(composed.diagnostics ?? []));
+  const host = createHost({ projectRoot, materialRoots: { ...Object.fromEntries(inventories.map(entry => [entry.materialSource.input, catalogRoot])), catalog: catalogRoot },
+    recipeMaterials: inventories.flatMap(entry => entry.materials), controls: { logging: 'off' } });
+  const prepared = await host.prepareSession({ policyText: new TextDecoder().decode(composed.value.policyBytes) });
+  assert.equal(prepared.status, 'ready', JSON.stringify(prepared.diagnostics ?? []));
+  assert.equal((await host.applyApproved({ sessionId: prepared.sessionId, reviewDigest: prepared.review.reviewDigest })).completion, 'complete');
+  const before = await host.managedInventory();
+  const group = installedList.originGroups(before).find(candidate => candidate.set?.setId === 'misc');
+  assert.ok(group, 'the installed list groups Misc by its recorded origin');
+  const entries = installedList.setRemovalEntries(group);
+  const sharedEntry = entries.find(entry => before.selections.find(selection => selection.managementId === entry.managementId).item.itemId === shared);
+  assert.deepEqual(sharedEntry.origin, { set: group.set }, 'the shared member loses only the Misc origin');
+  assert.deepEqual(sharedEntry.keptFor.map(set => set.setId), ['extensions.template.specialists'], 'it is kept for the other set by name');
+  const own = entries.filter(entry => entry !== sharedEntry);
+  assert.equal(own.length, 3, 'Misc removes its three own members');
+  assert.ok(own.every(entry => !entry.origin), 'they leave whole');
+  const removal = await host.prepareRemovalSession({ removals: entries.map(({ managementId, origin }) => ({ managementId, ...(origin ? { origin } : {}) })), scope: 'project', mode: 'vibe' });
+  assert.equal(removal.disposition, 'prepared', JSON.stringify(removal.diagnostics ?? []));
+  assert.deepEqual(removal.removals.map(entry => entry.change), entries.map(entry => entry.origin ? 'remove-origin' : 'remove-selection'));
+  const run = await host.applyApproved({ sessionId: removal.preparation.sessionId, reviewDigest: removal.preparation.review.reviewDigest });
+  assert.equal(run.completion, 'complete', JSON.stringify(run.diagnostics ?? []));
+  const after = await host.managedInventory();
+  const ownIds = new Set(own.map(entry => entry.managementId));
+  assert.deepEqual(after.selections.filter(selection => ownIds.has(selection.managementId)).map(selection => selection.managementId), [], 'Misc\'s own members are gone');
+  const files = before.selections.filter(selection => ownIds.has(selection.managementId)).flatMap(selection => selection.members.map(member => member.path));
+  assert.ok(files.length > 0 && files.every(path => !existsSync(path)), 'their files are absent');
+  const kept = after.selections.find(selection => selection.managementId === sharedEntry.managementId);
+  assert.deepEqual(reasons(kept.origins.filter(origin => origin.reasonIncluded !== 'required-by')), ['chosen', 'in-set:extensions.template.specialists'], 'the shared member keeps the direct choice and the other set');
 });
