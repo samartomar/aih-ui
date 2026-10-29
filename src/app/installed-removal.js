@@ -31,7 +31,7 @@ const NOT_PREPARED = {
 /** Why Core did not prepare a removal, in words. */
 function notPrepared(result) {
   const said = NOT_PREPARED[result?.disposition] ?? `was not removed: ${result?.preparation?.status ?? result?.status ?? 'Core returned no removal'}.`;
-  const why = diagnosticWords(result);
+  const why = diagnosticWords(result?.preparation, result);
   return why ? `${said} ${why}` : said;
 }
 const preparedRemoval = result => result?.disposition === 'prepared' && result.preparation?.status === 'ready' && result.preparation.sessionId && result.preparation.review
@@ -109,7 +109,7 @@ export async function confirmRemoval({ preview, request, mode, results: earlier 
       if (fresh?.status === 'superseded') stop('superseded', `${name} was not removed: the page changed before it was. Check the list.`);
       else if (fresh?.disposition === 'absent') results.push({ name, state: 'absent' });
       else if (fresh?.disposition === 'retained') results.push({ name, state: 'kept', message: STILL_NEEDED });
-      else stop('failed', `${name} ${notPrepared(fresh)}`);
+      else stop('failed', `${name} ${[attempt.reason, notPrepared(fresh)].filter(Boolean).join(' ')}`);
     } else if (attempt.state === 'stale') {
       stop('changed', `${name} was not removed: ${attempt.reason} Click Remove again to see what its removal takes now.`);
     } else if (attempt.state === 'superseded') stop('superseded', `For ${name} this page cannot tell whether files were removed; check the list.`);

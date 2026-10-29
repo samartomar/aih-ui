@@ -209,6 +209,24 @@ test('held: a Core REVIEW_STALE apply answer re-prepares for display and stops w
   assert.equal(removes, 2);
 });
 
+test('held: a stale removal keeps the original reason beside a failed replacement preparation', async () => {
+  let removes = 0;
+  const request = async operation => {
+    if (operation === 'remove') {
+      removes += 1;
+      if (removes === 1) return plainPrepared('s1', 'd1');
+      return { disposition: 'prepared', preparation: { status: 'partial', review: { reviewDigest: 'd2', operations: [] }, diagnostics: [{ message: 'Fresh disk conflict.' }] } };
+    }
+    if (operation === 'apply') return { status: 'refused', diagnostics: [{ code: 'REVIEW_STALE', message: 'Original stale reason.' }] };
+    throw new Error('unexpected ' + operation);
+  };
+  const preview = await previewRemoval({ entries: [plainEntry('a')], request, mode: 'all' });
+  const result = await confirmRemoval({ preview, request, mode: 'all' });
+  assert.equal(result.outcome, 'failed');
+  assert.match(result.message, /Original stale reason/);
+  assert.match(result.message, /Fresh disk conflict/);
+});
+
 test('held: a dependency-held later step applies its own shown handle on the second confirmation', async () => {
   const applied = [];
   let removes = 0;

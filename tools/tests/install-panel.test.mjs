@@ -26,6 +26,14 @@ test('lists every file the review will write, relative to the project, with a pl
 const member = (path, intent, outcome, check) => ({ intent, outcome, check, path: `${project}\\${path}` });
 const run14 = (completion, members, diagnostics = []) => ({ completion, diagnostics, members });
 
+test('relative targets respect path boundaries and platform case semantics', () => {
+  assert.equal(relativeTarget('/work/app-backup/settings.json', '/work/app'), '/work/app-backup/settings.json');
+  assert.equal(relativeTarget('/Work/App/settings.json', '/work/app'), '/Work/App/settings.json');
+  assert.equal(relativeTarget('/work/app/settings.json', '/work/app'), 'settings.json');
+  assert.equal(relativeTarget('C:\\work\\app-backup\\settings.json', 'C:\\work\\app'), 'C:/work/app-backup/settings.json');
+  assert.equal(relativeTarget('C:\\Work\\App\\settings.json', 'C:\\work\\app'), 'settings.json');
+});
+
 test('names the skills to try from the SKILL.md files being added', () => {
   assert.deepEqual(skillHints(installFiles(review)), ['grill-me', 'grilling']);
 });

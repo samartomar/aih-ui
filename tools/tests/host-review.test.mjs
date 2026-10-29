@@ -47,6 +47,19 @@ test('a superseded Apply answer keeps the outcome unknown: the run may have comp
   assert.deepEqual(applied, [{ sessionId: 'held-session', reviewDigest: 'held-digest' }]);
 });
 
+test('a stale held apply keeps its original reason when replacement preparation is not ready', async () => {
+  for (const status of ['partial', 'refused']) {
+    const result = await applyIfUnchanged({
+      held,
+      prepare: async () => ({ status, diagnostics: [{ code: 'DISK_CONFLICT', message: 'Fresh disk conflict.' }] }),
+      readyPreparation: () => undefined,
+      apply: async () => ({ status: 'refused', diagnostics: [{ code: 'REVIEW_STALE', message: 'Original stale reason.' }] }),
+    });
+    assert.equal(result.state, 'not-ready');
+    assert.equal(result.reason, 'Original stale reason.');
+  }
+});
+
 test('a non-stale refusal of the held handle shows a fresh review without applying it', async () => {
   const calls = [];
   const result = await applyIfUnchanged({

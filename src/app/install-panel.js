@@ -215,7 +215,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
           preview = attemptResult.preparation; const rows = show(preview.review, preview.operationSelections ?? []); install.disabled = Boolean(nothingToInstall({ roots: client.intent?.roots ?? [], rows }));
           message.textContent = `${attemptResult.reason} The list now shows a fresh review — check it and click Install again.`; return;
         }
-        message.textContent = `Install did not start: ${refusal(attemptResult.result)}`; return;
+        message.textContent = `Install did not start: ${[attemptResult.reason, refusal(attemptResult.result)].filter(Boolean).join(' ')}`; return;
       }
       const { preparation } = attemptResult;
       if (attemptResult.state === 'superseded') { message.textContent = 'Install was sent, but the page changed before its result arrived, so this page cannot determine whether files were written. Inspect what is installed in this project before trying again.'; message.dataset.outcome = 'superseded'; return; }
@@ -253,6 +253,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
       title.textContent = 'Install your setup into your project'; filesHeading.textContent = installSummary([]).heading; files.replaceChildren();
       message.textContent = install.title = nothingToInstall({ roots: [], rows: [] }); return;
     }
+    if (previewing) { again = true; return; }
     shownFor = key; delete message.dataset.outcome; void loadPreview();
   }
   // After a removal elsewhere or a change of project folder: the earlier preview and outcome no longer describe the

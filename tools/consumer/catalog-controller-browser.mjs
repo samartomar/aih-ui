@@ -221,6 +221,68 @@ async function installedStates() {
   await page.close();
 }
 
+function installReview(targets, digest = 'digest') {
+  return { target: { project: '/work/app' }, reviewDigest: digest, operations: targets.map((target, index) => ({
+    id: `write-${index}`, kind: 'file.write', effects: 'create-file', purpose: `Write ${target}`, details: { target },
+  })) };
+}
+
+async function previewQueue() {
+  const page = await browser.newPage(); page.setDefaultTimeout(5_000); page.on('pageerror', error => errors.push(error.message));
+  await page.goto(origin, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(async review => {
+    const [{ createInstallPanel }, { el }] = await Promise.all([import('/app/install-panel.js'), import('/app/dom.js')]);
+    const pending = [];
+    const client = {
+      catalog: { executionAvailable: true, items: [] }, intent: { roots: [{ itemId: 'one' }], pins: [] }, bytes: new TextEncoder().encode('A'),
+      requestHost(operation) {
+        if (operation !== 'prepare') throw new Error('No Apply expected while queueing a preview');
+        return new Promise(resolve => pending.push({ operation, resolve }));
+      },
+    };
+    const panel = createInstallPanel({ client, el, button: (label, action) => { const node = el('button', '', label); node.type = 'button'; node.addEventListener('click', action); return node; } });
+    document.body.append(panel.node); window.installPreview = { client, panel, pending, review };
+    panel.render(); client.bytes = new TextEncoder().encode('B'); panel.render();
+  }, installReview(['/work/app/inside.md', '/work/app-backup/settings.json', '/Work/App/case.md'], 'B'));
+  await page.evaluate(() => window.installPreview.pending[0].resolve({ status: 'superseded' }));
+  await page.waitForFunction(() => window.installPreview.pending.length === 2, 'a changed snapshot queues a fresh Prepare');
+  await page.evaluate(() => {
+    const { pending, review } = window.installPreview;
+    pending[1].resolve({ status: 'ready', sessionId: 'session-B', review, operationSelections: [] });
+  });
+  await page.locator('#install-button:not([disabled])').waitFor();
+  const files = await page.locator('#install-files').textContent();
+  assert.match(files, /inside\.md/);
+  assert.match(files, /\/work\/app-backup\/settings\.json/, 'a sibling prefix remains an absolute target');
+  assert.match(files, /\/Work\/App\/case\.md/, 'POSIX case difference remains an absolute target');
+  await page.close();
+}
+
+async function staleInstall() {
+  const page = await browser.newPage(); page.setDefaultTimeout(5_000); page.on('pageerror', error => errors.push(error.message));
+  await page.goto(origin, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(async review => {
+    const [{ createInstallPanel }, { el }] = await Promise.all([import('/app/install-panel.js'), import('/app/dom.js')]);
+    let prepares = 0;
+    const client = {
+      catalog: { executionAvailable: true, items: [] }, intent: { roots: [{ itemId: 'one' }], pins: [] }, bytes: new TextEncoder().encode('A'),
+      async requestHost(operation) {
+        if (operation === 'apply') return { status: 'refused', diagnostics: [{ code: 'REVIEW_STALE', message: 'Original stale reason.' }] };
+        prepares += 1;
+        if (prepares === 1) return { status: 'ready', sessionId: 'held', review, operationSelections: [] };
+        return { status: 'partial', diagnostics: [{ code: 'DISK_CONFLICT', message: 'Fresh disk conflict.' }] };
+      },
+    };
+    const panel = createInstallPanel({ client, el, button: (label, action) => { const node = el('button', '', label); node.type = 'button'; node.addEventListener('click', action); return node; } });
+    document.body.append(panel.node); panel.render();
+  }, installReview(['/work/app/inside.md']));
+  await page.locator('#install-button:not([disabled])').waitFor(); await page.locator('#install-button').click();
+  const message = page.locator('#install-message');
+  await message.filter({ hasText: /Fresh disk conflict/ }).waitFor();
+  assert.match(await message.textContent(), /Original stale reason/);
+  await page.close();
+}
+
 function approvalBrowseResult(item) {
   return {
     status: 'read', approvalShape: 'config',
@@ -282,6 +344,8 @@ try {
   if (!only || only === 'folder') { await folderOrdering(); passed++; console.log('✔ a late old-folder reply cannot replace current real DOM facts'); }
   if (!only || only === 'setup-choices') { await setupChoices(); passed++; console.log('✔ left-out rows preserve real member identity, scope and deduplication'); }
   if (!only || only === 'installed-states') { await installedStates(); passed++; console.log('✔ folded installed members keep their state badges without duplicate actions'); }
+  if (!only || only === 'preview-queue') { await previewQueue(); passed++; console.log('✔ a changed snapshot queues a fresh preview with truthful paths'); }
+  if (!only || only === 'stale-install') { await staleInstall(); passed++; console.log('✔ Install keeps stale and fresh preparation reasons together'); }
   if (!only || only === 'approval-identity') { await approvalIdentity(); passed++; console.log('✔ approval ticks bind exact item, scope and tool'); }
   if (!only || only === 'approval-failure') { await approvalFailure(); passed++; console.log('✔ approval failures restore ticks and show exact reasons'); }
   assert.deepEqual(errors, []);

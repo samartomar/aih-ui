@@ -19,9 +19,12 @@ export function diagnosticWords(...results) {
 
 export function relativeTarget(target, project) {
   if (!target) return '';
-  const lower = target.toLowerCase(), base = project?.toLowerCase();
-  const inside = base && lower.startsWith(base) ? target.slice(project.length).replace(/^[\\/]+/, '') : target;
-  return inside.replace(/\\/g, '/');
+  const windows = /^[a-z]:[\\/]/i.test(target) || /^[a-z]:[\\/]/i.test(project ?? '') || target.startsWith('\\\\') || (project ?? '').startsWith('\\\\');
+  const normalized = target.replace(/\\/g, '/'), base = (project ?? '').replace(/\\/g, '/').replace(/\/+$/, '') || '/';
+  const fold = value => windows ? value.toLowerCase() : value;
+  if (fold(normalized) === fold(base)) return '';
+  const prefix = base.endsWith('/') ? base : `${base}/`;
+  return fold(normalized).startsWith(fold(prefix)) ? normalized.slice(prefix.length) : normalized;
 }
 
 /** Readable rows for every operation in a prepared review. */
@@ -76,7 +79,7 @@ export async function applyIfUnchanged({ held, prepare, readyPreparation, apply 
     // Core calls the shown review stale: prepare fresh, show its review, require a new confirmation.
     const result = await prepare();
     const preparation = readyPreparation(result);
-    if (!preparation) return { state: 'not-ready', result };
+    if (!preparation) return { state: 'not-ready', result, reason };
     return { state: 'stale', preparation, reason, run };
   }
   // Defensive: nothing was shown, so nothing may be applied; prepare for display only.
