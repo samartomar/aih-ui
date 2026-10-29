@@ -3,7 +3,7 @@
 // advanced Prepare and Apply buttons stay where they are; this reuses the same host operations.
 
 import { applyIfUnchanged, diagnosticWords, fileCount, installFiles, IN_PLACE, listNames, relativeTarget, staleReason } from './host-review.js';
-import { reviewRows, groupReviewRows, sizeWords, guidanceFolder } from './review-rows.js';
+import { reviewRows, groupReviewRows, sizeWords, guidanceFolder, scanReviewWords } from './review-rows.js';
 
 export { relativeTarget } from './host-review.js';
 
@@ -111,7 +111,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
   timings.append(el('summary', '', 'Install time'), timingsList);
   node.append(title, action, message, firstRunLine, timings);
 
-  let preview, previewing = false, installing = false, shownFor, managed = false, again = false;
+  let preview, previewing = false, installing = false, shownFor, managed = false, again = false, recoveryManagementId;
   const itemOf = ref => client.catalog?.items.find(item => item.id === ref.itemId && item.root.releaseSha256 === ref.releaseSha256);
   const label = ref => { const item = itemOf(ref); return item ? item.label ?? item.id : ref.itemId; };
   const ready = () => Boolean(client.catalog && client.intent && !client.candidate && !(client.draft && !client.compiled));
@@ -131,10 +131,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
   // Named prepared-work 1.6 rows: Core's selections name them; operations attach by published selectionId;
   // blockers and global lines are Core's words, verbatim (#165).
   function namedRows(review, operationSelections, project) {
-    const { rows, global } = reviewRows(review, { operationSelections });
-    // Group the actual review rows under their recorded exact set identities (Q7-R), from the validated
-    // row.sets facts only - no inferred provenance. Blockers, effects, globals and selection identity stay
-    // on each row; simultaneous memberships appear under every set; no-set rows stay explicit.
+    const { rows, global, excluded } = reviewRows(review, { operationSelections });
     const rowNode = row => {
       const item = el('li', 'space-y-0.5'); item.dataset.reviewSelection = row.selectionId;
       const head = el('div', 'flex flex-wrap items-center gap-x-2');
@@ -143,11 +140,15 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
       if (row.how.length) head.append(el('span', 'text-[11px] text-on-surface-variant', row.how.join('; ')));
       if (row.sets.length) head.append(...row.sets.map(set => { const chip = el('span', 'text-[11px] text-on-surface-variant', `${set.setId} · exact set ${set.setSha256}`); chip.title = `${set.framework}/${set.setId}/${set.setSha256}`; return chip; }));
       item.append(head);
-      const meta = [row.scope === 'user' ? 'Your folders' : 'This project', sizeWords(row.size),
+      const meta = [row.scope === 'user' ? 'Your folders' : 'This project',
+        row.framework ? `Framework: ${row.framework}` : null,
+        row.layout ? `Layout: ${row.layout.support} · ${row.layout.observed}` : null,
+        scanReviewWords(row.scanState), row.coverage ? `Coverage: ${row.coverage}` : null, sizeWords(row.size),
         row.permissionStep ? `Still needs your OK: ${row.permissionStep}` : null,
         row.inputs.length ? `Inputs: ${row.inputs.join(', ')} (names only, never values)` : null]
         .filter(Boolean).join(' · ');
       item.append(el('p', 'text-[11px] text-on-surface-variant', meta));
+      for (const command of row.hookCommands) item.append(el('p', 'text-[11px] font-mono', `Hook command: ${command}`));
       for (const blocker of row.blockers) item.append(el('p', 'text-[11px]', `Blocker: ${blocker}`));
       for (const effect of row.effects) item.append(el('p', 'text-[11px] text-on-surface-variant',
         `${effect.effect}: ${effect.purpose}${effect.target ? ` → ${relativeTarget(effect.target, project)}` : ''}`));
@@ -173,6 +174,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
       nodes.push(section);
     }
     for (const line of global) nodes.push(el('li', 'text-[11px]', line));
+    for (const entry of excluded) nodes.push(el('li', 'text-[11px]', `Left out: ${entry.item.itemId} — ${entry.reason}`));
     return nodes;
   }
   async function showProjectFacts() {
@@ -195,7 +197,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
     previewing = true; preview = undefined; install.disabled = true; message.textContent = 'Checking which files will be added…';
     try {
       await showProjectFacts();
-      const result = await client.requestHost('prepare');
+      const result = recoveryManagementId ? await client.requestHost('finish', { managementId: recoveryManagementId }) : await client.requestHost('prepare');
       if (result.status === 'superseded') { message.textContent = ''; return; }
       const preparation = readyPreparation(result);
       if (preparation) {
@@ -236,7 +238,8 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
     try {
       // Apply the review the person was shown; Core alone calls it stale. What needs re-showing comes back
       // as the attempt's preparation; Apply is never bound to work that was not displayed.
-      const attemptResult = await applyIfUnchanged({ held: preview, prepare: () => client.requestHost('prepare'), readyPreparation,
+      const attemptResult = await applyIfUnchanged({ held: preview,
+        prepare: () => recoveryManagementId ? client.requestHost('finish', { managementId: recoveryManagementId }) : client.requestHost('prepare'), readyPreparation,
         apply: approval => { sent = true; return client.requestHost('apply', approval); } });
       if (attemptResult.state === 'not-ready') {
         if (attemptResult.preparation) {
@@ -251,7 +254,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
         preview = preparation; const rows = show(preparation.review, preparation.operationSelections ?? []); install.disabled = Boolean(nothingToInstall({ roots: client.intent?.roots ?? [], rows }));
         message.textContent = `The reviewed setup changed: ${attemptResult.reason} The list now shows what would happen — check it and click Install again.`; return;
       }
-      runId = attemptResult.run?.runId ?? preparation.runId;
+      runId = preparation.runId;
       const outcome = installOutcome(attemptResult.run, installFiles(preparation.review), preparation.review.target?.project);
       message.textContent = outcome.message;
       message.dataset.outcome = outcome.ok ? 'installed' : outcome.state ?? 'failed';
@@ -287,6 +290,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
   // After a removal elsewhere or a change of project folder: the earlier preview and outcome no longer describe the
   // folder, so they are dropped and it is checked again (once the preview already out has come back).
   function recheck() {
+    recoveryManagementId = undefined;
     install.textContent = 'Install';
     message.textContent = ''; delete message.dataset.outcome; shownFor = undefined; preview = undefined; install.disabled = true;
     firstRunLine.textContent = ''; named.replaceChildren(); projectFacts.replaceChildren();
@@ -301,6 +305,6 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
     const rows = installFiles(preview.review), summary = installSummary(rows, { managed });
     filesHeading.textContent = summary.heading; message.textContent = nothingToInstall({ roots: client.intent?.roots ?? [], rows }) || summary.message;
   }
-  function finish() { recheck(); install.textContent = 'Finish'; }
+  function finish(managementId) { recheck(); recoveryManagementId = managementId; install.textContent = 'Finish'; shownFor = undefined; render(); }
   return { node, heading: title, render, recheck, finish, setManaged, get busy() { return installing; } };
 }

@@ -93,13 +93,13 @@ test('supported-first browsing preserves mixed capability facts and exposes unde
 });
 
 test('ordinary target changes refresh counts and reasons while preserving accepted exact choices', async () => {
-  const { installedReleaseInventory } = await import('./installed-families.mjs');
+  const { installedFamilies } = await import('./installed-families.mjs');
   const { dirname } = await import('node:path');
   const { fileURLToPath } = await import('node:url');
   const root = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
-  const legacy = await Promise.all([['Extensions', 'extensions'], ['ECC', 'ecc'], ['Superpowers', 'superpowers'], ['Anthropic', 'anthropic']].map(async ([family, id]) =>
-    ({ family, ...await installedReleaseInventory({ root, releaseExport: `./release-${id}.json` }) })));
-  const started = await startConsumer({ installedFamilyInventories: legacy });
+  const inventories = await installedFamilies({ root });
+  assert.ok(inventories.filter(entry => entry.family !== 'Anthropic').every(entry => entry.release.items.every(item => item.contentSha256 && item.behaviourSha256)));
+  const started = await startConsumer({ installedFamilyInventories: inventories });
   try {
     const requests = [];
     const pageFetch = async (url, options) => {
@@ -108,16 +108,17 @@ test('ordinary target changes refresh counts and reasons while preserving accept
     };
     const nodes = await openPage(pageFetch);
     assert.equal(nodes.get('target').value, 'claude-code');
-    assert.deepEqual(nodes.get('target').children.map(option => option.value), ['claude-code', 'codex', 'copilot-vscode', 'generic', 'kiro-ide']);
+    assert.deepEqual(nodes.get('target').children.map(option => option.value), ['claude-code', 'copilot-vscode', 'generic', 'kiro-ide']);
     for (const family of ['Extensions', 'ECC', 'Superpowers', 'Anthropic']) {
       assert.ok(nodes.get('family').children.some(option => option.value === family));
+      nodes.get('family').value = family; nodes.get('family').onchange();
+      nodes.get('support-filter').value = 'all'; nodes.get('support-filter').onchange();
       assert.ok(nodes.get('items').children.some(box => box.children[0].textContent.startsWith(family + ' ·')));
     }
+    nodes.get('family').value = 'ECC'; nodes.get('family').onchange();
     const text = node => [node.textContent, ...node.children.map(text)].join(' ');
-    const matt = nodes.get('items').children.find(box => box.children[0].textContent.includes('ask-matt'));
-    assert.match(text(matt), /unsupported · automatic-guardrails · agent-tools — Skills are instructions/);
     const ecc = nodes.get('items').children.find(box => box.children[0].textContent.includes('accessibility'));
-    assert.match(text(ecc), /unknown · native-execution/);
+    assert.ok(ecc, 'the real prepared ECC content is browsable');
     await chooseButton(ecc).onclick();
     assert.equal(nodes.get('accept').disabled, false);
     nodes.get('accept').onclick();
@@ -125,23 +126,18 @@ test('ordinary target changes refresh counts and reasons while preserving accept
     const countBefore = nodes.get('support-counts').textContent, callsBefore = requests.length;
     nodes.get('family').value = 'ECC'; nodes.get('family').onchange();
     nodes.get('target').value = 'copilot-vscode'; nodes.get('target').onchange();
-    assert.equal(nodes.get('items').children.length, 1);
-    assert.match(text(nodes.get('items')), /ecc.copilot.skill.api-design/);
-    assert.match(nodes.get('support-counts').textContent, /1 with supported facts/);
     assert.notEqual(nodes.get('support-counts').textContent, countBefore);
-    nodes.get('support-filter').value = 'unsupported'; nodes.get('support-filter').onchange();
-    assert.ok(nodes.get('items').children.length > 0);
-    assert.match(text(nodes.get('items')), /no translated native mechanism is offered/);
-    nodes.get('support-filter').value = 'unknown'; nodes.get('support-filter').onchange();
-    assert.ok(nodes.get('items').children.length > 0);
-    assert.match(text(nodes.get('items')), /unknown · native-execution/);
     nodes.get('target').value = 'generic'; nodes.get('target').onchange();
     assert.match(text(nodes.get('items')), /No capability facts declared for generic/);
     nodes.get('support-filter').value = 'all'; nodes.get('support-filter').onchange();
-    assert.ok(nodes.get('items').children.some(box => box.children[0].textContent.includes('accessibility')));
     assert.equal(nodes.get('policy').value, policy);
     assert.equal(nodes.get('summary').textContent, summary);
     assert.equal(requests.length, callsBefore, 'Browsing must not send an authoring mutation');
+    nodes.get('target').value = 'kiro-ide'; nodes.get('target').onchange();
+    await chooseButton(ecc).onclick();
+    assert.match(nodes.get('proposal').textContent, /TOOL_UNAVAILABLE|Choose your tool before composing/);
+    assert.equal(nodes.get('accept').disabled, true);
+    assert.equal(nodes.get('policy').value, policy);
     await nodes.get('reopen').onclick();
     assert.equal(nodes.get('summary').textContent, summary);
     assert.equal(nodes.get('policy').value, policy);

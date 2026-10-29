@@ -43,6 +43,7 @@ export function inventoryState(entry) {
     policy: entry.policyState ?? null,
     approval: entry.approval ?? null,
     install: entry.installState ?? null,
+    ...(entry.installState === 'interrupted' ? { written: (entry.members ?? []).length } : {}),
   };
 }
 
@@ -96,7 +97,7 @@ export function groupInstalled({ inventory, policy, intent, label = () => undefi
   const describe = entry => {
     const itemId = itemByRecipe.get(entry.recipe?.reference?.sha256);
     const recorded = installed.get(entry.managementId);
-    return { id: entry.id, itemId, managementId: entry.managementId, scope: entry.scope,
+    return { ...recorded, id: entry.id, itemId: recorded?.item?.itemId ?? itemId, managementId: entry.managementId, scope: entry.scope,
       name: recorded?.name ?? (itemId && label(itemId)) ?? itemId ?? entry.managementId };
   };
   const withState = item => ({ ...item, state: inventoryState(installed.get(item.managementId) ?? {}) });
@@ -121,7 +122,7 @@ export function groupInstalled({ inventory, policy, intent, label = () => undefi
   const known = new Map([...byId.values()].map(entry => [entry.managementId, describe(entry)]));
   const others = inventory.selections.filter(entry => !grouped.has(entry.managementId)).map(entry => {
     const item = known.get(entry.managementId);
-    return withState({ managementId: entry.managementId, scope: entry.scope, itemId: entry.item?.itemId ?? item?.itemId,
+    return withState({ ...entry, managementId: entry.managementId, scope: entry.scope, itemId: entry.item?.itemId ?? item?.itemId,
       name: entry.name ?? item?.name ?? entry.managementId, inSetup: Boolean(item),
       sets: recordedSets(entry) });
   });

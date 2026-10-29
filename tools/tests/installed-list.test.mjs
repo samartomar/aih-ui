@@ -93,10 +93,17 @@ test('recorded 1.1 names win over draft-derived labels, and per-selection states
   assert.equal(view.groups.find(group => group.managementId === 'm-grill-me').needed.find(item => item.managementId === 'm-grilling').state.file, 'unknown', 'no members is unknown, never fabricated');
 });
 
-test('items outside the current setup keep their recorded names from the projection', () => {
-  const inv = { status: 'complete', selections: [recorded('m-elsewhere', { name: 'Outside item', item: { framework: 'ecc', itemId: 'ecc.other' } })] };
+test('items outside the current setup keep every redacted fact needed for a faithful update', () => {
+  const origins = [{ reasonIncluded: 'in-set', set: { framework: 'ecc', setId: 'starter', setSha256: 'a'.repeat(64) }, options: { languages: ['typescript'] } }];
+  const inv = { status: 'complete', selections: [recorded('m-elsewhere', { name: 'Outside item', framework: 'ecc', tool: 'claude',
+    item: { framework: 'ecc', itemId: 'ecc.other' }, configuration: { tone: 'terse' }, origins, approval: 'granted-by-aih' })] };
   const view = groupInstalled({ inventory: inv, policy: undefined, intent: undefined, label });
   assert.deepEqual(view.others.map(item => [item.name, item.inSetup]), [['Outside item', false]]);
+  assert.equal(view.others[0].framework, 'ecc');
+  assert.equal(view.others[0].tool, 'claude');
+  assert.equal(view.others[0].configuration.tone, 'terse');
+  assert.deepEqual(view.others[0].origins, origins);
+  assert.equal(view.others[0].approval, 'granted-by-aih');
 });
 
 test('origin groups come from recorded in-set origins, keep simultaneous membership, and stay explicit for legacy rows', () => {
@@ -121,7 +128,7 @@ test('update and install states Core reports are never recomputed here', () => {
   const inv = { status: 'incomplete', selections: [recorded('m-x', { updateState: 'no-longer-offered', installState: 'interrupted', members: [{ fileState: 'missing' }] })] };
   const view = groupInstalled({ inventory: inv, policy: undefined, intent: undefined, label });
   assert.equal(view.partial, true, 'an incomplete result is said incomplete, distinct from the selection state');
-  assert.deepEqual(view.others[0].state, { file: 'missing', update: 'no-longer-offered', policy: null, approval: null, install: 'interrupted' });
+  assert.deepEqual(view.others[0].state, { file: 'missing', update: 'no-longer-offered', policy: null, approval: null, install: 'interrupted', written: 1 });
   const blocky = { status: 'complete', selections: [recorded('m-y', { members: [{ fileState: 'block-changed' }, { fileState: 'block-changed' }] })] };
   const blockyView = groupInstalled({ inventory: blocky, policy: undefined, intent: undefined, label });
   assert.equal(blockyView.others[0].state.file, 'block-changed', 'a uniform block-changed set keeps its distinct literal state (Q8)');

@@ -41,7 +41,8 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   const { release, source: materialSource, materialRoots } = installed;
   const previous = previousCatalogRoot ? await readInstalledRelease({ root: previousCatalogRoot, sourceInput: 'catalog' }) : null;
   if (previous && !previous.valid) throw new Error(JSON.stringify(previous.diagnostics));
-  let legacyHost = projectRoot ? createExecutionHost({ projectRoot, materialRoots, organizationSource, controls }) : null;
+  const timingStore = new Map();
+  let legacyHost = projectRoot ? createExecutionHost({ projectRoot, materialRoots, organizationSource, controls, timingStore }) : null;
   const intentService = createIntentService();
   const catalogRoot = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
   const descriptors = new Map();
@@ -77,7 +78,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   const updateSource = updateSourceCatalogRoots !== undefined ? createCatalogUpdateSource({ roots: updateSourceCatalogRoots, installedPackage: release.package }) : null;
   if (updateSource) maintenanceSource = () => updateSource.read();
   const mixedService = await createMixedService({ release, materials, materialSource: { kind: 'local', input: 'maintained' } }, { suppliedInventories, familyInventories, frameworkCatalog, historicalInventories, maintenanceSource, frictionEvidence, observeCheckout });
-  const authoringRoots = { maintained: catalogRoot };
+  const authoringRoots = { maintained: catalogRoot, catalog: catalogRoot };
   // Startup inventories are staged once, when the first project folder is known. Concurrent callers share the one run,
   // and the roots are published only once every file is written; a failed run is retried by the next caller.
   const stageAuthoringRoots = shared(async () => {
@@ -97,12 +98,12 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   });
   if (projectRoot) await stageAuthoringRoots();
   const hostFor = project => project ? createExecutionHost({ projectRoot: project, materialRoots: authoringRoots, organizationSource,
-    recipeMaterials: mixedService.inventories.flatMap(i => i.materials ?? []), controls, inventories: mixedService.currentInventories }) : null;
+    recipeMaterials: mixedService.inventories.flatMap(i => i.materials ?? []), controls, inventories: mixedService.currentInventories, timingStore }) : null;
   let host = hostFor(projectRoot);
   // Client tokens exist only in the live page. No cookie, saved intent or imported
   // snapshot restores a client's inventory, material grants or prepared handles.
   const clients = new Map(), clientStages = new Set();
-  const clientHost = client => folder.project ? createExecutionHost({ projectRoot: folder.project, materialRoots: client.roots, organizationSource, recipeMaterials: client.recipeMaterials, controls, inventories: client.mixed.currentInventories }) : null;
+  const clientHost = client => folder.project ? createExecutionHost({ projectRoot: folder.project, materialRoots: client.roots, organizationSource, recipeMaterials: client.recipeMaterials, controls, inventories: client.mixed.currentInventories, timingStore }) : null;
   // Session ids prepared for an earlier project folder, so applying one is refused by name. Bounded; older ones read as lost.
   const retired = new Set();
   const retire = old => { for (const id of old?.heldSessions() ?? []) { retired.add(id); if (retired.size > 1024) retired.delete(retired.values().next().value); } };
@@ -110,7 +111,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   // personal-folder grants and their staged material roots are kept, since they are about content, not the project.
   const folder = createProjectFolder({ initial: projectRoot, options: { coreState }, beforeChange: stageAuthoringRoots, onChange: project => {
     retire(legacyHost); retire(host);
-    legacyHost = createExecutionHost({ projectRoot: project, materialRoots, organizationSource, controls }); host = hostFor(project);
+    legacyHost = createExecutionHost({ projectRoot: project, materialRoots, organizationSource, controls, timingStore }); host = hostFor(project);
     for (const client of clients.values()) {
       for (const [input, root] of Object.entries(authoringRoots)) if (!Object.hasOwn(client.roots, input)) client.roots[input] = root;
       if (client.recipeMaterials) { retire(client.host); client.host = clientHost(client); }
@@ -273,13 +274,13 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
           const record = client.host.installTimings(body.runId);
           return send(response, 200, record ? { status: 'ok', value: record } : { status: 'unavailable', reason: 'No consumer timings are recorded for that Core run id.' });
         }
-        if (['authority', 'prepare', 'apply', 'managed', 'remove', 'update'].includes(operation)) {
+        if (['authority', 'prepare', 'finish', 'apply', 'managed', 'remove', 'update'].includes(operation)) {
           if (!client.host) return send(response, 409, { status: 'unavailable', diagnostics: [{ code: 'HOST_UNAVAILABLE', message: 'No project folder is set. Choose one to install, update or remove.' }] });
           if (operation === 'apply' && retired.has(body.sessionId)) return send(response, 200, folderChanged());
           // Lifecycle operations hold the current folder until they finish; the host is read once they hold it.
-          const work = ['prepare', 'apply', 'remove', 'update'].includes(operation) ? folder.run : action => action();
+          const work = ['prepare', 'finish', 'apply', 'remove', 'update'].includes(operation) ? folder.run : action => action();
           return send(response, 200, await work(async () => {
-            const moved = operation === 'prepare' || operation === 'apply' || operation === 'remove' || operation === 'update' ? await folderMoved() : undefined;
+            const moved = ['prepare', 'finish', 'apply', 'remove', 'update'].includes(operation) ? await folderMoved() : undefined;
             if (moved) return moved;
             const policyText = new TextDecoder().decode(Uint8Array.from(body.policyBytes ?? []));
             if (operation === 'prepare' && historicalOnly.size) {
@@ -291,6 +292,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
             const host = client.host;
             return operation === 'authority' ? await host.inspectAuthority({ policyText })
               : operation === 'prepare' ? await host.prepareSession({ policyText, resolutions: body.resolutions })
+              : operation === 'finish' ? await host.prepareFinishSession({ policyText, managementId: body.managementId })
               : operation === 'apply' ? await host.applyApproved({ sessionId: body.sessionId, reviewDigest: body.reviewDigest, allowPartial: body.allowPartial === true })
               : operation === 'managed' ? await host.managedInventory()
               : operation === 'update' ? await host.prepareUpdateSession({ updates: body.updates, scope: body.scope, tool: body.tool })

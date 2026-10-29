@@ -1,0 +1,615 @@
+{
+  "schema": "urn:aihq:core:execution-policy:1.5.0",
+  "mode": "vibe",
+  "selections": [
+    {
+      "id": "catalog-59aa3061eb2b11370a70d0a6b14f30e1e7d7342c2c058b4d8bb44a79b1204f66",
+      "managementId": "project--aihq.catalog--ecc.notices",
+      "scope": "project",
+      "configuration": {},
+      "item": {
+        "framework": "ecc",
+        "itemId": "ecc.notices",
+        "contentSha256": "620500100a08339d1d67255c29fb5f80d12d45513948e7d5ac599e2bd4f196af",
+        "behaviourSha256": "4827da231f59b3666cdef51d6a92a6affb46629e94648c902dc4ed4c6632d6a9"
+      },
+      "tool": "claude",
+      "name": "ECC notices",
+      "kind": "document",
+      "origins": [
+        {
+          "reasonIncluded": "required-by",
+          "requiredBy": {
+            "framework": "ecc",
+            "itemId": "ecc.skill.accessibility"
+          }
+        }
+      ],
+      "bindingDigest": "80f6809c461fd50d21ab920a30ae76d20879ff613ddd2c44e281a91051a5c924",
+      "requires": [],
+      "recipe": {
+        "inline": {
+          "schema": "urn:aihq:core:recipe:1.0.0",
+          "id": "claude.ecc.notices.beside.ecc.skill.accessibility",
+          "description": "Deliver ecc/ecc.notices (document) to claude: content sha256:620500100a08339d1d67255c29fb5f80d12d45513948e7d5ac599e2bd4f196af, behaviour sha256:4827da231f59b3666cdef51d6a92a6affb46629e94648c902dc4ed4c6632d6a9, binding sha256:80f6809c461fd50d21ab920a30ae76d20879ff613ddd2c44e281a91051a5c924.",
+          "inputs": {},
+          "materials": [
+            {
+              "id": "asset-0",
+              "source": {
+                "kind": "local",
+                "input": "catalog"
+              },
+              "path": "release/materials/github.com/affaan-m/ECC/5064474d4d762dc9640234a41617cccb79185cec/LICENSE",
+              "sha256": "326146379f01bb137c0a5d3c54770c1aa31076705c8b88a7f6b26a460f6221b2",
+              "byteLength": 1071
+            },
+            {
+              "id": "asset-1",
+              "source": {
+                "kind": "local",
+                "input": "catalog"
+              },
+              "path": "release/materials/github.com/affaan-m/ECC/5064474d4d762dc9640234a41617cccb79185cec/AGENTS.md",
+              "sha256": "8d39c1fc1468598954bff7b0cad5c0e985d9fa1b2b5b66d94d363f59db99634b",
+              "byteLength": 8805
+            },
+            {
+              "id": "asset-2",
+              "source": {
+                "kind": "local",
+                "input": "catalog"
+              },
+              "path": "release/materials/github.com/affaan-m/ECC/5064474d4d762dc9640234a41617cccb79185cec/.claude-plugin/plugin.json",
+              "sha256": "58a0fc1e43c01a5a83cc57c33ac6d6139ac9bd04c551c720296d5350cd834451",
+              "byteLength": 1265
+            },
+            {
+              "id": "asset-3",
+              "source": {
+                "kind": "local",
+                "input": "catalog"
+              },
+              "path": "release/materials/github.com/affaan-m/ECC/5064474d4d762dc9640234a41617cccb79185cec/README.md",
+              "sha256": "56a45e47eef049918382751151d00ca27012b48398ffe137e705e14a28bf29a1",
+              "byteLength": 118682
+            }
+          ],
+          "targets": [
+            "project"
+          ],
+          "prerequisites": [],
+          "operations": [
+            {
+              "id": "write-1",
+              "purpose": "Write .claude/skills/accessibility/ecc.notices/LICENSE",
+              "kind": "file.write",
+              "scope": "project",
+              "target": {
+                "root": "project",
+                "segments": [
+                  {
+                    "literal": ".claude"
+                  },
+                  {
+                    "literal": "skills"
+                  },
+                  {
+                    "literal": "accessibility"
+                  },
+                  {
+                    "literal": "ecc.notices"
+                  },
+                  {
+                    "literal": "LICENSE"
+                  }
+                ]
+              },
+              "material": "asset-0",
+              "requires": [],
+              "checks": [
+                "write-1-sha256"
+              ]
+            },
+            {
+              "id": "write-2",
+              "purpose": "Write .claude/skills/accessibility/ecc.notices/AGENTS.md",
+              "kind": "file.write",
+              "scope": "project",
+              "target": {
+                "root": "project",
+                "segments": [
+                  {
+                    "literal": ".claude"
+                  },
+                  {
+                    "literal": "skills"
+                  },
+                  {
+                    "literal": "accessibility"
+                  },
+                  {
+                    "literal": "ecc.notices"
+                  },
+                  {
+                    "literal": "AGENTS.md"
+                  }
+                ]
+              },
+              "material": "asset-1",
+              "requires": [],
+              "checks": [
+                "write-2-sha256"
+              ]
+            },
+            {
+              "id": "write-3",
+              "purpose": "Write .claude/skills/accessibility/ecc.notices/plugin.json",
+              "kind": "file.write",
+              "scope": "project",
+              "target": {
+                "root": "project",
+                "segments": [
+                  {
+                    "literal": ".claude"
+                  },
+                  {
+                    "literal": "skills"
+                  },
+                  {
+                    "literal": "accessibility"
+                  },
+                  {
+                    "literal": "ecc.notices"
+                  },
+                  {
+                    "literal": "plugin.json"
+                  }
+                ]
+              },
+              "material": "asset-2",
+              "requires": [],
+              "checks": [
+                "write-3-sha256"
+              ]
+            },
+            {
+              "id": "write-4",
+              "purpose": "Write .claude/skills/accessibility/ecc.notices/README.md",
+              "kind": "file.write",
+              "scope": "project",
+              "target": {
+                "root": "project",
+                "segments": [
+                  {
+                    "literal": ".claude"
+                  },
+                  {
+                    "literal": "skills"
+                  },
+                  {
+                    "literal": "accessibility"
+                  },
+                  {
+                    "literal": "ecc.notices"
+                  },
+                  {
+                    "literal": "README.md"
+                  }
+                ]
+              },
+              "material": "asset-3",
+              "requires": [],
+              "checks": [
+                "write-4-sha256"
+              ]
+            }
+          ],
+          "checks": [
+            {
+              "id": "write-1-sha256",
+              "purpose": ".claude/skills/accessibility/ecc.notices/LICENSE has the pinned bytes",
+              "kind": "file.sha256",
+              "target": {
+                "root": "project",
+                "segments": [
+                  {
+                    "literal": ".claude"
+                  },
+                  {
+                    "literal": "skills"
+                  },
+                  {
+                    "literal": "accessibility"
+                  },
+                  {
+                    "literal": "ecc.notices"
+                  },
+                  {
+                    "literal": "LICENSE"
+                  }
+                ]
+              },
+              "sha256": "326146379f01bb137c0a5d3c54770c1aa31076705c8b88a7f6b26a460f6221b2"
+            },
+            {
+              "id": "write-2-sha256",
+              "purpose": ".claude/skills/accessibility/ecc.notices/AGENTS.md has the pinned bytes",
+              "kind": "file.sha256",
+              "target": {
+                "root": "project",
+                "segments": [
+                  {
+                    "literal": ".claude"
+                  },
+                  {
+                    "literal": "skills"
+                  },
+                  {
+                    "literal": "accessibility"
+                  },
+                  {
+                    "literal": "ecc.notices"
+                  },
+                  {
+                    "literal": "AGENTS.md"
+                  }
+                ]
+              },
+              "sha256": "8d39c1fc1468598954bff7b0cad5c0e985d9fa1b2b5b66d94d363f59db99634b"
+            },
+            {
+              "id": "write-3-sha256",
+              "purpose": ".claude/skills/accessibility/ecc.notices/plugin.json has the pinned bytes",
+              "kind": "file.sha256",
+              "target": {
+                "root": "project",
+                "segments": [
+                  {
+                    "literal": ".claude"
+                  },
+                  {
+                    "literal": "skills"
+                  },
+                  {
+                    "literal": "accessibility"
+                  },
+                  {
+                    "literal": "ecc.notices"
+                  },
+                  {
+                    "literal": "plugin.json"
+                  }
+                ]
+              },
+              "sha256": "58a0fc1e43c01a5a83cc57c33ac6d6139ac9bd04c551c720296d5350cd834451"
+            },
+            {
+              "id": "write-4-sha256",
+              "purpose": ".claude/skills/accessibility/ecc.notices/README.md has the pinned bytes",
+              "kind": "file.sha256",
+              "target": {
+                "root": "project",
+                "segments": [
+                  {
+                    "literal": ".claude"
+                  },
+                  {
+                    "literal": "skills"
+                  },
+                  {
+                    "literal": "accessibility"
+                  },
+                  {
+                    "literal": "ecc.notices"
+                  },
+                  {
+                    "literal": "README.md"
+                  }
+                ]
+              },
+              "sha256": "56a45e47eef049918382751151d00ca27012b48398ffe137e705e14a28bf29a1"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "catalog-188d37c85d208383e412beb155ca725b2a4fe4a7ebb7124517800227f418b616",
+      "managementId": "project--aihq.catalog--ecc.skill.accessibility",
+      "scope": "project",
+      "configuration": {},
+      "item": {
+        "framework": "ecc",
+        "itemId": "ecc.skill.accessibility",
+        "contentSha256": "7c661ab98c388278d25238305e11515aa943d5a792b4d4c473e5b72b82b586ab",
+        "behaviourSha256": "9d5c8421ff3dfb7e301f26a10c6c4c5b7f1105751f7d45a6d74411fb45942820"
+      },
+      "tool": "claude",
+      "name": "accessibility",
+      "kind": "skill",
+      "origins": [
+        {
+          "reasonIncluded": "chosen"
+        }
+      ],
+      "bindingDigest": "80f6809c461fd50d21ab920a30ae76d20879ff613ddd2c44e281a91051a5c924",
+      "requires": [
+        "catalog-59aa3061eb2b11370a70d0a6b14f30e1e7d7342c2c058b4d8bb44a79b1204f66"
+      ],
+      "recipe": {
+        "inline": {
+          "schema": "urn:aihq:core:recipe:1.0.0",
+          "id": "claude.ecc.skill.accessibility",
+          "description": "Deliver ecc/ecc.skill.accessibility (skill) to claude: content sha256:7c661ab98c388278d25238305e11515aa943d5a792b4d4c473e5b72b82b586ab, behaviour sha256:9d5c8421ff3dfb7e301f26a10c6c4c5b7f1105751f7d45a6d74411fb45942820, binding sha256:80f6809c461fd50d21ab920a30ae76d20879ff613ddd2c44e281a91051a5c924.",
+          "inputs": {},
+          "materials": [
+            {
+              "id": "asset-0",
+              "source": {
+                "kind": "local",
+                "input": "catalog"
+              },
+              "path": "release/materials/github.com/affaan-m/ECC/5064474d4d762dc9640234a41617cccb79185cec/skills/accessibility/SKILL.md",
+              "sha256": "d8578fe750e7321658450386e2112a46ea1aedca0235fbf97f3db2457e599b3a",
+              "byteLength": 6563
+            },
+            {
+              "id": "asset-1",
+              "source": {
+                "kind": "local",
+                "input": "catalog"
+              },
+              "path": "release/materials/github.com/affaan-m/ECC/5064474d4d762dc9640234a41617cccb79185cec/LICENSE",
+              "sha256": "326146379f01bb137c0a5d3c54770c1aa31076705c8b88a7f6b26a460f6221b2",
+              "byteLength": 1071
+            }
+          ],
+          "targets": [
+            "project"
+          ],
+          "prerequisites": [],
+          "operations": [
+            {
+              "id": "write-1",
+              "purpose": "Write .claude/skills/accessibility/SKILL.md",
+              "kind": "file.write",
+              "scope": "project",
+              "target": {
+                "root": "project",
+                "segments": [
+                  {
+                    "literal": ".claude"
+                  },
+                  {
+                    "literal": "skills"
+                  },
+                  {
+                    "literal": "accessibility"
+                  },
+                  {
+                    "literal": "SKILL.md"
+                  }
+                ]
+              },
+              "material": "asset-0",
+              "requires": [],
+              "checks": [
+                "write-1-sha256"
+              ]
+            },
+            {
+              "id": "write-2",
+              "purpose": "Write .claude/skills/accessibility/LICENSE",
+              "kind": "file.write",
+              "scope": "project",
+              "target": {
+                "root": "project",
+                "segments": [
+                  {
+                    "literal": ".claude"
+                  },
+                  {
+                    "literal": "skills"
+                  },
+                  {
+                    "literal": "accessibility"
+                  },
+                  {
+                    "literal": "LICENSE"
+                  }
+                ]
+              },
+              "material": "asset-1",
+              "requires": [],
+              "checks": [
+                "write-2-sha256"
+              ]
+            }
+          ],
+          "checks": [
+            {
+              "id": "write-1-sha256",
+              "purpose": ".claude/skills/accessibility/SKILL.md has the pinned bytes",
+              "kind": "file.sha256",
+              "target": {
+                "root": "project",
+                "segments": [
+                  {
+                    "literal": ".claude"
+                  },
+                  {
+                    "literal": "skills"
+                  },
+                  {
+                    "literal": "accessibility"
+                  },
+                  {
+                    "literal": "SKILL.md"
+                  }
+                ]
+              },
+              "sha256": "d8578fe750e7321658450386e2112a46ea1aedca0235fbf97f3db2457e599b3a"
+            },
+            {
+              "id": "write-2-sha256",
+              "purpose": ".claude/skills/accessibility/LICENSE has the pinned bytes",
+              "kind": "file.sha256",
+              "target": {
+                "root": "project",
+                "segments": [
+                  {
+                    "literal": ".claude"
+                  },
+                  {
+                    "literal": "skills"
+                  },
+                  {
+                    "literal": "accessibility"
+                  },
+                  {
+                    "literal": "LICENSE"
+                  }
+                ]
+              },
+              "sha256": "326146379f01bb137c0a5d3c54770c1aa31076705c8b88a7f6b26a460f6221b2"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "excludedItems": [],
+  "metadata": {
+    "aih.workbench": {
+      "schema": "urn:aihq:workbench:saved-intent:3.0.0",
+      "origins": [
+        {
+          "id": "direct",
+          "kind": "direct"
+        }
+      ],
+      "roots": [
+        {
+          "releaseSha256": "353717e3bb947af8c9094e62fe0c84eb55cb726e4dfb983ad22f9566e580a32c",
+          "itemId": "ecc.skill.accessibility",
+          "itemSha256": "c96c61424015f8c5343c3198dd1802194541a33bbaaa6f6b22ed48cc5076e823",
+          "scope": "project",
+          "configuration": {},
+          "originIds": [
+            "direct"
+          ]
+        }
+      ],
+      "exclusions": [],
+      "pins": [
+        {
+          "releaseSha256": "353717e3bb947af8c9094e62fe0c84eb55cb726e4dfb983ad22f9566e580a32c",
+          "itemId": "ecc.notices",
+          "itemSha256": "5a8aac4e570b4ab2b1a593d7b8cfe3e8c1ed7acf12d294f5aaff2456540e5060",
+          "recipe": {
+            "id": "claude.ecc.notices.beside.ecc.skill.accessibility",
+            "path": "inline:claude.ecc.notices.beside.ecc.skill.accessibility",
+            "sha256": "4b57a0cccb1c27d0c861d84d9aac46f7fd2dfef0dc021444f17382c53654ca0d",
+            "byteLength": 4405,
+            "schema": "urn:aihq:core:recipe:1.0.0"
+          },
+          "materials": [
+            {
+              "id": "asset-0",
+              "path": "release/materials/github.com/affaan-m/ECC/5064474d4d762dc9640234a41617cccb79185cec/LICENSE",
+              "sha256": "326146379f01bb137c0a5d3c54770c1aa31076705c8b88a7f6b26a460f6221b2",
+              "byteLength": 1071
+            },
+            {
+              "id": "asset-1",
+              "path": "release/materials/github.com/affaan-m/ECC/5064474d4d762dc9640234a41617cccb79185cec/AGENTS.md",
+              "sha256": "8d39c1fc1468598954bff7b0cad5c0e985d9fa1b2b5b66d94d363f59db99634b",
+              "byteLength": 8805
+            },
+            {
+              "id": "asset-2",
+              "path": "release/materials/github.com/affaan-m/ECC/5064474d4d762dc9640234a41617cccb79185cec/.claude-plugin/plugin.json",
+              "sha256": "58a0fc1e43c01a5a83cc57c33ac6d6139ac9bd04c551c720296d5350cd834451",
+              "byteLength": 1265
+            },
+            {
+              "id": "asset-3",
+              "path": "release/materials/github.com/affaan-m/ECC/5064474d4d762dc9640234a41617cccb79185cec/README.md",
+              "sha256": "56a45e47eef049918382751151d00ca27012b48398ffe137e705e14a28bf29a1",
+              "byteLength": 118682
+            },
+            {
+              "id": "behaviour",
+              "path": "release/items/ecc.notices/aih-behaviour.json",
+              "sha256": "47b2403adf710f0429ab93d158d774f2b2092144f321b33732f4c9a629663bcd",
+              "byteLength": 277
+            }
+          ]
+        },
+        {
+          "releaseSha256": "353717e3bb947af8c9094e62fe0c84eb55cb726e4dfb983ad22f9566e580a32c",
+          "itemId": "ecc.skill.accessibility",
+          "itemSha256": "c96c61424015f8c5343c3198dd1802194541a33bbaaa6f6b22ed48cc5076e823",
+          "recipe": {
+            "id": "claude.ecc.skill.accessibility",
+            "path": "inline:claude.ecc.skill.accessibility",
+            "sha256": "767ff55ca81c2d060cdfd36b292e6467a690f507fdb718e803c68a7ca613e55a",
+            "byteLength": 2286,
+            "schema": "urn:aihq:core:recipe:1.0.0"
+          },
+          "materials": [
+            {
+              "id": "asset-0",
+              "path": "release/materials/github.com/affaan-m/ECC/5064474d4d762dc9640234a41617cccb79185cec/skills/accessibility/SKILL.md",
+              "sha256": "d8578fe750e7321658450386e2112a46ea1aedca0235fbf97f3db2457e599b3a",
+              "byteLength": 6563
+            },
+            {
+              "id": "asset-1",
+              "path": "release/materials/github.com/affaan-m/ECC/5064474d4d762dc9640234a41617cccb79185cec/LICENSE",
+              "sha256": "326146379f01bb137c0a5d3c54770c1aa31076705c8b88a7f6b26a460f6221b2",
+              "byteLength": 1071
+            },
+            {
+              "id": "behaviour",
+              "path": "release/items/ecc.skill.accessibility/aih-behaviour.json",
+              "sha256": "a902a7bce126c07828852fd7326ddc8ce155814c92a7ebdba968c36c1a816baf",
+              "byteLength": 314
+            }
+          ]
+        }
+      ],
+      "provenance": [
+        {
+          "releaseSha256": "353717e3bb947af8c9094e62fe0c84eb55cb726e4dfb983ad22f9566e580a32c",
+          "package": {
+            "name": "@aihq/catalog",
+            "version": "0.1.0"
+          },
+          "sources": [
+            {
+              "id": "ecc",
+              "license": "MIT",
+              "origin": {
+                "kind": "git",
+                "repository": "https://github.com/affaan-m/ECC",
+                "revision": "5064474d4d762dc9640234a41617cccb79185cec"
+              }
+            }
+          ],
+          "materialSource": {
+            "kind": "local",
+            "input": "managed-inventory-index"
+          }
+        }
+      ],
+      "inputs": [],
+      "reviews": {
+        "schema": "urn:aihq:workbench:review-decisions:1.0.0",
+        "records": [],
+        "history": []
+      }
+    }
+  }
+}

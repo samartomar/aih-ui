@@ -33,6 +33,8 @@ export function reviewRows(review, { operationSelections = [] } = {}) {
       selectionId: row.selectionId, managementId: row.managementId, scope: row.scope,
       heading: row.name ? itemDisplayName(row) : `Selection ${row.selectionId} (its recorded metadata is unavailable)`,
       item: row.item ?? null, tool: row.tool ?? null, kind: row.kind ?? null,
+      framework: row.framework ?? row.item?.framework ?? null,
+      layout: row.layout ?? null, scanState: row.scanState ?? null, coverage: row.coverage ?? null,
       sets, how,
       permissionStep: row.permissionStep ?? null,
       inputs: row.inputs ?? [],
@@ -44,7 +46,17 @@ export function reviewRows(review, { operationSelections = [] } = {}) {
     };
   });
   global.push(...(review?.omissions ?? []).map(words));
-  return { rows, global: global.filter(Boolean) };
+  return { rows, global: global.filter(Boolean), excluded: structuredClone(review?.excluded ?? []) };
+}
+
+export function scanReviewWords(scan) {
+  if (!scan) return null;
+  if (scan.state === 'verified') return 'Verified';
+  if (scan.state === 'not-verified') return `Scanned, not verified${scan.why ? ` (${scan.why})` : ''}`;
+  if (scan.state === 'partial') return 'Scan incomplete';
+  if (scan.state === 'not-covered') return 'The scan offered covers other files';
+  if (scan.state === 'unreadable') return "Scan record can't be read";
+  return 'No scan record';
 }
 
 /** Core's delivered-size line for one row; absent means unknown, never zero. */

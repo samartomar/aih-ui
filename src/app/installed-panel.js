@@ -29,7 +29,8 @@ function stateBadges(state = {}, el) {
   const chips = [];
   const add = (key, extra) => { const words = STATE_WORDS[key]; if (!words) return;
     const chip = el('span', 'inline-flex items-center gap-1 text-[11px]', ''); chip.dataset.installedState = key;
-    chip.append(iconSpan('state', words[0]), el('span', '', words[1])); attachTooltip(chip, `${words[2]}${extra ? ` ${extra}` : ''}`); chips.push(chip); };
+    const text = key === 'interrupted' ? `Install didn't finish; ${state.written ?? 0} files written` : words[1];
+    chip.append(iconSpan('state', words[0]), el('span', '', text)); attachTooltip(chip, `${words[2]}${extra ? ` ${extra}` : ''}`); chips.push(chip); };
   if (state.update && state.update !== 'current' && state.update !== 'unknown') add(state.update);
   for (const distinct of state.files ?? (state.file && !['matches', 'unchecked', 'unknown'].includes(state.file) ? [state.file] : [])) add(distinct);
   if (state.install === 'interrupted') add('interrupted');
@@ -113,7 +114,9 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
 
   function finishControl(item) {
     if (item.state.install !== 'interrupted') return null;
-    return compact(button('Finish', () => { message.textContent = 'Review finishing the interrupted install. Nothing is applied yet.'; onFinish(); }));
+    const available = (policyDocument()?.selections ?? []).some(selection => selection.managementId === item.managementId);
+    if (!available) return null;
+    return compact(button('Finish', () => { message.textContent = 'Review finishing the interrupted install. Nothing is applied yet.'; onFinish(item.managementId); }));
   }
 
   function updateControl(item) {
@@ -125,8 +128,8 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       if (!offered) { message.textContent = `Update unavailable: the current Catalog does not publish ${item.itemId}.`; message.dataset.outcome = 'unavailable'; return; }
       removing = true; update.disabled = true; update.setAttribute('aria-busy', 'true'); message.textContent = 'Checking the replacement…'; delete message.dataset.outcome;
       try {
-        const entry = { name: item.name, managementId: item.managementId, scope: item.scope,
-          replacement: { ...offered.root, scope: item.scope, configuration: {} } };
+        const entry = { ...item, name: item.name, managementId: item.managementId, scope: item.scope,
+          replacement: { ...offered.root, scope: item.scope, configuration: item.configuration ?? {} } };
         const preview = await previewUpdate({ entries: [entry], request: requestHost, tool: client.tool });
         const actions = el('div', 'flex flex-wrap gap-2');
         const confirm = button('Confirm update', async () => {

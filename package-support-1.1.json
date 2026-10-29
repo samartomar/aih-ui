@@ -289,6 +289,60 @@
       ]
     },
     {
+      "id": "urn:aihq:core:prepared-work:1.6.0",
+      "role": "accepts",
+      "schemaExport": "@aihq/core/schemas/prepared-work/1.6.0.json",
+      "versions": ["1.6.0"],
+      "fixtures": []
+    },
+    {
+      "id": "urn:aihq:core:prepared-work:1.7.0",
+      "role": "accepts",
+      "schemaExport": "@aihq/core/schemas/prepared-work/1.7.0.json",
+      "versions": ["1.7.0"],
+      "fixtures": []
+    },
+    {
+      "id": "urn:aihq:core:run-result:1.5.0",
+      "role": "accepts",
+      "schemaExport": "@aihq/core/schemas/run-result/1.5.0.json",
+      "versions": ["1.5.0"],
+      "fixtures": []
+    },
+    {
+      "id": "urn:aihq:core:managed-inventory-result:1.1.0",
+      "role": "accepts",
+      "schemaExport": "@aihq/core/schemas/managed-inventory-result/1.1.0.json",
+      "versions": ["1.1.0"],
+      "fixtures": []
+    },
+    {
+      "id": "urn:aihq:core:managed-removal-preparation:1.2.0",
+      "role": "accepts",
+      "schemaExport": "@aihq/core/schemas/managed-removal-preparation/1.2.0.json",
+      "versions": ["1.2.0"],
+      "fixtures": []
+    },
+    {
+      "id": "urn:aihq:core:managed-update-preparation:1.0.0",
+      "role": "accepts",
+      "schemaExport": "@aihq/core/schemas/managed-update-preparation/1.0.0.json",
+      "versions": ["1.0.0"],
+      "fixtures": []
+    },
+    {
+      "id": "urn:aihq:core:execution-policy:1.5.0",
+      "role": "produces",
+      "schemaExport": "@aihq/core/schemas/execution-policy/1.5.0.json",
+      "versions": ["1.5.0"],
+      "fixtures": [
+        {
+          "export": "aih-ui/fixtures/core-execution-policy/1.5.0/accept.json",
+          "expect": "accept"
+        }
+      ]
+    },
+    {
       "id": "urn:aihq:core:file-state-result:1.1.0",
       "role": "accepts",
       "schemaExport": "@aihq/core/schemas/file-state-result/1.1.0.json",

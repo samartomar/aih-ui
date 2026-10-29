@@ -20,19 +20,17 @@ const lostResult = () => ({
 });
 
 // organizationSource (Enterprise only) is host configuration, never browser input.
-export function createHost({ projectRoot, materialRoots, organizationSource, recipeMaterials = [], controls: hostControls, inventories } = {}) {
+export function createHost({ projectRoot, materialRoots, organizationSource, recipeMaterials = [], controls: hostControls, inventories, timingStore } = {}) {
   if (typeof projectRoot !== 'string' || projectRoot.length === 0) {
     throw new TypeError('createHost requires a host-configured projectRoot');
   }
-  const sessions = new Map();
-  const timings = new Map(), pending = { resolve: 0, compatibility: 0, render: 0 };
-  let latestRunId;
+  const sessions = new Map(), awaitingInventory = new Set();
+  const timings = timingStore ?? new Map(), pending = { resolve: 0, compatibility: 0, render: 0 };
   const addTiming = (runId, phase, elapsed) => {
     if (!runId) return;
     const record = timings.get(runId) ?? { runId, resolve: 0, compatibility: 0, render: 0, prepare: 0, apply: 0, inventory: 0 };
     record[phase] += elapsed;
-    timings.set(runId, record); latestRunId = runId;
-    if (timings.size > 64) timings.delete(timings.keys().next().value);
+    timings.set(runId, record);
   };
   const measure = async (phase, work) => {
     const started = performance.now();
@@ -55,7 +53,7 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
     if (preparation.review) result.review = JSON.parse(JSON.stringify(preparation.review));
     if (preparation.prepared) {
       const sessionId = randomUUID();
-      sessions.set(sessionId, { handle: preparation.prepared, reviewDigest: preparation.review.reviewDigest });
+      sessions.set(sessionId, { handle: preparation.prepared, reviewDigest: preparation.review.reviewDigest, runId: preparation.runId });
       result.sessionId = sessionId;
     }
     return result;
@@ -95,8 +93,11 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
     // update state only from this host's complete current index; absent/incomplete input remains unknown.
     async managedInventory() {
       const index = currentIndex(), started = performance.now();
-      try { return await listManagedSelections({ target: { project: projectRoot }, scope: 'project', format: 'urn:aihq:core:managed-inventory-result:1.1.0', ...(index ? { index } : {}) }); }
-      finally { addTiming(latestRunId, 'inventory', performance.now() - started); }
+      try { return await listManagedSelections({ target: { project: projectRoot }, scope: 'both', format: 'urn:aihq:core:managed-inventory-result:1.1.0', ...(index ? { index } : {}) }); }
+      finally {
+        const runId = awaitingInventory.values().next().value;
+        if (runId) { addTiming(runId, 'inventory', performance.now() - started); awaitingInventory.delete(runId); }
+      }
     },
     async prepareRemovalSession({ managementId, removals, scope, mode, controls } = {}) {
       // Removal reads Core's retained custody; it does not acquire recipe material. The array form is removal 1.2:
@@ -113,17 +114,29 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
       if (!inventories) return { disposition: 'unavailable', diagnostics: [{ code: 'SOURCE_UNAVAILABLE', message: 'The current Catalog inventories are unavailable.' }] };
       const replacements = [];
       for (const update of updates) {
-        const root = { ...update.replacement, scope: update.replacement.scope ?? scope, configuration: update.replacement.configuration ?? {}, originIds: ['direct'] };
+        const recordedTool = update.tool ?? tool;
+        const root = { ...update.replacement, scope: update.replacement.scope ?? scope,
+          configuration: update.configuration ?? update.replacement.configuration ?? {}, originIds: ['direct'] };
         const intent = freshAuthoring(); intent.roots.push(root);
-        pinSelectedRecipes(intent, inventories, root, tool);
-        const composed = await composeAuthoring({ intent, inventories, tool });
+        pinSelectedRecipes(intent, inventories, root, recordedTool);
+        const grantApproval = update.approval === 'granted-by-aih' && update.item?.framework && update.item?.itemId
+          ? { framework: update.item.framework, itemId: update.item.itemId } : undefined;
+        const composed = await composeAuthoring({ intent, inventories, tool: recordedTool, ...(grantApproval ? { grantApproval } : {}) });
         if (composed.status !== 'ok') return { disposition: 'invalid', diagnostics: composed.diagnostics };
         const selection = composed.value.policy.selections.find(candidate => candidate.item?.itemId === root.itemId);
         if (!selection) return { disposition: 'invalid', diagnostics: [{ code: 'REPLACEMENT_UNAVAILABLE', message: `Catalog did not compose the explicit replacement ${root.itemId}.` }] };
-        replacements.push({ managementId: update.managementId, replacement: { ...selection, managementId: update.managementId } });
+        replacements.push({ managementId: update.managementId, replacement: { ...selection, managementId: update.managementId,
+          ...(Array.isArray(update.origins) ? { origins: structuredClone(update.origins) } : {}) } });
       }
       const result = await prepareUpdate({ target: { project: projectRoot }, scope, updates: replacements }, controlsFor(controls));
       return { ...result, ...(result.preparation ? { preparation: retain(result.preparation) } : {}) };
+    },
+    async prepareFinishSession({ policyText, managementId, controls } = {}) {
+      const parsed = parsePolicy(policyText);
+      if (!parsed.valid) return { status: 'invalid', diagnostics: parsed.diagnostics };
+      const selection = parsed.document.selections.find(candidate => candidate.managementId === managementId);
+      if (!selection) return { status: 'invalid', diagnostics: [{ code: 'SELECTION_UNAVAILABLE', message: 'Finish is available only while the interrupted selection is in the current setup.' }] };
+      return this.prepareSession({ policyText: JSON.stringify({ ...parsed.document, selections: [{ ...selection, requires: [] }] }), controls });
     },
     async prepareSession({ policyText, resolutions, controls } = {}) {
       const parsed = parsePolicy(policyText);
@@ -133,7 +146,7 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
         { useCase: 'policy', policy: parsed.document, target: { project: projectRoot },
           ...(resolutions ? { resolutions } : {}),
           ...(parsed.document.mode === 'enterprise' ? { organizationSource } : {}) },
-        controlsFor(controls)
+        { ...controlsFor(controls), ...(currentIndex() ? { index: currentIndex() } : {}) }
       );
       for (const phase of Object.keys(pending)) { addTiming(preparation.runId, phase, pending[phase]); pending[phase] = 0; }
       addTiming(preparation.runId, 'prepare', performance.now() - started);
@@ -157,9 +170,10 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
       const started = performance.now(), result = await apply(
         session.handle,
         { approved: true, origin, reviewDigest, ...(allowPartial ? { allowPartial: true } : {}) },
-        controlsFor(controls)
+        { ...controlsFor(controls), ...(currentIndex() ? { index: currentIndex() } : {}) }
       );
-      addTiming(result.runId ?? latestRunId, 'apply', performance.now() - started);
+      addTiming(session.runId, 'apply', performance.now() - started);
+      awaitingInventory.add(session.runId);
       return result;
     }
   };

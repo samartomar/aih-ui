@@ -8,7 +8,7 @@ import { checkIntentShape, checkReview, rootKey, pinKey, managementIdOf, AUTHORI
 import { migrateIntent } from './migrate-intent.mjs';
 import { inspectReviewEvidence, compareReviewBindings, describeReviewJudgments, summarizeReviewJudgments } from './review-bindings.mjs';
 import { approvalRecipeStands } from './approval-recipe.mjs';
-import { stable, ok, refuse } from './primitives.mjs';
+import { stable, ok, refuse, digestJson } from './primitives.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_KINDS } from './journey.mjs';
 // The ./authoring entry: these names and the operations below. inspectReviewEvidence builds the review identities from Scan's readContentCoverage.
 export { inspectReviewEvidence } from './review-bindings.mjs';
@@ -25,11 +25,11 @@ function inventoryIndex(inventories) {
   }
   return { releases, items };
 }
-const projected = selections => sorted(selections.map(({ id, managementId, organizationSelectionId, scope, configuration, requires, recipe, item, tool, name, kind, origins }) =>
+const projected = selections => sorted(selections.map(({ id, managementId, organizationSelectionId, scope, configuration, requires, recipe, item, tool, name, kind, origins, bindingDigest, scanRecords, itemMaterials, projectFacts }) =>
   ({ id, managementId, ...(organizationSelectionId !== undefined ? { organizationSelectionId } : {}), scope, configuration, requires: [...requires].sort(), recipe,
-    // The execution-policy 1.4 metadata bundle travels all-or-none; the comparison must see it so stale or
-    // tampered item/tool/origin metadata is never ignored on read (#165).
-    ...(item !== undefined ? { item, tool, name, kind, origins } : {}) })));
+    ...(item !== undefined ? { item, tool, name, kind, origins, bindingDigest,
+      ...(scanRecords !== undefined ? { scanRecords } : {}), ...(itemMaterials !== undefined ? { itemMaterials } : {}),
+      ...(projectFacts !== undefined ? { projectFacts } : {}) } : {}) })));
 
 async function build({ intent, inventories, base, capture = false, historicalV2 = false, tool = undefined, grantApproval = undefined, revokeApproval = undefined, strictOrigins = true }) {
   if (intent && new TextEncoder().encode(JSON.stringify(intent)).length > 850_000) return refuse('POLICY_BOUND_EXCEEDED', '/metadata/aih.workbench', 'Intent exceeds 850,000 UTF-8 bytes; reduce selected state.');
@@ -78,71 +78,87 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
   let approvalRendered = false, approvalRevoked = false;
   for (const selection of resolved.selections) {
     const found = index.items.get(pinKey(selection.item)), { entry, item } = found;
-    const configured = configurePinned(entry, item, selection.configuration, intent.pins);
+    const identityPrior = base?.selections.find(candidate => candidate.scope === selection.scope && candidate.item?.itemId === item.id
+      && candidate.item.framework === entry.release.framework?.id && candidate.item.contentSha256 === item.contentSha256 && candidate.item.behaviourSha256 === item.behaviourSha256);
+    const renderTool = identityPrior?.tool ?? canonicalTool;
+    const canRender = Boolean(entry.release.framework?.id && item.contentSha256 && item.behaviourSha256 && renderTool && typeof harness.renderDelivery === 'function');
+    const configured = canRender ? { valid: true, selection: { configuration: selection.configuration } } : configurePinned(entry, item, selection.configuration, intent.pins);
     if (!configured.valid) return refuse('INPUT_INVALID', '/roots/configuration', 'Catalog refused item configuration.', undefined, { owner: 'catalog', diagnostics: configured.diagnostics });
-    // An MCP selection whose one-server approval was rendered carries the renderer-produced inline recipe,
-    // not the configured reference; it is the same selection, matched by its recorded tool and recipe id.
-    const prior = base?.selections.find(s => s.scope === selection.scope && (stable(s.recipe) === stable(configured.selection.recipe)
-      || (s.recipe?.inline && s.tool && s.recipe.inline.id === `${s.tool}.${item.id}`)));
-    // An organization's root provenance identifies that exact selection only.
-    // Dependencies retain their own prior/default admission identities.
+    const prior = identityPrior ?? base?.selections.find(candidate => candidate.scope === selection.scope && (stable(candidate.recipe) === stable(configured.selection.recipe)
+      || (candidate.recipe?.inline && candidate.tool && candidate.recipe.inline.id === `${candidate.tool}.${item.id}`)));
     const organizationIds = new Set(intent.roots.filter(r => rootKey(r) === rootKey({ ...selection.item, scope: selection.scope }))
       .flatMap(r => r.originIds)
       .map(id => intent.origins.find(o => o.id === id)).filter(o => o?.kind === 'organization').map(o => o.organizationSelectionId));
     if (organizationIds.size > 1) return refuse('INTENT_POLICY_CONTRADICTION', '/origins', 'Conflicting organization selection identities.');
     const managementId = prior?.managementId ?? managementIdOf({ scope: selection.scope, packageName: entry.release.package.name, itemId: item.id });
-    // Execution-policy 1.4 metadata travels all-or-none. What the checked source supports truthfully today:
     const checkedBundle = entry.release.framework?.id && item.contentSha256 && item.behaviourSha256
       ? { item: { framework: entry.release.framework.id, itemId: item.id, contentSha256: item.contentSha256, behaviourSha256: item.behaviourSha256 },
           name: item.name ?? item.label, kind: item.kind, origins: structuredClone(selection.origins) } : undefined;
-    // A recorded bundle is validated against the exact checked source and its resolved origins, then kept —
-    // the current header never rebinds saved execution. A new bundle attaches only from the explicit
-    // composing tool; legacy items without 1.6 identities stay metadata-free (valid 1.4), never fabricated.
     if (prior?.item) {
-      // The checked identity must always match: tampered or stale source metadata is refused everywhere.
       const identityMismatch = !checkedBundle
         || prior.item.itemId !== checkedBundle.item.itemId || prior.item.framework !== checkedBundle.item.framework
         || prior.item.contentSha256 !== checkedBundle.item.contentSha256 || prior.item.behaviourSha256 !== checkedBundle.item.behaviourSha256
         || prior.kind !== checkedBundle.kind || prior.name !== checkedBundle.name;
       if (identityMismatch) return refuse('INTENT_POLICY_CONTRADICTION', '/selections',
         `Saved selection metadata for ${item.id} no longer matches the checked source and its resolved origins.`, undefined, { owner: 'core' });
-      // Origins are provenance, not executable content. On read/import they must match exactly (strict);
-      // on an authorized compose/edit the newly resolved public Catalog origins are recorded instead of
-      // refusing a legitimate choice change (overlapping sets, re-inclusion, required-origin changes).
       if (strictOrigins && stable(prior.origins ?? null) !== stable(selection.origins)) return refuse('INTENT_POLICY_CONTRADICTION', '/selections',
         `Saved selection origins for ${item.id} no longer match the checked source and its resolved origins.`, undefined, { owner: 'core' });
     }
     const bundle = prior?.item ? { item: prior.item, tool: prior.tool, name: prior.name, kind: prior.kind, origins: structuredClone(selection.origins) }
       : canonicalTool && checkedBundle ? { ...checkedBundle, tool: canonicalTool } : undefined;
-    // The one-server tick renders that server's delivery through public Harness and the rendered recipe —
-    // the ordinary recipe with the one approval operation — becomes the policy's recipe for this selection.
-    // A recorded approval stands until an explicit untick; nothing is silently granted or kept.
-    let recipe = configured.selection.recipe;
     const ticked = Boolean(grantApproval && bundle && grantApproval.framework === bundle.item.framework && grantApproval.itemId === item.id && (item.kind === 'mcp-server' || item.kind === 'mcp'));
     const approvalRecorded = Boolean(prior?.recipe?.inline && prior.tool && prior.recipe.inline.id === `${prior.tool}.${item.id}`);
     const revoked = Boolean(revokeApproval && bundle && revokeApproval.framework === bundle.item.framework && revokeApproval.itemId === item.id);
     if (revoked) approvalRevoked = true;
-    // Q2: the recorded approval stands only while it matches what the public renderer produces for this
-    // checked item/tool/scope now; the recipe id alone never binds executable operations.
+    let recipe = configured.selection.recipe, rendered;
+    if (canRender) {
+      if (ticked && bundle.tool !== canonicalTool) return refuse('INPUT_INVALID', '/grantApproval',
+        `The server's recorded tool ${bundle.tool} does not match the requested tool ${canonicalTool}; remove and reselect it explicitly before changing approval.`);
+      const binding = harness.toolBindings.find(candidate => candidate.tool === renderTool);
+      const requirers = item.kind === 'document' && item.payload?.placement !== 'project-folder'
+        ? selection.origins.filter(origin => origin.reasonIncluded === 'required-by').map(origin => {
+          const other = resolved.selections.find(candidate => candidate.item.itemId === origin.requiredBy?.itemId
+            && index.releases[candidate.item.releaseSha256]?.framework?.id === origin.requiredBy?.framework);
+          return other ? index.items.get(pinKey(other.item)).item : undefined;
+        }) : [];
+      if (requirers.some(required => !required)) return refuse('PREREQUISITE_UNAVAILABLE', '/selections', 'Catalog could not name the item requiring this document.');
+      const deliveries = (requirers.length ? requirers : [undefined]).map(requiredBy =>
+        harness.renderDelivery({ tool: renderTool, item, binding, scope: selection.scope, ...(ticked ? { grantApproval } : {}), ...(requiredBy ? { requiredBy } : {}) }));
+      const refused = deliveries.find(delivery => delivery.status !== 'rendered');
+      if (refused) return refuse('PREREQUISITE_UNAVAILABLE', ticked ? '/grantApproval' : '/selections',
+        refused.guidance ?? refused.message ?? refused.reason ?? 'Core refused the content delivery.', undefined,
+        { owner: 'core', diagnostics: refused.diagnostics ?? (refused.code ? [{ code: refused.code, message: refused.reason ?? refused.message }] : []) });
+      rendered = deliveries[0];
+      const combined = deliveries.length === 1 ? rendered.recipe : { ...rendered.recipe,
+        materials: [...new Map(deliveries.flatMap(delivery => delivery.recipe.materials).map(material => [`${material.id}/${material.path}/${material.sha256}`, material])).values()],
+        targets: [...new Set(deliveries.flatMap(delivery => delivery.recipe.targets))], prerequisites: [...new Set(deliveries.flatMap(delivery => delivery.recipe.prerequisites))],
+        operations: deliveries.flatMap(delivery => delivery.recipe.operations), checks: deliveries.flatMap(delivery => delivery.recipe.checks) };
+      recipe = { inline: combined };
+      if (ticked) approvalRendered = true;
+    }
     if (approvalRecorded && !ticked && !revoked && approvalRecipeStands({ prior, item, scope: selection.scope, renderDelivery: harness.renderDelivery, toolBindings: harness.toolBindings })) recipe = prior.recipe;
     if (revokeApproval && revokeApproval.itemId === item.id && !revoked)
       return refuse('INPUT_INVALID', '/revokeApproval', 'Only the one MCP server being un-allowed may be named, and it must be part of this setup.');
-    if (ticked) {
-      if (bundle.tool !== canonicalTool) return refuse('INPUT_INVALID', '/grantApproval',
-        `The server's recorded tool ${bundle.tool} does not match the requested tool ${canonicalTool}; remove and reselect it explicitly before changing approval.`);
+    if (ticked && !canRender) {
       approvalRendered = true;
       const binding = harness.toolBindings.find(candidate => candidate.tool === canonicalTool);
-      const rendered = harness.renderDelivery({ tool: canonicalTool, item, binding, scope: selection.scope, grantApproval });
-      if (rendered.status !== 'rendered') return refuse('PREREQUISITE_UNAVAILABLE', '/grantApproval',
-        rendered.guidance ?? rendered.message ?? rendered.reason ?? 'Core refused the one-server approval.', undefined,
-        { owner: 'core', diagnostics: rendered.diagnostics ?? (rendered.code ? [{ code: rendered.code, message: rendered.reason ?? rendered.message }] : []) });
-      recipe = { inline: rendered.recipe };
+      const approval = harness.renderDelivery({ tool: canonicalTool, item, binding, scope: selection.scope, grantApproval });
+      if (approval.status !== 'rendered') return refuse('PREREQUISITE_UNAVAILABLE', '/grantApproval',
+        approval.guidance ?? approval.message ?? approval.reason ?? 'Core refused the one-server approval.', undefined,
+        { owner: 'core', diagnostics: approval.diagnostics ?? (approval.code ? [{ code: approval.code, message: approval.reason ?? approval.message }] : []) });
+      recipe = { inline: approval.recipe };
     }
     selections.push({ ...prior, id: prior?.id ?? selection.id, managementId, scope: selection.scope, configuration: configured.selection.configuration,
       ...(bundle ? { item: bundle.item, tool: bundle.tool, name: bundle.name, kind: bundle.kind, origins: bundle.origins } : {}),
+      ...(rendered ? { bindingDigest: rendered.bindingDigest,
+        ...(item.scan?.length ? { scanRecords: structuredClone(item.scan), itemMaterials: item.materials.map(material => ({ materialId: material.id, relPath: material.relPath, path: material.packagePath,
+          sha256: material.sha256, byteLength: material.byteLength, role: material.role })) } : {}) } : {}),
       ...(base?.mode === 'enterprise' ? { organizationSelectionId: [...organizationIds][0] ?? prior?.organizationSelectionId ?? managementId } : {}),
       requires: [], recipe });
-    pins.set(pinKey(selection.item), { releaseSha256: entry.release.sha256, itemId: item.id, itemSha256: item.itemSha256, recipe: item.recipe ?? recipeDescriptor(Object.values(item.recipes).find(recipe => recipe.sha256 === configured.selection.recipe.reference.sha256)), materials: pinMaterials(item) });
+    const pinRecipe = rendered ? recipeDescriptor({ id: recipe.inline.id, path: `inline:${recipe.inline.id}`,
+      sha256: await digestJson(recipe.inline), byteLength: new TextEncoder().encode(stable(recipe.inline)).byteLength, schema: recipe.inline.schema })
+      : item.recipe ?? recipeDescriptor(Object.values(item.recipes).find(recipe => recipe.sha256 === configured.selection.recipe.reference.sha256));
+    pins.set(pinKey(selection.item), { releaseSha256: entry.release.sha256, itemId: item.id, itemSha256: item.itemSha256, recipe: pinRecipe, materials: pinMaterials(item) });
     sourceIds.add(entry.release.sha256);
   }
   const validation = validateSelectionSet({ releases: index.releases, selections: resolved.selections.map((s, i) => ({ ...s, id: selections[i].id })) });
@@ -161,13 +177,10 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
   const comparisonProvenance = historicalV2 ? next.provenance.filter(p => historicalSources.has(p.releaseSha256)) : next.provenance;
   if (!capture && (stable(sorted(intent.pins)) !== stable(next.pins) || stable(sorted(intent.provenance)) !== stable(comparisonProvenance) || stable(sorted(intent.inputs)) !== stable(next.inputs)))
     return refuse('INTENT_POLICY_CONTRADICTION', '/metadata/aih.workbench', 'Pins, provenance or inputs contradict the checked closure.');
-  // Execution policy 1.4 (#165): excludedItems name what the person left out by framework and item id, and
-  // management ids stay on each selection. A release without published framework identity cannot name an
-  // exclusion; the skip still stands. Selection origins are NOT attached here: execution policy 1.4 requires
-  // the full metadata set (item 1.6 digests, tool, name, kind) whenever origins are present — verified against
-  // the pinned public Core parser — and composition here holds no tool identity. Bare origins make Core refuse
-  // the policy (dependentRequired). Origins stay available on the Catalog resolution for the review surfaces.
-  // excludedItems name current intent exclusions and false members retained only in exact set requests.
+  // Execution policy 1.5 carries the rendered binding and exact Catalog identity, origins and exclusions.
+  // A release without published framework identity keeps its legacy recipe and cannot name an exclusion;
+  // the skip still stands. ExcludedItems name current intent exclusions and false members retained only
+  // in exact set requests.
   // An unskip/reinclusion removes the record; any actual resolved inclusion wins over a false member elsewhere.
   const excludedItems = [];
   for (const exclusion of intent.exclusions) {
@@ -184,8 +197,8 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
   }).filter(Boolean));
   const effectiveExclusions = new Map();
   for (const ref of excludedItems) if (!included.has(`${ref.framework}/${ref.itemId}`)) effectiveExclusions.set(`${ref.framework}/${ref.itemId}`, ref);
-  const policy = { ...(base ?? { schema: 'urn:aihq:core:execution-policy:1.4.0', mode: 'vibe' }),
-    schema: 'urn:aihq:core:execution-policy:1.4.0',
+  const policy = { ...(base ?? { schema: 'urn:aihq:core:execution-policy:1.5.0', mode: 'vibe' }),
+    schema: 'urn:aihq:core:execution-policy:1.5.0',
     selections,
     excludedItems: [...effectiveExclusions.values()],
     metadata: { ...base?.metadata, 'aih.workbench': next } };

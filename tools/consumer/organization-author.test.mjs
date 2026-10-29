@@ -650,14 +650,16 @@ test('export refuses, and never silently skips, a baseline whose selectors combi
 });
 
 // ---- Authority entries do not depend on a runnable example configuration ----------------------
-const GUARD = 'extensions.claude.hook.git-guard', GUARD_SOURCE = 'extensions.hook-source.git-guard';
-async function legacyExtensionsFixture() {
-  const { installedReleaseInventory } = await import('./installed-families.mjs');
-  return { family: 'Extensions', ...await installedReleaseInventory({ root: dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'))), releaseExport: './release-extensions.json' }) };
+const GUARD = 'extensions.hook.git-guard';
+async function preparedExtensionsFixture() {
+  const { installedFamilies } = await import('./installed-families.mjs');
+  const inventory = (await installedFamilies({ root: dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'))) })).find(entry => entry.family === 'Extensions');
+  assert.ok(inventory.release.items.some(item => item.id === GUARD && item.contentSha256 && item.behaviourSha256));
+  return inventory;
 }
 
 test('a prohibited entry needs neither input permissions nor a configuration to export', async () => {
-  await withConsumer({ installedFamilyInventories: [await legacyExtensionsFixture()] }, async started => {
+  await withConsumer({ installedFamilyInventories: [await preparedExtensionsFixture()] }, async started => {
     const { ref } = await catalogRefs(started);
     const d = await startDraft(started);
     await author(d, ref, { entries: [{ id: GUARD, obligation: 'prohibited', inputs: false }] });
@@ -672,34 +674,18 @@ test('a prohibited entry needs neither input permissions nor a configuration to 
   });
 });
 
-test('a required entry whose value only developers can declare is still part of the document and Core fulfillment', async () => {
-  await withConsumer({ installedFamilyInventories: [await legacyExtensionsFixture()] }, async started => {
+test('a required real hook exports without legacy ids or invented input requirements', async () => {
+  await withConsumer({ installedFamilyInventories: [await preparedExtensionsFixture()] }, async started => {
     const { ref } = await catalogRefs(started);
     const d = await startDraft(started);
-    await author(d, ref, { entries: [{ id: GUARD, obligation: 'required', inputs: { hookCommand: { allowDeclared: true } } }], targets: [{ scope: 'project' }] });
-    // Catalog says the hook needs its hook source; with no value to compose from, its dependency set cannot be checked through Core.
-    const waiting = await d.preview();
-    assert.equal(waiting.value.candidate.status, 'incomplete');
-    const open = waiting.value.candidate.unresolved.filter(item => item.entryId === d.entry(null, GUARD).id);
-    assert.equal(open.length, 1, JSON.stringify(open));
-    assert.match(open[0].message, /fixed value or choices/);
-    assert.equal((await d.export()).diagnostics[0].code, 'ORGANIZATION_DRAFT_UNRESOLVED');
-    // It is in the example-less preview regardless: omitted from the selection, present in Core's own fulfillment.
-    const project = targetOf(waiting, 'project');
-    assert.equal(project.status, 'ok');
-    assert.deepEqual(project.omitted.filter(item => item.itemId === GUARD).map(item => item.reason), ['needs-declared-value']);
-    assert.deepEqual(project.selection, []);
-    assert.deepEqual(project.fulfillment.map(({ itemId, status }) => ({ itemId, status })), [{ itemId: GUARD, status: 'not-fulfilled' }]);
-
-    // Approving the direct dependency is not enough: a prohibited transitive dependency would go unseen, so it stays unresolved.
-    await author(d, ref, { policyId: null, source: null, entries: [{ id: GUARD_SOURCE, obligation: 'permitted' }, { id: 'extensions.notices', obligation: 'prohibited', inputs: false }] });
-    const refused = await d.export();
-    assert.equal(refused.status, 'refused', JSON.stringify(refused));
-    assert.equal(refused.diagnostics[0].code, 'ORGANIZATION_DRAFT_UNRESOLVED');
-    const still = await d.preview();
-    assert.equal(still.value.candidate.status, 'incomplete');
-    assert.ok(still.value.candidate.unresolved.some(item => item.entryId === d.entry(null, GUARD).id));
-    assert.deepEqual(targetOf(still, 'project').fulfillment.filter(({ itemId }) => itemId === GUARD).map(({ status }) => status), ['not-fulfilled']);
+    await author(d, ref, { entries: [{ id: GUARD, obligation: 'required', inputs: false }], targets: [{ scope: 'project' }] });
+    const previewed = await d.preview();
+    assert.equal(previewed.value.candidate.status, 'valid', JSON.stringify(previewed.value.candidate.unresolved));
+    assert.deepEqual(previewed.value.candidate.unresolved, []);
+    const project = targetOf(previewed, 'project');
+    assert.doesNotMatch(JSON.stringify(project), /extensions\.claude\.hook\.git-guard|extensions\.hook-source\.git-guard|hookCommand/);
+    const exported = await d.export();
+    assert.equal(exported.status, 'ok', JSON.stringify(exported));
   });
 });
 

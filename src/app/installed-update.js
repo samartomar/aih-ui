@@ -5,7 +5,7 @@ const readyPreparation = result => result?.disposition === 'prepared' && ['ready
 
 export async function previewUpdate({ entries, request, tool }) {
   const scope = entries[0]?.scope;
-  const result = await request('update', { updates: entries.map(entry => ({ managementId: entry.managementId, replacement: entry.replacement })), scope, tool });
+  const result = await request('update', { updates: entries.map(entry => ({ ...entry, managementId: entry.managementId, replacement: entry.replacement })), scope, tool });
   const preparation = readyPreparation(result);
   const steps = entries.map((entry, index) => {
     const update = result.updates?.[index];
@@ -38,9 +38,9 @@ function outcome(entry, step, run) {
 
 export async function confirmUpdate({ preview, request, tool }) {
   if (!preview.canConfirm) return { outcome: 'failed', message: preview.steps.map(step => step.message).join(' ') };
-  const prepare = () => request('update', { updates: preview.entries.map(entry => ({ managementId: entry.managementId, replacement: entry.replacement })), scope: preview.scope, tool });
+  const prepare = () => request('update', { updates: preview.entries.map(entry => ({ ...entry, managementId: entry.managementId, replacement: entry.replacement })), scope: preview.scope, tool });
   const attempt = await applyIfUnchanged({ held: preview, prepare, readyPreparation, apply: approval => request('apply', { ...approval, ...(preview.allowPartial ? { allowPartial: true } : {}) }) });
   if (attempt.state !== 'applied') return { outcome: 'failed', message: `Update was not applied: ${[attempt.reason, diagnosticWords(attempt.result?.preparation, attempt.result)].filter(Boolean).join(' ')}` };
   const results = preview.entries.map((entry, index) => outcome(entry, preview.steps[index], attempt.run));
-  return { results, outcome: results.some(result => result.state === 'failed') ? 'failed' : 'updated', message: results.map(result => result.message).join(' ') };
+  return { results, outcome: results.some(result => result.state === 'failed') ? 'failed' : results.some(result => result.state === 'updated') ? 'updated' : 'kept', message: results.map(result => result.message).join(' ') };
 }

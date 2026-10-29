@@ -11,16 +11,19 @@ const review = (over = {}) => ({ schema: 'urn:aihq:core:prepared-work:1.6.0', ta
 test('prepared-work 1.6 selections name the rows; operations attach by published selectionId', () => {
   const r = review({
     selections: [
-      { selectionId: 's1', managementId: 'm1', scope: 'project', name: 'Grill me', kind: 'skill',
+      { selectionId: 's1', managementId: 'm1', scope: 'project', name: 'Grill me', kind: 'skill', framework: 'extensions',
+        layout: { support: 'native', observed: 'recognised' }, scanState: { state: 'not-verified', why: 'unchecked' }, coverage: 'matched',
+        hookCommands: ['node hook.mjs --exact'],
         origins: [{ reasonIncluded: 'chosen' }, { reasonIncluded: 'in-set', set: set('starter') }, { reasonIncluded: 'required-by', requiredBy: { framework: 'ecc', itemId: 'other' } }],
         inputs: ['tone'], deliveredSize: { bytes: 10, chars: 10, alwaysLoaded: { bytes: 2, chars: 2 } } },
       { selectionId: 's2', managementId: 'm2', scope: 'project' },
     ],
+    excluded: [{ item: { framework: 'ecc', itemId: 'ecc.hook.optional' }, reason: 'excluded-in-request' }],
     operations: [operation('op-a', { selectionId: 's1', details: { target: 'C:\\p\\.claude\\x' } }),
       operation('op-b', { selectionId: null }), // generated lifecycle cleanup: no selection, no row
       operation('op-c', { selectionId: 's1', effects: 'conflict', details: { reason: 'Another tool owns this file.' } })],
   });
-  const { rows, global } = reviewRows(r);
+  const { rows, global, excluded } = reviewRows(r);
   assert.equal(rows.length, 2);
   const first = rows[0];
   assert.equal(first.heading, 'Grill me');
@@ -30,6 +33,12 @@ test('prepared-work 1.6 selections name the rows; operations attach by published
   assert.deepEqual(first.blockers, ['Another tool owns this file.'], 'Core’s reason, verbatim');
   assert.equal(rows[1].heading, 'Selection s2 (its recorded metadata is unavailable)', 'missing name stays explicit');
   assert.equal(rows[1].size, null);
+  assert.equal(first.framework, 'extensions');
+  assert.deepEqual(first.layout, { support: 'native', observed: 'recognised' });
+  assert.deepEqual(first.scanState, { state: 'not-verified', why: 'unchecked' });
+  assert.equal(first.coverage, 'matched');
+  assert.deepEqual(first.hookCommands, ['node hook.mjs --exact']);
+  assert.deepEqual(excluded, [{ item: { framework: 'ecc', itemId: 'ecc.hook.optional' }, reason: 'excluded-in-request' }]);
   assert.deepEqual(global, []);
 });
 
