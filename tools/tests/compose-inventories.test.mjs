@@ -36,14 +36,15 @@ test('a catalog entry duplicating a KEPT installed sha is deduplicated to one', 
   assert.deepEqual(tags(out), ['installed-ecc', 'ext']);
 });
 
-test('a deduplicated internal-content twin hands its archive identity to the kept installed entry', () => {
-  const internalContent = { archiveSha256: 'archive-sha' };
-  const installed = [entry('ecc', '1.0.0', 'sha-ecc'), entry('extensions', '1.0.0', 'sha-ext')];
-  const catalog = [{ ...entry('ecc', '1.0.0', 'sha-ecc', 'catalog-dup'), internalContent }];
-  const out = composeFamilyInventories({ installed, catalog, fixtures: [] });
-  assert.deepEqual(tags(out), ['installed-ecc', 'installed-extensions']);
-  assert.deepEqual(out[0].internalContent, internalContent);
-  assert.equal(out[1].internalContent, undefined, 'a release without a configured twin gains no identity');
+test('a configured internal-content twin stays whole: its material source and archive identity travel together', () => {
+  // Build A is installed; the host verified the same release bytes inside build B's archive, a different digest.
+  const installed = [{ ...entry('ecc', '1.0.0', 'sha-ecc'), materialSource: { kind: 'local', input: 'catalog' } }, entry('extensions', '1.0.0', 'sha-ext')];
+  const twin = { ...entry('ecc', '1.0.0', 'sha-ecc', 'configured-b'), materialSource: { kind: 'local', input: 'internal-ecc-b' }, internalContent: { archiveSha256: 'archive-b' } };
+  const out = composeFamilyInventories({ installed, catalog: [twin], fixtures: [] });
+  assert.deepEqual(tags(out), ['installed-extensions', 'configured-b'], 'one copy of the release, the configured twin');
+  const ecc = out.find(value => value.release.sha256 === 'sha-ecc');
+  assert.deepEqual([ecc.materialSource, ecc.internalContent], [twin.materialSource, twin.internalContent], 'build B identity only with build B materials');
+  assert.ok(!out.some(value => value.materialSource?.input === 'catalog' && value.internalContent), 'build A materials never claim an archive identity');
 });
 
 test('two non-fixture releases sharing a framework+version are BOTH kept - genuine ambiguity is never hidden', () => {
