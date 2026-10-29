@@ -128,6 +128,8 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
     if (revokeApproval && revokeApproval.itemId === item.id && !revoked)
       return refuse('INPUT_INVALID', '/revokeApproval', 'Only the one MCP server being un-allowed may be named, and it must be part of this setup.');
     if (ticked) {
+      if (bundle.tool !== canonicalTool) return refuse('INPUT_INVALID', '/grantApproval',
+        `The server's recorded tool ${bundle.tool} does not match the requested tool ${canonicalTool}; remove and reselect it explicitly before changing approval.`);
       approvalRendered = true;
       const binding = harness.toolBindings.find(candidate => candidate.tool === canonicalTool);
       const rendered = harness.renderDelivery({ tool: canonicalTool, item, binding, scope: selection.scope, grantApproval });
@@ -165,18 +167,27 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
   // the full metadata set (item 1.6 digests, tool, name, kind) whenever origins are present — verified against
   // the pinned public Core parser — and composition here holds no tool identity. Bare origins make Core refuse
   // the policy (dependentRequired). Origins stay available on the Catalog resolution for the review surfaces.
-  // excludedItems name the CURRENT intent exclusions (#165): an unskip/reinclusion removes the intent
-  // exclusion, so the authored record must not be resurrected from the base policy forever.
+  // excludedItems name current intent exclusions and false members retained only in exact set requests.
+  // An unskip/reinclusion removes the record; any actual resolved inclusion wins over a false member elsewhere.
   const excludedItems = [];
   for (const exclusion of intent.exclusions) {
     const found = index.items.get(pinKey(exclusion));
     const framework = found?.entry.release.framework?.id;
     if (framework) excludedItems.push({ framework, itemId: exclusion.itemId });
   }
+  for (const choice of setChoicesOf(intent)) for (const member of choice.request.members ?? []) {
+    if (member.include === false && member.item?.framework) excludedItems.push({ framework: member.item.framework, itemId: member.item.itemId });
+  }
+  const included = new Set(resolved.selections.map(selection => {
+    const framework = index.releases[selection.item.releaseSha256]?.framework?.id;
+    return framework ? `${framework}/${selection.item.itemId}` : null;
+  }).filter(Boolean));
+  const effectiveExclusions = new Map();
+  for (const ref of excludedItems) if (!included.has(`${ref.framework}/${ref.itemId}`)) effectiveExclusions.set(`${ref.framework}/${ref.itemId}`, ref);
   const policy = { ...(base ?? { schema: 'urn:aihq:core:execution-policy:1.4.0', mode: 'vibe' }),
     schema: 'urn:aihq:core:execution-policy:1.4.0',
     selections,
-    excludedItems: [...new Map(excludedItems.map(ref => [`${ref.framework}/${ref.itemId}`, ref])).values()],
+    excludedItems: [...effectiveExclusions.values()],
     metadata: { ...base?.metadata, 'aih.workbench': next } };
   const setProblem = checkRecordedSetChoices(policy.metadata?.['aih.workbench'], inventories);
   if (setProblem) return refuse('INTENT_POLICY_CONTRADICTION', '/metadata/aih.workbench/provenance', setProblem);

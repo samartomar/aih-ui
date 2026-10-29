@@ -227,14 +227,13 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   }
 
   function unusable(entry) { const fit = browseResult?.compatibility?.items?.find(value => value.item.itemId === entry.authoringItem.id); return fit && (fit.support === 'none' || fit.notRendered || fit.staticBlockers?.length); }
-  // Whether the open artifact currently carries the one-server approval for an item: the card's tick must
-  // reflect this exactly, or a re-render silently flips it back to unchecked.
-  // Whether the open artifact currently grants the one-server approval for an item: the selection for this
-  // exact item whose inline recipe carries Core's approve-server operation (the one-server approval op).
-  const approvalGranted = itemId => {
+  const approvalErrors = new Map();
+  const approvalKey = item => `${item.root?.releaseSha256}/${item.id}/${item.root?.scope}/${chosenTool?.id}`;
+  // The tick reflects only this exact item, scope and current tool's recorded approve-server operation.
+  const approvalGranted = item => {
     try {
       const policy = JSON.parse(new TextDecoder().decode(authoring.bytes));
-      const selection = (policy.selections ?? []).find(candidate => candidate.item?.itemId === itemId);
+      const selection = (policy.selections ?? []).find(candidate => candidate.item?.itemId === item.id && candidate.scope === item.root?.scope && candidate.tool === chosenTool?.id);
       return Boolean(selection?.recipe?.inline?.operations?.some(operation => operation.id === 'approve-server'));
     } catch { return false; }
   };
@@ -267,15 +266,21 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
         if (document.activeElement === document.body || !document.activeElement?.isConnected) focusCard(state.chosenId);
       },
       // The one-server tick: exactly this server, through the guarded approval recording; the consumer
-      // renders the approval into the recipe. A failure leaves the box unticked and says why (#162); an
+      // renders the approval into the recipe. A failure restores the recorded tick and says why (#162); an
       // open draft survives and a late reply can never replace a newly opened artifact (#165 Q3).
       approvalOf: approvalGranted,
+      approvalErrorOf: item => approvalErrors.get(approvalKey(item)),
       onApprove: async (item, granted) => {
-        const framework = currentFramework();
-        const result = await authoring.recordApproval({ type: 'mcp-approval', root: { releaseSha256: framework?.sha256, itemId: item.id, scope: 'project' }, granted });
-        if (result.status === 'superseded') { render(); return; }
-        if (result.status !== 'ok') { render(); throw new Error(result.diagnostics?.map(value => value.message).join(' ') ?? 'The approval was not recorded.'); }
-        render();
+        const key = approvalKey(item);
+        approvalErrors.delete(key);
+        try {
+          const result = await authoring.recordApproval({ type: 'mcp-approval', root: { releaseSha256: item.root?.releaseSha256, itemId: item.id, scope: item.root?.scope }, granted });
+          if (result.status === 'superseded') { render(); return; }
+          if (result.status !== 'ok') throw new Error(result.diagnostics?.map(value => value.message).join(' ') || 'The approval was not recorded.');
+          approvalErrors.delete(key); render();
+        } catch (error) {
+          approvalErrors.set(key, error.message); render(); throw error;
+        }
       },
     };
   }

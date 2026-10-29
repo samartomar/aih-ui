@@ -87,6 +87,16 @@ test('a supported scope transition does not transplant the saved approval', asyn
   assert.ok(!JSON.stringify(selection?.recipe ?? {}).includes('approve-server'), 'the recorded approval must not be transplanted across a scope transition');
 });
 
+test('an approval edit refuses to mix the requested tool with the recorded recipe tool', async () => {
+  const composed = await composeAuthoring({ intent: freshIntent(), inventories });
+  const ticked = await editAuthoring({ policyBytes: composed.value.policyBytes, inventories, operation: approvalOp(true), tool: 'claude', grantApproval: { framework: prepared.release.framework.id, itemId: mcp.id } });
+  assert.equal(ticked.status, 'ok');
+  const mixed = await editAuthoring({ policyBytes: ticked.value.policyBytes, inventories, operation: approvalOp(true), tool: 'codex', grantApproval: { framework: prepared.release.framework.id, itemId: mcp.id } });
+  assert.equal(mixed.status, 'refused');
+  assert.deepEqual(mixed.originalBytes, ticked.value.policyBytes, 'the original selection and recipe bytes are retained');
+  assert.match(mixed.diagnostics.map(diagnostic => diagnostic.message).join(' '), /recorded tool claude.*requested tool codex/);
+});
+
 test('exact unchanged approval survives; a fresh policy under another tool carries no approval', async () => {
   // A fresh policy under another tool carries no approval (the supported scope-transition case is
   // exercised separately above).

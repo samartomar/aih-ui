@@ -51,18 +51,19 @@ const errors = [];
 const only = process.env.CATALOG_CASE;
 let passed = 0;
 
-async function openController() {
+async function openController(options = {}) {
   const page = await browser.newPage();
   page.setDefaultTimeout(5_000);
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(origin, { waitUntil: 'domcontentloaded' });
-  await page.evaluate(async ({ items, framework }) => {
+  await page.evaluate(async ({ items, framework, options }) => {
     const { createCatalog } = await import('/catalog/controller.js');
-    const requests = [], pending = [];
+    const requests = [], pending = [], approvalRequests = [];
+    const scope = options.scope ?? 'project';
     const authoring = {
       catalog: { frameworks: [framework], items },
-      intent: { roots: [{ releaseSha256: framework.sha256, itemId: items[0].id, scope: 'project', configuration: {}, originIds: ['direct'] }], pins: [], provenance: [] },
-      bytes: new TextEncoder().encode('{}'),
+      intent: { roots: [{ releaseSha256: framework.sha256, itemId: items[0].id, scope, configuration: {}, originIds: ['direct'] }], pins: [], provenance: [] },
+      bytes: new TextEncoder().encode(options.policy ?? '{}'),
       evidenceRevision: 0,
       revision: 0,
       folderRevision: 0,
@@ -72,12 +73,13 @@ async function openController() {
         if (operation === 'browse-content') return new Promise(resolve => pending.push({ body, resolve }));
         return Promise.resolve({ status: 'ok' });
       },
+      recordApproval(operation) { approvalRequests.push(operation); return Promise.resolve(options.approvalResult ?? { status: 'ok' }); },
     };
     const catalog = createCatalog({ authoring, onSummary() {}, onSelectEntry() {} });
-    window.ui165Controller = { catalog, authoring, requests, pending };
-    catalog.setTool({ id: 'claude', label: 'Claude Code' });
+    window.ui165Controller = { catalog, authoring, requests, pending, approvalRequests };
+    catalog.setTool(options.tool ?? { id: 'claude', label: 'Claude Code' });
     await catalog.start();
-  }, { items: [ecc, legacy], framework });
+  }, { items: options.items ?? [ecc, legacy], framework, options });
   await page.waitForFunction(() => window.ui165Controller.pending.length === 1);
   return page;
 }
@@ -188,10 +190,68 @@ async function setupChoices() {
   await page.close();
 }
 
+function approvalBrowseResult(item) {
+  return {
+    status: 'read', approvalShape: 'config',
+    compatibility: { items: [{ item: { framework: framework.id, itemId: item.id }, support: 'supported', permissionStep: 'Allow this server.', reason: 'Harness approval fixture.' }], sets: [], checks: [], pluginRoutes: [] },
+    resolution: { status: 'ok', value: { selections: [] } }, host: { status: 'unavailable', reason: 'Not requested.' },
+  };
+}
+
+async function approvalIdentity() {
+  const mcp = portable(eccFamily, eccFamily.release.items.find(item => item.kind === 'mcp-server'));
+  const policy = JSON.stringify({ selections: [{ item: { framework: framework.id, itemId: mcp.id }, scope: 'project', tool: 'claude', recipe: { inline: { operations: [{ id: 'approve-server' }] } } }] });
+  const open = async (options = {}) => {
+    const page = await openController({ items: [mcp], policy, ...options });
+    await page.evaluate(result => window.ui165Controller.pending[0].resolve(result), approvalBrowseResult(mcp));
+    const box = page.locator('#cards-grid .browse-mcp-approval input'); await box.waitFor(); return { page, box };
+  };
+  const exact = await open(); assert.equal(await exact.box.isChecked(), true, 'the exact item/scope/tool approval is checked'); await exact.page.close();
+  const foreign = await open({ tool: { id: 'other', label: 'Other Tool' } });
+  assert.equal(await foreign.box.isChecked(), false, 'another tool never inherits the tick'); await foreign.page.close();
+  const userItem = { ...mcp, root: { ...mcp.root, scope: 'user' } };
+  const user = await openController({ items: [userItem], policy, scope: 'user', approvalResult: { status: 'refused', diagnostics: [{ message: 'exact approval refusal' }] } });
+  await user.evaluate(result => window.ui165Controller.pending[0].resolve(result), approvalBrowseResult(userItem));
+  const box = user.locator('#cards-grid .browse-mcp-approval input'); await box.waitFor();
+  assert.equal(await box.isChecked(), false, 'another scope never inherits the tick');
+  await box.click();
+  await user.locator('#cards-grid [data-approval-error]').filter({ hasText: 'exact approval refusal' }).waitFor();
+  assert.equal(await box.isChecked(), false, 'a refused grant restores the recorded unticked state');
+  assert.equal(await box.isEnabled(), true);
+  assert.equal(await user.evaluate(() => window.ui165Controller.approvalRequests[0].root.scope), 'user');
+  await user.close();
+}
+
+async function approvalFailure() {
+  const mcp = portable(eccFamily, eccFamily.release.items.find(item => item.kind === 'mcp-server'));
+  const page = await browser.newPage(); page.setDefaultTimeout(5_000); page.on('pageerror', error => errors.push(error.message));
+  await page.goto(origin, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(async ({ item, browse }) => {
+    const { renderBrowseFacts } = await import('/catalog/browse-facts.js');
+    window.renderApproval = approved => {
+      document.body.replaceChildren();
+      const node = renderBrowseFacts(item, browse, { id: 'claude', label: 'Claude Code' }, { approved,
+        onApprove: () => Promise.reject(new Error(approved ? 'exact revoke refusal' : 'exact grant refusal')) });
+      document.body.append(node);
+    };
+  }, { item: mcp, browse: approvalBrowseResult(mcp) });
+  await page.evaluate(() => window.renderApproval(false));
+  const grant = page.locator('.browse-mcp-approval input'); await grant.click();
+  await page.locator('[data-approval-error]').filter({ hasText: 'exact grant refusal' }).waitFor();
+  assert.equal(await grant.isChecked(), false); assert.equal(await grant.isEnabled(), true);
+  await page.evaluate(() => window.renderApproval(true));
+  const revoke = page.locator('.browse-mcp-approval input'); await revoke.click();
+  await page.locator('[data-approval-error]').filter({ hasText: 'exact revoke refusal' }).waitFor();
+  assert.equal(await revoke.isChecked(), true, 'a refused revoke restores the recorded tick'); assert.equal(await revoke.isEnabled(), true);
+  await page.close();
+}
+
 try {
   if (!only || only === 'no-framework') { await noFramework(); passed++; console.log('✔ no-framework navigation invalidates real DOM facts without recursion'); }
   if (!only || only === 'folder') { await folderOrdering(); passed++; console.log('✔ a late old-folder reply cannot replace current real DOM facts'); }
   if (!only || only === 'setup-choices') { await setupChoices(); passed++; console.log('✔ left-out rows preserve real member identity, scope and deduplication'); }
+  if (!only || only === 'approval-identity') { await approvalIdentity(); passed++; console.log('✔ approval ticks bind exact item, scope and tool'); }
+  if (!only || only === 'approval-failure') { await approvalFailure(); passed++; console.log('✔ approval failures restore ticks and show exact reasons'); }
   assert.deepEqual(errors, []);
   console.log(`catalog-controller browser: pass ${passed} fail 0`);
 } finally {

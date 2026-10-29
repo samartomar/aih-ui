@@ -23,7 +23,7 @@ export function itemBrowseFacts(item, browse, tool) {
   const explanation = !fit ? (browse?.reason ?? 'Tool fit is loading or unavailable. Choose your tool; no successful use is assumed.') : `${fit.reason} ${fit.notRendered?.detail ?? ''} ${(fit.staticBlockers ?? []).map(value => value.detail).join(' ')} ${observed ? `Observed ${observed.observedAt}, ${observed.os} ${observed.arch}, tool ${observed.toolVersion}.` : `No observation on ${browse.platform?.os ?? 'unknown OS'} ${browse.platform?.arch ?? 'unknown architecture'}.`} A fallback label describes the published binding, not an installed-file check. Host facts ${host?.status ?? 'unchecked'}; static observation is not proof of use here.`;
   return { fit, scan, recipe, fitKey, words, explanation };
 }
-export function renderBrowseFacts(item, browse, tool, { detailed = false, onApprove = undefined, approved = false } = {}) {
+export function renderBrowseFacts(item, browse, tool, { detailed = false, onApprove = undefined, approved = false, approvalError = undefined } = {}) {
   const node = el('div', 'browse-facts'); const facts = itemBrowseFacts(item, browse, tool);
   node.append(badge('fit', facts.fitKey, facts.words, facts.explanation));
   if (item.payload?.invocation === 'user-only') node.append(badge('state', 'on-request', 'Only when you ask', 'Invocation is declared by this Catalog item.'));
@@ -54,8 +54,15 @@ export function renderBrowseFacts(item, browse, tool, { detailed = false, onAppr
     // as the needs-ok badge; no new palette.
     row.append(box, el('span', approval.approvable ? 'text-tertiary' : '', `${approval.words}. ${approval.requirements}`));
     attachTooltip(row, approval.reason);
-    if (approval.approvable && typeof onApprove === 'function') box.addEventListener('change', () => { box.disabled = true; void Promise.resolve(onApprove(item, box.checked)).finally(() => { box.disabled = false; }); });
-    node.append(row);
+    const error = el('p', 'text-error text-[11px]', approvalError ?? ''); error.dataset.approvalError = item.id; error.setAttribute('role', 'alert'); error.hidden = !approvalError;
+    if (approval.approvable && typeof onApprove === 'function') box.addEventListener('change', async () => {
+      const requested = box.checked, recorded = Boolean(approved);
+      box.disabled = true; error.hidden = true; error.textContent = '';
+      try { await onApprove(item, requested); }
+      catch (thrown) { box.checked = recorded; error.textContent = thrown.message; error.hidden = false; }
+      finally { box.disabled = false; }
+    });
+    node.append(row, error);
   } else if (approval.state !== 'empty') node.append(badge('state', 'needs-ok', approval.words, approval.words));
   // What the host inspection saw about a second copy, exactly as Core reported it (#163). The badge appears
   // for inspected (chosen) items and for any item Core named in a warning; unchosen items were not checked
