@@ -18,11 +18,12 @@ const mcp = prepared.release.items.find(item => item.kind === 'mcp-server');
 if (!mcp) throw new Error('ECC fixture carries no MCP server item');
 const inventories = [{ release: prepared.release, family: prepared.release.framework.name, materialSource: { kind: 'local', input: 'approval-binding-test' }, materials: [], fixture: 'approval binding regression' }];
 const root = { releaseSha256: prepared.release.sha256, itemId: mcp.id, itemSha256: mcp.itemSha256, scope: 'project', configuration: {}, originIds: ['direct'] };
+// A rendered policy (1.5) renders each per-client recipe for the composing tool, so every composition here names one.
 const freshIntent = () => { const intent = freshAuthoring(); intent.roots.push(structuredClone(root)); pinSelectedRecipes(intent, inventories, root, 'claude'); return intent; };
 const approvalOp = granted => ({ type: 'mcp-approval', root: { releaseSha256: prepared.release.sha256, itemId: mcp.id, scope: 'project' }, granted });
 
 test('a ticked one-server approval is renderer-produced, retained unchanged on read, and revocable', async () => {
-  const composed = await composeAuthoring({ intent: freshIntent(), inventories });
+  const composed = await composeAuthoring({ intent: freshIntent(), inventories, tool: 'claude' });
   assert.equal(composed.status, 'ok', JSON.stringify(composed.diagnostics));
   const ticked = await editAuthoring({ policyBytes: composed.value.policyBytes, inventories, operation: approvalOp(true), tool: 'claude', grantApproval: { framework: prepared.release.framework.id, itemId: mcp.id } });
   assert.equal(ticked.status, 'ok', JSON.stringify(ticked.diagnostics));
@@ -48,7 +49,7 @@ test('a ticked one-server approval is renderer-produced, retained unchanged on r
 });
 
 test('a schema-valid same-ID recipe with altered executable content is not retained (blocked, not silently editable)', async () => {
-  const composed = await composeAuthoring({ intent: freshIntent(), inventories });
+  const composed = await composeAuthoring({ intent: freshIntent(), inventories, tool: 'claude' });
   const ticked = await editAuthoring({ policyBytes: composed.value.policyBytes, inventories, operation: approvalOp(true), tool: 'claude', grantApproval: { framework: prepared.release.framework.id, itemId: mcp.id } });
   assert.equal(ticked.status, 'ok');
   // A validly shaped imported policy whose inline recipe id matches, but whose executable content was
@@ -88,7 +89,7 @@ test('a supported scope transition does not transplant the saved approval', asyn
 });
 
 test('an approval edit refuses to mix the requested tool with the recorded recipe tool', async () => {
-  const composed = await composeAuthoring({ intent: freshIntent(), inventories });
+  const composed = await composeAuthoring({ intent: freshIntent(), inventories, tool: 'claude' });
   const ticked = await editAuthoring({ policyBytes: composed.value.policyBytes, inventories, operation: approvalOp(true), tool: 'claude', grantApproval: { framework: prepared.release.framework.id, itemId: mcp.id } });
   assert.equal(ticked.status, 'ok');
   const mixed = await editAuthoring({ policyBytes: ticked.value.policyBytes, inventories, operation: approvalOp(true), tool: 'codex', grantApproval: { framework: prepared.release.framework.id, itemId: mcp.id } });
@@ -100,7 +101,7 @@ test('an approval edit refuses to mix the requested tool with the recorded recip
 test('exact unchanged approval survives; a fresh policy under another tool carries no approval', async () => {
   // A fresh policy under another tool carries no approval (the supported scope-transition case is
   // exercised separately above).
-  const composed = await composeAuthoring({ intent: freshIntent(), inventories });
+  const composed = await composeAuthoring({ intent: freshIntent(), inventories, tool: 'claude' });
   const ticked = await editAuthoring({ policyBytes: composed.value.policyBytes, inventories, operation: approvalOp(true), tool: 'claude', grantApproval: { framework: prepared.release.framework.id, itemId: mcp.id } });
   assert.equal(ticked.status, 'ok');
   // Exact unchanged approval on read: retained, editing available.

@@ -59,10 +59,11 @@ function stubTransport() {
   return { calls, restore: () => { globalThis.fetch = original; } };
 }
 
+// The saved base is composed for the tool the approval is rendered for: a rendered policy (1.5) needs the composing tool.
 /** A REAL envelope whose draft record carries pending choices that the saved base does NOT contain. */
 async function draftWithPendingChoice() {
   const intent = baseIntent();
-  const saved = await composeAuthoring({ intent, inventories });
+  const saved = await composeAuthoring({ intent, inventories, tool: 'claude' });
   assert.equal(saved.status, 'ok', JSON.stringify(saved.diagnostics));
   const pending = structuredClone(intent);
   pending.roots.push(rootOf(skill)); // selected after the base was saved: pending, not in savedIntentBytes
@@ -132,7 +133,7 @@ test('the ordinary (non-draft) approval path sends policyBytes and no body.bytes
       if (operation === 'catalog') return { ok: true, status: 200, json: async () => ({ frameworks: [], items: [] }) };
       if (operation === 'new') {
         const intent = baseIntent();
-        const saved = await composeAuthoring({ intent, inventories });
+        const saved = await composeAuthoring({ intent, inventories, tool: 'claude' });
         return { ok: true, status: 200, json: async () => ({ status: 'ok', value: { policyBytes: [...saved.value.policyBytes], intent: saved.value.intent } }) };
       }
       if (operation === 'edit') return { ok: true, status: 200, json: async () => editAuthoring({ policyBytes: Uint8Array.from(body.policyBytes), inventories, operation: body.operation, ...(body.tool !== undefined ? { tool: body.tool } : {}) }) };
