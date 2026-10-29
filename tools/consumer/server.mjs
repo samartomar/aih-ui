@@ -6,7 +6,7 @@ import { createServer } from 'node:http';
 import { readFile, mkdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { delimiter, dirname, join, resolve, sep } from 'node:path';
+import { basename, delimiter, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readInstalledRelease } from '@aihq/catalog/node';
 import { listItems, isCheckedRelease } from '@aihq/catalog/reader';
@@ -148,9 +148,11 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
     const client = clients.get(id); await client.ready; client.usedAt = now; return client;
   }
   // Only the declared source fields reach the page; extra host-file members never do.
-  const publicSource = organizationSource !== undefined ? {
+  // A local file is named by its file name only; its folder stays on the host.
+  const publicSource = organizationSource === undefined ? null : organizationSource?.provider === 'local'
+    ? { provider: 'local', fileName: basename(String(organizationSource.path ?? '')) } : {
     provider: organizationSource?.provider, repository: { owner: organizationSource?.repository?.owner, name: organizationSource?.repository?.name },
-    path: organizationSource?.path, revision: { kind: organizationSource?.revision?.kind, value: organizationSource?.revision?.value } } : null;
+    path: organizationSource?.path, revision: { kind: organizationSource?.revision?.kind, value: organizationSource?.revision?.value } };
   const staticFiles = new Map([['/', ['consumer.html', 'text/html']], ['/intent', ['intent.html', 'text/html']], ['/intent.js', ['intent.js', 'text/javascript']], ['/consumer.js', ['consumer.js', 'text/javascript']], ['/consumer.css', ['consumer.css', 'text/css']], ['/tokens.css', ['tokens.css', 'text/css']]]);
   staticFiles.set('/authoring', ['authoring.html', 'text/html']);
   staticFiles.set('/authoring.js', ['authoring.js', 'text/javascript']);
