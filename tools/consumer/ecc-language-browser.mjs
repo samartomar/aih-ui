@@ -96,7 +96,7 @@ try {
   for (const selection of expectedRules) {
     const item = inventory.release.items.find(candidate => candidate.id === selection.item.itemId);
     const addedResult = await post('edit', { policyBytes: fresh.value.policyBytes, tool: 'claude',
-      operation: { type: 'select', root: { releaseSha256: inventory.release.sha256, itemId: item.id, itemSha256: item.itemSha256, scope: 'project', configuration: {}, originIds: ['direct'] }, tool: 'claude' });
+      operation: { type: 'select', root: { releaseSha256: inventory.release.sha256, itemId: item.id, itemSha256: item.itemSha256, scope: 'project', configuration: {}, originIds: ['direct'] }, tool: 'claude' } });
     assert.equal(addedResult.status, 'ok', JSON.stringify(addedResult.diagnostics));
     fresh.value = addedResult.value;
   }
