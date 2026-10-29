@@ -144,7 +144,7 @@ export async function runInstalledListTruthBrowser({ origin, output, project, pl
     assert.equal(await page.locator('[data-installed-row]').count(), selections.length, `exactly ${selections.length} installed rows`);
     // The origin is the set the user picked: every in-set row sits under that set's Catalog name.
     const section = page.locator(`[data-installed-set="${set.setId}/${set.setSha256}"]`);
-    assert.equal(await section.locator('> p').first().innerText(), name);
+    assert.equal(await section.locator('> div > p').first().innerText(), name, 'the set section is headed by its Catalog name');
     for (const selection of inSet) assert.equal(await section.locator(`[data-installed-row="${selection.managementId}"]`).count(), 1, `${selection.name} is listed under "${name}"`);
     // Core's file state in contract wording; the untouched rows say nothing they cannot back.
     const editedRow = page.locator(`[data-installed-row="${edited.managementId}"]`);
