@@ -88,6 +88,12 @@ test('confirms on disk only when the run is complete and every intended write me
   assert.equal(installOutcome(undefined, files, project).ok, false);
 });
 
+test('run results have no invented policyChanged field; policy changes are REVIEW_STALE diagnostics', () => {
+  const outcome = installOutcome({ ...run14('complete', [member('a.md', 'write', 'written', 'present-matching')]), policyChanged: true }, installFiles(review), project);
+  assert.equal(outcome.policyChanged, undefined);
+  assert.doesNotMatch(outcome.message, /policy/i);
+});
+
 test('files in place are not called installed unless Core lists the whole setup as installed', async () => {
   const { installSummary } = await import('../../src/app/install-panel.js');
   const placed = path => ({ action: 'Already in place', path });

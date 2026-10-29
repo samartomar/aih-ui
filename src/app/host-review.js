@@ -45,8 +45,15 @@ export function staleReason(...results) {
   for (const result of results) {
     const diagnostic = (result?.diagnostics ?? []).find(entry => entry.code === 'REVIEW_STALE');
     if (!diagnostic) continue;
-    const changed = diagnostic.changed?.reason ? ` (${diagnostic.changed.reason})` : '';
-    return `${diagnostic.message ?? 'The reviewed setup changed.'}${changed}`;
+    if (typeof diagnostic.changed !== 'string') return diagnostic.message ?? 'The reviewed setup changed.';
+    if (diagnostic.changed === 'policy') return "Your organisation's policy changed since the preview; nothing was installed.";
+    const what = diagnostic.changed === 'index-status' ? 'The release list'
+      : diagnostic.changed === 'scan-state' ? 'A scan'
+      : diagnostic.changed === 'binding' ? `How AIH installs into ${diagnostic.detail ?? 'this tool'}`
+      : diagnostic.changed === 'target-file' ? diagnostic.detail ?? 'A target file'
+      : null;
+    if (what) return `${what} changed since the preview; nothing was installed. Preview again.`;
+    return diagnostic.message ?? 'The reviewed setup changed.';
   }
   return undefined;
 }

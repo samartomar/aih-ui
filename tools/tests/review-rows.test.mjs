@@ -27,26 +27,25 @@ test('prepared-work 1.6 selections name the rows; operations attach by published
   assert.deepEqual(first.sets.map(s => s.setId), ['starter']);
   assert.deepEqual(first.how, ['Chosen by you', 'Required by other']);
   assert.equal(first.effects.length, 2);
-  assert.deepEqual(first.blockers, ['Op op-c: Another tool owns this file.'], 'Core’s reason, verbatim');
+  assert.deepEqual(first.blockers, ['Another tool owns this file.'], 'Core’s reason, verbatim');
   assert.equal(rows[1].heading, 'Selection s2 (its recorded metadata is unavailable)', 'missing name stays explicit');
   assert.equal(rows[1].size, null);
   assert.deepEqual(global, []);
 });
 
-test('operationSelections links operations that carry no selectionId; unlinked diagnostics stay global', () => {
+test('operationSelections links operations that carry no selectionId; path-linked conflicts join their row verbatim', () => {
   const r = review({
     selections: [{ selectionId: 's1', managementId: 'm1', scope: 'project', name: 'A' }],
-    operations: [operation('op-x', { selectionId: null, effects: 'unavailable', details: { reason: 'Material unreadable.' } })],
-    conflicts: [{ message: 'Policy conflicts with an installed file.' }],
+    operations: [operation('op-x', { selectionId: null, effects: 'unavailable', details: { reason: 'Material unreadable.', target: 'C:\\p\\x.md' } })],
+    conflicts: [{ message: 'Policy conflicts with an installed file.', path: 'C:\\p\\x.md' }, { message: 'A global conflict.' }],
     omissions: [{ code: 'OMITTED', message: 'One material was omitted.' }],
   });
   const linked = reviewRows(r, { operationSelections: [{ selectionId: 's1', operationId: 'op-x' }] });
-  assert.deepEqual(linked.rows[0].blockers, ['Op op-x: Material unreadable.']);
-  assert.deepEqual(linked.global, ['Policy conflicts with an installed file.', 'One material was omitted.'],
-    'review conflicts and omissions are published globally regardless of operation linkage');
+  assert.deepEqual(linked.rows[0].blockers, ['Material unreadable.', 'Policy conflicts with an installed file.']);
+  assert.deepEqual(linked.global, ['A global conflict.', 'One material was omitted.']);
   const unlinked = reviewRows(r, { operationSelections: [] });
   assert.equal(unlinked.rows[0].blockers.length, 0, 'no published linkage, no invented blocker');
-  assert.deepEqual(unlinked.global, ['Policy conflicts with an installed file.', 'One material was omitted.']);
+  assert.deepEqual(unlinked.global, ['Policy conflicts with an installed file.', 'A global conflict.', 'One material was omitted.']);
 });
 
 test('size words: absent is unknown, never zero; with and without always-loaded', () => {

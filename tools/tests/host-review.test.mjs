@@ -2,7 +2,7 @@
 // Run: node --test tools/tests/host-review.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyIfUnchanged } from '../../src/app/host-review.js';
+import { applyIfUnchanged, staleReason } from '../../src/app/host-review.js';
 
 const held = { sessionId: 'held-session', review: { reviewDigest: 'held-digest', operations: [] } };
 const fresh = { sessionId: 'fresh-session', review: { reviewDigest: 'fresh-digest', operations: [] } };
@@ -26,12 +26,26 @@ test('a changed caller snapshot never reaches apply: a REVIEW_STALE held apply p
     held,
     prepare: async () => { calls.push('prepare'); return { status: 'ok', preparation: { status: 'ready', ...fresh } }; },
     readyPreparation: value => value?.preparation?.status === 'ready' ? value.preparation : undefined,
-    apply: async approval => { calls.push(`apply:${approval.sessionId}`); return { status: 'refused', diagnostics: [{ code: 'REVIEW_STALE', message: 'The reviewed setup changed.', changed: { reason: 'binding' } }] }; },
+    apply: async approval => { calls.push(`apply:${approval.sessionId}`); return { status: 'refused', diagnostics: [{ code: 'REVIEW_STALE', message: 'The reviewed setup changed.', changed: 'binding', detail: 'claude' }] }; },
   });
   assert.equal(result.state, 'stale');
   assert.equal(result.preparation.sessionId, 'fresh-session');
-  assert.match(result.reason, /changed/i);
+  assert.equal(result.reason, 'How AIH installs into claude changed since the preview; nothing was installed. Preview again.');
   assert.deepEqual(calls, ['apply:held-session', 'prepare']); // exactly one apply, with the held handle
+});
+
+test('REVIEW_STALE 1.5 changed and detail use the contract wording for every named kind', () => {
+  const diagnostic = (changed, detail) => ({ diagnostics: [{ code: 'REVIEW_STALE', changed, detail, message: 'Core detail must not replace the contract sentence.' }] });
+  assert.equal(staleReason(diagnostic('policy', 'obligation changed')),
+    "Your organisation's policy changed since the preview; nothing was installed.");
+  assert.equal(staleReason(diagnostic('index-status', 'ecc revoked')),
+    'The release list changed since the preview; nothing was installed. Preview again.');
+  assert.equal(staleReason(diagnostic('scan-state', 'scan:123')),
+    'A scan changed since the preview; nothing was installed. Preview again.');
+  assert.equal(staleReason(diagnostic('binding', 'claude')),
+    'How AIH installs into claude changed since the preview; nothing was installed. Preview again.');
+  assert.equal(staleReason(diagnostic('target-file', '/project/CLAUDE.md')),
+    '/project/CLAUDE.md changed since the preview; nothing was installed. Preview again.');
 });
 
 test('a superseded Apply answer keeps the outcome unknown: the run may have completed (AF1)', async () => {

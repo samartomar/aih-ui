@@ -17,6 +17,12 @@ export function reviewRows(review, { operationSelections = [] } = {}) {
     if (!selectionId) continue; // Generated lifecycle cleanup names no selection; it stays out of item rows.
     bySelection.set(selectionId, [...(bySelection.get(selectionId) ?? []), operation]);
   }
+  const rowConflicts = new Map(), global = [];
+  for (const diagnostic of review?.conflicts ?? []) {
+    const linked = [...bySelection].find(([, operations]) => operations.some(operation => operation.details?.target && operation.details.target === diagnostic.path));
+    if (linked) rowConflicts.set(linked[0], [...(rowConflicts.get(linked[0]) ?? []), words(diagnostic)].filter(Boolean));
+    else global.push(words(diagnostic));
+  }
   const rows = (review?.selections ?? []).map(row => {
     const operations = bySelection.get(row.selectionId) ?? [];
     const sets = (row.origins ?? []).map(origin => origin.set).filter(Boolean);
@@ -32,14 +38,12 @@ export function reviewRows(review, { operationSelections = [] } = {}) {
       size: row.deliveredSize ?? null,
       hookCommands: row.hookCommands ?? [],
       effects: operations.map(operation => ({ purpose: operation.purpose, target: operation.details?.target ?? null, effect: operation.effects })),
-      // Core's own words: conflict/unavailable effects and their reasons, verbatim.
-      blockers: operations.filter(operation => operation.effects === 'conflict' || operation.effects === 'unavailable')
-        .map(operation => words({ message: operation.details?.reason ? `${operation.purpose}: ${operation.details.reason}` : operation.purpose })),
+      blockers: [...operations.filter(operation => operation.effects === 'conflict' || operation.effects === 'unavailable')
+        .map(operation => operation.details?.reason ?? operation.purpose), ...(rowConflicts.get(row.selectionId) ?? [])],
     };
   });
-  // Diagnostics the review publishes without per-row linkage stay global; nothing here associates by guessing.
-  const global = [...(review?.conflicts ?? []), ...(review?.omissions ?? [])].map(words).filter(Boolean);
-  return { rows, global };
+  global.push(...(review?.omissions ?? []).map(words));
+  return { rows, global: global.filter(Boolean) };
 }
 
 /** Core's delivered-size line for one row; absent means unknown, never zero. */
