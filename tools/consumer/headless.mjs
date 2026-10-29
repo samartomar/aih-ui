@@ -644,7 +644,7 @@ export async function compileDraft({ envelopeBytes, inventories, roots, reviewEv
   return compileScope({ policy, intent: record.intent, inventories, analysis, roots, reviewEvidence, comparisons, recipient, originalBytes: envelopeBytes, tool });
 }
 // Safe edits of the recorded choices; each success is a new envelope revision.
-export async function editDraft({ envelopeBytes, inventories, operation, reviewEvidence = [], comparisons = [], recipient } = {}) {
+export async function editDraft({ envelopeBytes, inventories, operation, reviewEvidence = [], comparisons = [], recipient, tool = undefined } = {}) {
   const loaded = await loadDraft(envelopeBytes);
   if (loaded.status !== 'ok') return loaded;
   const { read, record, policy } = loaded.value;
@@ -768,6 +768,26 @@ export async function editDraft({ envelopeBytes, inventories, operation, reviewE
         if (at < 0) return fail('INPUT_INVALID', '/operation/exclusion', 'That skip is not recorded in this draft.');
         changes.removedExclusions.push(intent.exclusions[at]); intent.exclusions.splice(at, 1);
       }
+    } else if (operation.type === 'mcp-approval') {
+      // The one-server tick inside an open draft. The draft's pending choices live in its live intent
+      // (the saved base is stale by design), so the approval recomposes THAT intent, renders exactly this
+      // server, and rewrites the envelope with every recorded choice preserved.
+      const target = intent.roots.find(candidate => rootKey(candidate) === rootKey(operation.root));
+      if (!target) return fail('INPUT_INVALID', '/operation/root', 'The server is not part of this draft.');
+      const entry = inventories.find(candidate => candidate.release.sha256 === target.releaseSha256);
+      const item = entry?.release.items.find(candidate => candidate.id === target.itemId);
+      if (!item || (item.kind !== 'mcp-server' && item.kind !== 'mcp')) return fail('INPUT_INVALID', '/operation/root', 'Only an MCP server can be allowed this way.');
+      if (!entry.release.framework?.id) return fail('SOURCE_REVISION_UNAVAILABLE', '/operation/root', 'This exact source publishes no framework identity to name the approval.');
+      const approval = { framework: entry.release.framework.id, itemId: item.id };
+      const composed = await composeAuthoring({ intent, inventories, tool,
+        ...(operation.granted ? { grantApproval: approval } : { revokeApproval: approval }) });
+      if (composed.status !== 'ok') return unchanged(composed);
+      const known = read.records.filter(r => Object.hasOwn(JOURNEY_RECORD_KINDS, r.schema)).map(r => r === record ? { id: r.id, schema: r.schema, required: true, intent } : r);
+      const written = await writeJourneyEnvelope({ savedIntentBytes: composed.value.policyBytes, records: known, previous: read });
+      if (written.status !== 'ok') return unchanged(written);
+      const presented = await presentDraft({ inventories, reviewEvidence, comparisons, recipient, envelopeBytes: written.value.envelopeBytes, envelope: written.value.envelope,
+        savedIntentBytes: composed.value.policyBytes, supported: true, policy: composed.value.policy, intent, changes });
+      return presented.status === 'ok' ? presented : unchanged(presented);
     } else return fail('INPUT_INVALID', '/operation', 'Unsupported draft operation.');
   } catch (error) { return fail('INTENT_POLICY_CONTRADICTION', '/operation', error.message); }
   // Re-analyse the edited choices with the recorded pins still in place, then prune.

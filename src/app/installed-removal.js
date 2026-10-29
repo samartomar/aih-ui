@@ -112,7 +112,7 @@ export async function confirmRemoval({ preview, request, mode, results: earlier 
       else stop('failed', `${name} ${notPrepared(fresh)}`);
     } else if (attempt.state === 'stale') {
       stop('changed', `${name} was not removed: ${attempt.reason} Click Remove again to see what its removal takes now.`);
-    } else if (attempt.run?.status === 'superseded') stop('superseded', `For ${name} this page cannot tell whether files were removed; check the list.`);
+    } else if (attempt.state === 'superseded') stop('superseded', `For ${name} this page cannot tell whether files were removed; check the list.`);
     else {
       const outcome = removalOutcome(attempt.run, installFiles(attempt.preparation.review));
       if (outcome.state === 'failed') stop('failed', `${name} ${outcome.message}`);

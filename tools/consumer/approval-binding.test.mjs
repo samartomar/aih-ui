@@ -9,6 +9,7 @@ import { dirname } from 'node:path';
 import { readAuthoring, composeAuthoring, editAuthoring, freshAuthoring } from './headless.mjs';
 import { pinSelectedRecipes } from './selected-recipe.mjs';
 import { readInstalledPreparedContent } from '@aihq/catalog/node';
+import { parsePolicy, validateRecipe } from '@aihq/core/contracts';
 
 const catalogRoot = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
 const prepared = await readInstalledPreparedContent({ root: catalogRoot, frameworkId: 'ecc', sourceInput: 'approval-binding-test' });
@@ -46,21 +47,43 @@ test('a ticked one-server approval is renderer-produced, retained unchanged on r
   assert.ok(!JSON.stringify(undone?.recipe ?? {}).includes('approve-server'), 'untick removes the approval');
 });
 
-test('same-ID tampered executable operations are not retained from an imported policy', async () => {
+test('a schema-valid same-ID recipe with altered executable content is not retained (blocked, not silently editable)', async () => {
   const composed = await composeAuthoring({ intent: freshIntent(), inventories });
   const ticked = await editAuthoring({ policyBytes: composed.value.policyBytes, inventories, operation: approvalOp(true), tool: 'claude', grantApproval: { framework: prepared.release.framework.id, itemId: mcp.id } });
   assert.equal(ticked.status, 'ok');
-  // A validly shaped imported policy whose inline recipe id matches but whose operations were altered.
+  // A validly shaped imported policy whose inline recipe id matches, but whose executable content was
+  // altered (the registered server URL). Both the recipe schema and the policy parse accept it - the
+  // checked-renderer binding is what must catch it.
   const tampered = JSON.parse(new TextDecoder().decode(ticked.value.policyBytes));
   const victim = tampered.selections.find(entry => entry.item?.itemId === mcp.id);
-  victim.recipe.inline.operations.push({ id: 'run-anything', kind: 'process.run', purpose: 'not rendered by anyone' });
+  const register = victim.recipe.inline.operations.find(operation => operation.id === 'register-server');
+  const urlEntry = register.entries.find(entry => entry.path.join('/') === `mcpServers/${mcp.name ?? mcp.id}/url`);
+  assert.ok(urlEntry, 'the fixture registers a url entry');
+  urlEntry.value.literal = 'https://tampered.example/v3/mcp';
+  assert.equal(validateRecipe(victim.recipe.inline).valid, true, 'the tampered recipe stays schema-valid (the premise of the attack)');
   const tamperedBytes = new TextEncoder().encode(JSON.stringify(tampered));
-  // Core's parse layer refuses the hand-tampered document outright (integrity) - that refusal is the
-  // stronger answer. The retain-by-id seam itself is exercised by supplying the tampered policy as the
-  // base of a legitimate composition: the tampered operations must never be retained into the new policy.
+  assert.equal(parsePolicy(new TextDecoder().decode(tamperedBytes)).valid, true, 'the tampered policy parses');
   const read = await readAuthoring({ policyBytes: tamperedBytes, inventories });
-  assert.equal(read.status, 'refused', 'a hand-tampered policy is refused at parse, never silently read');
-  const recomposed = await composeAuthoring({ basePolicyBytes: tamperedBytes, intent: freshIntent(), inventories });
-  assert.ok(recomposed.status !== 'ok' || !JSON.stringify(recomposed.value?.policy?.selections ?? {}).includes('run-anything'),
-    'tampered executable operations must never be retained into a recomposed policy');
+  assert.equal(read.status, 'ok');
+  assert.equal(read.value.editing, 'unavailable', 'a recipe the renderer does not reproduce must not stay silently editable');
+  assert.match(JSON.stringify(read.value.diagnostics), /contradict|metadata|selection/i);
+  // And the tampered content never becomes the retained recipe of any editable composition.
+  const retained = JSON.stringify(read.value.policy.selections.find(entry => entry.item?.itemId === mcp.id)?.recipe ?? {});
+  assert.ok(!retained.includes('tampered.example') || read.value.editing !== 'available',
+    'the tampered executable content must never ride the id-match into an editable policy');
+});
+
+test('exact unchanged approval, changed tool, and changed configuration do not leak permission', async () => {
+  const composed = await composeAuthoring({ intent: freshIntent(), inventories });
+  const ticked = await editAuthoring({ policyBytes: composed.value.policyBytes, inventories, operation: approvalOp(true), tool: 'claude', grantApproval: { framework: prepared.release.framework.id, itemId: mcp.id } });
+  assert.equal(ticked.status, 'ok');
+  // Exact unchanged approval on read: retained, editing available.
+  const read = await readAuthoring({ policyBytes: ticked.value.policyBytes, inventories });
+  assert.equal(read.value.editing, 'available', JSON.stringify(read.value.diagnostics));
+  // Changed composing tool: the saved selection keeps its recorded claude identity (no rebind), and a
+  // fresh compose under another tool carries no claude approval.
+  const other = await composeAuthoring({ intent: freshIntent(), inventories, tool: 'codex' });
+  assert.equal(other.status, 'ok');
+  const foreign = other.value.policy.selections.find(entry => entry.item?.itemId === mcp.id);
+  assert.ok(!JSON.stringify(foreign?.recipe ?? {}).includes('approve-server'), 'a fresh policy under another tool carries no approval');
 });

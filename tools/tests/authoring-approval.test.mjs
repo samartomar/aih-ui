@@ -50,25 +50,24 @@ test('ordinary approval edit sends the real edit contract: policyBytes present, 
   } finally { stub.restore(); }
 });
 
-test('draft approval edits the saved intent and rewraps it: edit(policyBytes=savedIntent) then draft-open(bytes=edited), draft preserved with recorded choices', async () => {
+test('draft approval goes through the draft-edit route and adopts the presented draft', async () => {
   const { client, stub } = await startedClient({
     new: async () => ({ status: 'ok', value: POLICY }),
-    'draft-open': async body => ({ status: 'ok', value: { envelopeBytes: [5, 6], savedIntentBytes: body.bytes, projection: { revision: { sequence: 5 } }, intent: { roots: [{ itemId: 'a' }] } } }),
-    edit: async body => ({ status: 'ok', value: { policyBytes: body.policyBytes.map(b => b + 3), intent: { roots: [{ itemId: 'a' }] } } }),
+    'draft-open': async body => ({ status: 'ok', value: { envelopeBytes: body.bytes, savedIntentBytes: body.bytes, projection: { revision: { sequence: 2 } }, intent: { roots: [{ itemId: 'a' }] } } }),
+    'draft-edit': async body => ({ status: 'ok', value: { envelopeBytes: [5, 6], savedIntentBytes: [13, 14, 15], projection: { revision: { sequence: 5 } }, intent: { roots: [{ itemId: 'a' }] }, editing: 'available' } }),
   });
   try {
-    await client.openDraft(); // draft opens; its saved intent becomes the artifact bytes
+    await client.openDraft();
     assert.ok(client.draft);
-    const saved = [...client.bytes];
     const result = await client.recordApproval({ type: 'mcp-approval', granted: true });
     assert.equal(result.status, 'ok');
-    const edit = stub.bodies.find(entry => entry.operation === 'edit');
-    const reopen = stub.bodies.filter(entry => entry.operation === 'draft-open').at(-1);
-    assert.deepEqual(edit.body.policyBytes, saved, 'the draft saved intent is what the approval edits');
-    assert.deepEqual(reopen.body.bytes, saved.map(b => b + 3), 'the edited policy is rewrapped into a fresh envelope');
-    assert.ok(client.draft, 'the draft survives the approval');
+    const edit = stub.bodies.find(entry => entry.operation === 'draft-edit');
+    assert.ok(Array.isArray(edit.body.envelopeBytes), 'the draft envelope rides the request');
+    assert.equal(edit.body.policyBytes, undefined, 'a draft edit does not resend the base policy');
+    assert.deepEqual(edit.body.operation, { type: 'mcp-approval', granted: true });
+    assert.ok(client.draft, 'the presented draft is adopted; the draft stays open');
     assert.deepEqual([...client.draft.envelopeBytes], [5, 6]);
-    assert.deepEqual([...client.draft.savedIntentBytes], saved.map(b => b + 3), 'the edited content is carried into the new envelope');
+    assert.deepEqual([...client.draft.savedIntentBytes], [13, 14, 15]);
   } finally { stub.restore(); }
 });
 

@@ -46,7 +46,7 @@ process.on('exit', () => {
 // The real-Core batch group has its own bounded budget: its serial Windows
 // filesystem work measured 115s before the final concurrent-consent regression.
 const testGroups = [
-  ['ordinary-families', 'authoring-page', 'authoring-v3', 'reviews', 'personal-folder', 'journey', 'readiness', 'readiness-host', 'claims', 'friction', 'authority-source', 'organization-author', 'guided-setup', 'core-targets', 'workspace', 'project-folder'],
+  ['ordinary-families', 'authoring-page', 'authoring-v3', 'reviews', 'personal-folder', 'journey', 'readiness', 'readiness-host', 'claims', 'friction', 'authority-source', 'organization-author', 'guided-setup', 'core-targets', 'workspace', 'project-folder', 'approval-binding', 'draft-approval-preservation'],
   ['source-facts', 'scan-evidence', 'release-order', 'update-source', 'maintenance', 'improvements', 'trials'],
   ['batch'],
   ['intent-http', 'intent-page', 'organization', 'saved-intent', 'setup']
