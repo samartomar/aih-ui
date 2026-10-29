@@ -25,10 +25,16 @@ function closure(id, byId, seen = new Set()) {
 
 /** The redacted 1.1 per-selection states, straight from Core's projection; unknown stays unknown. */
 export function inventoryState(entry) {
+  // Distinct literal Core states stay distinct (Q8): a uniform block-changed/block-missing set is named
+  // exactly; a mixed set degrades to the generic 'changed'.
+  const fileStates = (entry.members ?? []).map(member => member.fileState);
+  const differing = ['changed', 'missing', 'block-changed', 'block-missing'].filter(state => fileStates.includes(state));
+  const file = differing.length === 1 ? differing[0]
+    : differing.length ? 'changed'
+    : fileStates.includes('unchecked') ? 'unchecked'
+    : fileStates.length ? 'matches' : 'unknown';
   return {
-    file: (entry.members ?? []).some(member => ['changed', 'missing', 'block-changed', 'block-missing'].includes(member.fileState)) ? 'changed'
-      : (entry.members ?? []).some(member => member.fileState === 'unchecked') ? 'unchecked'
-      : (entry.members ?? []).length ? 'matches' : 'unknown',
+    file,
     update: entry.updateState ?? 'unknown',
     policy: entry.policyState ?? null,
     approval: entry.approval ?? null,
@@ -53,7 +59,8 @@ export function originGroups(inventory) {
       groups.get(key).items.push(entry.managementId);
     }
     for (const set of sets) {
-      const key = `${set.framework}/${set.setId}`;
+      // Exact set provenance identity includes the set digest (Q7): distinct recorded revisions never merge.
+      const key = `${set.framework}/${set.setId}/${set.setSha256}`;
       if (!groups.has(key)) groups.set(key, { set, items: [] });
       if (!groups.get(key).items.includes(entry.managementId)) groups.get(key).items.push(entry.managementId);
     }

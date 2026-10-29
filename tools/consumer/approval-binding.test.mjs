@@ -73,13 +73,23 @@ test('a schema-valid same-ID recipe with altered executable content is not retai
     'the tampered executable content must never ride the id-match into an editable policy');
 });
 
+test('a supported scope transition does not transplant the saved approval', async () => {
+  // Genuine connected transition (Q2 residual): the supported operations change scope by dropping the
+  // project root and selecting the same item at user scope - never an invented in-place edit.
+  const composed = await composeAuthoring({ intent: freshIntent(), inventories, tool: 'claude', grantApproval: { framework: prepared.release.framework.id, itemId: mcp.id } });
+  assert.equal(composed.status, 'ok');
+  const moved = freshIntent();
+  moved.roots = moved.roots.map(root => ({ ...root, scope: 'user' }));
+  const recomposed = await composeAuthoring({ basePolicyBytes: composed.value.policyBytes, intent: moved, inventories, tool: 'claude' });
+  assert.equal(recomposed.status, 'ok', JSON.stringify(recomposed.diagnostics ?? []));
+  const selection = recomposed.value.policy.selections.find(entry => entry.item?.itemId === mcp.id);
+  assert.equal(selection?.scope, 'user');
+  assert.ok(!JSON.stringify(selection?.recipe ?? {}).includes('approve-server'), 'the recorded approval must not be transplanted across a scope transition');
+});
+
 test('exact unchanged approval survives; a fresh policy under another tool carries no approval', async () => {
-  // Assertion gap, recorded honestly: the public Harness renderDelivery contract takes
-  // {tool, item, binding, scope, grantApproval} - no configuration parameter - so renderer-produced
-  // approvals are configuration-invariant by contract, and the supported edit operations change scope
-  // only by adding or removing roots (scope is part of root identity), not in place. A meaningful
-  // changed-target case cannot be expressed through the checked fixture's supported operations
-  // without composing a different selection; that gap stays open rather than fabricated from the title.
+  // A fresh policy under another tool carries no approval (the supported scope-transition case is
+  // exercised separately above).
   const composed = await composeAuthoring({ intent: freshIntent(), inventories });
   const ticked = await editAuthoring({ policyBytes: composed.value.policyBytes, inventories, operation: approvalOp(true), tool: 'claude', grantApproval: { framework: prepared.release.framework.id, itemId: mcp.id } });
   assert.equal(ticked.status, 'ok');

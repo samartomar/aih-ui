@@ -94,7 +94,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     if (key === browseKey) return;
     browseKey = key; browseContentKey = contentKey; const attempt = ++browseAttempt; if (!factsOnly) browseResult = undefined;
     if (!framework) return;
-    try { const result = await authoring.request('browse-content', { releaseSha256: framework.sha256, tool: chosenTool?.id, sets: choice.requests, configurations: choice.configurations, inspect, itemId, enterprise, policyBytes: undefined });
+    // The host read reflects the artifact's actual roots, like the drawer, not the current set request (#165 Q6).
+    try { const result = await authoring.request('browse-content', { releaseSha256: framework.sha256, tool: chosenTool?.id, sets: choice.requests, configurations: choice.configurations, inspect, itemId, enterprise, chosen: (authoring.intent?.roots ?? []).filter(root => root.releaseSha256 === framework.sha256).map(root => root.itemId), policyBytes: undefined });
       if (attempt !== browseAttempt) return; browseResult = result;
     } catch { if (attempt !== browseAttempt) return; browseResult = { status: 'failed', reason: 'Could not read this source’s sets or tool fit. Your choices are unchanged.' }; }
     if (factsOnly) { cards.updateFacts(cardsModel()); details.render(detailsModel(selectedEntry())); } else render();

@@ -16,10 +16,13 @@ const STATE_WORDS = {
   superseded: ['no-longer-offered', 'Superseded', 'Core reports this item replaced by another.'],
   revoked: ['no-longer-offered', 'Revoked', 'Core reports this item revoked.'],
   changed: ['changed-since-install', 'Changed since install', 'Core found installed files that differ from what was reviewed.'],
-  'block-edited': ['block-edited', 'AIH block edited', 'Core found a managed text block edited by hand.'],
-  interrupted: ['changed-since-install', 'Install interrupted', 'Core reports this selection’s installation was interrupted.'],
+  missing: ['changed-since-install', 'Missing since install', 'Core found installed files missing.'],
+  'block-changed': ['block-edited', 'AIH block edited', 'Core found a managed text block edited by hand.'],
+  'block-missing': ['changed-since-install', 'AIH block missing', 'Core found a managed text block missing.'],
+  interrupted: ['interrupted', 'Install interrupted', 'Core reports this selection’s installation was interrupted.'],
   'granted-by-aih': ['needs-ok', 'OK granted by AIH', 'The one-server approval was written by AIH as reviewed.'],
   needed: ['needs-ok', 'Needs your OK', 'The tool still needs your OK for this item.'],
+  'policy-refused': ['policy-refused', 'Organization policy', 'Organization policy state for this item; it is not an offered-index answer.'],
 };
 function stateBadges(state = {}, el) {
   const chips = [];
@@ -27,11 +30,12 @@ function stateBadges(state = {}, el) {
     const chip = el('span', 'inline-flex items-center gap-1 text-[11px]', ''); chip.dataset.installedState = key;
     chip.append(iconSpan('state', words[0]), el('span', '', words[1])); attachTooltip(chip, `${words[2]}${extra ? ` ${extra}` : ''}`); chips.push(chip); };
   if (state.update && state.update !== 'current' && state.update !== 'unknown') add(state.update);
-  if (state.file === 'changed') add('changed');
+  if (state.file && !['matches', 'unchecked', 'unknown'].includes(state.file)) add(state.file);
   if (state.install === 'interrupted') add('interrupted');
   if (state.approval === 'granted-by-aih') add('granted-by-aih');
   else if (state.approval === 'needed') add('needed');
-  if (state.policy && !['permitted', 'recommended', 'unknown'].includes(state.policy)) add('no-longer-offered', `Organization policy: ${state.policy}.`);
+  // A policy refusal is an organization answer, never 'no longer offered' (Q8).
+  if (state.policy && !['permitted', 'recommended', 'unknown'].includes(state.policy)) add('policy-refused', `Organization policy: ${state.policy}.`);
   return chips;
 }
 
@@ -119,6 +123,21 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       if (group.sets?.length) head.append(el('span', 'text-on-surface-variant text-[11px]', `From set ${group.sets.map(set => set.setId).join(', ')}`));
       if (group.needed.length) head.append(el('span', 'text-on-surface-variant', `+ ${group.needed.length} it needs: ${group.needed.map(item => item.name).join(', ')}`));
       head.append(remove); row.append(head, area); list.append(row);
+    }
+    if (view.originGroups?.length) {
+      // Recorded-origin grouping, independent of the draft, with exact set identity (Q7).
+      const sets = el('li', 'space-y-1'); sets.dataset.recordedSets = 'true';
+      sets.append(el('p', 'text-[11px] font-medium text-on-surface-variant', 'Recorded sets'));
+      for (const group of view.originGroups) {
+        const line = el('p', 'text-[11px] text-on-surface-variant');
+        if (group.set) {
+          line.textContent = `${group.set.setId} · exact set ${group.set.setSha256}`;
+          line.title = `${group.set.framework}/${group.set.setId}/${group.set.setSha256}`;
+        } else line.textContent = 'Items with no recorded set origin';
+        line.append(` — ${group.items.length} installed`);
+        sets.append(line);
+      }
+      list.append(sets);
     }
     if (view.others.length) {
       // Named apart only when chosen items are listed above them.

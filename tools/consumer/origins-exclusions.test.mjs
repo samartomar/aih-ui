@@ -23,10 +23,17 @@ test('Q4: an authorized edit that changes resolved origins composes and records 
   // first depends on shared content; adding second (which also depends on it) changes first's resolved origins.
   const base = await composeAuthoring({ intent: intentWith([first]), inventories, tool: 'claude' });
   assert.equal(base.status, 'ok', JSON.stringify(base.diagnostics));
+  // The provenance that genuinely changes is the SHARED DEPENDENCY's: one required-by origin per
+  // requirer, so adding a second requirer changes its resolved origins exactly.
+  const shared = first.dependencies?.requires?.[0]?.itemId;
+  assert.ok(shared, 'the fixture skill requires shared content');
+  const originOf = (policy, itemId) => JSON.stringify(policy.selections.find(entry => entry.item?.itemId === itemId)?.origins);
+  const before = originOf(base.value.policy, shared);
   const expanded = await editAuthoring({ policyBytes: base.value.policyBytes, inventories, operation: { type: 'select', root: rootOf(second) }, tool: 'claude' });
   assert.equal(expanded.status, 'ok', JSON.stringify(expanded.diagnostics ?? []));
-  const selection = expanded.value.policy.selections.find(entry => entry.item?.itemId === first.id);
-  assert.ok(selection?.origins?.length, 'origins recorded after the authorized change');
+  const after = originOf(expanded.value.policy, shared);
+  assert.ok(after && after !== 'undefined', 'origins recorded after the authorized change');
+  assert.notEqual(after, before, 'the shared dependency\'s resolved provenance genuinely changed: the former strict-origin refusal would have rejected this exact transition');
   // Read back: strict - the recorded origins must match what the checked source resolves now (they do).
   const read = await readAuthoring({ policyBytes: expanded.value.policyBytes, inventories });
   assert.equal(read.value.editing, 'available', JSON.stringify(read.value.diagnostics));

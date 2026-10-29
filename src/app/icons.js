@@ -79,6 +79,8 @@ const STATE = {
   size: { icon: "data_usage", tone: "text-on-surface-variant", label: "Estimated size" },
   replaced: { icon: "swap_horiz", tone: "text-on-surface-variant", label: "Replaced by" },
   "no-longer-offered": { icon: "archive", tone: "text-on-surface-variant", label: "No longer offered" },
+  "interrupted": { icon: "error", tone: "text-tertiary", label: "Install interrupted" },
+  "policy-refused": { icon: "block", tone: "text-on-surface-variant", label: "Organization policy" },
   provenance: { icon: "account_tree", tone: "text-on-surface-variant", label: "Where it came from" },
   policy: { icon: "gavel", tone: "text-error", label: "Organisation policy" },
   "confirmed-on-disk": { icon: "task_alt", tone: "text-secondary", label: "Confirmed on disk" },

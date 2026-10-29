@@ -8,9 +8,15 @@ export function firstRunForSets(inventories, sets = []) {
   for (const ref of sets) {
     if (!ref || typeof ref.framework !== 'string' || typeof ref.setId !== 'string' || typeof ref.setSha256 !== 'string')
       return { status: 'refused', diagnostics: [{ code: 'INPUT_INVALID', message: 'Each set names its framework, setId and setSha256 exactly.' }] };
-    const release = (inventories ?? []).find(entry => entry.release.framework?.id === ref.framework)?.release;
+    // Exact identity can live in ANY checked revision of the framework (Q11): search every inventory that
+    // carries the framework id, and report ambiguity instead of silently taking the first inventory.
+    const candidates = (inventories ?? []).filter(entry => entry.release.framework?.id === ref.framework)
+      .map(entry => ({ entry, set: entry.release.sets?.find(candidate => (candidate.id ?? candidate.setId) === ref.setId && candidate.setSha256 === ref.setSha256) }))
+      .filter(match => match.set);
+    if (candidates.length > 1) { results.push({ set: ref, firstRun: null, reason: 'The exact set identity appears in more than one checked revision; guidance is ambiguous.' }); continue; }
+    const release = candidates[0]?.entry.release;
     // Catalog's public vocabulary: a release set is `id` + `setSha256`; Core origins call the same value setId.
-    const set = release?.sets?.find(candidate => (candidate.id ?? candidate.setId) === ref.setId && candidate.setSha256 === ref.setSha256);
+    const set = candidates[0]?.set;
     if (!release || !set) { results.push({ set: ref, firstRun: null, reason: 'The exact set is unavailable in the checked sources, so first-step guidance is unavailable.' }); continue; }
     if (!set.firstRun) { results.push({ set: ref, firstRun: null, reason: 'This set declares no first step.' }); continue; }
     const item = (release.items ?? []).find(candidate => candidate.id === set.firstRun.itemId);

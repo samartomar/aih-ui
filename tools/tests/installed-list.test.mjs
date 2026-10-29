@@ -108,9 +108,9 @@ test('origin groups come from recorded in-set origins, keep simultaneous members
     recorded('m-legacy', { origins: [{ reasonIncluded: 'chosen' }] }),
   ] };
   const view = groupInstalled({ inventory: inv, policy: undefined, intent: undefined, label });
-  const byKey = new Map(view.originGroups.map(group => [group.set ? `${group.set.framework}/${group.set.setId}` : 'null', group.items]));
-  assert.deepEqual(byKey.get('ecc/starter'), ['m-a', 'm-b'], 'overlapping sets keep every membership');
-  assert.deepEqual(byKey.get('ecc/extra'), ['m-a']);
+  const byKey = new Map(view.originGroups.map(group => [group.set ? `${group.set.framework}/${group.set.setId}/${group.set.setSha256}` : 'null', group.items]));
+  assert.deepEqual(byKey.get(`ecc/starter/${'a'.repeat(64)}`), ['m-a', 'm-b'], 'overlapping sets keep every membership');
+  assert.deepEqual(byKey.get(`ecc/extra/${'b'.repeat(64)}`), ['m-a']);
   assert.deepEqual(byKey.get('null'), ['m-legacy'], 'a row without recorded set origin stays explicit, never inferred');
 });
 
@@ -118,5 +118,11 @@ test('update and install states Core reports are never recomputed here', () => {
   const inv = { status: 'incomplete', selections: [recorded('m-x', { updateState: 'no-longer-offered', installState: 'interrupted', members: [{ fileState: 'missing' }] })] };
   const view = groupInstalled({ inventory: inv, policy: undefined, intent: undefined, label });
   assert.equal(view.partial, true, 'an incomplete result is said incomplete, distinct from the selection state');
-  assert.deepEqual(view.others[0].state, { file: 'changed', update: 'no-longer-offered', policy: null, approval: null, install: 'interrupted' });
+  assert.deepEqual(view.others[0].state, { file: 'missing', update: 'no-longer-offered', policy: null, approval: null, install: 'interrupted' });
+  const blocky = { status: 'complete', selections: [recorded('m-y', { members: [{ fileState: 'block-changed' }, { fileState: 'block-changed' }] })] };
+  const blockyView = groupInstalled({ inventory: blocky, policy: undefined, intent: undefined, label });
+  assert.equal(blockyView.others[0].state.file, 'block-changed', 'a uniform block-changed set keeps its distinct literal state (Q8)');
+  const mixed = { status: 'complete', selections: [recorded('m-z', { members: [{ fileState: 'block-changed' }, { fileState: 'missing' }] })] };
+  const mixedView = groupInstalled({ inventory: mixed, policy: undefined, intent: undefined, label });
+  assert.equal(mixedView.others[0].state.file, 'changed', 'a mixed differing set degrades to the generic changed');
 });

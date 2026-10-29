@@ -5,7 +5,7 @@ import { resolveSelections } from '@aihq/catalog/reader';
 import { recipeClient } from './selected-recipe.mjs';
 import { resolveConfiguredSets } from './set-choices.mjs';
 const platform = () => ({ os: ({ win32: 'windows', darwin: 'macos' })[process.platform] ?? process.platform, arch: process.arch });
-export async function browseContent(inventories, { tool, releaseSha256, sets = [], configurations = [], inspect = false, itemId }, project, summarize) {
+export async function browseContent(inventories, { tool, releaseSha256, sets = [], configurations = [], inspect = false, itemId, chosen }, project, summarize) {
   const inventory = inventories.find(entry => entry.release.sha256 === releaseSha256);
   if (!inventory) return { status: 'unavailable', reason: 'This exact source is unavailable. Your saved choices are unchanged.' };
   const release = inventory.release;
@@ -36,7 +36,12 @@ export async function browseContent(inventories, { tool, releaseSha256, sets = [
   const hostItem = item => ({ framework: release.framework.id, itemId: item.id, kind: item.kind,
     ...(item.payload?.dirName || item.payload?.key ? { key: item.payload.dirName ?? item.payload.key } : {}),
     inputs: Object.keys(item.requirements?.inputs ?? {}) });
-  const chosenItems = members.filter(({ item }) => selections.some(selection => selection.item.releaseSha256 === release.sha256 && selection.item.itemId === item.id)).map(({ item }) => item);
+  // What counts as chosen for the host read is the ARTIFACT's roots (Q6), not the current set-request
+  // resolution: a directly added item after clearing set choices must be checked, and an unadded
+  // starting-set member must not be. The caller supplies the artifact root ids for this release.
+  const chosenItems = Array.isArray(chosen) && chosen.length
+    ? members.filter(({ item }) => chosen.includes(item.id)).map(({ item }) => item)
+    : members.filter(({ item }) => selections.some(selection => selection.item.releaseSha256 === release.sha256 && selection.item.itemId === item.id)).map(({ item }) => item);
   let host;
   if (!project) host = { status: 'unavailable', reason: 'Choose a project folder to check whether your tool already has your chosen content; no tool is launched.' };
   else if (typeof runtime.inspectToolHost !== 'function') host = { status: 'unavailable', reason: 'This Core does not publish host inspection.' };
@@ -54,6 +59,7 @@ export async function browseContent(inventories, { tool, releaseSha256, sets = [
   return { status: resolution.status === 'ok' ? 'read' : 'refused', ...(resolution.status === 'ok' ? {} : { diagnostics: resolution.diagnostics }), observations: release.items.map(item => ({ itemId: item.id, observations: binding?.layouts[item.kind]?.observations ?? [] })), scans, dependencies, tool: selected.tool, platform: platform(), compatibility, host, resolution,
     // Whether Core's one-server approval write exists for this tool's MCP registration ('object-keyed' or
     // 'array'), or null/'other' when the shape cannot be written and the person approves in the tool (#162).
+    chosenItemIds: chosenItems.map(item => item.id),
     approvalShape: binding?.layouts?.['mcp-server']?.register?.approvalLocation?.shape ?? null,
     recipes: release.items.map(item => ({ itemId: item.id, ...recipeClient(item, tool) })) };
 }

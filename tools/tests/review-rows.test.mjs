@@ -63,6 +63,24 @@ test('the guidance folder is a real directory: partially matching segments do no
   assert.equal(guidanceFolder(review), '/home/u');
 });
 
+test('filesystem roots are preserved, never null or a drive-relative prefix (Q10)', () => {
+  const posixRoot = { operations: [
+    { scope: 'user', details: { target: '/etc/aih/a.json' } },
+    { scope: 'user', details: { target: '/etc/aih/b.json' } },
+  ] };
+  assert.equal(guidanceFolder(posixRoot), '/etc/aih');
+  const posixOnlyRoot = { operations: [
+    { scope: 'user', details: { target: '/a.json' } },
+    { scope: 'user', details: { target: '/b.json' } },
+  ] };
+  assert.equal(guidanceFolder(posixOnlyRoot), '/', 'the POSIX root is the folder written, never null');
+  const driveRoot = { operations: [
+    { scope: 'user', details: { target: 'C:\\a.json' } },
+    { scope: 'user', details: { target: 'C:\\b.json' } },
+  ] };
+  assert.equal(guidanceFolder(driveRoot), 'C:\\', 'the drive root keeps its separator, never a drive-relative prefix');
+});
+
 test('the guidance folder is the common directory of user-scope operation targets, or explicitly none', () => {
   assert.equal(guidanceFolder(review({ operations: [
     operation('u1', { scope: 'user', details: { target: 'C:\\Users\\me\\.claude\\CLAUDE.md' } }),

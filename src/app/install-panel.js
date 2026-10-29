@@ -41,9 +41,11 @@ export function skillHints(files) {
 
 /** The outcome of an Apply, in words. Only run result 1.4's own member checks can establish "confirmed on disk". */
 export function installOutcome(run, files, project) {
-  if (!run) return { ok: false, message: 'Install did not return a result. Check the files below before trying again.' };
+  // Run result 1.4's policyChanged is stated separately (Q9): a completed run does not imply a policy change.
+  const policyChanged = Boolean(run?.policyChanged);
+  if (!run) return { ok: false, message: 'Install did not return a result. Check the files below before trying again.', policyChanged };
   // The page moved on after sending Apply; the host may already have written files.
-  if (run.status === 'superseded') return { ok: false, message: 'The page changed while Install was running, so it cannot tell whether any files were written. Check what is installed in this project before installing again.' };
+  if (run.status === 'superseded') return { ok: false, message: 'The page changed while Install was running, so it cannot tell whether any files were written. Check what is installed in this project before installing again.', policyChanged };
   // Run result 1.4: Core checked each touched member directly on disk. Only a complete run whose every intended
   // write member was written and found present-matching is confirmed; kept, restored, unchecked, absent or
   // present-different members never are, and no other shape of result makes that claim.
@@ -53,16 +55,16 @@ export function installOutcome(run, files, project) {
     if (run.completion === 'complete' && intended.length > 0 && failed.length === 0) {
       const skills = skillHints(files);
       const tryLine = skills.length ? ` Open Claude Code in this folder and type ${skills.map(name => `/${name}`).join(' or ')}.` : ' Open your AI tool in this folder to use them.';
-      return { ok: true, state: 'confirmed', message: `Confirmed on disk: all ${fileCount(intended.length)} written into ${projectName(project)} checked present-matching.${tryLine}` };
+      return { ok: true, state: 'confirmed', policyChanged, message: `Confirmed on disk: all ${fileCount(intended.length)} written into ${projectName(project)} checked present-matching.${tryLine}` };
     }
     const words = member => `${relativeTarget(member.path, project)} (${member.outcome === 'written' ? `written, check ${member.check}` : `${member.outcome}, check ${member.check}`})`;
     const reason = [...(run.diagnostics ?? [])].map(diagnostic => diagnostic.message ?? diagnostic.code).filter(Boolean).join(' ');
-    return { ok: false, state: run.completion === 'complete' ? 'failed' : 'partial',
+    return { ok: false, state: run.completion === 'complete' ? 'failed' : 'partial', policyChanged,
       message: `Install is not confirmed on disk${run.completion === 'complete' ? '' : ` (run ${run.completion})`}: ${listNames(failed.length ? failed.map(words) : ['no intended file was written'])}.${reason ? ` ${reason}` : ''} Check what is installed in this project before installing again.` };
   }
   // No run-result 1.4 member projection: the page cannot claim installed-and-checked, whatever the operations say.
   const reason = [...(run.diagnostics ?? [])].map(diagnostic => diagnostic.message ?? diagnostic.code).filter(Boolean).join(' ');
-  return { ok: false, message: `Install did not finish${reason ? `: ${reason}` : '. Nothing else was changed by this page.'} Check what is installed in this project before installing again.` };
+  return { ok: false, policyChanged, message: `Install did not finish${reason ? `: ${reason}` : '. Nothing else was changed by this page.'} Check what is installed in this project before installing again.` };
 }
 
 const readyPreparation = result => { const preparation = result?.preparation ?? result; return preparation?.status === 'ready' && preparation.sessionId && preparation.review ? preparation : undefined; };
@@ -200,7 +202,9 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
         message.textContent = `The reviewed setup changed: ${attemptResult.reason} The list now shows what would happen — check it and click Install again.`; return;
       }
       const outcome = installOutcome(attemptResult.run, installFiles(preparation.review), preparation.review.target?.project);
-      message.textContent = outcome.message; message.dataset.outcome = outcome.ok ? 'installed' : outcome.state ?? 'failed';
+      message.textContent = outcome.message + (outcome.policyChanged ? ' Core also reports this run changed the setup policy.' : '');
+      message.dataset.outcome = outcome.ok ? 'installed' : outcome.state ?? 'failed';
+      if (outcome.policyChanged) message.dataset.policyChanged = 'true';
       if (outcome.ok) void showFirstRun(client, preparation.review, firstRunLine);
       // The count said what would change; once written, the same list is what was installed.
       if (outcome.ok) filesHeading.textContent = 'What was installed';

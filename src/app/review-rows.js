@@ -65,7 +65,14 @@ export function guidanceFolder(review) {
     const a = segments(prefix), b = segments(dir);
     let i = 0;
     while (i < a.length && i < b.length && a[i] === b[i]) i++;
-    return a.slice(0, i).join(dirs[0].includes('\\') ? '\\' : '/');
+    return a.slice(0, i).join(targets[0].includes('\\') ? '\\' : '/');
   }, dirs[0]);
-  return common.replace(/[\\/]+$/, '') || null;
+  // Preserve actual filesystem roots (Q10 residual): POSIX '/' and a drive root are folders, never null or
+  // a drive-relative prefix; UNC ancestry keeps its leading double separator through the segment join.
+  const absolute = targets.every(target => target.startsWith('/'));
+  const joined = common === '' && absolute ? '/'
+    : /^[A-Za-z]:$/.test(common) ? common + (targets[0].includes('\\') ? '\\' : '/')
+    : common;
+  const trimmed = joined.replace(/[\\/]+$/, '');
+  return trimmed === '' && absolute ? '/' : /^[A-Za-z]:$/.test(trimmed) ? joined : trimmed || null;
 }

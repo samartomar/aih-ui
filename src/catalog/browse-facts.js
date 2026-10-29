@@ -62,6 +62,11 @@ export function renderBrowseFacts(item, browse, tool, { detailed = false, onAppr
   // and carry no line. The drawer states the global couldn't-check wording.
   const inspected = browse?.host?.items?.some(hostItem => hostItem.itemId === item.id) ?? false;
   const warned = (browse?.host?.warnings ?? []).some(warning => warning.code === 'same-key-elsewhere' && warning.item?.itemId === item.id);
+  // An unavailable host answer is said per chosen item, never implied clean (Q6).
+  const artifactChosen = (browse?.chosenItemIds ?? []).includes(item.id);
+  if (!inspected && !warned && artifactChosen && browse?.host && !['read', 'checked'].includes(browse.host.status))
+    node.append(badge('state', 'not-reported', `Couldn't check whether your tool already has ${item.id}${browse.host.reason ? `: ${browse.host.reason}` : '.'}`,
+      'Read-only Core host inspection did not run for this item; no second-copy claim is made either way.'));
   if (inspected || warned) node.append(badge('state', 'two-copies', copiesWords(browse?.host, item.id, { chosen: inspected }),
     'Read-only Core host inspection of your project folder. No client was launched; the Workbench does not decide what counts as a duplicate.'));
   if (facts.recipe && !facts.recipe.available) node.append(badge('state', 'info', 'Can’t be added yet', facts.recipe.reason));
