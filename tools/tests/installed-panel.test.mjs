@@ -70,9 +70,12 @@ test('the panel places each interactive row in exactly one set section, noting f
   assert.deepEqual(sectionRows, ['m-1', 'm-2'], 'the real interactive rows (with their removal controls) are grouped under the exact set');
   assert.ok(walk(betaSection).find(entry => entry.dataset.setReference === 'm-2'), 'the secondary group keeps a named read-only reference to the shared member');
   assert.equal(walk(node).filter(entry => entry.dataset.installedOther === 'm-2').length, 1, 'a simultaneous member renders once (no duplicated actions)');
-  const also = walk(node).find(entry => /Also in:/.test(entry.textContent));
-  assert.ok(also, 'further memberships stay visible as a note');
-  assert.match(also.textContent, /beta · /, 'the note keeps the other set\'s exact identity (Q7-R2)');
+  // The contract has no "Also in" sentence: a further membership is the named reference under that set's own heading.
+  assert.equal(walk(node).filter(entry => /Also in/.test(entry.textContent)).length, 0, 'no made-up membership note');
+  const reference = walk(betaSection).find(entry => entry.dataset.setReference === 'm-2');
+  assert.deepEqual(reference.children.map(child => child.textContent), ['Two'], 'the further membership names the shared member');
+  assert.deepEqual(walk(betaSection).filter(entry => entry.tag === 'p').map(entry => entry.attributes.title ?? entry.title),
+    [`ecc/beta/${'b'.repeat(64)}`], 'the further set keeps its exact identity (Q7-R2)');
   const other = walk(node).find(entry => entry.dataset.installedOther === 'm-3');
   assert.ok(other, 'no-origin rows stay explicit outside the set sections');
   assert.equal(walk(other).filter(entry => entry.tag === 'button').length, 1, 'its removal control is present');
