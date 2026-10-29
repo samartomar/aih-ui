@@ -101,7 +101,11 @@ test('Q7-R: one chosen item in TWO actual sets, and left-out items grouped under
   assert.equal(walk(view.node).filter(node => node.dataset.choiceItem === 'tdd').length, 1, 'the simultaneous member renders exactly once (no duplicated Remove)');
   const tddRow = walk(view.node).find(node => node.dataset.choiceItem === 'tdd');
   const note = walk(tddRow).find(node => /Also in:/.test(node.textContent));
-  assert.ok(note && /beta/.test(note.textContent), 'the second set membership stays visible as an exact note');
+  assert.ok(note && /beta · /.test(note.textContent), 'the further membership keeps its exact identity (Q7-R2)');
+  const betaChosen = groups.get(`${REL}/beta/${SHA2}`);
+  assert.ok(betaChosen, 'the secondary set group stays visible (Q7-R2)');
+  const reference = walk(betaChosen).find(node => node.dataset.setReference === 'tdd');
+  assert.ok(reference, 'the secondary group keeps a named read-only reference to the shared member');
   assert.deepEqual(walk(groups.get('individual')).filter(node => node.dataset.choiceItem).map(node => node.dataset.choiceItem), ['git-guard']);
   // Left-out items group under the exact set that authored them; direct stays explicit.
   const leftGroups = new Map(walk(view.node).filter(node => node.dataset.leftOut).map(group => [group.dataset.leftOut, group]));
@@ -112,8 +116,9 @@ test('Q7-R: one chosen item in TWO actual sets, and left-out items grouped under
   const betaLeft = leftGroups.get(`${REL}/beta/${SHA2}`);
   const betaRow = walk(betaLeft).find(node => node.dataset.leftOutItem === 'grilling');
   assert.match(betaRow.textContent, /grilling — recorded left-out choice/, 'no fabricated reason when none is recorded');
-  const directLeft = leftGroups.get('direct');
-  assert.match(walk(directLeft).find(node => node.dataset.leftOutItem === 'git-guard.scripts').textContent, /left out by me/, 'direct exclusion stays in its own explicit group');
+  const directLeft = leftGroups.get('known:direct');
+  assert.match(walk(directLeft).find(node => node.dataset.leftOutItem === 'git-guard.scripts').textContent, /left out by me/, 'a direct exclusion is recorded provenance in its own explicit group (AF3)');
+  assert.match(walk(directLeft).find(node => node.dataset.leftOutSet).textContent, /recorded choice/);
   // Live draft: the same render reads the draft's live intent, not the saved base.
   const draft = { intent };
   const draftView = createSetupChoices({ client: { draft, intent: { roots: [], pins: [] }, catalog: { items }, bytes: [] }, el: fake, button });
@@ -122,16 +127,18 @@ test('Q7-R: one chosen item in TWO actual sets, and left-out items grouped under
   assert.ok(draftLeft.get(`${REL}/beta/${SHA2}`), 'draft live intent drives the same grouped left-out render');
 });
 
-test('Q7-R: a left-out origin the intent no longer records is said as unknown, never a fabricated set', () => {
-  const intent = { roots: [], pins: [], origins: [{ id: 'direct', kind: 'direct' }],
-    exclusions: [{ originId: 'set-stale-left-out', releaseSha256: REL, itemId: 'notices', scope: 'project' }],
+test('Q7-R: a known non-set origin (template) is recorded provenance, never "no longer recorded" (AF3)', () => {
+  const intent = { roots: [], pins: [], origins: [{ id: 'direct', kind: 'direct' }, { id: 'tpl-1', kind: 'template' }],
+    exclusions: [{ originId: 'tpl-1', releaseSha256: REL, itemId: 'notices', scope: 'project', reason: 'template default left out' }],
     provenance: [] };
   const button = (label, action) => { const node = fake('button', '', label); node.addEventListener('click', action); return node; };
   const view = createSetupChoices({ client: { intent, catalog: { items }, bytes: [] }, el: fake, button });
   view.render();
-  const unknown = walk(view.node).find(node => node.dataset.leftOut === 'unknown');
-  assert.ok(unknown, 'unknown-origin left-out group renders explicitly');
-  assert.match(walk(unknown).find(node => node.dataset.leftOutItem === 'notices').textContent, /Extensions licenses and notices/, 'the item is still named');
+  const known = walk(view.node).find(node => node.dataset.leftOut === 'known:tpl-1');
+  assert.ok(known, 'the valid recorded non-set origin renders in its own group');
+  assert.match(walk(known).find(node => node.dataset.choiceSet ?? node.textContent).textContent ?? '', /recorded choice \(template\)/);
+  assert.match(walk(known).find(node => node.dataset.leftOutItem === 'notices').textContent, /template default left out/);
+  assert.ok(!walk(view.node).some(node => /origin no longer recorded/.test(node.textContent ?? '')), 'recorded provenance is never described as lost');
 });
 
 // A small DOM: enough for the section to build its rows.

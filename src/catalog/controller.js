@@ -88,23 +88,34 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   // The single qualified chosen-root snapshot (Q6-R): an open uncompiled draft's LIVE roots win over the
   // executable intent; an explicit empty list stays empty (no fallback to the set request).
   const chosenRoots = framework => {
+    // AF2: an absent framework projects no roots - never dereference it before the guard below.
+    if (!framework) return [];
     const roots = (authoring.draft ? authoring.draft.intent?.roots : authoring.intent?.roots) ?? [];
     return roots.filter(root => root.releaseSha256 === framework.sha256).map(root => root.itemId);
   };
   async function readBrowse(framework, choice, inspect = false) {
-    // Root/tool/artifact-identity changes participate in the refresh identity: an unchanged browse set with
-    // changed roots is a new request, and stale replies cannot satisfy it.
-    const contentKey = JSON.stringify([framework?.sha256, chosenTool?.id, choice.requests, choice.configurations ?? [], enterprise, authoring.evidenceRevision, chosenRoots(framework), authoring.revision]);
+    if (!framework) {
+      // No ready framework (legacy Your sources/Tools navigation): old facts are invalidated, not kept.
+      browseKey = undefined; browseContentKey = undefined; browseAttempt++; browseResult = undefined;
+      render();
+      return;
+    }
+    // Root/tool/folder/artifact changes participate in the refresh identity: an unchanged browse set with
+    // changed roots or folder is a new request, and stale replies cannot satisfy it (Q6-R2).
+    const folderAtRequest = authoring.folderRevision;
+    const contentKey = JSON.stringify([framework.sha256, chosenTool?.id, choice.requests, choice.configurations ?? [], enterprise, authoring.evidenceRevision, chosenRoots(framework), authoring.revision, folderAtRequest]);
     const inspectedItem = inspect ? selectedEntry()?.authoringItem : undefined;
-    const itemId = inspectedItem && framework && inspectedItem.root.releaseSha256 === framework.sha256 ? inspectedItem.id : undefined;
+    const itemId = inspectedItem && inspectedItem.root.releaseSha256 === framework.sha256 ? inspectedItem.id : undefined;
     const key = JSON.stringify([contentKey, inspect, itemId]);
     const factsOnly = inspect && contentKey === browseContentKey && ['read', 'refused'].includes(browseResult?.status);
     if (key === browseKey) return;
     browseKey = key; browseContentKey = contentKey; const attempt = ++browseAttempt; if (!factsOnly) browseResult = undefined;
-    if (!framework) return;
     // The host read reflects the artifact's actual roots, like the drawer, not the current set request (#165 Q6).
     try { const result = await authoring.request('browse-content', { releaseSha256: framework.sha256, tool: chosenTool?.id, sets: choice.requests, configurations: choice.configurations, inspect, itemId, enterprise, chosen: chosenRoots(framework), policyBytes: undefined });
-      if (attempt !== browseAttempt) return; browseResult = result;
+      // A folder switch (or any later invalidation) while this read was out discards its answer: it
+      // described the old folder. Re-read for the current snapshot instead of adopting stale facts.
+      if (attempt !== browseAttempt || authoring.folderRevision !== folderAtRequest) { if (attempt === browseAttempt && authoring.folderRevision !== folderAtRequest) void readBrowse(framework, choice, inspect); return; }
+      browseResult = result;
     } catch { if (attempt !== browseAttempt) return; browseResult = { status: 'failed', reason: 'Could not read this source’s sets or tool fit. Your choices are unchanged.' }; }
     if (factsOnly) { cards.updateFacts(cardsModel()); details.render(detailsModel(selectedEntry())); } else render();
   }

@@ -156,11 +156,20 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       let any = false;
       for (const id of group.items) {
         const entry = pending.get(id);
-        if (!entry || rendered.has(id)) continue;
-        rendered.add(id); any = true;
-        const all = memberships.get(id) ?? [];
-        if (all.length > 1) entry.row.children[0].append(el('span', 'text-on-surface-variant text-[11px]', `Also in: ${all.slice(1).map(set => set.setId).join(', ')}`));
-        rows.append(entry.row);
+        if (entry && !rendered.has(id)) {
+          rendered.add(id); any = true;
+          const all = memberships.get(id) ?? [];
+          // Q7-R2: every further membership keeps its exact identity, not a bare id.
+          if (all.length > 1) entry.row.children[0].append(el('span', 'text-on-surface-variant text-[11px]', `Also in: ${all.slice(1).map(set => `${set.setId} · ${set.setSha256}`).join(', ')}`));
+          rows.append(entry.row);
+        } else {
+          // No interactive row here (folded under a chosen root, or already placed in another set):
+          // keep a visible named read-only reference so the exact group/member identity never vanishes.
+          const member = (group.members ?? []).find(candidate => candidate.managementId === id);
+          const ref = el('li', 'text-[11px] text-on-surface-variant', member?.name ?? id);
+          ref.title = id; ref.dataset.setReference = id; any = true;
+          rows.append(ref);
+        }
       }
       if (any) { section.append(heading, rows); list.append(section); }
     }

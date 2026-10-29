@@ -152,6 +152,9 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   let hostCopies, hostCopiesAttempt = 0;
   const refreshHostFacts = async () => {
     const attempt = ++hostCopiesAttempt;
+    // Old facts are cleared while the new read is pending (Q6-R2): never pair new choices with the
+    // previous tool/folder answer.
+    hostCopies = undefined; choicesView.render();
     // One snapshot with the catalog controller and compileDraft: an open draft's LIVE intent roots win (Q6-R).
     const roots = (client.draft ? client.draft.intent?.roots : client.intent?.roots) ?? [];
     const tool = (() => { try { return globalThis.localStorage?.getItem(YOUR_TOOL_KEY) ?? undefined; } catch { return undefined; } })();

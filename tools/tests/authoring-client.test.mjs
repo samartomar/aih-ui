@@ -175,3 +175,19 @@ test('the header tool serializes as its canonical id, never the registry object'
   await client.request('edit', { operation: { type: 'select' } });
   assert.equal(Object.hasOwn(bodies[2], 'tool'), false, 'no tool sends no tool field at all');
 });
+
+test('Q6-R2: setTool notifies subscribers and folderRevision is observable across discardHostWork', async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ status: 'ok', value: { policyBytes: [1], intent: { roots: [] } } }) });
+  try {
+    const client = createAuthoringClient();
+    await client.newDraft();
+    let notified = 0;
+    client.subscribe(() => { notified += 1; });
+    client.setTool('claude');
+    assert.equal(notified, 1, 'a tool change notifies every subscribed surface (drawer host facts, catalog re-read)');
+    const before = client.folderRevision;
+    client.discardHostWork();
+    assert.ok(client.folderRevision > before, 'folderRevision moves on folder/host invalidation so browse keys can bind it');
+  } finally { globalThis.fetch = original; }
+});

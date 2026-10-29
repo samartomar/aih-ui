@@ -31,7 +31,9 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
   // The header's canonical tool as ephemeral page context: it rides composing/editing/compiling requests,
   // never the saved policy bytes, and never rebinding a recorded selection's own tool identity. The header
   // hands over the registry entry; requests carry its canonical id string (Core's selectTool names ids only).
-  const setTool = tool => { selectedTool = typeof tool === 'string' ? tool : tool?.id ?? null; };
+  // Tool changes participate in every surface's snapshot (Q6-R2): subscribers (drawer host facts,
+  // catalog re-read) must see the new tool, so setTool notifies like any other identity change.
+  const setTool = tool => { selectedTool = typeof tool === 'string' ? tool : tool?.id ?? null; notify(); };
   const artifactBytes = () => draftValue?.envelopeBytes ?? bytes;
   const notify = () => {
     const current = artifactBytes();
@@ -101,6 +103,7 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
   }
   return {
     get dirty() { return dirty; }, get recoveryAvailable() { return recoveryAvailable; }, get startupSource() { return startupSource; },
+    get folderRevision() { return folderRevision; },
     setTool, get tool() { return selectedTool; },
     markDownloaded(downloaded = bytes) { const current = artifactBytes(); if (current.length !== downloaded.length || current.some((byte, index) => byte !== downloaded[index])) return; dirty = false; checkpoint = current.slice(); notify(); },
     discard() { revision++; candidate = undefined; notify(); },

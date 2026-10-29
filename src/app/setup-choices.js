@@ -95,16 +95,19 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
     // consumer refuses duplicate identities, so originId is the validated public qualification - no invented
     // collision semantics.
     const byOrigin = new Map(choices.map(choice => [choice.originId, choice.request]));
-    const knownOrigins = new Set((source?.origins ?? []).map(origin => origin.id));
+    const known = new Map((source?.origins ?? []).map(origin => [origin.id, origin]));
     const groups = new Map();
     const push = (key, request, exclusion) => {
-      if (!groups.has(key)) groups.set(key, { request, exclusions: [] });
+      if (!groups.has(key)) groups.set(key, { request, origin: known.get(exclusion.originId), exclusions: [] });
       groups.get(key).exclusions.push(exclusion);
     };
     for (const exclusion of exclusions) {
       const request = byOrigin.get(exclusion.originId);
+      // The validated intent requires every exclusion originId to exist (intent-shape); a known non-set
+      // origin (template, organization, other recorded direct ids) is truthful recorded provenance and
+      // must not be described as lost.
       if (request) push(`${request.release?.releaseSha256}/${request.setId}/${request.setSha256}`, request, exclusion);
-      else if (exclusion.originId === 'direct') push('direct', null, exclusion);
+      else if (known.has(exclusion.originId)) push(`known:${exclusion.originId}`, null, exclusion);
       else push('unknown', null, exclusion);
     }
     const nodes = [];
@@ -115,8 +118,8 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
         heading.textContent = `Left out from ${group.request.setId} · exact set ${group.request.setSha256}`;
         heading.title = key;
         heading.dataset.leftOutSet = group.request.setId;
-      } else if (key === 'direct') { heading.textContent = 'Left out — direct choices'; heading.dataset.leftOutSet = 'direct'; }
-      else { heading.textContent = 'Left out — origin no longer recorded'; heading.dataset.leftOutSet = 'unknown'; }
+      } else if (key === 'unknown') { heading.textContent = 'Left out — origin no longer recorded'; heading.dataset.leftOutSet = 'unknown'; }
+      else { heading.textContent = `Left out — recorded choice (${group.origin?.kind ?? group.origin?.id ?? 'other'})`; heading.dataset.leftOutSet = 'recorded'; }
       const rows = el('ul', 'pl-3 space-y-1');
       for (const exclusion of group.exclusions) {
         const row = el('li', 'text-[11px] text-on-surface-variant');
@@ -139,7 +142,7 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
     const keyOf = request => `${request.release?.releaseSha256}/${request.setId}/${request.setSha256}`;
     // Each interactive row renders exactly once (its Remove action is never duplicated): in its FIRST
     // recorded set, with an 'Also in' note naming every further exact set membership.
-    const rows = new Map(entries.map(entry => [entry, line(entry)]));
+    const rows = new Map(entries.map(entry => { const row = line(entry); row.parentElement = null; return [entry, row]; }));
     const memberships = new Map();
     for (const entry of entries) {
       const sets = (entry.root.originIds ?? []).filter(id => byOrigin.has(id)).map(id => byOrigin.get(id));
@@ -152,15 +155,11 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
       groups.get(key).entries.push(entry);
     };
     for (const entry of entries) {
-      const key = firstKey.get(entry);
-      push(key, key ? groups.get(key)?.request ?? [...memberships.get(entry)][0] : null, entry);
-    }
-    // Seed group metadata from every membership so a group's heading identity is exact even for
-    // simultaneous members whose row renders in their first set.
-    for (const entry of entries) for (const request of memberships.get(entry)) {
-      const key = keyOf(request);
-      if (!groups.has(key)) groups.set(key, { request, entries: [] });
-      groups.get(key).request = groups.get(key).request ?? request;
+      const sets = memberships.get(entry);
+      if (!sets.length) { push(null, null, entry); continue; }
+      // The entry belongs to every set group; the interactive row renders in its first group, secondary
+      // groups keep a named read-only reference (Q7-R2).
+      for (const request of sets) push(keyOf(request), request, entry);
     }
     const nodes = [];
     for (const [key, group] of groups) {
@@ -173,10 +172,21 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
         head.dataset.choiceSet = group.request.setId;
       } else { head.textContent = 'Individual choices'; head.dataset.choiceSet = 'individual'; }
       const rowsNode = el('ul', 'pl-3 space-y-1');
+      const placedElsewhere = new Set([...rows].filter(([, placed]) => placed).map(([entry]) => entry));
       for (const entry of members) {
         const row = rows.get(entry);
         const all = memberships.get(entry);
-        if (all.length > 1) row.children[0].append(el('span', 'text-on-surface-variant text-[11px]', `Also in: ${all.slice(1).map(request => request.setId).join(', ')}`));
+        if (placedElsewhere.has(entry) && row.parentElement) {
+          // Secondary group: a named read-only reference keeps the exact membership visible without a
+          // second interactive row (Q7-R2).
+          const ref = el('li', 'text-[11px] text-on-surface-variant', entry.name);
+          ref.title = entry.root.itemId; ref.dataset.setReference = entry.root.itemId;
+          rowsNode.append(ref);
+          continue;
+        }
+        // Q7-R2: every further membership keeps its exact identity, not a bare id.
+        if (all.length > 1) row.children[0].append(el('span', 'text-on-surface-variant text-[11px]', `Also in: ${all.slice(1).map(request => `${request.setId} · ${request.setSha256}`).join(', ')}`));
+        row.parentElement = rowsNode;
         rowsNode.append(row);
       }
       const wrap = el('li', 'space-y-1', ''); wrap.dataset.choiceGroup = key ?? 'individual';
