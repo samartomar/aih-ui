@@ -222,9 +222,13 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
         { owner: 'core', diagnostics: approval.diagnostics ?? (approval.code ? [{ code: approval.code, message: approval.reason ?? approval.message }] : []) });
       recipe = { inline: approval.recipe };
     }
-    selections.push({ ...prior, id: prior?.id ?? selection.id, managementId, scope: selection.scope, configuration: configured.selection.configuration,
+    // projectFacts is optional metadata of at least one fact. Facts read from the project now decide it alone: a project
+    // with none found carries no field, even if an earlier read recorded some. Without a read (no folder) the record stays.
+    const factsRead = bundle?.item.framework === 'project-basics' && Array.isArray(projectFacts?.facts);
+    const { projectFacts: _recordedFacts, ...priorWithoutFacts } = prior ?? {};
+    selections.push({ ...(factsRead ? priorWithoutFacts : prior), id: prior?.id ?? selection.id, managementId, scope: selection.scope, configuration: configured.selection.configuration,
       ...(bundle ? { item: bundle.item, tool: bundle.tool, name: bundle.name, kind: bundle.kind, origins: bundle.origins } : {}),
-      ...(bundle?.item.framework === 'project-basics' && Array.isArray(projectFacts?.facts) ? { projectFacts: structuredClone(projectFacts.facts) } : {}),
+      ...(factsRead && projectFacts.facts.length ? { projectFacts: structuredClone(projectFacts.facts) } : {}),
       ...(rendered ? { bindingDigest: rendered.bindingDigest,
         ...(item.scan?.length ? { scanRecords: structuredClone(item.scan), itemMaterials: item.materials.map(material => ({ materialId: material.id, relPath: material.relPath, path: material.packagePath,
           sha256: material.sha256, byteLength: material.byteLength, role: material.role })) } : {}) } : {}),

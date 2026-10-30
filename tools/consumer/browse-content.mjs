@@ -5,6 +5,30 @@ import { resolveSelections } from '@aihq/catalog/reader';
 import { recipeClient } from './selected-recipe.mjs';
 import { resolveConfiguredSets } from './set-choices.mjs';
 const platform = () => ({ os: ({ win32: 'windows', darwin: 'macos' })[process.platform] ?? process.platform, arch: process.arch });
+const blocked = entry => entry.support === 'none' || Boolean(entry.notRendered) || Boolean(entry.staticBlockers?.length);
+// One card's fit. A card's Add brings the items it requires ("+ N it needs"), so Core is asked about the card together
+// with that closure, as the Add and the set paths are. Its own answer then counts, plus any blocker Core reports for
+// an item the Add would bring, in Core's words and naming that item. A closure Catalog cannot resolve leaves the card
+// alone, where Core names what is missing.
+function checkCard({ item, fallback }, common, releases, release) {
+  const alone = () => harness.checkCompatibility({ ...common, items: [{ item, ...(fallback ? { fallback } : {}) }] });
+  if (!item.dependencies?.requires?.length) return alone();
+  const closure = resolveSelections({ releases, roots: [{ releaseSha256: release.sha256, itemId: item.id, scope: 'project', configuration: {} }], skips: [] });
+  if (closure.status !== 'ok') return alone();
+  const entries = closure.value.selections.map(selection => {
+    const source = releases[selection.item.releaseSha256], member = source.items.find(candidate => candidate.id === selection.item.itemId);
+    const memberFallback = member.fallback ? source.items.find(candidate => candidate.id === member.fallback.itemId) : undefined;
+    return { item: member, ...(memberFallback ? { fallback: memberFallback } : {}) };
+  });
+  const together = harness.checkCompatibility({ ...common, items: entries });
+  const own = together.items?.find(entry => entry.item.itemId === item.id);
+  if (together.status !== 'checked' || !own) return alone();
+  const required = together.items.filter(entry => entry !== own && blocked(entry)).flatMap(entry => [
+    ...(entry.support === 'none' ? [{ code: 'requirement-unsupported', itemId: entry.item.itemId, detail: entry.reason }] : []),
+    ...(entry.notRendered ? [{ code: entry.notRendered.reason, itemId: entry.item.itemId, detail: entry.notRendered.detail }] : []),
+    ...(entry.staticBlockers ?? []).map(blocker => ({ ...blocker, itemId: entry.item.itemId }))]);
+  return { ...together, items: [{ ...own, staticBlockers: [...(own.staticBlockers ?? []), ...required] }] };
+}
 export async function browseContent(inventories, { tool, releaseSha256, sets = [], configurations = [], inspect = false, itemId, chosen }, project, summarize) {
   const inventory = inventories.find(entry => entry.release.sha256 === releaseSha256);
   if (!inventory) return { status: 'unavailable', reason: 'This exact source is unavailable. Your saved choices are unchanged.' };
@@ -25,7 +49,7 @@ export async function browseContent(inventories, { tool, releaseSha256, sets = [
     // Ask Core about each candidate separately; set fit uses the resolved group.
     const common = { tool: selected.tool.id, platform: platform(), binding,
       nativeRoutes: release.nativeRoutes === undefined ? [] : [{ framework: release.framework.id, lines: release.nativeRoutes }] };
-    const checks = members.map(({ item, fallback }) => harness.checkCompatibility({ ...common, items: [{ item, ...(fallback ? { fallback } : {}) }] }));
+    const checks = members.map(member => checkCard(member, common, releases, release));
     const chosen = members.filter(member => selections.some(selection => selection.item.releaseSha256 === release.sha256 && selection.item.itemId === member.item.id));
     const setCheck = harness.checkCompatibility({ ...common, items: chosen });
     compatibility = { items: checks.flatMap(result => result.items ?? []), sets: setCheck.sets ?? [], pluginRoutes: checks[0]?.pluginRoutes ?? setCheck.pluginRoutes, checks: checks.filter(result => result.status !== 'checked'), setCheck };

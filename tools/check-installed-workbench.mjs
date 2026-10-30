@@ -17,7 +17,7 @@ import { noteInventory, runUi168UpdateInstallBrowser, runUi168UpdateVerifyBrowse
 import { runUi168ProjectBasicsBrowser, runUi168BlockDriftBrowser } from './consumer/ui168-project-basics-browser.mjs';
 import { runUi168SetRemovalBrowser } from './consumer/ui168-set-removal-browser.mjs';
 import { runUi168InterruptStartBrowser, runUi168InterruptedVerifyBrowser } from './consumer/ui168-interrupted-browser.mjs';
-import { runInstalledListTruthBrowser, runNamespacedRuleTruthBrowser, runSetRemovalTruthBrowser } from './consumer/installed-truth-browser.mjs';
+import { runInstalledListTruthBrowser, runNamespacedRuleTruthBrowser, runNeededRemovalTruthBrowser, runSetRemovalTruthBrowser, runSharedBlockTruthBrowser } from './consumer/installed-truth-browser.mjs';
 
 // Runs after the ordinary integrated check has assembled the packed consumer and page. Only this
 // server gets a disposable execution target; the existing unconfigured-host journeys stay as they are.
@@ -216,6 +216,13 @@ for (const theme of THEMES) {
   const truthRuleProject = join(consumerDir, `installed-truth-rule-${theme}-${randomUUID().slice(0, 8)}`);
   await withHost(truthRuleProject, { sources: factsSources }, async origin =>
     await caseOutcome(`namespaced rule named with its namespace (${theme})`, await runNamespacedRuleTruthBrowser({ origin, output: join(consumerDir, `installed-truth-rule-evidence-${theme}`), project: truthRuleProject, playwrightModule: playwrightPath, theme })));
+  // Project basics' shared block from its card in a project with no facts, and git-guard removed with its notices.
+  const truthBlockProject = join(consumerDir, `installed-truth-shared-block-${theme}-${randomUUID().slice(0, 8)}`);
+  await withHost(truthBlockProject, { sources: factsSources }, async origin =>
+    await caseOutcome(`shared block added and written (${theme})`, await runSharedBlockTruthBrowser({ origin, output: join(consumerDir, `installed-truth-shared-block-evidence-${theme}`), project: truthBlockProject, playwrightModule: playwrightPath, theme })));
+  const truthNeededProject = join(consumerDir, `installed-truth-needed-${theme}-${randomUUID().slice(0, 8)}`);
+  await withHost(truthNeededProject, { sources: factsSources }, async origin =>
+    await caseOutcome(`a chosen item removed with what it needs (${theme})`, await runNeededRemovalTruthBrowser({ origin, output: join(consumerDir, `installed-truth-needed-evidence-${theme}`), project: truthNeededProject, playwrightModule: playwrightPath, theme })));
 
   for (const action of ['finish', 'remove']) {
     const interruptedProject = join(consumerDir, `ui168-interrupted-${theme}-${action}-${randomUUID().slice(0, 8)}`);

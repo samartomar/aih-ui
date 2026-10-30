@@ -140,3 +140,30 @@ test('update and install states Core reports are never recomputed here', () => {
   assert.equal(mixedView.others[0].state.file, 'changed', 'the summary stays generic for a mixed set');
   assert.deepEqual(mixedView.others[0].state.files, ['missing', 'block-changed'], 'every distinct literal member state survives (Q8-R): the block edit is not erased');
 });
+
+// Core records why a selection is installed. With no draft naming the chosen item (a later session), a selection
+// Core records as chosen is still listed with what Core records it requires, and its Remove takes those too.
+test('a chosen item outside the draft is listed with the items Core records it requires, and Remove takes them', () => {
+  const guard = { framework: 'extensions', itemId: 'extensions.hook.git-guard' }, notices = { framework: 'extensions', itemId: 'extensions.notices' };
+  const tdd = { framework: 'extensions', itemId: 'extensions.tdd' };
+  const inv = { status: 'complete', selections: [
+    recorded('m-guard', { name: 'git-guard', item: guard, framework: 'extensions', origins: [{ reasonIncluded: 'chosen' }] }),
+    recorded('m-notices', { name: 'Extensions licenses and upstream notices', item: notices, framework: 'extensions', origins: [{ reasonIncluded: 'required-by', requiredBy: guard }] }),
+  ] };
+  for (const [draftPolicy, draftIntent] of [[undefined, undefined], [{ selections: [] }, { roots: [], pins: [] }]]) {
+    const view = groupInstalled({ inventory: inv, policy: draftPolicy, intent: draftIntent, label });
+    assert.deepEqual(view.groups.map(group => [group.managementId, group.needed.map(item => item.managementId)]), [['m-guard', ['m-notices']]]);
+    assert.deepEqual(view.others, [], 'the notices are not another installed item');
+    assert.deepEqual(view.groups[0].removes.map(item => item.managementId), ['m-guard', 'm-notices']);
+    assert.deepEqual(view.groups[0].kept, []);
+  }
+  // Another chosen item that also needs the notices keeps them; its own Remove leaves them for git-guard.
+  const shared = { ...inv, selections: [...inv.selections.slice(0, 1),
+    { ...inv.selections[1], origins: [{ reasonIncluded: 'required-by', requiredBy: guard }, { reasonIncluded: 'required-by', requiredBy: tdd }] },
+    recorded('m-tdd', { name: 'TDD', item: tdd, framework: 'extensions', origins: [{ reasonIncluded: 'chosen' }] })] };
+  const view = groupInstalled({ inventory: shared, policy: undefined, intent: undefined, label });
+  const guardGroup = view.groups.find(group => group.managementId === 'm-guard');
+  assert.deepEqual(guardGroup.removes.map(item => item.managementId), ['m-guard']);
+  assert.deepEqual(guardGroup.kept.map(item => [item.managementId, item.neededBy]), [['m-notices', ['TDD']]]);
+  assert.deepEqual(view.others, []);
+});

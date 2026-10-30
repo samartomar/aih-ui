@@ -88,7 +88,7 @@ export function originGroups(inventory, { name = recordedName } = {}) {
   // other scope, chosen there for itself, never leaves with this set. Those that leave go whole; any other member keeps
   // its other owners and loses only this set's origin.
   const selections = inventory?.selections ?? [];
-  const requirer = (entry, origin) => selections.find(candidate => candidate.scope === entry.scope && itemKey(candidate.item) === itemKey(origin.requiredBy));
+  const requirer = requirerIn(selections);
   for (const group of groups.values()) {
     if (!group.set) continue;
     const leaving = new Set();
@@ -125,6 +125,34 @@ export function setRemovalEntries(group) {
 const owners = entry => (entry.origins ?? []).filter(origin => origin.reasonIncluded !== 'required-by');
 const sameSet = (a, b) => Boolean(a && b) && a.framework === b.framework && a.setId === b.setId && a.setSha256 === b.setSha256;
 const itemKey = item => `${item?.framework}/${item?.itemId}`;
+// The installed selection a required-by origin names: Core's requiredBy names no scope, so it resolves at the
+// requiring entry's own scope.
+const requirerIn = selections => (entry, origin) => selections.find(candidate => candidate.scope === entry.scope && itemKey(candidate.item) === itemKey(origin.requiredBy));
+/**
+ * What Core records one installed selection as requiring, transitively: `needed` in requirement order, and `leaving`,
+ * those that go with it because every recorded origin of theirs is a requirement of a selection already leaving.
+ */
+function recordedRequirements(root, selections) {
+  const requirer = requirerIn(selections);
+  const requiredBy = entry => (entry.origins ?? []).filter(origin => origin.reasonIncluded === 'required-by').map(origin => requirer(entry, origin)).filter(Boolean);
+  const needed = [];
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const entry of selections) {
+      if (entry === root || needed.includes(entry) || !requiredBy(entry).some(owner => owner === root || needed.includes(owner))) continue;
+      needed.push(entry); grew = true;
+    }
+  }
+  const leaving = new Set([root.managementId]);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const entry of needed) {
+      if (leaving.has(entry.managementId)) continue;
+      if ((entry.origins ?? []).every(origin => origin.reasonIncluded === 'required-by' && leaving.has(requirer(entry, origin)?.managementId))) { leaving.add(entry.managementId); grew = true; }
+    }
+  }
+  return { needed, leaving, requiredBy };
+}
 
 /**
  * {readable, reason?, partial, groups, others, notInstalled, setupInstalled}
@@ -168,6 +196,21 @@ export function groupInstalled({ inventory, policy, intent, label = () => undefi
       needed: needed.map(withState).map(item => ({ ...item, sets: recordedSets(installed.get(item.managementId) ?? {}) })),
       removes, kept: needed.filter(item => othersNeed.has(item.id)).map(item => ({ ...withState(item), neededBy: neededBy(item) })) };
   });
+
+  // A selection Core records as chosen that no draft group holds (a later session, or a draft that no longer names it)
+  // is listed with what Core records it requires, so they are not other items, and its Remove takes those nothing else
+  // needs; Core's removal plan still decides any it must keep.
+  const draftGrouped = new Set(grouped);
+  for (const entry of inventory.selections) {
+    if (draftGrouped.has(entry.managementId) || !(entry.origins ?? []).some(origin => origin.reasonIncluded === 'chosen')) continue;
+    const { needed, leaving, requiredBy } = recordedRequirements(entry, inventory.selections);
+    if (!needed.length) continue;
+    const row = item => withState({ ...item, itemId: item.item?.itemId, name: nameOf(item), sets: recordedSets(item) });
+    for (const item of [entry, ...needed]) grouped.add(item.managementId);
+    groups.push({ ...row(entry), needed: needed.map(row), removes: [entry, ...needed.filter(item => leaving.has(item.managementId))].map(row),
+      kept: needed.filter(item => !leaving.has(item.managementId)).map(item => ({ ...row(item),
+        neededBy: requiredBy(item).filter(owner => !leaving.has(owner.managementId)).map(nameOf) })) });
+  }
 
   const known = new Map([...byId.values()].map(entry => [entry.managementId, describe(entry)]));
   const others = inventory.selections.filter(entry => !grouped.has(entry.managementId)).map(entry => {
