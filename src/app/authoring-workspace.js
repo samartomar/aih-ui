@@ -576,16 +576,19 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     accepted.replaceChildren();
     for (const root of draft ? [] : intent?.roots ?? []) {
       const item = client.catalog?.items.find(item => item.id === root.itemId && item.root.releaseSha256 === root.releaseSha256);
+      // The item's name, never its id; an item the catalog no longer lists keeps its recorded id.
+      const name = item?.label ?? root.itemId;
       const row = el('div', 'p-2 border border-wb-border rounded space-y-1');
-      row.append(el('p', 'font-medium', item?.label ?? root.itemId), el('p', 'font-mono text-[10px] text-outline', `${item?.family ?? 'Saved source'} · ${root.scope} · ${root.itemId}`));
-      row.append(createConfigurationEditor({ configuration: root.configuration, inputs: item?.inputs, label: root.itemId, button,
+      row.append(el('p', 'font-medium', name), el('p', 'font-mono text-[10px] text-outline', `${item?.family ?? 'Saved source'} · ${root.scope}`));
+      row.append(createConfigurationEditor({ configuration: root.configuration, inputs: item?.inputs, label: name, button,
         review: async value => { try { present(await client.propose({ type: 'select', root: { ...root, configuration: value } })); } catch (error) { showStatus(error.message); } } }));
-      row.append(button(`Take ${root.itemId} out of setup`, safe(async () => present(await client.propose({ type: 'remove-root', root, keep: [] })))));
+      row.append(button(`Take ${name} out of setup`, safe(async () => present(await client.propose({ type: 'remove-root', root, keep: [] })))));
       accepted.append(row);
     }
     for (const suggestion of draft ? [] : optional) {
       const exclusion = { originId: intent?.origins.find(origin => origin.kind === 'direct')?.id ?? intent?.origins[0]?.id, ...suggestion.to };
-      accepted.append(button(`${suggestion.skipped ? 'Clear skip' : 'Skip optional'} ${suggestion.to.itemId}`, safe(async () => present(await client.propose({ type: suggestion.skipped ? 'unskip' : 'skip', exclusion })))));
+      const optionalName = client.catalog?.items.find(item => item.id === suggestion.to.itemId && item.root.releaseSha256 === suggestion.to.releaseSha256)?.label ?? suggestion.to.itemId;
+      accepted.append(button(`${suggestion.skipped ? 'Clear skip' : 'Skip optional'} ${optionalName}`, safe(async () => present(await client.propose({ type: suggestion.skipped ? 'unskip' : 'skip', exclusion })))));
     }
     renderDraft(); reviewPanel.render(); choicesView.render(); installPanel.render();
     // Whether an installed item is in your setup follows the setup, so the list is read again when the setup changes (#137).
