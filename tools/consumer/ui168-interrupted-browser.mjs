@@ -83,7 +83,9 @@ export async function runUi168InterruptedVerifyBrowser({ origin, output, saved, 
       assert.match(await page.locator('#install-message').innerText(), /Confirmed on disk/);
     } else {
       await group.getByRole('button', { name: 'Remove', exact: true }).click();
-      await group.getByRole('button', { name: 'Confirm remove', exact: true }).click();
+      // A removal Core cannot confirm offers no Confirm; say what the page showed instead of only timing out.
+      await group.getByRole('button', { name: 'Confirm remove', exact: true }).click().catch(async error => {
+        throw new Error(`${error.message}\nThe page said: ${await page.locator('#installed-message').innerText().catch(() => '')}\n${await group.innerText().catch(() => '')}`); });
       await page.locator('#installed-message[data-outcome="removed"], #installed-message[data-outcome="failed"]').waitFor({ timeout: 120_000 });
       assert.equal(await page.locator('#installed-message').getAttribute('data-outcome'), 'removed', `${await page.locator('#installed-message').innerText()} ${JSON.stringify(applies)}`);
       assert.match(await page.locator('#installed-message').innerText(), /grill-me: removed/);
