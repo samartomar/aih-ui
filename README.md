@@ -901,9 +901,10 @@ does not answer within two minutes is the failed state.
 `package-support-1.1.json`, exported as `aih-ui/package-support-1.1.json`, is
 the Workbench's package-support declaration in Core's published
 `urn:aihq:package-support:1.1.0` format. Runtime support is per public entry:
-`aih-ui/stored-results` supports Node `>=24.15.0 <25 || >=26.12.1 <27`.
-The other Node entries retain `>=24.15.0 <25`; journey, workspace and batch
-retain their portable classification. A reader's entry range does not override
+every Node entry supports Node `>=26.12.1 <27`, the engines range of the current
+Core and Catalog archives and the range the owner-testing candidate accepts
+(`NODE_RANGE` in `tools/candidate/upgrade.mjs`; a test keeps the two equal).
+Journey, workspace and batch retain their portable classification. A reader's entry range does not override
 a dependency package's installation engine range or establish runtime support
 for the application host. It names what the Workbench actually reads and writes:
 
@@ -1283,7 +1284,7 @@ loopback URL and exact package hashes. Without `AIH_CONSUMER_PROJECT`, browsing,
 authoring, download and reopen work while Prepare/Apply stay unavailable. An
 explicit host-configured disposable target enables review and approval; the
 browser cannot supply material roots, and can change the project folder only through the host's checked choice above. `AIH_CONSUMER_CONTROLS`
-may name a host-owned controls JSON file. The current reviewed producer archives require Node 26.12.1 through 26.x for this mixed-package host. This host requirement does not broaden the per-entry support declaration above.
+may name a host-owned controls JSON file. The current reviewed producer archives require Node 26.12.1 through 26.x for this mixed-package host. The per-entry support declaration names the same range.
 
 The page saves ordinary execution policy JSON plus namespaced
 `aih.workbench` metadata describing exact source identity, explicit roots and

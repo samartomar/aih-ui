@@ -414,12 +414,12 @@
     {
       "export": "aih-ui/authoring",
       "runtime": "node",
-      "nodeRange": ">=24.15.0 <25"
+      "nodeRange": ">=26.12.1 <27"
     },
     {
       "export": "aih-ui/intake",
       "runtime": "node",
-      "nodeRange": ">=24.15.0 <25"
+      "nodeRange": ">=26.12.1 <27"
     },
     {
       "export": "aih-ui/journey",
@@ -428,22 +428,22 @@
     {
       "export": "aih-ui/maintenance",
       "runtime": "node",
-      "nodeRange": ">=24.15.0 <25"
+      "nodeRange": ">=26.12.1 <27"
     },
     {
       "export": "aih-ui/improvements",
       "runtime": "node",
-      "nodeRange": ">=24.15.0 <25"
+      "nodeRange": ">=26.12.1 <27"
     },
     {
       "export": "aih-ui/stored-results",
       "runtime": "node",
-      "nodeRange": ">=24.15.0 <25 || >=26.12.1 <27"
+      "nodeRange": ">=26.12.1 <27"
     },
     {
       "export": "aih-ui/trials",
       "runtime": "node",
-      "nodeRange": ">=24.15.0 <25"
+      "nodeRange": ">=26.12.1 <27"
     },
     {
       "export": "aih-ui/workspace",
@@ -456,12 +456,12 @@
     {
       "export": "aih-ui/organization-author",
       "runtime": "node",
-      "nodeRange": ">=24.15.0 <25"
+      "nodeRange": ">=26.12.1 <27"
     },
     {
       "export": "aih-ui/scan-evidence",
       "runtime": "node",
-      "nodeRange": ">=24.15.0 <25"
+      "nodeRange": ">=26.12.1 <27"
     }
   ]
 }
