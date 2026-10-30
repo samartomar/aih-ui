@@ -31,6 +31,19 @@ if (config.interrupt) {
     } };
   };
 }
+// A slower host (Core's Apply of a large setup on a slow disk): Core's Apply starts only after applyDelayMs, so the
+// whole Apply takes longer than one request may wait for its answer. Core itself runs unchanged.
+if (config.applyDelayMs) {
+  const { createHost } = await import(pathToFileURL(`${config.consumerDir}/consumer/host.mjs`).href);
+  createExecutionHost = options => {
+    const host = createHost(options);
+    return { ...host, async applyApproved(input) {
+      writeFileSync(`${config.runDir}/../apply-started`, 'Apply requested');
+      await new Promise(done => setTimeout(done, config.applyDelayMs));
+      return host.applyApproved(input);
+    } };
+  };
+}
 const workbench = await createWorkbench({ consumerDir: config.consumerDir, runDir: config.runDir, summary, settingsPath: config.settingsPath, frameworkFixtureInventories, createExecutionHost });
 const address = await listen(workbench.server, 0);
 writeFileSync(config.portPath, String(address.port));
