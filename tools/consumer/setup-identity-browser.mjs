@@ -134,7 +134,8 @@ export async function runSetupIdentityBrowser({ origin, output, playwrightModule
         const ids = itemIds.filter(id => shown.includes(id));
         assert.deepEqual(ids, [], `The details show no raw item ids (${ids.length} shown)`);
         assert.doesNotMatch(shown, /[{}]|"materialSource"|"releaseSha256"/, 'The details show no saved JSON');
-        // The details are labelled values, Package, Version and Archive digest, once per recorded internal content.
+        // The details are labelled values, Package, Version and Archive digest (pending owner approval as contract
+        // amendment 3.2.3 row 17), once per recorded internal content, and no other label.
         const values = await identity.locator('dl').evaluateAll(lists => lists.map(list => Object.fromEntries(
           [...list.querySelectorAll('dt')].map(term => [term.textContent.trim(), term.nextElementSibling?.textContent.trim()]))));
         assert.deepEqual(values, [{ Package: catalogPackage.name, Version: catalogPackage.version, 'Archive digest': catalogSha256 }],

@@ -49,6 +49,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   const internalNotice = el('details', 'text-on-surface-variant'); internalNotice.id = 'policy-internal-content';
   const internalSummary = el('summary', '', 'Internal content · not verified');
   // The recorded Catalog package, version and archive digest as labelled values; the saved JSON stays in the policy file.
+  // The labels Package, Version and Archive digest are pending owner approval as contract amendment 3.2.3 row 17.
   const internalProvenance = el('div', 'space-y-2'); internalNotice.append(internalSummary, internalProvenance);
   const proposal = el('div', 'space-y-2'); proposal.id = 'policy-proposal'; proposal.setAttribute('role', 'status'); review.after(proposal);
   const status = el('p', 'wb-status-area text-on-surface-variant'); status.id = 'policy-status'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite'); controls.after(status);
