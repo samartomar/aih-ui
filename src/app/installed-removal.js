@@ -82,7 +82,11 @@ function memberOutcome(entry, run) {
   // to confirm: a complete run removed it. One with members still needs Core's evidence for them.
   if (run?.completion === 'complete' && entry.state === 'ready' && !entry.files.length && !members.length)
     return { name: entry.entry.name, state: 'absent', message: `${entry.entry.name}: removed` };
-  if (run?.completion === 'complete' && members.length) {
+  // Every member the review showed as going must be in Core's run (by its review operation, else its path); one the run
+  // does not name may still be on disk, so the removal is not confirmed.
+  const reviewed = entry.files.filter(file => !file.action?.startsWith('keep-'));
+  const accounted = reviewed.every(file => members.some(member => file.operationId && member.operationId ? member.operationId === file.operationId : member.path === file.path));
+  if (run?.completion === 'complete' && members.length && accounted) {
     if (members.every(member => member.outcome === 'restored' && member.check === 'present-matching'))
       return { name: entry.entry.name, state: 'restored', message: `${entry.entry.name}: ${RESTORED}` };
     if (members.every(member => member.check === 'absent' || (member.outcome === 'restored' && member.check === 'present-matching') || (keptPaths.has(member.path) && member.outcome === 'kept'))) {

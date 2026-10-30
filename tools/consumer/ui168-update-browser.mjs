@@ -25,6 +25,10 @@ export async function runUi168UpdateVerifyBrowser({ origin, output, playwrightMo
     assert.ok(selection, `Core lists ${itemId} installed`);
     const row = page.locator(`[data-installed-row="${selection.managementId}"]`);
     await row.locator('[data-installed-state="update-available"]').waitFor();
+    // Only the changed item offers an update.
+    const offered = await page.locator('[data-installed-row]').filter({ has: page.locator('[data-installed-state="update-available"]') })
+      .evaluateAll(rows => rows.map(entry => entry.dataset.installedRow));
+    assert.deepEqual(offered, [selection.managementId], 'only the changed item shows "Update available"');
     const applies = [];
     page.on('response', response => { if (/\/api\/authoring-apply(-status)?$/.test(response.url())) void response.json().then(value => { if (value.status !== 'running') applies.push(value); }).catch(() => {}); });
     if (operationState === 'loading') await page.route('**/api/authoring-update', async route => { await new Promise(done => setTimeout(done, 500)); await route.continue(); });

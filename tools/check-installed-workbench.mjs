@@ -1,7 +1,7 @@
 import { appendFile, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -191,7 +191,7 @@ for (const theme of THEMES) {
     if (!target) throw new Error(`Core lists no installed ${uiUpdate.itemId}`);
     const files = target.members.filter(member => member.kind === 'file').map(member => member.path);
     if (!files.length) throw new Error(`Core lists no files for ${uiUpdate.itemId}`);
-    const read = async () => Object.fromEntries(await Promise.all(files.map(async path => [path, await readFile(path, 'utf8')])));
+    const read = async () => Object.fromEntries(await Promise.all(files.map(async path => [path, (await readFile(path)).toString('base64')])));
     if (edited) await appendFile(files[0], '\nLocal edit must survive.\n');
     const before = await read();
     const output = join(consumerDir, `ui168-update-verify-${theme}-${edited}`);
@@ -203,15 +203,27 @@ for (const theme of THEMES) {
           playwrightModule: playwrightPath, theme, itemId: uiUpdate.itemId, operationState }));
         if (JSON.stringify(await read()) !== JSON.stringify(before)) throw new Error(`the ${operationState} update state changed ${uiUpdate.itemId}'s files`);
       }
-      await caseOutcome(`UI168 reviewed update (${theme}, edited=${edited})`, await runUi168UpdateVerifyBrowser({ origin, output, playwrightModule: playwrightPath, theme,
-        itemId: uiUpdate.itemId, ...(edited ? { edited: files[0] } : { operationState: 'loading' }) }));
+      const updated = await runUi168UpdateVerifyBrowser({ origin, output, playwrightModule: playwrightPath, theme,
+        itemId: uiUpdate.itemId, ...(edited ? { edited: files[0] } : { operationState: 'loading' }) });
+      await caseOutcome(`UI168 reviewed update (${theme}, edited=${edited})`, updated);
+      if (!edited) {
+        // Core now records the newer item and offers it no update.
+        const now = updated.after.selections.find(selection => selection.managementId === target.managementId);
+        if (!now || now.updateState === 'update-available' || now.item?.contentSha256 !== uiUpdate.newer.contentSha256 || now.item?.behaviourSha256 !== uiUpdate.newer.behaviourSha256)
+          throw new Error(`after the update Core records ${JSON.stringify({ updateState: now?.updateState, item: now?.item })}, not ${JSON.stringify(uiUpdate.newer)}`);
+      }
     });
     // At the paths Core reported: a refused update leaves every file as it was, the person's edit included; a reviewed
     // update writes the newer content there.
     const after = await read();
     if (edited) {
       if (JSON.stringify(after) !== JSON.stringify(before)) throw new Error(`a refused update changed ${uiUpdate.itemId}'s files`);
-    } else if (!files.some(path => after[path] !== before[path])) throw new Error(`no file of ${uiUpdate.itemId} changed: ${files.join(', ')}`);
+    } else {
+      // Each file is exactly one of the newer Catalog's content materials for the item, and together they are all of them.
+      const digests = Object.values(after).map(bytes => createHash('sha256').update(Buffer.from(bytes, 'base64')).digest('hex')).sort();
+      const expected = uiUpdate.newer.materials.map(material => material.sha256).sort();
+      if (JSON.stringify(digests) !== JSON.stringify(expected)) throw new Error(`${uiUpdate.itemId}'s files after the update ${JSON.stringify(digests)} are not the newer Catalog's ${JSON.stringify(expected)}`);
+    }
   }
 
   const basicsProject = join(consumerDir, `ui168-basics-${theme}-${randomUUID().slice(0, 8)}`);

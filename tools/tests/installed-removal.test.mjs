@@ -183,3 +183,24 @@ test('an empty prepared removal is not confirmed by an incomplete run', async ()
   const result = await confirmRemoval({ preview, request, mode: 'vibe' });
   assert.match(result.results[1].message, /^grilling: Couldn't confirm it's gone\./);
 });
+
+test("a reviewed member missing from Core's run leaves the removal unconfirmed, even when every member the run names is gone", async () => {
+  // The run reports SKILL.md and NOTICE.md absent but says nothing of the LICENSE the review listed.
+  const run = foldedRun('absent'); run.members = run.members.filter(member => member.operationId !== 'lifecycle/remove-2');
+  const request = async operation => operation === 'remove' ? folded : run;
+  const preview = await previewRemoval({ entries: [grill, grilling], request, mode: 'vibe' });
+  const result = await confirmRemoval({ preview, request, mode: 'vibe' });
+  assert.equal(result.outcome, 'failed');
+  assert.match(result.results[0].message, /^grill-me: Couldn't confirm it's gone\./);
+});
+
+test('a reviewed member without an operationId is matched in the run by its path', async () => {
+  const byPath = structuredClone(folded); for (const member of byPath.removals[0].members) member.operationId = null;
+  const run = foldedRun('absent'); for (const member of run.members) member.managementId = grill.managementId;
+  const request = async operation => operation === 'remove' ? byPath : run;
+  const preview = await previewRemoval({ entries: [grill, grilling], request, mode: 'vibe' });
+  assert.equal((await confirmRemoval({ preview, request, mode: 'vibe' })).message, 'grill-me: removed grilling: removed');
+  run.members.pop();
+  const missing = await confirmRemoval({ preview: await previewRemoval({ entries: [grill, grilling], request, mode: 'vibe' }), request, mode: 'vibe' });
+  assert.match(missing.results[0].message, /^grill-me: Couldn't confirm it's gone\./);
+});

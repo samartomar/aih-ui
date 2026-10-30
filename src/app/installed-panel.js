@@ -72,7 +72,11 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
   const message = el('p', 'text-on-surface'); message.id = 'installed-message'; message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
   node.append(title, note, list, message);
 
-  let inventoryRead = 0, removing = false;
+  let inventoryRead = 0, removing = false, missedRead = false;
+  // Remove and Update previews the person has open: redrawing the list would drop them (and their Confirm), so a read
+  // that arrives meanwhile is deferred and made again once the last one closes and nothing is running.
+  const open = new Set();
+  const settle = area => { if (area) open.delete(area); if (!open.size && !removing && missedRead) { missedRead = false; void refresh({ keepMessage: true }); } };
   const policyDocument = () => { try { return JSON.parse(new TextDecoder().decode(client.bytes)); } catch { return undefined; } };
   // Catalog's display.name (1.7 publishes it as `name`), with a rule's or skill's namespace in brackets, as the cards name it.
   const label = itemId => {
@@ -99,7 +103,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
   // One Remove: preview first; each Confirm remove applies what was shown, and asks again for files not yet shown.
   function removeControl(entries, kept = [], text = 'Remove') {
     const area = el('div', 'space-y-2'); area.hidden = true;
-    const close = () => { area.hidden = true; area.replaceChildren(); };
+    const close = () => { area.hidden = true; area.replaceChildren(); settle(area); };
     function showRound(preview, mode, results) {
       const actions = el('div', 'flex flex-wrap gap-2');
       const cancel = button('Cancel', async () => {
@@ -125,7 +129,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       actions.append(confirm, cancel);
       area.replaceChildren(...stepRows(preview), ...[...kept, ...(preview.kept ?? [])].map(item => el('p', 'text-on-surface-variant', `${item.name}: ${item.reason ?? stillNeededWords(item.neededBy) ?? KEPT_FOR_ANOTHER}`)),
         el('p', 'text-on-surface-variant', preview.note), actions);
-      area.hidden = false;
+      area.hidden = false; open.add(area);
     }
     const remove = compact(button(text, async () => {
       if (removing) return;
@@ -138,7 +142,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
         showRound(preview, mode, []);
         message.textContent = preview.canConfirm ? 'Nothing has been removed yet. Check the files, then confirm.' : 'Remove cannot go ahead. Nothing was removed.';
       } catch (error) { message.textContent = `Remove did not start: ${error.message}`; }
-      finally { removing = false; remove.disabled = false; remove.removeAttribute('aria-busy'); }
+      finally { removing = false; remove.disabled = false; remove.removeAttribute('aria-busy'); settle(); }
     }), 'ml-auto');
     return { remove, area };
   }
@@ -177,22 +181,22 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
           try {
             const done = await confirmUpdate({ preview, request: requestHost, tool: client.tool });
             message.textContent = done.message; message.dataset.outcome = done.outcome;
-            if (done.outcome === 'updated') { area.hidden = true; await refresh({ keepMessage: true }); onRemoved(); }
+            if (done.outcome === 'updated') { area.hidden = true; open.delete(area); await refresh({ keepMessage: true }); onRemoved(); }
           } catch (error) { message.textContent = `Update did not finish: ${error.message}`; message.dataset.outcome = 'failed'; }
-          finally { removing = false; }
+          finally { removing = false; settle(); }
         }, true);
         confirm.disabled = !preview.canConfirm;
-        const cancel = button('Cancel', () => { area.hidden = true; area.replaceChildren(); message.textContent = ''; });
+        const cancel = button('Cancel', () => { area.hidden = true; area.replaceChildren(); message.textContent = ''; settle(area); });
         actions.append(confirm, cancel);
         area.replaceChildren(...preview.steps.flatMap(step => [
           el('p', 'font-medium', `${step.entry.name}: ${step.message}`),
           ...step.members.map(member => el('p', 'text-on-surface-variant text-[11px]', `${member.action} ${member.path}${member.reason ? ` — ${member.reason}` : ''}`))
         ]), actions);
-        area.hidden = false;
+        area.hidden = false; open.add(area);
         message.textContent = preview.message;
         if (!preview.canConfirm) message.dataset.outcome = 'not-prepared';
       } catch (error) { message.textContent = `Update did not start: ${error.message}`; message.dataset.outcome = 'failed'; }
-      finally { removing = false; update.disabled = false; update.removeAttribute('aria-busy'); }
+      finally { removing = false; update.disabled = false; update.removeAttribute('aria-busy'); settle(); }
     }));
     return { update, area };
   }
@@ -300,24 +304,27 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
   /** Reads the inventory again. It reads nothing from the draft and must not supersede Install; a folder change supersedes it. */
   async function refresh({ keepMessage = false } = {}) {
     node.hidden = !available();
-    if (node.hidden || removing) return;
-    const read = ++inventoryRead;
+    if (node.hidden) return;
+    if (removing || open.size) { missedRead = true; return; }
+    const read = ++inventoryRead, shownNote = note.textContent;
     if (!keepMessage) { message.textContent = ''; delete message.dataset.outcome; }
     if (!client.catalog.executionAvailable) { list.replaceChildren(); note.textContent = 'Choose a project folder above to see what is installed there.'; onInventory(undefined); return; }
     note.textContent = 'Checking what is installed…';
     try {
       // Core may still be writing here (an Apply this page lost contact with, or one started before a reload or elsewhere):
       // its record is read only once that Apply has finished.
-      await client.waitWhileApplying?.(() => { if (read === inventoryRead) { list.replaceChildren(); note.textContent = APPLY_RUNNING_NOTE; } });
+      await client.waitWhileApplying?.(() => { if (read === inventoryRead && !open.size && !removing) { list.replaceChildren(); note.textContent = APPLY_RUNNING_NOTE; } });
       if (read !== inventoryRead) return;
       note.textContent = 'Checking what is installed…';
       const inventory = await client.requestCurrent('managed');
       if (read !== inventoryRead || inventory?.status === 'superseded') return;
+      // A Remove or Update started while this read was out: its preview owns the rows until it closes, then the list is read again.
+      if (removing || open.size) { missedRead = true; note.textContent = shownNote; return; }
       const view = groupInstalled({ inventory, policy: policyDocument(), intent: client.intent, label, toolName: id => client.toolLabels?.[id] ?? id });
       show(view); onInventory(view);
     } catch (error) { if (read === inventoryRead) { list.replaceChildren(); note.textContent = `Cannot show what is installed: ${error.message}`; onInventory(undefined); } }
   }
   // A different project folder: the list and any removal still being previewed belong to the old one.
-  function clear() { inventoryRead++; list.replaceChildren(); message.textContent = ''; delete message.dataset.outcome; note.textContent = 'Checking what is installed…'; }
+  function clear() { inventoryRead++; open.clear(); missedRead = false; list.replaceChildren(); message.textContent = ''; delete message.dataset.outcome; note.textContent = 'Checking what is installed…'; }
   return { node, heading: title, refresh, clear, get busy() { return removing; } };
 }
