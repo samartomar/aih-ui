@@ -10,6 +10,9 @@ const SHA256 = /^[0-9a-f]{64}$/, COMMIT = /^[0-9a-f]{7,40}$/;
 const REQUIRED = ['core', 'catalog', 'scan'];
 // The most update-source Catalogs one candidate can name (the Workbench host's own limit).
 const MAX_UPDATE_SOURCE_CATALOGS = 8;
+// The most prepared selections the Workbench host reads from one framework-source file.
+const MAX_PREPARED_FRAMEWORKS = 16;
+const FRAMEWORK_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 // The order the candidate is printed and checked in.
 const IDENTITY_ORDER = ['core', 'scan', 'catalog'];
 const refusal = (code, message) => Object.assign(new Error(message), { code });
@@ -33,7 +36,7 @@ export function readManifest(path) {
   catch (error) { throw invalid(error.code === 'ENOENT' ? `The manifest ${file} does not exist.` : `The manifest ${file} could not be read as JSON: ${error.message}`); }
   if (!plain(manifest)) throw invalid('The manifest must be a JSON object.');
   if (manifest.schema !== MANIFEST_SCHEMA) throw invalid(`The manifest schema must be ${MANIFEST_SCHEMA} (found ${JSON.stringify(manifest.schema)}).`);
-  const unknown = Object.keys(manifest).filter(key => !['schema', 'candidate', 'packages', 'ui', 'hostInputs', 'previousCatalog', 'updateSourceCatalogs'].includes(key));
+  const unknown = Object.keys(manifest).filter(key => !['schema', 'candidate', 'packages', 'ui', 'hostInputs', 'previousCatalog', 'updateSourceCatalogs', 'preparedFrameworks'].includes(key));
   if (unknown.length) throw invalid(`The manifest has unknown ${unknown.length === 1 ? 'key' : 'keys'}: ${unknown.join(', ')}.`);
   if (manifest.candidate !== undefined && typeof manifest.candidate !== 'string') throw invalid('candidate must be a text label.');
   if (!plain(manifest.packages)) throw invalid('The manifest must name packages core, catalog and scan.');
@@ -62,7 +65,13 @@ export function readManifest(path) {
     if (list.length < 1 || list.length > MAX_UPDATE_SOURCE_CATALOGS) throw invalid(`updateSourceCatalogs must list 1 to ${MAX_UPDATE_SOURCE_CATALOGS} entries (found ${list.length}).`);
     packages.updateSourceCatalogs = list.map((entry, index) => readEntry(`updateSourceCatalogs[${index}]`, entry, directory));
   }
-  return { manifest, packages, hostInputs };
+  // Framework ids of the pinned Catalog's own prepared content (tools/candidate/framework-sources.mjs); the launcher's one framework-source input.
+  const list = manifest.preparedFrameworks;
+  if (list !== undefined && (!Array.isArray(list) || list.length < 1 || list.length > MAX_PREPARED_FRAMEWORKS
+    || list.some(id => typeof id !== 'string' || !FRAMEWORK_ID.test(id)) || new Set(list).size !== list.length)) {
+    throw invalid(`preparedFrameworks must list 1 to ${MAX_PREPARED_FRAMEWORKS} distinct framework ids (lowercase letters, digits and hyphens), such as ["extensions", "ecc", "superpowers"].`);
+  }
+  return { manifest, packages, hostInputs, ...(list ? { preparedFrameworks: [...list] } : {}) };
 }
 
 const digestOf = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -79,13 +88,14 @@ export async function verifyManifest({ packages, hostInputs = {} }) {
   }
 }
 
-export function candidateIdentity({ manifest, packages, hostInputs = {} }) {
+export function candidateIdentity({ manifest, packages, hostInputs = {}, preparedFrameworks }) {
   return { candidate: manifest.candidate ?? null,
     ...(Object.keys(hostInputs).length ? { hostInputs } : {}),
     ...(packages.ui ? { ui: { ...packages.ui, tarball: basename(packages.ui.tarball) } } : {}),
     packages: IDENTITY_ORDER.map(name => ({ name: `@aihq/${name}`, sha256: packages[name].sha256, commit: packages[name].commit, tarball: basename(packages[name].tarball) })),
     // Only when configured, so the printed identity says exactly which packs the update source uses, by position.
-    ...(packages.updateSourceCatalogs ? { updateSource: packages.updateSourceCatalogs.map((entry, index) => ({ position: index + 1, sha256: entry.sha256, commit: entry.commit, tarball: basename(entry.tarball) })) } : {}) };
+    ...(packages.updateSourceCatalogs ? { updateSource: packages.updateSourceCatalogs.map((entry, index) => ({ position: index + 1, sha256: entry.sha256, commit: entry.commit, tarball: basename(entry.tarball) })) } : {}),
+    ...(preparedFrameworks ? { preparedFrameworks } : {}) };
 }
 
 // The manifest as the candidate keeps it: the same document with every tarball path made absolute.

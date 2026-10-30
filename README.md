@@ -292,6 +292,24 @@ Personal page grants remain separate. Discovery/checking does
 not change those pins; the ordinary source-change review proposes an explicit
 update. A historical inspection package without a baseline keeps that absence.
 
+`preparedFrameworks` is optional: a list of 1 to 16 distinct framework ids from
+the pinned Catalog's own prepared content. Without it the rail reads **No
+frameworks available** and there are no starting sets. To walk the frameworks
+the journey uses:
+
+```json
+"preparedFrameworks": ["extensions", "ecc", "superpowers"]
+```
+
+Start writes `run/framework-sources.json`, one prepared selection per id
+(`root` is the Catalog installed in the candidate's consumer; `archivePath` and
+`archiveSha256` are the `packages.catalog` tarball), and gives the Workbench
+that file as `AIH_FRAMEWORK_SOURCES` (see [Framework sources](#framework-sources)).
+That is the only framework-source input: the launcher still drops every `AIH_*`
+setting from your shell, so an `AIH_FRAMEWORK_SOURCES` you set yourself is ignored.
+The printed identity lists the ids. An id the Catalog does not prepare shows as
+a failed internal source in the rail; the others stay browsable.
+
 Start refuses a tarball whose digest differs from the manifest before it writes
 anything.
 
