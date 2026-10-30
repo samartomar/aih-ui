@@ -178,7 +178,7 @@ The machine-readiness host tests run Core only against a disposable fixture home
 
 Pack each local package with `npm pack`, install the tarballs into a throwaway consumer project, and run the scenario there. Do not use `npm link`: it hides packaging errors such as a wrong `exports` map or a missing file.
 
-The application declares `@aihq/core` 1.0.0-dev.51, `@aihq/catalog` 0.1.0 and `@aihq/scan` 0.5.0 as optional peer dependencies. The `aih-ui/authoring` entry and the authoring host (review bindings, the headless operations and the mixed authoring service) import `readContentCoverage` from `@aihq/scan/read`, so they require a Scan 0.5.0 archive that exports it; with an archive that does not, these modules fail to load. The owning operations the Workbench calls in place of its own copies set the minimum archives: a Core 1.0.0-dev.51 archive whose `@aihq/core/contracts` exports `recipeOperationKinds`, whose policy Prepare renders execution policy 1.6.0 recipe-less selections from the Catalog release content documents the policy names in `catalogReleases` and reports `operationSelections`, whose file-state results are 1.1.0 with `targets[].selectionIds`, whose `@aihq/core/harness` `targets` carry `executables` and whose claim-set validation (`validateClaimSet`, `projectClaims`) refuses machine-local paths and whose `prepareUpdate` reads a managed update preparation 1.1.0 request, which names its execution policy 1.6.0 and Catalog releases so each recipe-less replacement is rendered, bound and Scan-checked as at install; and a Catalog 0.1.0 archive whose `@aihq/catalog/reader` exports `compareReleases` and whose `resolveSelections` refusals carry `reference` and `declaredBy` on unavailable and conflict diagnostics. The browse flow additionally needs Harness `selectTool`, `checkCompatibility`, `toolBindings` and runtime `inspectToolHost`, Core contracts `previewOrganizationObligations`, Catalog `readReleaseIndex`, `readInstalledPreparedContent`, `resolveSelections` with sets and `itemEvidenceDescriptor`, and Scan `summariseItem`. Earlier archives of the same versions that lack an owning operation cannot establish that behavior; the page reports its missing source or capability rather than inventing a result. They are peers because the consumer installs the reviewed archives beside the application, and optional because those versions exist only as local archives, so npm must not fetch them for this repository's own install. An installation that supplies another version of any of them is reported by npm as an unmet peer. The package entries are application-tier readers and writers of the Workbench's stored formats, not an SDK: `aih-ui/authoring`, `aih-ui/intake`, `aih-ui/journey`, `aih-ui/maintenance`, `aih-ui/improvements`, `aih-ui/trials`, `aih-ui/workspace`, `aih-ui/batch`, `aih-ui/organization-author`, `aih-ui/scan-evidence` and the twelve record schemas. Host adapters (review, execution, readiness, workspace and batch hosts), the readiness and claims projections and shared helpers are application-internal and are not entries. The portable entries (`aih-ui/journey`, `aih-ui/workspace`, `aih-ui/batch`) import none of the three; `aih-ui/batch` therefore takes the policy reader as `parsePolicy` and the recipe operation kinds as `operationKinds` (Core's `parsePolicy` and `recipeOperationKinds`, supplied by the caller), reads the exact saved policy bytes it binds through the first and calls an action verifiable only when every operation is a kind Core lists as `observable` for its recipe format; `tools/tests/pure-imports.test.mjs` keeps their whole import graph free of packages, Node built-ins, host modules and browser globals.
+The application declares `@aihq/core` 1.0.0-dev.54, `@aihq/catalog` 0.1.0 and `@aihq/scan` 0.5.0 as optional peer dependencies. The `aih-ui/authoring` entry and the authoring host (review bindings, the headless operations and the mixed authoring service) import `readContentCoverage` from `@aihq/scan/read`, so they require a Scan 0.5.0 archive that exports it; with an archive that does not, these modules fail to load. The owning operations the Workbench calls in place of its own copies set the minimum archives: a Core 1.0.0-dev.54 archive whose `@aihq/core/contracts` exports `recipeOperationKinds`, whose policy Prepare renders execution policy 1.6.0 recipe-less selections from the Catalog release content documents the policy names in `catalogReleases` and reports `operationSelections`, whose file-state results are 1.1.0 with `targets[].selectionIds`, whose `@aihq/core/harness` `targets` carry `executables` and whose claim-set validation (`validateClaimSet`, `projectClaims`) refuses machine-local paths and whose `prepareUpdate` reads a managed update preparation 1.1.0 request, which names its execution policy 1.6.0 and Catalog releases so each recipe-less replacement is rendered, bound and Scan-checked as at install; and a Catalog 0.1.0 archive whose `@aihq/catalog/reader` exports `compareReleases` and whose `resolveSelections` refusals carry `reference` and `declaredBy` on unavailable and conflict diagnostics. The browse flow additionally needs Harness `selectTool`, `checkCompatibility`, `toolBindings` and runtime `inspectToolHost`, Core contracts `previewOrganizationObligations`, Catalog `readReleaseIndex`, `readInstalledPreparedContent`, `resolveSelections` with sets and `itemEvidenceDescriptor`, and Scan `summariseItem`. Earlier archives of the same versions that lack an owning operation cannot establish that behavior; the page reports its missing source or capability rather than inventing a result. They are peers because the consumer installs the reviewed archives beside the application, and optional because those versions exist only as local archives, so npm must not fetch them for this repository's own install. An installation that supplies another version of any of them is reported by npm as an unmet peer. The package entries are application-tier readers and writers of the Workbench's stored formats, not an SDK: `aih-ui/authoring`, `aih-ui/intake`, `aih-ui/journey`, `aih-ui/maintenance`, `aih-ui/improvements`, `aih-ui/trials`, `aih-ui/workspace`, `aih-ui/batch`, `aih-ui/organization-author`, `aih-ui/scan-evidence` and the twelve record schemas. Host adapters (review, execution, readiness, workspace and batch hosts), the readiness and claims projections and shared helpers are application-internal and are not entries. The portable entries (`aih-ui/journey`, `aih-ui/workspace`, `aih-ui/batch`) import none of the three; `aih-ui/batch` therefore takes the policy reader as `parsePolicy` and the recipe operation kinds as `operationKinds` (Core's `parsePolicy` and `recipeOperationKinds`, supplied by the caller), reads the exact saved policy bytes it binds through the first and calls an action verifiable only when every operation is a kind Core lists as `observable` for its recipe format; `tools/tests/pure-imports.test.mjs` keeps their whole import graph free of packages, Node built-ins, host modules and browser globals.
 
 For the saved-intent local proof, set `CORE_TGZ`, `CATALOG_TGZ` and `SCAN_TGZ`
 to reviewed archives, then run `node tools/saved-intent-proof.mjs <output-directory> --serve`
@@ -236,17 +236,17 @@ example, with the three tarballs beside the manifest:
 ```json
 {
   "schema": "urn:aih-ui:candidate-manifest:1.0.0",
-  "candidate": "Core dev.51, Catalog 0.1.0 main, Scan 0.5.0",
+  "candidate": "Core dev.54, Catalog 0.1.0 main, Scan 0.5.0",
   "packages": {
     "core": {
-      "tarball": "aihq-core-1.0.0-dev.51-main-eddbd67-sha256-833dc831b7d0cb66663602526e5cc3959053ab3990385c18b8b8ef9b29ac1532.tgz",
-      "sha256": "833dc831b7d0cb66663602526e5cc3959053ab3990385c18b8b8ef9b29ac1532",
-      "commit": "eddbd67"
+      "tarball": "aihq-core-1.0.0-dev.54-main-1f9e220-sha256-c3f1d1baab02ab244725dad97777bd6109cf72440d174b2d36d5ab8c0031dd98.tgz",
+      "sha256": "c3f1d1baab02ab244725dad97777bd6109cf72440d174b2d36d5ab8c0031dd98",
+      "commit": "1f9e220"
     },
     "catalog": {
-      "tarball": "aihq-catalog-0.1.0-main-2ba71251-sha256-c82c32b9ebc1455a22036893627bd3f86af419b80b75129856b05e2779c72149.tgz",
-      "sha256": "c82c32b9ebc1455a22036893627bd3f86af419b80b75129856b05e2779c72149",
-      "commit": "2ba712512f2237e1244b96ba73abee7ec866ad30"
+      "tarball": "aihq-catalog-0.1.0-main-3b273faa-sha256-d17c7570e12dd79ac2c511a9f714b3ca0f89816364fc51d4d98ab13175b86b52.tgz",
+      "sha256": "d17c7570e12dd79ac2c511a9f714b3ca0f89816364fc51d4d98ab13175b86b52",
+      "commit": "3b273faa68de301117e6f5631395d74741d7822f"
     },
     "scan": {
       "tarball": "aihq-scan-0.5.0-main-9bbed5ae-sha256-a15f445acf940b7556d59c5d8ff61fae531085cac1bf3e062287f2175591f707.tgz",
@@ -1320,7 +1320,7 @@ For the supplied candidate tarballs on Windows, run this in PowerShell from the
 repository root and open the HTTP URL it prints:
 
 ```powershell
-$env:CORE_TGZ = 'C:\path\to\aihq-core-1.0.0-dev.51.tgz'
+$env:CORE_TGZ = 'C:\path\to\aihq-core-1.0.0-dev.54.tgz'
 $env:SCAN_TGZ = 'C:\path\to\aihq-scan-0.5.0.tgz'
 $env:CATALOG_TGZ = 'C:\path\to\aihq-catalog-0.1.0.tgz'
 node tools/preview.mjs
@@ -1357,7 +1357,7 @@ fetches every page asset before it prints its URL.
 there with `--ignore-scripts`. Everything is reached through published export
 maps — no `npm link`, no `dist/` deep import, no sibling source, no fallback.
 
-**The declared versions, @aihq/core 1.0.0-dev.51, @aihq/catalog 0.1.0 and
+**The declared versions, @aihq/core 1.0.0-dev.54, @aihq/catalog 0.1.0 and
 @aihq/scan 0.5.0, come from reviewed local tarballs, not from npm.** Only those
 tarballs carry the APIs this Workbench calls.
 

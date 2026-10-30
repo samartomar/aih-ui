@@ -45,12 +45,12 @@ const reasons = origins => origins.map(origin => origin.reasonIncluded === 'in-s
 test('a set\'s members are owned by the set, and an input for an item outside it adds no choice', () => {
   assert.equal(typeof setChoices.setOwnedOrigins, 'function', 'the composition decides set ownership of configured roots');
   const ecc = release('ecc');
-  // Catalog keeps required-input MCP servers out of every starting set: ECC's platform-configs set has 14 members and
+  // Catalog keeps required-input MCP servers out of every starting set: ECC's platform-configs set has 5 members and
   // none of them take an input, and the 15 required-input ECC items belong to no published set.
   const request = requestFor(ecc, 'ecc.module.platform-configs');
   const set = ecc.release.sets.find(candidate => candidate.id === request.setId);
   const memberItems = set.members.map(member => ecc.release.items.find(item => item.id === member.item.itemId));
-  assert.equal(memberItems.length, 14, 'Catalog publishes 14 platform-configs members');
+  assert.equal(memberItems.length, 5, 'Catalog publishes 5 platform-configs members');
   assert.equal(memberItems.filter(item => Object.keys(item.inputs ?? {}).length).length, 0, 'no platform-configs member takes an input');
   const requiresInput = ecc.release.items.filter(item => Object.values(item.inputs ?? {}).some(input => input.required));
   assert.equal(requiresInput.length, 15, 'Catalog publishes 15 ECC items with required inputs');
