@@ -111,9 +111,11 @@ if (process.exitCode === 0) {
   process.exitCode = integrated.status ?? 1;
 }
 if (process.exitCode === 0) {
-  // Its own budget: real Core lifecycle cases use several serial filesystem rounds and process restarts on Windows.
+  // Its own budget: real Core lifecycle cases use several serial filesystem rounds and process restarts on Windows, and
+  // every case runs in both themes. One theme measured about 690s on Linux (four ECC set installs for the UI168 update
+  // among them), so the stage budget is 30 minutes.
   const installed = spawnSync(process.execPath, [join(repo, 'tools/check-installed-workbench.mjs'), output], {
-    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 720_000, env: isolated,
+    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 1_800_000, env: isolated,
   });
   writeFileSync(join(output, 'installed-panel-check.log'), `${installed.stdout ?? ''}${installed.stderr ?? ''}`);
   process.stdout.write(installed.stdout ?? ''); process.stderr.write(installed.stderr ?? '');
