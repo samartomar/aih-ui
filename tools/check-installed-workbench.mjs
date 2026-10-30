@@ -17,7 +17,7 @@ import { noteInventory, runUi168UpdateInstallBrowser, runUi168UpdateVerifyBrowse
 import { runUi168ProjectBasicsBrowser, runUi168BlockDriftBrowser } from './consumer/ui168-project-basics-browser.mjs';
 import { runUi168SetRemovalBrowser } from './consumer/ui168-set-removal-browser.mjs';
 import { runUi168InterruptStartBrowser, runUi168InterruptedVerifyBrowser } from './consumer/ui168-interrupted-browser.mjs';
-import { runInstalledListTruthBrowser, runSetRemovalTruthBrowser } from './consumer/installed-truth-browser.mjs';
+import { runInstalledListTruthBrowser, runNamespacedRuleTruthBrowser, runSetRemovalTruthBrowser } from './consumer/installed-truth-browser.mjs';
 
 // Runs after the ordinary integrated check has assembled the packed consumer and page. Only this
 // server gets a disposable execution target; the existing unconfigured-host journeys stay as they are.
@@ -204,14 +204,18 @@ for (const theme of THEMES) {
   const setProject = join(consumerDir, `ui168-set-${theme}-${randomUUID().slice(0, 8)}`);
   await withHost(setProject, { sources: mcpSources }, async origin =>
     await caseOutcome(`UI168 grouped set removal with kept members (${theme})`, await runUi168SetRemovalBrowser({ origin, output: join(consumerDir, `ui168-set-evidence-${theme}`), playwrightModule: playwrightPath, theme })));
-  // The installed list and "Remove this set" in a fresh session, read back from Core alone (real Superpowers and
-  // overlapping Extensions sets through the facts sources route).
+  // The installed list, "Remove this set" and a namespaced rule in a fresh session, read back from Core alone (real
+  // Superpowers, overlapping Extensions and ECC TypeScript rules sets through the facts sources route).
   const truthListProject = join(consumerDir, `installed-truth-list-${theme}-${randomUUID().slice(0, 8)}`);
   await withHost(truthListProject, { sources: factsSources }, async origin =>
     await caseOutcome(`installed list from Core (${theme})`, await runInstalledListTruthBrowser({ origin, output: join(consumerDir, `installed-truth-list-evidence-${theme}`), project: truthListProject, playwrightModule: playwrightPath, theme })));
   const truthSetProject = join(consumerDir, `installed-truth-set-${theme}-${randomUUID().slice(0, 8)}`);
   await withHost(truthSetProject, { sources: factsSources }, async origin =>
     await caseOutcome(`Remove this set with a shared member (${theme})`, await runSetRemovalTruthBrowser({ origin, output: join(consumerDir, `installed-truth-set-evidence-${theme}`), project: truthSetProject, playwrightModule: playwrightPath, theme })));
+  // A namespaced ECC rule (real TypeScript rules set) named "{display.name} ({namespace})" in the list and its removal.
+  const truthRuleProject = join(consumerDir, `installed-truth-rule-${theme}-${randomUUID().slice(0, 8)}`);
+  await withHost(truthRuleProject, { sources: factsSources }, async origin =>
+    await caseOutcome(`namespaced rule named with its namespace (${theme})`, await runNamespacedRuleTruthBrowser({ origin, output: join(consumerDir, `installed-truth-rule-evidence-${theme}`), project: truthRuleProject, playwrightModule: playwrightPath, theme })));
 
   for (const action of ['finish', 'remove']) {
     const interruptedProject = join(consumerDir, `ui168-interrupted-${theme}-${action}-${randomUUID().slice(0, 8)}`);

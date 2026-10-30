@@ -2,6 +2,7 @@
 // reviewed Update and Remove lifecycle operations. It reads the inventory itself; lifecycle results refresh it,
 // and it tells the Install panel whether Core lists the whole setup as installed.
 
+import { itemDisplayName } from '../catalog/item-name.js';
 import { groupInstalled, setRemovalEntries } from './installed-list.js';
 import { cancelRemoval, confirmRemoval, previewRemoval, removalMemberWords } from './installed-removal.js';
 import { confirmUpdate, previewUpdate } from './installed-update.js';
@@ -60,11 +61,10 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
 
   let inventoryRead = 0, removing = false;
   const policyDocument = () => { try { return JSON.parse(new TextDecoder().decode(client.bytes)); } catch { return undefined; } };
-  // Catalog's display.name (1.7 publishes it as `name`), with a rule's or skill's namespace in brackets.
+  // Catalog's display.name (1.7 publishes it as `name`), with a rule's or skill's namespace in brackets, as the cards name it.
   const label = itemId => {
     const item = client.catalog?.items.find(entry => entry.id === itemId); if (!item) return undefined;
-    const name = item.display?.name ?? item.name ?? item.label ?? item.id, namespace = item.namespace ?? item.payload?.namespace;
-    return namespace ? `${name} [${namespace}]` : name;
+    return itemDisplayName({ name: item.display?.name ?? item.name ?? item.label, payload: { namespace: item.namespace ?? item.payload?.namespace } }, item.id);
   };
   // The name Catalog publishes for the exact recorded set; the set id when this Catalog no longer offers it.
   const setName = set => (client.catalog?.frameworks ?? []).filter(framework => framework.id === set.framework).flatMap(framework => framework.sets ?? [])

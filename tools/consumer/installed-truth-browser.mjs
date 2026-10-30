@@ -80,7 +80,7 @@ async function freshInstalledList(browser, origin, theme, errors) {
 
 const catalogItem = (catalog, itemId) => catalog.items.find(item => item.id === itemId);
 // Catalog display.name (1.7 publishes it as `name`), with a rule's or skill's namespace in brackets.
-const displayName = item => { const name = item.display?.name ?? item.name; const namespace = item.namespace ?? item.payload?.namespace; return namespace ? `${name} [${namespace}]` : name; };
+const displayName = item => { const name = item.display?.name ?? item.name; const namespace = item.namespace ?? item.payload?.namespace; return namespace ? `${name} (${namespace})` : name; };
 const setName = (catalog, set) => catalog.frameworks.flatMap(framework => framework.id === set.framework ? framework.sets ?? [] : [])
   .find(candidate => candidate.id === set.setId && (candidate.setSha256 === undefined || candidate.setSha256 === set.setSha256))?.name;
 const setOrigins = selection => (selection.origins ?? []).filter(origin => origin.reasonIncluded === 'in-set' && origin.set).map(origin => origin.set);
@@ -239,6 +239,69 @@ async function runSetRemoval({ origin, output, project, playwrightModule, theme 
     assert.equal(await page.locator(`[data-installed-set^="misc/"]`).count(), 0, 'Misc is no longer listed');
     await page.screenshot({ path: join(output, `${label}-${theme}.png`), fullPage: true });
     await writeFile(join(output, `${label}-${theme}.json`), JSON.stringify({ status: 'passed', removed: expectedRemoved, kept: expectedKept, review, result, calls, errors }, null, 2));
+    assert.deepEqual(errors, []);
+    return { status: 'passed' };
+  } finally { await browser.close(); }
+}
+
+// Keeps a framework's pre-ticked sets, adds the sets named, and installs (as the large-install check does).
+async function installWithSets(page, family, setIds) {
+  await chooseCatalogFamily(page, family);
+  await page.locator('#starting-sets [data-set-id]').first().waitFor({ state: 'attached' });
+  for (const id of setIds) {
+    const choice = page.locator(`#starting-sets [data-set-id="${id}"]`);
+    // A set under "More sets" is reached by opening its disclosure, as a person would.
+    const details = choice.locator('xpath=ancestor::details[1]');
+    if (await details.count() && !await details.evaluate(node => node.open)) await details.locator('xpath=./summary').click();
+    if (await choice.getAttribute('aria-pressed') !== 'true') await choice.click();
+    await page.waitForFunction(id => document.querySelector(`[data-set-id="${id}"]`)?.getAttribute('aria-pressed') === 'true', id);
+  }
+  await page.locator('#starting-sets [data-add-sets]').click();
+  await page.waitForFunction(() => document.getElementById('framework-guidance').textContent.includes('Chosen sets added'), undefined, { timeout: 600_000 });
+  await openPolicyDrawer(page);
+  await page.locator('#install-button:not([disabled])').waitFor({ timeout: 600_000 });
+  await page.locator('#install-button').click();
+  await page.locator('#install-message[data-outcome]').waitFor({ timeout: 900_000 });
+  assert.equal(await page.locator('#install-message').getAttribute('data-outcome'), 'installed', await page.locator('#install-message').innerText());
+}
+
+// A namespaced ECC rule from the real TypeScript rules set: the installed list and the removal outcome name it
+// "{display.name} ({namespace})", the same form the browse cards use.
+export async function runNamespacedRuleTruthBrowser({ origin, output, project, playwrightModule, theme = 'dark' }) {
+  const { chromium } = await import(playwrightModule);
+  await mkdir(output, { recursive: true });
+  const browser = await chromium.launch({ headless: true });
+  const errors = [], itemId = 'ecc.rule.typescript.coding-style', expected = 'coding-style (typescript)';
+  try {
+    const installing = await newContext(browser);
+    await installWithSets(await openPage(installing, origin, theme, errors), 'ECC', ['ecc.rules.typescript']);
+    await installing.close();
+    const { page, answers } = await freshInstalledList(browser, origin, theme, errors);
+    const item = catalogItem(answers.catalog, itemId);
+    assert.ok(item, `Catalog publishes ${itemId}`);
+    assert.equal(displayName(item), expected, 'Catalog display.name with its own namespace in round brackets');
+    const selection = answers.inventory.selections.find(entry => entry.item.itemId === itemId && entry.scope === 'project');
+    assert.ok(selection, `Core lists ${itemId} installed`);
+    const panel = await page.locator('#installed-panel').innerText();
+    const names = await page.locator('[data-installed-row] > div > span.font-medium').allInnerTexts();
+    assert.equal(names.length, answers.inventory.selections.length, 'every installed row is named');
+    assert.deepEqual(names.filter(name => name === expected), [expected], `one row named "${expected}"\n${names.join('\n')}`);
+    assert.deepEqual(names.filter(name => /\[[^\]]*\]/.test(name)), [], `no name with square brackets\n${panel}`);
+    const row = page.locator(`[data-installed-row="${selection.managementId}"]`);
+    assert.equal(await row.locator('.font-medium').first().innerText(), expected, 'the row is named in the contract form');
+    await row.getByRole('button', { name: 'Remove', exact: true }).first().click();
+    await row.getByRole('button', { name: 'Confirm remove', exact: true }).waitFor({ timeout: 120_000 });
+    const review = await row.innerText();
+    assert.ok(lines(review).some(line => line.startsWith(`${expected}: `)), `the review step names "${expected}"\n${review}`);
+    await row.getByRole('button', { name: 'Confirm remove', exact: true }).click();
+    const message = page.locator('#installed-message[data-outcome]');
+    await message.waitFor({ timeout: 240_000 });
+    const result = await message.innerText();
+    assert.equal(await message.getAttribute('data-outcome'), 'removed', result);
+    assert.equal(count(result, escape(`${expected}: removed`)), 1, `"${expected}: removed" reported once\n${result}`);
+    assert.doesNotMatch(result, /\[typescript\]/, result);
+    await page.screenshot({ path: join(output, `namespaced-rule-${theme}.png`), fullPage: true });
+    await writeFile(join(output, `namespaced-rule-${theme}.json`), JSON.stringify({ status: 'passed', expected, review, result, errors }, null, 2));
     assert.deepEqual(errors, []);
     return { status: 'passed' };
   } finally { await browser.close(); }
