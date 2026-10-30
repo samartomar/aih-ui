@@ -15,6 +15,13 @@ class AcquisitionError extends Error {
   constructor(diagnostics) { super('Evidence acquisition refused.'); this.diagnostics = diagnostics; }
 }
 const acquisitionFailure = diagnostics => new AcquisitionError(diagnostics);
+// Scan's readers refuse a schema as `SCHEMA_UNSUPPORTED`, but its source checks accept only lower-case codes, so the
+// refusal is carried as this source's `unsupported-format` failure, its path and versions kept; any other code a check
+// cannot carry fails the same one source as unreadable. Other sources are unaffected.
+const checkCode = /^[a-z][a-z0-9-]{0,63}$/;
+const unreadableDiagnostics = diagnostics => diagnostics.map(diagnostic => diagnostic.code === 'SCHEMA_UNSUPPORTED'
+  ? { ...diagnostic, code: 'unsupported-format', detail: `${diagnostic.detail ?? `Unsupported format at ${diagnostic.path}`}; Scan record can't be read.` }
+  : checkCode.test(diagnostic.code) ? diagnostic : { code: 'unreadable-report', detail: `Scan record can't be read (${String(diagnostic.code).slice(0, 64)}).` });
 const boundFailure = () => acquisitionFailure([{ code: 'acquisition-limit', detail: 'Acquisition exceeds 32 retained documents or 128 MiB aggregate bytes; earlier readable evidence retained.' }]);
 
 async function boundedFile(path) {
@@ -52,7 +59,7 @@ export function createScanEvidenceHost({ sources = [], packageRoot, trust, detec
           attemptedBytes += bytes.length;
           const digest = evidenceDigest(bytes);
           const read = await cache.read(`summary/${format}/${digest}`, () => readSummary({ format, bytes }));
-          if (read.status !== 'read') throw acquisitionFailure(read.diagnostics?.length ? read.diagnostics : [{ code: 'unsupported-report', detail: `Evidence reader returned ${read.status}; report schema ${read.reportSchema ?? 'unknown'}.` }]);
+          if (read.status !== 'read') throw acquisitionFailure(read.diagnostics?.length ? unreadableDiagnostics(read.diagnostics) : [{ code: 'unsupported-report', detail: `Evidence reader returned ${read.status}; report schema ${read.reportSchema ?? 'unknown'}.` }]);
           if (expectedScanId !== undefined && expectedScanId !== read.summary.scanId) throw acquisitionFailure([{ code: 'expected-scan-id-mismatch', detail: `Expected ${expectedScanId}; checked bytes identify ${read.summary.scanId}. Earlier evidence retained.` }]);
           const key = `${id}/${read.summary.scanId}/${digest}`;
           const previousBytes = retained.get(key)?.bytes.length ?? 0;
