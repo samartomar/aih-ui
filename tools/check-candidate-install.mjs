@@ -7,7 +7,8 @@
 //   --checkout packs and runs another checkout of this repository (for example an older commit) instead of this one.
 //   packs.json: { "core": { "tarball", "commit" }, "catalog": { ... }, "scan": { ... } }, tarballs relative to the file.
 // The output directory must be new or empty and outside every Git workspace (the candidate's own rule). The npm packs, the
-// manifest, the data directory, screenshots and receipt.json are kept there. Every command runs as plain `node`, without
+// manifest, the data directory, screenshots and receipt.json are kept there. The checkout must be clean (no edit and no untracked
+// file; tools/clean-checkout.mjs) before and after packing, so the archive is its commit; the receipt records commit and treeClean. Every command runs as plain `node`, without
 // npm_execpath, as the owner would type it.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -16,6 +17,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFi
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { assertSupportedNode, findNpmCli } from './candidate/upgrade.mjs';
+import { cleanCheckout } from './clean-checkout.mjs';
 
 const args = process.argv.slice(2);
 const option = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
@@ -24,6 +26,8 @@ const repo = resolve(option('--checkout') ?? join(dirname(fileURLToPath(import.m
 const [packsPath, outputPath] = args.filter((value, index, all) => !['--port', '--checkout'].includes(value) && !['--port', '--checkout'].includes(all[index - 1]));
 if (!packsPath || !outputPath) throw new Error('usage: node tools/check-candidate-install.mjs <packs.json> <new-output-directory> [--port 4894] [--checkout <dir>]');
 assertSupportedNode(process.versions.node);
+// The archive is packed from the checkout's files and recorded as its commit, so the two must be the same bytes.
+const checkout = cleanCheckout(repo);
 const output = resolve(outputPath);
 if (existsSync(output) && readdirSync(output).length) throw new Error(`${output} must be new or empty.`);
 const packsDir = join(output, 'packs'), data = join(output, 'data'), shots = join(output, 'screenshots');
@@ -38,7 +42,7 @@ const run = (command, commandArgs, cwd = output) => {
   if (result.error || result.status !== 0) throw new Error(`${commandArgs.join(' ')} failed (${result.error?.message ?? result.status}):\n${result.stdout.slice(-3000)}\n${result.stderr.slice(-3000)}`);
   return result.stdout;
 };
-const receipt = { node: process.versions.node, port, checkout: repo, steps: [], findings: [] };
+const receipt = { node: process.versions.node, port, checkout: repo, commit: checkout.commit, treeClean: checkout.treeClean, steps: [], findings: [] };
 const step = (name, detail = {}) => { receipt.steps.push({ name, at: new Date().toISOString(), ...detail }); say(`ok: ${name}`); };
 
 // 1. The UI archive, packed from this checkout, with only what its "files" list ships.
@@ -49,12 +53,13 @@ const stray = packedFiles.filter(path => /(^|\/)tests\/|\.test\.mjs$|^\.ua\/|^\.
 // Recorded, not thrown, so the documented commands still run and report their own state; the check fails at the end.
 if (stray.length) receipt.findings.push(`the UI archive carries ${stray.length} test, scratch, note or repository-tooling files, such as ${stray.slice(0, 5).join(', ')}`);
 if (packedFiles.includes('src/styles/tailwind.css')) receipt.findings.push('the UI archive carries a local Tailwind build; start builds it in the installed UI');
+cleanCheckout(repo);
 step('pack', { tarball: packed.filename, entries: packed.entryCount, bytes: packed.size });
 
 // 2. The manifest the README describes, with the frameworks the journey uses.
 const packs = JSON.parse(readFileSync(resolve(packsPath), 'utf8'));
 const entry = name => { const source = resolve(dirname(resolve(packsPath)), packs[name].tarball), target = join(packsDir, basename(source)); copyFileSync(source, target); return { tarball: basename(target), sha256: sha(target), commit: packs[name].commit }; };
-const commit = spawnSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+const { commit } = checkout;
 const manifest = { schema: 'urn:aih-ui:candidate-manifest:1.0.0', candidate: `aih-ui ${commit.slice(0, 8)} installed-candidate check`,
   ui: { tarball: packed.filename, sha256: sha(join(packsDir, packed.filename)), commit },
   packages: { core: entry('core'), catalog: entry('catalog'), scan: entry('scan') },

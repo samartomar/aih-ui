@@ -354,7 +354,10 @@ Playwright. There it requires a styled page, the three frameworks in the rail,
 its own centre), and **Your setup** opening and closing by pointer. It stops the
 candidate and keeps the packs, logs, screenshots and `receipt.json` in the output
 directory. `--checkout <dir>` packs and runs another checkout of this repository,
-such as an older commit, with this check.
+such as an older commit, with this check. The checkout must be clean:
+`git status --porcelain --untracked-files=all` must list nothing, so the archive
+is exactly the commit the manifest and the receipt record (`commit`,
+`treeClean: true`). A dirty checkout is refused before anything is created.
 
 Each exact manifest has a release directory under `releases/` and a
 `checkpoint.json` recording phases, elapsed times, installed tree digests,
