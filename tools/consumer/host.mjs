@@ -6,10 +6,20 @@ import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { apply, prepare, prepareManagedRemoval, prepareUpdate, listManagedSelections } from '@aihq/core';
 import { parsePolicy } from '@aihq/core/contracts';
+import updatePolicySchema from '@aihq/core/schemas/execution-policy/1.4.0.json' with { type: 'json' };
 import { composeAuthoring, freshAuthoring, inlineRecipelessSelections, unsuppliedInputs } from './headless.mjs';
 import { pinSelectedRecipes } from './selected-recipe.mjs';
 import { pageSource, readOrganization } from './authority-source.mjs';
 import { previewPolicyAuthority } from './organization.mjs';
+
+// Core's prepareUpdate takes each replacement as an execution policy 1.4.0 selection, so the fields later policies add
+// (the binding digest, Scan records and item materials) stay out of it, read from Core's own published schema. A
+// replacement can require only other replacements; Core keeps the dependency edges recorded at install.
+const updateSelectionFields = new Set(Object.keys(updatePolicySchema.properties.selections.items.properties));
+export function updateReplacement(selection, replacementIds) {
+  const replacement = Object.fromEntries(Object.entries(selection).filter(([field]) => updateSelectionFields.has(field)));
+  return { ...replacement, requires: (selection.requires ?? []).filter(id => replacementIds.has(id)) };
+}
 
 const lostResult = () => ({
   status: 'lost',
@@ -132,6 +142,8 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
         replacements.push({ managementId: update.managementId, replacement: { ...selection, managementId: update.managementId,
           ...(Array.isArray(update.origins) ? { origins: structuredClone(update.origins) } : {}) } });
       }
+      const replacementIds = new Set(replacements.map(update => update.replacement.id));
+      for (const update of replacements) update.replacement = updateReplacement(update.replacement, replacementIds);
       const result = await prepareUpdate({ target: { project: projectRoot }, scope, updates: replacements }, controlsFor(controls));
       return { ...result, ...(result.preparation ? { preparation: retain(result.preparation) } : {}) };
     },

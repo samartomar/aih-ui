@@ -169,7 +169,8 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
           ...step.members.map(member => el('p', 'text-on-surface-variant text-[11px]', `${member.action} ${member.path}${member.reason ? ` — ${member.reason}` : ''}`))
         ]), actions);
         area.hidden = false;
-        message.textContent = preview.canConfirm ? 'Nothing has been updated yet. Check the replacement, then confirm.' : 'Update cannot go ahead.';
+        message.textContent = preview.message;
+        if (!preview.canConfirm) message.dataset.outcome = 'not-prepared';
       } catch (error) { message.textContent = `Update did not start: ${error.message}`; message.dataset.outcome = 'failed'; }
       finally { removing = false; update.disabled = false; update.removeAttribute('aria-busy'); }
     }));

@@ -103,7 +103,7 @@ export async function runUi168UpdateVerifyBrowser({ origin, output, project, pla
     await installed.getByRole('button', { name: 'Update', exact: true }).click();
     if (operationState === 'loading') await page.locator('#installed-message').filter({ hasText: 'Checking the replacement…' }).waitFor();
     if (operationState === 'unavailable') {
-      await page.locator('#installed-message').filter({ hasText: 'Update cannot go ahead.' }).waitFor();
+      await page.locator('#installed-message').filter({ hasText: 'Update cannot go ahead: Update unavailable fixture. Nothing was updated.' }).waitFor();
       await writeFile(join(output, `update-unavailable-${theme}.json`), JSON.stringify({ status: 'passed', state: operationState }, null, 2));
       return { status: 'passed' };
     }

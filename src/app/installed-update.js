@@ -9,12 +9,23 @@ export async function previewUpdate({ entries, request, tool }) {
   const preparation = readyPreparation(result);
   const steps = entries.map((entry, index) => {
     const update = result.updates?.[index];
-    if (!update) return { entry, state: 'blocked', members: [], message: 'Core returned no update for this item.' };
-    return { entry, state: update.disposition === 'prepared' ? 'ready' : 'blocked', members: update.members ?? [],
+    if (!update) return { entry, state: 'blocked', members: [], message: `Cannot update: ${diagnosticWords(result) || `Core returned no update for this item (${result.disposition ?? 'no answer'})`}.` };
+    // A prepared entry is reviewable only inside a ready preparation; otherwise Core's reasons for that preparation are its own.
+    const reviewable = update.disposition === 'prepared' && Boolean(preparation);
+    const reason = diagnosticWords(update, result, update.disposition === 'prepared' ? result.preparation : undefined)
+      || (update.disposition === 'prepared' ? `Core prepared no review (${result.preparation?.status ?? result.disposition ?? 'no preparation'})` : update.disposition);
+    return { entry, state: reviewable ? 'ready' : 'blocked', members: update.members ?? [],
       from: update.from, to: update.to,
-      message: update.disposition === 'prepared' ? `Replacement reviewed: ${update.to?.name ?? entry.name}.` : `Cannot update: ${diagnosticWords(update, result) || update.disposition}.` };
+      message: reviewable ? `Replacement reviewed: ${update.to?.name ?? entry.name}.` : `Cannot update: ${reason}.` };
   });
-  return { steps, canConfirm: Boolean(preparation) && !steps.some(step => step.state === 'blocked'),
+  const canConfirm = Boolean(preparation) && !steps.some(step => step.state === 'blocked');
+  // Never a bare refusal: each blocked item with Core's own words, else the request's.
+  const sentence = text => text.trim().replace(/\.+$/, '');
+  const blocked = steps.filter(step => step.state === 'blocked').map(step => `${step.entry.name}: ${sentence(step.message.replace(/^Cannot update: /, ''))}`);
+  const why = !result.updates && diagnosticWords(result) ? diagnosticWords(result)
+    : blocked.length ? blocked.join('. ') : diagnosticWords(result, result.preparation) || `Core answered ${result.disposition ?? 'nothing'}`;
+  const message = canConfirm ? 'Nothing has been updated yet. Check the replacement, then confirm.' : `Update cannot go ahead: ${sentence(why)}. Nothing was updated.`;
+  return { steps, canConfirm, message,
     entries, scope, allowPartial: preparation?.status === 'partial', ...(preparation ? { sessionId: preparation.sessionId, review: preparation.review } : {}) };
 }
 
