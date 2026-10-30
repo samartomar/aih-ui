@@ -117,8 +117,8 @@ test('the contractCheck service operation runs the installed Core checkContracts
 const workbenchManifest = () => JSON.parse(readFileSync(join(repo, 'package.json'), 'utf8'));
 const workbenchSupport = () => JSON.parse(readFileSync(join(repo, 'package-support-1.1.json'), 'utf8'));
 
-test('the Workbench pins Core dev.51 and declares the execution policy 1.6 it produces', () => {
-  assert.equal(workbenchManifest().peerDependencies['@aihq/core'], '1.0.0-dev.51');
+test('the Workbench pins Core dev.53 and declares the execution policy 1.6 it produces', () => {
+  assert.equal(workbenchManifest().peerDependencies['@aihq/core'], '1.0.0-dev.53');
   assert.ok(workbenchSupport().contracts.some(record => record.id === 'urn:aihq:core:execution-policy:1.6.0' && record.role === 'produces'));
 });
 
