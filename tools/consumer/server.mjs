@@ -30,7 +30,7 @@ import { createCatalogUpdateSource } from './update-source.mjs';
 import { inspectorSummary } from './scan-evidence.mjs';
 import { createScanEvidenceHost } from './scan-evidence-host.mjs';
 
-export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, updateSourceCatalogRoots, evidenceSources, evidenceDetectorIds, frameworkSources, frameworkFixtureInventories, installedFamilyInventories: suppliedFamilyInventories, port = 0, createExecutionHost = createHost, coreState = { resolveStateLocation: core.resolveStateLocation, stateLocation: coreContracts.stateLocation } } = {}) {
+export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, updateSourceCatalogRoots, evidenceSources, evidenceDetectorIds, frameworkSources, frameworkFixtureInventories, installedFamilyInventories: suppliedFamilyInventories, installRecordRoot, port = 0, createExecutionHost = createHost, coreState = { resolveStateLocation: core.resolveStateLocation, stateLocation: coreContracts.stateLocation } } = {}) {
   // `createExecutionHost` is createHost; tests pass one that holds Install work while they act.
   // The fixture is a test source; a host names one update source, so both together would be ambiguous.
   if (updateSourceCatalogRoots !== undefined && maintenanceSource) throw new Error('Configure one update source: Catalog package roots or the test fixture, not both.');
@@ -42,7 +42,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   const previous = previousCatalogRoot ? await readInstalledRelease({ root: previousCatalogRoot, sourceInput: 'catalog' }) : null;
   if (previous && !previous.valid) throw new Error(JSON.stringify(previous.diagnostics));
   const timingStore = new Map();
-  let legacyHost = projectRoot ? createExecutionHost({ projectRoot, materialRoots, organizationSource, controls, timingStore }) : null;
+  let legacyHost = projectRoot ? createExecutionHost({ installRecordRoot, projectRoot, materialRoots, organizationSource, controls, timingStore }) : null;
   const intentService = createIntentService();
   const catalogRoot = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
   const descriptors = new Map();
@@ -97,13 +97,13 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
     Object.assign(authoringRoots, staged);
   });
   if (projectRoot) await stageAuthoringRoots();
-  const hostFor = project => project ? createExecutionHost({ projectRoot: project, materialRoots: authoringRoots, organizationSource,
+  const hostFor = project => project ? createExecutionHost({ installRecordRoot, projectRoot: project, materialRoots: authoringRoots, organizationSource,
     recipeMaterials: mixedService.inventories.flatMap(i => i.materials ?? []), controls, inventories: mixedService.currentInventories, timingStore }) : null;
   let host = hostFor(projectRoot);
   // Client tokens exist only in the live page. No cookie, saved intent or imported
   // snapshot restores a client's inventory, material grants or prepared handles.
   const clients = new Map(), clientStages = new Set();
-  const clientHost = client => folder.project ? createExecutionHost({ projectRoot: folder.project, materialRoots: client.roots, organizationSource, recipeMaterials: client.recipeMaterials, controls, inventories: client.mixed.currentInventories, timingStore }) : null;
+  const clientHost = client => folder.project ? createExecutionHost({ installRecordRoot, projectRoot: folder.project, materialRoots: client.roots, organizationSource, recipeMaterials: client.recipeMaterials, controls, inventories: client.mixed.currentInventories, timingStore }) : null;
   // Session ids prepared for an earlier project folder, so applying one is refused by name. Bounded; older ones read as lost.
   const retired = new Set();
   const retire = old => { for (const id of old?.heldSessions() ?? []) { retired.add(id); if (retired.size > 1024) retired.delete(retired.values().next().value); } };
@@ -132,7 +132,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   // personal-folder grants and their staged material roots are kept, since they are about content, not the project.
   const folder = createProjectFolder({ initial: projectRoot, options: { coreState }, beforeChange: stageAuthoringRoots, onChange: project => {
     retire(legacyHost); retire(host);
-    legacyHost = createExecutionHost({ projectRoot: project, materialRoots, organizationSource, controls, timingStore }); host = hostFor(project);
+    legacyHost = createExecutionHost({ installRecordRoot, projectRoot: project, materialRoots, organizationSource, controls, timingStore }); host = hostFor(project);
     for (const client of clients.values()) {
       for (const [input, root] of Object.entries(authoringRoots)) if (!Object.hasOwn(client.roots, input)) client.roots[input] = root;
       if (client.recipeMaterials) { retire(client.host); client.host = clientHost(client); }

@@ -2,12 +2,14 @@
 // consumer has been assembled (tools/check-workbench.mjs). check-installed-workbench.mjs runs the same three cases in
 // both themes.
 //
-// Usage: node tools/check-installed-truth.mjs <consumerDir> [list|set-removal|namespaced-rule|update-one ...] [--theme dark|light]
-//          [--update-pack <catalog.tgz>]
+// Usage: node tools/check-installed-truth.mjs <consumerDir> [list|set-removal|namespaced-rule|update-one|update-requirement ...]
+//          [--theme dark|light] [--update-pack <catalog.tgz>] [--requirement-pack <catalog.tgz>]
 // Each case gets a fresh disposable project and a real child host process (tools/installed-host.mjs).
 // update-one needs --update-pack: a Catalog pack of the installed package and version in which exactly one installed
 // ECC TypeScript rule changed. It installs through the page, restarts the host on that pack, updates the one item and
 // requires that only its files changed, with every selection's origins and configuration kept.
+// update-requirement needs --requirement-pack: the same, except the changed rule now also requires an item that is not
+// installed. The update must stop before Core is asked, name that item, and change no file.
 import { copyFile, cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
@@ -17,7 +19,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pageAssets } from './server/assets.mjs';
 import { buildCss } from './build-css.mjs';
-import { runInstalledListTruthBrowser, runNamespacedRuleTruthBrowser, runSetRemovalTruthBrowser, runUpdateOneBrowser, runUpdateOneInstallBrowser } from './consumer/installed-truth-browser.mjs';
+import { runInstalledListTruthBrowser, runNamespacedRuleTruthBrowser, runSetRemovalTruthBrowser, runUpdateBlockedBrowser, runUpdateOneBrowser, runUpdateOneInstallBrowser } from './consumer/installed-truth-browser.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // The page's Tailwind build is ignored by Git, so a fresh checkout has none; without it the catalog column is no
@@ -27,10 +29,11 @@ const args = process.argv.slice(2);
 const consumerDir = resolve(args[0]);
 const theme = args.includes('--theme') ? args[args.indexOf('--theme') + 1] : 'dark';
 const option = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
-const updatePack = option('--update-pack') && resolve(option('--update-pack'));
-const named = args.slice(1).filter((value, index, all) => !value.startsWith('--') && !['--theme', '--update-pack'].includes(all[index - 1]));
-const cases = { list: runInstalledListTruthBrowser, 'set-removal': runSetRemovalTruthBrowser, 'namespaced-rule': runNamespacedRuleTruthBrowser, 'update-one': runUpdateOne };
-const selected = named.length ? named : Object.keys(cases).filter(name => name !== 'update-one' || updatePack);
+const packs = { 'update-one': option('--update-pack'), 'update-requirement': option('--requirement-pack') };
+for (const name of Object.keys(packs)) packs[name] &&= resolve(packs[name]);
+const named = args.slice(1).filter((value, index, all) => !value.startsWith('--') && !['--theme', '--update-pack', '--requirement-pack'].includes(all[index - 1]));
+const cases = { list: runInstalledListTruthBrowser, 'set-removal': runSetRemovalTruthBrowser, 'namespaced-rule': runNamespacedRuleTruthBrowser, 'update-one': runUpdateOne, 'update-requirement': runUpdateRequirement };
+const selected = named.length ? named : Object.keys(cases).filter(name => !Object.hasOwn(packs, name) || packs[name]);
 for (const name of selected) if (!cases[name]) throw new Error(`Unknown case ${name}; choose from ${Object.keys(cases).join(', ')}.`);
 
 const summary = JSON.parse(await readFile(join(consumerDir, 'prototype/summary.json'), 'utf8'));
@@ -69,8 +72,9 @@ async function withHost(project, run, sourcesPath = sources, hostConsumerDir = c
 }
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
-// Every file of the project but the Workbench host's own (its page copy, port, configuration and setup store).
-const HOST_FILES = new Set(['page', 'host.port', 'host-config.json', 'settings.json']);
+// Every file of the project but the Workbench host's own (its page copy, port, configuration, setup store and, beside
+// it, its record of what it installed); this check keeps the setup store in the project folder.
+const HOST_FILES = new Set(['page', 'host.port', 'host-config.json', 'settings.json', 'installed']);
 async function treeHashes(root, prefix = '') {
   const hashes = {};
   for (const entry of await readdir(join(root, prefix), { withFileTypes: true })) {
@@ -85,39 +89,59 @@ async function treeHashes(root, prefix = '') {
 const kept = selection => JSON.stringify({ managementId: selection.managementId, scope: selection.scope, name: selection.name, kind: selection.kind, tool: selection.tool,
   framework: selection.framework, itemId: selection.item?.itemId, origins: selection.origins, approval: selection.approval, configuration: selection.configuration });
 
-async function runUpdateOne({ project, output, playwrightModule, theme }) {
-  if (!updatePack) return { status: 'incomplete', reason: 'update-one needs --update-pack <catalog.tgz>' };
-  // Catalog's public reader, as the consumer installed it.
+// The Workbench restarted on a newer Catalog: the same consumer with only its installed Catalog package replaced by
+// the pack, checked by Catalog's own reader to change exactly one item.
+async function stageNewerCatalog(name, pack, changes) {
   const catalogManifest = createRequire(join(consumerDir, 'package.json')).resolve('@aihq/catalog/package.json');
   const nodeEntry = JSON.parse(readFileSync(catalogManifest, 'utf8')).exports['./node'].import;
   const { readInstalledPreparedContent } = await import(pathToFileURL(join(dirname(catalogManifest), nodeEntry)).href);
-  // The Workbench restarted on the newer Catalog: the same consumer with only its installed Catalog package replaced.
-  const updatedConsumer = join(consumerDir, 'update-one-consumer');
+  const updatedConsumer = join(consumerDir, `${name}-consumer`);
   await rm(updatedConsumer, { recursive: true, force: true }); await mkdir(updatedConsumer, { recursive: true });
-  for (const name of ['package.json', 'package-lock.json', 'node_modules', 'consumer', 'service', 'workbench', 'schemas', 'page'])
-    if (existsSync(join(consumerDir, name))) await cp(join(consumerDir, name), join(updatedConsumer, name), { recursive: true, verbatimSymlinks: true });
+  for (const entry of ['package.json', 'package-lock.json', 'node_modules', 'consumer', 'service', 'workbench', 'schemas', 'page'])
+    if (existsSync(join(consumerDir, entry))) await cp(join(consumerDir, entry), join(updatedConsumer, entry), { recursive: true, verbatimSymlinks: true });
   const baseRoot = dirname(catalogManifest), newRoot = join(updatedConsumer, 'node_modules/@aihq/catalog');
   await rm(newRoot, { recursive: true, force: true }); await mkdir(newRoot, { recursive: true });
-  execFileSync('tar', ['-xzf', updatePack, '-C', newRoot, '--strip-components=1'], { windowsHide: true });
+  execFileSync('tar', ['-xzf', pack, '-C', newRoot, '--strip-components=1'], { windowsHide: true });
   const base = JSON.parse(readFileSync(sources, 'utf8'));
-  // Exactly one item changed between the two packs, read by Catalog's own reader.
   const frameworks = [...new Set(base.prepared.map(entry => entry.frameworkId))];
   const identities = async root => Object.fromEntries((await Promise.all(frameworks.map(async frameworkId => {
-    const read = await readInstalledPreparedContent({ root, frameworkId, sourceInput: `update-one-${frameworkId}` });
+    const read = await readInstalledPreparedContent({ root, frameworkId, sourceInput: `${name}-${frameworkId}` });
     if (!read.valid) throw new Error(`Catalog refused ${frameworkId} at ${root}: ${JSON.stringify(read.diagnostics).slice(0, 400)}`);
     return read.release.items.map(item => [`${frameworkId}:${item.id}`, `${item.contentSha256}/${item.behaviourSha256}`]);
   }))).flat());
   const before = await identities(baseRoot), after = await identities(newRoot);
-  if (JSON.stringify(Object.keys(before).sort()) !== JSON.stringify(Object.keys(after).sort())) throw new Error('the update pack adds or removes items');
+  if (JSON.stringify(Object.keys(before).sort()) !== JSON.stringify(Object.keys(after).sort())) throw new Error(`the ${name} pack adds or removes items`);
   const changed = Object.keys(before).filter(key => before[key] !== after[key]);
-  if (changed.length !== 1 || !changed[0].startsWith('ecc:ecc.rule.typescript.')) throw new Error(`the update pack must change exactly one ECC TypeScript rule; it changes ${changed.join(', ') || 'nothing'}`);
-  const itemId = changed[0].slice('ecc:'.length);
+  if (changed.length !== 1 || !changes.test(changed[0])) throw new Error(`the ${name} pack must change exactly one item matching ${changes}; it changes ${changed.join(', ') || 'nothing'}`);
   // Only the Catalogs' prepared content, as a person's Workbench has it: Core reports update states only when every
   // offered release names its items' hashes, which the fixture release index does not.
-  const installSources = join(fixtureDir, 'update-one-installed-sources.json'), updateSources = join(fixtureDir, 'update-one-newer-sources.json');
-  const archiveSha256 = sha256(readFileSync(updatePack));
+  const installSources = join(fixtureDir, `${name}-installed-sources.json`), updateSources = join(fixtureDir, `${name}-newer-sources.json`);
+  const archiveSha256 = sha256(readFileSync(pack));
   await writeFile(installSources, JSON.stringify({ prepared: base.prepared }));
-  await writeFile(updateSources, JSON.stringify({ prepared: base.prepared.map(({ expectedContentSha256: _pinned, ...entry }) => ({ ...entry, root: newRoot, archivePath: updatePack, archiveSha256 })) }));
+  await writeFile(updateSources, JSON.stringify({ prepared: base.prepared.map(({ expectedContentSha256: _pinned, ...entry }) => ({ ...entry, root: newRoot, archivePath: pack, archiveSha256 })) }));
+  return { itemId: changed[0].slice(changed[0].indexOf(':') + 1), updatedConsumer, installSources, updateSources };
+}
+
+async function runUpdateRequirement({ project, output, playwrightModule, theme }) {
+  const pack = packs['update-requirement'];
+  if (!pack) return { status: 'incomplete', reason: 'update-requirement needs --requirement-pack <catalog.tgz>' };
+  const { itemId, updatedConsumer, installSources, updateSources } = await stageNewerCatalog('update-requirement', pack, /^ecc:ecc\.rule\.typescript\./);
+  const installed = await withHost(project, origin => runUpdateOneInstallBrowser({ origin, output, playwrightModule, theme }), installSources);
+  if (installed.status !== 'passed') return installed;
+  const treeBefore = await treeHashes(project);
+  const blocked = await withHost(project, origin => runUpdateBlockedBrowser({ origin, output, playwrightModule, theme, itemId }), updateSources, updatedConsumer);
+  if (blocked.status !== 'passed') return blocked;
+  const treeAfter = await treeHashes(project);
+  const changedPaths = [...new Set([...Object.keys(treeBefore), ...Object.keys(treeAfter)])].filter(path => treeBefore[path] !== treeAfter[path]);
+  if (changedPaths.length) throw new Error(`a blocked update changed ${changedPaths.length} files: ${changedPaths.slice(0, 5).join(', ')}`);
+  await writeFile(join(output, `update-requirement-files-${theme}.json`), JSON.stringify({ itemId, message: blocked.message, unchanged: Object.keys(treeBefore).length }, null, 2));
+  return { status: 'passed' };
+}
+
+async function runUpdateOne({ project, output, playwrightModule, theme }) {
+  const pack = packs['update-one'];
+  if (!pack) return { status: 'incomplete', reason: 'update-one needs --update-pack <catalog.tgz>' };
+  const { itemId, updatedConsumer, installSources, updateSources } = await stageNewerCatalog('update-one', pack, /^ecc:ecc\.rule\.typescript\./);
 
   const installed = await withHost(project, origin => runUpdateOneInstallBrowser({ origin, output, playwrightModule, theme }), installSources);
   if (installed.status !== 'passed') return installed;
@@ -154,7 +178,7 @@ const playwrightModule = import.meta.resolve('playwright');
 for (const name of selected) {
   const project = join(consumerDir, `installed-truth-${name}-${theme}-${randomUUID().slice(0, 8)}`);
   const output = join(consumerDir, `installed-truth-evidence-${name}-${theme}`);
-  const outcome = name === 'update-one' ? await runUpdateOne({ project, output, playwrightModule, theme })
+  const outcome = Object.hasOwn(packs, name) ? await cases[name]({ project, output, playwrightModule, theme })
     : await withHost(project, origin => cases[name]({ origin, output, project, playwrightModule, theme }));
   if (outcome.status !== 'passed') throw new Error(`${name} (${theme}) failed: ${JSON.stringify(outcome)}`);
   console.log(`installed truth ${name} (${theme}) passed`);

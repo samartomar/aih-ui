@@ -53,3 +53,20 @@ test('a reviewable update asks the person to check the replacement', async () =>
   assert.equal(preview.canConfirm, true);
   assert.equal(preview.message, 'Nothing has been updated yet. Check the replacement, then confirm.');
 });
+
+// Pending owner approval as contract amendment 3.2.3 row 26: a requirement the newer item adds is named, not dropped.
+test('an update whose newer item needs something not installed names it and goes no further', async () => {
+  const nameOf = ref => ({ 'ecc.rule.README': 'README' })[ref.itemId];
+  const sent = [];
+  const preview = await previewUpdate({ entries: [entry], tool: 'claude-code', nameOf, request: async (operation, body) => { sent.push(operation); return { disposition: 'invalid',
+    diagnostics: [{ code: 'INPUT_INVALID', reason: 'requirement-not-installed', managementId: 'm-rule', item: { framework: 'ecc', itemId: 'ecc.rule.README' }, message: 'ecc.rule.README is not installed.' }] }; } });
+  assert.equal(preview.canConfirm, false);
+  assert.equal(preview.message, 'Update cannot go ahead: coding-style (typescript) needs README, which is not installed. Nothing was updated.');
+  assert.deepEqual(sent, ['update']);
+});
+test('an update whose newer item needs an installed item it did not need before says so', async () => {
+  const nameOf = () => 'README';
+  const preview = await previewUpdate({ entries: [entry], tool: 'claude-code', nameOf, request: async () => ({ disposition: 'invalid',
+    diagnostics: [{ code: 'INPUT_INVALID', reason: 'requirement-not-recorded', managementId: 'm-rule', item: { framework: 'ecc', itemId: 'ecc.rule.README' }, message: 'x' }] }) });
+  assert.equal(preview.message, 'Update cannot go ahead: coding-style (typescript) now needs README, which it did not need when it was installed. Nothing was updated.');
+});

@@ -363,3 +363,42 @@ export async function runUpdateOneBrowser({ origin, output, playwrightModule, th
     return { status: 'passed', managementId: selection.managementId, members: selection.members.map(member => member.path), result, inventory: after.answers.inventory };
   } finally { await browser.close(); }
 }
+
+// An update the newer Catalog item cannot have yet: Update is offered, and the page stops before Core is asked, naming
+// in the Catalog's own words the item the newer version needs that is not installed. Nothing can be confirmed.
+export async function runUpdateBlockedBrowser({ origin, output, playwrightModule, theme = 'dark', itemId }) {
+  const { chromium } = await import(playwrightModule);
+  await mkdir(output, { recursive: true });
+  const browser = await chromium.launch({ headless: true });
+  const errors = [];
+  try {
+    const { page, answers } = await freshInstalledList(browser, origin, theme, errors, { catalog: false });
+    const catalog = await page.evaluate(async () => (await (await fetch('/api/authoring-catalog')).json()).items.map(({ id, name, label, display, namespace, payload, dependencies }) =>
+      ({ id, name, label, display, namespace, payload: payload && { namespace: payload.namespace }, dependencies })));
+    const item = catalogItem({ items: catalog }, itemId);
+    assert.ok(item, `the newer Catalog publishes ${itemId}`);
+    const selection = answers.inventory.selections.find(entry => entry.item?.itemId === itemId && entry.scope === 'project');
+    assert.ok(selection, `Core lists ${itemId} installed`);
+    // The item the newer version requires that nothing installed provides.
+    const installedIds = new Set(answers.inventory.selections.map(entry => entry.item?.itemId));
+    const missing = (item.dependencies?.requires ?? []).map(ref => ref.itemId).filter(id => !installedIds.has(id));
+    assert.equal(missing.length, 1, `the newer ${itemId} requires exactly one item that is not installed: ${missing.join(', ')}`);
+    const row = page.locator(`[data-installed-row="${selection.managementId}"]`);
+    await row.locator('[data-installed-state="update-available"]').waitFor();
+    const updates = [];
+    page.on('request', request => { if (request.url().endsWith('/api/authoring-update')) updates.push(request.url()); });
+    await row.getByRole('button', { name: 'Update', exact: true }).click();
+    const message = page.locator('#installed-message');
+    await page.waitForFunction(() => { const node = document.getElementById('installed-message'); return node && node.textContent && !/Checking the replacement/.test(node.textContent); }, undefined, { timeout: 240_000 });
+    const text = await message.innerText();
+    assert.equal(await message.getAttribute('data-outcome'), 'not-prepared', `the update stops: ${text}\n${await row.innerText()}`);
+    const expected = `Update cannot go ahead: ${displayName(item)} needs ${displayName(catalogItem({ items: catalog }, missing[0]))}, which is not installed. Nothing was updated.`;
+    assert.equal(text, expected);
+    assert.equal(await row.getByRole('button', { name: 'Confirm update', exact: true }).count() === 0
+      || !await row.getByRole('button', { name: 'Confirm update', exact: true }).isEnabled(), true, 'nothing can be confirmed');
+    assert.equal(updates.length, 1, 'the page asked its host once');
+    await page.screenshot({ path: join(output, `update-requirement-${theme}.png`), fullPage: true });
+    assert.deepEqual(errors, []);
+    return { status: 'passed', message: text };
+  } finally { await browser.close(); }
+}

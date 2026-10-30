@@ -151,7 +151,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
           // The configuration the setup records for this selection; Core's inventory does not carry it.
           replacement: { ...offered.root, scope: item.scope, configuration: item.configuration
             ?? (policyDocument()?.selections ?? []).find(selection => selection.managementId === item.managementId)?.configuration ?? {} } };
-        const preview = await previewUpdate({ entries: [entry], request: requestHost, tool: client.tool });
+        const preview = await previewUpdate({ entries: [entry], request: requestHost, tool: client.tool, nameOf: ref => label(ref.itemId) });
         const actions = el('div', 'flex flex-wrap gap-2');
         const confirm = button('Confirm update', async () => {
           if (removing) return;
