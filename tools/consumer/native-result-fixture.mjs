@@ -3,7 +3,7 @@
 // verified result to read instead, so a verified one is assembled here with its two recorded sessions and consistent digests;
 // the digests are placeholders and prove nothing about a real run. A failed or unverified one records no session.
 const NATIVE_SCHEMA = 'urn:aihq:core:native-verification-result:1.0.0';
-const CORE = { name: '@aihq/core', version: '1.0.0-dev.46' };
+const CORE = { name: '@aihq/core', version: '1.0.0-dev.47' };
 const H = c => c.repeat(64);
 const STAGED = H('f');
 const match = { kind: 'match', matched: true }, digest = sha256 => ({ kind: 'digest', sha256 });

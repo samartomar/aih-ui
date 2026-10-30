@@ -1278,7 +1278,7 @@ test('the authoring catalog the browser is served carries every installed adapte
 // The host holds Core's own results (file state, native verification, the Workbench's inspect record). Recurrence is Core's
 // calculation over claims made from them; these tests build full result objects and keep the policy's selection ids real.
 const FILE_STATE = 'urn:aihq:core:file-state-result:1.1.0', DIAGNOSING = 'mattpocock.diagnosing-bugs', DAYS = ['2026-10-10T09:00:00Z', '2026-10-11T09:00:00Z', '2026-10-12T09:00:00Z', '2026-10-13T09:00:00Z'];
-const fileStateResult = (selectionId, outcome) => ({ schema: FILE_STATE, package: { name: '@aihq/core', version: '1.0.0-dev.46' }, status: 'complete', fileState: outcome === 'match' ? 'match' : 'changed', authority: 'not-evaluated',
+const fileStateResult = (selectionId, outcome) => ({ schema: FILE_STATE, package: { name: '@aihq/core', version: '1.0.0-dev.47' }, status: 'complete', fileState: outcome === 'match' ? 'match' : 'changed', authority: 'not-evaluated',
   targets: [{ id: 'target-1', operationIds: [`${selectionId}/write`], selectionIds: [selectionId], target: { root: 'project', path: 'CLAUDE.md' }, outcome, reason: outcome }], checks: [], notChecked: [],
   coverage: { comparedTargets: 1, unavailableTargets: outcome === 'unavailable' ? 1 : 0, comparedChecks: 0, unavailableChecks: 0, notChecked: 0 }, diagnostics: [], limits: { budgetMs: 1000, elapsedMs: 1, targetBytes: 0, materialBytes: 0 } });
 const frictionScenario = (extra = {}) => scenario({ goal: 'ship it', rule: 'goal.build', ...extra });
