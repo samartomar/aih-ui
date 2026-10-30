@@ -4,9 +4,9 @@ import { deriveRecipeIdentity, previewOrganizationAdmission } from '@aihq/core/c
 export async function previewPolicyAuthority({ policy, organization, recipeMaterials = [], privateInputs = {}, lifecycle = [] }) {
   const selections = [];
   for (const selection of policy.selections) {
-    const reference = selection.recipe.reference;
+    const reference = selection.recipe?.reference;
     const bytes = reference && recipeMaterials.find(m => m.sha256 === reference.sha256 && m.byteLength === reference.byteLength)?.bytes;
-    const identity = await deriveRecipeIdentity(reference ? { recipeBytes: bytes, reference } : { recipe: selection.recipe.inline });
+    const identity = await deriveRecipeIdentity(reference ? { recipeBytes: bytes, reference } : { recipe: selection.recipe?.inline });
     if (identity.status !== 'ok') return identity;
     // Identity derivation already validated these exact bytes as a recipe.
     const recipe = reference ? JSON.parse(new TextDecoder().decode(bytes)) : selection.recipe.inline;

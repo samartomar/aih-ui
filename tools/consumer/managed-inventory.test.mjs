@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,15 +17,19 @@ const source = inventories.find(entry => entry.family === 'ECC');
 const item = source.release.items.find(item => item.kind === 'skill' && !Object.keys(item.inputs ?? {}).length);
 const root = { releaseSha256: source.release.sha256, itemId: item.id, itemSha256: item.itemSha256, scope: 'project', configuration: {}, originIds: ['direct'] };
 
-test('real Catalog content composes execution policy 1.5 through renderDelivery and survives read-back', async () => {
+test('real Catalog content composes recipe-less execution policy 1.6 naming its release, and survives read-back', async () => {
   const intent = freshAuthoring(); intent.roots.push(root);
   const composed = await composeAuthoring({ intent, inventories, tool: 'claude' });
   assert.equal(composed.status, 'ok', JSON.stringify(composed.diagnostics ?? []));
-  assert.equal(composed.value.policy.schema, 'urn:aihq:core:execution-policy:1.5.0');
+  assert.equal(composed.value.policy.schema, 'urn:aihq:core:execution-policy:1.6.0');
+  const prepared = await readInstalledPreparedContent({ root: catalogRoot, frameworkId: 'ecc' });
+  assert.deepEqual(composed.value.policy.catalogReleases, [{ framework: 'ecc', source: { kind: 'local', input: 'catalog' },
+    path: prepared.provenance.contentPath, sha256: prepared.provenance.contentSha256, byteLength: prepared.provenance.contentByteLength }]);
   const selection = composed.value.policy.selections.find(candidate => candidate.item?.itemId === item.id);
   assert.ok(selection, 'the real ECC item is selected');
   assert.match(selection.bindingDigest, /^[a-f0-9]{64}$/);
-  assert.equal(selection.recipe.inline.id, `claude.${item.id}`);
+  assert.equal(selection.recipe, undefined, 'Core renders the recipe at Prepare');
+  assert.equal(selection.tool, 'claude');
   if (item.scan?.length) {
     assert.deepEqual(selection.scanRecords, item.scan);
     assert.deepEqual(selection.itemMaterials, item.materials.map(material => ({
@@ -76,6 +80,54 @@ test('managed inventory receives the current offered index and supersession fact
   assert.equal(await updateState(superseded), 'superseded', 'a published survivor supersedes the installed item');
   assert.equal(await host(projectRoot).managedInventory().then(result => result.selections.find(selection => selection.item?.itemId === item.id)?.updateState),
     'unknown', 'without consumer index inputs Core keeps update state unknown');
+});
+
+test('a recipe-less supporting document finished on its own is prepared beside the item requiring it', async t => {
+  const scratch = await mkdtemp(join(tmpdir(), 'aih-recipeless-finish-')), projectRoot = join(scratch, 'project');
+  await mkdir(projectRoot, { recursive: true });
+  t.after(async () => { await rm(scratch, { recursive: true, force: true }); });
+  const requiring = source.release.items.find(candidate => candidate.id === 'ecc.skill.accessibility');
+  const requiringRoot = { releaseSha256: source.release.sha256, itemId: requiring.id, itemSha256: requiring.itemSha256, scope: 'project', configuration: {}, originIds: ['direct'] };
+  const intent = freshAuthoring(); intent.roots.push(requiringRoot); pinSelectedRecipes(intent, inventories, requiringRoot, 'claude');
+  const composed = await composeAuthoring({ intent, inventories, tool: 'claude' });
+  assert.equal(composed.status, 'ok', JSON.stringify(composed.diagnostics ?? []));
+  const notices = composed.value.policy.selections.find(selection => selection.kind === 'document');
+  assert.ok(notices && notices.recipe === undefined && notices.origins.some(origin => origin.reasonIncluded === 'required-by'), 'the notices document is a recipe-less supporting document');
+  const finished = await host(projectRoot, inventories).prepareFinishSession({ policyText: new TextDecoder().decode(composed.value.policyBytes), managementId: notices.managementId });
+  assert.equal(finished.status, 'ready', JSON.stringify(finished.diagnostics));
+  // The same document operations the whole setup prepares for it, and nothing for the requiring item.
+  const whole = await host(projectRoot, inventories).prepareSession({ policyText: new TextDecoder().decode(composed.value.policyBytes) });
+  assert.equal(whole.status, 'ready', JSON.stringify(whole.diagnostics));
+  const of = (review, selectionId) => review.operations.filter(operation => operation.id.startsWith(`${selectionId}/`))
+    .map(({ id, kind, target }) => ({ id, kind, target }));
+  assert.ok(of(finished.review, notices.id).length > 0);
+  assert.deepEqual(of(finished.review, notices.id), of(whole.review, notices.id));
+  assert.equal(finished.review.operations.length, of(finished.review, notices.id).length, 'only the document is prepared');
+});
+
+test('an item whose required inputs cannot be supplied is named with "Needs {input}" and nothing is prepared', async t => {
+  const scratch = await mkdtemp(join(tmpdir(), 'aih-needs-inputs-')), projectRoot = join(scratch, 'project');
+  await mkdir(projectRoot, { recursive: true });
+  t.after(async () => { await rm(scratch, { recursive: true, force: true }); });
+  const jira = source.release.items.find(candidate => candidate.id === 'ecc.mcp.jira');
+  const inputs = Object.entries(jira.requirements.inputs);
+  assert.ok(inputs.some(([, input]) => input.sensitive) && inputs.some(([, input]) => !input.sensitive), 'the real jira server reads a secret and plain values');
+  const jiraRoot = { releaseSha256: source.release.sha256, itemId: jira.id, itemSha256: jira.itemSha256, scope: 'project', configuration: {}, originIds: ['direct'] };
+  const intent = freshAuthoring(); intent.roots.push(jiraRoot); pinSelectedRecipes(intent, inventories, jiraRoot, 'claude');
+  const composed = await composeAuthoring({ intent, inventories, tool: 'claude' });
+  assert.equal(composed.status, 'ok', JSON.stringify(composed.diagnostics ?? []));
+  const selection = composed.value.policy.selections.find(candidate => candidate.item?.itemId === jira.id);
+  // The host supplies the secret, and an unrelated selection's private input is not offered to Core.
+  const secrets = Object.fromEntries(inputs.filter(([, input]) => input.sensitive).map(([name]) => [name, `fixture-${name}`]));
+  const supplied = createHost({ projectRoot, materialRoots: { catalog: catalogRoot, 'managed-inventory-index': catalogRoot }, inventories,
+    controls: { logging: 'off', privateInputs: { [selection.id]: secrets, 'catalog-not-in-this-policy': { OTHER: 'x' } } } });
+  const prepared = await supplied.prepareSession({ policyText: new TextDecoder().decode(composed.value.policyBytes) });
+  const plain = inputs.filter(([, input]) => !input.sensitive).map(([name]) => name);
+  assert.equal(prepared.status, 'invalid');
+  assert.deepEqual(prepared.needs, [{ selectionId: selection.id, managementId: selection.managementId, itemId: jira.id, framework: 'ecc', name: selection.name, inputs: plain }]);
+  assert.deepEqual(prepared.diagnostics.map(entry => entry.message), [`${selection.name}: ${plain.map(name => `Needs ${name}`).join(', ')}`]);
+  assert.equal(prepared.sessionId, undefined);
+  assert.deepEqual(await readdir(projectRoot), [], 'nothing is written');
 });
 
 test('all six positive timings stay on the prepare run id and later inventory reads do not accumulate', async t => {

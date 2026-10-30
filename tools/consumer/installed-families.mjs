@@ -32,14 +32,20 @@ export async function installedReleaseInventory({ root, releaseExport = './relea
   if (!installed.valid) throw new Error(`${releaseExport}: ${JSON.stringify(installed.diagnostics)}`);
   return { release: installed.release, materialSource: installed.source, materials: await materialsOf(root, installed.release) };
 }
-export async function installedFamilies({ root = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json'))), sourceInput = 'maintained' } = {}) {
+const installedRoot = () => dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
+export async function installedFamilies({ root = installedRoot(), sourceInput = 'maintained' } = {}) {
+  // Only the installed package is the host's `catalog` root; a previous package's releases keep their recipes inline.
+  const atCatalogRoot = resolve(root) === resolve(installedRoot());
   return Promise.all(families.map(async ([family, releaseExport, frameworkId]) => {
     if (frameworkId) {
       const prepared = await readInstalledPreparedContent({ root, frameworkId });
       // The prepared release carries the item identities; custody keeps the caller's host-bound materialSource
       // input (the service binds that input to the installed package root - an unfamiliar input is staged
       // separately and cannot serve Core's material reads).
-      if (prepared.valid) return { family, release: prepared.release, materialSource: { kind: 'local', input: sourceInput }, materials: await materialsOf(root, prepared.release) };
+      // The release content document itself is what an execution policy 1.6.0 names for its recipe-less selections, read by Core
+      // from this package at the `catalog` root.
+      if (prepared.valid) return { family, release: prepared.release, materialSource: { kind: 'local', input: sourceInput }, materials: await materialsOf(root, prepared.release),
+        ...(atCatalogRoot ? { catalogRelease: { path: prepared.provenance.contentPath, sha256: prepared.provenance.contentSha256, byteLength: prepared.provenance.contentByteLength } } : {}) };
       // Public contract: 'prepared-content-unknown' means this package genuinely lists no prepared content for
       // the framework (an older Catalog) - the legacy export is then the truthful fallback. An older package
       // can instead reject the prepared reader's export lookup; fall back only when its public manifest declares

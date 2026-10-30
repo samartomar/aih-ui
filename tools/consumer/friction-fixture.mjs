@@ -14,7 +14,7 @@ export function frictionFixture({ policyBytes, selections, itemId, variant = 're
   // Opaque capture ids and null targets keep local paths out of the stored evidence.
   const subject = createHash('sha256').update(selection.id).digest('hex').slice(0, 16);
   const entries = outcomes.map((outcome, index) => {
-    const result = { schema: 'urn:aihq:core:file-state-result:1.1.0', package: { name: '@aihq/core', version: '1.0.0-dev.39' },
+    const result = { schema: 'urn:aihq:core:file-state-result:1.1.0', package: { name: '@aihq/core', version: '1.0.0-dev.46' },
       status: 'complete', fileState: outcome, authority: 'not-evaluated',
       targets: operations.map(op => ({ id: `fixture-${op.id}`, operationIds: [`${selection.id}/${op.id}`], selectionIds: [selection.id], target: null, outcome, reason: 'fixture-evidence' })),
       checks: [], notChecked: [], coverage: { comparedTargets: operations.length, unavailableTargets: 0, comparedChecks: 0, unavailableChecks: 0, notChecked: 0 },
