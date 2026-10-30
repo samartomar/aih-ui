@@ -44,7 +44,7 @@ export function createOrganization({ elements, onEdit, onModeComplete }) {
     if (!saved) return;
     const summary = setupSummary(saved, location, labels);
     const actions = el("div", "flex flex-wrap gap-2");
-    for (const [section, caption] of [["organization", "Edit organization"], ["clients", "Edit AI tools"], ["review", "Edit reviewer"], ["capabilities", "Optional assistance"]]) {
+    for (const [section, caption] of [["organization", "Edit organization"], ["clients", "Edit AI tools"], ["review", "Edit reviewer"]]) {
       if (section === "organization" && saved.role !== "admin") continue;
       const button = el("button", "wb-btn", caption);
       button.type = "button";

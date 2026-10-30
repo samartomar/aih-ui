@@ -14,12 +14,12 @@ export async function openAuthorityPage({ browser, origin, role }) {
     await page.getByRole('radio', { name: /Enterprise/ }).check(); await page.locator('#setup-next').click();
     await page.getByRole('radio', { name: /Admin/ }).check(); await page.locator('#setup-next').click();
     for (const [key, value] of Object.entries({ name: 'Fixture Organization', shortId: 'fixture-org', policyRepo: 'github.com/fixture-org/ai-policies', emails: 'author@fixture.test' })) await page.locator(`#setup-field-${key}`).fill(value);
-    // Organization, optional assistance, AI clients, then review and save.
-    for (let step = 0; step < 4; step++) await page.locator('#setup-next').click();
+    // Organization, AI clients, then review and save.
+    for (let step = 0; step < 3; step++) await page.locator('#setup-next').click();
     await page.locator('#setup-dialog').waitFor({ state: 'hidden' });
   } else if (await page.locator('#setup-dialog').isVisible()) {
     await page.getByRole('radio', { name: /Vibe coder/ }).check();
-    for (let step = 0; step < 4; step++) await page.locator('#setup-next').click();
+    for (let step = 0; step < 3; step++) await page.locator('#setup-next').click();
     await page.locator('#setup-dialog').waitFor({ state: 'hidden' });
   }
   // The organization source sits in the review drawer's Advanced section; a person opens it to read the source.

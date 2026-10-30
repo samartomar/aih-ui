@@ -69,7 +69,7 @@ export async function runImprovementsBrowser({ origin, output, playwrightModule,
     await page.locator('#browse-family option[value="Catalog"]').waitFor({ state: 'attached' });
     if (await page.locator('#setup-dialog').isVisible()) {
       await page.getByRole('radio', { name: /Vibe coder/ }).check();
-      for (let step = 0; step < 4; step++) await page.locator('#setup-next').click();
+      for (let step = 0; step < 3; step++) await page.locator('#setup-next').click();
       await page.locator('#setup-dialog').waitFor({ state: 'hidden' });
     }
     return page;

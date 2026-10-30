@@ -20,7 +20,7 @@ export async function runInstalledPanelBrowser({ origin, output, playwrightModul
     await next.locator('#browse-family option[value="Extensions"]').waitFor({ state: 'attached' });
     if (await next.locator('#setup-dialog').isVisible()) {
       await next.getByRole('radio', { name: /Vibe coder/ }).check();
-      for (let step = 0; step < 4; step++) await next.locator('#setup-next').click();
+      for (let step = 0; step < 3; step++) await next.locator('#setup-next').click();
       await next.locator('#setup-dialog').waitFor({ state: 'hidden' });
     }
     const destination = theme === 'light' ? 'Switch to light mode' : 'Switch to dark mode';

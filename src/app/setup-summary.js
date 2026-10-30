@@ -1,7 +1,6 @@
 import { el } from "./dom.js";
-import { CAPABILITIES, experienceLabel } from "./setup-model.js";
+import { experienceLabel } from "./setup-model.js";
 import { clientLabel } from "./core-targets.js";
-import { createGapIndicator } from "./gap-indicator.js";
 
 export const reviewerText = (settings) => settings.reviewer ? `${settings.reviewer.kind} ${settings.reviewer.id}` : "Not set — saved review judgments show as imported";
 
@@ -23,13 +22,10 @@ export function setupSummary(settings, location, labels = {}) {
   } else if (settings.role === "developer") {
     row("Organization policy", "Read by your configured execution host; prepare your project policy in the Workbench");
   }
-  row("Optional AIH requests", CAPABILITIES.filter((item) => settings.capabilities.includes(item.id)).map((item) => item.title).join(", ") || "None selected");
   row("AI clients", settings.clients.map(id => clientLabel(labels, id) || id).join(", ") || "None selected");
   row("Reviewing as", reviewerText(settings)).dataset.setupReviewer = "";
   section.append(list);
-  const notice = el("p", "setup-notice", "Local preferences. ");
-  notice.append(createGapIndicator({ label: "Assistance not ready", reason: "Optional assistance is not connected. Saving preferences does not install tools, read your repository, share data or verify enterprise approval." }));
-  section.append(notice);
+  section.append(el("p", "setup-notice", "Local preferences. Saving them does not install tools, read your repository, share data or verify enterprise approval."));
   const file = el("label", "block space-y-2");
   const path = el("textarea", "setup-input setup-path");
   path.readOnly = true;

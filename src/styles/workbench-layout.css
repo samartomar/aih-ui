@@ -125,6 +125,8 @@ body:has(#main-content) :focus-visible { outline: 2px solid var(--color-primary)
 .framework-choice .framework-count { margin-left: auto; font-size: 11px; color: var(--color-muted); }
 .framework-internal { flex-basis: 100%; font-size: 11px; color: var(--color-muted); }
 .framework-source-note { margin: 6px 8px; font-size: 11px; color: var(--color-muted); overflow-wrap: anywhere; }
+.framework-source-note > summary { cursor: pointer; }
+.framework-source-note > p { margin-top: 4px; }
 .framework-landing { padding: 8px 0; color: var(--color-muted); font-size: 12px; }
 .framework-landing button { color: var(--color-primary); text-decoration: underline; }
 

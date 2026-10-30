@@ -42,7 +42,7 @@ export async function runRenderSpeedBrowser({ origin, output, playwrightModule, 
       await page.locator('#framework-navigation').filter({ hasNotText: 'Loading frameworks' }).waitFor();
       if (await page.locator('#setup-dialog').isVisible()) {
         await page.getByRole('radio', { name: /Vibe coder/ }).check();
-        for (let i = 0; i < 4; i++) await page.locator('#setup-next').click();
+        for (let i = 0; i < 3; i++) await page.locator('#setup-next').click();
         await page.locator('#setup-dialog').waitFor({ state: 'hidden' });
       }
     });

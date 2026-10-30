@@ -11,7 +11,7 @@ export async function runReferenceLayoutBrowser({origin,output,playwrightModule,
   const browser=await chromium.launch({headless:true});const errors=[],observed=[];
   const ready=async page=>{
     await page.goto(origin+'/');await page.locator('#browse-family option[value="ECC"]').waitFor({state:'attached'});
-    if(await page.locator('#setup-dialog').isVisible()){await page.getByRole('radio',{name:/Vibe coder/}).check();for(let i=0;i<4;i++)await page.locator('#setup-next').click();await page.locator('#setup-dialog').waitFor({state:'hidden'});}
+    if(await page.locator('#setup-dialog').isVisible()){await page.getByRole('radio',{name:/Vibe coder/}).check();for(let i=0;i<3;i++)await page.locator('#setup-next').click();await page.locator('#setup-dialog').waitFor({state:'hidden'});}
   };
   try {
     for(const theme of ['dark','light']) {
