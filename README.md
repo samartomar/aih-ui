@@ -898,6 +898,12 @@ saved setup, saves `{ provider: 'github', repository, path, revision }` as
 `readGitHubPolicy` with the authentication the host controls file
 (`AIH_CONSUMER_CONTROLS`) holds. No token is stored or shown. The page then says read,
 not found or no access. A source the host configuration names is never replaced.
+When the setup saves no policy repository, the page says no organization policy is
+connected and points to setup. The page never names host configuration: when it says
+to give the Workbench host read access to the repository, the host operator puts a
+credential that can read it in the controls file (`AIH_CONSUMER_CONTROLS`, as
+`{ "authentication": { "kind": "bearer", "token": "<token>" } }`) and restarts the
+Workbench. A local policy file is connected with `AIH_ORGANIZATION_SOURCE`.
 
 Organization governance is per tool. In an Enterprise policy, a selection Core renders
 for a tool is governed by `<managementId>--<tool>` (the lead included, since which tool

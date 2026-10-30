@@ -10,8 +10,7 @@
 import { catalogElements } from "./elements.js";
 import { renderBrowseFacts, renderFrameworkRoutes } from './browse-facts.js';
 import { toolFit } from './tool-fit.js';
-import { organizationPolicyNotice } from './organization-policy.js';
-import { setupInstructions } from '../app/authority-source.js';
+import { organizationPolicyNotice, sourceAnswerWords } from './organization-policy.js';
 import { createStartingSets } from './starting-sets.js';
 import { createFrameworkNavigation } from './frameworks.js';
 import { createCards } from "./cards.js";
@@ -152,9 +151,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       try {
         const answer = await authoring.request('organization-source', { path: path.input.value.trim(), branch: branch.input.value.trim() });
         result.dataset.sourceState = answer.status;
-        result.textContent = answer.status === 'read' ? `Read: ${answer.policyId}.` : answer.status === 'not-found' ? 'Not found. Check the file path and branch.'
-          : answer.status === 'no-access' ? 'No access. Give the host read access in its controls file (AIH_CONSUMER_CONTROLS), then restart the Workbench.'
-          : (answer.diagnostics ?? []).map(value => value.message).join(' ') || `Not read (${answer.status}).`;
+        result.textContent = sourceAnswerWords(answer);
         if (['read', 'no-access'].includes(answer.status)) { delete policyNote.dataset.asking; organizationPolicy = undefined; browseKey = undefined; render(); }
       } catch (error) { result.textContent = `Not read: ${error.message}`; }
       // A file not found keeps the question and its answer on screen for the next try.
@@ -370,7 +367,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     const notice = enterprise ? organizationPolicyNotice(browseResult?.organizationPolicy ?? organizationPolicy, setupSettings) : null;
     if (policyNote && policyNote.dataset.asking !== 'true') {
       policyNote.hidden = !notice; policyNote.textContent = notice?.text ?? '';
-      if (notice) { policyNote.dataset.policyState = notice.state; policyNote.classList.toggle('text-error', !['ok', 'not-configured'].includes(notice.state)); attachTooltip(policyNote, setupInstructions()); } else delete policyNote.dataset.policyState;
+      if (notice) { policyNote.dataset.policyState = notice.state; policyNote.classList.toggle('text-error', !['ok', 'not-configured'].includes(notice.state)); } else delete policyNote.dataset.policyState;
       if (notice?.request) policyNote.append(policySourceForm(notice.request));
     }
     renderSetGuidance();

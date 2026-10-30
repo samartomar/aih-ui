@@ -14,5 +14,5 @@ test('the organisation policy state is said in words: asked once, read, not foun
   const missing = organizationPolicyNotice({ status: 'unreadable', source: github, diagnostics: [{ code: 'AUTHORITY_UNAVAILABLE', reason: 'source-missing-or-inaccessible', message: 'x' }] }, settings);
   assert.equal(missing.state, 'not-found'); assert.match(missing.text, /^Organization policy not found: samartomar\/test gosam\.organization-policy\.json \(branch main\)/);
   const denied = organizationPolicyNotice({ status: 'unreadable', source: github, diagnostics: [{ code: 'AUTHORITY_UNAVAILABLE', reason: 'authentication-required-or-denied', message: 'x' }] }, settings);
-  assert.equal(denied.state, 'no-access'); assert.match(denied.text, /no access to samartomar\/test.*AIH_CONSUMER_CONTROLS/);
+  assert.equal(denied.state, 'no-access'); assert.match(denied.text, /no access to samartomar\/test\. Give the Workbench host read access/);
 });

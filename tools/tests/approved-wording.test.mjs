@@ -10,6 +10,8 @@ import { stateWords } from '../../src/app/installed-panel.js';
 import { confirmRemoval, previewRemoval, removalMemberWords } from '../../src/app/installed-removal.js';
 import { confirmUpdate, previewUpdate } from '../../src/app/installed-update.js';
 import { replacedNames } from '../../src/catalog/item-name.js';
+import { refusalWords, unobservedWords } from '../../src/app/your-tool.js';
+import { organizationPolicyNotice, sourceAnswerWords } from '../../src/catalog/organization-policy.js';
 
 const APPROVED = '(owner-approved 2026-10-30)';
 const fill = (sentence, values) => sentence.replace(/\{([^}]+)\}/g, (_, key) => {
@@ -194,4 +196,67 @@ test('every amendment 3.2.3 row named in the source is marked approved, and none
   }
   const checked = new Set(ROWS.map(([row]) => row));
   assert.deepEqual([...named].filter(row => !checked.has(row)), [], 'every row named in the source has its wording checked here');
+});
+
+// The Your tools and organisation policy sentences the owner corrected on 2026-10-30: plain words, never a Core code.
+const github = { provider: 'github', repository: { owner: 'samartomar', name: 'test' }, path: 'gosam.organization-policy.json', revision: { kind: 'branch', value: 'main' } };
+const enterprise = policyRepo => ({ experience: 'enterprise', role: 'admin', organization: { policyRepo } });
+const unread = (reason, message, code = 'AUTHORITY_UNAVAILABLE') => ({ status: 'unreadable', source: github, diagnostics: [{ code, reason, message }] });
+const NO_ACCESS = 'Give the Workbench host read access to the repository, then try again.';
+
+test("row 42: the tools Core hasn't observed, without Core's code", () => {
+  assert.equal(unobservedWords(['Cursor']), "Cursor: Core hasn't observed it working, so no fit is shown and nothing is installed for it.");
+  assert.equal(unobservedWords(['Cursor', 'Kiro IDE']), "Cursor, Kiro IDE: Core hasn't observed them working, so no fit is shown and nothing is installed for them.");
+});
+
+test("row 43: a tool Core refuses says Core's reason sentence, never its code", () => {
+  assert.equal(refusalWords({ refusal: { code: 'PREREQUISITE_UNAVAILABLE', reason: 'tool-not-observed' } }), "Core hasn't observed it working, so no fit is shown for it.");
+  assert.equal(refusalWords({ refusal: { code: 'INPUT_INVALID', reason: 'unknown-tool' } }), 'Core refuses it, so no fit is shown for it.');
+  assert.equal(refusalWords({ refusal: { code: 'INPUT_INVALID', reason: 'This tool is not in the registry.' } }), 'Core refuses it, so no fit is shown for it. This tool is not in the registry.');
+});
+
+test('row 50 only when setup saves no policy repository; with one, the asked-once form is the only note', () => {
+  const row50 = "Organization policy not read. No organization policy is connected, so Enterprise policies can't be admitted. Add your organization's policy repository in setup, or ask whoever runs this Workbench to connect a local policy file.";
+  assert.equal(organizationPolicyNotice({ status: 'not-configured' }, enterprise('')).text, row50);
+  assert.equal(organizationPolicyNotice({ status: 'not-configured' }, { experience: 'enterprise', role: 'developer' }).text, row50);
+  const asked = organizationPolicyNotice({ status: 'not-configured', request: { repository: 'samartomar/test', path: 'gosam.organization-policy.json', branch: 'main' } }, enterprise('https://github.com/samartomar/test'));
+  assert.equal(asked.text, 'Organization policy not read yet. Name the policy file in samartomar/test and its branch, and the Workbench reads it from GitHub. Enterprise policies cannot be admitted until it is read.');
+  assert.ok(asked.request, 'the asked-once form');
+  // A saved repository the host cannot ask about is not told to add one in setup.
+  assert.equal(organizationPolicyNotice({ status: 'not-configured' }, enterprise('gitlab.com/acme/policies')), null);
+});
+
+test("row 51: Core's reader message only when it is a sentence, then what to do", () => {
+  assert.equal(organizationPolicyNotice({ status: 'invalid', source: github, diagnostics: [{ code: 'ORGANIZATION_INVALID', reason: 'policy-invalid', message: 'The organization policy is not valid JSON.' }] }, enterprise('https://github.com/samartomar/test')).text,
+    `Organization policy couldn’t be read from samartomar/test: The organization policy is not valid JSON. ${NO_ACCESS}`);
+  assert.equal(organizationPolicyNotice(unread('network-unavailable', 'network-unavailable'), enterprise('https://github.com/samartomar/test')).text,
+    `Organization policy couldn’t be read from samartomar/test. ${NO_ACCESS}`);
+});
+
+test('rows 55 and 57: no access says to give the Workbench host read access', () => {
+  assert.equal(sourceAnswerWords({ status: 'no-access' }), `No access. ${NO_ACCESS}`);
+  assert.equal(organizationPolicyNotice(unread('authentication-required-or-denied', 'x'), enterprise('https://github.com/samartomar/test')).text, `Organization policy: no access to samartomar/test. ${NO_ACCESS}`);
+});
+
+// A Core code: lower-case words joined by hyphens, in parentheses or standing alone after a colon.
+const CORE_CODE = /\(\s*[a-z]+(?:-[a-z]+)+\s*\)|:\s*[a-z]+(?:-[a-z]+)+\s*(?:[.;,]|$)/m;
+test('no Your tools or organisation policy text on the page says a Core code', () => {
+  assert.match('Cursor (tool-not-observed)', CORE_CODE); assert.match('couldn’t be read: network-unavailable.', CORE_CODE);
+  assert.doesNotMatch('Organization policy read: gosam-baseline from samartomar/test', CORE_CODE, 'a policy id followed by more words is a name');
+  const codes = ['tool-not-observed', 'unknown-tool', 'authentication-required-or-denied', 'source-missing-or-inaccessible', 'network-unavailable', 'policy-invalid'];
+  const said = [unobservedWords(['Cursor']), unobservedWords(['Cursor', 'Kiro IDE'])];
+  for (const reason of [...codes, undefined]) said.push(refusalWords({ refusal: { code: 'PREREQUISITE_UNAVAILABLE', reason } }));
+  for (const settings of [enterprise(''), enterprise('https://github.com/samartomar/test'), enterprise('gitlab.com/acme/policies')]) {
+    for (const answer of [{ status: 'not-configured' }, { status: 'not-configured', request: { repository: 'samartomar/test', path: 'p.json', branch: 'main' } }, { status: 'ok', source: github, policyId: 'gosam-baseline' },
+      ...codes.flatMap(reason => ['unreadable', 'invalid'].map(status => ({ ...unread(reason, reason), status }))), { status: 'unreadable', source: { provider: 'local', path: '/host/policy.json' }, diagnostics: [] }]) {
+      const notice = organizationPolicyNotice(answer, settings); if (notice) said.push(notice.text);
+    }
+  }
+  for (const status of ['read', 'not-found', 'no-access', 'invalid', 'unreadable', 'refused'])
+    for (const diagnostics of [[], codes.map(code => ({ code: 'AUTHORITY_UNAVAILABLE', reason: code, message: code }))]) said.push(sourceAnswerWords({ status, policyId: 'gosam-baseline', diagnostics }));
+  for (const words of said) {
+    assert.doesNotMatch(words, CORE_CODE, words);
+    for (const code of codes) assert.ok(!words.includes(code), `"${words}" says Core's ${code}`);
+    assert.doesNotMatch(words, /AIH_[A-Z_]+|controls file|[A-Z]+_[A-Z_]+/, `"${words}" names host configuration or a Core code`);
+  }
 });

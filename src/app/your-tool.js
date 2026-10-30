@@ -27,6 +27,22 @@
 import { el } from "./dom.js";
 import { iconFor, iconSpan } from "./icons.js";
 import { attachTooltip } from "./tooltip.js";
+import { coreSentence } from "./core-words.js";
+
+// A tool Core refuses, in plain words: Core's reason only when it is a sentence, never its code.
+export function refusalWords(tool) {
+  const reason = tool.refusal?.reason;
+  if (reason === "tool-not-observed") return "Core hasn't observed it working, so no fit is shown for it.";
+  if (!reason) return "Core's listTools() does not offer it and gave no reason, so no fit is shown for it.";
+  const sentence = coreSentence(reason);
+  return `Core refuses it, so no fit is shown for it.${sentence ? ` ${sentence}` : ""}`;
+}
+
+// The chosen tools Core hasn't observed, said once under the list.
+export function unobservedWords(labels) {
+  const them = labels.length === 1 ? "it" : "them";
+  return `${labels.join(", ")}: Core hasn't observed ${them} working, so no fit is shown and nothing is installed for ${them}.`;
+}
 
 // The older single-tool choice; read once as part of the starting set, never written.
 export const YOUR_TOOL_KEY = "wb-your-tool";
@@ -83,12 +99,6 @@ export function createYourTool({ elements, onChange = () => {} }) {
     const named = found.label && found.label !== tool.label ? ` (as ${found.label})` : "";
     const details = inspection.observations.filter((row) => row.target === tool.id && row.detail).map((row) => row.detail);
     return { key: found.state, words: [`Core's inspection${named}: ${shown.known ? shown.label : `state ${found.state}`}.`, ...details].join(" ") };
-  }
-
-  function refusalWords(tool) {
-    const reason = tool.refusal?.reason;
-    if (reason === "tool-not-observed") return `Core hasn't observed it working (${reason}), so no fit is shown for it.`;
-    return reason ? `Core refuses it (${reason}), so no fit is shown for it.` : "Core's listTools() does not offer it and gave no reason, so no fit is shown for it.";
   }
 
   function toggle(tool) {
@@ -173,7 +183,7 @@ export function createYourTool({ elements, onChange = () => {} }) {
     const observed = list.tools.filter((tool) => tool.observed).length;
     note(`Choose every tool you use. ${observed} of ${list.tools.length} tools in Core's registry have been observed by Core. ${KEPT}`);
     const unobserved = current.filter((tool) => !tool.observed);
-    if (unobserved.length) note(`${unobserved.map((tool) => tool.label ?? tool.id).join(", ")}: Core hasn't observed ${unobserved.length === 1 ? "it" : "them"} working (tool-not-observed), so no fit is shown and nothing is installed for ${unobserved.length === 1 ? "it" : "them"}.`);
+    if (unobserved.length) note(unobservedWords(unobserved.map((tool) => tool.label ?? tool.id)));
     const unknown = chosenIds().filter((id) => !list.tools.some((tool) => tool.id === id));
     if (unknown.length) note(`Not in Core's registry now: ${unknown.join(", ")}.`);
     if (inspection === undefined) note("Checking this machine with Core's inspection…").setAttribute("role", "status");
