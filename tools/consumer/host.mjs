@@ -36,6 +36,11 @@ export function updateRequirements({ selection, policySelections, replacementIds
     return [{ item: required?.item ? { framework: required.item.framework, itemId: required.item.itemId } : { itemId: id }, installed: Boolean(key && installed.has(key)) }];
   });
 }
+/** The root an update composes: the page's item and scope, with the configuration recorded when it was installed. */
+export function updateRoot({ update, install, scope }) {
+  const { configuration: _sent, ...replacement } = update.replacement;
+  return { ...replacement, scope: replacement.scope ?? scope, configuration: structuredClone(install.configuration ?? {}), originIds: ['direct'] };
+}
 // What the install record keeps of each selection in a policy Core is asked to apply.
 const installEntries = document => {
   const byId = new Map(document.selections.map(selection => [selection.id, selection]));
@@ -162,8 +167,7 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
         if (!install) return { disposition: 'invalid', diagnostics: [{ code: 'INPUT_INVALID', reason: 'install-not-recorded', managementId: update.managementId,
           message: `${update.managementId} has no record of how this Workbench installed it.` }] };
         const recordedTool = update.tool ?? tool;
-        const root = { ...update.replacement, scope: updateScope,
-          configuration: update.configuration ?? update.replacement.configuration ?? {}, originIds: ['direct'] };
+        const root = updateRoot({ update, install, scope: updateScope });
         const intent = freshAuthoring(); intent.roots.push(root);
         pinSelectedRecipes(intent, inventories, root, recordedTool);
         const grantApproval = update.approval === 'granted-by-aih' && update.item?.framework && update.item?.itemId

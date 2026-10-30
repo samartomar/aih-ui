@@ -11,7 +11,7 @@
 // update-requirement needs --requirement-pack: the same, except the changed rule now also requires an item that is not
 // installed. The update must stop before Core is asked, name that item, and change no file.
 import { copyFile, cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
@@ -85,9 +85,17 @@ async function treeHashes(root, prefix = '') {
   }
   return hashes;
 }
-// What a selection keeps across an update: the facts Core records for it, less its item hashes and states.
+// What a selection keeps across an update: the facts Core's inventory records for it, less its item hashes and states.
+// Inventory 1.1.0 carries no configuration, so that is compared from the Workbench's record of the install.
 const kept = selection => JSON.stringify({ managementId: selection.managementId, scope: selection.scope, name: selection.name, kind: selection.kind, tool: selection.tool,
-  framework: selection.framework, itemId: selection.item?.itemId, origins: selection.origins, approval: selection.approval, configuration: selection.configuration });
+  framework: selection.framework, itemId: selection.item?.itemId, origins: selection.origins, approval: selection.approval });
+// The Workbench's record of what it installed in the project: configuration and install-time requirements per selection.
+function installRecord(project) {
+  const directory = join(project, 'installed');
+  const files = existsSync(directory) ? readdirSync(directory).filter(name => name.endsWith('.json')) : [];
+  if (files.length !== 1) throw new Error(`expected one install record for ${project}, found ${files.length}`);
+  return JSON.parse(readFileSync(join(directory, files[0]), 'utf8')).selections;
+}
 
 // The Workbench restarted on a newer Catalog: the same consumer with only its installed Catalog package replaced by
 // the pack, checked by Catalog's own reader to change exactly one item.
@@ -147,7 +155,7 @@ async function runUpdateOne({ project, output, playwrightModule, theme }) {
   if (installed.status !== 'passed') return installed;
   const target = installed.inventory.selections.find(selection => selection.item?.itemId === itemId && selection.scope === 'project');
   if (!target) throw new Error(`${itemId} was not installed with ecc.rules.typescript`);
-  const treeBefore = await treeHashes(project);
+  const treeBefore = await treeHashes(project), recordBefore = installRecord(project);
   const updated = await withHost(project, origin => runUpdateOneBrowser({ origin, output, playwrightModule, theme, itemId }), updateSources, updatedConsumer);
   if (updated.status !== 'passed') return updated;
   const treeAfter = await treeHashes(project);
@@ -164,13 +172,21 @@ async function runUpdateOne({ project, output, playwrightModule, theme }) {
     const next = updated.inventory.selections.find(other => other.managementId === selection.managementId && other.scope === selection.scope);
     return !next || kept(next) !== kept(selection);
   });
-  if (lost.length) throw new Error(`${lost.length} selections lost origins or configuration: ${lost.slice(0, 5).map(selection => selection.managementId).join(', ')}`);
+  if (lost.length) throw new Error(`${lost.length} selections lost their origins: ${lost.slice(0, 5).map(selection => selection.managementId).join(', ')}`);
+  // Configuration and install-time requirements, from the record the update read them from, before and after.
+  const recordAfter = installRecord(project);
+  const selectionKeys = installed.inventory.selections.map(selection => `${selection.scope}:${selection.managementId}`);
+  const unrecorded = selectionKeys.filter(key => !recordBefore[key]);
+  if (unrecorded.length) throw new Error(`${unrecorded.length} installed selections have no install record: ${unrecorded.slice(0, 5).join(', ')}`);
+  const changedRecords = selectionKeys.filter(key => JSON.stringify(recordAfter[key]) !== JSON.stringify(recordBefore[key]));
+  if (changedRecords.length) throw new Error(`${changedRecords.length} selections changed configuration or requirements: ${changedRecords.slice(0, 5).join(', ')}`);
   if (updated.inventory.selections.length !== installed.inventory.selections.length) throw new Error('the update changed how many selections are installed');
   const now = updated.inventory.selections.find(selection => selection.managementId === target.managementId);
   if (now.updateState !== 'current' || now.members.some(member => member.fileState !== 'matches')) throw new Error(`${itemId} after the update: ${JSON.stringify({ updateState: now.updateState, members: now.members })}`);
   if (now.item.contentSha256 === target.item.contentSha256) throw new Error(`${itemId} is still recorded with its installed content`);
   await writeFile(join(output, `update-one-files-${theme}.json`), JSON.stringify({ itemId, changed: touched.map(path => ({ path, before: treeBefore[path], after: treeAfter[path] })),
-    unchanged: Object.keys(treeBefore).length - touched.length, selectionsKept: installed.inventory.selections.length }, null, 2));
+    unchanged: Object.keys(treeBefore).length - touched.length, selectionsKept: installed.inventory.selections.length,
+    configuration: { before: recordBefore[`project:${target.managementId}`], after: recordAfter[`project:${target.managementId}`] } }, null, 2));
   return { status: 'passed' };
 }
 

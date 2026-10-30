@@ -14,6 +14,13 @@ function requirementWords(diagnostic, entries, nameOf) {
   return undefined;
 }
 
+/** The page's part of an update: the installed item and the Catalog item offered for it. Its configuration is the one
+ * the host recorded at install, so none is read from the setup open in this page. */
+export function updateEntry({ item, offered }) {
+  const { configuration: _offered, ...root } = offered.root;
+  return { ...item, replacement: { ...root, scope: item.scope } };
+}
+
 export async function previewUpdate({ entries, request, tool, nameOf }) {
   const scope = entries[0]?.scope;
   const result = await request('update', { updates: entries.map(entry => ({ ...entry, managementId: entry.managementId, replacement: entry.replacement })), scope, tool });

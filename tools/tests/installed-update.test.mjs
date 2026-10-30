@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { confirmUpdate, previewUpdate } from '../../src/app/installed-update.js';
+import { confirmUpdate, previewUpdate, updateEntry } from '../../src/app/installed-update.js';
 
 test('an all-kept update result is kept, not updated', async () => {
   const entry = { name: 'Note', managementId: 'm-note', scope: 'project', replacement: {} };
@@ -69,4 +69,16 @@ test('an update whose newer item needs an installed item it did not need before 
   const preview = await previewUpdate({ entries: [entry], tool: 'claude-code', nameOf, request: async () => ({ disposition: 'invalid',
     diagnostics: [{ code: 'INPUT_INVALID', reason: 'requirement-not-recorded', managementId: 'm-rule', item: { framework: 'ecc', itemId: 'ecc.rule.README' }, message: 'x' }] }) });
   assert.equal(preview.message, 'Update cannot go ahead: coding-style (typescript) now needs README, which it did not need when it was installed. Nothing was updated.');
+});
+
+// The page sends the item and its recorded identities; the configuration comes from the host's record of the install,
+// never from the setup open in the page.
+test('an update entry carries no configuration of its own', () => {
+  const item = { name: 'Working rules', managementId: 'project--aihq.catalog--project-basics.working-rules', scope: 'project', itemId: 'project-basics.working-rules', origins: [] };
+  const offered = { root: { releaseSha256: 'a'.repeat(64), itemId: 'project-basics.working-rules', scope: 'project', configuration: { projectFolder: 'from-the-catalog-card' } } };
+  const entry = updateEntry({ item, offered });
+  assert.equal(entry.managementId, item.managementId);
+  assert.equal(Object.hasOwn(entry, 'configuration'), false);
+  assert.equal(Object.hasOwn(entry.replacement, 'configuration'), false);
+  assert.deepEqual(entry.replacement, { releaseSha256: 'a'.repeat(64), itemId: 'project-basics.working-rules', scope: 'project' });
 });
