@@ -43,3 +43,33 @@ test('the fallback (no artifact roots supplied) keeps the previous set-request b
   assert.equal(result.status, 'read');
   assert.deepEqual(result.chosenItemIds, [], 'without artifact roots the set-request resolution decides, as before');
 });
+
+// A card is judged with the items its Add brings ("+ N it needs"), as the Add and the set paths are: Core's
+// dependency-missing for a requirement the Add supplies is no blocker, and a blocker Core reports for any of those
+// items still holds the card back.
+const basics = await readInstalledPreparedContent({ root: catalogRoot, frameworkId: 'project-basics', sourceInput: 'browse-fit' });
+const extensions = await readInstalledPreparedContent({ root: catalogRoot, frameworkId: 'extensions', sourceInput: 'browse-fit' });
+const fitInventories = [basics, extensions].map(read => ({ release: read.release, family: read.release.framework.name, materialSource: { kind: 'local', input: 'browse-fit' }, materials: [] }));
+const fitOf = async (tool, read, itemId) => (await browseContent(fitInventories, { tool, releaseSha256: read.release.sha256, sets: [], configurations: [], chosen: [] }, undefined, undefined))
+  .compatibility.items.find(entry => entry.item.itemId === itemId);
+const blocked = fit => fit.support === 'none' || Boolean(fit.notRendered) || fit.staticBlockers.length > 0;
+
+test('a card whose requirements its Add brings is judged together with them', async () => {
+  for (const itemId of ['project-basics.router', 'project-basics.shared-block']) {
+    const fit = await fitOf('claude', basics, itemId);
+    assert.equal(blocked(fit), false, `${itemId}: ${JSON.stringify(fit)}`);
+  }
+  assert.equal(blocked(await fitOf('claude', extensions, 'extensions.hook.git-guard')), false);
+});
+
+test('a card with a genuine blocker, its own or a requirement\'s, still does not work', async () => {
+  const guard = await fitOf('kiro', extensions, 'extensions.hook.git-guard');
+  const codes = guard.staticBlockers.map(blocker => blocker.code);
+  assert.ok(codes.includes('protocol-not-spoken'), JSON.stringify(guard));
+  assert.ok(!codes.includes('dependency-missing'), 'the notices come with it, so they are not missing');
+  // Core cannot place the notices beside a hook Kiro cannot run; its own words say so on the card.
+  assert.ok(guard.staticBlockers.some(blocker => blocker.itemId === 'extensions.notices' && /supporting document/.test(blocker.detail)), JSON.stringify(guard.staticBlockers));
+  const shared = await fitOf('kiro', basics, 'project-basics.shared-block');
+  assert.equal(shared.notRendered?.reason, 'scope-not-bound', JSON.stringify(shared));
+  assert.equal(blocked(await fitOf('claude', extensions, 'extensions.notices')), true, 'a supporting document alone is still not a card that works');
+});

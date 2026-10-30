@@ -427,8 +427,7 @@ async function addAndInstall(page, browse, itemIds) {
 }
 
 // Project basics' shared block in a project with nothing to detect: it is added and installed, listed with the two
-// items it needs, and its block is written into CLAUDE.md. Its card is offered until the page's per-item fit arrives,
-// which names its requirements as unselected and holds the card back, so that answer is held until the Add is made.
+// items it needs, and its block is written into CLAUDE.md. Its card's Add is used after the page has Core's fit for it.
 export async function runSharedBlockTruthBrowser({ origin, output, project, playwrightModule, theme = 'dark' }) {
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
@@ -438,11 +437,17 @@ export async function runSharedBlockTruthBrowser({ origin, output, project, play
     const installing = await newContext(browser);
     const page = await openPage(installing, origin, theme, errors);
     const added = await addAndInstall(page, async () => {
-      let release; const held = new Promise(done => { release = done; });
-      await page.route('**/api/authoring-browse-content', async route => { await held; await route.continue().catch(() => {}); });
-      await page.locator('#framework-navigation button[data-framework^="internal:project-basics"]').click();
+      // The card's Add is clicked only once the page holds Core's fit for this framework's cards.
+      const framework = page.locator('#framework-navigation button[data-framework^="internal:project-basics"]');
+      const releaseSha256 = (await framework.getAttribute('data-framework')).split(':')[2];
+      const fit = page.waitForResponse(response => response.url().endsWith('/api/authoring-browse-content') && response.ok()
+        && response.request().postData()?.includes(releaseSha256), { timeout: 120_000 });
+      await framework.click();
       if (!await page.locator('#browse-all-items').isChecked()) await page.locator('#browse-all-items').check();
-      return async () => { release(); await page.unroute('**/api/authoring-browse-content'); };
+      const answer = await (await fit).json();
+      assert.ok(answer.compatibility?.items?.some(entry => entry.item.itemId === itemId), 'the fit answer covers the shared block');
+      await page.locator('#cards-grid [data-card-id]').filter({ hasNotText: 'Tool fit loading' }).first().waitFor();
+      assert.equal(await page.locator('#browse-unsupported').filter({ hasText: 'Shared block' }).count(), 0, 'the shared block is not filed under what does not work');
     }, [itemId]);
     await installing.close();
     const { page: listed, answers } = await freshInstalledList(browser, origin, theme, errors);
