@@ -8,7 +8,7 @@ async function enter(page, origin, theme, { hasTool = true } = {}) {
   await page.locator('#framework-navigation [data-framework]').first().waitFor();
   if (await page.locator('#setup-dialog').isVisible()) {
     await page.getByRole('radio', { name: /Vibe coder/ }).check();
-    for (let index = 0; index < 4; index++) await page.locator('#setup-next').click();
+    for (let index = 0; index < 3; index++) await page.locator('#setup-next').click();
     await page.locator('#setup-dialog').waitFor({ state: 'hidden' });
   }
   const toggle = page.getByRole('button', { name: `Switch to ${theme} mode`, exact: true });
@@ -40,7 +40,7 @@ export async function runBrowseBrowser({ origin, output, playwrightModule, expec
       const catalog = await (await context.request.get(origin + '/api/authoring-catalog')).json();
       const first = catalog.frameworks.find(row => row.state === 'ready');
       assert.equal(await page.locator('.wb-source-heading').innerText(), first.name, 'Fresh entry uses supported source order');
-      assert.match(await page.locator('#framework-navigation').innerText(), /linux|windows|macos|darwin|win32|unknown OS/);
+      assert.match(await page.locator('#framework-navigation [data-compatibility-note]').textContent(), /linux|windows|macos|darwin|win32|unknown OS/);
       await framework(page, expected.prepared);
       const basics = expected.prepared.items[0];
       await page.getByRole('button', { name: `Add ${basics.id}`, exact: true }).click();

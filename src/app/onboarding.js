@@ -1,11 +1,11 @@
 import { el, collectIds } from "./dom.js";
 import { clientNodes, publishedClients } from "./core-targets.js";
-import { CAPABILITIES, REVIEWER_KINDS, newSetupSettings, setupSteps, experienceLabel, organizationErrors, settingsErrors } from "./setup-model.js";
+import { REVIEWER_KINDS, newSetupSettings, setupSteps, experienceLabel, organizationErrors, settingsErrors } from "./setup-model.js";
 import { reviewerText, setupSummary } from "./setup-summary.js";
 import { loadSetup, saveSetup, updateSetup } from "./settings-client.js";
 
-const STEP_TITLES = { experience: "How will you use the Workbench?", role: "What is your enterprise role?", organization: "Your organization", capabilities: "Choose optional AIH assistance", clients: "Which AI clients do you use?", review: "Review your local setup" };
-const STEP_LABELS = { experience: "Mode", role: "Role", organization: "Organization", capabilities: "Assistance", clients: "AI clients", review: "Review" };
+const STEP_TITLES = { experience: "How will you use the Workbench?", role: "What is your enterprise role?", organization: "Your organization", clients: "Which AI clients do you use?", review: "Review your local setup" };
+const STEP_LABELS = { experience: "Mode", role: "Role", organization: "Organization", clients: "AI clients", review: "Review" };
 
 export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
   const elements = collectIds(["setup-dialog", "setup-title", "setup-description", "setup-fixed-experience", "setup-progress", "setup-content", "setup-error", "setup-back", "setup-next", "setup-skip", "setup-cancel", "setup-form"]);
@@ -92,28 +92,6 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
     );
     elements.setupContent.append(group);
   }
-  function renderCapabilities() {
-    elements.setupDescription.textContent = editing
-      ? "Optional future assistance preferences. Changes save with your setup; integrations are not connected yet."
-      : "Choose any future assistance you are interested in. These integrations are not connected yet.";
-    const group = el("fieldset", "setup-capabilities");
-    group.append(el("legend", "sr-only", "Optional AIH capabilities"));
-    for (const capability of CAPABILITIES) {
-      const label = el("label", "setup-choice items-start");
-      const box = el("input");
-      box.type = "checkbox";
-      box.value = capability.id;
-      box.checked = draft.capabilities.includes(capability.id);
-      box.addEventListener("change", () => {
-        draft.capabilities = box.checked ? [...draft.capabilities, capability.id] : draft.capabilities.filter((id) => id !== capability.id);
-      });
-      const text = el("span", "space-y-1.5");
-      text.append(el("strong", "block font-medium text-on-surface text-[12px]", capability.title), el("span", "block text-on-surface-variant text-[11px] leading-relaxed", `Proposed benefit: ${capability.benefit}`), el("span", "block text-outline text-[11px] leading-relaxed", `If skipped: ${capability.skipped}`));
-      label.append(box, text);
-      group.append(label);
-    }
-    elements.setupContent.append(el("p", "setup-notice mb-4", "Selecting a capability only authorizes saving that preference here. No installation, connection, code access or data sharing is performed. Setup of these integrations is not connected in this version."), group);
-  }
   function renderClients() {
     elements.setupDescription.textContent = "Select the AI coding clients you use. The list comes from the installed Core package's public nativeClientIds; its order is not a ranking. Selecting one does not install it or verify a connection.";
     if (targets === null) {
@@ -198,9 +176,9 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
     elements.setupCancel.disabled = saving;
     elements.setupFixedExperience.hidden = !editing || loading || retryLoad;
     elements.setupFixedExperience.textContent = editing ? `${experienceLabel(draft)} · Change mode using the Mode control in the header.` : "";
-    elements.setupSkip.hidden = loading || retryLoad || !["capabilities", "clients"].includes(current());
+    elements.setupSkip.hidden = loading || retryLoad || current() !== "clients";
     elements.setupSkip.disabled = saving;
-    elements.setupSkip.textContent = editing ? "Keep current choices" : current() === "clients" ? "Choose tools later" : "Skip assistance";
+    elements.setupSkip.textContent = editing ? "Keep current choices" : "Choose tools later";
     renderProgress();
     if (loading || retryLoad) {
       elements.setupTitle.textContent = editing ? "Loading your saved information" : "Opening your Workbench";
@@ -214,7 +192,7 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
     if (current() === "experience") {
       elements.setupDescription.textContent = "Choose a starting experience. This setup is saved locally and reopened next time.";
       elements.setupContent.append(radioCards("experience", [
-        { value: "vibe", title: "Vibe coder", description: "A personal starting point for exploring the catalog and choosing optional assistance. No enterprise organization is required." },
+        { value: "vibe", title: "Vibe coder", description: "A personal starting point for exploring the catalog. No enterprise organization is required." },
         { value: "enterprise", title: "Enterprise", description: "Choose Admin or Developer. Admins maintain organization details; Developers prepare project policies for their configured organization host." },
       ], draft.experience, (value) => {
         draft.experience = value;
@@ -231,14 +209,13 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
         draft.organization = value === "admin" ? { name: "", shortId: "", policyRepo: "", emails: [] } : null;
       }));
     } else if (current() === "organization") renderOrganization();
-    else if (current() === "capabilities") renderCapabilities();
     else if (current() === "clients") renderClients();
     else {
       elements.setupDescription.textContent = draft.experience === "vibe"
-        ? "Your personal setup opens the catalog and project policy authoring. Vibe-specific automation and connected assistance are not available in this version. Your choices persist across restarts."
+        ? "Your personal setup opens the catalog and project policy authoring. Vibe-specific automation is not available in this version. Your choices persist across restarts."
         : draft.role === "developer"
-          ? "Your role and assistance preferences persist. The organization policy your admin publishes is read by the configured execution host; it is not chosen or approved by this profile."
-          : "Your organization details and preferences persist. Policy authority and connected assistance are follow-on work.";
+          ? "Your role and preferences persist. The organization policy your admin publishes is read by the configured execution host; it is not chosen or approved by this profile."
+          : "Your organization details and preferences persist. Policy authority is follow-on work.";
       elements.setupContent.append(renderReviewer(), setupSummary(draft, location, labels));
     }
     elements.setupTitle.focus();
@@ -284,7 +261,7 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
   async function start(editMode = false, section = null) {
     const sequence = ++loadSequence;
     editing = editMode;
-    editSection = editMode && ["organization", "capabilities", "clients", "review"].includes(section) ? section : null;
+    editSection = editMode && ["organization", "clients", "review"].includes(section) ? section : null;
     loading = true;
     retryLoad = false;
     savedProblem = null;
@@ -298,7 +275,8 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
       location = result.location ?? null;
       if (result.state === "saved") {
         if (editing) {
-          draft = structuredClone(result.settings);
+          // Retired assistance in an older file is dropped when the edit saves.
+          draft = { ...structuredClone(result.settings), capabilities: [] };
           if (draft.experience === "enterprise" && draft.role === "developer") draft.organization = null;
         }
         else {
@@ -335,8 +313,6 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
   elements.setupBack.addEventListener("click", () => { if (step > 0 && !saving) { step -= 1; render(); } });
   elements.setupSkip.addEventListener("click", () => {
     if (saving || loading) return;
-    // First-run "Skip assistance" saves no assistance; while editing, "Keep current choices" leaves them as they are.
-    if (!editing && current() === "capabilities") draft.capabilities = [];
     step += 1;
     render();
   });

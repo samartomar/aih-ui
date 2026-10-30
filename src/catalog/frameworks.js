@@ -28,9 +28,7 @@ export function createFrameworkNavigation({ container, onChoose, onFirstStep }) 
       attachTooltip(summary, source.message);
       disclosure.append(summary, el('p', '', source.message)); container.append(disclosure);
     }
-    const scope = el('p', 'framework-source-note', tool ? `Compatibility observations for ${tool.label} · Workbench host: ${catalog.hostPlatform?.os ?? "unknown OS"} ${catalog.hostPlatform?.arch ?? "unknown architecture"}` : 'Choose your tool to read observed counts.');
-    attachTooltip(scope, 'Harness static observations for the loaded items on this OS and architecture, not proof that an item works in this project.'); container.append(scope);
-    if (tool) container.append(el('p', 'framework-source-note', 'Published compatibility evidence, not installed-item counts. Zero observations means not yet confirmed, not unsupported.'));
+    if (!tool) container.append(el('p', 'framework-source-note', 'Choose your tool to read observed counts.'));
     const frameworks = catalog.frameworks ?? [];
     if (!frameworks.length) container.append(el('p', '', 'No frameworks available from the configured sources. Existing content is in Filters & your sources.'));
     for (const framework of frameworks) {
@@ -54,6 +52,15 @@ export function createFrameworkNavigation({ container, onChoose, onFirstStep }) 
         for (const row of container.querySelectorAll('[data-framework]')) row.setAttribute('aria-pressed', String(row.dataset.framework === key));
       });
       container.append(button); if (focused === key) button.focus();
+    }
+    // What the counts mean, as a small collapsed note below the frameworks.
+    if (tool) {
+      const note = el('details', 'framework-source-note'); note.dataset.compatibilityNote = '';
+      const summary = el('summary', '', `Compatibility observations for ${tool.label}`);
+      attachTooltip(summary, 'Harness static observations for the loaded items on this OS and architecture, not proof that an item works in this project.');
+      note.append(summary, el('p', '', `Workbench host: ${catalog.hostPlatform?.os ?? "unknown OS"} ${catalog.hostPlatform?.arch ?? "unknown architecture"}`),
+        el('p', '', 'Published compatibility evidence, not installed-item counts. Zero observations means not yet confirmed, not unsupported.'));
+      container.append(note);
     }
   }
   const landing = document.getElementById('framework-first-step');

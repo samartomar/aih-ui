@@ -13,7 +13,7 @@ export async function runFrameworksBrowser({ origin, output, playwrightModule, s
       // This is a viewer preference, not a grant. The real header validates it against listTools.
       await context.addInitScript(()=>localStorage.setItem('wb-your-tool','claude'));
       await page.goto(origin+'/');await page.locator('#browse-family option').nth(1).waitFor({state:'attached'});
-      if(await page.locator('#setup-dialog').isVisible()){await page.getByRole('radio',{name:/Vibe coder/}).check();for(let i=0;i<4;i++)await page.locator('#setup-next').click();await page.locator('#setup-dialog').waitFor({state:'hidden'});}
+      if(await page.locator('#setup-dialog').isVisible()){await page.getByRole('radio',{name:/Vibe coder/}).check();for(let i=0;i<3;i++)await page.locator('#setup-next').click();await page.locator('#setup-dialog').waitFor({state:'hidden'});}
       const toggle=page.getByRole('button',{name:`Switch to ${theme} mode`,exact:true});if(await toggle.count())await toggle.click();
       const rail=page.locator('#framework-navigation');
       assert.match(await rail.innerText(),/Test fixture sources — not production data/);
@@ -101,7 +101,7 @@ export async function runFrameworkReopenBrowser({origin,output,savedDirectory,ex
   const {chromium}=await import(playwrightModule);const browser=await chromium.launch({headless:true});await mkdir(output,{recursive:true});
   try {for(const theme of ['dark','light']) {
     const page=await browser.newPage();await page.goto(origin+'/');await page.locator('#browse-family option').nth(1).waitFor({state:'attached'});
-    if(await page.locator('#setup-dialog').isVisible()){await page.getByRole('radio',{name:/Vibe coder/}).check();for(let i=0;i<4;i++)await page.locator('#setup-next').click();}
+    if(await page.locator('#setup-dialog').isVisible()){await page.getByRole('radio',{name:/Vibe coder/}).check();for(let i=0;i<3;i++)await page.locator('#setup-next').click();}
     const toggle=page.getByRole('button',{name:`Switch to ${theme} mode`,exact:true});if(await toggle.count())await toggle.click();
     await openPolicyFileActions(page);await page.locator('#policy-open').setInputFiles(join(savedDirectory,`${theme}-saved-policy.json`));
     await page.getByRole('button',{name:'Validate and reopen',exact:true}).click();

@@ -3,14 +3,9 @@ export const SETTINGS_FORMAT = "aih-ui-settings";
 export const SETTINGS_VERSION = 1;
 export const SETTINGS_LOCATION = ".aih-ui/settings.v1.json";
 
-export const CAPABILITIES = [
-  { id: "code-review", title: "Code review", icon: "rate_review", benefit: "Request help reviewing code changes and spotting issues.", skipped: "No AIH code-review assistance is requested." },
-  { id: "codebase-memory", title: "Codebase memory", icon: "neurology", benefit: "Request help retaining useful project context across sessions.", skipped: "No AIH project-memory assistance is requested." },
-  { id: "workspace-help", title: "Workspace help", icon: "folder_open", benefit: "Request help understanding and navigating a workspace.", skipped: "No AIH workspace assistance is requested." },
-  { id: "headroom", title: "Headroom", icon: "monitoring", benefit: "Express interest in help managing available context capacity.", skipped: "No Headroom assistance is requested." },
-  { id: "serena", title: "Serena", icon: "code", benefit: "Express interest in help navigating and editing code by symbol.", skipped: "No Serena assistance is requested." },
-  { id: "context-optimization", title: "Context / token optimization", icon: "compress", benefit: "Request help keeping relevant context concise and reducing avoidable token use.", skipped: "No AIH context or token optimization is requested." },
-];
+/* Assistance a setup could once request. Catalog publishes no installable item for any of them, so no choice could reach
+ * Your setup and setup no longer offers them. Saved setups that name them stay readable; nothing acts on them. */
+const RETIRED_ASSISTANCE = ["code-review", "codebase-memory", "workspace-help", "headroom", "serena", "context-optimization"];
 
 export function experienceLabel(settings) {
   if (settings.experience === "vibe") return "Vibe coder";
@@ -26,13 +21,13 @@ export function newSetupSettings() {
   return emptySettings();
 }
 
-/** Setup steps in order. First-run setup always offers the optional assistance step; a section edit shows that section and review. */
+/** Setup steps in order; a section edit shows that section and review. */
 export function setupSteps({ draft, editing = false, editSection = null }) {
   if (editSection) return [...(editSection === "review" ? [] : [editSection]), "review"];
   return [
     ...(!editing ? ["experience", ...(draft.experience === "enterprise" ? ["role"] : [])] : []),
     ...(draft.experience === "enterprise" && draft.role === "admin" ? ["organization"] : []),
-    "capabilities", "clients", "review",
+    "clients", "review",
   ];
 }
 
@@ -82,7 +77,7 @@ export function settingsErrors(value) {
       Object.assign(errors, organizationErrors(value.organization, value.role));
     }
   } else if (value.role !== null || value.organization !== null) errors.organization = "Vibe setup does not carry enterprise organization details.";
-  if (!listOfStrings(value.capabilities, CAPABILITIES.length) || value.capabilities.some((id) => !CAPABILITIES.some((item) => item.id === id))) errors.capabilities = "Choose only the listed optional capabilities.";
+  if (!listOfStrings(value.capabilities, RETIRED_ASSISTANCE.length) || value.capabilities.some((id) => !RETIRED_ASSISTANCE.includes(id))) errors.capabilities = "The setup names assistance this Workbench never offered.";
   if (!listOfStrings(value.clients, 100)) errors.clients = "AI client choices must be a list of distinct supported identifiers.";
   return errors;
 }
