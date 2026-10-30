@@ -1,9 +1,9 @@
 // Install before stopping; resume only after rechecking the exact archive and installed bytes.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, lstatSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, lstatSync, realpathSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, posix, resolve, win32 } from 'node:path';
 import { absoluteManifest, candidateIdentity, readManifest, verifyManifest } from './manifest.mjs';
 import { assertCandidateDir, claimDataDir, ensureLayout } from './data-dir.mjs';
 import { candidateLayout } from './layout.mjs';
@@ -18,10 +18,30 @@ function run(executable, args, cwd) {
   if (result.error || result.status !== 0) throw new Error(`${executable} ${args[0]} failed: ${result.error?.message ?? `${result.stdout}\n${result.stderr}`}`);
   return result.stdout;
 }
+// npm's own script, run with this Node: npm_execpath (set when npm started us), then npm on PATH, then the platform's
+// layout beside node (Windows: <dir>\node_modules\npm; elsewhere: <prefix>/lib/node_modules/npm).
+export function findNpmCli({ env = process.env, execPath = process.execPath, platform = process.platform, exists = existsSync,
+  realpath = path => { try { return realpathSync(path); } catch { return path; } } } = {}) {
+  const path = platform === 'win32' ? win32 : posix, beside = dir => [path.join(dir, 'node_modules', 'npm', 'bin', 'npm-cli.js'), path.join(dir, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js')];
+  const execpath = env.npm_execpath;
+  if (execpath && path.basename(execpath) === 'npm-cli.js' && exists(execpath)) return execpath;
+  const pathValue = Object.entries(env).find(([key]) => key.toUpperCase() === 'PATH')?.[1] ?? '';
+  for (const dir of pathValue.split(path.delimiter).filter(Boolean)) {
+    for (const name of platform === 'win32' ? ['npm.cmd', 'npm'] : ['npm']) {
+      const found = path.join(dir, name);
+      if (!exists(found)) continue;
+      const real = realpath(found);
+      if (path.basename(real) === 'npm-cli.js' && exists(real)) return real;
+      const cli = beside(dir).find(exists);
+      if (cli) return cli;
+    }
+  }
+  const layout = platform === 'win32' ? beside(path.dirname(execPath))[0] : beside(path.dirname(execPath))[1];
+  if (exists(layout)) return path.normalize(layout);
+  throw new Error(`Could not find npm: npm_execpath does not name npm-cli.js, no npm on PATH leads to npm-cli.js, and ${path.normalize(layout)} does not exist. Install npm with this Node or set npm_execpath to its npm-cli.js.`);
+}
 function npm(args, cwd) {
-  const cli = process.env.npm_execpath ?? join(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js');
-  if (!existsSync(cli)) throw new Error('Set npm_execpath to the installed npm-cli.js before upgrading.');
-  return run(process.execPath, [cli, ...args], cwd);
+  return run(process.execPath, [findNpmCli(), ...args], cwd);
 }
 function archiveManifest(entry) {
   const result = spawnSync('tar', ['-xzOf', '-', 'package/package.json'], { input: readFileSync(entry.tarball), encoding: 'utf8', windowsHide: true, timeout: 30_000, maxBuffer: 2_000_000 });

@@ -308,7 +308,9 @@ node tools/candidate.mjs upgrade --manifest C:\path\to\candidate.json --data C:\
 
 `preflight` reads all pinned archives, checks package identities, Node (26.12.1 through 26.x, the engine range of the current Core and Catalog archives; any other Node is refused with that range)/npm/tar,
 the destination and port, and verifies any existing recorded process identity.
-It writes no candidate state and stops nothing. `upgrade` repeats preflight,
+It writes no candidate state and stops nothing. Plain `node` is enough on
+Windows, macOS and Linux: npm is found through `npm_execpath` when npm started
+the command, then `npm` on `PATH`, then npm's own layout beside Node. `upgrade` repeats preflight,
 installs the UI, its pinned frontend dependencies and the three public packages
 with lifecycle scripts disabled, then compares every installed package file to
 its archive. Installation and dependency resolution finish before a running
