@@ -722,7 +722,7 @@ export async function runEccSetsRemovalTruthBrowser({ origin, output, project, p
       await section.getByRole('button', { name: 'Confirm remove', exact: true }).waitFor({ timeout: 120_000 });
       const review = await section.innerText();
       for (let attempt = 0; attempt < 100 && !answers.removal; attempt++) await page.waitForTimeout(100);
-      const previewed = assertPreviewListsRemovals(review, answers.removal);
+      const removal = answers.removal, previewed = assertPreviewListsRemovals(review, removal);
       await section.getByRole('button', { name: 'Confirm remove', exact: true }).click();
       // Each round's outcome is read once Core's list has been read again after it, so an earlier round's message is not taken for it.
       for (let attempt = 0; attempt < 2400 && answers.inventory === listed; attempt++) await page.waitForTimeout(100);
@@ -731,9 +731,12 @@ export async function runEccSetsRemovalTruthBrowser({ origin, output, project, p
       await message.waitFor({ timeout: 60_000 });
       const result = await message.innerText();
       assert.equal(await message.getAttribute('data-outcome'), 'removed', result);
-      rounds.push({ setId, previewed, review, result });
+      rounds.push({ setId, previewed, review, result, removals: removal.removals.map(entry => ({ managementId: entry.managementId, ...(entry.origin ? { origin: entry.origin } : {}),
+        disposition: entry.disposition, change: entry.change, members: (entry.members ?? []).map(member => `${member.action} ${member.path}`) })),
+        left: answers.inventory.selections.filter(selection => selection.item?.framework === 'ecc').map(selection => ({ itemId: selection.item.itemId, origins: selection.origins })) });
     }
     const after = answers.inventory?.selections ?? [];
+    await writeFile(join(output, `ecc-sets-removal-${theme}.json`), JSON.stringify({ status: 'checking', before: ecc.map(selection => selection.item.itemId), rounds, errors }, null, 2));
     assert.deepEqual(after.filter(selection => selection.item?.framework === 'ecc').map(selection => selection.item.itemId), [], 'nothing of ECC is left, its notices included');
     const left = ecc.flatMap(selection => selection.members.map(member => member.path)).filter(path => path.startsWith(project) && existsSync(path));
     assert.deepEqual(left, [], 'every ECC file is absent on disk');
