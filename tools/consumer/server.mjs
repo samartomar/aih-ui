@@ -322,7 +322,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
               : operation === 'finish' ? await host.prepareFinishSession({ policyText, managementId: body.managementId })
               : operation === 'apply' ? await host.applyApproved({ sessionId: body.sessionId, reviewDigest: body.reviewDigest, allowPartial: body.allowPartial === true })
               : operation === 'managed' ? await host.managedInventory()
-              : operation === 'update' ? await host.prepareUpdateSession({ updates: body.updates, scope: body.scope, tool: body.tool })
+              : operation === 'update' ? await host.prepareUpdateSession({ updates: body.updates, scope: body.scope, tool: body.tool, mode: body.mode })
               : await host.prepareRemovalSession({ managementId: body.managementId, removals: body.removals, scope: body.scope, mode: body.mode });
           });
           const run = operation === 'apply' ? () => tracked(folder.project, perform) : perform;

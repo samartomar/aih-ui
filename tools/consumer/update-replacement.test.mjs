@@ -1,14 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { prepareUpdate } from '@aihq/core';
+import { apply, prepareManagedRemoval, prepareUpdate } from '@aihq/core';
 import { composeAuthoring, freshAuthoring } from './headless.mjs';
 import { pinSelectedRecipes } from './selected-recipe.mjs';
 import { installedFamilies } from './installed-families.mjs';
-import { createHost, updateRequest, updateRequirements } from './host.mjs';
+import { createHost, updateInputs, updateRequest, updateRequirements } from './host.mjs';
 
 // The page's reading of an update, from the checkout AIH_REPO names (check-workbench sets it).
 const repo = resolve(process.env.AIH_REPO ?? join(dirname(fileURLToPath(import.meta.url)), '..', '..'));
@@ -103,12 +103,19 @@ async function installedRule(t) {
   assert.equal((await host.applyApproved({ sessionId: prepared.sessionId, reviewDigest: prepared.review.reviewDigest })).completion, 'complete');
   const selection = composed.value.policy.selections.find(candidate => candidate.item?.itemId === ruleItem.id);
   const { configuration: _configuration, originIds: _origins, ...replacement } = ruleRoot;
-  return { host, projectRoot, composed, selection, entry: { name: 'coding-style (typescript)', managementId: selection.managementId, scope: 'project', replacement } };
+  return { host, scratch, projectRoot, composed, selection, entry: { name: 'coding-style (typescript)', managementId: selection.managementId, scope: 'project', replacement } };
 }
+// The one record file of a test's store, read and rewritten as another program might leave it.
+async function recordFile(scratch) {
+  const directory = join(scratch, 'store', 'installed'), [name] = (await readdir(directory)).filter(file => file.endsWith('.json'));
+  const path = join(directory, name);
+  return { path, read: async () => JSON.parse(await readFile(path, 'utf8')), write: async document => writeFile(path, `${JSON.stringify(document, null, 2)}\n`) };
+}
+const refusedAs = result => [result.disposition, ...(result.diagnostics ?? []).map(item => item.reason)];
 
 test('Core prepares the update as an install: managed update 1.1.0 for a 1.6.0 replacement, its binding and Scan state reviewed', async t => {
   const { host, selection, entry } = await installedRule(t);
-  const result = await host.prepareUpdateSession({ updates: [{ ...entry, tool: 'claude' }], scope: 'project', tool: 'claude' });
+  const result = await host.prepareUpdateSession({ updates: [{ ...entry, tool: 'claude' }], scope: 'project', tool: 'claude', mode: 'vibe' });
   assert.equal(result.schema, 'urn:aihq:core:managed-update-preparation:1.1.0', 'Core read a request that names its policy');
   assert.equal(result.disposition, 'prepared', JSON.stringify(result));
   assert.equal(result.preparation.status, 'ready', JSON.stringify(result.preparation.diagnostics));
@@ -135,4 +142,64 @@ test('a replacement rendered for a binding Core no longer ships is refused, and 
   const words = result.updates[0].diagnostics.find(item => item.reason === 'binding-changed').message;
   assert.match(words, /was rendered for another binding/);
   assert.equal(preview.message, `Update cannot go ahead: coding-style (typescript): ${words.replace(/\.$/, '')}. Nothing was updated.`);
+});
+
+// An install record describes an installation only while Core still shows it: a removal through the Workbench drops the
+// entry, and an entry that no longer matches what Core's inventory shows is never used.
+test('a removal through the Workbench drops the item from the install record, so it is not updated from it', async t => {
+  const { host, scratch, selection } = await installedRule(t);
+  const key = `project:${selection.managementId}`;
+  assert.ok((await (await recordFile(scratch)).read()).selections[key], 'the install is recorded');
+  const removal = await host.prepareRemovalSession({ removals: [{ managementId: selection.managementId }], scope: 'project', mode: 'vibe' });
+  assert.equal(removal.preparation?.status, 'ready', JSON.stringify(removal));
+  assert.equal((await host.applyApproved({ sessionId: removal.preparation.sessionId, reviewDigest: removal.preparation.review.reviewDigest })).completion, 'complete');
+  assert.equal((await (await recordFile(scratch)).read()).selections[key], undefined, 'the removed item is no longer recorded');
+});
+
+test('an install record that no longer matches what Core shows installed is refused as not recorded', async t => {
+  const { host, scratch, projectRoot, selection, entry } = await installedRule(t);
+  // Removed and installed again outside this Workbench: Core's claim now records other origins than the Workbench's install.
+  const removal = await prepareManagedRemoval({ target: { project: projectRoot }, removals: [{ managementId: selection.managementId }], scope: 'project', mode: 'vibe' }, { logging: 'off' });
+  assert.equal((await apply(removal.preparation.prepared, { approved: true, origin: 'interactive', reviewDigest: removal.preparation.review.reviewDigest }, { logging: 'off' })).completion, 'complete');
+  const other = createHost({ projectRoot, materialRoots, recipeMaterials: inventories.flatMap(item => item.materials), controls: { logging: 'off' }, inventories });
+  const root = { ...ruleRoot, originIds: ['direct'] }, intent = freshAuthoring(); intent.roots.push(root); pinSelectedRecipes(intent, inventories, root, 'claude');
+  const composed = await composeAuthoring({ intent, inventories, tool: 'claude' });
+  const policy = { ...composed.value.policy, selections: composed.value.policy.selections.map(candidate => candidate.id === selection.id
+    ? { ...candidate, origins: [{ reasonIncluded: 'in-set', set: { framework: 'ecc', setId: 'ecc.rules.typescript', setSha256: ecc.release.sets.find(set => set.id === 'ecc.rules.typescript').setSha256 } }] } : candidate) };
+  const prepared = await other.prepareSession({ policyText: JSON.stringify(policy) });
+  assert.equal(prepared.status, 'ready', JSON.stringify(prepared.diagnostics));
+  assert.equal((await other.applyApproved({ sessionId: prepared.sessionId, reviewDigest: prepared.review.reviewDigest })).completion, 'complete');
+  assert.ok((await (await recordFile(scratch)).read()).selections[`project:${selection.managementId}`], 'the Workbench\'s earlier entry is still on disk');
+  const result = await host.prepareUpdateSession({ updates: [{ ...entry, tool: 'claude' }], scope: 'project', tool: 'claude', mode: 'vibe' });
+  assert.deepEqual(refusedAs(result), ['invalid', 'install-not-recorded'], JSON.stringify(result));
+  assert.equal(result.schema, undefined, 'Core was not asked');
+});
+
+// The same check install runs before Core: an input the newer item requires that the recorded configuration and the host's
+// private inputs do not supply, with the private inputs kept to the replacement's own selection. Catalog's reader accepts
+// only its own release handles, so the newer item is the installed rule's Catalog entry with two required inputs added.
+test('an update whose newer item needs an input the install did not record is named "Needs", as install names it', async t => {
+  const { composed, selection, entry } = await installedRule(t);
+  const required = { teamName: { type: 'string', required: true }, apiToken: { type: 'string', required: true, sensitive: true } };
+  const newer = inventories.map(source => source !== ecc ? source : { ...source, release: { ...source.release,
+    items: source.release.items.map(item => item.id !== ruleItem.id ? item : { ...item, requirements: { ...item.requirements, inputs: required } }) } });
+  const replacement = composed.value.policy.selections.find(candidate => candidate.id === selection.id);
+  const held = { [selection.id]: { apiToken: 'secret' }, 'another-selection': { teamName: 'not this one' } };
+  const supplied = updateInputs({ updates: [{ managementId: selection.managementId, selection: replacement }], inventories: newer, held });
+  assert.deepEqual(supplied.privateInputs, { [selection.id]: { apiToken: 'secret' } }, 'only the replacement\'s own private inputs are offered');
+  assert.deepEqual(supplied.needs.map(need => [need.managementId, need.inputs]), [[selection.managementId, ['teamName']]]);
+  assert.deepEqual(supplied.diagnostics.map(item => [item.reason, item.message]), [['input-needed', 'coding-style: Needs teamName']]);
+  const missing = updateInputs({ updates: [{ managementId: selection.managementId, selection: replacement }], inventories: newer, held: {} });
+  assert.deepEqual(missing.diagnostics.map(item => item.message), ['coding-style: Needs teamName, Needs apiToken']);
+  const preview = await previewUpdate({ entries: [entry], tool: 'claude', request: async () => ({ disposition: 'invalid', needs: missing.needs, diagnostics: missing.diagnostics }) });
+  assert.equal(preview.message, 'Update cannot go ahead: coding-style: Needs teamName, Needs apiToken. Nothing was updated.');
+  assert.deepEqual(updateInputs({ updates: [{ managementId: selection.managementId, selection: replacement }], inventories, held }).needs, [], 'the installed item needs nothing');
+});
+
+// Core's update request names no organization and prepares only Vibe policy, so an Enterprise setup cannot update here.
+test('an update in an Enterprise setup is refused before Core is asked', async t => {
+  const { host, entry } = await installedRule(t);
+  const result = await host.prepareUpdateSession({ updates: [{ ...entry, tool: 'claude' }], scope: 'project', tool: 'claude', mode: 'enterprise' });
+  assert.deepEqual(refusedAs(result), ['unavailable', 'enterprise-update-unavailable'], JSON.stringify(result));
+  assert.equal(result.schema, undefined, 'Core was not asked');
 });

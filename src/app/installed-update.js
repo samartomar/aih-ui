@@ -3,15 +3,33 @@ import { applyIfUnchanged, diagnosticWords } from './host-review.js';
 const readyPreparation = result => result?.disposition === 'prepared' && ['ready', 'partial'].includes(result.preparation?.status) && result.preparation.sessionId && result.preparation.review
   ? result.preparation : undefined;
 
-// The host's refusals that name a Catalog item, in the page's words with the page's names for both items.
-// Pending owner approval as contract amendment 3.2.3 row 26.
+// The host's refusals, in the page's words with the page's names for both items; never the host's own error text.
+const REFUSALS = {
+  // Pending owner approval as contract amendment 3.2.3 row 26.
+  // The newer item needs something nothing installed provides.
+  'requirement-not-installed': ({ name, required }) =>
+    `${name} needs ${required}, which is not installed`,
+  // Pending owner approval as contract amendment 3.2.3 row 27.
+  // The newer item needs an installed item the install did not need.
+  'requirement-not-recorded': ({ name, required }) =>
+    `${name} now needs ${required}, which it did not need when it was installed`,
+  // Pending owner approval as contract amendment 3.2.3 row 28.
+  // No entry, or one that no longer matches what Core shows installed.
+  'install-not-recorded': ({ name }) =>
+    `${name} has no record of how this Workbench installed it, so its update cannot be checked`,
+  // Pending owner approval as contract amendment 3.2.3 row 29.
+  // The record exists but cannot be read; its error is not shown.
+  'record-unavailable': () =>
+    'this Workbench cannot read its record of what it installed in this folder, so no update can be checked',
+  // Pending owner approval as contract amendment 3.2.3 row 31.
+  // Core's update request names no organization source.
+  'enterprise-update-unavailable': () =>
+    'Update is not available in an Enterprise setup, because Core cannot yet check an update against the organization\'s rules',
+};
 function requirementWords(diagnostic, entries, nameOf) {
   const name = entries.find(entry => entry.managementId === diagnostic.managementId)?.name ?? diagnostic.managementId;
   const required = diagnostic.item && (nameOf?.(diagnostic.item) ?? diagnostic.item.itemId);
-  if (diagnostic.reason === 'requirement-not-installed') return `${name} needs ${required}, which is not installed`;
-  if (diagnostic.reason === 'requirement-not-recorded') return `${name} now needs ${required}, which it did not need when it was installed`;
-  if (diagnostic.reason === 'install-not-recorded') return `${name} has no record of how this Workbench installed it, so its update cannot be checked`;
-  return undefined;
+  return Object.hasOwn(REFUSALS, diagnostic.reason ?? '') ? REFUSALS[diagnostic.reason]({ name, required }) : undefined;
 }
 
 /** The page's part of an update: the installed item and the Catalog item offered for it. Its configuration is the one
@@ -21,9 +39,9 @@ export function updateEntry({ item, offered }) {
   return { ...item, replacement: { ...root, scope: item.scope } };
 }
 
-export async function previewUpdate({ entries, request, tool, nameOf }) {
+export async function previewUpdate({ entries, request, tool, mode, nameOf }) {
   const scope = entries[0]?.scope;
-  const result = await request('update', { updates: entries.map(entry => ({ ...entry, managementId: entry.managementId, replacement: entry.replacement })), scope, tool });
+  const result = await request('update', { updates: entries.map(entry => ({ ...entry, managementId: entry.managementId, replacement: entry.replacement })), scope, tool, mode });
   const preparation = readyPreparation(result);
   const steps = entries.map((entry, index) => {
     const update = result.updates?.[index];
@@ -48,7 +66,7 @@ export async function previewUpdate({ entries, request, tool, nameOf }) {
     || diagnosticWords(result, result.preparation) || `Core answered ${result.disposition ?? 'nothing'}`;
   const message = canConfirm ? 'Nothing has been updated yet. Check the replacement, then confirm.' : `Update cannot go ahead: ${sentence(why)}. Nothing was updated.`;
   return { steps, canConfirm, message,
-    entries, scope, allowPartial: preparation?.status === 'partial', ...(preparation ? { sessionId: preparation.sessionId, review: preparation.review } : {}) };
+    entries, scope, mode, allowPartial: preparation?.status === 'partial', ...(preparation ? { sessionId: preparation.sessionId, review: preparation.review } : {}) };
 }
 
 function outcome(entry, step, run) {
@@ -69,9 +87,9 @@ function outcome(entry, step, run) {
   return { name: entry.name, state: 'failed', message: `${entry.name}: Core did not confirm the update members. ${diagnosticWords(run)}` };
 }
 
-export async function confirmUpdate({ preview, request, tool }) {
+export async function confirmUpdate({ preview, request, tool, mode = preview.mode }) {
   if (!preview.canConfirm) return { outcome: 'failed', message: preview.steps.map(step => step.message).join(' ') };
-  const prepare = () => request('update', { updates: preview.entries.map(entry => ({ ...entry, managementId: entry.managementId, replacement: entry.replacement })), scope: preview.scope, tool });
+  const prepare = () => request('update', { updates: preview.entries.map(entry => ({ ...entry, managementId: entry.managementId, replacement: entry.replacement })), scope: preview.scope, tool, mode });
   const attempt = await applyIfUnchanged({ held: preview, prepare, readyPreparation, apply: approval => request('apply', { ...approval, purpose: 'update', ...(preview.allowPartial ? { allowPartial: true } : {}) }) });
   // Pending owner approval as contract amendment 3.2.3 row 25.
   if (attempt.state === 'unknown') return { outcome: 'unknown', message: `Update outcome unknown: ${diagnosticWords(attempt.run)}` };

@@ -100,3 +100,25 @@ test('an update entry carries no configuration of its own', () => {
   assert.equal(Object.hasOwn(entry.replacement, 'configuration'), false);
   assert.deepEqual(entry.replacement, { releaseSha256: 'a'.repeat(64), itemId: 'project-basics.working-rules', scope: 'project' });
 });
+
+// The host's refusals are said in the page's own words; a host error's text, which may name a local path, is never shown.
+test('an install record the host cannot read is named without the host\'s error text', async () => {
+  const preview = await ask({ disposition: 'unavailable', diagnostics: [{ code: 'RECORD_UNAVAILABLE', reason: 'record-unavailable',
+    message: 'This Workbench cannot read its record of what it installed in this folder.' , detail: 'EACCES: permission denied, open \'/home/someone/.aih/installed/abc.json\'' }] });
+  assert.equal(preview.canConfirm, false);
+  assert.equal(preview.message, 'Update cannot go ahead: this Workbench cannot read its record of what it installed in this folder, so no update can be checked. Nothing was updated.');
+  assert.doesNotMatch(preview.message, /\/home\/|EACCES/);
+});
+test('an Update in an Enterprise setup says why it cannot go ahead', async () => {
+  const preview = await ask({ disposition: 'unavailable', diagnostics: [{ code: 'PREREQUISITE_UNAVAILABLE', reason: 'enterprise-update-unavailable', message: 'x' }] });
+  assert.equal(preview.canConfirm, false);
+  assert.equal(preview.message, 'Update cannot go ahead: Update is not available in an Enterprise setup, because Core cannot yet check an update against the organization\'s rules. Nothing was updated.');
+});
+test('the page sends the setup\'s mode with every update it asks for', async () => {
+  const sent = [];
+  const preview = await previewUpdate({ entries: [entry], tool: 'claude-code', mode: 'enterprise', request: async (operation, body) => { sent.push(body); return { disposition: 'unavailable', diagnostics: [] }; } });
+  await confirmUpdate({ preview: { ...preview, canConfirm: true, sessionId: 's', review: { reviewDigest: 'd' } }, tool: 'claude-code', mode: 'enterprise',
+    request: async (operation, body) => { sent.push(body); return operation === 'update' ? { disposition: 'unavailable', diagnostics: [] } : { completion: 'complete', members: [] }; } });
+  assert.ok(sent.length >= 2);
+  for (const body of sent.filter(item => item.updates)) assert.equal(body.mode, 'enterprise');
+});

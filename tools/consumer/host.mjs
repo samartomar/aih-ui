@@ -10,7 +10,7 @@ import { composeAuthoring, freshAuthoring, inlineRecipelessSelections, unsupplie
 import { pinSelectedRecipes } from './selected-recipe.mjs';
 import { pageSource, readOrganization } from './authority-source.mjs';
 import { previewPolicyAuthority } from './organization.mjs';
-import { createInstallRecord, selectionKey } from './install-record.mjs';
+import { createInstallRecord, installedIdentity, selectionKey } from './install-record.mjs';
 
 /**
  * Core's update request, prepared exactly as an install is: each replacement is the execution policy selection the
@@ -36,6 +36,19 @@ export function updateRequest({ project, scope, updates }) {
   const replacements = updates.map(({ managementId, selection, origins }) => ({ managementId, replacement: JSON.parse(JSON.stringify({ ...selection, managementId,
     ...(Array.isArray(origins) ? { origins } : {}), requires: (selection.requires ?? []).filter(id => replacementIds.has(id)) })) }));
   return { request: { target: { project }, scope, updates: replacements, policy } };
+}
+/**
+ * The host's private inputs offered to an update, kept to the replacements' own selection ids, and the inputs a replacement
+ * requires that neither its recorded configuration nor those private inputs supply: the same check, and the same "Needs"
+ * words, as install runs before Core is asked.
+ */
+export function updateInputs({ updates, inventories, held = {} }) {
+  const privateInputs = Object.fromEntries(Object.entries(held ?? {}).filter(([id]) => updates.some(({ selection }) => selection.id === id)));
+  const needs = updates.flatMap(({ managementId, selection }) => unsuppliedInputs({ policy: { selections: [selection] }, inventories, privateInputs })
+    .map(need => ({ ...need, managementId })));
+  return { privateInputs, needs, diagnostics: needs.map(entry => ({ code: 'INPUT_INVALID', reason: 'input-needed', managementId: entry.managementId,
+    path: `/updates/${updates.findIndex(({ selection }) => selection.id === entry.selectionId)}/replacement`,
+    message: `${entry.name}: ${entry.inputs.map(input => `Needs ${input}`).join(', ')}` })) };
 }
 // What the host sent Core for an update, without its bytes: the policy version and, per replacement, whether Core renders
 // its recipe and whether it carries its binding digest, Scan records and item materials.
@@ -108,14 +121,14 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
     materialRoots: controls?.materialRoots ?? materialRoots
   });
 
-  const retain = (preparation, installs) => {
+  const retain = (preparation, installs, removal = false) => {
     const result = { status: preparation.status, runId: preparation.runId, diagnostics: preparation.diagnostics,
       ...(preparation.resolutionInputs ? { resolutionInputs: preparation.resolutionInputs } : {}),
       ...(preparation.operationSelections ? { operationSelections: JSON.parse(JSON.stringify(preparation.operationSelections)) } : {}) };
     if (preparation.review) result.review = JSON.parse(JSON.stringify(preparation.review));
     if (preparation.prepared) {
       const sessionId = randomUUID();
-      sessions.set(sessionId, { handle: preparation.prepared, reviewDigest: preparation.review.reviewDigest, runId: preparation.runId, ...(installs ? { installs } : {}) });
+      sessions.set(sessionId, { handle: preparation.prepared, reviewDigest: preparation.review.reviewDigest, runId: preparation.runId, ...(installs ? { installs } : {}), ...(removal ? { removal } : {}) });
       result.sessionId = sessionId;
     }
     return result;
@@ -173,18 +186,27 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
         ? { target: { project: projectRoot }, removals: removals ?? [{ managementId }], scope, mode, ...(mode === 'enterprise' ? { organizationSource } : {}) }
         : { target: { project: projectRoot }, managementId, scope, mode, ...(mode === 'enterprise' ? { organizationSource } : {}) };
       const result = await prepareManagedRemoval(request, removalControls);
-      return { ...result, ...(result.preparation ? { preparation: retain(result.preparation) } : {}) };
+      return { ...result, ...(result.preparation ? { preparation: retain(result.preparation, undefined, true) } : {}) };
     },
-    async prepareUpdateSession({ updates = [], scope, tool, controls } = {}) {
+    async prepareUpdateSession({ updates = [], scope, tool, mode, controls } = {}) {
+      // Core's update request names no organization source and prepares Vibe policy only (managed update preparation 1.1.0),
+      // so an Enterprise setup's update could not be checked against the organization as its install is.
+      if (mode === 'enterprise') return { disposition: 'unavailable', diagnostics: [{ code: 'PREREQUISITE_UNAVAILABLE', reason: 'enterprise-update-unavailable',
+        message: 'Core cannot check an update against the organization\'s rules.' }] };
       if (!inventories) return { disposition: 'unavailable', diagnostics: [{ code: 'SOURCE_UNAVAILABLE', message: 'The current Catalog inventories are unavailable.' }] };
       let recorded;
       try { recorded = installRecord?.read(); }
-      catch (error) { return { disposition: 'unavailable', diagnostics: [{ code: 'RECORD_UNAVAILABLE', message: `This Workbench's record of what it installed cannot be read: ${error.message}` }] }; }
+      // The error's own text can name a local path, so the page is told only that the record cannot be read.
+      catch { return { disposition: 'unavailable', diagnostics: [{ code: 'RECORD_UNAVAILABLE', reason: 'record-unavailable', message: 'This Workbench cannot read its record of what it installed in this folder.' }] }; }
       const inventory = await listManagedSelections({ target: { project: projectRoot }, scope: 'both', format: 'urn:aihq:core:managed-inventory-result:1.1.0' });
-      const installed = new Set((inventory.selections ?? []).map(selection => selectionKey(selection.scope, selection.managementId)));
+      const current = new Map((inventory.selections ?? []).map(selection => [selectionKey(selection.scope, selection.managementId), selection]));
+      const installed = new Set(current.keys());
       const composedUpdates = [];
       for (const update of updates) {
-        const updateScope = update.replacement.scope ?? scope, install = recorded?.get(selectionKey(updateScope, update.managementId));
+        const updateScope = update.replacement.scope ?? scope, key = selectionKey(updateScope, update.managementId), recordedInstall = recorded?.get(key);
+        // An entry describes this install only while Core still shows what the Workbench saw installed after applying it;
+        // removed and installed again elsewhere, it is not this Workbench's install.
+        const install = recordedInstall && current.has(key) && recordedInstall.installed === installedIdentity(current.get(key)) ? recordedInstall : undefined;
         if (!install) return { disposition: 'invalid', diagnostics: [{ code: 'INPUT_INVALID', reason: 'install-not-recorded', managementId: update.managementId,
           message: `${update.managementId} has no record of how this Workbench installed it.` }] };
         const recordedTool = update.tool ?? tool;
@@ -200,6 +222,9 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
         if (!selection) return { disposition: 'invalid', diagnostics: [{ code: 'REPLACEMENT_UNAVAILABLE', message: `Catalog did not compose the explicit replacement ${root.itemId}.` }] };
         composedUpdates.push({ update, install, selection, policy: composed.value.policy });
       }
+      const { privateInputs, needs, diagnostics: inputDiagnostics } = updateInputs({ updates: composedUpdates.map(({ update, selection }) => ({ managementId: update.managementId, selection })),
+        inventories, held: controlsFor(controls).privateInputs });
+      if (needs.length) return { disposition: 'invalid', needs, diagnostics: inputDiagnostics };
       const replacementIds = new Set(composedUpdates.map(({ selection }) => selection.id));
       // Nothing the newer item requires is dropped without a word: what Core does not already keep stops the update here.
       // Core does not check a requirement the newer item adds against what is installed.
@@ -215,7 +240,7 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
         requires: [...new Set([...install.requires, ...(selection.requires ?? []).filter(id => replacementIds.has(id))
           .map(id => composedUpdates.find(other => other.selection.id === id)).map(other => selectionKey(other.selection.scope, other.update.managementId))])] }));
       // The Scan evidence and release index an install's checks read, and Apply reads again.
-      const result = await prepareUpdate(sent.request, { ...controlsFor(controls), ...(currentIndex() ? { index: currentIndex() } : {}) });
+      const result = await prepareUpdate(sent.request, { ...controlsFor(controls), privateInputs, ...(currentIndex() ? { index: currentIndex() } : {}) });
       return { ...result, request: sentShape(sent.request), ...(result.preparation ? { preparation: retain(result.preparation, installs) } : {}) };
     },
     async prepareFinishSession({ policyText, managementId, controls } = {}) {
@@ -276,9 +301,19 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
       const applied = new Set([...(result.operations ?? []).filter(operation => ['applied', 'already-satisfied'].includes(operation.application)).map(operation => operation.id.split('/')[0]),
         ...(result.members ?? []).map(member => member.selectionId)]);
       const installs = (session.installs ?? []).filter(entry => applied.has(entry.id)).map(({ id: _id, ...entry }) => entry);
-      if (installRecord && installs.length) {
-        try { installRecord.record(installs); }
-        catch (error) { return { ...result, diagnostics: [...(result.diagnostics ?? []), { code: 'RECORD_UNAVAILABLE', message: `Installed, but this Workbench could not record it, so it cannot be updated from here: ${error.message}` }] }; }
+      if (installRecord && (installs.length || session.removal)) {
+        try {
+          // Each entry keeps the identity Core's inventory shows for it now; after a removal, a recorded selection Core no
+          // longer shows is dropped, so a later install of it by another tool is never updated from this record.
+          const now = await listManagedSelections({ target: { project: projectRoot }, scope: 'both', format: 'urn:aihq:core:managed-inventory-result:1.1.0' });
+          const shown = new Map((now.selections ?? []).map(selection => [selectionKey(selection.scope, selection.managementId), selection]));
+          const forget = session.removal && now.status === 'complete' ? [...installRecord.read().keys()].filter(key => !shown.has(key)) : [];
+          installRecord.record(installs.filter(entry => shown.has(selectionKey(entry.scope, entry.managementId)))
+            .map(entry => ({ ...entry, installed: installedIdentity(shown.get(selectionKey(entry.scope, entry.managementId))) })), forget);
+        } catch {
+          // Pending owner approval as contract amendment 3.2.3 row 30.
+          return { ...result, diagnostics: [...(result.diagnostics ?? []), { code: 'RECORD_UNAVAILABLE', reason: 'record-unavailable', message: 'Installed, but this Workbench could not record it, so it cannot be updated from here.' }] };
+        }
       }
       return result;
     }

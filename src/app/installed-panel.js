@@ -148,7 +148,8 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       removing = true; update.disabled = true; update.setAttribute('aria-busy', 'true'); message.textContent = 'Checking the replacement…'; delete message.dataset.outcome;
       try {
         const entry = updateEntry({ item, offered });
-        const preview = await previewUpdate({ entries: [entry], request: requestHost, tool: client.tool, nameOf: ref => label(ref.itemId) });
+        // The setup's own mode, as Remove sends it; the host refuses an update it cannot check for an Enterprise setup.
+        const preview = await previewUpdate({ entries: [entry], request: requestHost, tool: client.tool, mode: policyDocument()?.mode, nameOf: ref => label(ref.itemId) });
         const actions = el('div', 'flex flex-wrap gap-2');
         const confirm = button('Confirm update', async () => {
           if (removing) return;
