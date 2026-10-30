@@ -1,5 +1,6 @@
-// The installed list and "Remove this set" against real Catalog sets, alone, after the packed consumer has been
-// assembled (tools/check-workbench.mjs). check-installed-workbench.mjs runs the same cases in both themes.
+// The installed list, "Remove this set" and a namespaced rule's name against real Catalog sets, alone, after the packed
+// consumer has been assembled (tools/check-workbench.mjs). check-installed-workbench.mjs runs the same three cases in
+// both themes.
 //
 // Usage: node tools/check-installed-truth.mjs <consumerDir> [list|set-removal|namespaced-rule ...] [--theme dark|light]
 // Each case gets a fresh disposable project and a real child host process (tools/installed-host.mjs).

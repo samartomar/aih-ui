@@ -251,10 +251,13 @@ async function installWithSets(page, family, setIds) {
   for (const id of setIds) {
     const choice = page.locator(`#starting-sets [data-set-id="${id}"]`);
     await choice.evaluate(node => { const details = node.closest('details'); if (details) details.open = true; node.scrollIntoView({ block: 'center' }); });
-    // The long ECC picker scrolls inside the drawer, out of reach of a pointer click; the choice is a button.
+    // TODO: use pointer clicks here once the set-picker click-interception bug is fixed (Playwright reports
+    // "<html> intercepts pointer events" on #starting-sets choices; installSets fails the list and set-removal
+    // cases the same way on 14c01320). Until then this case alone clicks through the DOM.
     if (await choice.getAttribute('aria-pressed') !== 'true') await choice.evaluate(node => node.click());
     await page.waitForFunction(id => document.querySelector(`[data-set-id="${id}"]`)?.getAttribute('aria-pressed') === 'true', id);
   }
+  // TODO: pointer click once the set-picker click-interception bug (above) is fixed.
   await page.locator('#starting-sets [data-add-sets]').evaluate(node => node.click());
   await page.waitForFunction(() => document.getElementById('framework-guidance').textContent.includes('Chosen sets added'), undefined, { timeout: 600_000 });
   await openPolicyDrawer(page);
