@@ -17,7 +17,7 @@ export async function createWorkbench({ consumerDir, runDir, summary, settingsPa
   const readiness = createReadinessAdapter(consumerDir);
   // The Workbench's record of what it installed lives beside its setup store.
   const installRecordRoot = dirname(resolve(settingsPath ?? SETTINGS_PATH));
-  const authoring = await createAuthoringAdapter(consumerDir, { coreState, frameworkFixtureInventories, suppliedInventories, installedFamilyInventories, createExecutionHost, installRecordRoot, frictionEvidence: await journalFrictionEvidence(consumerDir, () => readiness.records()) });
+  const authoring = await createAuthoringAdapter(consumerDir, { coreState, frameworkFixtureInventories, suppliedInventories, installedFamilyInventories, createExecutionHost, installRecordRoot, setupSettingsPath: resolve(settingsPath ?? SETTINGS_PATH), frictionEvidence: await journalFrictionEvidence(consumerDir, () => readiness.records()) });
   const batch = createBatchAdapter(consumerDir);
   const report = createReportAdapter(consumerDir);
   // Started now and answered when done, so the page can show it loading; it never delays the server.

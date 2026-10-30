@@ -1,6 +1,7 @@
 import { composeFamilyInventories } from './compose-inventories.mjs';
 import { browsePolicy } from './browse-policy.mjs';
 import { browseContent, inspectChosenHost } from './browse-content.mjs';
+import { organizationSourceStep, readSavedSource } from './organization-source.mjs';
 import { firstRunForSets } from './first-run.mjs';
 import { createServer } from 'node:http';
 import { readFile, mkdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
@@ -30,7 +31,7 @@ import { createCatalogUpdateSource } from './update-source.mjs';
 import { inspectorSummary } from './scan-evidence.mjs';
 import { createScanEvidenceHost } from './scan-evidence-host.mjs';
 
-export async function startConsumer({ projectRoot, controls, organizationSource, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, updateSourceCatalogRoots, evidenceSources, evidenceDetectorIds, frameworkSources, frameworkFixtureInventories, installedFamilyInventories: suppliedFamilyInventories, installRecordRoot, port = 0, createExecutionHost = createHost, coreState = { resolveStateLocation: core.resolveStateLocation, stateLocation: coreContracts.stateLocation } } = {}) {
+export async function startConsumer({ projectRoot, controls, organizationSource: suppliedSource, setupSettingsPath, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, updateSourceCatalogRoots, evidenceSources, evidenceDetectorIds, frameworkSources, frameworkFixtureInventories, installedFamilyInventories: suppliedFamilyInventories, installRecordRoot, port = 0, createExecutionHost = createHost, coreState = { resolveStateLocation: core.resolveStateLocation, stateLocation: coreContracts.stateLocation } } = {}) {
   // `createExecutionHost` is createHost; tests pass one that holds Install work while they act.
   // The fixture is a test source; a host names one update source, so both together would be ambiguous.
   if (updateSourceCatalogRoots !== undefined && maintenanceSource) throw new Error('Configure one update source: Catalog package roots or the test fixture, not both.');
@@ -42,6 +43,9 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   const previous = previousCatalogRoot ? await readInstalledRelease({ root: previousCatalogRoot, sourceInput: 'catalog' }) : null;
   if (previous && !previous.valid) throw new Error(JSON.stringify(previous.diagnostics));
   const timingStore = new Map();
+  // The organisation source is host configuration: the one the host configuration names, else one this host saved through
+  // the organisation-source step (organization-source.mjs). The page never supplies it.
+  let organizationSource = suppliedSource ?? readSavedSource(setupSettingsPath);
   let legacyHost = projectRoot ? createExecutionHost({ installRecordRoot, projectRoot, materialRoots, organizationSource, controls, timingStore }) : null;
   const intentService = createIntentService();
   const catalogRoot = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
@@ -170,7 +174,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   }
   // Only the declared source fields reach the page; extra host-file members never do.
   // A local file is named by its file name only; its folder stays on the host.
-  const publicSource = organizationSource === undefined ? null : organizationSource?.provider === 'local'
+  const publicSourceOf = () => organizationSource === undefined ? null : organizationSource?.provider === 'local'
     ? pageSource(organizationSource) : {
     provider: organizationSource?.provider, repository: { owner: organizationSource?.repository?.owner, name: organizationSource?.repository?.name },
     path: organizationSource?.path, revision: { kind: organizationSource?.revision?.kind, value: organizationSource?.revision?.value } };
@@ -207,7 +211,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
       if (request.method === 'GET' && pathname === '/api/authoring-catalog') {
         const client = await clientFor(request);
         return send(response, 200, { ...client.mixed.catalog(), executionAvailable: !!client.host,
-          organizationConfigured: organizationSource !== undefined, organizationSource: publicSource });
+          organizationConfigured: organizationSource !== undefined, organizationSource: publicSourceOf() });
       }
       if (request.method !== 'POST' || !pathname.startsWith('/api/')) return send(response, 404, { error: 'not-found' });
       if (request.headers.origin !== origin) return send(response, 403, { error: 'foreign-origin' });
@@ -255,9 +259,10 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
           if (body.enterprise === true && result.compatibility) {
             const inventory = mixedService.inventories.find(entry => entry.release.sha256 === body.releaseSha256);
             const source = organizationSource ? await readOrganization({ organizationSource, controls }) : undefined;
-            result.organizationPolicy = !source ? { status: 'not-configured', source: null, diagnostics: [] }
-              : source.status === 'ok' ? { status: 'ok', source: publicSource, policyId: source.organization.id, diagnostics: [] }
-              : { status: source.status, source: publicSource, diagnostics: source.diagnostics };
+            const asked = !source ? (await organizationSourceStep({ body: {}, setupSettingsPath, configured: undefined, fixed: suppliedSource !== undefined, controls })).answer.request : undefined;
+            result.organizationPolicy = !source ? { status: 'not-configured', source: null, diagnostics: [], ...(asked ? { request: asked } : {}) }
+              : source.status === 'ok' ? { status: 'ok', source: publicSourceOf(), policyId: source.organization.id, diagnostics: [] }
+              : { status: source.status, source: publicSourceOf(), diagnostics: source.diagnostics };
             if (source?.status === 'ok') result.policy = await browsePolicy(inventory, body.tool, source.organization);
           }
           return send(response, 200, result);
@@ -301,6 +306,18 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
         }
         // Host-configured source and controls only; the request body is ignored and needs no project root.
         if (operation === 'authority-source') return send(response, 200, await readAuthoritySource({ organizationSource, controls }));
+        // The host-side organisation-source step: the page names a file and branch; the host saves and reads the source.
+        if (operation === 'organization-source') {
+          const step = await organizationSourceStep({ body, setupSettingsPath, configured: organizationSource, fixed: suppliedSource !== undefined, controls });
+          if (step.source) {
+            organizationSource = step.source;
+            // Every execution host is made again with the new source; held previews were made without it.
+            retire(legacyHost); retire(host);
+            legacyHost = folder.project ? createExecutionHost({ installRecordRoot, projectRoot: folder.project, materialRoots, organizationSource, controls, timingStore }) : null; host = hostFor(folder.project);
+            for (const other of clients.values()) if (other.recipeMaterials) { retire(other.host); other.host = clientHost(other); }
+          }
+          return send(response, 200, step.answer);
+        }
         if (operation === 'timings') {
           if (!client.host) return send(response, 409, { status: 'unavailable', diagnostics: [{ code: 'HOST_UNAVAILABLE', message: 'Choose a project folder before reading install timings.' }] });
           const record = client.host.installTimings(body.runId);

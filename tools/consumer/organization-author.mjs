@@ -288,6 +288,18 @@ const catalogMessage = diagnostics => (diagnostics ?? []).map(diagnostic => diag
 // composes the same item is admitted by the exported document. Dependencies are approved with their requirer.
 async function assemble({ record, index, inventories }) {
   const omitted = [], problems = [], authored = [];
+  // Per tool, every composable per-tool entry is composed together once: a supporting document (a notices file) is rendered
+  // beside the items requiring it, so it is permitted as it is delivered beside all of them.
+  const together = new Map();
+  const jointFor = tool => {
+    if (!together.has(tool)) together.set(tool, composeRoots(record.entries.flatMap(entry => {
+      const hit = found(index, entry);
+      if (!hit || !rendersPerTool(hit) || entry.obligation === undefined || entry.obligation === 'prohibited' || !hit.item.scopes.includes(entry.scope)) return [];
+      const { configuration, missing } = exampleConfiguration(hit.item, entry);
+      return missing.length ? [] : [{ ...entry.item, scope: entry.scope, configuration }];
+    }), inventories, tool));
+    return together.get(tool);
+  };
   for (const [position, entry] of record.entries.entries()) {
     const hit = found(index, entry);
     const label = labelOf(hit?.item, entry.item.itemId), base = { entryId: entry.id, itemId: entry.item.itemId, label };
@@ -305,14 +317,18 @@ async function assemble({ record, index, inventories }) {
       const misses = [], before = authored.length;
       for (const tool of targetTools(record)) {
         if (composes) {
-          const composed = await composeRoots([{ ...ref, configuration }], inventories, tool);
+          const joint = await jointFor(tool);
+          const composed = joint.status === 'ok' && joint.value.policy.selections.some(candidate => candidate.item?.itemId === entry.item.itemId && candidate.scope === composeScope && candidate.tool === tool)
+            ? joint : await composeRoots([{ ...ref, configuration }], inventories, tool);
           if (composed.status !== 'ok') { misses.push(`${tool}: ${catalogMessage(composed.diagnostics)}`); continue; }
           const { policy } = composed.value, selection = policy.selections.find(candidate => candidate.item?.itemId === entry.item.itemId && candidate.scope === composeScope && candidate.tool === tool);
           const recipeIdentity = selection && await renderedIdentity(selection, inventories, policy);
           if (!recipeIdentity) { misses.push(`${tool}: Catalog composed no selection for ${label}.`); continue; }
           const dependencies = [];
+          // What this entry brings with it in that composition: its required items, not the other entries.
+          const brought = new Set(composed.value.inclusions.filter(inclusion => inclusion.root.itemId === entry.item.itemId && inclusion.item.itemId !== entry.item.itemId).map(inclusion => inclusion.item.itemId));
           for (const other of policy.selections) {
-            if (other === selection || other.tool !== tool) continue;
+            if (other === selection || other.tool !== tool || !brought.has(other.item?.itemId)) continue;
             const identity = await renderedIdentity(other, inventories, policy);
             if (!identity) { misses.push(`${tool}: no recipe for the dependency ${other.item?.itemId} of ${label}.`); continue; }
             const dependencyRef = { releaseSha256: composed.value.intent.pins.find(pin => pin.itemId === other.item.itemId)?.releaseSha256 ?? entry.item.releaseSha256, itemId: other.item.itemId, scope: other.scope };

@@ -137,6 +137,31 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     setFeedback = { framework: framework?.sha256, tool, result, requests };
     renderSetGuidance();
   }
+  // Asked once: the policy file and branch in the setup's repository. The host saves the source and reads it; the page
+  // sends only these two values.
+  function policySourceForm(request) {
+    const form = el('form', 'flex flex-wrap items-end gap-2 mt-1'); form.id = 'organization-source-form';
+    const field = (labelText, id, value) => { const label = el('label', 'flex flex-col text-[11px]'); const input = el('input', 'px-2 py-1 rounded border border-wb-control-border bg-surface-container-lowest text-on-surface'); input.id = id; input.value = value; input.required = true; label.append(el('span', '', labelText), input); return { label, input }; };
+    const path = field('Policy file', 'organization-source-path', request.path), branch = field('Branch', 'organization-source-branch', request.branch);
+    const submit = el('button', 'set-choice', 'Read organization policy'); submit.type = 'submit';
+    const result = el('p', 'w-full'); result.id = 'organization-source-result'; result.setAttribute('role', 'status');
+    form.append(path.label, branch.label, submit, result);
+    form.addEventListener('submit', async event => {
+      event.preventDefault(); submit.disabled = true; result.textContent = 'Reading…';
+      const policyNote = document.getElementById('organization-policy-note'); policyNote.dataset.asking = 'true';
+      try {
+        const answer = await authoring.request('organization-source', { path: path.input.value.trim(), branch: branch.input.value.trim() });
+        result.dataset.sourceState = answer.status;
+        result.textContent = answer.status === 'read' ? `Read: ${answer.policyId}.` : answer.status === 'not-found' ? 'Not found. Check the file path and branch.'
+          : answer.status === 'no-access' ? 'No access. Give the host read access in its controls file (AIH_CONSUMER_CONTROLS), then restart the Workbench.'
+          : (answer.diagnostics ?? []).map(value => value.message).join(' ') || `Not read (${answer.status}).`;
+        if (['read', 'no-access'].includes(answer.status)) { delete policyNote.dataset.asking; organizationPolicy = undefined; browseKey = undefined; render(); }
+      } catch (error) { result.textContent = `Not read: ${error.message}`; }
+      // A file not found keeps the question and its answer on screen for the next try.
+      finally { submit.disabled = false; }
+    });
+    return form;
+  }
   function renderSetGuidance() {
     const guidance = document.getElementById('framework-guidance');
     if (setFeedback && (setFeedback.framework !== currentFramework()?.sha256 || setFeedback.tool !== chosenTool?.id)) setFeedback = undefined;
@@ -343,9 +368,10 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     // Enterprise: the organization policy's read state, said once and never left blank.
     const policyNote = document.getElementById('organization-policy-note');
     const notice = enterprise ? organizationPolicyNotice(browseResult?.organizationPolicy ?? organizationPolicy, setupSettings) : null;
-    if (policyNote) {
+    if (policyNote && policyNote.dataset.asking !== 'true') {
       policyNote.hidden = !notice; policyNote.textContent = notice?.text ?? '';
-      if (notice) { policyNote.dataset.policyState = notice.state; policyNote.classList.toggle('text-error', notice.state !== 'ok'); attachTooltip(policyNote, setupInstructions()); } else delete policyNote.dataset.policyState;
+      if (notice) { policyNote.dataset.policyState = notice.state; policyNote.classList.toggle('text-error', !['ok', 'not-configured'].includes(notice.state)); attachTooltip(policyNote, setupInstructions()); } else delete policyNote.dataset.policyState;
+      if (notice?.request) policyNote.append(policySourceForm(notice.request));
     }
     renderSetGuidance();
     const choice = browseChoice(selectedFramework);

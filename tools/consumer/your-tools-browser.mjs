@@ -76,9 +76,11 @@ export async function runYourToolsBrowser({ origin, output, project, playwrightM
     await note.waitFor();
     assert.equal(await note.getAttribute('data-policy-state'), 'not-configured');
     const noteText = await note.innerText();
-    assert.match(noteText, /No organization authority source is configured by the host\./);
-    assert.ok(noteText.includes(OWNER_SETTINGS.organization.policyRepo), noteText);
-    assert.match(noteText, /AIH_ORGANIZATION_SOURCE/);
+    // The setup names a GitHub policy repository, so the page asks once for its policy file and branch (nothing is read
+    // here: this check makes no network request).
+    assert.match(noteText, /Organization policy not read yet\. Name the policy file in samartomar\/test and its branch/);
+    assert.equal(await page.locator('#organization-source-path').inputValue(), 'gosam.organization-policy.json');
+    assert.equal(await page.locator('#organization-source-branch').inputValue(), 'main');
 
     // Add the first card: Core composes it for each observed tool that takes it.
     const first = adds.first(), itemId = (await first.getAttribute('aria-label')).replace(/^Add /, '');
@@ -169,6 +171,7 @@ export async function runEnterpriseAdminBrowser({ origin, output, project, playw
     assert.deepEqual(installed, policy.selections.map(selection => selection.managementId).sort(), 'every item of the Enterprise policy installed');
     await page.screenshot({ path: join(output, `enterprise-admin-installed-${theme}.png`) });
     assert.deepEqual(errors, []);
+    assert.ok(new Set(policy.selections.map(selection => selection.tool)).size > 1, 'installed for several tools under the organisation');
     const facts = { policyMode: policy.mode, organizationGoverned: true, itemCount: installed.length, authority: authority.slice(0, 300),
       tools: [...new Set(policy.selections.map(selection => selection.tool))] };
     await writeFile(join(output, `enterprise-admin-${theme}.json`), JSON.stringify(facts, null, 2));

@@ -875,11 +875,42 @@ Core renders to the same project paths, such as Codex CLI and Antigravity CLI un
 `.agents`, share one installation). Saved selections keep the tools they were
 installed for; changing Your tools does not silently rewrite them.
 
+Fit is one test, shared by the card, a single Add, a set Add and Install
+(`checkToolFit` in `tools/consumer/headless.mjs`): Core's compatibility check finds no
+blocker for the tool (the item checked with what its Add brings) and Core renders the
+item for it. A chosen tool that fails it gets nothing; an item no chosen tool passes is
+refused in Core's words. The installed list shows an item installed for several tools
+as one row naming its tools; its Remove and Update cover every copy in one request.
+
 Under Enterprise, the catalog says once whether the host-configured organization
 authority source was read, in the authority-source wording, and what to do when it
-was not. The policy repository in setup is a saved reference; the page never reads it. Every Enterprise setup, Admin or
-Developer, composes an Enterprise policy that the host-configured organization policy governs; with no
-readable source, Add still works and Install says, in Core's words, that it needs one.
+was not. Every Enterprise setup, Admin or Developer, composes an Enterprise policy that
+the host-configured organization policy governs; with no readable source, Add still
+works and Install says, in Core's words, that it needs one.
+
+The organization source is host configuration. When the host configuration names none
+(`AIH_ORGANIZATION_SOURCE`) and the setup is Enterprise with a GitHub policy repository,
+the catalog asks once for the policy file's path and branch (defaults: the file name the
+organization author's export produces, `<short id>.organization-policy.json`, and
+`main`). The page sends only those two values; the host takes the repository from the
+saved setup, saves `{ provider: 'github', repository, path, revision }` as
+`organization-source.json` beside the setup file, and reads it through Core's
+`readGitHubPolicy` with the authentication the host controls file
+(`AIH_CONSUMER_CONTROLS`) holds. No token is stored or shown. The page then says read,
+not found or no access. A source the host configuration names is never replaced.
+
+Organization governance is per tool. In an Enterprise policy, a selection Core renders
+for a tool is governed by `<managementId>--<tool>` (the lead included, since which tool
+leads depends on the developer's choice; copies keep the management id they install
+under). The organization author writes one entry per permitted item and per tool the
+organization targets, each with that tool's rendered recipe identity: **an Admin who
+permits an item permits it for every tool the organization targets**. The targeted
+tools are the clients the draft's targets and entries name, or, when they name none,
+every tool Core observes. Core admits an entry by exact selection id and recipe identity
+(one entry per id), so a supporting document such as a notices file, which Core renders
+beside the items requiring it, is permitted as it is delivered beside the entries the
+baseline permits together: a developer who selects a different subset of those items is
+refused for that document.
 
 The strip also carries the start-up contract-check message, as information
 that blocks nothing. At start-up the host runs the installed Core's

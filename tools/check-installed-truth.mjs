@@ -17,8 +17,9 @@
 // your-tools runs the owner's Gate A setup (Enterprise admin, a policy repository the host does not read, all eleven AI
 // clients, an old single Codex choice): every chosen tool is listed and judged, items are addable, one Add installs for
 // each tool Core renders it for, and the organization policy's state is said with what to do.
-// enterprise-admin is the same setup with a readable local organisation policy: adding the Superpowers set composes an
-// Enterprise policy the organisation governs, and every item of it installs (as an Enterprise Developer's does).
+// enterprise-admin is the same setup with a readable local organisation policy exported by the Workbench's organisation
+// author for the Superpowers set: adding that set composes an Enterprise policy the organisation governs, and every item of it
+// installs for every chosen tool Core takes it in (as an Enterprise Developer's does).
 // no-raw-ids walks pick, review, Your setup, install and the installed list and fails on any item id, management id,
 // set id or sha256 from the page's Catalog and Core inventory in their visible text.
 // setup-assistance walks first-run setup and checks that no assistance tool appears without installable Catalog content,
@@ -222,27 +223,40 @@ async function runYourTools({ project, output, playwrightModule, theme }) {
   return withHost(project, origin => runYourToolsBrowser({ origin, output, project, playwrightModule, theme }));
 }
 
-// The organisation file is named by the host (AIH_ORGANIZATION_SOURCE, provider local). A scouting project takes the same
-// page steps to learn the exact setup the page composes; the organisation then permits exactly those recipes, by Core's
-// recipe identity, and the case project adds and installs it.
+// The organisation file is named by the host (AIH_ORGANIZATION_SOURCE, provider local). It is what the Workbench's own
+// organisation author exports when an Admin permits the Superpowers set for the tools the setup chose: one entry per
+// item and targeted tool. The case project then adds the Superpowers set and installs it.
 async function runEnterpriseAdmin({ project, output, playwrightModule, theme }) {
   await mkdir(output, { recursive: true });
   const organizationFile = 'organization-policy.json', organizationPath = join(output, organizationFile), sourcePath = join(output, 'organization-source.json');
-  const organization = { schema: 'urn:aihq:core:organization-policy:1.2.0', id: 'gosam-local', selections: [] };
-  await writeFile(organizationPath, `${JSON.stringify(organization, null, 2)}\n`);
-  await writeFile(sourcePath, JSON.stringify({ provider: 'local', path: organizationPath }));
-  const hostEnv = { AIH_ORGANIZATION_SOURCE: sourcePath };
-  const settle = async folder => { await mkdir(folder, { recursive: true }); await writeFile(join(folder, 'settings.json'), `${JSON.stringify(OWNER_SETTINGS, null, 2)}\n`); };
-  const scout = `${project}-scout`; await settle(scout);
-  const scouted = await withHost(scout, origin => runEnterpriseAdminBrowser({ origin, output, project: scout, playwrightModule, theme, install: false, organizationFile }), sources, consumerDir, hostEnv);
   const load = name => import(pathToFileURL(join(consumerDir, name)).href);
-  const { permitComposed } = await load('consumer/organization-permits.mjs');
+  const { runOrganizationAuthor } = await load('consumer/organization-author.mjs');
+  const { readJourneyEnvelope } = await load('consumer/journey.mjs');
   const { installedFamilies } = await load('consumer/installed-families.mjs');
   const catalogRoot = dirname(createRequire(join(consumerDir, 'package.json')).resolve('@aihq/catalog/package.json'));
-  organization.selections.push(...await permitComposed({ policy: scouted.policy, inventories: await installedFamilies({ root: catalogRoot }) }));
-  await writeFile(organizationPath, `${JSON.stringify(organization, null, 2)}\n`);
-  await settle(project);
-  return withHost(project, origin => runEnterpriseAdminBrowser({ origin, output, project, playwrightModule, theme, organizationFile }), sources, consumerDir, hostEnv);
+  const inventories = await installedFamilies({ root: catalogRoot });
+  const superpowers = inventories.find(entry => entry.family === 'Superpowers');
+  let state = await runOrganizationAuthor('organization-new', {}, { inventories });
+  const edit = async operation => {
+    state = await runOrganizationAuthor('organization-edit', { envelopeBytes: [...state.value.envelopeBytes], operation }, { inventories });
+    if (state.status !== 'ok') throw new Error(`the organisation author refused ${operation.kind}: ${JSON.stringify(state.diagnostics)}`);
+  };
+  await edit({ kind: 'set-policy-id', policyId: 'gosam-baseline' });
+  await edit({ kind: 'set-source', source: { provider: 'github', repository: { owner: 'samartomar', name: 'test' }, path: 'gosam.organization-policy.json', revision: { kind: 'branch', value: 'main' } } });
+  // The Admin permits the Superpowers set as Catalog offers it (its default members). A notices file is rendered beside the
+  // items requiring it, so its recipe identity depends on which of them are selected; one organisation entry holds one
+  // identity, so the baseline permits it as it is delivered beside this exact set.
+  const set = superpowers.release.sets.find(candidate => candidate.offer === 'pre-ticked');
+  for (const member of set.members.filter(candidate => candidate.defaultOn)) await edit({ kind: 'add-entry', releaseSha256: superpowers.release.sha256, itemId: member.item.itemId, scope: 'project' });
+  const { records } = (await readJourneyEnvelope(Uint8Array.from(state.value.envelopeBytes))).value;
+  for (const entry of records.find(record => record.id === 'organization-draft').entries) await edit({ kind: 'set-obligation', entryId: entry.id, obligation: 'permitted' });
+  for (const client of OWNER_SETTINGS.clients) await edit({ kind: 'add-target', scope: 'project', client });
+  const exported = await runOrganizationAuthor('organization-export', { envelopeBytes: [...state.value.envelopeBytes] }, { inventories });
+  if (exported.status !== 'ok') throw new Error(`the organisation author did not export the baseline: ${JSON.stringify(exported.diagnostics).slice(0, 2000)}`);
+  await writeFile(organizationPath, Buffer.from(exported.value.candidateBytes));
+  await writeFile(sourcePath, JSON.stringify({ provider: 'local', path: organizationPath }));
+  await mkdir(project, { recursive: true }); await writeFile(join(project, 'settings.json'), `${JSON.stringify(OWNER_SETTINGS, null, 2)}\n`);
+  return withHost(project, origin => runEnterpriseAdminBrowser({ origin, output, project, playwrightModule, theme, organizationFile }), sources, consumerDir, { AIH_ORGANIZATION_SOURCE: sourcePath });
 }
 
 // The ECC sets are first installed in another project under the same account home. Core must count only this project's
