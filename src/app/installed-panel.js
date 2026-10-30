@@ -5,7 +5,7 @@
 import { itemDisplayName } from '../catalog/item-name.js';
 import { groupInstalled, setRemovalEntries } from './installed-list.js';
 import { cancelRemoval, confirmRemoval, previewRemoval, removalMemberWords } from './installed-removal.js';
-import { confirmUpdate, previewUpdate } from './installed-update.js';
+import { confirmUpdate, previewUpdate, updateEntry } from './installed-update.js';
 import { compact } from './compact.js';
 import { iconSpan } from './icons.js';
 import { attachTooltip } from './tooltip.js';
@@ -147,9 +147,8 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       if (!offered) { message.textContent = `Update unavailable: the current Catalog does not publish ${item.itemId}.`; message.dataset.outcome = 'unavailable'; return; }
       removing = true; update.disabled = true; update.setAttribute('aria-busy', 'true'); message.textContent = 'Checking the replacement…'; delete message.dataset.outcome;
       try {
-        const entry = { ...item, name: item.name, managementId: item.managementId, scope: item.scope,
-          replacement: { ...offered.root, scope: item.scope, configuration: item.configuration ?? {} } };
-        const preview = await previewUpdate({ entries: [entry], request: requestHost, tool: client.tool });
+        const entry = updateEntry({ item, offered });
+        const preview = await previewUpdate({ entries: [entry], request: requestHost, tool: client.tool, nameOf: ref => label(ref.itemId) });
         const actions = el('div', 'flex flex-wrap gap-2');
         const confirm = button('Confirm update', async () => {
           if (removing) return;
@@ -169,7 +168,8 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
           ...step.members.map(member => el('p', 'text-on-surface-variant text-[11px]', `${member.action} ${member.path}${member.reason ? ` — ${member.reason}` : ''}`))
         ]), actions);
         area.hidden = false;
-        message.textContent = preview.canConfirm ? 'Nothing has been updated yet. Check the replacement, then confirm.' : 'Update cannot go ahead.';
+        message.textContent = preview.message;
+        if (!preview.canConfirm) message.dataset.outcome = 'not-prepared';
       } catch (error) { message.textContent = `Update did not start: ${error.message}`; message.dataset.outcome = 'failed'; }
       finally { removing = false; update.disabled = false; update.removeAttribute('aria-busy'); }
     }));

@@ -3,18 +3,50 @@ import { applyIfUnchanged, diagnosticWords } from './host-review.js';
 const readyPreparation = result => result?.disposition === 'prepared' && ['ready', 'partial'].includes(result.preparation?.status) && result.preparation.sessionId && result.preparation.review
   ? result.preparation : undefined;
 
-export async function previewUpdate({ entries, request, tool }) {
+// The host's refusals that name a Catalog item, in the page's words with the page's names for both items.
+// Pending owner approval as contract amendment 3.2.3 row 26.
+function requirementWords(diagnostic, entries, nameOf) {
+  const name = entries.find(entry => entry.managementId === diagnostic.managementId)?.name ?? diagnostic.managementId;
+  const required = diagnostic.item && (nameOf?.(diagnostic.item) ?? diagnostic.item.itemId);
+  if (diagnostic.reason === 'requirement-not-installed') return `${name} needs ${required}, which is not installed`;
+  if (diagnostic.reason === 'requirement-not-recorded') return `${name} now needs ${required}, which it did not need when it was installed`;
+  if (diagnostic.reason === 'install-not-recorded') return `${name} has no record of how this Workbench installed it, so its update cannot be checked`;
+  return undefined;
+}
+
+/** The page's part of an update: the installed item and the Catalog item offered for it. Its configuration is the one
+ * the host recorded at install, so none is read from the setup open in this page. */
+export function updateEntry({ item, offered }) {
+  const { configuration: _offered, ...root } = offered.root;
+  return { ...item, replacement: { ...root, scope: item.scope } };
+}
+
+export async function previewUpdate({ entries, request, tool, nameOf }) {
   const scope = entries[0]?.scope;
   const result = await request('update', { updates: entries.map(entry => ({ ...entry, managementId: entry.managementId, replacement: entry.replacement })), scope, tool });
   const preparation = readyPreparation(result);
   const steps = entries.map((entry, index) => {
     const update = result.updates?.[index];
-    if (!update) return { entry, state: 'blocked', members: [], message: 'Core returned no update for this item.' };
-    return { entry, state: update.disposition === 'prepared' ? 'ready' : 'blocked', members: update.members ?? [],
+    if (!update) return { entry, state: 'blocked', members: [], message: `Cannot update: ${diagnosticWords(result) || `Core returned no update for this item (${result.disposition ?? 'no answer'})`}.` };
+    // A prepared entry is reviewable only inside a ready preparation; otherwise the preparation's reasons are its reasons.
+    const reviewable = update.disposition === 'prepared' && Boolean(preparation);
+    const reason = update.disposition === 'prepared'
+      ? diagnosticWords(update, result, result.preparation) || `Core prepared no review (${result.preparation?.status ?? 'no preparation'})`
+      : diagnosticWords(update, result) || update.disposition;
+    return { entry, state: reviewable ? 'ready' : 'blocked', members: update.members ?? [],
       from: update.from, to: update.to,
-      message: update.disposition === 'prepared' ? `Replacement reviewed: ${update.to?.name ?? entry.name}.` : `Cannot update: ${diagnosticWords(update, result) || update.disposition}.` };
+      message: reviewable ? `Replacement reviewed: ${update.to?.name ?? entry.name}.` : `Cannot update: ${reason}.` };
   });
-  return { steps, canConfirm: Boolean(preparation) && !steps.some(step => step.state === 'blocked'),
+  const canConfirm = Boolean(preparation) && !steps.some(step => step.state === 'blocked');
+  // Never a bare refusal: Core's reason for the whole request, else each blocked item's in Core's own words.
+  const sentence = text => text.trim().replace(/\.+$/, '');
+  const named = (result.diagnostics ?? []).map(diagnostic => requirementWords(diagnostic, entries, nameOf)).filter(Boolean);
+  const why = (!result.updates && named.length && named.join('. '))
+    || (!result.updates && diagnosticWords(result))
+    || steps.filter(step => step.state === 'blocked').map(step => `${step.entry.name}: ${sentence(step.message.replace(/^Cannot update: /, ''))}`).join('. ')
+    || diagnosticWords(result, result.preparation) || `Core answered ${result.disposition ?? 'nothing'}`;
+  const message = canConfirm ? 'Nothing has been updated yet. Check the replacement, then confirm.' : `Update cannot go ahead: ${sentence(why)}. Nothing was updated.`;
+  return { steps, canConfirm, message,
     entries, scope, allowPartial: preparation?.status === 'partial', ...(preparation ? { sessionId: preparation.sessionId, review: preparation.review } : {}) };
 }
 
