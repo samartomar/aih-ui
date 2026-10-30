@@ -8,7 +8,11 @@ import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { resolveSelections } from '@aihq/catalog/reader';
+import { resolveSelections, readReleaseContent, readReleaseSets } from '@aihq/catalog/reader';
+import { createHash } from 'node:crypto';
+import { stable } from './primitives.mjs';
+import { readFileSync } from 'node:fs';
+import { compileReleaseSets } from '@aihq/catalog/producer';
 import { composeAuthoring, freshAuthoring } from './headless.mjs';
 import * as setChoices from './set-choices.mjs';
 import { pinSelectedRecipes } from './selected-recipe.mjs';
@@ -70,6 +74,43 @@ test('a set\'s members are owned by the set, and an input for an item outside it
   assert.equal(members.length, memberItems.length, 'every member is selected');
   for (const selection of members) assert.deepEqual(reasons(setChoices.setOwnedOrigins(intent, selection)), ['in-set:ecc.module.platform-configs'], `${selection.item.itemId} is owned by its set alone`);
   assert.equal(resolution.value.selections.some(selection => requiresInput.some(item => item.id === selection.item.itemId)), false, 'no required-input item is selected');
+});
+
+test('a configured member that only a set added is owned by the set, not recorded as chosen', () => {
+  // No published set has a member with a required input, so a selection-only set over the published ECC content
+  // with its published sets taken off holds one.
+  const ecc = release('ecc');
+  const document = JSON.parse(readFileSync(fileURLToPath(import.meta.resolve('@aihq/catalog/release-ecc.content.json')), 'utf8'));
+  delete document.sets;
+  const contentBytes = new TextEncoder().encode(stable(document) + '\n');
+  const content = readReleaseContent(contentBytes, { expectedSha256: createHash('sha256').update(contentBytes).digest('hex') });
+  assert.ok(content.valid, JSON.stringify(content.diagnostics));
+  const member = content.release.items.find(item => Object.values(item.inputs ?? {}).some(input => input.required));
+  assert.ok(member, 'Catalog publishes an ECC item with a required input');
+  const built = compileReleaseSets({ release: content.release, sets: [{ id: 'fixture.configured', name: 'Configured member fixture', description: 'Selection-only set whose member takes a required input.', offer: 'pre-ticked',
+    members: [{ item: { framework: content.release.framework.id, itemId: member.id }, optional: false, defaultOn: true }] }] });
+  assert.equal(built.status, 'ok', JSON.stringify(built));
+  const checked = readReleaseSets(built.value.bytes, { expectedSha256: built.value.sha256, release: content.release });
+  assert.ok(checked.valid, JSON.stringify(checked.diagnostics));
+  const fixture = { ...ecc, release: checked.release ?? checked.value.release };
+  const fixtureInventories = inventories.map(entry => entry === ecc ? fixture : entry);
+  const request = requestFor(fixture, 'fixture.configured');
+  const configuration = Object.fromEntries(Object.entries(member.inputs).filter(([, input]) => input.required).map(([name]) => [name, join(tmpdir(), 'aih-installed-truth', name)]));
+  const intent = freshAuthoring();
+  const chosen = setChoices.selectSetChoices({ intent, inventories: fixtureInventories, sets: [request], tool: 'claude',
+    configurations: [{ releaseSha256: fixture.release.sha256, itemId: member.id, scope: 'project', configuration }] });
+  assert.equal(chosen.status, 'ok', JSON.stringify(chosen.diagnostics ?? []));
+  const root = intent.roots.find(candidate => candidate.itemId === member.id);
+  assert.ok(root, 'the configured member is a root');
+  assert.deepEqual(root.configuration, configuration, 'the root carries its configuration');
+  const releases = Object.fromEntries(fixtureInventories.map(entry => [entry.release.sha256, entry.release]));
+  const resolution = resolveSelections({ releases, sets: setChoices.setChoicesOf(intent).map(choice => choice.request),
+    roots: intent.roots.map(({ releaseSha256, itemId, scope, configuration }) => ({ releaseSha256, itemId, scope, configuration })), skips: [] });
+  assert.equal(resolution.status, 'ok', JSON.stringify(resolution.diagnostics ?? []));
+  const selection = resolution.value.selections.find(candidate => candidate.item.itemId === member.id);
+  assert.deepEqual(reasons(selection.origins), ['chosen', 'in-set:fixture.configured'], 'Catalog records the root as chosen');
+  assert.deepEqual(reasons(setChoices.setOwnedOrigins(intent, selection)), ['in-set:fixture.configured'], 'the set alone owns it');
+  assert.deepEqual(selection.configuration, configuration, 'its configuration is kept');
 });
 
 test('an item chosen directly and through a set stays a root and keeps its chosen origin; set-only members do not', async () => {
