@@ -179,7 +179,10 @@ async function runUpdateOne({ project, output, playwrightModule, theme }) {
   const selectionKeys = installed.inventory.selections.map(selection => `${selection.scope}:${selection.managementId}`);
   const unrecorded = selectionKeys.filter(key => !recordBefore[key]);
   if (unrecorded.length) throw new Error(`${unrecorded.length} installed selections have no install record: ${unrecorded.slice(0, 5).join(', ')}`);
-  const changedRecords = selectionKeys.filter(key => JSON.stringify(recordAfter[key]) !== JSON.stringify(recordBefore[key]));
+  // The identity of what Core shows installed changes with the update; what it was installed with does not.
+  const keptFacts = entry => JSON.stringify({ scope: entry?.scope, managementId: entry?.managementId, configuration: entry?.configuration, requires: entry?.requires });
+  const changedRecords = selectionKeys.filter(key => keptFacts(recordAfter[key]) !== keptFacts(recordBefore[key]));
+  if (recordAfter[`project:${target.managementId}`]?.installed === recordBefore[`project:${target.managementId}`]?.installed) throw new Error(`${itemId}'s record still names what was installed before the update`);
   if (changedRecords.length) throw new Error(`${changedRecords.length} selections changed configuration or requirements: ${changedRecords.slice(0, 5).join(', ')}`);
   if (updated.inventory.selections.length !== installed.inventory.selections.length) throw new Error('the update changed how many selections are installed');
   const now = updated.inventory.selections.find(selection => selection.managementId === target.managementId);
