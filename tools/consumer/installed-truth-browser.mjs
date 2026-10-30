@@ -64,7 +64,7 @@ async function installSets(page, family, setIds) {
 }
 
 // A fresh session: nothing of the installing session's draft is open, so the list can only come from Core.
-async function freshInstalledList(browser, origin, theme, errors) {
+async function freshInstalledList(browser, origin, theme, errors, { catalog = true } = {}) {
   const context = await newContext(browser);
   const page = await openPage(context, origin, theme, errors);
   const answers = recordAnswers(page);
@@ -72,8 +72,8 @@ async function freshInstalledList(browser, origin, theme, errors) {
   await page.locator('#browse-family option[value="Extensions"]').waitFor({ state: 'attached' });
   await openPolicyDrawer(page);
   await page.waitForFunction(() => { const note = document.getElementById('installed-note'); return note && !/Checking what is installed/.test(note.textContent) && document.querySelectorAll('#installed-list li').length > 0; }, undefined, { timeout: 120_000 });
-  for (let attempt = 0; attempt < 100 && (!answers.catalog || !answers.inventory); attempt++) await page.waitForTimeout(100);
-  assert.ok(answers.catalog?.items?.length, 'the page received its Catalog');
+  for (let attempt = 0; attempt < 100 && ((catalog && !answers.catalog) || !answers.inventory); attempt++) await page.waitForTimeout(100);
+  if (catalog) assert.ok(answers.catalog?.items?.length, 'the page received its Catalog');
   assert.ok(answers.inventory?.selections?.length, 'the page received a non-empty Core inventory');
   return { context, page, answers };
 }
@@ -308,3 +308,58 @@ export async function runNamespacedRuleTruthBrowser({ origin, output, project, p
 }
 
 export const runSetRemovalTruthBrowser = options => runSetRemoval({ theme: 'dark', ...options });
+
+// Update one item: the real ECC TypeScript rules installed through the page, then, on a Workbench restarted
+// on a newer Catalog in which exactly one installed item changed, that item's Update and Confirm update. The caller
+// compares the project's files and Core's inventory before and after.
+export async function runUpdateOneInstallBrowser({ origin, output, playwrightModule, theme = 'dark' }) {
+  const { chromium } = await import(playwrightModule);
+  await mkdir(output, { recursive: true });
+  const browser = await chromium.launch({ headless: true });
+  const errors = [];
+  try {
+    const installing = await newContext(browser);
+    await installWithSets(await openPage(installing, origin, theme, errors), 'ECC', ['ecc.rules.typescript']);
+    await installing.close();
+    const { answers } = await freshInstalledList(browser, origin, theme, errors);
+    assert.deepEqual(errors, []);
+    return { status: 'passed', inventory: answers.inventory };
+  } finally { await browser.close(); }
+}
+
+export async function runUpdateOneBrowser({ origin, output, playwrightModule, theme = 'dark', itemId }) {
+  const { chromium } = await import(playwrightModule);
+  await mkdir(output, { recursive: true });
+  const browser = await chromium.launch({ headless: true });
+  const errors = [];
+  try {
+    // A Catalog read from a package root of its own keeps its recipes inline, a body past what the browser's
+    // protocol buffers for a test to read back, so the page asks its host whether it publishes the item.
+    const { page, answers } = await freshInstalledList(browser, origin, theme, errors, { catalog: false });
+    const published = await page.evaluate(async id => (await (await fetch('/api/authoring-catalog')).json()).items.some(item => item.id === id), itemId);
+    assert.ok(published, `the newer Catalog publishes ${itemId}`);
+    const selection = answers.inventory.selections.find(entry => entry.item?.itemId === itemId && entry.scope === 'project');
+    assert.ok(selection, `Core lists ${itemId} installed`);
+    // Only the changed item offers an update.
+    const offered = await page.locator('[data-installed-row]').filter({ has: page.locator('[data-installed-state="update-available"]') })
+      .evaluateAll(rows => rows.map(row => row.dataset.installedRow));
+    assert.deepEqual(offered, [selection.managementId], 'only the changed item shows "Update available"');
+    const row = page.locator(`[data-installed-row="${selection.managementId}"]`);
+    await row.getByRole('button', { name: 'Update', exact: true }).click();
+    const confirm = row.getByRole('button', { name: 'Confirm update', exact: true });
+    await confirm.waitFor({ timeout: 240_000 });
+    const message = page.locator('#installed-message');
+    await page.waitForFunction(() => !/Checking the replacement/.test(document.getElementById('installed-message')?.textContent ?? ''), undefined, { timeout: 240_000 });
+    assert.equal(await confirm.isEnabled(), true, `Confirm update is offered: ${await message.innerText()}\n${await row.innerText()}`);
+    const review = await row.innerText();
+    await confirm.click();
+    await page.waitForFunction(() => ['updated', 'failed', 'unknown', 'kept'].includes(document.getElementById('installed-message')?.dataset.outcome), undefined, { timeout: 240_000 });
+    const result = await message.innerText();
+    assert.equal(await message.getAttribute('data-outcome'), 'updated', result);
+    await page.screenshot({ path: join(output, `update-one-${theme}.png`), fullPage: true });
+    const after = await freshInstalledList(browser, origin, theme, errors, { catalog: false });
+    assert.deepEqual(errors, []);
+    await writeFile(join(output, `update-one-${theme}.json`), JSON.stringify({ status: 'passed', itemId, managementId: selection.managementId, review, result, errors }, null, 2));
+    return { status: 'passed', managementId: selection.managementId, members: selection.members.map(member => member.path), result, inventory: after.answers.inventory };
+  } finally { await browser.close(); }
+}

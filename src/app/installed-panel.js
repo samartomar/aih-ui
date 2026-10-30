@@ -148,7 +148,9 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       removing = true; update.disabled = true; update.setAttribute('aria-busy', 'true'); message.textContent = 'Checking the replacement…'; delete message.dataset.outcome;
       try {
         const entry = { ...item, name: item.name, managementId: item.managementId, scope: item.scope,
-          replacement: { ...offered.root, scope: item.scope, configuration: item.configuration ?? {} } };
+          // The configuration the setup records for this selection; Core's inventory does not carry it.
+          replacement: { ...offered.root, scope: item.scope, configuration: item.configuration
+            ?? (policyDocument()?.selections ?? []).find(selection => selection.managementId === item.managementId)?.configuration ?? {} } };
         const preview = await previewUpdate({ entries: [entry], request: requestHost, tool: client.tool });
         const actions = el('div', 'flex flex-wrap gap-2');
         const confirm = button('Confirm update', async () => {
