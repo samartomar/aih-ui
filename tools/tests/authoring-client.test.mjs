@@ -213,3 +213,70 @@ test('a policy with choices keeps its own mode when the setup mode changes', asy
   await client.setMode('enterprise');
   assert.deepEqual(urls, []); assert.equal(JSON.parse(new TextDecoder().decode(client.bytes)).mode, 'vibe');
 });
+// While the setup is Enterprise but the open policy is not, nothing is proposed, prepared or installed from it.
+const NOTICE = "These choices were made outside your organisation's policy. Start a new Enterprise setup to install them under it.";
+const modeOf = client => JSON.parse(new TextDecoder().decode(client.bytes)).mode;
+async function refusesOutside(client, urls) {
+  const sent = urls.length;
+  assert.equal(client.modeMismatch, true, 'the page shows the notice');
+  for (const result of [await client.propose({ type: 'select' }), await client.proposeRequest('compose', {}), await client.requestHost('prepare'), await client.requestHost('finish', {}), await client.requestHost('apply', {})])
+    assert.deepEqual(result, { status: 'refused', diagnostics: [{ code: 'ENTERPRISE_SETUP_REQUIRED', message: NOTICE }] });
+  assert.equal(urls.length, sent, 'no proposal, Prepare or Install request reaches the host');
+}
+function hostAnswering(t, answer) {
+  const previous = globalThis.fetch, urls = []; t.after(() => { globalThis.fetch = previous; });
+  globalThis.fetch = async (url, init) => { urls.push(url); return answer(url, JSON.parse(init.body)); };
+  return urls;
+}
+test('picks made before the switch to Enterprise are kept, refused, and left as they are by a new Enterprise setup', async t => {
+  const urls = hostAnswering(t, (url, body) => response({ status: 'ok', value: policyIn(body.mode) }));
+  const client = createAuthoringClient({ sessionRecovery: false }); client.publish(policyIn('vibe', [{ itemId: 'a' }]));
+  const picked = client.bytes;
+  await client.setMode('enterprise');
+  assert.deepEqual(urls, [], 'the policy with picks is not remade');
+  await refusesOutside(client, urls);
+  assert.deepEqual(client.bytes, picked, 'the picks are untouched');
+  assert.equal((await client.startSetupPolicy()).status, 'ok');
+  assert.deepEqual(urls, ['/api/authoring-new']); assert.equal(modeOf(client), 'enterprise');
+  assert.equal(client.modeMismatch, false); assert.deepEqual(client.intent.roots, [], 'nothing is carried into the Enterprise setup');
+});
+test('a pick pending review at the switch cannot be added to the non-Enterprise policy', async t => {
+  const pending = requests(t), client = createAuthoringClient({ sessionRecovery: false }); client.publish(policyIn('vibe'));
+  const proposed = client.propose({ type: 'select' });
+  await new Promise(done => setImmediate(done));
+  pending[0].resolve(response({ status: 'ok', value: policyIn('vibe', [{ itemId: 'a' }]) })); await proposed;
+  assert.ok(client.candidate, 'the pick waits for review');
+  await client.setMode('enterprise');
+  assert.equal(pending.length, 1, 'a policy with a pending pick is not remade');
+  const before = client.bytes;
+  assert.deepEqual(client.accept(), { status: 'refused', diagnostics: [{ code: 'ENTERPRISE_SETUP_REQUIRED', message: NOTICE }] });
+  assert.deepEqual(client.bytes, before); assert.ok(client.candidate, 'the pending pick is left as it is');
+  assert.equal(client.modeMismatch, true);
+  assert.deepEqual(await client.requestHost('prepare'), { status: 'refused', diagnostics: [{ code: 'ENTERPRISE_SETUP_REQUIRED', message: NOTICE }] });
+  assert.equal(pending.length, 1);
+});
+test('a recovered vibe policy with picks is refused under an Enterprise setup', async t => {
+  const urls = hostAnswering(t, () => response({ status: 'ok', value: policyIn('vibe', [{ itemId: 'a' }]) }));
+  const client = createAuthoringClient({ sessionRecovery: false });
+  client.importBytes(new TextEncoder().encode(JSON.stringify({ mode: 'vibe' })));
+  await client.reopen();
+  urls.length = 0;
+  await client.setMode('enterprise');
+  assert.deepEqual(urls, []);
+  await refusesOutside(client, urls);
+});
+for (const [name, answer] of [['is refused', async () => response({ status: 'refused', diagnostics: [{ code: 'SOURCE_UNAVAILABLE', message: 'no catalog' }] })],
+  ['fails', async () => { throw new Error('network down'); }]]) {
+  test(`a new Enterprise policy request that ${name} is not swallowed`, async t => {
+    const urls = hostAnswering(t, answer);
+    const client = createAuthoringClient({ sessionRecovery: false }); client.publish(policyIn('vibe'));
+    await client.setMode('enterprise');
+    assert.deepEqual(urls, ['/api/authoring-new']);
+    assert.equal(client.modeFailure.status, 'refused', 'the failure is kept');
+    assert.equal(modeOf(client), 'vibe');
+    await refusesOutside(client, urls);
+    // The notice's button asks again, and its failure is reported the same way.
+    assert.equal((await client.startSetupPolicy()).status, 'refused');
+    assert.equal(client.modeMismatch, true);
+  });
+}
