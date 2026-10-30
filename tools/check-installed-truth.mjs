@@ -11,18 +11,23 @@
 // only its files changed, and that every selection kept its origins and configuration.
 // update-requirement needs --requirement-pack: the same, except the changed rule now also requires an item that is not
 // installed. The update must stop before Core is asked, name that item, and change no file.
+// ecc-sets-removal installs two ECC rule sets in a second project, then in this one removes both in one request and,
+// installed again, one after the other; nothing of ECC may be left here, and the other project keeps all of its ECC.
+// Every case's host runs on a disposable account home that the case's projects share.
 // no-raw-ids walks pick, review, Your setup, install and the installed list and fails on any item id, management id,
 // set id or sha256 from the page's Catalog and Core inventory in their visible text.
-import { copyFile, cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { copyFile, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pageAssets } from './server/assets.mjs';
 import { buildCss } from './build-css.mjs';
-import { runEccSetsRemovalTruthBrowser, runInstalledListTruthBrowser, runNamespacedRuleTruthBrowser, runNeededRemovalTruthBrowser, runNoRawIdsBrowser, runSetRemovalTruthBrowser, runSharedBlockTruthBrowser, runUpdateBlockedBrowser, runUpdateOneBrowser, runUpdateOneInstallBrowser } from './consumer/installed-truth-browser.mjs';
+import { homeEnvironment } from './consumer/home-environment.mjs';
+import { installEccSetsBrowser, readEccInstalledBrowser, runEccSetsRemovalTruthBrowser, runInstalledListTruthBrowser, runNamespacedRuleTruthBrowser, runNeededRemovalTruthBrowser, runNoRawIdsBrowser, runSetRemovalTruthBrowser, runSharedBlockTruthBrowser, runUpdateBlockedBrowser, runUpdateOneBrowser, runUpdateOneInstallBrowser } from './consumer/installed-truth-browser.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // The page's Tailwind build is ignored by Git, so a fresh checkout has none; without it the catalog column is no
@@ -36,7 +41,7 @@ const packs = { 'update-one': option('--update-pack'), 'update-requirement': opt
 for (const name of Object.keys(packs)) packs[name] &&= resolve(packs[name]);
 const named = args.slice(1).filter((value, index, all) => !value.startsWith('--') && !['--theme', '--update-pack', '--requirement-pack'].includes(all[index - 1]));
 const cases = { list: runInstalledListTruthBrowser, 'set-removal': runSetRemovalTruthBrowser, 'namespaced-rule': runNamespacedRuleTruthBrowser,
-  'shared-block': runSharedBlockTruthBrowser, 'needed-removal': runNeededRemovalTruthBrowser, 'ecc-sets-removal': runEccSetsRemovalTruthBrowser, 'no-raw-ids': runNoRawIdsBrowser, 'update-one': runUpdateOne, 'update-requirement': runUpdateRequirement };
+  'shared-block': runSharedBlockTruthBrowser, 'needed-removal': runNeededRemovalTruthBrowser, 'ecc-sets-removal': runEccSetsRemoval, 'no-raw-ids': runNoRawIdsBrowser, 'update-one': runUpdateOne, 'update-requirement': runUpdateRequirement };
 const selected = named.length ? named : Object.keys(cases).filter(name => !Object.hasOwn(packs, name) || packs[name]);
 for (const name of selected) if (!cases[name]) throw new Error(`Unknown case ${name}; choose from ${Object.keys(cases).join(', ')}.`);
 
@@ -49,6 +54,9 @@ const fixtureDir = join(consumerDir, 'installed-truth-fixtures');
 const sources = join(fixtureDir, 'sources.json');
 await writeFile(sources, JSON.stringify((await frameworkFixtures(fixtureDir, catalogArtifact)).scenarios.facts));
 
+// Core keeps its records under the account home. Each case's host runs on its own disposable home, never the real one;
+// every project of the case shares it, as two projects on one machine do.
+let caseHome;
 async function withHost(project, run, sourcesPath = sources, hostConsumerDir = consumerDir) {
   await mkdir(project, { recursive: true });
   const runDir = join(project, 'page');
@@ -56,7 +64,7 @@ async function withHost(project, run, sourcesPath = sources, hostConsumerDir = c
   const summaryPath = join(runDir, 'summary.json'); await writeFile(summaryPath, JSON.stringify(summary));
   const portPath = join(project, 'host.port'), configPath = join(project, 'host-config.json');
   await writeFile(configPath, JSON.stringify({ consumerDir: hostConsumerDir, runDir, summaryPath, settingsPath: join(project, 'settings.json'), portPath,
-    env: { AIH_CONSUMER_PROJECT: project, AIH_FRAMEWORK_SOURCES: sourcesPath } }));
+    env: { ...homeEnvironment(caseHome), AIH_CONSUMER_PROJECT: project, AIH_FRAMEWORK_SOURCES: sourcesPath } }));
   await rm(portPath, { force: true });
   const child = spawn(process.execPath, [join(repo, 'tools/installed-host.mjs'), configPath], { stdio: ['ignore', 'pipe', 'pipe'] });
   const log = []; child.stdout.on('data', chunk => log.push(String(chunk))); child.stderr.on('data', chunk => log.push(String(chunk)));
@@ -197,11 +205,31 @@ async function runUpdateOne({ project, output, playwrightModule, theme }) {
   return { status: 'passed' };
 }
 
+// The ECC sets are first installed in another project under the same account home. Core must count only this project's
+// requirers when it decides what a removal frees, so the other project's ECC is still listed afterwards, file for file.
+async function runEccSetsRemoval({ project, output, playwrightModule, theme }) {
+  const other = `${project}-other`;
+  const installed = await withHost(other, origin => installEccSetsBrowser({ origin, playwrightModule, theme }));
+  if (installed.status !== 'passed') return installed;
+  if (!installed.itemIds.includes('ecc.notices')) throw new Error(`the other project has no ecc.notices: ${installed.itemIds.join(', ')}`);
+  const treeBefore = await treeHashes(other);
+  const removed = await withHost(project, origin => runEccSetsRemovalTruthBrowser({ origin, output, project, playwrightModule, theme }));
+  if (removed.status !== 'passed') return removed;
+  const listed = await withHost(other, origin => readEccInstalledBrowser({ origin, playwrightModule, theme }));
+  if (JSON.stringify(listed.itemIds) !== JSON.stringify(installed.itemIds)) throw new Error(`the other project's ECC changed: before ${installed.itemIds.join(', ')}; after ${listed.itemIds.join(', ')}`);
+  const treeAfter = await treeHashes(other);
+  const changedPaths = [...new Set([...Object.keys(treeBefore), ...Object.keys(treeAfter)])].filter(path => treeBefore[path] !== treeAfter[path]);
+  if (changedPaths.length) throw new Error(`removing ECC here changed ${changedPaths.length} files of the other project: ${changedPaths.slice(0, 5).join(', ')}`);
+  await writeFile(join(output, `ecc-sets-removal-other-${theme}.json`), JSON.stringify({ itemIds: listed.itemIds, files: Object.keys(treeAfter).length }, null, 2));
+  return { status: 'passed' };
+}
+
 const playwrightModule = import.meta.resolve('playwright');
 for (const name of selected) {
   const project = join(consumerDir, `installed-truth-${name}-${theme}-${randomUUID().slice(0, 8)}`);
   const output = join(consumerDir, `installed-truth-evidence-${name}-${theme}`);
-  const outcome = Object.hasOwn(packs, name) ? await cases[name]({ project, output, playwrightModule, theme })
+  caseHome = await mkdtemp(join(tmpdir(), 'aih-installed-truth-home-'));
+  const outcome = Object.hasOwn(packs, name) || name === 'ecc-sets-removal' ? await cases[name]({ project, output, playwrightModule, theme })
     : await withHost(project, origin => cases[name]({ origin, output, project, playwrightModule, theme }));
   if (outcome.status !== 'passed') throw new Error(`${name} (${theme}) failed: ${JSON.stringify(outcome)}`);
   console.log(`installed truth ${name} (${theme}) passed`);

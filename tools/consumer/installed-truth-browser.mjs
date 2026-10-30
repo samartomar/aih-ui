@@ -695,25 +695,109 @@ export async function runNoRawIdsBrowser({ origin, output, playwrightModule, the
   } finally { await browser.close(); }
 }
 
-// Two real ECC rule sets, each of whose rules requires ECC's shared notices. Removing the sets one after the other through
-// "Remove this set" must leave nothing of ECC: the notices go with the last set (Core frees what only removed items
-// required), and each preview lists every file Core removes.
+// Two real ECC rule sets, each of whose rules requires ECC's shared notices.
+export const ECC_SETS = ['ecc.rules.typescript', 'ecc.rules.golang'];
+const ECC_NOTICES = 'ecc.notices';
+const eccOf = inventory => (inventory?.selections ?? []).filter(selection => selection.item?.framework === 'ecc');
+
+// The same ECC sets installed through the page in this host's project; what Core then lists of ECC there.
+export async function installEccSetsBrowser({ origin, playwrightModule, theme = 'dark' }) {
+  const { chromium } = await import(playwrightModule);
+  const browser = await chromium.launch({ headless: true });
+  const errors = [];
+  try {
+    const installing = await newContext(browser);
+    await installSets(await openPage(installing, origin, theme, errors), 'ECC', ECC_SETS);
+    await installing.close();
+    const { answers } = await freshInstalledList(browser, origin, theme, errors);
+    assert.deepEqual(errors, []);
+    return { status: 'passed', itemIds: eccOf(answers.inventory).map(selection => selection.item.itemId).sort() };
+  } finally { await browser.close(); }
+}
+
+// What Core lists of ECC in this host's project, read by the page in a fresh session.
+export async function readEccInstalledBrowser({ origin, playwrightModule, theme = 'dark' }) {
+  const { chromium } = await import(playwrightModule);
+  const browser = await chromium.launch({ headless: true });
+  const errors = [];
+  try {
+    const { answers } = await freshInstalledList(browser, origin, theme, errors);
+    assert.deepEqual(errors, []);
+    return { status: 'passed', itemIds: eccOf(answers.inventory).map(selection => selection.item.itemId).sort() };
+  } finally { await browser.close(); }
+}
+
+// The preview round as the installed list shows it: each item's message and the files Core would remove.
+const previewText = preview => preview.steps.map(step => [`${step.entry.name}: ${step.message}`, ...step.files.map(file => `${file.action}  ${file.path}`)].join('\n')).join('\n');
+
+// The ECC sets are removed twice from this project while another project under the same account home keeps them
+// (check-installed-truth.mjs installs them there first and checks them afterwards). First both sets in ONE request:
+// the installed list offers one set per Remove, so the page's own removal modules are given both sets' entries, as
+// "Remove this set" builds them, and preview once; ECC's notices must be folded into that preview and be gone after.
+// Then, installed again, one set after the other through "Remove this set". Each time nothing of ECC may be left here.
 export async function runEccSetsRemovalTruthBrowser({ origin, output, project, playwrightModule, theme = 'dark' }) {
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true });
-  const errors = [], setIds = ['ecc.rules.typescript', 'ecc.rules.golang'], noticesId = 'ecc.notices';
-  try {
+  const errors = [], evidence = { together: undefined, rounds: [] };
+  const install = async () => {
     const installing = await newContext(browser);
-    await installSets(await openPage(installing, origin, theme, errors), 'ECC', setIds);
+    await installSets(await openPage(installing, origin, theme, errors), 'ECC', ECC_SETS);
     await installing.close();
-    const { page, answers } = await freshInstalledList(browser, origin, theme, errors);
-    const before = answers.inventory.selections;
-    const ecc = before.filter(selection => selection.item?.framework === 'ecc');
-    const notices = ecc.find(selection => selection.item.itemId === noticesId);
-    assert.ok(notices, `Core lists ${noticesId} installed: ${JSON.stringify(ecc.map(selection => selection.item.itemId))}`);
-    const rounds = [];
-    for (const setId of setIds) {
+    const listed = await freshInstalledList(browser, origin, theme, errors);
+    const ecc = eccOf(listed.answers.inventory);
+    assert.ok(ecc.some(selection => selection.item.itemId === ECC_NOTICES), `Core lists ${ECC_NOTICES} installed: ${JSON.stringify(ecc.map(selection => selection.item.itemId))}`);
+    return { ...listed, ecc };
+  };
+  const leftOnDisk = ecc => ecc.flatMap(selection => selection.members.map(member => member.path)).filter(path => path.startsWith(project) && existsSync(path));
+  try {
+    // Both sets in one request. "Remove this set" is opened and cancelled once only to read the page's own request.
+    const first = await install();
+    const sent = [];
+    first.page.on('request', request => { if (request.url().endsWith('/api/authoring-remove')) sent.push({ headers: request.headers(), body: JSON.parse(request.postData() ?? '{}') }); });
+    const opened = first.page.locator(`[data-installed-set^="${ECC_SETS[0]}/"]`);
+    await opened.locator('> div').first().getByRole('button').first().click();
+    await opened.getByRole('button', { name: 'Cancel', exact: true }).waitFor({ timeout: 120_000 });
+    await opened.getByRole('button', { name: 'Cancel', exact: true }).click();
+    assert.equal(sent.length, 1, 'Remove this set asked Core once');
+    const { removals: _removals, scope: _scope, mode, ...base } = sent[0].body;
+    const headers = Object.fromEntries(Object.entries(sent[0].headers).filter(([name]) => name === 'x-aih-client' || name === 'content-type'));
+    first.answers.removal = undefined; sent.length = 0;
+    const preview = await first.page.evaluate(async ({ inventory, setIds, base, headers, mode }) => {
+      const { previewRemoval } = await import('/app/installed-removal.js');
+      const { groupInstalled, setRemovalEntries } = await import('/app/installed-list.js');
+      const groups = groupInstalled({ inventory }).originGroups.filter(group => setIds.includes(group.set?.setId));
+      const entries = groups.flatMap(group => setRemovalEntries(group).map(({ keptFor: _kept, ...entry }) => entry));
+      const request = async (operation, body) => (await fetch(`/api/authoring-${operation}`, { method: 'POST', headers, body: JSON.stringify({ ...base, ...body }) })).json();
+      return { sets: groups.length, preview: await previewRemoval({ entries, request, mode }) };
+    }, { inventory: first.answers.inventory, setIds: ECC_SETS, base, headers, mode });
+    assert.equal(preview.sets, ECC_SETS.length, 'both sets are listed as installed sets');
+    assert.equal(sent.length, 1, 'both sets were previewed in one request');
+    for (let attempt = 0; attempt < 100 && !first.answers.removal; attempt++) await first.page.waitForTimeout(100);
+    const together = previewText(preview.preview), removal = first.answers.removal;
+    const previewed = assertPreviewListsRemovals(together, removal);
+    assert.ok(preview.preview.canConfirm, together);
+    const notices = first.ecc.find(selection => selection.item.itemId === ECC_NOTICES);
+    const noticesFiles = notices.members.map(member => member.path);
+    assert.ok(noticesFiles.length, `${ECC_NOTICES} has files`);
+    assert.deepEqual(noticesFiles.filter(path => !together.includes(path)), [], `${ECC_NOTICES} is folded into the one preview\n${together}`);
+    const done = await first.page.evaluate(async ({ preview, base, headers, mode }) => {
+      const { confirmRemoval } = await import('/app/installed-removal.js');
+      const request = async (operation, { purpose: _purpose, ...body }) => (await fetch(`/api/authoring-${operation}`, { method: 'POST', headers, body: JSON.stringify({ ...base, ...body }) })).json();
+      const result = await confirmRemoval({ preview, request, mode });
+      const inventory = await request('managed', {});
+      return { outcome: result.outcome, message: result.message, inventory };
+    }, { preview: preview.preview, base, headers, mode });
+    assert.equal(done.outcome, 'removed', done.message);
+    evidence.together = { previewed, preview: together, result: done.message, left: eccOf(done.inventory).map(selection => ({ itemId: selection.item.itemId, origins: selection.origins })) };
+    await writeFile(join(output, `ecc-sets-removal-${theme}.json`), JSON.stringify({ status: 'checking', ...evidence, errors }, null, 2));
+    assert.deepEqual(eccOf(done.inventory).map(selection => selection.item.itemId), [], 'after one request for both sets nothing of ECC is left, its notices included');
+    assert.deepEqual(leftOnDisk(first.ecc), [], 'every ECC file is absent on disk after the one request');
+    await first.context.close();
+
+    // One set after the other through "Remove this set".
+    const { page, answers, ecc } = await install();
+    for (const setId of ECC_SETS) {
       const listed = answers.inventory;
       answers.removal = undefined;
       const section = page.locator(`[data-installed-set^="${setId}/"]`);
@@ -731,17 +815,16 @@ export async function runEccSetsRemovalTruthBrowser({ origin, output, project, p
       await message.waitFor({ timeout: 60_000 });
       const result = await message.innerText();
       assert.equal(await message.getAttribute('data-outcome'), 'removed', result);
-      rounds.push({ setId, previewed, review, result, removals: removal.removals.map(entry => ({ managementId: entry.managementId, ...(entry.origin ? { origin: entry.origin } : {}),
+      evidence.rounds.push({ setId, previewed, review, result, removals: removal.removals.map(entry => ({ managementId: entry.managementId, ...(entry.origin ? { origin: entry.origin } : {}),
         disposition: entry.disposition, change: entry.change, members: (entry.members ?? []).map(member => `${member.action} ${member.path}`) })),
-        left: answers.inventory.selections.filter(selection => selection.item?.framework === 'ecc').map(selection => ({ itemId: selection.item.itemId, origins: selection.origins })) });
+        left: eccOf(answers.inventory).map(selection => ({ itemId: selection.item.itemId, origins: selection.origins })) });
     }
     const after = answers.inventory?.selections ?? [];
-    await writeFile(join(output, `ecc-sets-removal-${theme}.json`), JSON.stringify({ status: 'checking', before: ecc.map(selection => selection.item.itemId), rounds, errors }, null, 2));
-    assert.deepEqual(after.filter(selection => selection.item?.framework === 'ecc').map(selection => selection.item.itemId), [], 'nothing of ECC is left, its notices included');
-    const left = ecc.flatMap(selection => selection.members.map(member => member.path)).filter(path => path.startsWith(project) && existsSync(path));
-    assert.deepEqual(left, [], 'every ECC file is absent on disk');
+    await writeFile(join(output, `ecc-sets-removal-${theme}.json`), JSON.stringify({ status: 'checking', before: ecc.map(selection => selection.item.itemId), ...evidence, errors }, null, 2));
+    assert.deepEqual(eccOf(answers.inventory).map(selection => selection.item.itemId), [], 'nothing of ECC is left, its notices included');
+    assert.deepEqual(leftOnDisk(ecc), [], 'every ECC file is absent on disk');
     await page.screenshot({ path: join(output, `ecc-sets-removal-${theme}.png`), fullPage: true });
-    await writeFile(join(output, `ecc-sets-removal-${theme}.json`), JSON.stringify({ status: 'passed', before: ecc.map(selection => selection.item.itemId), rounds,
+    await writeFile(join(output, `ecc-sets-removal-${theme}.json`), JSON.stringify({ status: 'passed', before: ecc.map(selection => selection.item.itemId), ...evidence,
       after: after.map(selection => selection.item?.itemId), errors }, null, 2));
     assert.deepEqual(errors, []);
     return { status: 'passed' };
