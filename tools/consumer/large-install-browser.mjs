@@ -95,8 +95,22 @@ export async function runLargeInstallBrowser({ origin, output, playwrightModule,
   } finally { await browser.close(); }
 }
 
-// The connection to the Workbench is lost for the whole of a (small) Install: the page must not call it installed or
-// failed, and the installed list it shows afterwards is Core's record.
+const HELD_NOTE = 'Install is still running in this project folder. What is installed shows here once it has finished.';
+const RUNNING_MESSAGE = 'Install is still running in this project folder.';
+const applyRunning = page => page.evaluate(async () => (await (await fetch('/api/authoring-apply-state', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).json()).running);
+// The list is Core's record, read once nothing is applying: rows appear, and every row is a selection Core records.
+async function listFromCore(page, inventory, log) {
+  await page.waitForFunction(() => document.querySelectorAll('[data-installed-row]').length > 0, undefined, { timeout: 120_000 });
+  const rows = await page.locator('[data-installed-row]').evaluateAll(nodes => nodes.map(node => node.dataset.installedRow));
+  const recorded = new Set(inventory.selections.map(selection => selection.managementId));
+  log(`list: ${rows.length} rows for Core's ${inventory.selections.length} selections`);
+  assert.deepEqual(rows.filter(id => !recorded.has(id)), [], 'every row is a selection Core records');
+}
+const text = async locator => (await locator.innerText()).replace(/\s+/g, ' ').trim();
+
+// Every answer to an Install is lost while the host's Apply is still going (it starts Core only after applyDelayMs).
+// The page must say the outcome is unknown, hold the installed list and Install while anything is applying in the
+// folder, read Core's record only afterwards, and show Core's own outcome once the answer can be reached again.
 export async function runLostContactBrowser({ origin, output, playwrightModule, log = console.log }) {
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
@@ -108,27 +122,91 @@ export async function runLostContactBrowser({ origin, output, playwrightModule, 
     await openPolicyDrawer(page);
     await page.locator('#install-button:not([disabled])').waitFor({ timeout: 300_000 });
     // Every request that would carry Core's answer back fails, as a dropped connection does.
-    await page.route(/\/api\/authoring-apply(-status)?$/, route => /-status$/.test(route.request().url()) ? route.abort('connectionreset') : route.continue());
+    const lostAnswers = /\/api\/authoring-apply-status$/;
+    await page.route(lostAnswers, route => route.abort('connectionreset'));
+    const reads = [];
+    page.on('request', request => { if (/\/api\/authoring-managed$/.test(request.url())) reads.push(Date.now()); });
+    const clicked = Date.now();
     await page.locator('#install-button').click();
     await page.locator('#install-message[data-outcome]').waitFor({ timeout: 600_000 });
     const outcome = await page.locator('#install-message').getAttribute('data-outcome');
-    const message = (await page.locator('#install-message').innerText()).replace(/\s+/g, ' ');
+    const message = await text(page.locator('#install-message'));
     log(`lost contact: page outcome ${outcome}: ${message}`);
-    await page.unroute(/\/api\/authoring-apply(-status)?$/);
     assert.equal(outcome, 'unknown', 'a lost answer is neither installed nor failed');
-    assert.match(message, /Install outcome unknown/);
-    assert.match(message, /installed list shows what Core recorded/);
-    // What the list shows comes from Core: once Core has finished, the list has a row for each selection it records.
-    let inventory;
-    for (let attempt = 0; attempt < 120; attempt++) {
-      inventory = await coreInventory(page);
-      if (inventory.selections?.length && await page.locator('[data-installed-row]').count() === inventory.selections.length) break;
-      await page.waitForTimeout(1000);
-      if (attempt % 10 === 9) { await page.reload(); await openPolicyDrawer(page); }
+    // The host is still applying (Core starts only after applyDelayMs): for the next seconds nothing may be read or offered.
+    await page.waitForTimeout(5000);
+    log(`lost contact: from Install to 5 s after giving up: ${reads.filter(time => time >= clicked).length} reads of Core's record, Install ${await page.locator('#install-button').isDisabled() ? 'held' : 'offered'}, ${await page.locator('[data-installed-row]').count()} rows, note "${await text(page.locator('#installed-note'))}"`);
+    assert.equal(reads.filter(time => time >= clicked).length, 0, "Core's record is not read while Core may be writing");
+    assert.equal(await page.locator('#install-button').isDisabled(), true, 'Install stays held');
+    assert.equal(await text(page.locator('#installed-note')), HELD_NOTE, 'the list says it is waiting, nothing about what is installed');
+    assert.equal(message, 'Install outcome unknown: This page lost contact with the Workbench while it was running.');
+    assert.equal(await applyRunning(page), true, 'the host is still applying when the page gives up asking (applyDelayMs too short otherwise)');
+    // While anything is applying in the folder: no list, no Core read, no Install.
+    await page.locator('#installed-note').filter({ hasText: HELD_NOTE }).waitFor({ timeout: 15_000 });
+    let checks = 0;
+    while (await applyRunning(page)) {
+      assert.equal(await page.locator('[data-installed-row]').count(), 0, 'no installed row while Core may be writing');
+      assert.equal(await text(page.locator('#installed-note')), HELD_NOTE);
+      assert.equal(await page.locator('#install-button').isDisabled(), true, 'Install stays held');
+      assert.equal(reads.filter(time => time >= clicked).length, 0, "Core's record is not read while Core may be writing");
+      checks++; await page.waitForTimeout(1000);
     }
-    assert.ok(inventory.selections.length > 0, 'Core recorded the Install the page lost contact with');
-    assert.equal(await page.locator('[data-installed-row]').count(), inventory.selections.length, `the installed list shows Core's ${inventory.selections.length} records`);
+    log(`lost contact: held for ${checks} checks while the host applied`);
+    assert.ok(checks >= 3, `the hold was observed (${checks} checks)`);
+    // Contact is back: the page reads Core's run and Core's record.
+    await page.unroute(lostAnswers);
+    await page.locator('#install-message[data-outcome="installed"]').waitFor({ timeout: 120_000 })
+      .catch(async error => { log(`lost contact: after contact came back the page says "${await text(page.locator('#install-message'))}" (${await page.locator('#install-message').getAttribute('data-outcome')})`); throw error; });
+    const inventory = await coreInventory(page);
+    await listFromCore(page, inventory, log);
+    assert.ok(inventory.selections.length > 0, 'Core recorded the Install');
+    log(`lost contact: then ${await text(page.locator('#install-message'))} · ${inventory.selections.length} rows`);
     await page.screenshot({ path: join(output, 'lost-contact.png'), fullPage: true });
+    assert.deepEqual(errors, []);
+    return { status: 'passed', selections: inventory.selections.length, heldChecks: checks };
+  } finally { await browser.close(); }
+}
+
+// The page is reloaded while a (held-back) Install is running: the reloaded page says Install is still running, holds
+// the list and Install, then shows Core's outcome and Core's record.
+export async function runReloadBrowser({ origin, output, playwrightModule, log = console.log }) {
+  const { chromium } = await import(playwrightModule);
+  await mkdir(output, { recursive: true });
+  const browser = await chromium.launch({ headless: true });
+  const errors = [];
+  try {
+    const { page } = await openPage(browser, origin, errors);
+    await addSets(page, 'Superpowers');
+    await openPolicyDrawer(page);
+    await page.locator('#install-button:not([disabled])').waitFor({ timeout: 300_000 });
+    const started = page.waitForResponse(response => /\/api\/authoring-apply$/.test(response.url()));
+    if (process.env.AIH_DEBUG_APPLY) page.on('response', async response => { if (/apply-(state|status)$/.test(response.url())) log(`debug ${response.url().split('/').at(-1)} ${response.status()} ${await response.text().catch(() => '?')}`.slice(0, 200)); });
+    await page.locator('#install-button').click();
+    await started;
+    await page.reload();
+    await page.locator('#browse-family option[value="ECC"]').waitFor({ state: 'attached' });
+    await openPolicyDrawer(page);
+    await page.locator('#install-message').filter({ hasText: RUNNING_MESSAGE }).waitFor({ timeout: 30_000 })
+      .catch(async error => { log(`reload: the reloaded page says "${await text(page.locator('#install-message'))}", Install ${await page.locator('#install-button').isDisabled() ? 'held' : 'offered'}`); throw error; });
+    assert.equal(await applyRunning(page), true, 'the host is still applying after the reload');
+    await page.locator('#installed-note').filter({ hasText: HELD_NOTE }).waitFor({ timeout: 30_000 });
+    assert.equal(await page.locator('#install-button').isDisabled(), true, 'Install stays held after the reload');
+    assert.equal(await page.locator('[data-installed-row]').count(), 0, 'no installed row while Core may be writing');
+    log(`reload: ${await text(page.locator('#install-message'))}`);
+    if (process.env.AIH_DEBUG_APPLY) {
+      page.on('console', entry => log(`console ${entry.type()} ${entry.text().slice(0, 200)}`));
+      page.on('pageerror', error => log(`pageerror ${error.message}`));
+      log(`stored job ${await page.evaluate(() => sessionStorage.getItem('aih-apply-job'))}`);
+      await page.evaluate(() => { const node = document.getElementById('install-message'); new MutationObserver(() => console.log(`install-message [${node.dataset.outcome ?? ''}] ${node.textContent}`)).observe(node, { childList: true, characterData: true, subtree: true, attributes: true }); });
+    }
+    await page.locator('#install-message[data-outcome]').waitFor({ timeout: 600_000 });
+    const outcome = await page.locator('#install-message').getAttribute('data-outcome'), message = await text(page.locator('#install-message'));
+    log(`reload: then ${outcome}: ${message.slice(0, 200)}`);
+    assert.equal(outcome, 'installed', message);
+    assert.match(message, /^Confirmed on disk: all \d+ files written/);
+    const inventory = await coreInventory(page);
+    await listFromCore(page, inventory, log);
+    await page.screenshot({ path: join(output, 'reload.png'), fullPage: true });
     assert.deepEqual(errors, []);
     return { status: 'passed', selections: inventory.selections.length };
   } finally { await browser.close(); }

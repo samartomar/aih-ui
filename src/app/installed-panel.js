@@ -48,6 +48,8 @@ function stateBadges(state = {}, el) {
   return chips;
 }
 
+// Pending owner approval as contract amendment 3.2.3 rows 19 and 20.
+export const APPLY_RUNNING_NOTE = 'Install is still running in this project folder. What is installed shows here once it has finished.';
 export function createInstalledPanel({ client, el, button, onRemoved = () => {}, onFinish = () => {}, onInventory = () => {} }) {
   const node = el('section', 'p-3 rounded border border-wb-border bg-surface-container-low space-y-2'); node.id = 'installed-panel'; node.hidden = true;
   const title = el('h3', 'text-sm font-semibold text-on-surface', 'Installed in this project');
@@ -278,6 +280,11 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
     if (!client.catalog.executionAvailable) { list.replaceChildren(); note.textContent = 'Choose a project folder above to see what is installed there.'; onInventory(undefined); return; }
     note.textContent = 'Checking what is installed…';
     try {
+      // Core may still be writing here (an Apply this page lost contact with, or one started before a reload or elsewhere):
+      // its record is read only once that Apply has finished.
+      await client.waitWhileApplying?.(() => { if (read === inventoryRead) { list.replaceChildren(); note.textContent = APPLY_RUNNING_NOTE; } });
+      if (read !== inventoryRead) return;
+      note.textContent = 'Checking what is installed…';
       const inventory = await client.requestCurrent('managed');
       if (read !== inventoryRead || inventory?.status === 'superseded') return;
       const view = groupInstalled({ inventory, policy: policyDocument(), intent: client.intent, label });

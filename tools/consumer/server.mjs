@@ -112,6 +112,14 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   // keeps working whatever happens to that connection. The page reads the result Core returned with apply-status,
   // only from the client that started it. Bounded; finished jobs are forgotten oldest first.
   const applyJobs = new Map();
+  // Applies still running, per project folder and whoever started them, so any page (a reloaded one too) holds
+  // the installed list and Install while Core may still be writing there.
+  const applying = new Map();
+  const tracked = (project, work) => {
+    applying.set(project, (applying.get(project) ?? 0) + 1);
+    const done = () => { const left = applying.get(project) - 1; if (left) applying.set(project, left); else applying.delete(project); };
+    return work().finally(done);
+  };
   const startApplyJob = (clientId, work) => {
     const applyId = randomUUID(), job = { clientId, started: Date.now(), result: undefined };
     work().then(result => { job.result = result; },
@@ -226,9 +234,11 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
         if (operation === 'apply-status') {
           const job = applyJobs.get(body.applyId);
           if (!job || job.clientId !== (request.headers['x-aih-client'] ?? null)) return send(response, 200, { status: 'unknown', diagnostics: [{ code: 'APPLY_UNKNOWN',
-            message: 'This Workbench holds no Install with that id, so it cannot say what that Install wrote.' }] });
+            // Pending owner approval as contract amendment 3.2.3 row 22.
+            message: 'This Workbench no longer holds that result.' }] });
           return send(response, 200, job.result ?? { status: 'running', elapsedMs: Date.now() - job.started });
         }
+        if (operation === 'apply-state') return send(response, 200, { running: Boolean(folder.project) && applying.has(folder.project) });
         if (body.reviewEvidenceIds !== undefined) {
           const ids = body.reviewEvidenceIds;
           if (!Array.isArray(ids) || ids.length > 32 || new Set(ids).size !== ids.length || ids.some(id => typeof id !== 'string' || !/^scan:sha256:[a-f0-9]{64}$/.test(id))) return send(response, 200, { status: 'refused', diagnostics: [{ code: 'EVIDENCE_UNAVAILABLE', message: 'Supply up to 32 unique acquired Scan identities.' }] });
@@ -315,8 +325,9 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
               : operation === 'update' ? await host.prepareUpdateSession({ updates: body.updates, scope: body.scope, tool: body.tool })
               : await host.prepareRemovalSession({ managementId: body.managementId, removals: body.removals, scope: body.scope, mode: body.mode });
           });
-          if (operation === 'apply' && body.background === true) return send(response, 200, { status: 'running', applyId: startApplyJob(request.headers['x-aih-client'] ?? null, perform) });
-          return send(response, 200, await perform());
+          const run = operation === 'apply' ? () => tracked(folder.project, perform) : perform;
+          if (operation === 'apply' && body.background === true) return send(response, 200, { status: 'running', applyId: startApplyJob(request.headers['x-aih-client'] ?? null, run) });
+          return send(response, 200, await run());
         }
         const reviewIntent = pathname === '/api/authoring-inspect-review' && reviewTrust && body.policyBytes ? (await mixedService.run('read', body)).value?.intent : undefined;
         const reviewPin = reviewIntent?.pins.find(pin => pin.releaseSha256 === body.target?.releaseSha256 && pin.itemId === body.target?.itemId);

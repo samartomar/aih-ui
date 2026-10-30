@@ -312,3 +312,30 @@ test('an Apply whose answer cannot be reached is unknown, never failed or instal
   const result = await settle(t, createAuthoringClient().request('apply', { sessionId: 's', reviewDigest: 'd' }));
   assert.equal(result.status, 'unknown'); assert.equal(result.diagnostics[0].code, 'APPLY_UNKNOWN');
 });
+test('an Apply out of reach stays resumable: a reloaded page finds it and reads Core\'s run with the token that started it', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const stored = sessionStorageFor(t);
+  const run = { schema: 'urn:aihq:core:run-result:1.5.0', completion: 'complete', members: [] };
+  const sent = scripted(t, [response({ status: 'running', applyId: 'job-3' }), ...Array(60).fill(new TypeError('fetch failed')), response({ status: 'running' }), response(run)]);
+  const first = createAuthoringClient();
+  const lost = await settle(t, first.request('apply', { sessionId: 's', reviewDigest: 'd', purpose: 'install' }));
+  assert.equal(lost.status, 'unknown'); assert.equal(lost.resumable, true);
+  assert.equal(lost.diagnostics[0].message, 'This page lost contact with the Workbench while it was running.');
+  assert.equal(sent[0].body.purpose, undefined, 'the purpose stays in the page');
+  const starter = JSON.parse(stored.get('aih-apply-job')).client;
+  const reloaded = createAuthoringClient();
+  assert.deepEqual(reloaded.pendingApply, { applyId: 'job-3', purpose: 'install' });
+  assert.deepEqual(await settle(t, reloaded.resumeApply()), run);
+  assert.equal(stored.has('aih-apply-job'), false, 'an answered job is forgotten');
+  assert.equal(reloaded.pendingApply, undefined);
+  assert.ok(sent.slice(-2).every(entry => entry.url === '/api/authoring-apply-status' && entry.body.applyId === 'job-3'));
+  assert.ok(starter);
+});
+test('waiting for the folder holds while an Apply runs there or the host cannot be reached, and says so once', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const sent = scripted(t, [response({ running: true }), new TypeError('fetch failed'), response({ running: true }), response({ running: false }), response({ running: false })]);
+  let held = 0;
+  assert.equal(await settle(t, createAuthoringClient().waitWhileApplying(() => { held++; })), true);
+  assert.equal(held, 1); assert.equal(sent.length, 4); assert.ok(sent.every(entry => entry.url === '/api/authoring-apply-state'));
+  assert.equal(await createAuthoringClient().waitWhileApplying(() => { held++; }), false); assert.equal(held, 1);
+});

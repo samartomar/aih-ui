@@ -3,7 +3,7 @@
 // Installed, with exact counts against Core's review. The host's Apply is held back by --apply-delay-ms (default 120 s)
 // so the whole Apply outlasts the 300 s one request may wait for its answer, as it does on a slow disk.
 //
-// Usage: node tools/check-large-install.mjs <consumerDir> [default-pick|lost-contact ...] [--apply-delay-ms N]
+// Usage: node tools/check-large-install.mjs <consumerDir> [default-pick|lost-contact|reload ...] [--apply-delay-ms N]
 // Each case gets a fresh disposable project and a real child host process (tools/installed-host.mjs).
 import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
@@ -12,7 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pageAssets } from './server/assets.mjs';
-import { runLargeInstallBrowser, runLostContactBrowser } from './consumer/large-install-browser.mjs';
+import { runLargeInstallBrowser, runLostContactBrowser, runReloadBrowser } from './consumer/large-install-browser.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -20,7 +20,10 @@ const consumerDir = resolve(args[0]);
 const option = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
 const applyDelayMs = Number(option('--apply-delay-ms') ?? 120_000);
 const named = args.slice(1).filter((value, index, all) => !value.startsWith('--') && !all[index - 1]?.startsWith('--'));
-const cases = { 'default-pick': { run: runLargeInstallBrowser, applyDelayMs }, 'lost-contact': { run: runLostContactBrowser, applyDelayMs: 0 } };
+// lost-contact: the page gives up asking after about 60 s, so the host's Apply is held back 90 s and is still going then.
+// reload: the page is reloaded a moment after Install starts, while the host's Apply is held back 30 s.
+const cases = { 'default-pick': { run: runLargeInstallBrowser, applyDelayMs }, 'lost-contact': { run: runLostContactBrowser, applyDelayMs: 90_000 },
+  reload: { run: runReloadBrowser, applyDelayMs: 30_000 } };
 const selected = named.length ? named : Object.keys(cases);
 for (const name of selected) if (!cases[name]) throw new Error(`Unknown case ${name}; choose from ${Object.keys(cases).join(', ')}.`);
 

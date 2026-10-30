@@ -20,6 +20,12 @@ export const ENTERPRISE_SETUP_NOTICE = "These choices were made outside your org
 const refusal = (code, message) => ({ status: 'refused', diagnostics: [{ code, message }] });
 const APPLY_POLL_MS = 1000, APPLY_LOST_POLLS = 60;
 const applyUnknown = message => ({ status: 'unknown', diagnostics: [{ code: 'APPLY_UNKNOWN', message }] });
+// The Apply this tab is waiting for, kept across a reload of the tab only.
+const APPLY_JOB_KEY = 'aih-apply-job';
+// The page's one resumption of that Apply, shared by every client and view on the page.
+let resuming;
+const storedJob = () => { try { const job = JSON.parse(globalThis.sessionStorage?.getItem(APPLY_JOB_KEY) ?? 'null'); return typeof job?.applyId === 'string' && typeof job.client === 'string' ? job : undefined; } catch { return undefined; } };
+const keepJob = job => { try { if (job) globalThis.sessionStorage?.setItem(APPLY_JOB_KEY, JSON.stringify(job)); else globalThis.sessionStorage?.removeItem(APPLY_JOB_KEY); } catch { /* no storage: nothing to resume */ } };
 const asDraft = ({ originalBytes: _kept, ...value }) => ({ ...value,
   envelopeBytes: Uint8Array.from(value.envelopeBytes), savedIntentBytes: Uint8Array.from(value.savedIntentBytes) });
 
@@ -76,19 +82,29 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
     return result;
   }
   // Apply runs as a host job (a large setup takes Core minutes, beyond what one request may wait). The page asks for its
-  // result until Core has returned one, so what it reports is what Core returned. A host that no longer holds the job, or
-  // one the page cannot reach for APPLY_LOST_POLLS polls in a row, is an unknown outcome, never a failure or a success.
-  async function applyInBackground(body) {
+  // result until Core has returned one, so what it reports is what Core returned. The job and the token that may read it
+  // are kept for this tab, so a reloaded page resumes asking (resumeApply). One the page cannot reach for APPLY_LOST_POLLS
+  // polls in a row is an unknown outcome for now, never a failure or a success; it stays resumable.
+  async function applyInBackground({ purpose = 'install', ...body }) {
     const started = await send('apply', { ...body, background: true });
     // Refused before Core started (or an older host that answers at once): that answer is the result.
     if (started?.status !== 'running' || typeof started.applyId !== 'string') return started;
+    const job = { applyId: started.applyId, client: headers['x-aih-client'], purpose };
+    keepJob(job);
+    return pollJob(job, APPLY_LOST_POLLS);
+  }
+  async function pollJob(job, giveUpAfter) {
     for (let lost = 0; ;) {
       await new Promise(done => setTimeout(done, APPLY_POLL_MS));
-      const result = await fetch('/api/authoring-apply-status', { method: 'POST', headers: { ...headers, 'content-type': 'application/json' },
-        body: JSON.stringify({ applyId: started.applyId }) }).then(response => response.ok ? response.json() : undefined).catch(() => undefined);
-      if (!result) { if (++lost >= APPLY_LOST_POLLS) return applyUnknown('This page lost contact with the Workbench while Install was running.'); continue; }
+      const result = await fetch('/api/authoring-apply-status', { method: 'POST', headers: { 'x-aih-client': job.client, 'content-type': 'application/json' },
+        body: JSON.stringify({ applyId: job.applyId }) }).then(response => response.ok ? response.json() : undefined).catch(() => undefined);
+      if (!result) {
+        // Pending owner approval as contract amendment 3.2.3 row 21.
+        if (++lost >= giveUpAfter) return { ...applyUnknown('This page lost contact with the Workbench while it was running.'), resumable: true };
+        continue;
+      }
       lost = 0;
-      if (result.status !== 'running') return result;
+      if (result.status !== 'running') { keepJob(undefined); return result; }
     }
   }
   // Adopts an opened draft: the policy becomes its original bytes, never the envelope.
@@ -148,6 +164,30 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
     invalidate() { revision++; candidate = undefined; notify(); return revision; },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     request,
+    // An Apply this tab started and has no answer for yet (also after a reload): { applyId, purpose }.
+    get pendingApply() { const job = storedJob(); return job && { applyId: job.applyId, purpose: job.purpose }; },
+    // After a reload: the Apply this tab was waiting for, once nothing is applying in the folder, with Core's run if the
+    // host still holds it. One answer for the page, however many views ask; undefined when there was none.
+    resumed() {
+      if (resuming === undefined) {
+        const job = storedJob();
+        resuming = job ? this.waitWhileApplying().then(() => pollJob(job, 5)).then(run => ({ purpose: job.purpose, run: run?.status === 'unknown' ? undefined : run })) : null;
+      }
+      return resuming ?? undefined;
+    },
+    // Asks for that Apply's result until Core has returned one, the host no longer holds it, or `giveUpAfter` polls fail.
+    resumeApply({ giveUpAfter = Infinity } = {}) { const job = storedJob(); return job ? pollJob(job, giveUpAfter) : Promise.resolve(undefined); },
+    // Resolves once no Apply is running in the current project folder, whoever started it. `onHeld` is called once if
+    // one is; a host the page cannot reach counts as still running, since Core may be writing.
+    async waitWhileApplying(onHeld = () => {}) {
+      for (let held = false; ;) {
+        const state = await fetch('/api/authoring-apply-state', { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: '{}' })
+          .then(response => response.ok ? response.json() : undefined).catch(() => undefined);
+        if (state && state.running !== true) return held;
+        if (!held) { held = true; onHeld(); }
+        await new Promise(done => setTimeout(done, APPLY_POLL_MS * 2));
+      }
+    },
     // Host results still out (an Install preview, an installed list) were for the previous project folder; they come back superseded.
     discardHostWork() { hostRevision++; folderRevision++; notify(); },
     async requestHost(operation, body = {}) {

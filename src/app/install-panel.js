@@ -45,7 +45,8 @@ export function installOutcome(run, files, project) {
   // The page moved on after sending Apply; the host may already have written files.
   if (run.status === 'superseded') return { ok: false, message: 'The page changed while Install was running, so it cannot tell whether any files were written. Check what is installed in this project before installing again.' };
   // Core's result never reached the page: it may have finished, so this is neither a failure nor a success.
-  if (run.status === 'unknown') return { ok: false, state: 'unknown', message: `Install outcome unknown: ${[...(run.diagnostics ?? [])].map(diagnostic => diagnostic.message ?? diagnostic.code).join(' ')} Your installed list shows what Core recorded; check it before installing again.` };
+  // Pending owner approval as contract amendment 3.2.3 row 23.
+  if (run.status === 'unknown') return { ok: false, state: 'unknown', message: `Install outcome unknown: ${[...(run.diagnostics ?? [])].map(diagnostic => diagnostic.message ?? diagnostic.code).join(' ')}` };
   // Run result 1.4: Core checked each touched member directly on disk. Only a complete run whose every intended
   // write member was written and found present-matching is confirmed; kept, restored, unchecked, absent or
   // present-different members never are, and no other shape of result makes that claim.
@@ -66,6 +67,9 @@ export function installOutcome(run, files, project) {
   const reason = [...(run.diagnostics ?? [])].map(diagnostic => diagnostic.message ?? diagnostic.code).filter(Boolean).join(' ');
   return { ok: false, message: `Install did not finish${reason ? `: ${reason}` : '. Nothing else was changed by this page.'} Check what is installed in this project before installing again.` };
 }
+
+// Pending owner approval as contract amendment 3.2.3 row 19.
+export const APPLY_RUNNING_MESSAGE = 'Install is still running in this project folder.';
 
 const readyPreparation = result => { const preparation = result?.preparation ?? result; return preparation?.status === 'ready' && preparation.sessionId && preparation.review ? preparation : undefined; };
 
@@ -195,6 +199,8 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
     if (previewing || installing) return;
     previewing = true; preview = undefined; install.disabled = true; message.textContent = 'Checking which files will be added…'; needsList.replaceChildren();
     try {
+      // Nothing is prepared against a folder Core may still be writing to.
+      if (await client.waitWhileApplying?.(() => { message.textContent = APPLY_RUNNING_MESSAGE; })) message.textContent = 'Checking which files will be added…';
       const result = recoveryManagementId ? await client.requestHost('finish', { managementId: recoveryManagementId }) : await client.requestHost('prepare');
       if (result.status === 'superseded') { message.textContent = ''; return; }
       const preparation = readyPreparation(result);
@@ -246,7 +252,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
   }
   async function run() {
     if (!preview || installing || install.disabled) return;
-    let sent = false, runId;
+    let sent = false, runId, unknown;
     installing = true; install.disabled = true; install.setAttribute('aria-busy', 'true'); message.textContent = 'Installing…'; notice = undefined;
     try {
       // Apply the review the person was shown; Core alone calls it stale. What needs re-showing comes back
@@ -262,6 +268,12 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
         message.textContent = `Install did not start: ${[attemptResult.reason, refusal(attemptResult.result)].filter(Boolean).join(' ')}`; return;
       }
       const { preparation } = attemptResult;
+      if (attemptResult.state === 'unknown') {
+        unknown = attemptResult.run; const outcome = installOutcome(unknown);
+        message.textContent = outcome.message; message.dataset.outcome = 'unknown';
+        // The list says it is waiting for Core and reads Core's record only once nothing is applying here.
+        void onInstalled(); return;
+      }
       if (attemptResult.state === 'superseded') { message.textContent = 'Install was sent, but the page changed before its result arrived, so this page cannot determine whether files were written. Inspect what is installed in this project before trying again.'; message.dataset.outcome = 'superseded'; return; }
       if (attemptResult.state === 'stale') {
         preview = preparation; const rows = show(preparation.review, preparation.operationSelections ?? []); install.disabled = Boolean(nothingToInstall({ roots: client.intent?.roots ?? [], rows }));
@@ -277,13 +289,50 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
       if (outcome.ok) filesHeading.textContent = 'What was installed';
       preview = undefined;
     } catch (error) { message.textContent = `Install did not finish: ${error.message}`; message.dataset.outcome = 'failed'; }
-    finally { installing = false; install.removeAttribute('aria-busy'); if (sent) { await onInstalled(); await showTimings(runId); } }
+    finally {
+      // Core's answer did not arrive: Install and the list stay held until Core has answered (then its outcome is shown)
+      // and nothing is applying in this folder any more.
+      const answered = unknown ? await settle(unknown.resumable, preview?.review ?? undefined) : false;
+      if (answered) preview = undefined;
+      installing = false; install.removeAttribute('aria-busy'); if (sent) { await onInstalled(); await showTimings(runId); }
+      // Still no answer from Core: once nothing is applying, the folder is checked again for a fresh review.
+      if (unknown && !answered) { shownFor = undefined; render(); }
+    }
+  }
+  async function settle(resumable, review) {
+    await client.waitWhileApplying?.();
+    const later = resumable ? await client.resumeApply({ giveUpAfter: 5 }) : undefined;
+    if (!later || later.status === 'unknown') return false;
+    const outcome = installOutcome(later, installFiles(review), review?.target?.project);
+    message.textContent = outcome.message; message.dataset.outcome = outcome.ok ? 'installed' : outcome.state ?? 'failed';
+    return true;
+  }
+  // A reload while an Install this tab started is still out: say so, wait for Core's answer and show it.
+  async function resume() {
+    const resuming = client.resumed?.();
+    if (!resuming) return;
+    installing = true; install.disabled = true; install.setAttribute('aria-busy', 'true');
+    if (client.pendingApply?.purpose === 'install') message.textContent = APPLY_RUNNING_MESSAGE;
+    let answered = false;
+    try {
+      const { purpose, run } = await resuming;
+      if (purpose === 'install' && run) {
+        const outcome = installOutcome(run, []); message.textContent = outcome.message; message.dataset.outcome = outcome.ok ? 'installed' : outcome.state ?? 'failed';
+        answered = true;
+      }
+    } finally {
+      installing = false; install.removeAttribute('aria-busy'); await onInstalled();
+      // Core's outcome stays on screen for this setup, as after an Install that was never interrupted.
+      if (answered) shownFor = client.bytes?.join(','); else { shownFor = undefined; render(); }
+    }
   }
   function render() {
     node.hidden = !ready();
     const refs = client.intent?.pins ?? client.intent?.roots ?? [];
     items.replaceChildren(...refs.map(ref => el('li', '', label(ref))));
     if (node.hidden) { shownFor = undefined; preview = undefined; return; }
+    // An Apply is out (or this tab is waiting for one after a reload): nothing is prepared or replaced until it has settled.
+    if (installing) return;
     // No project folder: there is nothing to preview until one is chosen above.
     if (!client.catalog.executionAvailable) {
       shownFor = undefined; preview = undefined; install.disabled = true; delete message.dataset.outcome;
@@ -325,5 +374,6 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
     filesHeading.textContent = summary.heading; message.textContent = nothingToInstall({ roots: client.intent?.roots ?? [], rows }) || summary.message;
   }
   function finish(managementId) { recheck(); recoveryManagementId = managementId; install.textContent = 'Finish'; shownFor = undefined; render(); }
+  void resume();
   return { node, heading: title, render, recheck, finish, setManaged, get busy() { return installing; } };
 }
