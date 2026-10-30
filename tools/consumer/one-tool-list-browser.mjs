@@ -6,8 +6,9 @@
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { listTools } from '@aihq/core/harness';
+import { listTools, targets as harnessTargets } from '@aihq/core/harness';
 import { OWNER_SETTINGS } from './your-tools-browser.mjs';
+import { chooseCatalogFamily } from './policy-drawer.mjs';
 
 const CODE_WORDS = /nativeClientIds|listTools|tool-not-observed|PREREQUISITE_UNAVAILABLE|AI clients/;
 
@@ -72,6 +73,20 @@ export async function runOneToolListBrowser({ origin, output, playwrightModule, 
     const summary = await note.locator('summary').innerText();
     const unsupported = chosen.filter(tool => !observed.has(tool.id)).map(tool => tool.label);
     assert.equal(summary, `Compatibility observations for ${labels.join(', ')}.${unsupported.length ? ` None yet for ${unsupported.join(', ')}: not supported yet.` : ''}`);
+
+    // Card hints name a tool as the header does: Catalog's Kiro variants say "Written for Kiro CLI", never Core's other
+    // client label for the same id.
+    const otherNames = harnessTargets.filter(target => all.some(tool => tool.id === target.id && tool.label !== target.label)).map(target => target.label);
+    assert.ok(otherNames.length, 'Core names some tool differently in its client list, so the check means something');
+    await chooseCatalogFamily(page, 'ECC');
+    await page.fill('#catalog-search', 'kiro-variant');
+    await page.waitForFunction(() => [...document.querySelectorAll('*')].some(node => node.childElementCount === 0 && node.textContent === 'Written for Kiro CLI'), null, { timeout: 15_000 }).catch(async error => {
+      await page.screenshot({ path: join(output, `debug-hints-${theme}.png`) });
+      throw new Error(`${error.message} ${JSON.stringify(await page.evaluate(() => [...new Set([...document.querySelectorAll('*')].filter(node => node.childElementCount === 0 && /^Written for /.test(node.textContent)).map(node => node.textContent))]))}`);
+    });
+    const hints = await page.evaluate(() => [...new Set([...document.querySelectorAll('*')].filter(node => node.childElementCount === 0 && /^Written for /.test(node.textContent)).map(node => node.textContent))]);
+    for (const hint of hints) for (const name of otherNames) assert.ok(!hint.split(/, | for /).includes(name), `"${hint}" uses the tool list's name, not "${name}"`);
+    await page.fill('#catalog-search', '');
 
     // No Core code word anywhere on the page, and no raw tool id in a control that shows tools (Catalog's own content
     // may name a tool in its descriptions).

@@ -46,12 +46,12 @@ async function main() {
     // Core's labels. Core's policy targets arrive with the preview summary the
     // catalog loads, for the controls that write policy targets.
     const organization = createOrganization({ elements: organizationElements(), onEdit: section => onboarding.edit(section), onModeComplete: applySettings });
-    // Your tools reads Core's tool list and inspection itself. Every tool chosen in setup (Settings, Edit your tools)
-    // is chosen in it, and it is always a multi-select.
+    // Your tools reads Core's tool list and inspection itself. Its choice is setup's tools (Settings, Edit your tools)
+    // plus its own additions minus its own unticks; saving setup clears the unticks. It is always a multi-select.
     // The header's chosen tools feed both the catalog and the authoring context; they rebind no saved execution.
     // Its tool list is the one setup offers and the settings summary names, by Core's labels.
     const yourTool = createYourTool({ elements: yourToolElements(), onChange: tools => { catalog.setTool(tools); authoring.setTool(tools); },
-      onList: list => { onboarding.setTools(list); organization.setTools(list); } });
+      onList: list => { onboarding.setTools(list); organization.setTools(list); catalog.setToolList(list); authoringWorkspace.setToolList(list); } });
 
     function applySettings(settings, location) {
       yourTool.setSetupClients(settings.clients);
@@ -66,6 +66,8 @@ async function main() {
     const onboarding = createOnboarding({
       onCloseEdit: () => organization.open(),
       onComplete: applySettings,
+      // Saving setup chooses every setup tool in the header again.
+      onSaved: () => yourTool.setupSaved(),
     });
 
     catalog = createCatalog({

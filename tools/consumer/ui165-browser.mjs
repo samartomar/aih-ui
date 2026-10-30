@@ -117,7 +117,7 @@ export async function runUi165Browser({ origin, output, expected, playwrightModu
       for (const [key, value] of Object.entries(stored.local)) {
         if (key === 'wb-mode') assert.ok(['dark', 'light'].includes(value), 'stored theme is a theme enum');
         else if (key === 'wb-your-tool') assert.equal(value, 'claude', 'stored tool is the selected canonical tool');
-        else if (key === 'wb-your-tools' || key === 'wb-your-tools-setup') assert.ok(JSON.parse(value).every(id => typeof id === 'string'), 'stored tools are only canonical tool ids');
+        else if (key === 'wb-your-tools-changes') { const changes = JSON.parse(value); assert.deepEqual(Object.keys(changes).sort(), ['added', 'unticked']); assert.ok([...changes.added, ...changes.unticked].every(id => typeof id === 'string'), 'stored tools are only canonical tool ids'); }
         else if (/^aih-workbench-advanced-[a-z0-9-]+$/.test(key)) assert.equal(value, 'open', 'advanced disclosure stores only its open preference');
         else assert.fail(`Unexpected local storage key: ${key}`);
       }

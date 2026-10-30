@@ -1,5 +1,5 @@
 import { el, collectIds } from "./dom.js";
-import { NOT_SUPPORTED_YET, listedTools, toolLabels, toolNames } from "./tool-list.js";
+import { NOT_SUPPORTED_YET, listedTools, setupToolsNotice, toolLabels, toolNames } from "./tool-list.js";
 import { REVIEWER_KINDS, newSetupSettings, setupSteps, experienceLabel, organizationErrors, settingsErrors } from "./setup-model.js";
 import { reviewerText, setupSummary } from "./setup-summary.js";
 import { loadSetup, saveSetup, updateSetup } from "./settings-client.js";
@@ -7,7 +7,8 @@ import { loadSetup, saveSetup, updateSetup } from "./settings-client.js";
 const STEP_TITLES = { experience: "How will you use the Workbench?", role: "What is your enterprise role?", organization: "Your organization", clients: "Your tools", review: "Review your local setup" };
 const STEP_LABELS = { experience: "Mode", role: "Role", organization: "Organization", clients: "Your tools", review: "Review" };
 
-export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
+// onSaved: the person saved setup just now (first run or an edit), after onComplete has applied it.
+export function createOnboarding({ onComplete, onSaved = () => {}, onCloseEdit = () => {} }) {
   const elements = collectIds(["setup-dialog", "setup-title", "setup-description", "setup-fixed-experience", "setup-progress", "setup-content", "setup-error", "setup-back", "setup-next", "setup-skip", "setup-cancel", "setup-form"]);
   let draft = newSetupSettings();
   let editing = false;
@@ -17,7 +18,7 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
   // Core's tool list, the one the header's Your tools shows (src/app/tool-list.js): null until it is read.
   let tools = null;
   let labels = {};
-  let toolsReason = "Loading the tools Core knows…";
+  let toolsNotice = "Loading your tools… Tools you already chose stay chosen; you can continue and choose them later from Settings.";
   let savedProblem = null;
   let loading = true;
   let saving = false;
@@ -95,8 +96,8 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
   }
   function renderClients() {
     elements.setupDescription.textContent = "Choose every AI tool you use; most people use several. Choosing one doesn't install it or check that it's connected. A tool marked Not supported yet stays chosen; the Workbench can't check or install content for it yet.";
-    if (tools === null) {
-      elements.setupContent.append(el("p", "setup-notice", `${toolsReason} Tools you already chose stay chosen. You can continue without choosing.`));
+    if (!tools?.length) {
+      elements.setupContent.append(el("p", "setup-notice", toolsNotice));
       return;
     }
     const group = el("fieldset", "setup-clients");
@@ -251,6 +252,7 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
     try {
       const saved = await (editing ? updateSetup(draft) : saveSetup(draft));
       onComplete(saved.settings, saved.location);
+      onSaved(saved.settings);
       elements.setupDialog.close();
       if (editing) { editing = false; onCloseEdit(); }
     } catch (failure) {
@@ -328,7 +330,7 @@ export function createOnboarding({ onComplete, onCloseEdit = () => {} }) {
     setTools(list) {
       tools = listedTools(list);
       labels = toolLabels(list);
-      toolsReason = list?.state === "published" ? "Core lists no tools." : `Core's tool list couldn't be read: ${list?.reason ?? "no reason was given"}.`;
+      toolsNotice = setupToolsNotice(list) ?? toolsNotice;
       if (elements.setupDialog.open && !loading && current() === "clients") render();
     },
   };

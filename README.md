@@ -861,9 +861,15 @@ There is one tool list. First-run setup's **Your tools** step offers the same
 Harness `listTools({ includeUnobserved: true })` answer as the header, in Core's
 order and by Core's labels, and the setup file saves those ids; the host checks a
 saved choice against that list. Every tool chosen in setup is chosen in the
-header: setup's tools start the header's choice, and a tool setup newly chooses
-later joins a saved header choice (a tool unticked in the header stays unticked
-until setup's choice changes). A tool Core does not support yet stays chosen and
+header: the header's choice is setup's tools, plus tools added in the header,
+minus tools unticked in the header. Only those additions and unticks are kept in
+the browser (`wb-your-tools-changes`), each change made against what is stored at
+that moment and shared with other tabs through the `storage` event, so no tab can
+overwrite setup's tools. A header untick lasts until setup is next saved: saving
+setup clears every untick, so all of setup's tools are chosen again. An older
+saved header choice is migrated once, as additions. When the tool list can't be
+loaded, setup says so in fixed words and keeps the tools already chosen. A tool
+Core does not support yet stays chosen and
 says "Not supported yet"; no raw tool id or Core function name is shown. Setup's
 tools are changed from Settings (**Edit your tools**). The FRAMEWORKS rail's
 observations note names every chosen tool and which have none yet. The earlier

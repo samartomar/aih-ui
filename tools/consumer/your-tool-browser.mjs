@@ -14,7 +14,8 @@ import { listTools } from '@aihq/core/harness';
 // the host's answers.
 const here = dirname(fileURLToPath(import.meta.url));
 const STATES = join(here, 'fixtures', 'your-tool');
-const KEY = 'wb-your-tools';
+// Only what the person changed in the header is kept: { unticked, added }. This setup chooses no tools, so every tick is an addition.
+const KEY = 'wb-your-tools-changes';
 
 const luminance = ([r, g, b]) => { const [x, y, z] = [r, g, b].map(v => v / 255).map(c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)); return 0.2126 * x + 0.7152 * y + 0.0722 * z; };
 const contrast = (a, b) => { const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
@@ -107,7 +108,7 @@ export async function runYourToolBrowser({ origin, output, playwrightModule, the
     // the page says Core gives it no fit.
     const unobserved = shown.find(row => row.disabled), [first, second] = shown.filter(row => !row.disabled);
     const row = id => page.locator(`#your-tool-list > button[data-tool="${id}"]`);
-    const stored = () => page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), KEY);
+    const stored = async () => { const value = await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), KEY); assert.deepEqual(value?.unticked, [], 'nothing from setup was unticked'); return value.added; };
     await row(first.id).click();
     await row(second.id).click();
     assert.equal(await page.locator('#your-tool-pop').isVisible(), true, 'The list stays open for the next tool.');
@@ -120,7 +121,7 @@ export async function runYourToolBrowser({ origin, output, playwrightModule, the
     await row(second.id).click();
     assert.equal(await row(second.id).getAttribute('aria-checked'), 'false');
     assert.equal(await page.locator('#your-tool-name').innerText(), first.name);
-    assert.deepEqual(await page.evaluate(() => Object.keys(localStorage).filter(key => key.includes('tool')).sort()), [KEY, `${KEY}-setup`], 'Only the tool ids are kept in browser storage.');
+    assert.deepEqual(await page.evaluate(() => Object.keys(localStorage).filter(key => key.includes('tool')).sort()), [KEY], 'Only the tool ids are kept in browser storage.');
     assert.deepEqual(await stored(), [first.id]);
     await page.keyboard.press('Escape');
 

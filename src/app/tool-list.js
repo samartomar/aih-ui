@@ -41,3 +41,9 @@ export function toolNames(labels, ids) {
   const rest = gone ? `${gone} tool${gone === 1 ? "" : "s"} Core no longer lists` : "";
   return named.length && rest ? `${named.join(", ")} and ${rest}` : named.join(", ") || rest;
 }
+
+// Setup's words when it has no tools to offer: fixed, so no raw error text reaches the page. The header's alert keeps
+// the reason for whoever needs it.
+const SETUP_TOOLS_NOTICE = "Your tools couldn't be loaded. Tools you already chose stay chosen; you can continue and choose them later from Settings.";
+/** The notice setup shows in place of its tool list, or null when there are tools to offer. */
+export const setupToolsNotice = (list) => (listedTools(list)?.length ? null : SETUP_TOOLS_NOTICE);

@@ -15,12 +15,14 @@
  *     `inspect`, matched by the registry id. A tool the inspection does not
  *     report says so; nothing is assumed.
  *
- * The choice is a per-viewer convenience kept in this browser's local storage
- * (only the tool ids), so it survives a restart of the Workbench. Every tool
- * chosen in setup is chosen here: until the person changes it here, the choice
- * is setup's tools with an older single choice from this browser, and a tool
- * setup newly chooses later joins a saved choice. A tool unticked here stays
- * unticked until setup's choice changes. It is not a policy. Tools Core does not
+ * The choice is setup's tools, plus tools added here, minus tools unticked
+ * here. Only those two changes are kept, in this browser's local storage (tool
+ * ids only), so the choice survives a restart and nothing stored here can stand
+ * in for setup's tools: a tool setup chooses is chosen here unless the person
+ * unticked it here. Saving setup clears the unticks, so every setup tool is
+ * chosen again. Each change is made against what is stored at that moment, and
+ * a change made in another tab arrives through the `storage` event, so a second
+ * tab never writes a stale copy. It is not a policy. Tools Core does not
  * support yet stay chosen and say so; the page claims no fit for them.
  *
  * States: loading (no answer yet), empty (Core lists no tools), unavailable
@@ -32,21 +34,37 @@ import { iconFor, iconSpan } from "./icons.js";
 import { attachTooltip } from "./tooltip.js";
 import { NOT_SUPPORTED_YET, readToolList } from "./tool-list.js";
 
-// The older single-tool choice; read once as part of the starting set, never written.
+// What the person changed here: { unticked: [ids], added: [ids] }.
+export const YOUR_TOOLS_CHANGES_KEY = "wb-your-tools-changes";
+// Older keys, migrated once into additions and then removed: the single-tool choice, the whole multi-tool choice and
+// the setup list an earlier build of this branch kept.
 export const YOUR_TOOL_KEY = "wb-your-tool";
 export const YOUR_TOOLS_KEY = "wb-your-tools";
-// Setup's tools as this browser last took them in, so only a tool setup newly chooses joins a saved choice.
-export const YOUR_TOOLS_SETUP_KEY = "wb-your-tools-setup";
+const OLD_SETUP_KEY = "wb-your-tools-setup";
 const storage = () => { try { return globalThis.localStorage; } catch { return undefined; } };
 const KEPT = "Kept in this browser only.";
 const NOT_PROOF = "Finding a tool is not proof that it loads content.";
 const SURFACE = { cli: "CLI", ide: "IDE" };
 
-function savedChoice(key = YOUR_TOOLS_KEY) {
-  try {
-    const value = JSON.parse(storage()?.getItem(key) ?? "null");
-    return Array.isArray(value) && value.every((id) => typeof id === "string") ? value : null;
-  } catch { return null; }
+const ids = (value) => (Array.isArray(value) && value.every((id) => typeof id === "string") ? [...new Set(value)] : null);
+function read(key) {
+  try { return JSON.parse(storage()?.getItem(key) ?? "null"); } catch { return null; }
+}
+function write(value) {
+  try { storage()?.setItem(YOUR_TOOLS_CHANGES_KEY, JSON.stringify(value)); } catch { /* Local storage may be unavailable; the choice still applies here. */ }
+}
+// The stored changes, read afresh. The first read in a browser that holds only the older keys migrates them: the old
+// choice and single choice become additions (setup's tools are chosen anyway), and the old keys are removed.
+function storedChanges() {
+  const value = read(YOUR_TOOLS_CHANGES_KEY);
+  const unticked = ids(value?.unticked), added = ids(value?.added);
+  if (unticked && added) return { unticked, added };
+  let legacy = null;
+  try { legacy = storage()?.getItem(YOUR_TOOL_KEY) ?? null; } catch { legacy = null; }
+  const migrated = { unticked: [], added: [...new Set([...(ids(read(YOUR_TOOLS_KEY)) ?? []), ...(legacy ? [legacy] : [])])] };
+  write(migrated);
+  for (const key of [YOUR_TOOLS_KEY, OLD_SETUP_KEY, YOUR_TOOL_KEY]) { try { storage()?.removeItem?.(key); } catch { /* nothing to remove */ } }
+  return migrated;
 }
 
 /**
@@ -58,12 +76,10 @@ export function createYourTool({ elements, onChange = () => {}, onList = () => {
   let inspection;        // undefined while checking; then the /api/tool-inspection answer
   // A group of checkboxes, never a radio group: everyone uses several tools.
   elements.yourToolList.setAttribute("role", "group");
-  let saved = savedChoice();
-  let legacy = null;
-  try { legacy = storage()?.getItem(YOUR_TOOL_KEY) ?? null; } catch { legacy = null; }
+  let changes = storedChanges();
   let setupClients = [];
-  // The chosen ids: the saved multi-tool choice, else setup's tools with the older single choice.
-  const chosenIds = () => saved ?? [...new Set([...(legacy ? [legacy] : []), ...setupClients])];
+  // The chosen ids: setup's tools, plus additions here, minus unticks here.
+  const chosenIds = () => [...new Set([...setupClients, ...changes.added])].filter((id) => !changes.unticked.includes(id));
   // Chosen registry tools in Core's registry order; ids the registry does not list are reported in the note.
   const chosenTools = () => (list?.state === "published" ? list.tools.filter((tool) => chosenIds().includes(tool.id)) : []);
 
@@ -96,15 +112,20 @@ export function createYourTool({ elements, onChange = () => {}, onList = () => {
 
   const UNSUPPORTED = "Not supported yet: Core can't check fit or install content for it yet, so no fit is shown for it. It stays chosen.";
 
-  function keep(key, value) {
-    try { storage()?.setItem(key, JSON.stringify(value)); } catch { /* Local storage may be unavailable; the choice still applies here. */ }
+  // Every change starts from what is stored now, so another tab's change is never overwritten.
+  function change(edit) {
+    changes = storedChanges();
+    edit(changes);
+    write(changes);
+    render();
   }
 
   function toggle(tool) {
-    const ids = chosenIds();
-    saved = ids.includes(tool.id) ? ids.filter((id) => id !== tool.id) : [...ids, tool.id];
-    keep(YOUR_TOOLS_KEY, saved);
-    render();
+    change(({ unticked, added }) => {
+      const id = tool.id, without = (list) => list.splice(0, list.length, ...list.filter((value) => value !== id));
+      if (chosenIds().includes(id)) { without(added); if (setupClients.includes(id)) unticked.push(id); }
+      else { without(unticked); if (!setupClients.includes(id)) added.push(id); }
+    });
     // The list stays open: ticking one tool is often followed by the next.
     onChange(chosenTools());
   }
@@ -225,6 +246,14 @@ export function createYourTool({ elements, onChange = () => {}, onList = () => {
     }
   }
 
+  // Another tab changed the stored choice: show it here at once.
+  globalThis.addEventListener?.("storage", (event) => {
+    if (event.key !== null && event.key !== YOUR_TOOLS_CHANGES_KEY) return;
+    changes = storedChanges();
+    render();
+    if (list?.state === "published") onChange(chosenTools());
+  });
+
   render();
 
   return {
@@ -240,16 +269,16 @@ export function createYourTool({ elements, onChange = () => {}, onList = () => {
     },
     /** The chosen tools' registry entries, in registry order (each with Core's `observed`). */
     current: () => chosenTools(),
-    /** Setup's tools: every one is chosen here; one setup newly chooses joins a saved choice. */
+    /** Setup's tools, as saved: each is chosen here unless the person unticked it here. */
     setSetupClients(clients) {
       setupClients = Array.isArray(clients) ? clients : [];
-      if (saved) {
-        const known = savedChoice(YOUR_TOOLS_SETUP_KEY) ?? [];
-        const added = setupClients.filter((id) => !known.includes(id) && !saved.includes(id));
-        if (added.length) { saved = [...saved, ...added]; keep(YOUR_TOOLS_KEY, saved); }
-      }
-      keep(YOUR_TOOLS_SETUP_KEY, setupClients);
+      changes = storedChanges();
       render();
+      if (list?.state === "published") onChange(chosenTools());
+    },
+    /** Setup was just saved: its tools are chosen again, every untick here is cleared. */
+    setupSaved() {
+      change((current) => { current.unticked.length = 0; });
       if (list?.state === "published") onChange(chosenTools());
     },
   };

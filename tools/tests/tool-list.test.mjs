@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createFrameworkNavigation } from '../../src/catalog/frameworks.js';
-import { listedTools, toolLabels, toolNames } from '../../src/app/tool-list.js';
+import { listedTools, setupToolsNotice, toolLabels, toolNames } from '../../src/app/tool-list.js';
 
 // One tool list: setup, the header's Your tools and the rail read Core's listTools({ includeUnobserved: true }) answer
 // (GET /api/tools) and show its tools by Core's labels.
@@ -54,4 +54,13 @@ test('the rail\'s observations note names every chosen tool and says plainly whi
   rail.setTool(LIST.tools.filter(tool => tool.id === 'cursor'));
   const only = walk(container).find(node => node.dataset.compatibilityNote !== undefined).children.find(node => node.tag === 'summary').textContent;
   assert.match(only, /^Compatibility observations for Cursor\. None yet for Cursor/);
+});
+
+test('setup says in fixed words that Your tools couldn\'t be loaded, never the raw error', () => {
+  const sentence = "Your tools couldn't be loaded. Tools you already chose stay chosen; you can continue and choose them later from Settings.";
+  for (const list of [undefined, { state: 'failed', reason: 'Failed to fetch' }, { state: 'failed', reason: "Unexpected token '<', \"<html>\" is not valid JSON" },
+    { state: 'unavailable', reason: 'The installed Core does not publish its tool list.' }, { state: 'published', tools: [] }]) {
+    assert.equal(setupToolsNotice(list), sentence, JSON.stringify(list));
+  }
+  assert.equal(setupToolsNotice(LIST), null);
 });
