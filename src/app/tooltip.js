@@ -35,6 +35,8 @@ let touchTimer = null;
 // The element a touch showed the bubble for: its own blur or mouseleave (a tap selects a card and redraws it) leaves
 // the bubble up until the touch timer ends.
 let touchOwner = null;
+// A tap that redraws focuses the replacement of the tapped element: it keeps the touch bubble. Focus elsewhere ends it.
+const redrawnOwner = (element) => Boolean(touchOwner) && (element === touchOwner || (!touchOwner.isConnected && touchOwner.dataset?.tooltip === element.dataset?.tooltip));
 // The element the bubble shows words for; only its own exit hides them.
 let shownFor = null;
 
@@ -150,7 +152,7 @@ function listen(element) {
   element.dataset.tooltipBound = "true";
   element.addEventListener("focus", () => {
     // Keyboard focus only: a mouse click already had the hover tooltip.
-    if (typeof element.matches !== "function" || element.matches(":focus-visible")) { touchOwner = null; show(element); }
+    if (typeof element.matches !== "function" || element.matches(":focus-visible")) { touchOwner = redrawnOwner(element) ? element : null; show(element); }
   });
   const leave = () => { if (element === shownFor && element !== touchOwner) hide(); };
   element.addEventListener("blur", leave);
