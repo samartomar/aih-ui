@@ -48,7 +48,8 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   const roots = el('div', 'space-y-2'); choices.after(roots);
   const internalNotice = el('details', 'text-on-surface-variant'); internalNotice.id = 'policy-internal-content';
   const internalSummary = el('summary', '', 'Internal content · not verified');
-  const internalProvenance = el('pre', 'whitespace-pre-wrap break-words'); internalNotice.append(internalSummary, internalProvenance);
+  // The recorded Catalog package, version and archive digest as labelled values; the saved JSON stays in the policy file.
+  const internalProvenance = el('div', 'space-y-2'); internalNotice.append(internalSummary, internalProvenance);
   const proposal = el('div', 'space-y-2'); proposal.id = 'policy-proposal'; proposal.setAttribute('role', 'status'); review.after(proposal);
   const status = el('p', 'wb-status-area text-on-surface-variant'); status.id = 'policy-status'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite'); controls.after(status);
   const file = el('input'); file.type = 'file'; file.accept = 'application/json,.json'; file.id = 'policy-open'; file.setAttribute('aria-label', 'Open saved project policy');
@@ -540,7 +541,16 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     if (persistentContext) persistentContext.textContent = `${draft ? 'Working draft' : 'Your setup'} · ${current.length} chosen ${current.length === 1 ? 'item' : 'items'}${client.candidate ? ' · A change is waiting in Your setup' : ''}${client.dirty ? ' · Changes not downloaded' : ' · No changes waiting to download'}${client.recoveryAvailable === false ? ' · Browser recovery unavailable' : ''}`;
     const internalSources = (client.intent?.provenance ?? client.draft?.intent?.provenance ?? []).filter(source => source.materialSource?.internalContent);
     internalNotice.hidden = internalSources.length === 0;
-    internalProvenance.textContent = internalSources.length ? 'Baseline unbound; unauthenticated, non-production. Exact saved source and choice:\n' + JSON.stringify(internalSources, null, 2) : '';
+    const internalContents = new Map(internalSources.map(source => source.materialSource.internalContent)
+      .map(content => [`${content.provenance?.package?.name}@${content.provenance?.package?.version}#${content.archiveSha256}`, content]));
+    internalProvenance.replaceChildren(...(internalSources.length ? [el('p', '', 'Baseline unbound; unauthenticated, non-production.'),
+      ...[...internalContents.values()].map(content => {
+        const list = el('dl', 'space-y-1');
+        for (const [label, value] of [['Package', content.provenance?.package?.name], ['Version', content.provenance?.package?.version], ['Archive digest', content.archiveSha256]]) {
+          const group = el('div', 'flex flex-wrap gap-x-2'); group.append(el('dt', 'text-outline', label), el('dd', 'text-on-surface break-all', value ?? '—')); list.append(group);
+        }
+        return list;
+      })] : []));
     pageContext.textContent = `${draft ? 'Working draft' : 'Current project policy'}: ${current.length} accepted choices${client.dirty ? ' · Changes not downloaded' : ''}${client.startupSource === 'recovery' ? ' · Recovered from this browser session' : ''}. Open policy choices and review to edit, download or reopen an artifact.`;
     summary.textContent = draft ? (intent
       ? `Current executable policy: compiled from the draft · ${intent.roots.length} explicit choices · ${intent.pins.length} exact pins including dependencies. The draft envelope is kept separately and is not executable.`
