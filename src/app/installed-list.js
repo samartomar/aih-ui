@@ -203,7 +203,7 @@ function recordedRequirements(root, selections) {
  * removes: what its Remove takes, in removal order; kept: needed items another installed chosen item still needs,
  * each with `neededBy`, the names of those chosen items.
  */
-export function groupInstalled({ inventory, policy, intent, label = () => undefined }) {
+export function groupInstalled({ inventory, policy, intent, label = () => undefined, toolName = id => id }) {
   // Catalog's display name for the recorded item when this page's Catalog still publishes it, else Core's record.
   const nameOf = entry => (entry.item?.itemId && label(entry.item.itemId)) ?? recordedName(entry);
   if (!inventory || !['complete', 'incomplete'].includes(inventory.status)) {
@@ -263,7 +263,50 @@ export function groupInstalled({ inventory, policy, intent, label = () => undefi
   });
   // Core lists every selection of the current setup as installed (matching bytes alone do not show this).
   const setupInstalled = byId.size > 0 && [...byId.values()].every(entry => installed.has(entry.managementId));
-  return { readable: true, partial: inventory.status !== 'complete', groups, others, notInstalled: chosen.filter(item => !isInstalled(item)), setupInstalled,
+  const merged = mergeToolCopies({ groups, others, toolName });
+  return { readable: true, partial: inventory.status !== 'complete', groups: merged.groups, others: merged.others, notInstalled: chosen.filter(item => !isInstalled(item)), setupInstalled,
     // Grouping purely from recorded origins, independent of the draft; legacy rows stay explicit under set:null.
     originGroups: originGroups(inventory, { name: nameOf }) };
+}
+
+// One item installed for several tools is the lead selection and a copy per further tool (`<managementId>--<tool>`,
+// tools/consumer/headless.mjs), each its own Core selection with the same scope, framework and item. The list shows them
+// as one row naming its tools: its Remove and Update cover every copy, and each copy is named with its tool there.
+const toolKey = row => row.item?.framework && (row.itemId ?? row.item?.itemId) ? `${row.scope}/${row.item.framework}/${row.itemId ?? row.item.itemId}` : null;
+const isToolCopyRow = row => Boolean(row.tool && row.managementId?.endsWith(`--${row.tool}`));
+const byManagementId = rows => [...new Map(rows.map(row => [row.managementId, row])).values()];
+function mergeToolCopies({ groups, others, toolName }) {
+  const named = row => ({ ...row, name: `${row.name} (${toolName(row.tool)})` });
+  const fold = rows => {
+    const keyed = new Map(), out = [];
+    for (const row of rows) {
+      const key = toolKey(row);
+      if (!key) { out.push(row); continue; }
+      if (!keyed.has(key)) { keyed.set(key, []); out.push(key); }
+      keyed.get(key).push(row);
+    }
+    return out.map(entry => {
+      if (typeof entry !== 'string') return entry;
+      const rows = keyed.get(entry), lead = rows.find(row => !isToolCopyRow(row)) ?? rows[0], copies = rows.filter(row => row !== lead);
+      if (!copies.length) return lead.tool ? { ...lead, tools: [lead.tool], toolNames: [toolName(lead.tool)], copies: [] } : lead;
+      const tools = rows.map(row => row.tool).filter(Boolean);
+      // Removing copies names each by its tool; the lead keeps its own name.
+      const removes = lead.removes ? byManagementId([...lead.removes, ...copies.flatMap(copy => copy.removes ?? [copy]).map(named)]) : undefined;
+      return { ...lead, tools, toolNames: tools.map(toolName), copies: copies.map(named), managementIds: rows.map(row => row.managementId),
+        ...(removes ? { removes } : {}), ...(lead.needed ? { needed: byManagementId([...lead.needed, ...copies.flatMap(copy => copy.needed ?? []).map(named)]) } : {}),
+        ...(lead.kept ? { kept: byManagementId([...lead.kept, ...copies.flatMap(copy => copy.kept ?? []).map(named)]) } : {}) };
+    });
+  };
+  const mergedGroups = fold(groups), mergedOthers = [];
+  // A copy listed apart from its chosen row (say, outside the open draft) joins that row.
+  for (const other of fold(others)) {
+    const group = mergedGroups.find(candidate => toolKey(candidate) && toolKey(candidate) === toolKey(other));
+    if (!group) { mergedOthers.push(other); continue; }
+    const rows = [other, ...(other.copies ?? [])];
+    group.tools = [...new Set([...(group.tools ?? []), ...rows.map(row => row.tool).filter(Boolean)])]; group.toolNames = group.tools.map(toolName);
+    group.copies = byManagementId([...(group.copies ?? []), ...rows.map(named)]);
+    group.managementIds = [...new Set([...(group.managementIds ?? [group.managementId]), ...rows.map(row => row.managementId)])];
+    group.removes = byManagementId([...group.removes, ...rows.map(named)]);
+  }
+  return { groups: mergedGroups, others: mergedOthers };
 }

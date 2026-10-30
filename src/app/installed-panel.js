@@ -5,7 +5,7 @@
 import { itemDisplayName } from '../catalog/item-name.js';
 import { groupInstalled, keptWords, setLabeller, setRemovalEntries, stillNeededWords } from './installed-list.js';
 import { KEPT_FOR_ANOTHER, cancelRemoval, confirmRemoval, previewRemoval, removalMemberWords } from './installed-removal.js';
-import { confirmUpdate, previewUpdate, updateEntry } from './installed-update.js';
+import { confirmUpdate, previewUpdate, updateEntries } from './installed-update.js';
 import { compact } from './compact.js';
 import { iconSpan } from './icons.js';
 
@@ -143,6 +143,13 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
     return { remove, area };
   }
 
+  // The tools an item is installed for, when it is installed for more than one.
+  function toolsLine(row) {
+    if (!(row.toolNames?.length > 1)) return [];
+    const line = el('span', 'text-on-surface-variant text-[11px]', `for ${row.toolNames.join(', ')}`); line.dataset.installedTools = row.tools.join(' ');
+    return [line];
+  }
+
   function finishControl(item) {
     if (item.state.install !== 'interrupted') return null;
     const available = (policyDocument()?.selections ?? []).some(selection => selection.managementId === item.managementId);
@@ -159,9 +166,10 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       if (!offered) { message.textContent = `Update unavailable: the current Catalog does not publish ${item.itemId}.`; message.dataset.outcome = 'unavailable'; return; }
       removing = true; update.disabled = true; update.setAttribute('aria-busy', 'true'); message.textContent = 'Checking the replacement…'; delete message.dataset.outcome;
       try {
-        const entry = updateEntry({ item, offered });
+        // Every installed copy of the item (one per tool) is updated in the one request.
+        const entries = updateEntries({ item, offered });
         // The setup's own mode, as Remove sends it; the host refuses an update it cannot check for an Enterprise setup.
-        const preview = await previewUpdate({ entries: [entry], request: requestHost, tool: client.tool, mode: policyDocument()?.mode, nameOf: ref => label(ref.itemId) });
+        const preview = await previewUpdate({ entries, request: requestHost, tool: client.tool, mode: policyDocument()?.mode, nameOf: ref => label(ref.itemId) });
         const actions = el('div', 'flex flex-wrap gap-2');
         const confirm = button('Confirm update', async () => {
           if (removing) return;
@@ -204,7 +212,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
     for (const group of view.groups) {
       const row = el('li', 'space-y-1'); row.dataset.installedItem = group.itemId; row.dataset.installedRow = group.managementId; row.title = group.managementId;
       const { remove, area } = removeControl(group.removes, group.kept);
-      const head = el('div', 'flex flex-wrap items-center gap-2'); head.append(el('span', 'font-medium', group.name));
+      const head = el('div', 'flex flex-wrap items-center gap-2'); head.append(el('span', 'font-medium', group.name), ...toolsLine(group));
       head.append(...stateBadges(stated(group), el));
       if (group.needed.length) {
         const fold = el('details', 'text-on-surface-variant'); fold.append(el('summary', '', `+ ${group.needed.length} it needs`));
@@ -223,11 +231,11 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
     }
     for (const item of view.others) {
       const row = el('div', 'space-y-1'); row.dataset.installedOther = item.managementId; row.dataset.installedRow = item.managementId;
-      const { remove, area } = removeControl([item]);
+      const { remove, area } = removeControl([item, ...(item.copies ?? [])]);
       const finish = finishControl(item), { update, area: updateArea } = updateControl(item);
       // The full installed id stays in the tooltip (#137).
       const name = el('span', 'font-medium break-all', item.name); name.title = item.managementId;
-      const head = el('div', 'flex flex-wrap items-center gap-2'); head.append(name);
+      const head = el('div', 'flex flex-wrap items-center gap-2'); head.append(name, ...toolsLine(item));
       head.append(...stateBadges(stated(item), el));
       if (finish) head.append(finish);
       if (update) head.append(update);
@@ -236,6 +244,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       pending.set(item.managementId, { row, kind: 'other' });
     }
     const rendered = new Set();
+    const copyOf = new Map([...view.groups, ...view.others].flatMap(row => (row.copies ?? []).map(copy => [copy.managementId, row.managementId])));
     for (const group of view.originGroups ?? []) {
       if (!group.set) continue;
       const section = el('li', 'space-y-1'); section.dataset.installedSet = `${group.set.setId}/${group.set.setSha256}`;
@@ -255,6 +264,8 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       const rows = el('ul', 'space-y-1');
       let any = false;
       for (const id of group.items) {
+        // A tool copy shows on its item's row, which names its tools; it is not listed again in the set.
+        if (copyOf.has(id) && group.items.includes(copyOf.get(id))) continue;
         const entry = pending.get(id);
         if (entry && !rendered.has(id)) {
           rendered.add(id); any = true;
@@ -302,7 +313,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       note.textContent = 'Checking what is installed…';
       const inventory = await client.requestCurrent('managed');
       if (read !== inventoryRead || inventory?.status === 'superseded') return;
-      const view = groupInstalled({ inventory, policy: policyDocument(), intent: client.intent, label });
+      const view = groupInstalled({ inventory, policy: policyDocument(), intent: client.intent, label, toolName: id => client.toolLabels?.[id] ?? id });
       show(view); onInventory(view);
     } catch (error) { if (read === inventoryRead) { list.replaceChildren(); note.textContent = `Cannot show what is installed: ${error.message}`; onInventory(undefined); } }
   }

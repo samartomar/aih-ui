@@ -39,6 +39,13 @@ export function updateEntry({ item, offered }) {
   return { ...item, replacement: { ...root, scope: item.scope } };
 }
 
+/** One entry per installed copy of a row that has an update (an item installed for several tools), each with its recorded tool. */
+export function updateEntries({ item, offered }) {
+  const { copies = [], tools: _tools, toolNames: _names, managementIds: _ids, removes: _removes, needed: _needed, kept: _kept, ...lead } = item;
+  return [lead, ...copies.map(({ copies: _nested, ...copy }) => copy)].filter(row => row.state?.update === undefined || row.state.update === 'update-available')
+    .map(row => updateEntry({ item: row, offered }));
+}
+
 export async function previewUpdate({ entries, request, tool, mode, nameOf }) {
   const scope = entries[0]?.scope;
   const result = await request('update', { updates: entries.map(entry => ({ ...entry, managementId: entry.managementId, replacement: entry.replacement })), scope, tool, mode });

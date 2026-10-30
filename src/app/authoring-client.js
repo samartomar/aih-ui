@@ -37,7 +37,7 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
   const headers = { 'x-aih-client': crypto.randomUUID() };
   const listeners = new Set();
   let catalog, bytes = new Uint8Array(), intent, candidate, draftValue, compiled, revision = 0, catalogRevision = 0, hostRevision = 0, folderRevision = 0, reviewEvidence = [], evidenceRevision = 0, recipient, judgments = [], judgmentSummary;
-  let dirty = false, checkpoint, recoveryAvailable, startupSource, selectedTool, selectedToolLabel, selectedTools = [];
+  let dirty = false, checkpoint, recoveryAvailable, startupSource, selectedTool, selectedToolLabel, selectedTools = [], toolLabels = {};
   // The saved setup's execution mode: an Enterprise Developer's setup is an Enterprise policy, so the host applies and
   // re-checks the organisation source for it. New policies start in it; `ready` settles once start-up and any mode change are done.
   let setupMode, ready = Promise.resolve(), modeChanges = 0, modeFailure;
@@ -58,7 +58,9 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
     const tools = (Array.isArray(value) ? value : value ? [value] : []).filter(tool => typeof tool === 'string' || tool.observed !== false);
     const lead = tools[0];
     selectedTool = typeof lead === 'string' ? lead : lead?.id ?? null; selectedToolLabel = typeof lead === 'string' ? null : lead?.label ?? null;
-    selectedTools = tools.map(tool => typeof tool === 'string' ? tool : tool.id); notify();
+    selectedTools = tools.map(tool => typeof tool === 'string' ? tool : tool.id);
+    for (const tool of Array.isArray(value) ? value : value ? [value] : []) if (typeof tool !== 'string' && tool?.label) toolLabels[tool.id] = tool.label;
+    notify();
   };
   const artifactBytes = () => draftValue?.envelopeBytes ?? bytes;
   const notify = () => {
@@ -160,7 +162,7 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
   return {
     get dirty() { return dirty; }, get recoveryAvailable() { return recoveryAvailable; }, get startupSource() { return startupSource; },
     get folderRevision() { return folderRevision; },
-    setTool, get tool() { return selectedTool; }, get toolLabel() { return selectedToolLabel; }, get tools() { return selectedTools; },
+    setTool, get tool() { return selectedTool; }, get toolLabel() { return selectedToolLabel; }, get tools() { return selectedTools; }, get toolLabels() { return toolLabels; },
     markDownloaded(downloaded = bytes) { const current = artifactBytes(); if (current.length !== downloaded.length || current.some((byte, index) => byte !== downloaded[index])) return; dirty = false; checkpoint = current.slice(); notify(); },
     discard() { revision++; candidate = undefined; notify(); },
     get catalog() { return catalog; }, get intent() { return intent; },
