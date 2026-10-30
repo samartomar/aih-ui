@@ -3,10 +3,13 @@ import { applyIfUnchanged, diagnosticWords } from './host-review.js';
 const readyPreparation = result => result?.disposition === 'prepared' && result.preparation?.status === 'ready' && result.preparation.sessionId && result.preparation.review
   ? result.preparation : undefined;
 
-// The contract's sentence for a kept member ("Kept; also part of {set}") when the other owner is a named set; for any
-// other kept member the contract has no sentence, so Core's action is shown as it is.
+// The contract's sentence for a kept member ("Kept; also part of {set}") when the other owner is a named set, or for a
+// member Core keeps because it changed after install; for any other kept member the contract has no sentence, so
+// Core's action is shown as it is.
 export function removalMemberWords(member, entry) {
   if ((member.action === 'keep-shared' || member.reason === 'another-origin') && entry?.kept) return entry.kept;
+  // Contract amendment 3.2.3 row 11 (owner-approved 2026-10-30).
+  if (member.action === 'keep-changed') return 'Kept; you changed it after install';
   return member.action ?? member.reason ?? 'keep-shared';
 }
 
@@ -56,9 +59,12 @@ function memberOutcome(entry, run) {
   if (entry.state === 'kept') return { name: entry.entry.name, state: 'kept', message: entry.message };
   // Contract amendment 3.2.3 row 12 (owner-approved 2026-10-30).
   if (entry.state === 'absent') return { name: entry.entry.name, state: 'absent', message: `${entry.entry.name}: removed` };
-  if (entry.state === 'kept-shared') return run?.completion === 'complete'
-    ? { name: entry.entry.name, state: 'kept', message: `${entry.entry.name}: ${entry.message}` }
-    : { name: entry.entry.name, state: 'failed', message: `${entry.entry.name}: ${run?.completion ?? 'not-applied'}${diagnosticWords(run) ? ` ${diagnosticWords(run)}` : ''}` };
+  if (entry.state === 'kept-shared') {
+    if (run?.completion === 'complete') return { name: entry.entry.name, state: 'kept', message: `${entry.entry.name}: ${entry.message}` };
+    const reason = diagnosticWords(run);
+    // Contract amendment 3.2.3 row 14 (owner-approved 2026-10-30).
+    return { name: entry.entry.name, state: 'failed', message: `${entry.entry.name}: Couldn't confirm it's kept.${reason ? ` ${reason}` : ''}` };
+  }
   const members = (run?.members ?? []).filter(member => member.managementId === entry.entry.managementId);
   const keptFiles = entry.files.filter(file => file.action?.startsWith('keep-'));
   const keptPaths = new Set(keptFiles.map(file => file.path));

@@ -143,3 +143,18 @@ test('the kept sentence never names the set being removed, nor falls back to a r
   assert.equal(keptWords([gone], label(newer), label), 'Kept; also part of a set this catalog no longer offers');
   assert.equal(keptWords([], label(newer), label), undefined, 'kept only by a direct choice or requirement: no set sentence');
 });
+
+test('Remove this set names what keeps a member: the user\'s own choice, or the selections that still need it', async () => {
+  const { setRemovalEntries, stillNeededWords } = await import('../../src/app/installed-list.js');
+  const rules = { framework: 'ecc', setId: 'rules', setSha256: 'a'.repeat(64) };
+  const groups = originGroups({ selections: [
+    { managementId: 'm-1', scope: 'project', name: 'Chosen too', item: { framework: 'ecc', itemId: 'one' }, origins: [{ reasonIncluded: 'in-set', set: rules }, { reasonIncluded: 'chosen' }] },
+    { managementId: 'm-2', scope: 'project', name: 'README', item: { framework: 'ecc', itemId: 'readme' }, origins: [{ reasonIncluded: 'in-set', set: rules }, { reasonIncluded: 'required-by', requiredBy: { framework: 'ecc', itemId: 'tdd' } }] },
+    { managementId: 'm-3', scope: 'project', name: 'tdd', item: { framework: 'ecc', itemId: 'tdd' }, origins: [{ reasonIncluded: 'chosen' }] },
+  ] });
+  const entries = setRemovalEntries(groups.find(group => group.set));
+  assert.deepEqual(entries.map(({ managementId, chosen, neededBy }) => ({ managementId, chosen, neededBy })),
+    [{ managementId: 'm-1', chosen: true, neededBy: [] }, { managementId: 'm-2', chosen: false, neededBy: ['tdd'] }]);
+  assert.equal(keptWords(entries[0].keptFor, 'rules', () => undefined, entries[0].chosen), 'Kept; you also chose it yourself');
+  assert.equal(keptWords(entries[1].keptFor, 'rules', () => undefined, entries[1].chosen) ?? stillNeededWords(entries[1].neededBy), 'Kept; still needed by tdd');
+});

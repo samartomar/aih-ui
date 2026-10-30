@@ -3,50 +3,62 @@
 // and it tells the Install panel whether Core lists the whole setup as installed.
 
 import { itemDisplayName } from '../catalog/item-name.js';
-import { groupInstalled, keptWords, setLabeller, setRemovalEntries } from './installed-list.js';
+import { groupInstalled, keptWords, setLabeller, setRemovalEntries, stillNeededWords } from './installed-list.js';
 import { cancelRemoval, confirmRemoval, previewRemoval, removalMemberWords } from './installed-removal.js';
 import { confirmUpdate, previewUpdate, updateEntry } from './installed-update.js';
 import { compact } from './compact.js';
 import { iconSpan } from './icons.js';
-import { attachTooltip } from './tooltip.js';
 
 // What Core's redacted 1.1 projection said about one installed selection, each state with its own icon and the
-// contract's sentence (workbench-reads, "Your setup"). Core owns these states; nothing here recomputes them (#167).
-// Where the contract has no sentence, or Core does not return the field its sentence needs, the chip shows Core's
-// own value and no made-up words. A selection in none of these states shows no state: the list itself is what Core
-// installed, so no row says a bare "Installed". Each chip's tooltip names the Core field and value it shows.
+// contract's sentence (workbench-reads, "Your setup", and amendment 3.2.3). Core owns these states; nothing here
+// recomputes them (#167). A selection in none of these states shows no state: the list itself is what Core installed,
+// so no row says a bare "Installed", and an item Core finds compliant with policy says nothing about it.
 const STATE_WORDS = {
-  'update-available': ['updateState', 'update-available', () => 'Update available'],
-  // "No longer offered ({reason}); still installed", "Replaced by {names}" and "Withdrawn from the release index
-  // ({reason}); still installed" need a reason or names that inventory 1.1 does not return.
-  'no-longer-offered': ['updateState', 'no-longer-offered'],
-  superseded: ['updateState', 'no-longer-offered'],
-  revoked: ['updateState', 'no-longer-offered'],
-  changed: ['fileState', 'changed-since-install', () => 'Changed since install (your tool already uses the changed copy)'],
-  // The contract lists `missing` with no sentence.
-  missing: ['fileState', 'changed-since-install'],
-  unchecked: ['fileState', 'changed-since-install', () => 'Not checked yet'],
-  'block-changed': ['fileState', 'block-edited', state => state.blockFiles?.length ? `The AIH block in ${blockFiles(state)} was edited` : undefined],
-  'block-missing': ['fileState', 'changed-since-install', state => state.blockFiles?.length ? `The AIH block in ${blockFiles(state)} is gone` : undefined],
-  interrupted: ['installState', 'interrupted', state => `Install didn't finish; ${state.written ?? 0} files written`],
-  'granted-by-aih': ['approval', 'needs-ok', state => `Allowed by AIH in ${state.toolLabel}; removed with the server`],
-  needed: ['approval', 'needs-ok', state => `Installed; still needs your OK in ${state.toolLabel}`],
-  'non-compliant': ['policyState', 'policy-refused', () => 'Doesn’t meet your organisation’s policy'],
+  'update-available': ['update-available', () => 'Update available'],
+  // Inventory 1.1 returns no replacement names and no reason an item is no longer offered or was revoked, which
+  // "Replaced by {names}" and the contract's reason sentences need.
+  // Contract amendment 3.2.3 rows 1, 2 and 3 (owner-approved 2026-10-30).
+  superseded: ['replaced', () => 'Replaced in the release index; still installed'],
+  'no-longer-offered': ['no-longer-offered', () => 'No longer offered; still installed'],
+  revoked: ['no-longer-offered', () => 'Withdrawn from the release index; still installed'],
+  changed: ['changed-since-install', () => 'Changed since install (your tool already uses the changed copy)'],
+  // Contract amendment 3.2.3 row 4 (owner-approved 2026-10-30).
+  missing: ['changed-since-install', () => 'Some of its files are missing'],
+  unchecked: ['changed-since-install', () => 'Not checked yet'],
+  // Contract amendment 3.2.3 row 5 (owner-approved 2026-10-30), when Core names no file.
+  'block-changed': ['block-edited', state => state.blockFiles?.length ? `The AIH block in ${blockFiles(state)} was edited` : 'A block AIH added was changed'],
+  'block-missing': ['changed-since-install', state => state.blockFiles?.length ? `The AIH block in ${blockFiles(state)} is gone` : 'A block AIH added is missing'],
+  interrupted: ['interrupted', state => `Install didn't finish; ${state.written ?? 0} files written`],
+  'granted-by-aih': ['needs-ok', state => `Allowed by AIH in ${state.toolLabel}; removed with the server`],
+  needed: ['needs-ok', state => `Installed; still needs your OK in ${state.toolLabel}`],
+  'non-compliant': ['policy-refused', () => 'Doesn’t meet your organisation’s policy'],
+  // Contract amendment 3.2.3 row 6 (owner-approved 2026-10-30).
+  'policy-unknown': ['not-checked', () => 'Policy not checked'],
 };
 const blockFiles = state => state.blockFiles.map(path => path.split(/[\\/]/).pop()).join(', ');
-function stateBadges(state = {}, el) {
-  const chips = [];
-  const add = (key, field = STATE_WORDS[key]?.[0]) => { const words = STATE_WORDS[key]; if (!words) return;
-    const chip = el('span', 'inline-flex items-center gap-1 text-[11px]', ''); chip.dataset.installedState = key;
-    chip.append(iconSpan('state', words[1]), el('span', '', words[2]?.(state) ?? key)); attachTooltip(chip, `Core ${field}: ${key}`); chips.push(chip); };
-  if (state.update && state.update !== 'current' && state.update !== 'unknown') add(state.update);
-  for (const distinct of state.files ?? (state.file && !['matches', 'unknown'].includes(state.file) ? [state.file] : [])) add(distinct);
-  if (state.install === 'interrupted') add('interrupted');
-  if (state.approval === 'granted-by-aih') add('granted-by-aih');
-  else if (state.approval === 'needed') add('needed');
+// The states one selection shows, in order: [state, icon, words].
+function stateChips(state = {}) {
+  const keys = [];
+  if (state.update && state.update !== 'current' && state.update !== 'unknown') keys.push(state.update);
+  keys.push(...(state.files ?? (state.file && !['matches', 'unknown'].includes(state.file) ? [state.file] : [])));
+  if (state.install === 'interrupted') keys.push('interrupted');
+  if (state.approval === 'granted-by-aih') keys.push('granted-by-aih');
+  else if (state.approval === 'needed') keys.push('needed');
   // A policy refusal is an organization answer, never 'no longer offered' (Q8).
-  if (state.policy === 'non-compliant') add('non-compliant');
-  return chips;
+  if (state.policy === 'non-compliant') keys.push('non-compliant');
+  else if (state.policy === 'unknown') keys.push('policy-unknown');
+  // A state with no words is not shown: a raw Core value never reaches the page.
+  return keys.filter(key => STATE_WORDS[key]).map(key => [key, STATE_WORDS[key][0], STATE_WORDS[key][1](state)]);
+}
+/** The words each state chip of one installed selection says. */
+export const stateWords = state => stateChips(state).map(([, , words]) => words);
+// Amendment 3.2.3 drops the chip tooltips: a chip's words are all it says.
+function stateBadges(state = {}, el) {
+  return stateChips(state).map(([key, icon, words]) => {
+    const chip = el('span', 'inline-flex items-center gap-1 text-[11px]', ''); chip.dataset.installedState = key;
+    chip.append(iconSpan('state', icon), el('span', '', words));
+    return chip;
+  });
 }
 
 // Contract amendment 3.2.3 rows 19 and 20 (owner-approved 2026-10-30).
@@ -110,7 +122,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       }, true);
       confirm.disabled = !preview.canConfirm;
       actions.append(confirm, cancel);
-      area.replaceChildren(...stepRows(preview), ...[...kept, ...(preview.kept ?? [])].map(item => el('p', 'text-on-surface-variant', item.reason ? `${item.name}: ${item.reason}` : `${item.name}: keep-required`)),
+      area.replaceChildren(...stepRows(preview), ...[...kept, ...(preview.kept ?? [])].map(item => el('p', 'text-on-surface-variant', `${item.name}: ${item.reason ?? stillNeededWords(item.neededBy) ?? 'keep-required'}`)),
         el('p', 'text-on-surface-variant', preview.note), actions);
       area.hidden = false;
     }
@@ -230,11 +242,10 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       const name = setName(group.set);
       const heading = el('p', 'text-[11px] font-medium text-on-surface-variant', name ?? '');
       heading.title = `${group.set.framework}/${group.set.setId}/${group.set.setSha256}`;
-      // Core removes only this set's origin from a member another set or a direct choice still owns, and what only
-      // this set's own members need goes with them. The contract's sentence names the other set; a member kept only
-      // for a direct choice or a requirement has no sentence, so its removal shows Core's action.
-      const removals = setRemovalEntries(group).map(({ keptFor, ...entry }) => {
-        const kept = keptWords(keptFor, name, setName);
+      // Core removes only this set's origin from a member another set, a direct choice or a requirement still owns,
+      // and what only this set's own members need goes with them. The kept sentence names what keeps it.
+      const removals = setRemovalEntries(group).map(({ keptFor, chosen, neededBy, ...entry }) => {
+        const kept = keptWords(keptFor, name, setName, chosen) ?? stillNeededWords(neededBy);
         return kept ? { ...entry, kept } : entry;
       });
       const { remove: removeSet, area: setArea } = removeControl(removals, [], 'Remove this set');

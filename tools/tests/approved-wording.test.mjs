@@ -5,8 +5,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { installOutcome, firstRunWords } from '../../src/app/install-panel.js';
-import { keptWords, setLabeller } from '../../src/app/installed-list.js';
-import { confirmRemoval, previewRemoval } from '../../src/app/installed-removal.js';
+import { keptWords, setLabeller, setRemovalEntries, stillNeededWords } from '../../src/app/installed-list.js';
+import { stateWords } from '../../src/app/installed-panel.js';
+import { confirmRemoval, previewRemoval, removalMemberWords } from '../../src/app/installed-removal.js';
 import { confirmUpdate, previewUpdate } from '../../src/app/installed-update.js';
 import { replacedNames } from '../../src/catalog/item-name.js';
 
@@ -17,12 +18,17 @@ const fill = (sentence, values) => sentence.replace(/\{([^}]+)\}/g, (_, key) => 
 
 // Removal and Update outcomes, run through the page's own code.
 const removed = { name: 'grill-me', managementId: 'm-1', scope: 'project' };
-const removalOf = async run => {
+const removalOf = async (run, entry = removed, removal = { change: 'remove-selection', members: [{ kind: 'file', path: '/project/0.md', action: 'remove' }] }) => {
   const request = async operation => operation === 'remove' ? { disposition: 'prepared', diagnostics: [],
-    removals: [{ managementId: 'm-1', disposition: 'prepared', change: 'remove-selection', diagnostics: [], members: [{ kind: 'file', path: '/project/0.md', action: 'remove' }] }],
+    removals: [{ managementId: 'm-1', disposition: 'prepared', diagnostics: [], ...removal }],
     preparation: { status: 'ready', sessionId: 's', review: { reviewDigest: 'd', operations: [] } } } : run;
-  return confirmRemoval({ preview: await previewRemoval({ entries: [removed], request, mode: 'vibe' }), request, mode: 'vibe' });
+  return confirmRemoval({ preview: await previewRemoval({ entries: [entry], request, mode: 'vibe' }), request, mode: 'vibe' });
 };
+// "Remove this set" on a member another owner keeps: Core releases only this set's origin.
+const keptMember = { ...removed, origin: { set: { framework: 'ecc', setId: 'ecc.rules', setSha256: 'b'.repeat(64) } }, kept: 'Kept; also part of plain' };
+const originOnly = { change: 'remove-origin', origin: keptMember.origin, members: [{ kind: 'file', path: '/project/0.md', action: 'keep-shared', reason: 'another-origin' }] };
+// One installed-list chip's words for one Core state.
+const chip = state => { const words = stateWords(state); assert.equal(words.length, 1, `one chip for ${JSON.stringify(state)}`); return words[0]; };
 const refusal = async (reason, values) => (await previewUpdate({ entries: [{ name: values.item, managementId: 'm-1', scope: 'project', replacement: {} }],
   tool: 'claude-code', nameOf: () => values.name,
   request: async () => ({ disposition: 'invalid', diagnostics: [{ reason, managementId: 'm-1', item: { framework: 'f', itemId: 'f.x' }, message: 'not shown' }] }) })).message;
@@ -35,6 +41,23 @@ const frameworks = [{ id: 'ecc', sets: [{ id: 'ecc.rules', name: 'rules', setSha
 // [row, file, the amendment's sentence, then where the page builds it: sample values, the page's sentence for them and
 // the source words its marker sits by, when not the sentence's first fixed words]
 const ROWS = [
+  // Inventory 1.1 carries no replacement names and no reason an item is no longer offered or was revoked.
+  [1, 'src/app/installed-panel.js', 'Replaced in the release index; still installed', {}, () => chip({ update: 'superseded' })],
+  [2, 'src/app/installed-panel.js', 'No longer offered; still installed', {}, () => chip({ update: 'no-longer-offered' })],
+  [3, 'src/app/installed-panel.js', 'Withdrawn from the release index; still installed', {}, () => chip({ update: 'revoked' })],
+  [4, 'src/app/installed-panel.js', 'Some of its files are missing', {}, () => chip({ file: 'missing' })],
+  [5, 'src/app/installed-panel.js', 'A block AIH added was changed', {}, () => chip({ file: 'block-changed' })],
+  [5, 'src/app/installed-panel.js', 'A block AIH added is missing', {}, () => chip({ file: 'block-missing' })],
+  [6, 'src/app/installed-panel.js', 'Policy not checked', {}, () => chip({ policy: 'unknown' })],
+  [8, 'src/app/installed-list.js', 'Kept; you also chose it yourself', {}, () => {
+    const [entry] = setRemovalEntries({ set, members: [{ managementId: 'm-1', scope: 'project', name: 'tdd', alsoIn: [{ reasonIncluded: 'chosen' }] }], needs: [] });
+    return keptWords(entry.keptFor, 'rules', setLabeller(frameworks), entry.chosen);
+  }],
+  [10, 'src/app/installed-list.js', 'Kept; still needed by {names}', { names: 'tdd and README' }, () => stillNeededWords(['tdd', 'README'])],
+  [11, 'src/app/installed-removal.js', 'Kept; you changed it after install', {},
+    () => removalMemberWords({ kind: 'file', path: '/project/0.md', action: 'keep-changed', reason: 'managed-content-changed' }, removed)],
+  [14, 'src/app/installed-removal.js', "Couldn't confirm it's kept.", {},
+    async () => between((await removalOf({ completion: 'partial', diagnostics: [], members: [] }, keptMember, originOnly)).message, 'grill-me: ', '.') + '.', ": Couldn't confirm it's kept."],
   [9, 'src/app/installed-list.js', 'Kept; also part of {set1} and {set2}', { set1: 'rules', set2: 'plain' },
     () => keptWords([{ framework: 'ecc', setId: 'ecc.rules', setSha256: 'b'.repeat(64) }, { framework: 'ecc', setId: 'ecc.plain', setSha256: 'c'.repeat(64) }], 'other', setLabeller(frameworks))],
   [12, 'src/app/installed-removal.js', '{name}: removed', { name: 'grill-me' },
@@ -89,6 +112,33 @@ for (const [row, file, sentence, values, page, words] of ROWS) test(`row ${row}:
   const at = lines.findIndex(line => line.includes(anchor));
   assert.ok(at >= 0, `${file} says "${anchor}"`);
   assert.ok(markedRows(lines, at).includes(row), `marked as approved row ${row}`);
+});
+
+test('a compliant, current, matching installed item shows no state, and no chip says a Core code', () => {
+  for (const policy of ['required', 'recommended', 'permitted', null, undefined])
+    assert.deepEqual(stateWords({ file: 'matches', update: 'current', policy, approval: 'not-needed', install: 'complete' }), [], `policy ${policy}`);
+  const codes = ['superseded', 'no-longer-offered', 'revoked', 'missing', 'block-changed', 'block-missing', 'unknown', 'changed', 'unchecked'];
+  for (const state of [{ update: 'superseded' }, { update: 'no-longer-offered' }, { update: 'revoked' }, { file: 'missing' }, { file: 'block-changed' }, { file: 'block-missing' },
+    { policy: 'unknown' }, { files: ['missing', 'block-changed', 'block-missing', 'changed'] }])
+    for (const words of stateWords(state)) assert.ok(!codes.includes(words) && /^[A-Z]/.test(words), `${JSON.stringify(state)} says "${words}"`);
+  // Row 5 keeps naming the file when Core gives its path.
+  assert.deepEqual(stateWords({ file: 'block-changed', blockFiles: ['/p/CLAUDE.md'] }), ['The AIH block in CLAUDE.md was edited']);
+});
+
+test('row 15: no installed state chip carries a tooltip', () => {
+  const source = readFileSync(new URL('../../src/app/installed-panel.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /Core \$\{field\}|attachTooltip\(chip/, 'no "Core fileState: …" tooltip on a chip');
+});
+
+test('row 8 only when no set keeps the member; row 9 wins when one does', () => {
+  const label = setLabeller(frameworks);
+  assert.equal(keptWords([{ framework: 'ecc', setId: 'ecc.plain', setSha256: 'c'.repeat(64) }], 'rules', label, true), 'Kept; also part of plain');
+  assert.equal(keptWords([], 'rules', label, false), undefined, 'kept only by a requirement: no row 8');
+});
+
+test("row 14 only for a kept member Core did not confirm; a confirmed one says the kept sentence", async () => {
+  assert.equal((await removalOf({ completion: 'complete', diagnostics: [], members: [] }, keptMember, originOnly)).message, 'grill-me: Kept; also part of plain');
+  assert.equal((await removalOf({ completion: 'partial', diagnostics: [{ message: 'Lost.' }], members: [] }, keptMember, originOnly)).message, "grill-me: Couldn't confirm it's kept. Lost.");
 });
 
 const sources = dir => readdirSync(new URL(`../../${dir}/`, import.meta.url), { recursive: true, withFileTypes: true })

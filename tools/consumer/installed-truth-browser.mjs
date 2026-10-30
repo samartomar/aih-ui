@@ -92,8 +92,9 @@ const setOrigins = selection => (selection.origins ?? []).filter(origin => origi
 const lines = text => text.split('\n').map(line => line.trim()).filter(Boolean);
 const escape = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const count = (text, pattern) => (text.match(new RegExp(pattern, 'g')) ?? []).length;
-// Sentences this page used to make up; the contract has none of them (workbench-reads, "Your setup").
-const INVENTED = [/From set /, /Also in set/, /Replaced by a newer item/, /Missing since install/, /your own choices/, /still needed by/, /Couldn't confirm it's kept/, /: Removed\b/, /: Restored\b/];
+// Sentences this page used to make up; neither the contract (workbench-reads, "Your setup") nor its amendment 3.2.3 has
+// them. "Kept; still needed by {names}" and "Couldn't confirm it's kept." are now approved wording.
+const INVENTED = [/From set /, /Also in set/, /Replaced by a newer item/, /Missing since install/, /your own choices/, /: Removed\b/, /: Restored\b/];
 
 export async function runInstalledListTruthBrowser({ origin, output, project, playwrightModule, theme = 'dark' }) {
   const { chromium } = await import(playwrightModule);

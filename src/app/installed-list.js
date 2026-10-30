@@ -106,8 +106,10 @@ export function originGroups(inventory, { name = recordedName } = {}) {
     group.members = group.members.map(member => {
       const entry = selections.find(candidate => candidate.managementId === member.managementId);
       if (leaving.has(member.managementId)) return { ...member, leaves: true };
-      const stillRequired = (entry.origins ?? []).some(origin => origin.reasonIncluded === 'required-by' && !leaving.has(requirer(entry, origin)?.managementId));
-      return { ...member, stillRequired };
+      // The selections that still need it once this set leaves, by name, for the kept sentence.
+      const neededBy = [...new Set((entry.origins ?? []).filter(origin => origin.reasonIncluded === 'required-by').map(origin => requirer(entry, origin))
+        .filter(owner => owner && !leaving.has(owner.managementId)).map(name))];
+      return { ...member, stillRequired: neededBy.length > 0, neededBy };
     });
     group.needs = selections.filter(entry => leaving.has(entry.managementId) && !group.items.includes(entry.managementId))
       .map(entry => ({ managementId: entry.managementId, scope: entry.scope, name: name(entry) }));
@@ -116,12 +118,14 @@ export function originGroups(inventory, { name = recordedName } = {}) {
 }
 /**
  * What "Remove this set" sends to Core for one recorded set group: each member that leaves goes whole; any other
- * member releases only this set's origin and names the other sets it stays in (`keptFor`, possibly empty when only a
- * direct choice or a requirement keeps it); what only leaving selections need goes whole after the members.
+ * member releases only this set's origin and names what keeps it: the other sets it stays in (`keptFor`), whether the
+ * user also chose it (`chosen`) and the selections that still need it (`neededBy`); what only leaving selections need
+ * goes whole after the members.
  */
 export function setRemovalEntries(group) {
-  return [...group.members.map(({ leaves, stillRequired, alsoIn, ...member }) => leaves ? member
-    : { ...member, origin: { set: group.set }, keptFor: alsoIn.filter(origin => origin.set).map(origin => origin.set) }), ...group.needs];
+  return [...group.members.map(({ leaves, stillRequired, neededBy = [], alsoIn = [], ...member }) => leaves ? member
+    : { ...member, origin: { set: group.set }, keptFor: alsoIn.filter(origin => origin.set).map(origin => origin.set),
+      chosen: alsoIn.some(origin => origin.reasonIncluded === 'chosen'), neededBy }), ...group.needs];
 }
 /**
  * A recorded set's heading: the name Catalog publishes for the exact set. When this Catalog offers that set id only at
@@ -140,9 +144,10 @@ export function setLabeller(frameworks = []) {
 }
 /**
  * The kept sentence for a member "Remove this set" leaves in its other sets (`keptFor`), never naming a set by the
- * heading being removed. Undefined when no set keeps it (a direct choice or a requirement does).
+ * heading being removed; with no other set, for a member the user also chose (`chosen`). Undefined when neither keeps
+ * it (a requirement does: see stillNeededWords).
  */
-export function keptWords(keptFor = [], heading, label) {
+export function keptWords(keptFor = [], heading, label, chosen = false) {
   const labels = keptFor.map(label);
   const named = [...new Set(labels.filter(name => name && name !== heading))];
   // Contract amendment 3.2.3 row 9 (owner-approved 2026-10-30).
@@ -150,7 +155,14 @@ export function keptWords(keptFor = [], heading, label) {
   // Contract amendment 3.2.3 rows 33 and 34 (owner-approved 2026-10-30).
   if (labels.some(name => name && name === heading)) return 'Kept; also part of another release of this set';
   if (labels.length) return 'Kept; also part of a set this catalog no longer offers';
+  // Contract amendment 3.2.3 row 8 (owner-approved 2026-10-30).
+  if (chosen) return 'Kept; you also chose it yourself';
   return undefined;
+}
+/** The kept sentence for a member another installed selection still needs, by the names of those selections. */
+export function stillNeededWords(names) {
+  // Contract amendment 3.2.3 row 10 (owner-approved 2026-10-30).
+  return names?.length ? `Kept; still needed by ${listNames(names)}` : undefined;
 }
 // A recorded origin that owns the item (a set or a direct choice), not one that only requires it.
 const owners = entry => (entry.origins ?? []).filter(origin => origin.reasonIncluded !== 'required-by');
