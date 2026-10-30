@@ -44,13 +44,13 @@ async function main() {
     // loads. Every control that offers a client reads that SAME list and keeps
     // no copy of its own.
     const organization = createOrganization({ elements: organizationElements(), onEdit: section => onboarding.edit(section), onModeComplete: applySettings });
-    // Your tool reads Core's tool registry and inspection itself; it is not the workspace setup's AI clients, which
-    // stay in Settings (Edit AI tools).
-    // The header's one canonical tool feeds both the catalog and the authoring context; it is the same
-    // choice, not a Settings client, and it rebinds no saved execution.
-    const yourTool = createYourTool({ elements: yourToolElements(), onChange: tool => { catalog.setTool(tool); authoring.setTool(tool); } });
+    // Your tools reads Core's tool registry and inspection itself. It starts from the workspace setup's AI clients
+    // (Settings, Edit AI tools) and is always a multi-select.
+    // The header's chosen tools feed both the catalog and the authoring context; they rebind no saved execution.
+    const yourTool = createYourTool({ elements: yourToolElements(), onChange: tools => { catalog.setTool(tools); authoring.setTool(tools); } });
 
     function applySettings(settings, location) {
+      yourTool.setSetupClients(settings.clients);
       organization.setSettings(settings, location);
       policyWorkspace.setSettings(settings);
       authoringWorkspace.setSettings(settings);

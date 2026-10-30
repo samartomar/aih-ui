@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { openPolicyAdvanced, closePolicyDrawer } from './policy-drawer.mjs';
+import { chooseOnlyTool } from './choose-tool.mjs';
 
 // UI165 ordinary page cases on the real browse fixture (project-basics + extensions + the actual checked ECC
 // release). The MCP server is the real ecc.mcp.cloudflare-docs item; the tool is the header's canonical
@@ -116,6 +117,7 @@ export async function runUi165Browser({ origin, output, expected, playwrightModu
       for (const [key, value] of Object.entries(stored.local)) {
         if (key === 'wb-mode') assert.ok(['dark', 'light'].includes(value), 'stored theme is a theme enum');
         else if (key === 'wb-your-tool') assert.equal(value, 'claude', 'stored tool is the selected canonical tool');
+        else if (key === 'wb-your-tools') assert.ok(JSON.parse(value).every(id => typeof id === 'string'), 'stored tools are only canonical tool ids');
         else if (/^aih-workbench-advanced-[a-z0-9-]+$/.test(key)) assert.equal(value, 'open', 'advanced disclosure stores only its open preference');
         else assert.fail(`Unexpected local storage key: ${key}`);
       }
@@ -129,8 +131,7 @@ export async function runUi165Browser({ origin, output, expected, playwrightModu
 
       // --- Unsupported approval shape: the public codex binding declares approvalLocation 'other';
       // Core cannot write it, so the card says to approve in the tool and offers no tick (#162-AC03).
-      await page.locator('#your-tool-trigger').click();
-      await page.locator('[data-tool="codex"]').click();
+      await chooseOnlyTool(page, 'codex');
       const codexCard = page.locator(`[data-card-id="${expected.ecc.sha256}/${expected.ecc.mcp.id}"]`);
       const inTool = codexCard.locator('.browse-mcp-approval[data-mcp-approval="in-tool"]');
       await inTool.waitFor({ timeout: 30_000 });
@@ -154,8 +155,7 @@ export async function runUi165Browser({ origin, output, expected, playwrightModu
       // --- Positive duplicate warning: a real second copy one folder above the granted project, observed
       // through public inspectToolHost (#163-AC01). Only the copilot binding declares ancestor-folder reads,
       // so the header switches to it; saved selections keep their recorded tool identity (no rebind).
-      await page.locator('#your-tool-trigger').click();
-      await page.locator('[data-tool="claude"]').click();
+      await chooseOnlyTool(page, 'claude');
       await framework(page, expected.additional);
       const grill = expected.additional.grill;
       const grillCard = page.locator(`[data-card-id="${expected.additional.sha256}/${grill.id}"]`);
@@ -178,8 +178,7 @@ export async function runUi165Browser({ origin, output, expected, playwrightModu
       await page.locator('#project-folder-message').filter({ hasNotText: /^Checking the folder…$/ }).waitFor();
       await closePolicyDrawer(page);
       // The tool switch re-browses with the folder set, so the real inspection runs for the chosen items.
-      await page.locator('#your-tool-trigger').click();
-      await page.locator('[data-tool="copilot"]').click();
+      await chooseOnlyTool(page, 'copilot');
       await framework(page, expected.additional);
       await page.locator('#your-setup').click();
       await page.waitForFunction(() => /Second copy|Couldn't check/.test(document.getElementById('setup-choices-host-copies').textContent));

@@ -55,7 +55,8 @@
 }
 .your-tool-option:hover, .your-tool-option:focus-visible { background: var(--color-surface-container); }
 .your-tool-option[aria-checked="true"] { background: var(--color-surface-container-high); box-shadow: inset 2px 0 0 var(--color-primary); }
-.your-tool-option[aria-disabled="true"] { cursor: not-allowed; color: var(--color-on-surface-variant); }
+.your-tool-option[aria-disabled="true"], .your-tool-option[data-unobserved="true"] { color: var(--color-on-surface-variant); }
+.your-tool-option[aria-disabled="true"] { cursor: not-allowed; }
 .your-tool-option-words { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
 .your-tool-option-reason, .your-tool-option-surface { font-size: 10px; color: var(--color-on-surface-variant); }
 .your-tool-option-surface { font-family: var(--font-mono, monospace); }

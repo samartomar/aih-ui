@@ -250,10 +250,15 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
         if (operation === 'browse-content') {
           const browse = () => browseContent(mixedService.inventories, body, folder.project, (inventory, itemId) => client.scanEvidence.check({ inventory, itemId, supplied: (body.reviewEvidence ?? []).map(bytes => Uint8Array.from(bytes)), evaluationTime: new Date().toISOString(), withSummary: true }));
           const result = client.host ? await client.host.measure('compatibility', browse) : await browse();
+          // Enterprise: whether the host-configured organization source was read is said once, for the page; a policy that
+          // could not be read gives no per-item preview rather than a silent nothing.
           if (body.enterprise === true && result.compatibility) {
             const inventory = mixedService.inventories.find(entry => entry.release.sha256 === body.releaseSha256);
-            const source = organizationSource ? await readOrganization({ organizationSource, controls }) : {};
-            result.policy = await browsePolicy(inventory, body.tool, source.organization);
+            const source = organizationSource ? await readOrganization({ organizationSource, controls }) : undefined;
+            result.organizationPolicy = !source ? { status: 'not-configured', source: null, diagnostics: [] }
+              : source.status === 'ok' ? { status: 'ok', source: publicSource, policyId: source.organization.id, diagnostics: [] }
+              : { status: source.status, source: publicSource, diagnostics: source.diagnostics };
+            if (source?.status === 'ok') result.policy = await browsePolicy(inventory, body.tool, source.organization);
           }
           return send(response, 200, result);
         }

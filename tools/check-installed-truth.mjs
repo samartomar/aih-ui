@@ -2,7 +2,7 @@
 // consumer has been assembled (tools/check-workbench.mjs). check-installed-workbench.mjs runs the same three cases in
 // both themes.
 //
-// Usage: node tools/check-installed-truth.mjs <consumerDir> [list|set-removal|namespaced-rule|shared-block|needed-removal|ecc-sets-removal|no-raw-ids|update-one|update-requirement ...]
+// Usage: node tools/check-installed-truth.mjs <consumerDir> [list|set-removal|namespaced-rule|shared-block|needed-removal|ecc-sets-removal|no-raw-ids|your-tools|update-one|update-requirement ...]
 //          [--theme dark|light] [--update-pack <catalog.tgz>] [--requirement-pack <catalog.tgz>]
 // Each case gets a fresh disposable project and a real child host process (tools/installed-host.mjs).
 // update-one needs --update-pack: a Catalog pack of the installed package and version in which exactly one installed
@@ -14,6 +14,9 @@
 // ecc-sets-removal installs two ECC rule sets in a second project, then in this one removes both in one request and,
 // installed again, one after the other; nothing of ECC may be left here, and the other project keeps all of its ECC.
 // Every case's host runs on a disposable account home that the case's projects share.
+// your-tools runs the owner's Gate A setup (Enterprise admin, a policy repository the host does not read, all eleven AI
+// clients, an old single Codex choice): every chosen tool is listed and judged, items are addable, one Add installs for
+// each tool Core renders it for, and the organization policy's state is said with what to do.
 // no-raw-ids walks pick, review, Your setup, install and the installed list and fails on any item id, management id,
 // set id or sha256 from the page's Catalog and Core inventory in their visible text.
 import { copyFile, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
@@ -27,6 +30,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pageAssets } from './server/assets.mjs';
 import { buildCss } from './build-css.mjs';
 import { homeEnvironment } from './consumer/home-environment.mjs';
+import { OWNER_SETTINGS, runYourToolsBrowser } from './consumer/your-tools-browser.mjs';
 import { installEccSetsBrowser, readEccInstalledBrowser, runEccSetsRemovalTruthBrowser, runInstalledListTruthBrowser, runNamespacedRuleTruthBrowser, runNeededRemovalTruthBrowser, runNoRawIdsBrowser, runSetRemovalTruthBrowser, runSharedBlockTruthBrowser, runUpdateBlockedBrowser, runUpdateOneBrowser, runUpdateOneInstallBrowser } from './consumer/installed-truth-browser.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -41,7 +45,7 @@ const packs = { 'update-one': option('--update-pack'), 'update-requirement': opt
 for (const name of Object.keys(packs)) packs[name] &&= resolve(packs[name]);
 const named = args.slice(1).filter((value, index, all) => !value.startsWith('--') && !['--theme', '--update-pack', '--requirement-pack'].includes(all[index - 1]));
 const cases = { list: runInstalledListTruthBrowser, 'set-removal': runSetRemovalTruthBrowser, 'namespaced-rule': runNamespacedRuleTruthBrowser,
-  'shared-block': runSharedBlockTruthBrowser, 'needed-removal': runNeededRemovalTruthBrowser, 'ecc-sets-removal': runEccSetsRemoval, 'no-raw-ids': runNoRawIdsBrowser, 'update-one': runUpdateOne, 'update-requirement': runUpdateRequirement };
+  'shared-block': runSharedBlockTruthBrowser, 'needed-removal': runNeededRemovalTruthBrowser, 'ecc-sets-removal': runEccSetsRemoval, 'no-raw-ids': runNoRawIdsBrowser, 'your-tools': runYourTools, 'update-one': runUpdateOne, 'update-requirement': runUpdateRequirement };
 const selected = named.length ? named : Object.keys(cases).filter(name => !Object.hasOwn(packs, name) || packs[name]);
 for (const name of selected) if (!cases[name]) throw new Error(`Unknown case ${name}; choose from ${Object.keys(cases).join(', ')}.`);
 
@@ -205,6 +209,13 @@ async function runUpdateOne({ project, output, playwrightModule, theme }) {
   return { status: 'passed' };
 }
 
+// The owner's own saved setup, as the Workbench stores it, is in the project before the host starts.
+async function runYourTools({ project, output, playwrightModule, theme }) {
+  await mkdir(project, { recursive: true });
+  await writeFile(join(project, 'settings.json'), `${JSON.stringify(OWNER_SETTINGS, null, 2)}\n`);
+  return withHost(project, origin => runYourToolsBrowser({ origin, output, project, playwrightModule, theme }));
+}
+
 // The ECC sets are first installed in another project under the same account home. Core must count only this project's
 // requirers when it decides what a removal frees, so the other project's ECC is still listed afterwards, file for file.
 async function runEccSetsRemoval({ project, output, playwrightModule, theme }) {
@@ -229,7 +240,7 @@ for (const name of selected) {
   const project = join(consumerDir, `installed-truth-${name}-${theme}-${randomUUID().slice(0, 8)}`);
   const output = join(consumerDir, `installed-truth-evidence-${name}-${theme}`);
   caseHome = await mkdtemp(join(tmpdir(), 'aih-installed-truth-home-'));
-  const outcome = Object.hasOwn(packs, name) || name === 'ecc-sets-removal' ? await cases[name]({ project, output, playwrightModule, theme })
+  const outcome = Object.hasOwn(packs, name) || ['ecc-sets-removal', 'your-tools'].includes(name) ? await cases[name]({ project, output, playwrightModule, theme })
     : await withHost(project, origin => cases[name]({ origin, output, project, playwrightModule, theme }));
   if (outcome.status !== 'passed') throw new Error(`${name} (${theme}) failed: ${JSON.stringify(outcome)}`);
   console.log(`installed truth ${name} (${theme}) passed`);

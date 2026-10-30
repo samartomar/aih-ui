@@ -36,7 +36,7 @@ function needsReview(result, candidate, chosen, before) {
 
 /** Proposes adding the item; accepts it when the host returned it with nothing to decide. */
 export async function addItem(client, item) {
-  const chosen = item.root, before = client.draft, result = await client.propose({ type: 'select', root: chosen, ...(item.selectedTool ? { tool: item.selectedTool } : {}) });
+  const chosen = item.root, before = client.draft, result = await client.propose({ type: 'select', root: chosen, ...(item.selectedTool ? { tool: item.selectedTool } : {}), ...(item.selectedTools?.length > 1 ? { tools: item.selectedTools } : {}) });
   if (result.status === 'superseded') return { status: 'superseded', result };
   if (result.status !== 'ok') return { status: 'refused', result };
   const candidate = client.candidate;

@@ -9,6 +9,9 @@
 
 import { catalogElements } from "./elements.js";
 import { renderBrowseFacts, renderFrameworkRoutes } from './browse-facts.js';
+import { toolFit } from './tool-fit.js';
+import { organizationPolicyNotice } from './organization-policy.js';
+import { setupInstructions } from '../app/authority-source.js';
 import { createStartingSets } from './starting-sets.js';
 import { createFrameworkNavigation } from './frameworks.js';
 import { createCards } from "./cards.js";
@@ -52,9 +55,14 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     // entryId -> 'Adding…' or 'Removing…' while a card's Add or Remove is in flight (the grid is redrawn meanwhile).
     busy: new Map(),
   };
-  let restoredView = false, chosenTool = null, legacyBrowsing = false;
+  // Your tools: every chosen tool (Core-observed or not). The lead is the first one Core has observed; it is the tool
+  // for the host's second-copy read and one-server approvals. Fit is judged across all of the observed ones.
+  let restoredView = false, chosenTools = [], chosenTool = null, legacyBrowsing = false;
+  const fitTools = () => chosenTools.filter(tool => tool.observed !== false).map(tool => tool.id);
+  const toolsLabel = () => chosenTools.map(tool => tool.label ?? tool.id).join(', ');
   let browseKey, browseContentKey, browseResult, browseAttempt = 0;
-  let enterprise = false;
+  // The organization policy's last read state stays shown while the next browse answer is read.
+  let enterprise = false, setupSettings = null, organizationPolicy;
   const savedSetSources = new Set();
   let setFeedback;
   try {
@@ -104,7 +112,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     // Root/tool/folder/artifact changes participate in the refresh identity: an unchanged browse set with
     // changed roots or folder is a new request, and stale replies cannot satisfy it (Q6-R2).
     const folderAtRequest = authoring.folderRevision;
-    const contentKey = JSON.stringify([framework.sha256, chosenTool?.id, choice.requests, choice.configurations ?? [], enterprise, authoring.evidenceRevision, chosenRoots(framework), authoring.revision, folderAtRequest]);
+    const contentKey = JSON.stringify([framework.sha256, chosenTools.map(tool => tool.id), choice.requests, choice.configurations ?? [], enterprise, authoring.evidenceRevision, chosenRoots(framework), authoring.revision, folderAtRequest]);
     const inspectedItem = inspect ? selectedEntry()?.authoringItem : undefined;
     const itemId = inspectedItem && inspectedItem.root.releaseSha256 === framework.sha256 ? inspectedItem.id : undefined;
     const key = JSON.stringify([contentKey, inspect, itemId]);
@@ -112,17 +120,17 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     if (key === browseKey) return;
     browseKey = key; browseContentKey = contentKey; const attempt = ++browseAttempt; if (!factsOnly) browseResult = undefined;
     // The host read reflects the artifact's actual roots, like the drawer, not the current set request (#165 Q6).
-    try { const result = await authoring.request('browse-content', { releaseSha256: framework.sha256, tool: chosenTool?.id, sets: choice.requests, configurations: choice.configurations, inspect, itemId, enterprise, chosen: chosenRoots(framework), policyBytes: undefined });
+    try { const result = await authoring.request('browse-content', { releaseSha256: framework.sha256, tool: chosenTool?.id, tools: chosenTools.map(tool => tool.id), sets: choice.requests, configurations: choice.configurations, inspect, itemId, enterprise, chosen: chosenRoots(framework), policyBytes: undefined });
       // A folder switch (or any later invalidation) while this read was out discards its answer: it
       // described the old folder. Re-read for the current snapshot instead of adopting stale facts.
       if (attempt !== browseAttempt || authoring.folderRevision !== folderAtRequest) { if (attempt === browseAttempt && authoring.folderRevision !== folderAtRequest) void readBrowse(framework, choice, inspect); return; }
-      browseResult = result;
+      browseResult = result; if (result?.organizationPolicy) organizationPolicy = result.organizationPolicy;
     } catch { if (attempt !== browseAttempt) return; browseResult = { status: 'failed', reason: 'Could not read this source’s sets or tool fit. Your choices are unchanged.' }; }
     if (factsOnly) { cards.updateFacts(cardsModel()); details.render(detailsModel(selectedEntry())); } else render();
   }
   async function addSets(requests) {
     const framework = currentFramework(), tool = chosenTool?.id;
-    const result = await authoring.propose({ type: 'select-sets', sets: requests, configurations: browseChoice(framework).configurations, releaseSha256: framework?.sha256, tool });
+    const result = await authoring.propose({ type: 'select-sets', sets: requests, configurations: browseChoice(framework).configurations, releaseSha256: framework?.sha256, tool, tools: fitTools() });
     if (result.status === 'ok' && authoring.candidate && !result.diagnostics?.length) authoring.accept();
     // Refused because the setup is Enterprise and the policy is not: the page's one notice already says so.
     if (result.diagnostics?.some(value => value.code === 'ENTERPRISE_SETUP_REQUIRED')) { setFeedback = undefined; renderSetGuidance(); return; }
@@ -135,7 +143,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     const { result, requests } = setFeedback ?? {};
     guidance.textContent = result
       ? result.status === 'ok' ? 'Chosen sets added. Review Your setup; save to keep the exact options and origins.' : (result.diagnostics?.map(value => value.message).join(' ') || 'The selected sets could not be added.')
-      : chosenTool ? 'Choose content below. Add it to Your setup, then review your choices.' : 'Choose your tool in the header, then explore the framework below.';
+      : chosenTool ? 'Choose content below. Add it to Your setup, then review your choices.' : 'Choose your tools in the header, then explore the framework below.';
     if (!authoring.draft && result?.diagnostics?.some(value => value.code === 'POLICY_BOUND_EXCEEDED')) {
       const keep = el('button', 'set-choice', 'Keep set choices in a draft'); keep.type = 'button'; keep.id = 'browse-keep-draft';
       attachTooltip(keep, 'Explicitly keep these choices in a non-executable draft, retaining the original policy bytes. Existing policy bounds still apply when compiling.');
@@ -228,7 +236,12 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     return state.entries.find((candidate) => text(candidate?.entryId) === state.selectedId) ?? null;
   }
 
-  function unusable(entry) { const fit = browseResult?.compatibility?.items?.find(value => value.item.itemId === entry.authoringItem.id); return fit && (fit.support === 'none' || fit.notRendered || fit.staticBlockers?.length); }
+  // Not addable in ANY chosen tool. With several tools, one that takes the item is enough.
+  function unusable(entry) {
+    const across = toolFit(entry.authoringItem, browseResult);
+    if (across.judged) return !across.addable;
+    const fit = browseResult?.compatibility?.items?.find(value => value.item.itemId === entry.authoringItem.id); return fit && (fit.support === 'none' || fit.notRendered || fit.staticBlockers?.length);
+  }
   const approvalErrors = new Map();
   const approvalKey = item => `${item.root?.releaseSha256}/${item.id}/${item.root?.scope}/${chosenTool?.id}`;
   // The tick reflects only this exact item, scope and current tool's recorded approve-server operation.
@@ -247,7 +260,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     const scope = selectedScope(state.counts, browsingView());
     return {
       entries: visibleByTool(browseEntries()),
-      browse: { ...browseResult, ...browseContext(), enterprise },
+      browse: { ...browseResult, ...browseContext(), enterprise, organizationPolicy: browseResult?.organizationPolicy ?? organizationPolicy },
       tool: chosenTool,
       total: scopeTotal(state.entries, browsingView()),
       noun: scope === null ? "catalog entries" : "entries from this source",
@@ -261,7 +274,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
       onChoose: async (item, entryId) => {
         state.chosenId = entryId ?? null;
         state.busy.set(entryId, 'Adding…');
-        try { await onAdd({ ...item, selectedTool: chosenTool?.id }); } finally { state.busy.delete(entryId); render(); }
+        try { await onAdd({ ...item, selectedTool: chosenTool?.id, selectedTools: fitTools() }); } finally { state.busy.delete(entryId); render(); }
         // A clean Add rebuilds the grid without opening the review; keyboard focus returns to the card.
         if (document.activeElement === document.body || !document.activeElement?.isConnected) focusCard(state.chosenId);
       },
@@ -302,7 +315,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   }
 
   function detailsModel(entry) {
-    return { entry, browse: { ...browseResult, ...browseContext(), enterprise }, tool: chosenTool, counts: state.counts, target: target.value,
+    return { entry, browse: { ...browseResult, ...browseContext(), enterprise, organizationPolicy: browseResult?.organizationPolicy ?? organizationPolicy }, tool: chosenTool, counts: state.counts, target: target.value,
       // Core's nativeClientIds when it published them, otherwise null (support unknown).
       coreClients: publishedClients(state.summary?.coreTargets)?.ids ?? null };
   }
@@ -326,7 +339,14 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     frameworks.setCatalog(authoring.catalog, state.view);
     const guidance = document.querySelector('.framework-landing');
     guidance.dataset.step = chosenTool ? 'choose-content' : 'choose-tool';
-    document.getElementById('framework-first-step').textContent = chosenTool ? `Browsing for ${chosenTool.label}` : 'Choose your tool';
+    document.getElementById('framework-first-step').textContent = chosenTools.length ? `Browsing for ${toolsLabel()}` : 'Choose your tools';
+    // Enterprise: the organization policy's read state, said once and never left blank.
+    const policyNote = document.getElementById('organization-policy-note');
+    const notice = enterprise ? organizationPolicyNotice(browseResult?.organizationPolicy ?? organizationPolicy, setupSettings) : null;
+    if (policyNote) {
+      policyNote.hidden = !notice; policyNote.textContent = notice?.text ?? '';
+      if (notice) { policyNote.dataset.policyState = notice.state; policyNote.classList.toggle('text-error', notice.state !== 'ok'); attachTooltip(policyNote, setupInstructions()); } else delete policyNote.dataset.policyState;
+    }
     renderSetGuidance();
     const choice = browseChoice(selectedFramework);
     readBrowse(selectedFramework, choice, Boolean(state.selectedId));
@@ -334,8 +354,14 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     let quiet = document.getElementById('browse-unsupported');
     if (!quiet) { quiet = el('details', 'browse-unsupported'); quiet.id = 'browse-unsupported'; elements.cards.cardsGrid.before(quiet); }
     const blocked = browseEntries().filter(unusable); quiet.hidden = !blocked.length;
-    quiet.replaceChildren(el('summary', '', `${blocked.length} items don’t work in ${chosenTool?.label ?? 'this tool'} — show why`));
-    for (const entry of blocked) { const fit = browseResult.compatibility.items.find(value => value.item.itemId === entry.authoringItem.id); const row = el('div', 'unsupported-item'); row.append(el('p', '', `${entry.authoringItem.name ?? entry.authoringItem.label}: ${fit.notRendered?.detail ?? fit.reason} ${(fit.staticBlockers ?? []).map(value => value.detail).join(' ')}`), renderBrowseFacts(entry.authoringItem, browseResult, chosenTool)); quiet.append(row); }
+    const several = fitTools().length > 1;
+    const judgedLabels = (browseResult?.tools ?? []).map(tool => tool.label ?? tool.id).join(', ');
+    quiet.replaceChildren(el('summary', '', `${blocked.length} items don’t work in ${several ? `any of your tools (${judgedLabels})` : chosenTool?.label ?? 'this tool'} — show why`));
+    for (const entry of blocked) {
+      const across = toolFit(entry.authoringItem, browseResult), fit = browseResult.compatibility.items.find(value => value.item.itemId === entry.authoringItem.id);
+      const why = across.judged ? across.misses.map(miss => `${miss.label}: ${miss.reason}`).join(' ') : `${fit.notRendered?.detail ?? fit.reason} ${(fit.staticBlockers ?? []).map(value => value.detail).join(' ')}`;
+      const row = el('div', 'unsupported-item'); row.append(el('p', '', `${entry.authoringItem.name ?? entry.authoringItem.label}: ${why}`), renderBrowseFacts(entry.authoringItem, browseResult, chosenTool)); quiet.append(row);
+    }
     const context = document.getElementById('framework-context');
     context.replaceChildren();
     if (selectedFramework) {
@@ -352,14 +378,14 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     target.value = state.view.target;
     support.value = selectedFramework ? 'all' : state.view.support;
     target.disabled = Boolean(selectedFramework); support.disabled = Boolean(selectedFramework);
-    target.title = support.title = selectedFramework ? 'Framework fit uses Your tool in the header. Legacy target filters do not narrow this framework.' : '';
+    target.title = support.title = selectedFramework ? 'Framework fit uses Your tools in the header. Legacy target filters do not narrow this framework.' : '';
     const total = state.entries.length;
     const scope = selectedScope(state.counts, browsingView());
     const inScope = scopeTotal(state.entries, browsingView());
     const cardsView = cardsModel();
     const scoped = browseEntries();
     const count = status => scoped.filter(entry => capabilityFacts(entry.authoringItem, target.value).some(fact => fact.support === status)).length;
-    counts.textContent = selectedFramework ? `Framework fit follows ${chosenTool?.label ?? 'Your tool in the header'}. Published observations and unavailable content are shown separately; legacy target filters are inactive.` : `${publishedClients(state.summary?.coreTargets)?.ids.length ?? 'Unknown'} Core clients are listed in setup; this catalog declares ${target.options.length} target clients. Target declarations do not establish installation. ${target.value || 'No declared target'} · ${scoped.length} items in family/search/source scope: ${count('supported')} with supported facts · ${count('unsupported')} with unsupported facts · ${count('unknown')} with unknown facts. Mixed items can count in more than one group.`;
+    counts.textContent = selectedFramework ? `Framework fit follows ${chosenTools.length ? toolsLabel() : 'Your tools in the header'}. Published observations and unavailable content are shown separately; legacy target filters are inactive.` : `${publishedClients(state.summary?.coreTargets)?.ids.length ?? 'Unknown'} Core clients are listed in setup; this catalog declares ${target.options.length} target clients. Target declarations do not establish installation. ${target.value || 'No declared target'} · ${scoped.length} items in family/search/source scope: ${count('supported')} with supported facts · ${count('unsupported')} with unsupported facts · ${count('unknown')} with unknown facts. Mixed items can count in more than one group.`;
     const availableKinds = visibleByTool(browseEntries({ ...state.view, kind: null }));
     const filteredCounts = inventoryCounts(availableKinds);
     provenance.render({
@@ -442,8 +468,13 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
 
   return {
     sourceUnavailable: message => { if (!authoring.catalog) frameworks.setFailure(message); },
-    setMode: settings => { enterprise = ['admin', 'developer'].includes(settings?.role); render(); },
-    setTool: tool => { chosenTool = tool; frameworks.setTool(tool); render(); },
+    setMode: settings => { enterprise = ['admin', 'developer'].includes(settings?.role); setupSettings = settings ?? null; render(); },
+    // Your tools: the chosen list (a single tool or null is still accepted from older callers).
+    setTool: tools => {
+      chosenTools = Array.isArray(tools) ? tools : tools ? [tools] : [];
+      chosenTool = chosenTools.find(tool => tool.observed !== false) ?? null;
+      frameworks.setTool(chosenTools); render();
+    },
     async start() {
       state.summary = await (await fetch('./summary.json', { cache: 'no-store' })).json();
       provenance.setSummary(state.summary);

@@ -32,19 +32,20 @@
 <span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-medium" id="workbench-role">Local</span>
 </div>
 <div class="h-3.5 w-px bg-surface-container-high mx-0.5"></div>
-<!-- Your tool: the one AI tool the person works in. The list is Harness listTools({ includeUnobserved: true });
-     a tool Core has not observed stays listed and greyed with Core's reason. Each icon is the tool's state from
-     Core's offline inspect. The choice is kept in this browser only (src/app/your-tool.js). -->
+<!-- Your tools: every AI tool the person works in, always a multi-select. The list is Harness
+     listTools({ includeUnobserved: true }); a tool Core has not observed can be chosen, stays greyed with Core's reason
+     and gets no fit. Each icon is the tool's state from Core's offline inspect. The choice starts from setup's AI
+     clients and is kept in this browser only (src/app/your-tool.js). -->
 <div class="relative">
 <button class="wb-header-control" type="button" id="your-tool-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="your-tool-pop">
 <span class="flex items-center" id="your-tool-icon"></span>
-<span class="wb-header-muted">Your tool:</span>
-<span class="font-medium" id="your-tool-name">Loading…</span>
+<span class="wb-header-muted">Your tools:</span>
+<span class="font-medium truncate max-w-[22rem]" id="your-tool-name">Loading…</span>
 <span class="wb-header-chevron" aria-hidden="true">▾</span>
 </button>
 <div class="absolute left-0 top-7 w-72 p-2 rounded bg-surface-container-lowest border border-wb-border shadow-panel space-y-1 text-[11.5px] z-50" id="your-tool-pop" hidden>
-<div class="px-1 pb-1 text-[10px] font-mono uppercase tracking-wider text-on-surface-variant font-medium" id="your-tool-heading">Your tool</div>
-<div class="space-y-0.5" id="your-tool-list" role="radiogroup" aria-labelledby="your-tool-heading"></div>
+<div class="px-1 pb-1 text-[10px] font-mono uppercase tracking-wider text-on-surface-variant font-medium" id="your-tool-heading">Your tools</div>
+<div class="space-y-0.5" id="your-tool-list" role="group" aria-labelledby="your-tool-heading"></div>
 <div class="px-1 pt-1 space-y-0.5 text-[10px] text-on-surface-variant leading-snug border-t border-wb-border" id="your-tool-note"></div>
 </div>
 </div>
@@ -165,7 +166,7 @@
 <main class="flex-1 flex flex-col min-w-0 bg-background overflow-hidden" id="main-content">
 <div class="flex-1 flex flex-col overflow-y-auto min-w-0 bg-wb-center" id="catalog-workspace">
 
-<div class="catalog-heading-row"><div><h1 class="wb-source-heading text-wb-heading font-semibold text-wb-title tracking-tight" tabindex="-1">Choose content for your AI tool</h1><div id="framework-context" class="framework-context"></div><p class="framework-landing"><button type="button" id="framework-first-step">Choose your tool</button><span id="framework-guidance">Choose your tool, then explore the framework below.</span></p></div><div class="catalog-heading-tools"><details id="catalog-filter-disclosure"><summary>Filters &amp; your sources</summary><div class="catalog-secondary-panel"><div class="catalog-secondary-heading"><strong>Filters &amp; your sources</strong><button id="catalog-filters-close" type="button" class="wb-header-control">Close filters</button></div><div class="flex flex-wrap gap-2 mb-3 text-[11px]" id="authoring-browse">
+<div class="catalog-heading-row"><div><h1 class="wb-source-heading text-wb-heading font-semibold text-wb-title tracking-tight" tabindex="-1">Choose content for your AI tools</h1><div id="framework-context" class="framework-context"></div><p class="framework-landing"><button type="button" id="framework-first-step">Choose your tools</button><span id="framework-guidance">Choose your tools, then explore the framework below.</span></p><p id="organization-policy-note" class="framework-source-note" role="status" hidden></p></div><div class="catalog-heading-tools"><details id="catalog-filter-disclosure"><summary>Filters &amp; your sources</summary><div class="catalog-secondary-panel"><div class="catalog-secondary-heading"><strong>Filters &amp; your sources</strong><button id="catalog-filters-close" type="button" class="wb-header-control">Close filters</button></div><div class="flex flex-wrap gap-2 mb-3 text-[11px]" id="authoring-browse">
 <label>Family <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-family" aria-label="Content family"></select></label>
 <label>Support <select class="bg-wb-input border border-wb-border rounded p-1" id="browse-support" aria-label="Target support"><option value="supported">With supported facts</option><option value="all">Full inventory</option><option value="unsupported">With unsupported facts</option><option value="unknown">With unknown facts</option></select></label>
 <label class="cursor-pointer rounded border border-wb-border p-1">Choose personal folder <input id="personal-folder" type="file" webkitdirectory multiple aria-label="Choose personal folder"></label>
