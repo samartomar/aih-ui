@@ -306,7 +306,7 @@ node tools/candidate.mjs preflight --manifest C:\path\to\candidate.json --data C
 node tools/candidate.mjs upgrade --manifest C:\path\to\candidate.json --data C:\local\workbench --port 4894
 ```
 
-`preflight` reads all pinned archives, checks package identities, Node/npm/tar,
+`preflight` reads all pinned archives, checks package identities, Node (26.12.1 through 26.x, the engine range of the current Core and Catalog archives; any other Node is refused with that range)/npm/tar,
 the destination and port, and verifies any existing recorded process identity.
 It writes no candidate state and stops nothing. `upgrade` repeats preflight,
 installs the UI, its pinned frontend dependencies and the three public packages

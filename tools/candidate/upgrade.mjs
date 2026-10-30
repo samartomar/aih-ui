@@ -45,9 +45,14 @@ function retainedFiles(layout) {
   for (const name of ['home', 'config', 'samples']) walk(layout[name], name);
   return files;
 }
+// The current reviewed producer archives (Core, Catalog) declare this engine range, and the README requires it.
+export const NODE_RANGE = '>=26.12.1 <27';
+export function assertSupportedNode(version) {
+  const [major, minor, patch] = version.split('.').map(Number);
+  if (major !== 26 || minor < 12 || (minor === 12 && patch < 1)) throw new Error(`The Workbench candidate requires Node ${NODE_RANGE} (26.12.1 through 26.x); this is Node ${version}.`);
+}
 export async function preflightCandidate({ manifest, data, port }) {
-  const [major, minor] = process.versions.node.split('.').map(Number);
-  if (major !== 24 || minor < 15) throw new Error('Workbench requires Node >=24.15 and <25.');
+  assertSupportedNode(process.versions.node);
   if (!manifest) throw new Error('preflight and upgrade require --manifest with a pinned ui archive.');
   const read = readManifest(resolve(manifest));
   await verifyManifest(read);
