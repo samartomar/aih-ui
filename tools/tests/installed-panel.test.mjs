@@ -3,7 +3,7 @@
 // duplicated actions; no-origin rows stay explicit.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { originGroups } from '../../src/app/installed-list.js';
+import { originGroups, setLabeller, keptWords } from '../../src/app/installed-list.js';
 
 // The grouping logic itself lives in installed-panel's show(); exercise it through the same view data
 // with a minimal DOM, asserting section membership of the real row elements.
@@ -99,8 +99,47 @@ test('a set heading keeps the name Catalog publishes for the set id when the rec
   await panel.refresh();
   const sections = walk(panel.node).filter(entry => entry.dataset.installedSet);
   const heading = setId => walk(sections.find(entry => entry.dataset.installedSet.startsWith(`${setId}/`))).find(entry => entry.tag === 'p');
-  assert.equal(heading('ecc.rules.typescript').textContent, 'rules (typescript)', 'the name is resolved by set id within the framework');
+  assert.equal(heading('ecc.rules.typescript').textContent, 'rules (typescript) (earlier release)', 'the name is resolved by set id within the framework, marked as an earlier release');
   assert.equal(heading('ecc.rules.typescript').title, `ecc/ecc.rules.typescript/${'a'.repeat(64)}`, 'the exact recorded identity stays in the tooltip');
   for (const node of walk(panel.node)) assert.doesNotMatch(node.textContent, /ecc\.rules\./, 'no raw set id is shown');
   for (const node of walk(panel.node)) assert.doesNotMatch(node.attributes['aria-label'] ?? '', /ecc\.rules\./, 'no raw set id is announced');
+});
+
+const frameworks = [{ id: 'ecc', sets: [{ id: 'ecc.rules.typescript', name: 'rules (typescript)', setSha256: 'b'.repeat(64) }] }];
+const older = { framework: 'ecc', setId: 'ecc.rules.typescript', setSha256: 'a'.repeat(64) };
+const newer = { ...older, setSha256: 'b'.repeat(64) };
+
+test('two recorded versions of one set at once get distinguishable headings and Remove labels', async () => {
+  const { createInstalledPanel } = await import('../../src/app/installed-panel.js');
+  // After an update, the updated member records the newer set while its siblings keep the older one.
+  const selections = [
+    { managementId: 'm-1', name: 'coding-style', origins: [{ reasonIncluded: 'in-set', set: newer }], members: [{ fileState: 'matches' }] },
+    { managementId: 'm-2', name: 'testing', origins: [{ reasonIncluded: 'in-set', set: older }], members: [{ fileState: 'matches' }] },
+  ];
+  const client = { catalog: { executionAvailable: true, items: [], frameworks }, requestCurrent: async () => ({ status: 'complete', selections }), intent: { roots: [] }, bytes: new Uint8Array() };
+  const panel = createInstalledPanel({ client, el: (tag, className = '', text) => fake(tag, className, text), button: (label, action) => { const node = fake('button', '', label); node.addEventListener('click', action); return node; } });
+  await panel.refresh();
+  const sections = walk(panel.node).filter(entry => entry.dataset.installedSet);
+  const of = set => sections.find(entry => entry.dataset.installedSet === `${set.setId}/${set.setSha256}`);
+  const heading = set => walk(of(set)).find(entry => entry.tag === 'p').textContent;
+  const removeLabel = set => walk(of(set)).find(entry => entry.tag === 'button' && /^Remove this set/.test(entry.attributes['aria-label'] ?? '')).attributes['aria-label'];
+  assert.equal(heading(newer), 'rules (typescript)', 'the exact set keeps its plain name');
+  assert.equal(heading(older), 'rules (typescript) (earlier release)', 'the older recorded version is marked');
+  assert.notEqual(removeLabel(newer), removeLabel(older), 'the two Remove buttons are announced differently');
+  assert.equal(removeLabel(older), 'Remove this set: rules (typescript) (earlier release)');
+});
+
+test('the kept sentence never names the set being removed, nor falls back to a raw action for a set no longer offered', () => {
+  const label = setLabeller(frameworks);
+  const gone = { framework: 'ecc', setId: 'ecc.rules.gone', setSha256: 'c'.repeat(64) };
+  const other = { framework: 'ecc', setId: 'ecc.rules.typescript', setSha256: 'd'.repeat(64) };
+  assert.equal(label(newer), 'rules (typescript)');
+  assert.equal(label(gone), undefined);
+  // Kept for the other version of the set being removed: named, since its name differs from this heading.
+  assert.equal(keptWords([newer], label(older), label), 'Kept; also part of rules (typescript)');
+  // Kept for a set with the same heading as the one being removed: never named as itself.
+  assert.equal(keptWords([other], label(older), label), 'Kept; also part of another release of this set');
+  // Kept for a set this Catalog no longer offers.
+  assert.equal(keptWords([gone], label(newer), label), 'Kept; also part of a set this catalog no longer offers');
+  assert.equal(keptWords([], label(newer), label), undefined, 'kept only by a direct choice or requirement: no set sentence');
 });

@@ -3,7 +3,7 @@
 // and it tells the Install panel whether Core lists the whole setup as installed.
 
 import { itemDisplayName } from '../catalog/item-name.js';
-import { groupInstalled, setRemovalEntries } from './installed-list.js';
+import { groupInstalled, keptWords, setLabeller, setRemovalEntries } from './installed-list.js';
 import { cancelRemoval, confirmRemoval, previewRemoval, removalMemberWords } from './installed-removal.js';
 import { confirmUpdate, previewUpdate, updateEntry } from './installed-update.js';
 import { compact } from './compact.js';
@@ -66,14 +66,8 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
     const item = client.catalog?.items.find(entry => entry.id === itemId); if (!item) return undefined;
     return itemDisplayName({ name: item.display?.name ?? item.name ?? item.label, payload: { namespace: item.namespace ?? item.payload?.namespace } }, item.id);
   };
-  // The name Catalog publishes for the recorded set: the exact set first, else the set of that id in the same framework,
-  // as a newer release publishes it once an update changes the set's digest. Undefined when this Catalog no longer
-  // offers the set id at all; the raw id is never shown.
-  const setName = set => {
-    const candidates = (client.catalog?.frameworks ?? []).filter(framework => framework.id === set.framework).flatMap(framework => framework.sets ?? [])
-      .filter(candidate => candidate.id === set.setId);
-    return (candidates.find(candidate => candidate.setSha256 === undefined || candidate.setSha256 === set.setSha256) ?? candidates[0])?.name;
-  };
+  // The name Catalog publishes for the recorded set, marked when it is an earlier release of an offered set.
+  const setName = set => setLabeller(client.catalog?.frameworks ?? [])(set);
   // The recorded tool's label for the approval wording.
   const toolLabel = tool => (tool === client.tool ? client.toolLabel : undefined) ?? tool ?? 'your tool';
   const requestHost = (operation, body) => client.requestHost(operation, body);
@@ -240,8 +234,8 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       // this set's own members need goes with them. The contract's sentence names the other set; a member kept only
       // for a direct choice or a requirement has no sentence, so its removal shows Core's action.
       const removals = setRemovalEntries(group).map(({ keptFor, ...entry }) => {
-        const names = (keptFor ?? []).map(setName).filter(Boolean);
-        return names.length ? { ...entry, kept: `Kept; also part of ${names.join(', ')}` } : entry;
+        const kept = keptWords(keptFor, name, setName);
+        return kept ? { ...entry, kept } : entry;
       });
       const { remove: removeSet, area: setArea } = removeControl(removals, [], 'Remove this set');
       removeSet.setAttribute('aria-label', name ? `Remove this set: ${name}` : 'Remove this set');

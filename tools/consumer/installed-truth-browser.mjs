@@ -387,7 +387,8 @@ export async function runUpdateOneBrowser({ origin, output, playwrightModule, th
       const [framework, setId, setSha256] = exact.split('/');
       const offered = offeredSets.find(entry => entry.framework === framework && entry.id === setId);
       assert.ok(offered, `the newer Catalog offers ${setId}`);
-      assert.equal(heading, offered.name, `the ${set} heading is Catalog's name for the set${offered.setSha256 === setSha256 ? '' : ' after its digest changed'}`);
+      // A recorded digest the newer release no longer has is that set's earlier release (pending contract row 32).
+      assert.equal(heading, offered.setSha256 === setSha256 ? offered.name : `${offered.name} (earlier release)`, `the ${set} heading is Catalog's name for the set`);
       assert.notEqual(heading, setId, 'no raw set id as a heading');
     }
     assert.deepEqual(errors, []);

@@ -121,6 +121,34 @@ export function setRemovalEntries(group) {
   return [...group.members.map(({ leaves, stillRequired, alsoIn, ...member }) => leaves ? member
     : { ...member, origin: { set: group.set }, keptFor: alsoIn.filter(origin => origin.set).map(origin => origin.set) }), ...group.needs];
 }
+/**
+ * A recorded set's heading: the name Catalog publishes for the exact set. When this Catalog offers that set id only at
+ * another digest, as after an update, its name is marked as an earlier release so two recorded versions of one set
+ * never read alike. Undefined when it offers no set of that id; the raw id is never shown.
+ */
+export function setLabeller(frameworks = []) {
+  return set => {
+    const candidates = frameworks.filter(framework => framework.id === set.framework).flatMap(framework => framework.sets ?? [])
+      .filter(candidate => candidate.id === set.setId);
+    const exact = candidates.find(candidate => candidate.setSha256 === undefined || candidate.setSha256 === set.setSha256);
+    if (exact) return exact.name;
+    // Pending owner approval as contract amendment 3.2.3 row 32.
+    return candidates[0] ? `${candidates[0].name} (earlier release)` : undefined;
+  };
+}
+/**
+ * The kept sentence for a member "Remove this set" leaves in its other sets (`keptFor`), never naming a set by the
+ * heading being removed. Undefined when no set keeps it (a direct choice or a requirement does).
+ */
+export function keptWords(keptFor = [], heading, label) {
+  const labels = keptFor.map(label);
+  const named = [...new Set(labels.filter(name => name && name !== heading))];
+  if (named.length) return `Kept; also part of ${named.join(', ')}`;
+  // Pending owner approval as contract amendment 3.2.3 rows 33 and 34.
+  if (labels.some(name => name && name === heading)) return 'Kept; also part of another release of this set';
+  if (labels.length) return 'Kept; also part of a set this catalog no longer offers';
+  return undefined;
+}
 // A recorded origin that owns the item (a set or a direct choice), not one that only requires it.
 const owners = entry => (entry.origins ?? []).filter(origin => origin.reasonIncluded !== 'required-by');
 const sameSet = (a, b) => Boolean(a && b) && a.framework === b.framework && a.setId === b.setId && a.setSha256 === b.setSha256;

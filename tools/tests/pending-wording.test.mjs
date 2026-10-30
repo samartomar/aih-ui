@@ -19,6 +19,9 @@ const ROWS = [
   [29, 'src/app/installed-update.js', 'this Workbench cannot read its record of what it installed in this folder, so no update can be checked'],
   [30, 'tools/consumer/host.mjs', 'Installed, but this Workbench could not record it, so it cannot be updated from here.'],
   [31, 'src/app/installed-update.js', 'Update is not available in an Enterprise setup, because Core cannot yet check an update against the organization'],
+  [32, 'src/app/installed-list.js', ' (earlier release)'],
+  [33, 'src/app/installed-list.js', 'Kept; also part of a set this catalog no longer offers'],
+  [34, 'src/app/installed-list.js', 'Kept; also part of another release of this set'],
 ];
 for (const [row, file, sentence] of ROWS) test(`row ${row}: "${sentence.trim()}" is marked pending in ${file}`, () => {
   const lines = readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8').split('\n');

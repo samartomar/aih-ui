@@ -1,10 +1,6 @@
 // Presentation only: Catalog owns profile interpretation and field provenance.
-// An MCP server Catalog reads from a shared configuration key carries Catalog's own provider and acquisition note in
-// `description`, not a description of the server; the page shows none of that note.
-const providerNoteOnly = item => item.kind === 'mcp-server' && item.nameBasis === 'key';
 export function sourcePresentation(item = {}) {
   const facts = item.metadata?.sourceFacts;
-  if (providerNoteOnly(item)) item = { ...item, description: undefined };
   if (item.role && typeof item.name === 'string') return { name: item.name, description: item.description || 'Description not published.', facts: facts ?? null };
   const prose = (value, fallback) => typeof value === 'string' && value.trim() ? value : fallback;
   const field = value => value && (value.state === 'authored' ? typeof value.value === 'string'
