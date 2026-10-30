@@ -4,7 +4,7 @@ const readyPreparation = result => result?.disposition === 'prepared' && result.
   ? result.preparation : undefined;
 
 // A member another selection or origin still owns, when no set sentence names it.
-// Contract amendment 3.2.3 row 38 (pending owner approval).
+// Contract amendment 3.2.3 row 38 (owner-approved 2026-10-30).
 export const KEPT_FOR_ANOTHER = 'Kept for another selection';
 
 // The sentence for a member Core's removal plan keeps (removal 1.2.0 `keep-*` actions). A Core action or reason is
@@ -15,7 +15,7 @@ export function removalMemberWords(member, entry) {
   // Contract amendment 3.2.3 row 11 (owner-approved 2026-10-30).
   if (member.action === 'keep-changed') return 'Kept; you changed it after install';
   // A licence or notice file kept with an item that keeps a changed member; it says nothing about requirements.
-  // Contract amendment 3.2.3 row 37 (pending owner approval).
+  // Contract amendment 3.2.3 row 37 (owner-approved 2026-10-30).
   if (member.action === 'keep-required') return "Kept: the item's licence or notice";
   return KEPT_FOR_ANOTHER;
 }
