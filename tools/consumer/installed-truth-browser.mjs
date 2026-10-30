@@ -3,7 +3,7 @@
 // catalog and managed-inventory responses it receives), never from hand-built fixtures; every count is exact and an
 // empty expectation fails.
 import assert from 'node:assert/strict';
-import { appendFile, mkdir, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { chooseCatalogFamily, openPolicyDrawer } from './policy-drawer.mjs';
@@ -400,5 +400,111 @@ export async function runUpdateBlockedBrowser({ origin, output, playwrightModule
     await page.screenshot({ path: join(output, `update-requirement-${theme}.png`), fullPage: true });
     assert.deepEqual(errors, []);
     return { status: 'passed', message: text };
+  } finally { await browser.close(); }
+}
+
+// Items added one at a time from their cards (after `browse` brings the cards into view; what it returns runs after the
+// adds), then installed together.
+async function addAndInstall(page, browse, itemIds) {
+  const afterAdds = await browse();
+  const notices = [];
+  for (const itemId of itemIds) {
+    await page.locator('#cards-grid').getByRole('button', { name: `Add ${itemId}`, exact: true }).click();
+    // Added, or refused: the refusal opens Your setup with the page's status saying "Nothing was added".
+    const notice = page.locator('#added-notice-message').filter({ hasText: /\S/ }), refused = page.locator('#policy-status').filter({ hasText: /^Nothing was added/ });
+    await notice.or(refused).first().waitFor();
+    notices.push(await (await notice.isVisible() ? notice : refused).innerText());
+    assert.match(notices.at(-1), /^Added /, `the Add of ${itemId} was accepted: ${notices.at(-1)}`);
+    await page.locator('#added-notice-dismiss').click();
+  }
+  await afterAdds?.();
+  await openPolicyDrawer(page);
+  await page.locator('#install-button:not([disabled])').waitFor({ timeout: 180_000 });
+  await page.locator('#install-button').click();
+  await page.locator('#install-message[data-outcome]').waitFor({ timeout: 240_000 });
+  assert.equal(await page.locator('#install-message').getAttribute('data-outcome'), 'installed', await page.locator('#install-message').innerText());
+  return notices;
+}
+
+// Project basics' shared block in a project with nothing to detect: it is added and installed, listed with the two
+// items it needs, and its block is written into CLAUDE.md. Its card is offered until the page's per-item fit arrives,
+// which names its requirements as unselected and holds the card back, so that answer is held until the Add is made.
+export async function runSharedBlockTruthBrowser({ origin, output, project, playwrightModule, theme = 'dark' }) {
+  const { chromium } = await import(playwrightModule);
+  await mkdir(output, { recursive: true });
+  const browser = await chromium.launch({ headless: true });
+  const errors = [], itemId = 'project-basics.shared-block';
+  try {
+    const installing = await newContext(browser);
+    const page = await openPage(installing, origin, theme, errors);
+    const added = await addAndInstall(page, async () => {
+      let release; const held = new Promise(done => { release = done; });
+      await page.route('**/api/authoring-browse-content', async route => { await held; await route.continue().catch(() => {}); });
+      await page.locator('#framework-navigation button[data-framework^="internal:project-basics"]').click();
+      if (!await page.locator('#browse-all-items').isChecked()) await page.locator('#browse-all-items').check();
+      return async () => { release(); await page.unroute('**/api/authoring-browse-content'); };
+    }, [itemId]);
+    await installing.close();
+    const { page: listed, answers } = await freshInstalledList(browser, origin, theme, errors);
+    const basics = answers.inventory.selections.filter(selection => selection.item?.framework === 'project-basics');
+    assert.deepEqual(basics.map(selection => selection.item.itemId).sort(), ['project-basics.router', 'project-basics.shared-block', 'project-basics.working-rules']);
+    assert.ok(basics.every(selection => !Object.hasOwn(selection, 'projectFacts')), 'no project facts were recorded for a project with none');
+    const row = listed.locator(`[data-installed-item="${itemId}"]`);
+    assert.equal(await row.count(), 1, 'the shared block has its own installed row');
+    const text = await row.innerText();
+    assert.match(text, /\+ 2 it needs/, text);
+    const claude = await readFile(join(project, 'CLAUDE.md'), 'utf8');
+    assert.match(claude, /<!-- BEGIN aih:shared -->[\s\S]+<!-- END aih:shared -->/, 'CLAUDE.md holds the shared block');
+    await listed.screenshot({ path: join(output, `shared-block-${theme}.png`), fullPage: true });
+    await writeFile(join(output, `shared-block-${theme}.json`), JSON.stringify({ status: 'passed', added, row: text, selections: basics.map(selection => selection.item.itemId),
+      claudeMd: claude.match(/<!-- BEGIN aih:shared -->[^\n]*\n?/)?.[0], errors }, null, 2));
+    assert.deepEqual(errors, []);
+    return { status: 'passed' };
+  } finally { await browser.close(); }
+}
+
+// An item chosen alone whose only requirement is a supporting document: the list folds that document under it as
+// what it needs, and removing the item removes the document too, since nothing else needs it.
+export async function runNeededRemovalTruthBrowser({ origin, output, project, playwrightModule, theme = 'dark' }) {
+  const { chromium } = await import(playwrightModule);
+  await mkdir(output, { recursive: true });
+  const browser = await chromium.launch({ headless: true });
+  const errors = [], itemId = 'extensions.hook.git-guard', neededId = 'extensions.notices';
+  try {
+    const installing = await newContext(browser);
+    const page = await openPage(installing, origin, theme, errors);
+    const added = await addAndInstall(page, async () => { await chooseCatalogFamily(page, 'Extensions'); await page.locator('#catalog-search').fill('git-guard'); }, [itemId]);
+    await installing.close();
+    const { page: listed, answers } = await freshInstalledList(browser, origin, theme, errors);
+    const before = answers.inventory.selections;
+    const chosen = before.find(selection => selection.item?.itemId === itemId), needed = before.find(selection => selection.item?.itemId === neededId);
+    assert.ok(chosen && needed, `Core lists both installed: ${JSON.stringify(before.map(selection => selection.item?.itemId))}`);
+    const row = listed.locator(`[data-installed-item="${itemId}"]`);
+    assert.equal(await row.count(), 1, `git-guard has its own installed row\n${await listed.locator('#installed-list').innerText()}`);
+    const text = await row.innerText();
+    assert.match(text, /\+ 1 it needs/, `the row names what it needs\n${await listed.locator('#installed-list').innerText()}`);
+    assert.equal(await row.locator(`[data-installed-needed="${needed.managementId}"]`).count(), 1, 'the notices are folded under git-guard');
+    assert.equal(await listed.locator(`[data-installed-other="${needed.managementId}"]`).count(), 0, 'the notices are not another installed item');
+    await row.locator('> div').first().getByRole('button', { name: 'Remove', exact: true }).click();
+    const message = listed.locator('#installed-message[data-outcome]');
+    for (let round = 0; round < 5 && !await message.count(); round++) {
+      const confirm = row.getByRole('button', { name: 'Confirm remove', exact: true });
+      await confirm.or(message).first().waitFor({ timeout: 120_000 });
+      if (await confirm.isVisible()) { await confirm.click(); await listed.waitForFunction(() => !document.querySelector('[aria-busy="true"]'), undefined, { timeout: 240_000 }); }
+    }
+    await message.waitFor({ timeout: 240_000 });
+    const result = await message.innerText();
+    assert.equal(await message.getAttribute('data-outcome'), 'removed', result);
+    const listedBefore = answers.inventory;
+    for (let attempt = 0; attempt < 600 && answers.inventory === listedBefore; attempt++) await listed.waitForTimeout(100);
+    const after = answers.inventory?.selections ?? [];
+    assert.deepEqual(after.filter(selection => [itemId, neededId].includes(selection.item?.itemId)).map(selection => selection.item.itemId), [], `nothing of git-guard or its notices is left\n${result}`);
+    const left = [chosen, needed].flatMap(selection => selection.members.map(member => member.path)).filter(path => path.startsWith(project) && existsSync(path));
+    assert.deepEqual(left, [], 'their files are absent on disk');
+    await listed.screenshot({ path: join(output, `needed-removal-${theme}.png`), fullPage: true });
+    await writeFile(join(output, `needed-removal-${theme}.json`), JSON.stringify({ status: 'passed', added, row: text, result,
+      before: before.map(selection => selection.item?.itemId), after: after.map(selection => selection.item?.itemId), errors }, null, 2));
+    assert.deepEqual(errors, []);
+    return { status: 'passed' };
   } finally { await browser.close(); }
 }

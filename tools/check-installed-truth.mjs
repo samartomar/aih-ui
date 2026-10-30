@@ -2,7 +2,7 @@
 // consumer has been assembled (tools/check-workbench.mjs). check-installed-workbench.mjs runs the same three cases in
 // both themes.
 //
-// Usage: node tools/check-installed-truth.mjs <consumerDir> [list|set-removal|namespaced-rule|update-one|update-requirement ...]
+// Usage: node tools/check-installed-truth.mjs <consumerDir> [list|set-removal|namespaced-rule|shared-block|needed-removal|update-one|update-requirement ...]
 //          [--theme dark|light] [--update-pack <catalog.tgz>] [--requirement-pack <catalog.tgz>]
 // Each case gets a fresh disposable project and a real child host process (tools/installed-host.mjs).
 // update-one needs --update-pack: a Catalog pack of the installed package and version in which exactly one installed
@@ -19,7 +19,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pageAssets } from './server/assets.mjs';
 import { buildCss } from './build-css.mjs';
-import { runInstalledListTruthBrowser, runNamespacedRuleTruthBrowser, runSetRemovalTruthBrowser, runUpdateBlockedBrowser, runUpdateOneBrowser, runUpdateOneInstallBrowser } from './consumer/installed-truth-browser.mjs';
+import { runInstalledListTruthBrowser, runNamespacedRuleTruthBrowser, runNeededRemovalTruthBrowser, runSetRemovalTruthBrowser, runSharedBlockTruthBrowser, runUpdateBlockedBrowser, runUpdateOneBrowser, runUpdateOneInstallBrowser } from './consumer/installed-truth-browser.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // The page's Tailwind build is ignored by Git, so a fresh checkout has none; without it the catalog column is no
@@ -32,7 +32,8 @@ const option = name => args.includes(name) ? args[args.indexOf(name) + 1] : unde
 const packs = { 'update-one': option('--update-pack'), 'update-requirement': option('--requirement-pack') };
 for (const name of Object.keys(packs)) packs[name] &&= resolve(packs[name]);
 const named = args.slice(1).filter((value, index, all) => !value.startsWith('--') && !['--theme', '--update-pack', '--requirement-pack'].includes(all[index - 1]));
-const cases = { list: runInstalledListTruthBrowser, 'set-removal': runSetRemovalTruthBrowser, 'namespaced-rule': runNamespacedRuleTruthBrowser, 'update-one': runUpdateOne, 'update-requirement': runUpdateRequirement };
+const cases = { list: runInstalledListTruthBrowser, 'set-removal': runSetRemovalTruthBrowser, 'namespaced-rule': runNamespacedRuleTruthBrowser,
+  'shared-block': runSharedBlockTruthBrowser, 'needed-removal': runNeededRemovalTruthBrowser, 'update-one': runUpdateOne, 'update-requirement': runUpdateRequirement };
 const selected = named.length ? named : Object.keys(cases).filter(name => !Object.hasOwn(packs, name) || packs[name]);
 for (const name of selected) if (!cases[name]) throw new Error(`Unknown case ${name}; choose from ${Object.keys(cases).join(', ')}.`);
 
