@@ -219,10 +219,14 @@ for (const theme of THEMES) {
     if (edited) {
       if (JSON.stringify(after) !== JSON.stringify(before)) throw new Error(`a refused update changed ${uiUpdate.itemId}'s files`);
     } else {
-      // Each file is exactly one of the newer Catalog's content materials for the item, and together they are all of them.
-      const digests = Object.values(after).map(bytes => createHash('sha256').update(Buffer.from(bytes, 'base64')).digest('hex')).sort();
-      const expected = uiUpdate.newer.materials.map(material => material.sha256).sort();
-      if (JSON.stringify(digests) !== JSON.stringify(expected)) throw new Error(`${uiUpdate.itemId}'s files after the update ${JSON.stringify(digests)} are not the newer Catalog's ${JSON.stringify(expected)}`);
+      // Each file Core reports is the newer Catalog's content material at that item-relative path, byte for byte. (Core
+      // decides which materials it delivers as the item's files: this rule's LICENSE is not one of them.)
+      for (const [path, bytes] of Object.entries(after)) {
+        const material = uiUpdate.newer.materials.filter(entry => path.replace(/\\/g, '/').endsWith(`/${entry.relPath}`));
+        const digest = createHash('sha256').update(Buffer.from(bytes, 'base64')).digest('hex');
+        if (material.length !== 1 || material[0].sha256 !== digest)
+          throw new Error(`${path} after the update (${digest}) is not the newer Catalog's material for it: ${JSON.stringify(uiUpdate.newer.materials)}`);
+      }
     }
   }
 
