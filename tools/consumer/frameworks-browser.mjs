@@ -23,7 +23,7 @@ export async function runFrameworksBrowser({ origin, output, playwrightModule, s
         await internal.click();assert.equal(await page.locator('.wb-source-heading').innerText(),expected.prepared.framework.name);
         assert.equal(await page.locator('#cards-grid [data-card-id]').count(),expected.prepared.items.length,'Actual prepared items are browsable despite another source failure');
         const count=expected.counts.find(row=>row.tool==='claude');await page.waitForFunction(()=>document.getElementById('your-tool-name')?.textContent==='Claude Code');
-        assert.match(await internal.innerText(),new RegExp(`${count.count} observed`));
+        assert.equal(await internal.locator('.framework-count').innerText(),`${count.count} observations`);
         await page.locator('#catalog-search').focus();await page.keyboard.press('Tab');await internal.focus();await page.locator('#wb-tooltip').filter({hasText:'Static observations'}).waitFor();
         assert.match(await internal.getAttribute('title'),/not “works”/);
         await internal.tap();await page.locator('#wb-tooltip').filter({hasText:'non-production'}).waitFor();

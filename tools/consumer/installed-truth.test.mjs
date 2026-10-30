@@ -38,34 +38,38 @@ const chooseDirect = (intent, root) => {
 };
 const reasons = origins => origins.map(origin => origin.reasonIncluded === 'in-set' ? `in-set:${origin.set.setId}` : origin.reasonIncluded === 'required-by' ? `required-by:${origin.requiredBy.itemId}` : origin.reasonIncluded).sort();
 
-test('a configured member that only a set added is owned by the set, not recorded as chosen', () => {
+test('a set\'s members are owned by the set, and an input for an item outside it adds no choice', () => {
   assert.equal(typeof setChoices.setOwnedOrigins, 'function', 'the composition decides set ownership of configured roots');
   const ecc = release('ecc');
-  // ECC's platform-configs set is the published set whose members declare required inputs (npm MCP servers).
+  // Catalog keeps required-input MCP servers out of every starting set: ECC's platform-configs set has 14 members and
+  // none of them take an input, and the 15 required-input ECC items belong to no published set.
   const request = requestFor(ecc, 'ecc.module.platform-configs');
   const set = ecc.release.sets.find(candidate => candidate.id === request.setId);
-  const configured = set.members.map(member => ecc.release.items.find(item => item.id === member.item.itemId)).filter(item => Object.values(item.inputs ?? {}).some(input => input.required));
-  assert.equal(configured.length, 15, 'Catalog publishes 15 platform-configs members with required inputs');
+  const memberItems = set.members.map(member => ecc.release.items.find(item => item.id === member.item.itemId));
+  assert.equal(memberItems.length, 14, 'Catalog publishes 14 platform-configs members');
+  assert.equal(memberItems.filter(item => Object.keys(item.inputs ?? {}).length).length, 0, 'no platform-configs member takes an input');
+  const requiresInput = ecc.release.items.filter(item => Object.values(item.inputs ?? {}).some(input => input.required));
+  assert.equal(requiresInput.length, 15, 'Catalog publishes 15 ECC items with required inputs');
+  const inSomeSet = new Set(inventories.flatMap(entry => (entry.release.sets ?? []).flatMap(candidate => candidate.members.map(member => `${entry.release.sha256}/${member.item.itemId}`))));
+  assert.deepEqual(requiresInput.filter(item => inSomeSet.has(`${ecc.release.sha256}/${item.id}`)).map(item => item.id), [], 'no required-input item is in a published set');
+  // A remembered input for an item outside the chosen set never makes it a new choice.
   const value = name => join(tmpdir(), 'aih-installed-truth', name);
-  const configurations = configured.map(item => ({ releaseSha256: ecc.release.sha256, itemId: item.id, scope: 'project',
+  const configurations = requiresInput.map(item => ({ releaseSha256: ecc.release.sha256, itemId: item.id, scope: 'project',
     configuration: Object.fromEntries(Object.entries(item.inputs).filter(([, input]) => input.required).map(([name]) => [name, value(name)])) }));
   const intent = freshAuthoring();
   const chosen = setChoices.selectSetChoices({ intent, inventories, sets: [request], tool: 'claude', configurations });
   assert.equal(chosen.status, 'ok', JSON.stringify(chosen.diagnostics ?? []));
-  const roots = intent.roots.filter(root => Object.keys(root.configuration).length);
-  assert.equal(roots.length, configured.length, 'every configured member is a root carrying its configuration');
+  assert.deepEqual(intent.roots.filter(root => requiresInput.some(item => item.id === root.itemId)).map(root => root.itemId), [], 'an input for an item outside the set adds no root');
+  assert.deepEqual(intent.roots.filter(root => Object.keys(root.configuration).length), [], 'no root carries a configuration');
   // The same resolution the composition runs: every root and the saved set request.
   const releases = Object.fromEntries(inventories.map(entry => [entry.release.sha256, entry.release]));
   const resolution = resolveSelections({ releases, sets: setChoices.setChoicesOf(intent).map(choice => choice.request),
     roots: intent.roots.map(({ releaseSha256, itemId, scope, configuration }) => ({ releaseSha256, itemId, scope, configuration })), skips: [] });
   assert.equal(resolution.status, 'ok', JSON.stringify(resolution.diagnostics ?? []));
-  const members = resolution.value.selections.filter(selection => configured.some(item => item.id === selection.item.itemId));
-  assert.equal(members.length, configured.length);
-  for (const selection of members) {
-    assert.deepEqual(reasons(selection.origins), ['chosen', 'in-set:ecc.module.platform-configs'], 'Catalog records the root as chosen');
-    assert.deepEqual(reasons(setChoices.setOwnedOrigins(intent, selection)), ['in-set:ecc.module.platform-configs'], `${selection.item.itemId} is owned by its set alone`);
-    assert.deepEqual(selection.configuration, configurations.find(root => root.itemId === selection.item.itemId).configuration, 'its configuration is kept');
-  }
+  const members = resolution.value.selections.filter(selection => memberItems.some(item => item.id === selection.item.itemId));
+  assert.equal(members.length, memberItems.length, 'every member is selected');
+  for (const selection of members) assert.deepEqual(reasons(setChoices.setOwnedOrigins(intent, selection)), ['in-set:ecc.module.platform-configs'], `${selection.item.itemId} is owned by its set alone`);
+  assert.equal(resolution.value.selections.some(selection => requiresInput.some(item => item.id === selection.item.itemId)), false, 'no required-input item is selected');
 });
 
 test('an item chosen directly and through a set stays a root and keeps its chosen origin; set-only members do not', async () => {
