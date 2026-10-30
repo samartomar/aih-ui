@@ -203,14 +203,3 @@ test('an update in an Enterprise setup is refused before Core is asked', async t
   assert.deepEqual(refusedAs(result), ['unavailable', 'enterprise-update-unavailable'], JSON.stringify(result));
   assert.equal(result.schema, undefined, 'Core was not asked');
 });
-
-test('the UI168 update fixture builds a transition release whose review note is its source material, in both variants', async () => {
-  const { noteInventory } = await import('./ui168-update-browser.mjs');
-  for (const variant of ['current', 'updated']) {
-    const { release } = await noteInventory(variant);
-    const [item] = release.items;
-    assert.equal(item.id, 'extensions.notices', variant);
-    // Catalog names the primary source material in provenance; a licence or notice file never stands in for it.
-    assert.doesNotMatch(item.provenance.source.path, /(^|\/)(LICENSE|LICENCE|NOTICE|COPYING)([.-][^/]*)?$/i, variant);
-  }
-});

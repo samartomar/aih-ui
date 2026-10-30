@@ -24,7 +24,7 @@ function present(entries, result) {
   const steps = entries.map((entry, index) => {
     const removal = result.removals?.[index];
     if (!removal) return { entry, state: 'blocked', files: [], message: 'Core returned no removal for this item.' };
-    const files = (removal.members ?? []).map(member => ({ path: member.path, action: member.action, reason: member.reason }));
+    const files = (removal.members ?? []).map(member => ({ path: member.path, action: member.action, reason: member.reason, operationId: member.operationId ?? null }));
     const reason = diagnosticWords(removal, result);
     // Only this origin is released: Core keeps the item, and its files, for the other owner.
     if (removal.disposition === 'prepared' && removal.change === 'remove-origin')
@@ -72,9 +72,16 @@ function memberOutcome(entry, run) {
     // Contract amendment 3.2.3 row 14 (owner-approved 2026-10-30).
     return { name: entry.entry.name, state: 'failed', message: `${entry.entry.name}: Couldn't confirm it's kept.${reason ? ` ${reason}` : ''}` };
   }
-  const members = (run?.members ?? []).filter(member => member.managementId === entry.entry.managementId);
+  // Removal 1.2.0 lists a freed item it was not asked to name (such as shared notices) under the removal that freed it;
+  // the run names those members under the freed item's own id, so they are tied back by their review operation.
+  const operations = new Set(entry.files.map(file => file.operationId).filter(Boolean));
+  const members = (run?.members ?? []).filter(member => member.managementId === entry.entry.managementId || operations.has(member.operationId));
   const keptFiles = entry.files.filter(file => file.action?.startsWith('keep-'));
   const keptPaths = new Set(keptFiles.map(file => file.path));
+  // A prepared removal with no members (an install interrupted before any of its files were written) has nothing on disk
+  // to confirm: a complete run removed it. One with members still needs Core's evidence for them.
+  if (run?.completion === 'complete' && entry.state === 'ready' && !entry.files.length && !members.length)
+    return { name: entry.entry.name, state: 'absent', message: `${entry.entry.name}: removed` };
   if (run?.completion === 'complete' && members.length) {
     if (members.every(member => member.outcome === 'restored' && member.check === 'present-matching'))
       return { name: entry.entry.name, state: 'restored', message: `${entry.entry.name}: ${RESTORED}` };

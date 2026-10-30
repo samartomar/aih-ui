@@ -70,7 +70,7 @@ async function pickSets(page, family, setIds) {
 }
 
 // A fresh session: nothing of the installing session's draft is open, so the list can only come from Core.
-async function freshInstalledList(browser, origin, theme, errors, { catalog = true } = {}) {
+export async function freshInstalledList(browser, origin, theme, errors, { catalog = true } = {}) {
   const context = await newContext(browser);
   const page = await openPage(context, origin, theme, errors);
   const answers = recordAnswers(page);

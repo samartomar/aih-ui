@@ -15,10 +15,6 @@ const config = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 for (const [key, value] of Object.entries(config.env ?? {})) process.env[key] = value;
 const summary = JSON.parse(readFileSync(config.summaryPath, 'utf8'));
 let frameworkFixtureInventories, createExecutionHost;
-if (config.noteVariant) {
-  const { noteInventory } = await import(pathToFileURL(`${config.consumerDir}/consumer/ui168-update-browser.mjs`).href);
-  frameworkFixtureInventories = [await noteInventory(config.noteVariant)];
-}
 if (config.interrupt) {
   const { createHost } = await import(pathToFileURL(`${config.consumerDir}/consumer/host.mjs`).href);
   createExecutionHost = options => {
