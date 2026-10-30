@@ -244,9 +244,9 @@ example, with the three tarballs beside the manifest:
       "commit": "1f9e220"
     },
     "catalog": {
-      "tarball": "aihq-catalog-0.1.0-main-2ba71251-sha256-c82c32b9ebc1455a22036893627bd3f86af419b80b75129856b05e2779c72149.tgz",
-      "sha256": "c82c32b9ebc1455a22036893627bd3f86af419b80b75129856b05e2779c72149",
-      "commit": "2ba712512f2237e1244b96ba73abee7ec866ad30"
+      "tarball": "aihq-catalog-0.1.0-main-3b273faa-sha256-d17c7570e12dd79ac2c511a9f714b3ca0f89816364fc51d4d98ab13175b86b52.tgz",
+      "sha256": "d17c7570e12dd79ac2c511a9f714b3ca0f89816364fc51d4d98ab13175b86b52",
+      "commit": "3b273faa68de301117e6f5631395d74741d7822f"
     },
     "scan": {
       "tarball": "aihq-scan-0.5.0-main-9bbed5ae-sha256-a15f445acf940b7556d59c5d8ff61fae531085cac1bf3e062287f2175591f707.tgz",
