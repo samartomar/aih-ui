@@ -2,11 +2,11 @@
 // The draft is a journey record beside the empty Enterprise starting policy. Everything Core decides (validity,
 // admission, advisory and fulfillment results, contradictions) comes from @aihq/core/contracts; this module only
 // chooses what to ask it. Nothing here publishes, authenticates, signs or changes the active authority.
-import { parseOrganizationPolicy, previewOrganizationObligations } from '@aihq/core/contracts';
-import { nativeClientIds } from '@aihq/core/harness';
+import { deriveRecipeIdentity, parseOrganizationPolicy, previewOrganizationObligations } from '@aihq/core/contracts';
+import { listTools, nativeClientIds } from '@aihq/core/harness';
 import { isCheckedRelease, listItems } from '@aihq/catalog/reader';
 import { refuse, ok, stable } from './primitives.mjs';
-import { composeAuthoring, freshAuthoring } from './headless.mjs';
+import { composeAuthoring, fitReason, freshAuthoring, inlineRecipelessSelections, renderRecipe, toolCopyId } from './headless.mjs';
 import { describeAuthoringSubject } from './review-bindings.mjs';
 import { managementIdOf } from './intent-shape.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
@@ -250,11 +250,25 @@ function exampleConfiguration(item, entry) {
   }
   return { configuration, missing };
 }
-async function composeRoots(roots, inventories) {
+async function composeRoots(roots, inventories, tool) {
   const intent = freshAuthoring();
   intent.roots = roots.map(root => ({ releaseSha256: root.releaseSha256, itemId: root.itemId, itemSha256: root.itemSha256, scope: root.scope,
     configuration: structuredClone(root.configuration), originIds: ['direct'] }));
-  return composeAuthoring({ intent, inventories, basePolicyBytes: ENTERPRISE_BASE });
+  return composeAuthoring({ intent, inventories, basePolicyBytes: ENTERPRISE_BASE, ...(tool ? { tool, tools: [tool] } : {}) });
+}
+// Content Core renders per tool (a framework release with item hashes) is governed per tool: one entry for each tool the
+// organisation targets, with that tool's rendered recipe identity and the id an Enterprise composition gives it.
+const rendersPerTool = hit => Boolean(hit.inventory.release.framework?.id && hit.item.contentSha256 && hit.item.behaviourSha256);
+// The tools the organisation targets: the clients its targets and entries name, or, when it names none, every tool Core observes.
+const targetTools = record => {
+  const named = [...new Set([...record.targets.map(target => target.client), ...record.entries.flatMap(entry => entry.clients ?? [])].filter(Boolean))];
+  return named.length ? named : listTools().map(tool => tool.id);
+};
+async function renderedIdentity(selection, inventories, policy) {
+  const inlined = inlineRecipelessSelections({ policy, inventories }).selections.find(candidate => candidate.id === selection.id);
+  const recipe = inlined?.recipe?.inline;
+  const identity = recipe ? await deriveRecipeIdentity({ recipe }) : undefined;
+  return identity?.status === 'ok' ? identity.value.recipeIdentity : undefined;
 }
 // The composed selection for one item at one scope: its pin names the recipe, its scope and recipe pick the selection.
 function selectionOf(composed, ref) {
@@ -284,6 +298,39 @@ async function assemble({ record, index, inventories }) {
     if (permissionsUnset) { omitted.push({ ...base, reason: 'input-permission-unset', message: `Not every input of ${label} has a permission.` }); continue; }
     const supported = hit.item.scopes.includes(entry.scope), composeScope = supported ? entry.scope : hit.item.scopes[0];
     if (composeScope === undefined) { omit('cannot-compose', `${label} declares no scope Catalog can compose it at.`); continue; }
+    if (supported && rendersPerTool(hit)) {
+      const ref = { ...entry.item, scope: composeScope };
+      const { configuration, missing } = entry.obligation === 'prohibited' ? { configuration: null, missing: [] } : exampleConfiguration(hit.item, entry);
+      const composes = entry.obligation !== 'prohibited' && !missing.length, managementId = managementIdOf({ scope: composeScope, packageName: hit.inventory.release.package.name, itemId: entry.item.itemId });
+      const misses = [], before = authored.length;
+      for (const tool of targetTools(record)) {
+        if (composes) {
+          const composed = await composeRoots([{ ...ref, configuration }], inventories, tool);
+          if (composed.status !== 'ok') { misses.push(`${tool}: ${catalogMessage(composed.diagnostics)}`); continue; }
+          const { policy } = composed.value, selection = policy.selections.find(candidate => candidate.item?.itemId === entry.item.itemId && candidate.scope === composeScope && candidate.tool === tool);
+          const recipeIdentity = selection && await renderedIdentity(selection, inventories, policy);
+          if (!recipeIdentity) { misses.push(`${tool}: Catalog composed no selection for ${label}.`); continue; }
+          const dependencies = [];
+          for (const other of policy.selections) {
+            if (other === selection || other.tool !== tool) continue;
+            const identity = await renderedIdentity(other, inventories, policy);
+            if (!identity) { misses.push(`${tool}: no recipe for the dependency ${other.item?.itemId} of ${label}.`); continue; }
+            const dependencyRef = { releaseSha256: composed.value.intent.pins.find(pin => pin.itemId === other.item.itemId)?.releaseSha256 ?? entry.item.releaseSha256, itemId: other.item.itemId, scope: other.scope };
+            dependencies.push({ ref: dependencyRef, selectionId: other.organizationSelectionId, recipeIdentity: identity, configuration: structuredClone(other.configuration) });
+          }
+          authored.push({ entry, position, hit, label, supported, tool, selectionId: selection.organizationSelectionId, recipeIdentity, configuration, dependencies });
+        } else {
+          // A prohibition, or a value left to developers, names what Core renders for the tool; nothing is composed or installed.
+          const delivered = renderRecipe({ tool, entry: hit.inventory, item: hit.item, scope: composeScope });
+          const identity = delivered.refused ? undefined : await deriveRecipeIdentity({ recipe: delivered.recipe.inline });
+          if (identity?.status !== 'ok') { misses.push(`${tool}: ${fitReason(undefined, delivered)}`); continue; }
+          authored.push({ entry, position, hit, label, supported, tool, selectionId: toolCopyId(managementId, tool), recipeIdentity: identity.value.recipeIdentity, configuration: null, dependencies: [] });
+        }
+      }
+      if (authored.length === before) { omit('cannot-compose', `${label} doesn’t work in any tool the organisation targets. ${misses.join(' ')}`); continue; }
+      if (!composes && entry.obligation !== 'prohibited') omitted.push({ ...base, reason: 'needs-declared-value', message: `${label} requires ${missing.join(', ')} but Catalog declares no default and the baseline leaves the value to developers. The example selection leaves it out; Core still reports whether the requirement is fulfilled.` });
+      continue;
+    }
     const ref = { ...entry.item, scope: composeScope };
     // A prohibited entry never needs a configuration. Any other entry composes when its own permissions give it an example value.
     const { configuration, missing } = entry.obligation === 'prohibited' ? { configuration: null, missing: [] } : exampleConfiguration(hit.item, entry);
@@ -376,7 +423,7 @@ const withItem = (record, meta, index) => {
   const item = detail ? index.get(keyOf(detail))?.item : undefined;
   return { ...structuredClone(record), itemId: detail?.itemId ?? null, label: item?.label ?? detail?.itemId ?? null };
 };
-async function previewTarget({ target, built, compose, inheritedContradictions }) {
+async function previewTarget({ target, built, compose, inheritedContradictions, inventories }) {
   const { candidate, assembled, index } = built, { parsed } = candidate;
   const meta = candidate.document.metadata['aih.workbench'].entries;
   const empty = { target: { ...target }, selection: [], advisory: [], fulfillment: [], contradictions: [...inheritedContradictions], unsupported: [], omitted: [] };
@@ -392,6 +439,8 @@ async function previewTarget({ target, built, compose, inheritedContradictions }
   for (const authored of assembled.authored) {
     const { entry, label } = authored;
     if (!['required', 'recommended'].includes(entry.obligation) || entry.scope !== target.scope) continue;
+    // A per-tool entry is the target's only when the target names that client.
+    if (authored.tool !== undefined && authored.tool !== target.client) continue;
     const result = applies.get(authored.selectionId);
     if (!result || result.applicability === 'not-applicable') continue;
     const base = { entryId: entry.id, itemId: entry.item.itemId, label };
@@ -409,7 +458,7 @@ async function previewTarget({ target, built, compose, inheritedContradictions }
   }
   const selections = [], composedSelections = [];
   if (roots.length) {
-    const composed = await compose(roots);
+    const composed = await compose(roots, assembled.authored.some(authored => authored.tool !== undefined && authored.tool === target.client) ? target.client : undefined);
     if (composed.status !== 'ok') return { ...refused(composed.diagnostics), unsupported, omitted };
     const requirers = new Map();
     for (const inclusion of composed.value.inclusions) {
@@ -419,6 +468,20 @@ async function previewTarget({ target, built, compose, inheritedContradictions }
       requirers.set(key, [...new Set([...(requirers.get(key) ?? []), root.label])]);
     }
     for (const selection of composed.value.policy.selections) {
+      if (selection.tool) {
+        // Rendered by Core for the target's client: named by its item, identified by the recipe Core renders.
+        const pinned = composed.value.intent.pins.find(candidatePin => candidatePin.itemId === selection.item.itemId);
+        const ref = { releaseSha256: pinned?.releaseSha256, itemId: selection.item.itemId, scope: selection.scope };
+        const identity = await renderedIdentity(selection, inventories, composed.value.policy);
+        const inlined = inlineRecipelessSelections({ policy: composed.value.policy, inventories }).selections.find(candidate => candidate.id === selection.id);
+        if (!identity || !pinned) return { ...refused([bad('/selections', `Exact recipe for ${selection.item.itemId} is not available.`)]), unsupported, omitted };
+        const rootHit = roots.some(root => sameRef(root, ref)), hit = index.get(keyOf(ref));
+        composedSelections.push({ id: selection.id, organizationSelectionId: selection.organizationSelectionId, scope: selection.scope, recipeIdentity: identity, inputs: inlined.recipe.inline.inputs ?? {},
+          configuration: structuredClone(selection.configuration), privateInputs: [] });
+        selections.push({ id: selection.id, itemId: ref.itemId, label: hit?.item.label ?? ref.itemId, scope: selection.scope, organizationSelectionId: selection.organizationSelectionId,
+          configuration: structuredClone(selection.configuration), origin: rootHit ? 'authored' : 'dependency', requiredBy: requirers.get(`${keyOf(ref)}@${ref.scope}`) ?? [] });
+        continue;
+      }
       const pin = composed.value.intent.pins.find(candidatePin => candidatePin.recipe.sha256 === selection.recipe?.reference?.sha256
         && composed.value.inclusions.some(inclusion => inclusion.item.releaseSha256 === candidatePin.releaseSha256 && inclusion.item.itemId === candidatePin.itemId && inclusion.item.scope === selection.scope));
       if (!pin) return { ...refused([bad('/selections', `Catalog composed a selection the Workbench could not name: ${selection.id}.`)]), unsupported, omitted };
@@ -456,13 +519,13 @@ async function previewTargets({ built, inventories, targets }) {
     itemId: null, label: null, requiredBy: [], reason: 'obligation-contradiction', message: diagnostic.message, path: diagnostic.path }));
   // Targets that select the same roots share one Catalog composition.
   const composed = new Map();
-  const compose = roots => {
-    const key = stable(roots.map(({ label: _label, ...root }) => root));
-    if (!composed.has(key)) composed.set(key, composeRoots(roots, inventories));
+  const compose = (roots, tool) => {
+    const key = stable([tool ?? null, roots.map(({ label: _label, ...root }) => root)]);
+    if (!composed.has(key)) composed.set(key, composeRoots(roots, inventories, tool));
     return composed.get(key);
   };
   const results = [];
-  for (const { id, ...target } of targets) results.push({ ...(await previewTarget({ target, built, compose, inheritedContradictions: inherited })), target: { ...(id ? { id } : {}), ...target } });
+  for (const { id, ...target } of targets) results.push({ ...(await previewTarget({ target, built, compose, inheritedContradictions: inherited, inventories })), target: { ...(id ? { id } : {}), ...target } });
   return results;
 }
 const declaredOf = ({ scope, client, repository }) => ({ scope, ...(client !== undefined ? { client } : {}), ...(repository !== undefined ? { repository } : {}) });

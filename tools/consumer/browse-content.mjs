@@ -4,7 +4,7 @@ import * as runtime from '@aihq/core/harness/runtime';
 import { resolveSelections } from '@aihq/catalog/reader';
 import { recipeClient } from './selected-recipe.mjs';
 import { resolveConfiguredSets } from './set-choices.mjs';
-import { renderRecipe } from './headless.mjs';
+import { checkToolFit, fitReason } from './headless.mjs';
 const platform = () => ({ os: ({ win32: 'windows', darwin: 'macos' })[process.platform] ?? process.platform, arch: process.arch });
 const blocked = entry => entry.support === 'none' || Boolean(entry.notRendered) || Boolean(entry.staticBlockers?.length);
 // One card's fit. A card's Add brings the items it requires ("+ N it needs"), so Core is asked about the card together
@@ -30,9 +30,6 @@ function checkCard({ item, fallback }, common, releases, release) {
     ...(entry.staticBlockers ?? []).map(blocker => ({ ...blocker, itemId: entry.item.itemId }))]);
   return { ...together, items: [{ ...own, staticBlockers: [...(own.staticBlockers ?? []), ...required] }] };
 }
-// Why Core does not take an item in one tool, in Core's words.
-const missReason = (entry, delivered) => entry?.notRendered?.detail ?? (entry?.staticBlockers?.length ? entry.staticBlockers.map(blocker => blocker.detail).join(' ') : undefined)
-  ?? (entry?.support === 'none' ? entry.reason : undefined) ?? delivered?.refused?.message ?? delivered?.refused?.reason ?? 'Core gave no reason.';
 export async function browseContent(inventories, { tool, tools, releaseSha256, sets = [], configurations = [], inspect = false, itemId, chosen }, project, summarize) {
   const inventory = inventories.find(entry => entry.release.sha256 === releaseSha256);
   if (!inventory) return { status: 'unavailable', reason: 'This exact source is unavailable. Your saved choices are unchanged.' };
@@ -70,9 +67,11 @@ export async function browseContent(inventories, { tool, tools, releaseSha256, s
     fit = release.items.filter(item => item.role !== 'supporting').map(item => ({ itemId: item.id, tools: judged.map(({ tool: selectedTool, compatibility: checked }) => {
       const entry = checked.items.find(value => value.item.itemId === item.id);
       const renderable = Boolean(release.framework?.id && item.contentSha256 && item.behaviourSha256);
-      const delivered = renderable && entry && !blocked(entry) ? renderRecipe({ tool: selectedTool.id, entry: inventory, item, scope: 'project' }) : undefined;
-      const fits = Boolean(entry) && !blocked(entry) && (renderable ? !delivered.refused : recipeClient(item, selectedTool.id).available);
-      return { tool: selectedTool.id, label: selectedTool.label, fits, ...(fits ? {} : { reason: renderable || !entry || blocked(entry) ? missReason(entry, delivered) : recipeClient(item, selectedTool.id).reason }) };
+      // The shared fit test Install uses (headless.mjs); content Core does not render needs that tool's Catalog recipe.
+      const shared = renderable ? checkToolFit({ tool: selectedTool.id, entry: inventory, item, scope: 'project', compatibility: entry ?? null }) : undefined;
+      const recipe = renderable ? undefined : recipeClient(item, selectedTool.id);
+      const fits = renderable ? shared.fits : Boolean(entry) && !blocked(entry) && recipe.available;
+      return { tool: selectedTool.id, label: selectedTool.label, fits, ...(fits ? {} : { reason: renderable ? shared.reason : !entry || blocked(entry) ? fitReason(entry) : recipe.reason }) };
     }) }));
   } catch { return { status: 'failed', reason: 'Compatibility could not be checked.', resolution, platform: platform() }; }
   const dependencies = typeof itemId === 'string' && release.items.some(item => item.id === itemId) ? { itemId, resolution: resolveSelections({ releases, roots: [{ releaseSha256, itemId, scope: 'project', configuration: {} }], skips: [] }) } : undefined;

@@ -43,6 +43,39 @@ export function renderRecipe({ tool, entry, item, scope, requirers = [], grantAp
     operations: unique.flatMap(delivery => delivery.recipe.operations), checks: unique.flatMap(delivery => delivery.recipe.checks) };
   return { rendered, recipe: { inline: combined } };
 }
+// The one fit test the catalog card, a single Add, a set Add and Install share: Core's compatibility check finds no
+// blocker for the tool AND Core renders the item for it. `compatibility` is the card's own answer (it also folds in the
+// items an Add brings); without it the item is checked alone.
+const platformOf = () => ({ os: ({ win32: 'windows', darwin: 'macos' })[process.platform] ?? process.platform, arch: process.arch });
+const blockedBy = entry => !entry || entry.support === 'none' || Boolean(entry.notRendered) || Boolean(entry.staticBlockers?.length);
+export function checkToolFit({ tool, entry, item, scope = 'project', requirers = [], compatibility }) {
+  // A supporting document is delivered beside the items requiring it; their own fit decides, and it must render beside them.
+  if (requirers.length && compatibility === undefined) {
+    const delivered = renderRecipe({ tool, entry, item, scope, requirers });
+    return delivered.refused ? { fits: false, delivered, reason: fitReason(undefined, delivered) } : { fits: true, delivered };
+  }
+  let checked = compatibility;
+  if (checked === undefined && typeof harness.checkCompatibility === 'function') {
+    const release = entry.release, fallback = item.fallback ? release.items.find(candidate => candidate.id === item.fallback.itemId) : undefined;
+    const answer = harness.checkCompatibility({ tool, platform: platformOf(), binding: harness.toolBindings.find(candidate => candidate.tool === tool),
+      nativeRoutes: release.nativeRoutes === undefined ? [] : [{ framework: release.framework.id, lines: release.nativeRoutes }], items: [{ item, ...(fallback ? { fallback } : {}) }] });
+    checked = answer.items?.find(value => value.item.itemId === item.id);
+  }
+  if (blockedBy(checked)) return { fits: false, compatibility: checked, reason: fitReason(checked) };
+  const delivered = renderRecipe({ tool, entry, item, scope, requirers });
+  return delivered.refused ? { fits: false, compatibility: checked, delivered, reason: fitReason(checked, delivered) } : { fits: true, compatibility: checked, delivered };
+}
+// Core's compatibility answer for items that are selected together (an Add with the items it brings), per tool.
+export function checkTogether({ tool, entry, items }) {
+  if (typeof harness.checkCompatibility !== 'function') return undefined;
+  const release = entry.release, fallbackOf = item => item.fallback ? release.items.find(candidate => candidate.id === item.fallback.itemId) : undefined;
+  return harness.checkCompatibility({ tool, platform: platformOf(), binding: harness.toolBindings.find(candidate => candidate.tool === tool),
+    nativeRoutes: release.nativeRoutes === undefined ? [] : [{ framework: release.framework.id, lines: release.nativeRoutes }],
+    items: items.map(item => ({ item, ...(fallbackOf(item) ? { fallback: fallbackOf(item) } : {}) })) });
+}
+// Why Core does not take an item in one tool, in Core's words.
+export const fitReason = (checked, delivered) => checked?.notRendered?.detail ?? (checked?.staticBlockers?.length ? checked.staticBlockers.map(blocker => blocker.detail).join(' ') : undefined)
+  ?? (checked?.support === 'none' ? checked.reason : undefined) ?? delivered?.refused?.message ?? delivered?.refused?.reason ?? (checked ? 'Core gave no reason.' : 'Core did not check this item.');
 const supportingDocument = item => item.kind === 'document' && item.payload?.placement !== 'project-folder';
 // Execution policy 1.6.0 names the Catalog release content document a recipe-less selection is rendered from. Only an
 // inventory read from an installed Catalog package carries one, at that package's `catalog` material root.
@@ -131,8 +164,8 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
     if (selected?.status === 'selected' && !chosenTools.includes(selected.tool.id)) chosenTools.push(selected.tool.id);
   }
   if (!canonicalTool && chosenTools.length) canonicalTool = chosenTools[0];
-  if (canonicalTool && chosenTools.length && !chosenTools.includes(canonicalTool)) chosenTools.unshift(canonicalTool);
-  const copies = [];
+  if (canonicalTool && !chosenTools.includes(canonicalTool)) chosenTools.unshift(canonicalTool);
+  const copies = [], compatibilityOf = new Map();
   // The one-server approval opt-in is exactly { framework, itemId }, ephemeral and explicit. `false`-less
   // revocation uses revokeApproval with the same shape; both never carry a value.
   const approvalShape = value => value !== undefined && (!value || typeof value.framework !== 'string' || typeof value.itemId !== 'string' || Object.keys(value).length !== 2);
@@ -188,9 +221,22 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
           && index.releases[candidate.item.releaseSha256]?.framework?.id === origin.requiredBy?.framework);
         return other ? index.items.get(pinKey(other.item)) : undefined;
       }) : [];
-    const rendersFor = value => renderable && !requirerFound.some(required => !required)
-      && !renderRecipe({ tool: value, entry, item, scope: selection.scope, requirers: requirerFound.map(required => required.item) }).refused;
-    const renderTool = identityPrior?.tool ?? (chosenTools.length > 1 && renderable ? chosenTools.find(rendersFor) ?? canonicalTool : canonicalTool);
+    const together = value => {
+      const key = `${value}/${entry.release.sha256}`;
+      if (!compatibilityOf.has(key)) compatibilityOf.set(key, checkTogether({ tool: value, entry, items: resolved.selections.filter(other => other.item.releaseSha256 === entry.release.sha256)
+        .map(other => index.items.get(pinKey(other.item)).item) }));
+      return compatibilityOf.get(key)?.items?.find(value => value.item.itemId === item.id) ?? null;
+    };
+    const fitFor = value => checkToolFit({ tool: value, entry, item, scope: selection.scope, requirers: requirerFound.map(required => required.item), ...(requirerFound.length ? {} : { compatibility: together(value) }) });
+    const rendersFor = value => renderable && !requirerFound.some(required => !required) && fitFor(value).fits;
+    // A new item goes to the first chosen tool that passes the shared fit test; none passing refuses it with Core's reason.
+    const renderTool = identityPrior?.tool ?? (renderable && chosenTools.length ? chosenTools.find(rendersFor) : canonicalTool);
+    if (renderable && chosenTools.length && !renderTool && !requirerFound.some(required => !required)) {
+      const misses = chosenTools.map(value => ({ tool: value, ...fitFor(value) })), refused = misses[0].delivered?.refused;
+      return refuse('PREREQUISITE_UNAVAILABLE', '/selections', misses.length === 1 ? misses[0].reason
+        : `${item.name ?? item.label ?? item.id} doesn’t work in any of your tools. ${misses.map(miss => `${miss.tool}: ${miss.reason}`).join(' ')}`, undefined,
+        { owner: 'core', diagnostics: refused?.diagnostics ?? (refused?.code ? [{ code: refused.code, message: refused.reason ?? refused.message }] : misses.map(miss => ({ code: 'TOOL_FIT', message: miss.reason }))) });
+    }
     const canRender = Boolean(renderable && renderTool);
     const configured = canRender ? { valid: true, selection: { configuration: selection.configuration } } : configurePinned(entry, item, selection.configuration, intent.pins);
     if (!configured.valid) return refuse('INPUT_INVALID', '/roots/configuration', 'Catalog refused item configuration.', undefined, { owner: 'catalog', diagnostics: configured.diagnostics });
@@ -258,7 +304,9 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
       ...(rendered ? { bindingDigest: rendered.bindingDigest,
         ...(item.scan?.length ? { scanRecords: structuredClone(item.scan), itemMaterials: item.materials.map(material => ({ materialId: material.id, relPath: material.relPath, path: material.packagePath,
           sha256: material.sha256, byteLength: material.byteLength, role: material.role })) } : {}) } : {}),
-      ...(base?.mode === 'enterprise' ? { organizationSelectionId: [...organizationIds][0] ?? prior?.organizationSelectionId ?? managementId } : {}),
+      // Enterprise: what Core renders is governed per tool, by `<managementId>--<tool>`, so an organisation can permit each
+      // tool's own rendering (the organisation author writes the same ids).
+      ...(base?.mode === 'enterprise' ? { organizationSelectionId: [...organizationIds][0] ?? prior?.organizationSelectionId ?? (canRender && bundle?.tool ? toolCopyId(managementId, bundle.tool) : managementId) } : {}),
       requires: [], recipe });
     // Execution policy 1.6.0: the plain rendering Core reproduces at Prepare is left out of the policy when its release (and each
     // requiring item's) can be named. A one-server approval is not a recipe-less input, so it stays inline.
@@ -300,7 +348,8 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
   for (const { lead, tool: other, delivered, recipeless } of copies) {
     const { recipe: _leadRecipe, ...rest } = lead;
     const copy = { ...structuredClone(rest), id: toolCopyId(lead.id, other), managementId: toolCopyId(lead.managementId, other), tool: other,
-      ...(lead.organizationSelectionId !== undefined ? { organizationSelectionId: toolCopyId(lead.organizationSelectionId, other) } : {}),
+      ...(lead.organizationSelectionId !== undefined ? { organizationSelectionId: lead.organizationSelectionId === toolCopyId(lead.managementId, lead.tool)
+        ? toolCopyId(lead.managementId, other) : toolCopyId(lead.organizationSelectionId, other) } : {}),
       bindingDigest: delivered.rendered.bindingDigest, requires: lead.requires.map(id => copyIds.has(toolCopyId(id, other)) ? toolCopyId(id, other) : id) };
     if (recipeless) recipelessRecipes.set(copy.id, delivered.recipe); else copy.recipe = delivered.recipe;
     selections.push(copy);
