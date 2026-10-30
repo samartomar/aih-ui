@@ -1,25 +1,23 @@
 import { applyIfUnchanged, diagnosticWords } from './host-review.js';
-import { stillNeededWords } from './installed-list.js';
 
 const readyPreparation = result => result?.disposition === 'prepared' && result.preparation?.status === 'ready' && result.preparation.sessionId && result.preparation.review
   ? result.preparation : undefined;
 
-/** The kept sentence for an item still required: by the requirers' names, or, when none can be named, without them. */
-export const keptRequiredWords = names => stillNeededWords(names)
-  // Contract amendment 3.2.3 row 37 (pending owner approval).
-  ?? 'Kept; still needed by another installed item';
+// A member another selection or origin still owns, when no set sentence names it.
+// Contract amendment 3.2.3 row 38 (pending owner approval).
+export const KEPT_FOR_ANOTHER = 'Kept for another selection';
 
-// The contract's sentence for a kept member ("Kept; also part of {set}") when the other owner is a named set, or for a
-// member Core keeps because it changed after install; for any other kept member the contract has no sentence, so
-// Core's action is shown as it is.
+// The sentence for a member Core's removal plan keeps (removal 1.2.0 `keep-*` actions). A Core action or reason is
+// never page text.
 export function removalMemberWords(member, entry) {
+  // The set sentence ("Kept; also part of {set}", or what else keeps it) when Remove this set computed one.
   if ((member.action === 'keep-shared' || member.reason === 'another-origin') && entry?.kept) return entry.kept;
   // Contract amendment 3.2.3 row 11 (owner-approved 2026-10-30).
   if (member.action === 'keep-changed') return 'Kept; you changed it after install';
-  // Core's plan names no requirer: the installed items Core's inventory records as requiring this one (`requiredBy`),
-  // other than those leaving in the same removal, say who still needs it.
-  if (member.action === 'keep-required') return keptRequiredWords((entry?.requiredBy ?? []).map(owner => owner.name));
-  return member.action ?? member.reason ?? 'keep-shared';
+  // A licence or notice file kept with an item that keeps a changed member; it says nothing about requirements.
+  // Contract amendment 3.2.3 row 37 (pending owner approval).
+  if (member.action === 'keep-required') return "Kept: the item's licence or notice";
+  return KEPT_FOR_ANOTHER;
 }
 
 function present(entries, result) {
@@ -30,7 +28,7 @@ function present(entries, result) {
     const reason = diagnosticWords(removal, result);
     // Only this origin is released: Core keeps the item, and its files, for the other owner.
     if (removal.disposition === 'prepared' && removal.change === 'remove-origin')
-      return { entry, state: 'kept-shared', change: removal.change, files, message: entry.kept ?? 'keep-shared' };
+      return { entry, state: 'kept-shared', change: removal.change, files, message: entry.kept ?? KEPT_FOR_ANOTHER };
     const state = removal.disposition === 'prepared' ? 'ready'
       : removal.disposition === 'retained' ? 'kept'
       : removal.disposition === 'absent' ? 'absent' : 'blocked';

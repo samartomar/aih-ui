@@ -13,7 +13,7 @@ import { replacedNames } from '../../src/catalog/item-name.js';
 
 const APPROVED = '(owner-approved 2026-10-30)';
 // Rows the page shows that the owner has not approved yet; each says the proposed sentence and carries PENDING.
-const PENDING = '(pending owner approval)', PENDING_ROWS = new Set([37]);
+const PENDING = '(pending owner approval)', PENDING_ROWS = new Set([37, 38]);
 const fill = (sentence, values) => sentence.replace(/\{([^}]+)\}/g, (_, key) => {
   assert.ok(Object.hasOwn(values, key), `a sample value for {${key}}`); return values[key];
 });
@@ -56,11 +56,16 @@ const ROWS = [
     return keptWords(entry.keptFor, 'rules', setLabeller(frameworks), entry.chosen);
   }],
   [10, 'src/app/installed-list.js', 'Kept; still needed by {names}', { names: 'tdd and README' }, () => stillNeededWords(['tdd', 'README'])],
-  // Core's removal plan keeps a member as required without naming who requires it: the names come from Core's inventory.
-  [10, 'src/app/installed-list.js', 'Kept; still needed by {names}', { names: 'tdd' },
-    () => removalMemberWords({ kind: 'file', path: '/project/0.md', action: 'keep-required', reason: 'licence-or-notice' }, { ...removed, requiredBy: [{ managementId: 'm-2', name: 'tdd' }] })],
-  [37, 'src/app/installed-removal.js', 'Kept; still needed by another installed item', {},
-    () => removalMemberWords({ kind: 'file', path: '/project/0.md', action: 'keep-required', reason: 'licence-or-notice' }, { ...removed, requiredBy: [] })],
+  // Core's keep-required is a licence or notice file kept with an item that keeps a changed member; it never names a
+  // requirement, so the inventory's requirers (passed here) must not appear.
+  [37, 'src/app/installed-removal.js', "Kept: the item's licence or notice", {},
+    () => removalMemberWords({ kind: 'file', path: '/project/LICENSE', action: 'keep-required', reason: 'licence-or-notice' }, { ...removed, requiredBy: [{ managementId: 'm-2', name: 'tdd' }] })],
+  [38, 'src/app/installed-removal.js', 'Kept for another selection', {},
+    () => removalMemberWords({ kind: 'file', path: '/project/0.md', action: 'keep-shared', reason: 'another-selection' }, removed)],
+  // A member Remove this set releases from this set while nothing the page can name keeps it.
+  [38, 'src/app/installed-removal.js', 'Kept for another selection', {},
+    async () => (await previewRemoval({ entries: [{ ...keptMember, kept: undefined }], mode: 'vibe', request: async () => ({ disposition: 'prepared', diagnostics: [],
+      removals: [{ managementId: 'm-1', disposition: 'prepared', diagnostics: [], ...originOnly }], preparation: { status: 'ready', sessionId: 's', review: { reviewDigest: 'd', operations: [] } } }) })).steps[0].message],
   [11, 'src/app/installed-removal.js', 'Kept; you changed it after install', {},
     () => removalMemberWords({ kind: 'file', path: '/project/0.md', action: 'keep-changed', reason: 'managed-content-changed' }, removed)],
   [14, 'src/app/installed-removal.js', "Couldn't confirm it's kept.", {},
@@ -148,6 +153,32 @@ test('row 8 only when no set keeps the member; row 9 wins when one does', () => 
 test("row 14 only for a kept member Core did not confirm; a confirmed one says the kept sentence", async () => {
   assert.equal((await removalOf({ completion: 'complete', diagnostics: [], members: [] }, keptMember, originOnly)).message, 'grill-me: Kept; also part of plain');
   assert.equal((await removalOf({ completion: 'partial', diagnostics: [{ message: 'Lost.' }], members: [] }, keptMember, originOnly)).message, "grill-me: Couldn't confirm it's kept. Lost.");
+});
+
+// Core's removal 1.2.0 member actions and the reasons it gives them (aih-core README, removal preparation).
+const ACTIONS = ['remove', 'restore', 'unregister', 'keep-shared', 'keep-changed', 'keep-required'];
+const REASONS = [undefined, 'pre-existing-value', 'already-absent', 'another-selection', 'another-origin', 'managed-content-changed', 'licence-or-notice', 'hook-group-changed'];
+const CODES = [...ACTIONS, ...REASONS.filter(Boolean)];
+test('no Core removal 1.2.0 member action or reason reaches the page as text', async () => {
+  const said = [];
+  for (const action of ACTIONS) for (const reason of REASONS) {
+    const member = { kind: 'file', path: '/project/0.md', action, ...(reason ? { reason } : {}), operationId: null };
+    for (const entry of [removed, { ...removed, kept: undefined }, keptMember]) if (action.startsWith('keep-')) said.push(removalMemberWords(member, entry));
+    // Remove of one item and Remove this set: the preview's step messages and kept lines, then the outcome.
+    for (const [entry, change] of [[removed, 'remove-selection'], [keptMember, 'remove-origin'], [{ ...keptMember, kept: undefined }, 'remove-origin']]) {
+      const removal = { change, ...(change === 'remove-origin' ? { origin: keptMember.origin } : {}), members: [member] };
+      const request = async operation => operation === 'remove' ? { disposition: 'prepared', diagnostics: [], removals: [{ managementId: 'm-1', disposition: 'prepared', diagnostics: [], ...removal }],
+        preparation: { status: 'ready', sessionId: 's', review: { reviewDigest: 'd', operations: [] } } }
+        : { completion: 'complete', diagnostics: [], members: [{ managementId: 'm-1', path: '/project/0.md', outcome: action.startsWith('keep-') ? 'kept' : 'removed', check: 'absent' }] };
+      const preview = await previewRemoval({ entries: [entry], request, mode: 'vibe' });
+      said.push(...preview.steps.map(step => step.message), ...preview.kept.map(item => item.reason));
+      said.push((await confirmRemoval({ preview, request, mode: 'vibe' })).message);
+    }
+  }
+  for (const words of said) {
+    assert.equal(typeof words, 'string', 'every kept member has words');
+    for (const code of CODES) assert.doesNotMatch(words, new RegExp(`(^|[^\\w-])${code}($|[^\\w-])`), `"${words}" says Core's ${code}`);
+  }
 });
 
 const sources = dir => readdirSync(new URL(`../../${dir}/`, import.meta.url), { recursive: true, withFileTypes: true })

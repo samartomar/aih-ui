@@ -4,7 +4,7 @@
 
 import { itemDisplayName } from '../catalog/item-name.js';
 import { groupInstalled, keptWords, setLabeller, setRemovalEntries, stillNeededWords } from './installed-list.js';
-import { cancelRemoval, confirmRemoval, keptRequiredWords, previewRemoval, removalMemberWords } from './installed-removal.js';
+import { KEPT_FOR_ANOTHER, cancelRemoval, confirmRemoval, previewRemoval, removalMemberWords } from './installed-removal.js';
 import { confirmUpdate, previewUpdate, updateEntry } from './installed-update.js';
 import { compact } from './compact.js';
 import { iconSpan } from './icons.js';
@@ -72,7 +72,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
   const message = el('p', 'text-on-surface'); message.id = 'installed-message'; message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
   node.append(title, note, list, message);
 
-  let inventoryRead = 0, removing = false, requirers = new Map();
+  let inventoryRead = 0, removing = false;
   const policyDocument = () => { try { return JSON.parse(new TextDecoder().decode(client.bytes)); } catch { return undefined; } };
   // Catalog's display.name (1.7 publishes it as `name`), with a rule's or skill's namespace in brackets, as the cards name it.
   const label = itemId => {
@@ -123,7 +123,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       }, true);
       confirm.disabled = !preview.canConfirm;
       actions.append(confirm, cancel);
-      area.replaceChildren(...stepRows(preview), ...[...kept, ...(preview.kept ?? [])].map(item => el('p', 'text-on-surface-variant', `${item.name}: ${item.reason ?? keptRequiredWords(item.neededBy)}`)),
+      area.replaceChildren(...stepRows(preview), ...[...kept, ...(preview.kept ?? [])].map(item => el('p', 'text-on-surface-variant', `${item.name}: ${item.reason ?? stillNeededWords(item.neededBy) ?? KEPT_FOR_ANOTHER}`)),
         el('p', 'text-on-surface-variant', preview.note), actions);
       area.hidden = false;
     }
@@ -134,11 +134,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       if (mode === undefined) { message.textContent = 'Remove did not start: this page cannot read the setup. Nothing was removed.'; return; }
       removing = true; remove.disabled = true; remove.setAttribute('aria-busy', 'true'); delete message.dataset.outcome; message.textContent = 'Checking which files would be removed…';
       try {
-        // Who still requires each item, from Core's inventory, for a member Core's plan keeps as required; an item
-        // leaving in this same removal does not count.
-        const leaving = new Set(entries.map(entry => entry.managementId));
-        const named = entries.map(entry => ({ ...entry, requiredBy: (requirers.get(entry.managementId) ?? []).filter(owner => !leaving.has(owner.managementId)) }));
-        const preview = await previewRemoval({ entries: named, request: requestHost, mode });
+        const preview = await previewRemoval({ entries, request: requestHost, mode });
         showRound(preview, mode, []);
         message.textContent = preview.canConfirm ? 'Nothing has been removed yet. Check the files, then confirm.' : 'Remove cannot go ahead. Nothing was removed.';
       } catch (error) { message.textContent = `Remove did not start: ${error.message}`; }
@@ -194,7 +190,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
   }
 
   function show(view) {
-    list.replaceChildren(); requirers = view.requirers ?? new Map();
+    list.replaceChildren();
     if (!view.readable) { note.textContent = `Cannot show what is installed: ${view.reason}`; return; }
     note.textContent = view.partial ? 'This list may be incomplete: Core could not read everything installed in this project.' : '';
     if (!view.groups.length && !view.others.length) { note.textContent = [note.textContent, 'Nothing from Workbench is installed in this project.'].filter(Boolean).join(' '); return; }
@@ -250,7 +246,7 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       // Core removes only this set's origin from a member another set, a direct choice or a requirement still owns,
       // and what only this set's own members need goes with them. The kept sentence names what keeps it.
       const removals = setRemovalEntries(group).map(({ keptFor, chosen, neededBy, ...entry }) => {
-        const kept = keptWords(keptFor, name, setName, chosen) ?? stillNeededWords(neededBy);
+        const kept = keptWords(keptFor, name, setName, chosen) ?? stillNeededWords(neededBy) ?? KEPT_FOR_ANOTHER;
         return kept ? { ...entry, kept } : entry;
       });
       const { remove: removeSet, area: setArea } = removeControl(removals, [], 'Remove this set');
