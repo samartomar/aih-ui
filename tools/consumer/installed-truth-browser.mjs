@@ -361,9 +361,9 @@ export async function runUpdateOneBrowser({ origin, output, playwrightModule, th
     assert.equal(await message.getAttribute('data-outcome'), 'updated', result);
     // The update was prepared as an install is: the host sent a 1.6.0 replacement Core renders from the named Catalog
     // release, with its binding, and Core answered with managed update 1.1.0 and a review naming its binding and Scan state.
-    const answers = await Promise.all(updates);
-    assert.ok(answers.length >= 1, 'the page asked the host for the update');
-    const sent = answers.map(answer => {
+    const prepared = await Promise.all(updates);
+    assert.ok(prepared.length >= 1, 'the page asked the host for the update');
+    const sent = prepared.map(answer => {
       assert.equal(answer.schema, 'urn:aihq:core:managed-update-preparation:1.1.0', `Core read a request naming its policy: ${JSON.stringify(answer).slice(0, 600)}`);
       assert.equal(answer.disposition, 'prepared', JSON.stringify(answer.updates));
       assert.equal(answer.request?.policy, 'urn:aihq:core:execution-policy:1.6.0', JSON.stringify(answer.request));
