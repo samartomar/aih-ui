@@ -1,7 +1,7 @@
 // The installed list and "Remove this set" against real Catalog sets, alone, after the packed consumer has been
 // assembled (tools/check-workbench.mjs). check-installed-workbench.mjs runs the same cases in both themes.
 //
-// Usage: node tools/check-installed-truth.mjs <consumerDir> [list|set-removal ...] [--theme dark|light]
+// Usage: node tools/check-installed-truth.mjs <consumerDir> [list|set-removal|namespaced-rule ...] [--theme dark|light]
 // Each case gets a fresh disposable project and a real child host process (tools/installed-host.mjs).
 import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
@@ -10,14 +10,14 @@ import { randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pageAssets } from './server/assets.mjs';
-import { runInstalledListTruthBrowser, runSetRemovalTruthBrowser } from './consumer/installed-truth-browser.mjs';
+import { runInstalledListTruthBrowser, runNamespacedRuleTruthBrowser, runSetRemovalTruthBrowser } from './consumer/installed-truth-browser.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const consumerDir = resolve(args[0]);
 const theme = args.includes('--theme') ? args[args.indexOf('--theme') + 1] : 'dark';
 const named = args.slice(1).filter((value, index, all) => value !== '--theme' && all[index - 1] !== '--theme');
-const cases = { list: runInstalledListTruthBrowser, 'set-removal': runSetRemovalTruthBrowser };
+const cases = { list: runInstalledListTruthBrowser, 'set-removal': runSetRemovalTruthBrowser, 'namespaced-rule': runNamespacedRuleTruthBrowser };
 const selected = named.length ? named : Object.keys(cases);
 for (const name of selected) if (!cases[name]) throw new Error(`Unknown case ${name}; choose from ${Object.keys(cases).join(', ')}.`);
 
