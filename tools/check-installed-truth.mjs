@@ -10,9 +10,13 @@ import { randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pageAssets } from './server/assets.mjs';
+import { buildCss } from './build-css.mjs';
 import { runInstalledListTruthBrowser, runSetRemovalTruthBrowser } from './consumer/installed-truth-browser.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+// The page's Tailwind build is ignored by Git, so a fresh checkout has none; without it the catalog column is no
+// scroll container and its controls sit clipped under the panels, unreachable by a pointer.
+await buildCss(repo);
 const args = process.argv.slice(2);
 const consumerDir = resolve(args[0]);
 const theme = args.includes('--theme') ? args[args.indexOf('--theme') + 1] : 'dark';

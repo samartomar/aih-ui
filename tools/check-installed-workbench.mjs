@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pageAssets } from './server/assets.mjs';
+import { buildCss } from './build-css.mjs';
 import { createWorkbench } from './server/workbench.mjs';
 import { listen } from './server/static.mjs';
 import { runInstalledPanelBrowser } from './consumer/installed-panel-browser.mjs';
@@ -26,6 +27,8 @@ const project = join(consumerDir, `installed-project-${randomUUID().slice(0, 8)}
 const cancelAfterFirst = process.argv.includes('--cancel');
 await mkdir(project, { recursive: true });
 const runDir = join(project, 'page'), repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+// A fresh checkout has no built Tailwind (see check-installed-truth.mjs).
+await buildCss(repo);
 for (const asset of pageAssets(repo)) {
   const target = join(runDir, asset.to); await mkdir(dirname(target), { recursive: true });
   await copyFile(join(repo, asset.from), target);

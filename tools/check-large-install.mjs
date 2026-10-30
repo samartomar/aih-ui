@@ -12,9 +12,12 @@ import { randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pageAssets } from './server/assets.mjs';
+import { buildCss } from './build-css.mjs';
 import { runLargeInstallBrowser, runLostContactBrowser, runReloadBrowser } from './consumer/large-install-browser.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+// A fresh checkout has no built Tailwind (see check-installed-truth.mjs).
+await buildCss(repo);
 const args = process.argv.slice(2);
 const consumerDir = resolve(args[0]);
 const option = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
