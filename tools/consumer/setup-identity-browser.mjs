@@ -141,6 +141,23 @@ export async function runSetupIdentityBrowser({ origin, output, playwrightModule
         assert.deepEqual(values, [{ Package: catalogPackage.name, Version: catalogPackage.version, 'Archive digest': catalogSha256 }],
           'The details show the Catalog package, version and archive digest as labelled values');
         assert.ok((await page.locator('#policy-review-panel').innerText()).includes(catalogSha256), 'The opened details show the digest');
+        // The whole of Your setup, every section opened, shows names, never a raw item id. The one exception is the
+        // existing developer section "Exact policy artifact and diagnostics", which holds the policy file's exact JSON.
+        await page.locator('#policy-review-panel details').evaluateAll(sections => { for (const section of sections) section.open = true; });
+        const found = await page.locator('#policy-review-panel').evaluate((panel, ids) => {
+          const developer = document.getElementById('policy-bytes')?.closest('details');
+          const shown = [], walker = document.createTreeWalker(panel, NodeFilter.SHOW_TEXT);
+          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            const element = node.parentElement;
+            if (developer?.contains(element) || !element.checkVisibility()) continue;
+            for (const id of ids) if (new RegExp(`(^|[^\\w.-])${id.replace(/[.]/g, '\\.')}($|[^\\w.-])`).test(node.data))
+              shown.push({ id, text: node.data.slice(0, 160), where: [...function* () { for (let at = element; at && at !== panel; at = at.parentElement) if (at.id) yield at.id; }()].join(' < ') });
+          }
+          return shown;
+        }, itemIds);
+        const anywhere = [...new Set(found.map(entry => entry.id))];
+        await writeFile(join(output, `${theme}-raw-ids.json`), JSON.stringify(found, null, 2));
+        assert.deepEqual(anywhere, [], `Your setup shows no raw item ids (${anywhere.length} shown, e.g. ${anywhere.slice(0, 3).join(', ')})`);
         await page.screenshot({ animations: 'disabled', path: join(output, `${theme}-setup-identity.png`) });
       }
       if (scenario in EXPECTED_STATUSES) {
