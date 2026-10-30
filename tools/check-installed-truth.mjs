@@ -2,7 +2,7 @@
 // consumer has been assembled (tools/check-workbench.mjs). check-installed-workbench.mjs runs the same three cases in
 // both themes.
 //
-// Usage: node tools/check-installed-truth.mjs <consumerDir> [list|set-removal|namespaced-rule|shared-block|needed-removal|ecc-sets-removal|no-raw-ids|your-tools|update-one|update-requirement|setup-assistance ...]
+// Usage: node tools/check-installed-truth.mjs <consumerDir> [list|set-removal|namespaced-rule|shared-block|needed-removal|ecc-sets-removal|no-raw-ids|your-tools|enterprise-admin|update-one|update-requirement|setup-assistance ...]
 //          [--theme dark|light] [--update-pack <catalog.tgz>] [--requirement-pack <catalog.tgz>]
 // Each case gets a fresh disposable project and a real child host process (tools/installed-host.mjs).
 // update-one needs --update-pack: a Catalog pack of the installed package and version in which exactly one installed
@@ -17,6 +17,8 @@
 // your-tools runs the owner's Gate A setup (Enterprise admin, a policy repository the host does not read, all eleven AI
 // clients, an old single Codex choice): every chosen tool is listed and judged, items are addable, one Add installs for
 // each tool Core renders it for, and the organization policy's state is said with what to do.
+// enterprise-admin is the same setup with a readable local organisation policy: adding the Superpowers set composes an
+// Enterprise policy the organisation governs, and every item of it installs (as an Enterprise Developer's does).
 // no-raw-ids walks pick, review, Your setup, install and the installed list and fails on any item id, management id,
 // set id or sha256 from the page's Catalog and Core inventory in their visible text.
 // setup-assistance walks first-run setup and checks that no assistance tool appears without installable Catalog content,
@@ -32,7 +34,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pageAssets } from './server/assets.mjs';
 import { buildCss } from './build-css.mjs';
 import { homeEnvironment } from './consumer/home-environment.mjs';
-import { OWNER_SETTINGS, runYourToolsBrowser } from './consumer/your-tools-browser.mjs';
+import { OWNER_SETTINGS, runEnterpriseAdminBrowser, runYourToolsBrowser } from './consumer/your-tools-browser.mjs';
 import { runSetupAssistanceBrowser } from './consumer/setup-assistance-browser.mjs';
 import { installEccSetsBrowser, readEccInstalledBrowser, runEccSetsRemovalTruthBrowser, runInstalledListTruthBrowser, runNamespacedRuleTruthBrowser, runNeededRemovalTruthBrowser, runNoRawIdsBrowser, runSetRemovalTruthBrowser, runSharedBlockTruthBrowser, runUpdateBlockedBrowser, runUpdateOneBrowser, runUpdateOneInstallBrowser } from './consumer/installed-truth-browser.mjs';
 
@@ -48,7 +50,7 @@ const packs = { 'update-one': option('--update-pack'), 'update-requirement': opt
 for (const name of Object.keys(packs)) packs[name] &&= resolve(packs[name]);
 const named = args.slice(1).filter((value, index, all) => !value.startsWith('--') && !['--theme', '--update-pack', '--requirement-pack'].includes(all[index - 1]));
 const cases = { list: runInstalledListTruthBrowser, 'set-removal': runSetRemovalTruthBrowser, 'namespaced-rule': runNamespacedRuleTruthBrowser,
-  'shared-block': runSharedBlockTruthBrowser, 'needed-removal': runNeededRemovalTruthBrowser, 'ecc-sets-removal': runEccSetsRemoval, 'no-raw-ids': runNoRawIdsBrowser, 'your-tools': runYourTools, 'update-one': runUpdateOne, 'update-requirement': runUpdateRequirement,
+  'shared-block': runSharedBlockTruthBrowser, 'needed-removal': runNeededRemovalTruthBrowser, 'ecc-sets-removal': runEccSetsRemoval, 'no-raw-ids': runNoRawIdsBrowser, 'your-tools': runYourTools, 'enterprise-admin': runEnterpriseAdmin, 'update-one': runUpdateOne, 'update-requirement': runUpdateRequirement,
   'setup-assistance': runSetupAssistanceBrowser };
 const selected = named.length ? named : Object.keys(cases).filter(name => !Object.hasOwn(packs, name) || packs[name]);
 for (const name of selected) if (!cases[name]) throw new Error(`Unknown case ${name}; choose from ${Object.keys(cases).join(', ')}.`);
@@ -65,14 +67,14 @@ await writeFile(sources, JSON.stringify((await frameworkFixtures(fixtureDir, cat
 // Core keeps its records under the account home. Each case's host runs on its own disposable home, never the real one;
 // every project of the case shares it, as two projects on one machine do.
 let caseHome;
-async function withHost(project, run, sourcesPath = sources, hostConsumerDir = consumerDir) {
+async function withHost(project, run, sourcesPath = sources, hostConsumerDir = consumerDir, hostEnv = {}) {
   await mkdir(project, { recursive: true });
   const runDir = join(project, 'page');
   for (const asset of pageAssets(repo)) { const target = join(runDir, asset.to); await mkdir(dirname(target), { recursive: true }); await copyFile(join(repo, asset.from), target); }
   const summaryPath = join(runDir, 'summary.json'); await writeFile(summaryPath, JSON.stringify(summary));
   const portPath = join(project, 'host.port'), configPath = join(project, 'host-config.json');
   await writeFile(configPath, JSON.stringify({ consumerDir: hostConsumerDir, runDir, summaryPath, settingsPath: join(project, 'settings.json'), portPath,
-    env: { ...homeEnvironment(caseHome), AIH_CONSUMER_PROJECT: project, AIH_FRAMEWORK_SOURCES: sourcesPath } }));
+    env: { ...homeEnvironment(caseHome), AIH_CONSUMER_PROJECT: project, AIH_FRAMEWORK_SOURCES: sourcesPath, ...hostEnv } }));
   await rm(portPath, { force: true });
   const child = spawn(process.execPath, [join(repo, 'tools/installed-host.mjs'), configPath], { stdio: ['ignore', 'pipe', 'pipe'] });
   const log = []; child.stdout.on('data', chunk => log.push(String(chunk))); child.stderr.on('data', chunk => log.push(String(chunk)));
@@ -220,6 +222,29 @@ async function runYourTools({ project, output, playwrightModule, theme }) {
   return withHost(project, origin => runYourToolsBrowser({ origin, output, project, playwrightModule, theme }));
 }
 
+// The organisation file is named by the host (AIH_ORGANIZATION_SOURCE, provider local). A scouting project takes the same
+// page steps to learn the exact setup the page composes; the organisation then permits exactly those recipes, by Core's
+// recipe identity, and the case project adds and installs it.
+async function runEnterpriseAdmin({ project, output, playwrightModule, theme }) {
+  await mkdir(output, { recursive: true });
+  const organizationFile = 'organization-policy.json', organizationPath = join(output, organizationFile), sourcePath = join(output, 'organization-source.json');
+  const organization = { schema: 'urn:aihq:core:organization-policy:1.2.0', id: 'gosam-local', selections: [] };
+  await writeFile(organizationPath, `${JSON.stringify(organization, null, 2)}\n`);
+  await writeFile(sourcePath, JSON.stringify({ provider: 'local', path: organizationPath }));
+  const hostEnv = { AIH_ORGANIZATION_SOURCE: sourcePath };
+  const settle = async folder => { await mkdir(folder, { recursive: true }); await writeFile(join(folder, 'settings.json'), `${JSON.stringify(OWNER_SETTINGS, null, 2)}\n`); };
+  const scout = `${project}-scout`; await settle(scout);
+  const scouted = await withHost(scout, origin => runEnterpriseAdminBrowser({ origin, output, project: scout, playwrightModule, theme, install: false, organizationFile }), sources, consumerDir, hostEnv);
+  const load = name => import(pathToFileURL(join(consumerDir, name)).href);
+  const { permitComposed } = await load('consumer/organization-permits.mjs');
+  const { installedFamilies } = await load('consumer/installed-families.mjs');
+  const catalogRoot = dirname(createRequire(join(consumerDir, 'package.json')).resolve('@aihq/catalog/package.json'));
+  organization.selections.push(...await permitComposed({ policy: scouted.policy, inventories: await installedFamilies({ root: catalogRoot }) }));
+  await writeFile(organizationPath, `${JSON.stringify(organization, null, 2)}\n`);
+  await settle(project);
+  return withHost(project, origin => runEnterpriseAdminBrowser({ origin, output, project, playwrightModule, theme, organizationFile }), sources, consumerDir, hostEnv);
+}
+
 // The ECC sets are first installed in another project under the same account home. Core must count only this project's
 // requirers when it decides what a removal frees, so the other project's ECC is still listed afterwards, file for file.
 async function runEccSetsRemoval({ project, output, playwrightModule, theme }) {
@@ -244,7 +269,7 @@ for (const name of selected) {
   const project = join(consumerDir, `installed-truth-${name}-${theme}-${randomUUID().slice(0, 8)}`);
   const output = join(consumerDir, `installed-truth-evidence-${name}-${theme}`);
   caseHome = await mkdtemp(join(tmpdir(), 'aih-installed-truth-home-'));
-  const outcome = Object.hasOwn(packs, name) || ['ecc-sets-removal', 'your-tools'].includes(name) ? await cases[name]({ project, output, playwrightModule, theme })
+  const outcome = Object.hasOwn(packs, name) || ['ecc-sets-removal', 'your-tools', 'enterprise-admin'].includes(name) ? await cases[name]({ project, output, playwrightModule, theme })
     : await withHost(project, origin => cases[name]({ origin, output, project, playwrightModule, theme }));
   if (outcome.status !== 'passed') throw new Error(`${name} (${theme}) failed: ${JSON.stringify(outcome)}`);
   console.log(`installed truth ${name} (${theme}) passed`);

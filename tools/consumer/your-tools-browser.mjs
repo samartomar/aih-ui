@@ -1,11 +1,10 @@
 // The owner's Gate A setup in a real browser: Enterprise, role admin, a remote policy repository the host does not read,
 // all eleven AI clients chosen in setup, and an older single "Codex" choice in this browser. The page must list every
-// chosen tool, judge content across all of them, show addable items, add one to each tool Core renders it for, install
-// it through Core, and say clearly that the organization policy was not read and what to do. Expectations come from the
+// chosen tool, judge content across all of them, show addable items, add one to each tool Core renders it for into an
+// Enterprise policy, and say clearly that the organization policy was not read, what to do, and why Install waits. Expectations come from the
 // page's own answers (Core's tool registry and Core's inventory), never from a list kept here.
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { chooseCatalogFamily, openPolicyDrawer } from './policy-drawer.mjs';
 
@@ -80,7 +79,6 @@ export async function runYourToolsBrowser({ origin, output, project, playwrightM
     assert.match(noteText, /No organization authority source is configured by the host\./);
     assert.ok(noteText.includes(OWNER_SETTINGS.organization.policyRepo), noteText);
     assert.match(noteText, /AIH_ORGANIZATION_SOURCE/);
-    assert.match(noteText, /As an admin you can still add and install content/);
 
     // Add the first card: Core composes it for each observed tool that takes it.
     const first = adds.first(), itemId = (await first.getAttribute('aria-label')).replace(/^Add /, '');
@@ -98,23 +96,82 @@ export async function runYourToolsBrowser({ origin, output, project, playwrightM
     assert.equal(await card.innerText(), 'Remove');
     await page.screenshot({ path: join(output, `your-tools-added-${theme}.png`) });
 
-    // Install through Core; Core's inventory lists the item for each of those tools.
+    // Install: an Enterprise policy with no readable organisation policy is not installed, and the drawer says why.
     await openPolicyDrawer(page);
-    await page.locator('#install-button:not([disabled])').waitFor({ timeout: 180_000 })
-      .catch(async error => { await page.screenshot({ path: join(output, `your-tools-install-failed-${theme}.png`) }); throw new Error(`${error.message}\n${await page.locator('#policy-review-panel').innerText()}`); });
-    await page.locator('#install-button').click();
-    await page.locator('#install-message[data-outcome]').waitFor({ timeout: 240_000 });
-    assert.equal(await page.locator('#install-message').getAttribute('data-outcome'), 'installed', await page.locator('#install-message').innerText());
-    await page.waitForFunction(() => document.querySelectorAll('#installed-list li').length > 0, undefined, { timeout: 120_000 });
-    for (let attempt = 0; attempt < 100 && !answers.inventory?.selections?.some(selection => selection.item?.itemId === itemId); attempt++) await page.waitForTimeout(100);
-    const installed = answers.inventory.selections.filter(selection => selection.item?.itemId === itemId).map(selection => selection.tool).sort();
-    assert.deepEqual(installed, tools, 'Core installed it for each of those tools');
-    const files = answers.inventory.selections.filter(selection => selection.item?.itemId === itemId).flatMap(selection => selection.members.map(member => member.path));
-    assert.ok(files.length && files.every(path => existsSync(path) && path.startsWith(project)), 'every installed file is in the project');
-    await page.screenshot({ path: join(output, `your-tools-installed-${theme}.png`) });
+    await page.waitForFunction(() => /Can.t install yet|organi[sz]ation/i.test(document.getElementById('install-message')?.textContent ?? '')
+      || document.getElementById('install-button')?.disabled === false, undefined, { timeout: 180_000 });
+    const installText = (await page.locator('#install-message').innerText().catch(() => '')).trim();
+    const panel = (await page.locator('#policy-review-panel').innerText()).trim();
+    assert.equal(added.value.policy.mode, 'enterprise', 'an Enterprise Admin\'s setup is an Enterprise policy');
+    assert.equal(await page.locator('#install-button').isDisabled(), true, 'nothing installs without the organisation policy');
+    assert.match(installText, /organization source/, `Install says why: ${installText}`);
+    assert.ok(panel.length);
+    await page.screenshot({ path: join(output, `your-tools-install-${theme}.png`) });
     assert.deepEqual(errors, []);
     await writeFile(join(output, `your-tools-${theme}.json`), JSON.stringify({ chosen: chosen.map(tool => tool.id), judged: browse.tools.map(tool => tool.id),
-      refused: browse.refusedTools, addable, itemId, addedFor: tools, installedFor: installed, files: files.length, policyNote: noteText }, null, 2));
+      refused: browse.refusedTools, addable, itemId, addedFor: tools, policyMode: added.value.policy.mode, policyNote: noteText, install: installText }, null, 2));
     return { status: 'passed' };
+  } finally { await browser.close(); }
+}
+
+// E2: the owner's Enterprise Admin setup with a readable local organisation policy. Adding the Superpowers set must
+// compose an Enterprise policy, the one the organisation governs (as an Enterprise Developer's does, N1), and every
+// item it holds must install. Returns the composed policy, so a scouting run can learn what the organisation permits.
+export async function runEnterpriseAdminBrowser({ origin, output, project, playwrightModule, theme = 'dark', install = true, organizationFile }) {
+  const { chromium } = await import(playwrightModule);
+  await mkdir(output, { recursive: true });
+  const browser = await chromium.launch({ headless: true });
+  const errors = [];
+  try {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    const page = await context.newPage(); page.setDefaultTimeout(60_000);
+    page.on('pageerror', error => errors.push(error.message));
+    const held = { policy: undefined, inventory: undefined };
+    page.on('response', async response => {
+      const path = new URL(response.url()).pathname;
+      const body = await response.json().catch(() => undefined);
+      if (/\/api\/authoring-(new|edit)$/.test(path) && body?.status === 'ok' && Array.isArray(body.value?.policyBytes))
+        held.policy = JSON.parse(new TextDecoder().decode(Uint8Array.from(body.value.policyBytes)));
+      if (path === '/api/authoring-managed' && body?.selections) held.inventory = body;
+    });
+    await page.goto(origin + '/');
+    await page.locator('#browse-family option[value="Superpowers"]').waitFor({ state: 'attached' });
+    assert.equal(await page.locator('#setup-dialog').isVisible(), false, 'the saved setup opens the Workbench directly');
+    const destination = theme === 'light' ? 'Switch to light mode' : 'Switch to dark mode';
+    if (await page.getByRole('button', { name: destination, exact: true }).count()) await page.getByRole('button', { name: destination, exact: true }).first().click();
+    await page.waitForFunction(() => document.getElementById('your-tool-trigger').dataset.yourTool === 'listed');
+    await chooseCatalogFamily(page, 'Superpowers');
+    // The organisation policy's state, in words, before anything is added.
+    const note = page.locator('#organization-policy-note');
+    await note.waitFor();
+    assert.equal(await note.getAttribute('data-policy-state'), 'ok', await note.innerText());
+    assert.ok((await note.innerText()).includes(organizationFile), await note.innerText());
+    await page.locator('#starting-sets [data-add-sets]').click();
+    await page.waitForFunction(() => document.getElementById('framework-guidance').textContent.includes('Chosen sets added'));
+    for (let attempt = 0; attempt < 100 && !held.policy?.selections?.length; attempt++) await page.waitForTimeout(100);
+    const policy = held.policy;
+    assert.equal(policy?.mode, 'enterprise', 'an Enterprise Admin\'s setup is an Enterprise policy');
+    if (!install) return { status: 'passed', policy };
+    // Every selection carries the identity the organisation governs it by.
+    assert.ok(policy.selections.every(selection => typeof selection.organizationSelectionId === 'string'), 'every selection is governed by the organisation');
+    assert.equal(new Set(policy.selections.map(selection => selection.organizationSelectionId)).size, policy.selections.length);
+    await openPolicyDrawer(page);
+    await page.locator('#install-button:not([disabled])').waitFor({ timeout: 240_000 })
+      .catch(async error => { await page.screenshot({ path: join(output, `enterprise-admin-install-failed-${theme}.png`) }); throw new Error(`${error.message}\n${await page.locator('#policy-review-panel').innerText()}`); });
+    const authority = (await page.locator('#authority-source').textContent()).trim();
+    assert.ok(authority.includes(`Policy from ${organizationFile}`), authority);
+    await page.locator('#install-button').click();
+    await page.locator('#install-message[data-outcome]').waitFor({ timeout: 300_000 });
+    assert.equal(await page.locator('#install-message').getAttribute('data-outcome'), 'installed', await page.locator('#install-message').innerText());
+    await page.waitForFunction(() => document.querySelectorAll('#installed-list li').length > 0, undefined, { timeout: 120_000 });
+    for (let attempt = 0; attempt < 200 && (held.inventory?.selections?.length ?? 0) < policy.selections.length; attempt++) await page.waitForTimeout(100);
+    const installed = held.inventory.selections.map(selection => selection.managementId).sort();
+    assert.deepEqual(installed, policy.selections.map(selection => selection.managementId).sort(), 'every item of the Enterprise policy installed');
+    await page.screenshot({ path: join(output, `enterprise-admin-installed-${theme}.png`) });
+    assert.deepEqual(errors, []);
+    const facts = { policyMode: policy.mode, organizationGoverned: true, itemCount: installed.length, authority: authority.slice(0, 300),
+      tools: [...new Set(policy.selections.map(selection => selection.tool))] };
+    await writeFile(join(output, `enterprise-admin-${theme}.json`), JSON.stringify(facts, null, 2));
+    return { status: 'passed', policy, facts };
   } finally { await browser.close(); }
 }

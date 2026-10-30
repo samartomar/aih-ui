@@ -300,6 +300,7 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
   for (const { lead, tool: other, delivered, recipeless } of copies) {
     const { recipe: _leadRecipe, ...rest } = lead;
     const copy = { ...structuredClone(rest), id: toolCopyId(lead.id, other), managementId: toolCopyId(lead.managementId, other), tool: other,
+      ...(lead.organizationSelectionId !== undefined ? { organizationSelectionId: toolCopyId(lead.organizationSelectionId, other) } : {}),
       bindingDigest: delivered.rendered.bindingDigest, requires: lead.requires.map(id => copyIds.has(toolCopyId(id, other)) ? toolCopyId(id, other) : id) };
     if (recipeless) recipelessRecipes.set(copy.id, delivered.recipe); else copy.recipe = delivered.recipe;
     selections.push(copy);

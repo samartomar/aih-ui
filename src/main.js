@@ -17,6 +17,7 @@ import { organizationElements, shellElements, yourToolElements } from "./app/ele
 import { createYourTool } from "./app/your-tool.js";
 import { createOrganization } from "./app/organization.js";
 import { createTheme } from "./app/theme.js";
+import { authoringMode } from "./app/setup-model.js";
 import { createOnboarding } from "./app/onboarding.js";
 import { createPolicyWorkspace } from "./app/policy-workspace.js";
 import { createAuthoringClient } from './app/authoring-client.js';
@@ -54,7 +55,7 @@ async function main() {
       organization.setSettings(settings, location);
       policyWorkspace.setSettings(settings);
       authoringWorkspace.setSettings(settings);
-      void authoring.setMode(settings.experience === "enterprise" && settings.role === "developer" ? "enterprise" : "vibe");
+      void authoring.setMode(authoringMode(settings));
       void evidenceReview.setDefaultRecipient(settings.reviewer ?? null);
       catalog.setMode(settings);
       catalog.setOrganizationName(settings.role === "admin" ? settings.organization?.name ?? null : null);

@@ -877,7 +877,9 @@ installed for; changing Your tools does not silently rewrite them.
 
 Under Enterprise, the catalog says once whether the host-configured organization
 authority source was read, in the authority-source wording, and what to do when it
-was not. The policy repository in setup is a saved reference; the page never reads it.
+was not. The policy repository in setup is a saved reference; the page never reads it. Every Enterprise setup, Admin or
+Developer, composes an Enterprise policy that the host-configured organization policy governs; with no
+readable source, Add still works and Install says, in Core's words, that it needs one.
 
 The strip also carries the start-up contract-check message, as information
 that blocks nothing. At start-up the host runs the installed Core's
