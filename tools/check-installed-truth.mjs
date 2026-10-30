@@ -7,7 +7,8 @@
 // Each case gets a fresh disposable project and a real child host process (tools/installed-host.mjs).
 // update-one needs --update-pack: a Catalog pack of the installed package and version in which exactly one installed
 // ECC TypeScript rule changed. It installs through the page, restarts the host on that pack, updates the one item and
-// requires that only its files changed, with every selection's origins and configuration kept.
+// requires that Core read the update as an install (a 1.6.0 replacement with its policy, binding and Scan state), that
+// only its files changed, and that every selection kept its origins and configuration.
 // update-requirement needs --requirement-pack: the same, except the changed rule now also requires an item that is not
 // installed. The update must stop before Core is asked, name that item, and change no file.
 import { copyFile, cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
@@ -185,7 +186,7 @@ async function runUpdateOne({ project, output, playwrightModule, theme }) {
   if (now.updateState !== 'current' || now.members.some(member => member.fileState !== 'matches')) throw new Error(`${itemId} after the update: ${JSON.stringify({ updateState: now.updateState, members: now.members })}`);
   if (now.item.contentSha256 === target.item.contentSha256) throw new Error(`${itemId} is still recorded with its installed content`);
   await writeFile(join(output, `update-one-files-${theme}.json`), JSON.stringify({ itemId, changed: touched.map(path => ({ path, before: treeBefore[path], after: treeAfter[path] })),
-    unchanged: Object.keys(treeBefore).length - touched.length, selectionsKept: installed.inventory.selections.length,
+    unchanged: Object.keys(treeBefore).length - touched.length, selectionsKept: installed.inventory.selections.length, sent: updated.sent,
     configuration: { before: recordBefore[`project:${target.managementId}`], after: recordAfter[`project:${target.managementId}`] } }, null, 2));
   return { status: 'passed' };
 }

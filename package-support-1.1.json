@@ -324,10 +324,10 @@
       "fixtures": []
     },
     {
-      "id": "urn:aihq:core:managed-update-preparation:1.0.0",
+      "id": "urn:aihq:core:managed-update-preparation:1.1.0",
       "role": "accepts",
-      "schemaExport": "@aihq/core/schemas/managed-update-preparation/1.0.0.json",
-      "versions": ["1.0.0"],
+      "schemaExport": "@aihq/core/schemas/managed-update-preparation/1.1.0.json",
+      "versions": ["1.1.0"],
       "fixtures": []
     },
     {

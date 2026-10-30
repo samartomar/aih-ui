@@ -345,6 +345,9 @@ export async function runUpdateOneBrowser({ origin, output, playwrightModule, th
       .evaluateAll(rows => rows.map(row => row.dataset.installedRow));
     assert.deepEqual(offered, [selection.managementId], 'only the changed item shows "Update available"');
     const row = page.locator(`[data-installed-row="${selection.managementId}"]`);
+    // Every update the page asks for: what the host sent Core, and Core's answer to it.
+    const updates = [];
+    page.on('response', response => { if (response.url().endsWith('/api/authoring-update')) updates.push(response.json().catch(error => ({ unreadable: error.message }))); });
     await row.getByRole('button', { name: 'Update', exact: true }).click();
     const confirm = row.getByRole('button', { name: 'Confirm update', exact: true });
     await confirm.waitFor({ timeout: 240_000 });
@@ -356,11 +359,27 @@ export async function runUpdateOneBrowser({ origin, output, playwrightModule, th
     await page.waitForFunction(() => ['updated', 'failed', 'unknown', 'kept'].includes(document.getElementById('installed-message')?.dataset.outcome), undefined, { timeout: 240_000 });
     const result = await message.innerText();
     assert.equal(await message.getAttribute('data-outcome'), 'updated', result);
+    // The update was prepared as an install is: the host sent a 1.6.0 replacement Core renders from the named Catalog
+    // release, with its binding, and Core answered with managed update 1.1.0 and a review naming its binding and Scan state.
+    const answers = await Promise.all(updates);
+    assert.ok(answers.length >= 1, 'the page asked the host for the update');
+    const sent = answers.map(answer => {
+      assert.equal(answer.schema, 'urn:aihq:core:managed-update-preparation:1.1.0', `Core read a request naming its policy: ${JSON.stringify(answer).slice(0, 600)}`);
+      assert.equal(answer.disposition, 'prepared', JSON.stringify(answer.updates));
+      assert.equal(answer.request?.policy, 'urn:aihq:core:execution-policy:1.6.0', JSON.stringify(answer.request));
+      assert.ok(answer.request.catalogReleases >= 1, 'the request names the Catalog release');
+      assert.deepEqual(answer.request.replacements.map(({ managementId, recipe, bindingDigest }) => ({ managementId, recipe, bindingDigest })),
+        [{ managementId: selection.managementId, recipe: 'rendered-by-core', bindingDigest: true }]);
+      assert.equal(answer.preparation?.review?.schema, 'urn:aihq:core:prepared-work:1.7.0');
+      const reviewed = answer.preparation.review.selections.find(entry => entry.managementId === selection.managementId);
+      assert.ok(reviewed?.layout && reviewed.scanState, `the review names the replacement's binding and Scan state: ${JSON.stringify(reviewed)}`);
+      return { request: answer.request, schema: answer.schema, review: answer.preparation.review.schema, layout: reviewed.layout, scanState: reviewed.scanState };
+    });
     await page.screenshot({ path: join(output, `update-one-${theme}.png`), fullPage: true });
     const after = await freshInstalledList(browser, origin, theme, errors, { catalog: false });
     assert.deepEqual(errors, []);
-    await writeFile(join(output, `update-one-${theme}.json`), JSON.stringify({ status: 'passed', itemId, managementId: selection.managementId, review, result, errors }, null, 2));
-    return { status: 'passed', managementId: selection.managementId, members: selection.members.map(member => member.path), result, inventory: after.answers.inventory };
+    await writeFile(join(output, `update-one-${theme}.json`), JSON.stringify({ status: 'passed', itemId, managementId: selection.managementId, review, result, sent, errors }, null, 2));
+    return { status: 'passed', managementId: selection.managementId, members: selection.members.map(member => member.path), result, sent, inventory: after.answers.inventory };
   } finally { await browser.close(); }
 }
 

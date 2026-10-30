@@ -6,21 +6,42 @@ import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { apply, prepare, prepareManagedRemoval, prepareUpdate, listManagedSelections } from '@aihq/core';
 import { parsePolicy } from '@aihq/core/contracts';
-import updatePolicySchema from '@aihq/core/schemas/execution-policy/1.4.0.json' with { type: 'json' };
 import { composeAuthoring, freshAuthoring, inlineRecipelessSelections, unsuppliedInputs } from './headless.mjs';
 import { pinSelectedRecipes } from './selected-recipe.mjs';
 import { pageSource, readOrganization } from './authority-source.mjs';
 import { previewPolicyAuthority } from './organization.mjs';
 import { createInstallRecord, selectionKey } from './install-record.mjs';
 
-// Core's prepareUpdate takes each replacement as an execution policy 1.4.0 selection, so the fields later policies add
-// (the binding digest, Scan records and item materials) stay out of it, read from Core's own published schema. A
-// replacement can require only other replacements; Core keeps the dependency edges recorded at install.
-const updateSelectionFields = new Set(Object.keys(updatePolicySchema.properties.selections.items.properties));
-export function updateReplacement(selection, replacementIds) {
-  const replacement = Object.fromEntries(Object.entries(selection).filter(([field]) => updateSelectionFields.has(field)));
-  return { ...replacement, requires: (selection.requires ?? []).filter(id => replacementIds.has(id)) };
+/**
+ * Core's update request, prepared exactly as an install is: each replacement is the execution policy selection the
+ * composition produced (recipe-less, with its binding digest, Scan records and item materials), and the request names
+ * that policy's version, Catalog releases and Scan evidence, so Core renders, binds and checks it as at install.
+ * A replacement can require only other replacements; Core keeps the dependency edges recorded at install.
+ */
+export function updateRequest({ project, scope, updates }) {
+  const replacementIds = new Set(updates.map(({ selection }) => selection.id));
+  const schemas = new Set(updates.map(({ policy }) => policy.schema)), releases = new Map(), evidence = new Map();
+  if (schemas.size !== 1) return { diagnostics: [{ code: 'INPUT_INVALID', reason: 'policy-version-conflict', message: 'The replacements were composed in different execution policy versions.' }] };
+  for (const { policy } of updates) {
+    for (const release of policy.catalogReleases ?? []) {
+      if (releases.has(release.framework) && JSON.stringify(releases.get(release.framework)) !== JSON.stringify(release))
+        return { diagnostics: [{ code: 'INPUT_INVALID', reason: 'catalog-release-conflict', message: `The replacements name different bytes for the ${release.framework} Catalog release.` }] };
+      releases.set(release.framework, release);
+    }
+    for (const entry of policy.evidence ?? []) evidence.set(JSON.stringify(entry), entry);
+  }
+  const policy = { schema: [...schemas][0],
+    ...(releases.size ? { catalogReleases: [...releases.values()].sort((a, b) => a.framework < b.framework ? -1 : a.framework > b.framework ? 1 : 0) } : {}),
+    ...(evidence.size ? { evidence: [...evidence.values()] } : {}) };
+  const replacements = updates.map(({ managementId, selection, origins }) => ({ managementId, replacement: JSON.parse(JSON.stringify({ ...selection, managementId,
+    ...(Array.isArray(origins) ? { origins } : {}), requires: (selection.requires ?? []).filter(id => replacementIds.has(id)) })) }));
+  return { request: { target: { project }, scope, updates: replacements, policy } };
 }
+// What the host sent Core for an update, without its bytes: the policy version and, per replacement, whether Core renders
+// its recipe and whether it carries its binding digest, Scan records and item materials.
+const sentShape = request => ({ policy: request.policy.schema, catalogReleases: request.policy.catalogReleases?.length ?? 0,
+  replacements: request.updates.map(({ managementId, replacement }) => ({ managementId, recipe: replacement.recipe === undefined ? 'rendered-by-core' : 'inline',
+    bindingDigest: replacement.bindingDigest !== undefined, scanRecords: replacement.scanRecords !== undefined, itemMaterials: replacement.itemMaterials !== undefined })) });
 
 /**
  * The selections a replacement requires that an update cannot leave to Core. Core keeps the edges recorded at install,
@@ -174,25 +195,28 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
           ? { framework: update.item.framework, itemId: update.item.itemId } : undefined;
         const composed = await composeAuthoring({ intent, inventories, tool: recordedTool, ...(grantApproval ? { grantApproval } : {}) });
         if (composed.status !== 'ok') return { disposition: 'invalid', diagnostics: composed.diagnostics };
-        // An update request names no Catalog release, so the replacement carries its rendered recipe inline.
-        const selection = inlineRecipelessSelections({ policy: composed.value.policy, inventories }).selections.find(candidate => candidate.item?.itemId === root.itemId);
+        // The replacement is the selection exactly as an install of it is composed, naming its Catalog release.
+        const selection = composed.value.policy.selections.find(candidate => candidate.item?.itemId === root.itemId);
         if (!selection) return { disposition: 'invalid', diagnostics: [{ code: 'REPLACEMENT_UNAVAILABLE', message: `Catalog did not compose the explicit replacement ${root.itemId}.` }] };
-        composedUpdates.push({ update, install, selection, policySelections: composed.value.policy.selections });
+        composedUpdates.push({ update, install, selection, policy: composed.value.policy });
       }
       const replacementIds = new Set(composedUpdates.map(({ selection }) => selection.id));
       // Nothing the newer item requires is dropped without a word: what Core does not already keep stops the update here.
-      const missing = composedUpdates.flatMap(({ update, install, selection, policySelections }) =>
-        updateRequirements({ selection, policySelections, replacementIds, recordedRequires: install.requires, installed }).map(requirement => ({
+      // Core does not check a requirement the newer item adds against what is installed.
+      const missing = composedUpdates.flatMap(({ update, install, selection, policy }) =>
+        updateRequirements({ selection, policySelections: policy.selections, replacementIds, recordedRequires: install.requires, installed }).map(requirement => ({
           code: 'INPUT_INVALID', reason: requirement.installed ? 'requirement-not-recorded' : 'requirement-not-installed', managementId: update.managementId, item: requirement.item,
           message: requirement.installed ? `${requirement.item.itemId} was not required when ${update.managementId} was installed.` : `${requirement.item.itemId} is not installed.` })));
       if (missing.length) return { disposition: 'invalid', diagnostics: missing };
-      const replacements = composedUpdates.map(({ update, selection }) => ({ managementId: update.managementId, replacement: updateReplacement({ ...selection, managementId: update.managementId,
-        ...(Array.isArray(update.origins) ? { origins: structuredClone(update.origins) } : {}) }, replacementIds) }));
+      const sent = updateRequest({ project: projectRoot, scope, updates: composedUpdates.map(({ update, selection, policy }) => ({ managementId: update.managementId, selection, policy,
+        ...(Array.isArray(update.origins) ? { origins: structuredClone(update.origins) } : {}) })) });
+      if (!sent.request) return { disposition: 'invalid', diagnostics: sent.diagnostics };
       const installs = composedUpdates.map(({ update, install, selection }) => ({ ...install, id: selection.id,
         requires: [...new Set([...install.requires, ...(selection.requires ?? []).filter(id => replacementIds.has(id))
           .map(id => composedUpdates.find(other => other.selection.id === id)).map(other => selectionKey(other.selection.scope, other.update.managementId))])] }));
-      const result = await prepareUpdate({ target: { project: projectRoot }, scope, updates: replacements }, controlsFor(controls));
-      return { ...result, ...(result.preparation ? { preparation: retain(result.preparation, installs) } : {}) };
+      // The Scan evidence and release index an install's checks read, and Apply reads again.
+      const result = await prepareUpdate(sent.request, { ...controlsFor(controls), ...(currentIndex() ? { index: currentIndex() } : {}) });
+      return { ...result, request: sentShape(sent.request), ...(result.preparation ? { preparation: retain(result.preparation, installs) } : {}) };
     },
     async prepareFinishSession({ policyText, managementId, controls } = {}) {
       const parsed = parsePolicy(policyText);

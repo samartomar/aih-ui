@@ -41,6 +41,24 @@ test('a prepared entry whose policy preparation was refused names the preparatio
   assert.equal(preview.steps[0].state, 'blocked');
   assert.equal(preview.message, 'Update cannot go ahead: coding-style (typescript): Selection rule requires unknown selection notices. Nothing was updated.');
 });
+// Core checks a replacement's binding and Scan records as at install. A replacement rendered for a binding Core no
+// longer ships is a conflict in a partial review, named in its entry; it is stale at Apply, so it cannot be confirmed.
+test('a replacement Core finds rendered for another binding cannot be confirmed, and says why in Core\'s words', async () => {
+  const conflict = { code: 'STATE_CONFLICT', reason: 'binding-changed', message: 'coding-style was rendered for another binding of claude; render it again.' };
+  const preview = await ask({ schema: 'urn:aihq:core:managed-update-preparation:1.1.0', disposition: 'prepared', diagnostics: [], reviewDigest: 'd',
+    updates: [{ managementId: 'm-rule', disposition: 'prepared', members: [{ action: 'replace', path: '.claude/rules/typescript/coding-style.md' }], diagnostics: [conflict] }],
+    preparation: { status: 'partial', sessionId: 's', review: { reviewDigest: 'd', conflicts: [conflict] }, diagnostics: [conflict] } });
+  assert.equal(preview.canConfirm, false);
+  assert.equal(preview.steps[0].state, 'blocked');
+  assert.equal(preview.message, 'Update cannot go ahead: coding-style (typescript): coding-style was rendered for another binding of claude; render it again. Nothing was updated.');
+});
+// A refused preparation is no update at all: the request is not prepared and each entry carries Core's reasons.
+test('a preparation Core refused names each entry\'s reason', async () => {
+  const preview = await ask({ schema: 'urn:aihq:core:managed-update-preparation:1.1.0', disposition: 'not-prepared', diagnostics: [],
+    updates: [{ managementId: 'm-rule', disposition: 'invalid', members: [], diagnostics: [{ code: 'INPUT_INVALID', reason: 'scan-record-mismatch', message: 'The Scan record for coding-style does not match its bytes.' }] }] });
+  assert.equal(preview.canConfirm, false);
+  assert.equal(preview.message, 'Update cannot go ahead: coding-style (typescript): The Scan record for coding-style does not match its bytes. Nothing was updated.');
+});
 test('a refusal without Core diagnostics still says what Core answered', async () => {
   const preview = await ask({ disposition: 'prepared', diagnostics: [], updates: [{ managementId: 'm-rule', disposition: 'prepared', members: [], diagnostics: [] }], preparation: { status: 'blocked', diagnostics: [] } });
   assert.equal(preview.canConfirm, false);

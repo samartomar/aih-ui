@@ -28,10 +28,11 @@ export async function previewUpdate({ entries, request, tool, nameOf }) {
   const steps = entries.map((entry, index) => {
     const update = result.updates?.[index];
     if (!update) return { entry, state: 'blocked', members: [], message: `Cannot update: ${diagnosticWords(result) || `Core returned no update for this item (${result.disposition ?? 'no answer'})`}.` };
-    // A prepared entry is reviewable only inside a ready preparation; otherwise the preparation's reasons are its reasons.
-    const reviewable = update.disposition === 'prepared' && Boolean(preparation);
+    // A prepared entry is reviewable only inside a ready preparation and when Core names no conflict of its own, such as a
+    // replacement rendered for a binding Core no longer ships; otherwise the entry's or the preparation's reasons are its reasons.
+    const reviewable = update.disposition === 'prepared' && Boolean(preparation) && !update.diagnostics?.length;
     const reason = update.disposition === 'prepared'
-      ? diagnosticWords(update, result, result.preparation) || `Core prepared no review (${result.preparation?.status ?? 'no preparation'})`
+      ? diagnosticWords(update) || diagnosticWords(result, result.preparation) || `Core prepared no review (${result.preparation?.status ?? 'no preparation'})`
       : diagnosticWords(update, result) || update.disposition;
     return { entry, state: reviewable ? 'ready' : 'blocked', members: update.members ?? [],
       from: update.from, to: update.to,
