@@ -26,7 +26,8 @@ export async function runMcpFailedRunBrowser({ origin, output, project, playwrig
     await openPolicyDrawer(page);
     await page.locator('#install-button:not([disabled])').waitFor();
     await mkdir(join(project, '.mcp.json'), { recursive: true });
-    const applied = page.waitForResponse(response => response.url().endsWith('/api/authoring-apply'), { timeout: 120_000 });
+    // Install runs as a host job; Core's run is the first answer that is not 'running'.
+    const applied = page.waitForResponse(response => /\/api\/authoring-apply(-status)?$/.test(response.url()) && response.json().then(value => value.status !== 'running', () => false), { timeout: 120_000 });
     await page.locator('#install-button').click();
     const run = await (await applied).json();
     assert.ok(['incomplete', 'cancelled', 'rejected'].includes(run.completion), JSON.stringify(run));

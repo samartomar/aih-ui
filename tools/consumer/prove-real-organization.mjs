@@ -157,7 +157,7 @@ try {
   const removalResponse = recoveryPage.waitForResponse(r => r.url().endsWith('/api/authoring-remove')); await recoveryPage.getByRole('button', { name: `Review removal ${f.withdrawnSelection.managementId}`, exact: true }).click();
   const removal = await capture('permitted-removal-prepare', await (await removalResponse).json());
   assert.equal(removal.preparation?.status, 'ready', JSON.stringify(removal));
-  const removalApply = recoveryPage.waitForResponse(r => r.url().endsWith('/api/authoring-apply')); await recoveryPage.locator('#apply:not([disabled])').click();
+  const removalApply = recoveryPage.waitForResponse(r => /\/api\/authoring-apply(-status)?$/.test(r.url()) && r.json().then(body => body.status !== 'running', () => false)); await recoveryPage.locator('#apply:not([disabled])').click();
   const removed = await capture('permitted-removal-apply', await (await removalApply).json());
   assert.equal(removed.completion, 'complete', JSON.stringify(removed));
   const managed = await capture('retained-managed', await recovery.managedInventory());

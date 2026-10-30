@@ -18,6 +18,8 @@ export function importLimitError(size, bytes) {
 // Pending owner approval as contract amendment 3.2.3 row 18.
 export const ENTERPRISE_SETUP_NOTICE = "These choices were made outside your organisation's policy. Start a new Enterprise setup to install them under it.";
 const refusal = (code, message) => ({ status: 'refused', diagnostics: [{ code, message }] });
+const APPLY_POLL_MS = 1000, APPLY_LOST_POLLS = 60;
+const applyUnknown = message => ({ status: 'unknown', diagnostics: [{ code: 'APPLY_UNKNOWN', message }] });
 const asDraft = ({ originalBytes: _kept, ...value }) => ({ ...value,
   envelopeBytes: Uint8Array.from(value.envelopeBytes), savedIntentBytes: Uint8Array.from(value.savedIntentBytes) });
 
@@ -61,6 +63,10 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
   // What a maintenance or improvement check or record reads: the open draft's envelope, else the ordinary policy that is open.
   const maintenanceInput = () => draftValue ? { envelopeBytes: [...draftValue.envelopeBytes] } : intent ? { bytes: [...bytes] } : undefined;
   async function request(operation, body = {}) {
+    if (operation === 'apply') return applyInBackground(body);
+    return send(operation, body);
+  }
+  async function send(operation, body) {
     const response = await fetch(`/api/authoring-${operation}`, {
       method: 'POST', headers: { ...headers, 'content-type': 'application/json' },
       body: JSON.stringify({ policyBytes: [...bytes], reviewEvidence: reviewEvidence.map(value => [...value]), ...(reviewEvidenceIds.length ? { reviewEvidenceIds } : {}), ...(recipient ? { recipient } : {}), ...(selectedTool ? { tool: selectedTool } : {}), ...body }),
@@ -68,6 +74,22 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error ?? JSON.stringify(result));
     return result;
+  }
+  // Apply runs as a host job (a large setup takes Core minutes, beyond what one request may wait). The page asks for its
+  // result until Core has returned one, so what it reports is what Core returned. A host that no longer holds the job, or
+  // one the page cannot reach for APPLY_LOST_POLLS polls in a row, is an unknown outcome, never a failure or a success.
+  async function applyInBackground(body) {
+    const started = await send('apply', { ...body, background: true });
+    // Refused before Core started (or an older host that answers at once): that answer is the result.
+    if (started?.status !== 'running' || typeof started.applyId !== 'string') return started;
+    for (let lost = 0; ;) {
+      await new Promise(done => setTimeout(done, APPLY_POLL_MS));
+      const result = await fetch('/api/authoring-apply-status', { method: 'POST', headers: { ...headers, 'content-type': 'application/json' },
+        body: JSON.stringify({ applyId: started.applyId }) }).then(response => response.ok ? response.json() : undefined).catch(() => undefined);
+      if (!result) { if (++lost >= APPLY_LOST_POLLS) return applyUnknown('This page lost contact with the Workbench while Install was running.'); continue; }
+      lost = 0;
+      if (result.status !== 'running') return result;
+    }
   }
   // Adopts an opened draft: the policy becomes its original bytes, never the envelope.
   // Draft requests carry the envelope alone: it already holds the saved policy bytes, and sending them

@@ -126,3 +126,9 @@ test('Install says why it is unavailable when the review has nothing to change (
   // Files already in place are still checked again by Install, as before.
   assert.equal(nothingToInstall({ roots: [{ itemId: 'x' }], rows: [{ action: 'Already in place', path: 'a' }] }), '');
 });
+test("an Install whose answer never arrived is unknown and points at Core's list, never failed or installed", () => {
+  const unknown = installOutcome({ status: 'unknown', diagnostics: [{ code: 'APPLY_UNKNOWN', message: 'This page lost contact with the Workbench while Install was running.' }] }, [], project);
+  assert.equal(unknown.ok, false);
+  assert.equal(unknown.state, 'unknown');
+  assert.equal(unknown.message, 'Install outcome unknown: This page lost contact with the Workbench while Install was running. Your installed list shows what Core recorded; check it before installing again.');
+});

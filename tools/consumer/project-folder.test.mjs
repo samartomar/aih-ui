@@ -138,3 +138,30 @@ test('changing the folder is refused while Install is preparing or applying, and
   assert.deepEqual(await get('project'), { project: folderA, source: 'host-default' });
   assert.equal((await call('project', { path: folderB })).status, 'ok');
 }, { createExecutionHost: held.createExecutionHost }));
+
+// Install's Apply as a host job: the request that starts it answers at once, Core keeps working, the folder stays held,
+// and only the client that started it reads Core's run once Core has returned it.
+const background = heldHost();
+test('a background Apply answers at once, holds the folder while Core works, and hands its starter Core\'s run', () => withConsumer(async ({ call, anonymous, get, folderA, folderB }) => {
+  const policyBytes = await policyFor(call, get);
+  let entered = background.entered();
+  const preparing = call('prepare', { policyBytes }); await entered; background.gate.release();
+  const prepared = await preparing;
+  entered = background.entered();
+  const started = await call('apply', { sessionId: prepared.sessionId, reviewDigest: prepared.review.reviewDigest, background: true });
+  assert.equal(started.status, 'running'); assert.match(started.applyId, /^[0-9a-f-]{36}$/);
+  await entered;
+  assert.equal((await call('apply-status', { applyId: started.applyId })).status, 'running');
+  assert.equal((await call('project', { path: folderB })).code, 'FOLDER_BUSY');
+  const other = await anonymous('apply-status', { applyId: started.applyId });
+  assert.equal(other.status, 'unknown'); assert.equal(other.diagnostics[0].code, 'APPLY_UNKNOWN');
+  assert.equal((await call('apply-status', { applyId: 'not-a-job' })).status, 'unknown');
+  background.gate.release();
+  let run;
+  for (let attempt = 0; attempt < 600 && (!run || run.status === 'running'); attempt++) { run = await call('apply-status', { applyId: started.applyId }); if (run.status === 'running') await new Promise(done => setTimeout(done, 50)); }
+  assert.equal(run.completion, 'complete', JSON.stringify(run.diagnostics));
+  assert.ok(run.members.every(member => member.path.startsWith(folderA)));
+  // Read again, the same run: an answer lost on the way is not lost for good.
+  assert.equal((await call('apply-status', { applyId: started.applyId })).runId, run.runId);
+  assert.equal((await call('project', { path: folderB })).status, 'ok');
+}, { createExecutionHost: background.createExecutionHost }));

@@ -107,6 +107,19 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
   // Session ids prepared for an earlier project folder, so applying one is refused by name. Bounded; older ones read as lost.
   const retired = new Set();
   const retire = old => { for (const id of old?.heldSessions() ?? []) { retired.add(id); if (retired.size > 1024) retired.delete(retired.values().next().value); } };
+  // An Apply the page runs in the background: Core's Apply of a large setup outlasts the time limits of a single HTTP
+  // request (fetch waits at most 300 s for response headers), so the request that starts it answers at once and Core
+  // keeps working whatever happens to that connection. The page reads the result Core returned with apply-status,
+  // only from the client that started it. Bounded; finished jobs are forgotten oldest first.
+  const applyJobs = new Map();
+  const startApplyJob = (clientId, work) => {
+    const applyId = randomUUID(), job = { clientId, started: Date.now(), result: undefined };
+    work().then(result => { job.result = result; },
+      error => { job.result = { status: 'failed', diagnostics: [{ code: 'APPLY_FAILED', message: error.message }] }; });
+    applyJobs.set(applyId, job);
+    for (const [id, value] of applyJobs) { if (applyJobs.size <= 32) break; if (value.result) applyJobs.delete(id); }
+    return applyId;
+  };
   // The ordinary page's project folder. A switch replaces every execution host, discarding all prepared sessions;
   // personal-folder grants and their staged material roots are kept, since they are about content, not the project.
   const folder = createProjectFolder({ initial: projectRoot, options: { coreState }, beforeChange: stageAuthoringRoots, onChange: project => {
@@ -210,6 +223,12 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
         const client = await clientFor(request), mixedService = client.mixed;
         const operation = pathname.slice('/api/authoring-'.length);
         if (operation === 'scan-evidence-detail') return send(response, 200, client.scanEvidence.detail(body.scanId));
+        if (operation === 'apply-status') {
+          const job = applyJobs.get(body.applyId);
+          if (!job || job.clientId !== (request.headers['x-aih-client'] ?? null)) return send(response, 200, { status: 'unknown', diagnostics: [{ code: 'APPLY_UNKNOWN',
+            message: 'This Workbench holds no Install with that id, so it cannot say what that Install wrote.' }] });
+          return send(response, 200, job.result ?? { status: 'running', elapsedMs: Date.now() - job.started });
+        }
         if (body.reviewEvidenceIds !== undefined) {
           const ids = body.reviewEvidenceIds;
           if (!Array.isArray(ids) || ids.length > 32 || new Set(ids).size !== ids.length || ids.some(id => typeof id !== 'string' || !/^scan:sha256:[a-f0-9]{64}$/.test(id))) return send(response, 200, { status: 'refused', diagnostics: [{ code: 'EVIDENCE_UNAVAILABLE', message: 'Supply up to 32 unique acquired Scan identities.' }] });
@@ -277,7 +296,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
           if (operation === 'apply' && retired.has(body.sessionId)) return send(response, 200, folderChanged());
           // Lifecycle operations hold the current folder until they finish; the host is read once they hold it.
           const work = ['prepare', 'finish', 'apply', 'remove', 'update'].includes(operation) ? folder.run : action => action();
-          return send(response, 200, await work(async () => {
+          const perform = () => work(async () => {
             const moved = ['prepare', 'finish', 'apply', 'remove', 'update'].includes(operation) ? await folderMoved() : undefined;
             if (moved) return moved;
             const policyText = new TextDecoder().decode(Uint8Array.from(body.policyBytes ?? []));
@@ -295,7 +314,9 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
               : operation === 'managed' ? await host.managedInventory()
               : operation === 'update' ? await host.prepareUpdateSession({ updates: body.updates, scope: body.scope, tool: body.tool })
               : await host.prepareRemovalSession({ managementId: body.managementId, removals: body.removals, scope: body.scope, mode: body.mode });
-          }));
+          });
+          if (operation === 'apply' && body.background === true) return send(response, 200, { status: 'running', applyId: startApplyJob(request.headers['x-aih-client'] ?? null, perform) });
+          return send(response, 200, await perform());
         }
         const reviewIntent = pathname === '/api/authoring-inspect-review' && reviewTrust && body.policyBytes ? (await mixedService.run('read', body)).value?.intent : undefined;
         const reviewPin = reviewIntent?.pins.find(pin => pin.releaseSha256 === body.target?.releaseSha256 && pin.itemId === body.target?.itemId);

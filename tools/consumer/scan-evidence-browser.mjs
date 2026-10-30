@@ -136,7 +136,7 @@ export async function runScanEvidenceBrowser({origin,output,fixtureRoot,sourcePa
     const downloaded=await download('original-untrusted.evidence.json',()=>panel.getByRole('button',{name:'Download original Scan evidence',exact:true}).click());assert.equal(hash(downloaded),fixture.variants.untrusted.sha256);
     await page.screenshot({path:join(output,'04-authentication-gaps.png'),fullPage:true});
     // The original held preparation remains executable; view changes did not replace it.
-    const applyEvent=page.waitForResponse(value=>value.url().endsWith('/api/authoring-apply'));await openSetupAdvanced(page, 'Sources and execution').then(() => page.getByRole('button',{name:'Approve and Apply reviewed effects',exact:true}).click());
+    const applyEvent=page.waitForResponse(value=>/\/api\/authoring-apply(-status)?$/.test(value.url())&&value.json().then(body=>body.status!=='running',()=>false));await openSetupAdvanced(page, 'Sources and execution').then(() => page.getByRole('button',{name:'Approve and Apply reviewed effects',exact:true}).click());
     const applied=await(await applyEvent).json();assert.equal(applied.completion,'complete',JSON.stringify(applied));assert.equal(hash(await readFile(join(dirname(output),'project/alpha.txt'))),item.materials[0].sha256);steps.push('original-prepared-handle-applies-after-view-changes');
     const headlessPolicy=await readAuthoring({policyBytes:after,inventories:[inventory],reviewEvidence:[new Uint8Array(await readFile(join(fixtureRoot,'s1.json')))]});assert.equal(headlessPolicy.status,'ok');assert.equal(headlessPolicy.value.reviewJudgments[0].applicability,'applies');
     // Same selected bytes under Core's organization boundary, through the real host/public admission.

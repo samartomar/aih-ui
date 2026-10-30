@@ -92,7 +92,7 @@ export async function runUi168UpdateVerifyBrowser({ origin, output, project, pla
     if (edited) await appendFile(join(project, '.aih-extensions', 'notices', 'NOTICE.md'), '\nLocal edit must survive.\n');
     const { context, page } = await openPage(browser, origin, theme);
     const applies = [];
-    page.on('response', response => { if (response.url().endsWith('/api/authoring-apply')) void response.json().then(value => applies.push(value)).catch(() => {}); });
+    page.on('response', response => { if (/\/api\/authoring-apply(-status)?$/.test(response.url())) void response.json().then(value => { if (value.status !== 'running') applies.push(value); }).catch(() => {}); });
     await openPolicyDrawer(page);
     const installed = page.locator('[data-installed-other]').filter({ hasText: 'Review note' }).first();
     await installed.waitFor();

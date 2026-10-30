@@ -51,7 +51,7 @@ export async function runUi168InterruptedVerifyBrowser({ origin, output, saved, 
   try {
     const { context, page } = await openPage(browser, origin, theme);
     const applies = [];
-    page.on('response', response => { if (response.url().endsWith('/api/authoring-apply')) void response.json().then(value => applies.push(value)).catch(() => {}); });
+    page.on('response', response => { if (/\/api\/authoring-apply(-status)?$/.test(response.url())) void response.json().then(value => { if (value.status !== 'running') applies.push(value); }).catch(() => {}); });
     page.on('pageerror', error => errors.push(error.message));
     await openPolicyWorkspace(page); await openPolicyFileActions(page);
     await page.locator('#policy-open').setInputFiles(saved);

@@ -280,3 +280,35 @@ for (const [name, answer] of [['is refused', async () => response({ status: 'ref
     assert.equal(client.modeMismatch, true);
   });
 }
+// Install's Apply is a host job: the page asks for Core's result until there is one.
+function scripted(t, answers) {
+  const sent = [], previous = globalThis.fetch;
+  globalThis.fetch = async (url, init) => { sent.push({ url, body: JSON.parse(init.body) }); const next = answers.shift(); if (next instanceof Error) throw next; return next; };
+  t.after(() => { globalThis.fetch = previous; }); return sent;
+}
+async function settle(t, promise) {
+  let done = false; promise.then(() => { done = true; }, () => { done = true; });
+  for (let step = 0; step < 500 && !done; step++) { await new Promise(resolve => setImmediate(resolve)); t.mock.timers.tick(1000); }
+  return promise;
+}
+test("Apply returns Core's run once the host has one, never the running answer", async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const run = { schema: 'urn:aihq:core:run-result:1.5.0', completion: 'complete', members: [] };
+  const sent = scripted(t, [response({ status: 'running', applyId: 'job-1' }), response({ status: 'running', elapsedMs: 1000 }), new TypeError('fetch failed'), response(run)]);
+  const result = await settle(t, createAuthoringClient().request('apply', { sessionId: 's', reviewDigest: 'd' }));
+  assert.deepEqual(result, run);
+  assert.equal(sent[0].url, '/api/authoring-apply'); assert.equal(sent[0].body.background, true); assert.equal(sent[0].body.sessionId, 's');
+  assert.deepEqual(sent.slice(1).map(entry => [entry.url, entry.body]), Array(3).fill(['/api/authoring-apply-status', { applyId: 'job-1' }]));
+});
+test('Apply refused before Core started is that answer, with nothing polled', async t => {
+  const refused = { status: 'rejected', reason: 'folder-changed', diagnostics: [] };
+  const sent = scripted(t, [response(refused)]);
+  assert.deepEqual(await createAuthoringClient().request('apply', { sessionId: 's', reviewDigest: 'd' }), refused);
+  assert.equal(sent.length, 1);
+});
+test('an Apply whose answer cannot be reached is unknown, never failed or installed', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  scripted(t, [response({ status: 'running', applyId: 'job-2' }), ...Array(60).fill(new TypeError('fetch failed'))]);
+  const result = await settle(t, createAuthoringClient().request('apply', { sessionId: 's', reviewDigest: 'd' }));
+  assert.equal(result.status, 'unknown'); assert.equal(result.diagnostics[0].code, 'APPLY_UNKNOWN');
+});

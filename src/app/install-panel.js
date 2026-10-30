@@ -44,6 +44,8 @@ export function installOutcome(run, files, project) {
   if (!run) return { ok: false, message: 'Install did not return a result. Check the files below before trying again.' };
   // The page moved on after sending Apply; the host may already have written files.
   if (run.status === 'superseded') return { ok: false, message: 'The page changed while Install was running, so it cannot tell whether any files were written. Check what is installed in this project before installing again.' };
+  // Core's result never reached the page: it may have finished, so this is neither a failure nor a success.
+  if (run.status === 'unknown') return { ok: false, state: 'unknown', message: `Install outcome unknown: ${[...(run.diagnostics ?? [])].map(diagnostic => diagnostic.message ?? diagnostic.code).join(' ')} Your installed list shows what Core recorded; check it before installing again.` };
   // Run result 1.4: Core checked each touched member directly on disk. Only a complete run whose every intended
   // write member was written and found present-matching is confirmed; kept, restored, unchecked, absent or
   // present-different members never are, and no other shape of result makes that claim.
