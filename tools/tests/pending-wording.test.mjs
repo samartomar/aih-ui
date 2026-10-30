@@ -22,6 +22,8 @@ const ROWS = [
   [32, 'src/app/installed-list.js', ' (earlier release)'],
   [33, 'src/app/installed-list.js', 'Kept; also part of a set this catalog no longer offers'],
   [34, 'src/app/installed-list.js', 'Kept; also part of another release of this set'],
+  [35, 'src/catalog/item-name.js', ' earlier item'],
+  [36, 'src/app/install-panel.js', 'declares to run first. It does not run by itself.'],
 ];
 for (const [row, file, sentence] of ROWS) test(`row ${row}: "${sentence.trim()}" is marked pending in ${file}`, () => {
   const lines = readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8').split('\n');

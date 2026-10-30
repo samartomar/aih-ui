@@ -90,9 +90,10 @@ async function showFirstRun(client, review, line) {
 export function firstRunWords(entries, frameworks) {
   return entries.map(entry => {
     const name = setDisplayName(frameworks, entry.set);
+    // Pending owner approval as contract amendment 3.2.3 row 36.
     return entry.firstRun
       ? `First step: ${entry.firstRun.name} (${entry.firstRun.kind}) — the step ${name ? `its set ${name}` : 'its set'} declares to run first. It does not run by itself.`
-      : `First-step guidance unavailable for ${name ? `set ${name}` : UNNAMED_SET.toLowerCase()}: ${entry.reason}`;
+      : `First-step guidance unavailable for ${name ? `set ${name}` : UNNAMED_SET}: ${entry.reason}`;
   }).join(' ');
 }
 
@@ -151,7 +152,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
   // Named prepared-work 1.6 rows: Core's selections name them; operations attach by published selectionId;
   // blockers and global lines are Core's words, verbatim (#165).
   function namedRows(review, operationSelections, project) {
-    const setName = set => setDisplayName(client.catalog?.frameworks, set) ?? UNNAMED_SET;
+    const setName = set => setDisplayName(client.catalog?.frameworks, set) ?? `${UNNAMED_SET[0].toUpperCase()}${UNNAMED_SET.slice(1)}`;
     const { rows, global, excluded } = reviewRows(review, { operationSelections, items: client.catalog?.items ?? [] });
     const rowNode = row => {
       const item = el('li', 'space-y-0.5'); item.dataset.reviewSelection = row.selectionId;

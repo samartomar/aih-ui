@@ -552,14 +552,17 @@ export async function runNeededRemovalTruthBrowser({ origin, output, project, pl
   } finally { await browser.close(); }
 }
 
-// Raw identities in a screen's visible text: every Catalog item id (and those of the items they replace) and set id, every Core management id and recorded
-// set id, and every sha256 (or its 16-character prefix) the page's Catalog and Core answers carry. An id is matched
-// as a whole token, not inside a path or a longer id; an id that is one plain word (a set id such as "engineering") only
-// where it stands alone as a line, as a label would, since prose uses the word too. An id that is also a published name
-// (an item or set named by its id) is a name, and is skipped. Catalog's own descriptions are shown as Catalog wrote
-// them (an MCP server's provider note may name another item), so that prose is taken out before the scan.
-const TOKEN = /[A-Za-z0-9_./-]/;
+// Raw identities in a screen's visible text: every Catalog item id (and those of the items they replace) and set id,
+// every Core management id and recorded set id, and every sha256, whole or as a prefix of 7 or more characters, that the
+// page's Catalog and Core answers carry. Text is read as words and path segments, a trailing ".", "," or "/" trimmed,
+// and each checked against the known ids, so an id ending a sentence or inside an id path is found while a file path,
+// even one with a folder named after an item, is not. An id that is one plain word (a set id such as "misc") is a word prose uses too, so it counts only where it
+// stands alone as a line or follows the words this page introduces an id with ("set ", "from ", "Also in: ",
+// "Required by ", "Replaces"). An id that is also a published name (an item or set named by its id) is a name, and is
+// skipped. Catalog's own descriptions are shown as Catalog wrote them (an MCP server's provider note may name another
+// item), so that prose is taken out before the scan.
 const prose = value => value.replace(/\s+/g, ' ').trim();
+const INTRODUCED = /(?:\bset |\bfrom |\bAlso in: |\bRequired by |\bReplaces\s+)([a-z]+)(?![A-Za-z0-9_.-])/g;
 export function rawIdentities(text, { catalog, inventory }) {
   const descriptions = [...new Set([...catalog.items.map(item => item.description),
     ...catalog.frameworks.flatMap(framework => [framework.description, ...(framework.sets ?? []).map(set => set.description)])]
@@ -577,27 +580,34 @@ export function rawIdentities(text, { catalog, inventory }) {
     ids.set(selection.managementId, 'management id'); if (selection.item?.itemId) ids.set(selection.item.itemId, 'item id');
     for (const set of setOrigins(selection)) ids.set(set.setId, 'set id');
   }
-  const found = [], named = [];
-  for (const [id, what] of ids) {
-    if (typeof id !== 'string' || !id) continue;
-    if (names.has(id)) { named.push(id); continue; }
-    if (/^[a-z]+$/.test(id)) {
-      if (lines(text).includes(id)) found.push({ what, value: id, context: `${id} (a line of its own)` });
-      continue;
-    }
-    for (let at = text.indexOf(id); at !== -1; at = text.indexOf(id, at + 1)) {
-      if (TOKEN.test(text[at - 1] ?? '') || TOKEN.test(text[at + id.length] ?? '')) continue;
-      found.push({ what, value: id, context: text.slice(Math.max(0, at - 60), at + id.length + 60) });
-      break;
+  const found = [], named = new Set(), seen = new Set();
+  const report = (id, context) => {
+    const what = ids.get(id);
+    if (!what || seen.has(id)) return;
+    if (names.has(id)) { named.add(id); return; }
+    seen.add(id); found.push({ what, value: id, context });
+  };
+  const word = id => /^[a-z]+$/.test(id);
+  for (const line of lines(text)) {
+    if (word(line)) report(line, `${line} (a line of its own)`);
+    // A file path (rooted, relative to a dot folder, or ending in a file name) is where a file goes; a folder Core names
+    // after an item is part of it, not a label, so it is not split.
+    const filePath = token => /^(?:[./~]|[A-Za-z]:[\\/])/.test(token) || /\/[^/]*\.[A-Za-z0-9]{1,8}$/.test(token);
+    for (const token of line.split(/[\s;:()"'“”‘’[\]·—→]+/)) for (const part of [token, ...(filePath(token) ? [] : token.split('/'))]) {
+      const trimmed = part.replace(/[.,/]+$/, '');
+      if (trimmed && !word(trimmed)) report(trimmed, line);
     }
   }
-  const shas = new Set(JSON.stringify([catalog, inventory ?? null]).match(/[0-9a-f]{64}/g) ?? []);
-  for (const sha of shas) {
-    const at = text.indexOf(sha.slice(0, 16));
-    if (at !== -1) found.push({ what: 'sha256', value: sha, context: text.slice(Math.max(0, at - 60), at + 76) });
+  for (const match of text.matchAll(INTRODUCED)) report(match[1], text.slice(Math.max(0, match.index - 40), match.index + match[0].length + 40));
+  const shas = [...new Set(JSON.stringify([catalog, inventory ?? null]).match(/[0-9a-f]{64}/g) ?? [])];
+  for (const match of text.matchAll(/(?<![0-9A-Za-z])[0-9a-f]{7,}(?![0-9A-Za-z])/g)) {
+    if (/^\d+$/.test(match[0])) continue; // a number, such as a byte count
+    const context = text.slice(Math.max(0, match.index - 60), match.index + match[0].length + 60);
+    const sha = shas.find(value => value.startsWith(match[0]));
+    if (sha) found.push({ what: 'sha256', value: sha, context });
+    else if (match[0].length === 64) found.push({ what: 'sha256', value: match[0], context });
   }
-  for (const match of text.matchAll(/[0-9a-f]{64}/g)) if (!shas.has(match[0])) found.push({ what: 'sha256', value: match[0], context: text.slice(Math.max(0, match.index - 60), match.index + 124) });
-  return { found, named: [...new Set(named)] };
+  return { found, named: [...named] };
 }
 
 // Pick, review, Your setup, install and the installed list say names only. Two overlapping Extensions sets are picked,

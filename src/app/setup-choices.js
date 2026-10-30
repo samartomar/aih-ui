@@ -43,7 +43,10 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
   node.append(title, empty, list, hostLine);
   let removing = false;
   // A saved set request by the name Catalog publishes for it; its exact identity stays in the tooltip.
-  const setName = request => setDisplayName(client.catalog?.frameworks, { releaseSha256: request?.release?.releaseSha256, setId: request?.setId, setSha256: request?.setSha256 }) ?? UNNAMED_SET;
+  const setLabel = request => setDisplayName(client.catalog?.frameworks, { releaseSha256: request?.release?.releaseSha256, setId: request?.setId, setSha256: request?.setSha256 });
+  // "set {name}", or row 33's words for a set this Catalog no longer offers.
+  const ofSet = request => { const name = setLabel(request); return name ? `set ${name}` : UNNAMED_SET; };
+  const setName = request => { const name = setLabel(request); return name ?? `${UNNAMED_SET[0].toUpperCase()}${UNNAMED_SET.slice(1)}`; };
 
   function line({ root, item, name, needed }) {
     const row = el('li', 'flex flex-wrap items-center gap-x-2 gap-y-0.5'); row.dataset.choiceItem = root.itemId;
@@ -133,7 +136,7 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
       const section = el('li', 'space-y-1'); section.dataset.leftOut = key;
       const heading = el('p', 'text-[11px] font-medium text-on-surface-variant');
       if (group.request) {
-        heading.textContent = `Left out from ${setName(group.request)}`;
+        heading.textContent = `Left out from ${setLabel(group.request) ?? UNNAMED_SET}`;
         heading.title = key;
         heading.dataset.leftOutSet = group.request.setId;
       } else if (key === 'unknown') { heading.textContent = 'Left out — origin no longer recorded'; heading.dataset.leftOutSet = 'unknown'; }
@@ -148,7 +151,7 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
           : itemDisplayName(byKey.get(`${exclusion.releaseSha256}/${exclusion.itemId}`), exclusion.itemId);
         const setFramework = frameworkOf.get(group.request?.release?.releaseSha256);
         const cross = exclusion.memberFramework && setFramework && exclusion.memberFramework !== setFramework ? ` [${exclusion.memberFramework}]` : '';
-        const why = exclusion.reason ? ` — ${exclusion.reason}` : exclusion.setLeftOut ? ` — left out of set ${group.request ? setName(group.request) : ''}`.replace(/ $/, '') : ' — recorded left-out choice';
+        const why = exclusion.reason ? ` — ${exclusion.reason}` : exclusion.setLeftOut ? ` — left out of ${group.request ? ofSet(group.request) : 'set'}` : ' — recorded left-out choice';
         row.textContent = `${name}${cross}${exclusion.scope === 'user' ? ' (your folders)' : ''}${why}`;
         row.dataset.leftOutItem = exclusion.itemId;
         rows.append(row);
@@ -213,7 +216,7 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
         }
         // Q7-R2: every further membership is named; its exact identity stays in the tooltip.
         if (all.length > 1) {
-          const also = el('span', 'ml-2 text-on-surface-variant text-[11px]', `Also in: ${all.slice(1).map(setName).join(', ')}`);
+          const also = el('span', 'ml-2 text-on-surface-variant text-[11px]', `Also in: ${all.slice(1).map(request => setLabel(request) ?? UNNAMED_SET).join(', ')}`);
           also.title = all.slice(1).map(keyOf).join(', ');
           row.children[0].append(also);
         }
