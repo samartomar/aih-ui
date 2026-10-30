@@ -127,22 +127,27 @@ export async function runRestartVerifyBrowser({ origin, output, playwrightModule
     const { context, page } = await openPage(browser, origin, { theme });
     page.on('pageerror', error => errors.push(error.message));
     await openPolicyDrawer(page);
-    // Without a draft, recorded selections use the ungrouped inventory rows. The section heading is
-    // shown only when chosen groups precede those rows; require the actual names and recorded ids instead.
+    // Without a draft, Core's record alone places each row: a selection it records as chosen is listed with the
+    // selections it records as required by it ("+ N it needs"); anything else is its own row. Require the actual
+    // names and recorded ids, not a section heading.
     const list = page.locator('#installed-list');
     await list.waitFor();
-    const recorded = name => list.locator('[data-installed-other]').filter({ has: page.getByText(name, { exact: true }) });
-    const installed = recorded('grill-me');
+    const recorded = name => list.locator('[data-installed-row]').filter({ has: page.getByText(name, { exact: true }) });
+    // Core records grill-me as chosen and grilling and the Extensions notices as required by it.
+    const installed = list.locator('[data-installed-item="extensions.matt.grill-me"]');
     await installed.waitFor();
     assert.equal(await installed.count(), 1, 'one recorded Extensions row survives the fresh host');
-    assert.ok(await installed.getAttribute('data-installed-other'), 'the Extensions row retains its recorded management id');
+    assert.ok(await installed.getAttribute('data-installed-row'), 'the Extensions row retains its recorded management id');
     assert.doesNotMatch(await installed.innerText(), /Not in your setup/, 'recorded inventory is shown as Core recorded it, never compared with an open draft');
-    assert.equal(await list.locator('[data-installed-item]').count(), 0, 'no draft-derived chosen groups are invented');
+    // The members sit in the collapsed "+ N it needs" fold, so their text is read, not their rendered text.
+    const needed = (await installed.locator('[data-installed-needed]').allTextContents()).map(text => text.trim());
+    assert.ok(needed.includes('grilling') && needed.includes('Extensions licenses and upstream notices'), `grill-me lists what Core records it requires: ${JSON.stringify(needed)}`);
+    assert.equal(await list.locator(['extensions.matt.grill-me', 'extensions.matt.grilling', 'extensions.notices'].map(id => `[data-installed-other$="--${id}"]`).join(', ')).count(), 0, 'grill-me and what it needs are not other installed items');
     if (extraItem) {
       const mixed = recorded(extraName ?? extraItem);
       await mixed.waitFor();
       assert.equal(await mixed.count(), 1, 'one recorded ECC row survives the fresh host');
-      assert.ok(await mixed.getAttribute('data-installed-other'), 'the ECC row retains its recorded management id');
+      assert.ok(await mixed.getAttribute('data-installed-row'), 'the ECC row retains its recorded management id');
       assert.doesNotMatch(await mixed.innerText(), /Not in your setup/);
     }
     assert.equal(await page.locator('[data-installed-state]').count(), 0, 'a fresh complete install carries no adverse state chips');
