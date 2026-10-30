@@ -192,3 +192,24 @@ test('Q6-R2: setTool notifies subscribers and folderRevision is observable acros
     assert.equal(notified, beforeNotify + 1, 'folder invalidation synchronously refreshes subscribed host-fact surfaces');
   } finally { globalThis.fetch = original; }
 });
+// The saved setup's mode: an empty policy is remade in it, and a choice made meanwhile lands on the remade policy.
+const policyIn = (mode, roots = []) => ({ policyBytes: [...new TextEncoder().encode(JSON.stringify({ mode }))], intent: { roots } });
+test('an empty policy is remade in the setup mode before a choice is proposed', async t => {
+  const previous = globalThis.fetch, bodies = []; t.after(() => { globalThis.fetch = previous; });
+  globalThis.fetch = async (url, init) => { const body = JSON.parse(init.body); bodies.push({ url, body });
+    return response(url.endsWith('-new') ? { status: 'ok', value: policyIn(body.mode) } : { status: 'ok', value: policyIn('enterprise', [{ itemId: 'a' }]) }); };
+  const client = createAuthoringClient({ sessionRecovery: false }); client.publish(policyIn('vibe'));
+  const changed = client.setMode('enterprise'), proposed = client.propose({ type: 'select' });
+  await changed; await proposed;
+  assert.deepEqual(bodies.map(({ url, body }) => [url, body.mode ?? JSON.parse(new TextDecoder().decode(Uint8Array.from(body.policyBytes))).mode]),
+    [['/api/authoring-new', 'enterprise'], ['/api/authoring-edit', 'enterprise']]);
+  assert.equal(client.dirty, false);
+  assert.equal((await client.newDraft(), bodies.at(-1).body.mode), 'enterprise', 'a later new policy starts in the setup mode');
+});
+test('a policy with choices keeps its own mode when the setup mode changes', async t => {
+  const previous = globalThis.fetch, urls = []; t.after(() => { globalThis.fetch = previous; });
+  globalThis.fetch = async url => { urls.push(url); return response({ status: 'ok', value: policyIn('enterprise') }); };
+  const client = createAuthoringClient({ sessionRecovery: false }); client.publish(policyIn('vibe', [{ itemId: 'a' }]));
+  await client.setMode('enterprise');
+  assert.deepEqual(urls, []); assert.equal(JSON.parse(new TextDecoder().decode(client.bytes)).mode, 'vibe');
+});

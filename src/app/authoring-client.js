@@ -29,8 +29,8 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
   let catalog, bytes = new Uint8Array(), intent, candidate, draftValue, compiled, revision = 0, catalogRevision = 0, hostRevision = 0, folderRevision = 0, reviewEvidence = [], evidenceRevision = 0, recipient, judgments = [], judgmentSummary;
   let dirty = false, checkpoint, recoveryAvailable, startupSource, selectedTool, selectedToolLabel;
   // The saved setup's execution mode: an Enterprise Developer's setup is an Enterprise policy, so the host applies and
-  // re-checks the organisation source for it. New policies start in it; `ready` settles once the open one matches.
-  let setupMode, ready = Promise.resolve();
+  // re-checks the organisation source for it. New policies start in it; `ready` settles once start-up and any mode change are done.
+  let setupMode, ready = Promise.resolve(), modeChanges = 0;
   const policyMode = () => { try { return JSON.parse(new TextDecoder().decode(bytes)).mode; } catch { return undefined; } };
   // The header's canonical tool as ephemeral page context: it rides composing/editing/compiling requests,
   // never the saved policy bytes, and never rebinding a recorded selection's own tool identity. The header
@@ -146,18 +146,17 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
       if (attempt !== catalogRevision || (expectedRevision !== undefined && expectedRevision !== revision)) return undefined;
       catalog = value; notify(); return catalog;
     },
-    // Choices wait for a mode change still in progress, so none lands on the policy it replaces.
-    get ready() { return ready; },
     start() { const run = this.startNow(); ready = run.then(() => {}, () => {}); return run; },
     // Only a policy with nothing chosen yet is replaced; an opened file or recorded choices keep their own mode.
+    // Choices made meanwhile wait for it, so none lands on the policy it replaces.
     setMode(mode) {
       if (mode !== 'vibe' && mode !== 'enterprise') return ready;
-      setupMode = mode;
+      setupMode = mode; modeChanges++;
       ready = ready.then(async () => {
         if (setupMode !== mode || draftValue || candidate || !intent || intent.roots?.length || policyMode() === mode) return;
         const result = await this.newDraft(mode);
         if (result.status === 'ok') { dirty = false; notify(); }
-      }).catch(() => {});
+      }).catch(() => {}).finally(() => { modeChanges--; });
       return ready;
     },
     async startNow() {
@@ -189,7 +188,7 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
     importBytes(value) { artifact++; revision++; bytes = value.slice(); dirty = false; checkpoint = bytes.slice(); intent = undefined; keepJudgments(); candidate = undefined; draftValue = undefined; compiled = undefined; notify(); },
     // While a draft is open every edit goes through the draft operations: the recorded
     // choices are never composed as an executable policy until an explicit compile.
-    async propose(operation) { await ready; return draftValue ? this.proposeDraft(operation) : this.proposeRequest('edit', { operation }); },
+    async propose(operation) { if (modeChanges) await ready; return draftValue ? this.proposeDraft(operation) : this.proposeRequest('edit', { operation }); },
     async proposeDraft(operation) {
       if (!draftValue) return refusal('INPUT_INVALID', 'Open a draft before editing it.');
       const attempt = ++revision; candidate = undefined; notify();
@@ -305,7 +304,7 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
       notify(); return result;
     },
     async proposeRequest(operation, body = {}) {
-      await ready;
+      if (modeChanges) await ready;
       const attempt = ++revision; candidate = undefined; notify();
       const result = await request(operation, body);
       if (attempt !== revision) return { status: 'superseded' };
