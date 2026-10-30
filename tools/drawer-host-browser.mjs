@@ -78,9 +78,11 @@ async function dedupeNotifications() {
   await page.locator('#setup-choices-host-copies').filter({ hasText: /Second copy/ }).waitFor();
   const before = bodies.length;
   await page.locator('#your-tool-trigger').click();
-  await page.locator('.your-tool-option').filter({ hasText: 'Claude Code' }).click();
+  // Your tools is a multi-select: ticking and unticking a tool Core has not observed ends on the same tools Core judges.
+  await page.locator('.your-tool-option[data-unobserved="true"]').first().click();
+  await page.locator('.your-tool-option[data-unobserved="true"]').first().click();
   await page.waitForTimeout(150);
-  assert.equal(bodies.length, before, 'reselecting the same tool does not inspect the host again');
+  assert.equal(bodies.length, before, 'reselecting the same tools does not inspect the host again');
   await done(value);
 }
 

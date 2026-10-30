@@ -194,6 +194,8 @@ export function createYourTool({ elements, onChange = () => {} }) {
   });
   document.addEventListener("click", (event) => {
     if (!isOpen()) return;
+    // A tick re-renders the list, so the clicked row is already detached here; it was inside, not outside.
+    if (event.target?.isConnected === false) return;
     if (elements.yourToolPop.contains(event.target) || elements.yourToolTrigger.contains(event.target)) return;
     setOpen(false);
   });
