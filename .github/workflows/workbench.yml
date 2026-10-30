@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: samartomar/aih-core
-          ref: eddbd672eb1570fe7f451a9b540f0317572655ac
+          ref: 1f9e22028c94c2afb14dd12d972864e37a950ae6
           path: .ci/core
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -60,7 +60,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export CORE_TGZ="$RUNNER_TEMP/workbench-packages/aihq-core-1.0.0-dev.51.tgz"
+          export CORE_TGZ="$RUNNER_TEMP/workbench-packages/aihq-core-1.0.0-dev.54.tgz"
           export CATALOG_TGZ="$RUNNER_TEMP/workbench-packages/aihq-catalog-0.1.0.tgz"
           export SCAN_TGZ="$RUNNER_TEMP/workbench-packages/aihq-scan-0.5.0.tgz"
           npm run check:workbench -- "$RUNNER_TEMP/workbench-consumer"

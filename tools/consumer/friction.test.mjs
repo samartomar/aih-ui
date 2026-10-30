@@ -11,7 +11,7 @@ import { MAINTENANCE_CHECK_RECORD_SCHEMA } from './maintenance-record.mjs';
 
 // The adapter reads stored Core results the host holds and asks Core's recurrence method; these tests build full result objects.
 const T = ['2026-10-10T09:00:00Z', '2026-10-11T09:00:00Z', '2026-10-12T09:00:00Z', '2026-10-13T09:00:00Z', '2026-10-14T09:00:00Z'];
-const SEL = 'catalog-aaaa', MID = 'project--aihq.catalog--mattpocock.implement', CORE = { name: '@aihq/core', version: '1.0.0-dev.51' };
+const SEL = 'catalog-aaaa', MID = 'project--aihq.catalog--mattpocock.implement', CORE = { name: '@aihq/core', version: '1.0.0-dev.54' };
 const tie = (kind, key, extra = {}) => ({ kind, key, itemId: 'mattpocock.implement', rootItemId: 'mattpocock.implement', label: 'Implement', scope: 'project', ...extra });
 const selectionTie = tie('managed-selection', MID, { selectionId: SEL, goal: 'ship it' }), clientTie = tie('client', 'claude', { itemId: 'aihq.client.claude' }), targetTie = tie('target', 'git');
 const sha = n => String(n).repeat(64).slice(0, 64);
