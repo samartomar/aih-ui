@@ -191,13 +191,12 @@ for (const theme of THEMES) {
   await writeFile(join(basicsProject, 'package.json'), JSON.stringify({ name: 'ui168-facts-fixture', private: true, type: 'module', engines: { node: '>=26 <27' }, scripts: { test: 'node --test' } }, null, 2));
   await withHost(basicsProject, { sources: mcpSources }, async origin =>
     await caseOutcome(`UI168 project facts and install (${theme})`, await runUi168ProjectBasicsBrowser({ origin, output: join(consumerDir, `ui168-basics-evidence-${theme}`), playwrightModule: playwrightPath, theme })));
-  for (const factsState of ['loading', 'empty', 'unavailable', 'failed']) {
-    const factsStateProject = join(consumerDir, `ui168-facts-state-${theme}-${factsState}-${randomUUID().slice(0, 8)}`);
-    await mkdir(factsStateProject, { recursive: true });
-    await writeFile(join(factsStateProject, 'package.json'), JSON.stringify({ name: 'ui168-facts-fixture', private: true, type: 'module', engines: { node: '>=26 <27' }, scripts: { test: 'node --test' } }, null, 2));
-    await withHost(factsStateProject, { sources: mcpSources }, async origin =>
-      await caseOutcome(`UI168 project facts ${factsState} state (${theme})`, await runUi168ProjectBasicsBrowser({ origin, output: join(consumerDir, `ui168-facts-state-${theme}-${factsState}`), playwrightModule: playwrightPath, theme, factsState })));
-  }
+  // An empty project folder: Core's review carries no project facts. (Facts arrive with the review, so there is no
+  // separate loading, unavailable or failed facts state to show.)
+  const emptyFactsProject = join(consumerDir, `ui168-facts-state-${theme}-empty-${randomUUID().slice(0, 8)}`);
+  await mkdir(emptyFactsProject, { recursive: true });
+  await withHost(emptyFactsProject, { sources: mcpSources }, async origin =>
+    await caseOutcome(`UI168 project facts empty state (${theme})`, await runUi168ProjectBasicsBrowser({ origin, output: join(consumerDir, `ui168-facts-state-${theme}-empty`), playwrightModule: playwrightPath, theme, factsState: 'empty' })));
   const driftProject = join(consumerDir, `ui168-drift-${theme}-${randomUUID().slice(0, 8)}`);
   await withHost(driftProject, { sources: mcpSources }, async origin =>
     await caseOutcome(`UI168 managed block drift (${theme})`, await runUi168BlockDriftBrowser({ origin, output: join(consumerDir, `ui168-drift-evidence-${theme}`), project: driftProject, playwrightModule: playwrightPath, theme })));

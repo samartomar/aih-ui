@@ -14,8 +14,10 @@ export async function noteInventory(variant = 'current') {
   const inventory = (await installedFamilies()).find(entry => entry.family === 'Extensions');
   const sourceItem = inventory.release.items.find(item => item.id === 'extensions.notices');
   const item = structuredClone(declaration.items[0]);
+  // The note's source file is not named like a notice: Catalog never takes a licence or notice file as an item's
+  // source material. The recipe still installs it as .aih-extensions/notices/NOTICE.md.
   Object.assign(item, { id: 'extensions.notices', source: 'notes', label: 'Review note', description: 'An independently authored review note.', requires: [], recipePath: 'recipe.json',
-    materials: [{ id: 'license', path: 'LICENSE' }, { id: 'asset-1', path: 'NOTICE.md' }], kind: 'skill', payload: { dirName: 'notes', invocation: 'model-allowed', invocationBasis: 'default' } });
+    materials: [{ id: 'license', path: 'LICENSE' }, { id: 'asset-1', path: 'review-note.md' }], kind: 'skill', payload: { dirName: 'notes', invocation: 'model-allowed', invocationBasis: 'default' } });
   Object.assign(declaration, { package: { name: 'review-notes-catalog', version: variant === 'updated' ? '1.0.1' : '1.0.0' },
     framework: { id: 'extensions', name: 'Extensions', version: '1.0.0', description: 'Checked lifecycle fixture content.' },
     sources: [{ id: 'notes', repository: 'example/review-notes', licensePath: 'LICENSE', license: 'MIT' }], items: [item] });
@@ -27,7 +29,7 @@ export async function noteInventory(variant = 'current') {
   for (const check of recipe.checks) check.sha256 = { materialSha256: check.id === 'check-license' ? 'license' : 'asset-1' };
   const files = {};
   for (const descriptor of sourceItem.materials.filter(material => ['license', 'asset-1'].includes(material.id))) {
-    const path = descriptor.id === 'license' ? 'LICENSE' : 'NOTICE.md';
+    const path = descriptor.id === 'license' ? 'LICENSE' : 'review-note.md';
     let bytes = inventory.materials.find(material => material.sha256 === descriptor.sha256).bytes;
     if (variant === 'updated' && descriptor.id === 'asset-1') bytes = new TextEncoder().encode(`${new TextDecoder().decode(bytes)}\nAn explicit updated note snapshot.\n`);
     files[path] = bytes;

@@ -24,6 +24,18 @@ async function openPage(browser, origin, { theme = 'dark', tool = false } = {}) 
   return { context, page };
 }
 
+// The checked ECC MCP server, shown with all of ECC: it is in none of ECC's pre-ticked starting sets, so the default
+// framework view leaves it out once Core's browse answer arrives. Null when the integrated catalog carries no such card.
+async function showEccServer(page) {
+  await chooseCatalogFamily(page, 'ECC');
+  // The box is disabled (and shown ticked) until Core's set answer arrives; only then is its state the person's choice.
+  const all = page.locator('#browse-all-items:not([disabled])'); await all.waitFor();
+  if (!await all.isChecked()) await all.check();
+  await page.locator('#catalog-search').fill('cloudflare-docs');
+  const card = page.locator('[data-card-id$="/ecc.mcp.cloudflare-docs"]');
+  return await card.waitFor({ timeout: 15_000 }).then(() => card, () => null);
+}
+
 // (1) Positive set-owned firstRun: the real checked Extensions 'engineering' set declares
 // extensions.matt.setup-matt-pocock-skills as its first step. Choosing the set (not the item directly) is what
 // records the in-set origin the guidance resolves from.
@@ -153,14 +165,16 @@ export async function runRestartVerifyBrowser({ origin, output, playwrightModule
     assert.equal(await page.locator('[data-installed-state]').count(), 0, 'a fresh complete install carries no adverse state chips');
     if (project) {
       // Adverse state, truthfully produced: edit an installed file on disk; Core's redacted projection must
-      // report it and the page renders its changed-since-install state with icon, tooltip and wording.
+      // report it and the page renders its changed-since-install state with icon and wording. Amendment 3.2.3 drops the
+      // chip tooltips: the chip's words are all it says.
       const { appendFile } = await import('node:fs/promises');
       await appendFile(join(project, '.claude', 'skills', 'grill-me', 'SKILL.md'), '\n# edited outside the Workbench\n');
       await closePolicyDrawer(page); await openPolicyDrawer(page);
       const changed = page.locator('[data-installed-state="changed"]');
       await changed.waitFor();
       assert.match(await changed.innerText(), /Changed since install \(your tool already uses the changed copy\)/);
-      assert.ok(await changed.getAttribute('title') ?? await changed.locator('[title]').first().getAttribute('title'), 'the state chip carries its explanation');
+      assert.equal(await changed.locator('[data-icon]').count(), 1, 'the state chip shows its icon');
+      assert.equal(await changed.evaluate(chip => chip.hasAttribute('title') || chip.querySelector('[title]') !== null), false, 'the state chip carries no tooltip');
       await page.screenshot({ path: join(output, `adverse-changed-${theme}.png`), fullPage: true });
     }
     await page.screenshot({ path: join(output, 'restart-inventory.png'), fullPage: true });
@@ -180,10 +194,8 @@ export async function runMcpFailedApplyBrowser({ origin, output, project, playwr
     const { context, page } = await openPage(browser, origin, { theme, tool: true });
     const preparations = [];
     page.on('response', response => { if (response.url().endsWith('/api/authoring-prepare')) void response.json().then(value => preparations.push(value)).catch(() => {}); });
-    await chooseCatalogFamily(page, 'ECC');
-    await page.locator('#catalog-search').fill('cloudflare-docs');
-    const card = page.locator('[data-card-id$="/ecc.mcp.cloudflare-docs"]');
-    if (!await card.count()) {
+    const card = await showEccServer(page);
+    if (!card) {
       await writeFile(join(output, 'incomplete.json'), JSON.stringify({ status: 'incomplete', reason: 'The integrated consumer catalog carries no checked ECC MCP item, so the typed MCP Apply case cannot run in this seam.' }, null, 2));
       return { status: 'incomplete', reason: 'ECC MCP item not in integrated catalog' };
     }
@@ -222,10 +234,8 @@ export async function runMcpApplyBrowser({ origin, output, project, playwrightMo
   try {
     const { context, page } = await openPage(browser, origin, { theme, tool: true });
     page.on('pageerror', error => errors.push(error.message));
-    await chooseCatalogFamily(page, 'ECC');
-    await page.locator('#catalog-search').fill('cloudflare-docs');
-    const card = page.locator('[data-card-id$="/ecc.mcp.cloudflare-docs"]');
-    if (!await card.count()) {
+    const card = await showEccServer(page);
+    if (!card) {
       await writeFile(join(output, 'incomplete.json'), JSON.stringify({ status: 'incomplete', reason: 'The integrated consumer catalog carries no checked ECC MCP item, so the typed MCP Apply case cannot run in this seam.' }, null, 2));
       return { status: 'incomplete', reason: 'ECC MCP item not in integrated catalog' };
     }

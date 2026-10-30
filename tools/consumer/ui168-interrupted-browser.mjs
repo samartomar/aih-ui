@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { addFromCatalog, chooseCatalogFamily, closePolicyDrawer, openPolicyDrawer, openPolicyFileActions } from './policy-drawer.mjs';
+import { addFromCatalog, chooseCatalogFamily, closePolicyDrawer, drawer, openPolicyDrawer, openPolicyFileActions } from './policy-drawer.mjs';
 import { openPolicyWorkspace, openSetupAdvanced } from './advanced-browser.mjs';
 
 async function openPage(browser, origin, theme) {
@@ -55,13 +55,15 @@ export async function runUi168InterruptedVerifyBrowser({ origin, output, saved, 
     page.on('pageerror', error => errors.push(error.message));
     await openPolicyWorkspace(page); await openPolicyFileActions(page);
     await page.locator('#policy-open').setInputFiles(saved);
-    await page.getByRole('button', { name: 'Validate and reopen', exact: true }).click();
+    // Scoped to the drawer, as elsewhere: naming every button of the full catalog page can outlast the click's timeout.
+    await drawer(page).getByRole('button', { name: 'Validate and reopen', exact: true }).click();
     await page.locator('#policy-status').filter({ hasText: 'Saved choices recovered' }).waitFor();
     await closePolicyDrawer(page); await openPolicyDrawer(page);
     const interrupted = page.locator('[data-installed-state="interrupted"]').first();
     await interrupted.waitFor();
-    assert.match(await interrupted.innerText(), /Install interrupted/);
-    assert.ok(await interrupted.getAttribute('title') ?? await interrupted.locator('[title]').first().getAttribute('title'));
+    assert.match(await interrupted.innerText(), /Install didn't finish; \d+ files written$/);
+    // Amendment 3.2.3 drops the chip tooltips: the chip's words are all it says.
+    assert.equal(await interrupted.evaluate(chip => chip.hasAttribute('title') || chip.querySelector('[title]') !== null), false, 'the state chip carries no tooltip');
     const group = page.locator('[data-installed-item="extensions.matt.grill-me"]');
     await group.waitFor();
     if (action === 'finish') {

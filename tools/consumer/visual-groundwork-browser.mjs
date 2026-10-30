@@ -13,6 +13,11 @@ const here = dirname(fileURLToPath(import.meta.url));
 const STATES = join(here, 'fixtures', 'contract-check', 'states');
 const POSITIVE = /\b(matched|passed|safe|clean|secure|trusted|no findings|verified)\b/i;
 const CONTRACT_CHECK_ABSENT = "This Core can't check contracts yet.";
+// The Core contracts the Workbench accepts that Core 1.0.0-dev.54 ships fixtures for but publishes no validator for, in
+// the Workbench declaration's order. The Workbench never stands its own logic in for Core's, so each is a check that
+// cannot run until Core publishes one. File-state results join the list only with a Core without validateFileStateResult.
+const CORE_UNREADABLE = ['prepared-work:1.6.0', 'prepared-work:1.7.0', 'run-result:1.5.0', 'managed-inventory-result:1.1.0',
+  'managed-removal-preparation:1.2.0', 'managed-update-preparation:1.1.0', 'execution-policy:1.5.0', 'file-state-result:1.1.0'].map(id => `urn:aihq:core:${id}`);
 
 const luminance = ([r, g, b]) => { const [x, y, z] = [r, g, b].map(v => v / 255).map(c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)); return 0.2126 * x + 0.7152 * y + 0.0722 * z; };
 const contrast = (a, b) => { const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
@@ -145,10 +150,13 @@ export async function runVisualGroundworkBrowser({ origin, output, playwrightMod
         if (row.status === 'passed') {
           assert.equal(listed, false, `The Workbench's own reader for ${row.contractId} is not listed as missing.`);
         } else {
-          assert.deepEqual([row.contractId, row.status, row.reason], ['urn:aihq:core:file-state-result:1.1.0', 'unavailable', 'reader-missing']);
-          assert.ok(tooltip.includes(`reads ${row.contractId} from @aihq/core: the Workbench has no reader it can run for it.`), 'The page names the file-state check that cannot run.');
+          assert.deepEqual([row.status, row.reason, row.fixturePackage], ['unavailable', 'reader-missing', '@aihq/core'], JSON.stringify(row));
+          assert.ok(tooltip.includes(`reads ${row.contractId} from @aihq/core: the Workbench has no reader it can run for it.`), `The page names the ${row.contractId} check that cannot run.`);
         }
       }
+      // Exactly Core's list, first unreadable contract first: a new row, a lost row or a reordering fails here.
+      assert.deepEqual([...new Set(workbenchRows.filter(row => row.status !== 'passed').map(row => row.contractId))],
+        CORE_UNREADABLE.filter(id => !readers.includes(id)), 'The Workbench checks that cannot run are exactly those Core publishes no validator for.');
     }
     await page.screenshot({ path: join(output, `01-startup-${actual}.png`) });
 

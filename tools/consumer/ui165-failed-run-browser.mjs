@@ -21,6 +21,10 @@ export async function runMcpFailedRunBrowser({ origin, output, project, playwrig
     const destination = theme === 'light' ? 'Switch to light mode' : 'Switch to dark mode';
     if (await page.getByRole('button', { name: destination, exact: true }).count()) await page.getByRole('button', { name: destination, exact: true }).first().click();
     await chooseCatalogFamily(page, 'ECC');
+    // The server is in none of ECC's pre-ticked starting sets, so it is reached with all of ECC shown.
+    // The box is disabled (and shown ticked) until Core's set answer arrives; only then is its state the person's choice.
+    const all = page.locator('#browse-all-items:not([disabled])'); await all.waitFor();
+    if (!await all.isChecked()) await all.check();
     await page.locator('#catalog-search').fill('cloudflare-docs');
     await addFromCatalog(page, 'ecc.mcp.cloudflare-docs');
     await openPolicyDrawer(page);
