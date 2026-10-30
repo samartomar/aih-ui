@@ -23,7 +23,7 @@ export async function runBrowsingLayoutBrowser({origin,output,playwrightModule})
   try {for(const theme of ['dark','light']) {
     const context=await browser.newContext({viewport:{width:1440,height:1100},hasTouch:true});await context.addInitScript(()=>localStorage.setItem('wb-your-tool','claude'));const page=await context.newPage();page.setDefaultTimeout(30000);page.on('pageerror',e=>errors.push(e.message));
     await page.goto(origin+'/');await page.locator('#browse-family option[value="Extensions"]').waitFor({state:'attached'});
-    if(await page.locator('#setup-dialog').isVisible()){await page.getByRole('radio',{name:/Vibe coder/}).check();for(let i=0;i<4;i++)await page.locator('#setup-next').click();await page.locator('#setup-dialog').waitFor({state:'hidden'});}
+    if(await page.locator('#setup-dialog').isVisible()){await page.getByRole('radio',{name:/Vibe coder/}).check();for(let i=0;i<3;i++)await page.locator('#setup-next').click();await page.locator('#setup-dialog').waitFor({state:'hidden'});}
     const toggle=page.getByRole('button',{name:`Switch to ${theme} mode`,exact:true});if(await toggle.count())await toggle.click();await page.evaluate(()=>document.fonts.ready);
     const tools=page.locator('#catalog-filter-disclosure');assert.equal(await tools.evaluate(n=>n.open),false);assert.equal(await page.locator('#package-disclosure').evaluate(n=>n.open),false);
     await chooseCatalogSupport(page,'all');await chooseCatalogFamily(page,'ECC');

@@ -4,7 +4,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmdirSyn
 import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createSettingsStore } from "../server/settings.mjs";
-import { CAPABILITIES, emptySettings, newSetupSettings, reviewerErrors, settingsErrors, setupSteps } from "../../src/app/setup-model.js";
+import * as setupModel from "../../src/app/setup-model.js";
+import { emptySettings, newSetupSettings, reviewerErrors, settingsErrors, setupSteps } from "../../src/app/setup-model.js";
 import { createApi } from "../server/api.mjs";
 import { createStaticServer, listen } from "../server/static.mjs";
 
@@ -115,7 +116,7 @@ test("oversized or unexpected values are rejected", () => {
 test("new setup does not request unconnected assistance without a choice", () => {
   const first = newSetupSettings();
   assert.deepEqual(first.capabilities, []);
-  first.capabilities.push(CAPABILITIES[0].id);
+  first.capabilities.push("code-review");
   assert.deepEqual(newSetupSettings().capabilities, []);
   assert.deepEqual(emptySettings().capabilities, []);
 });
@@ -350,12 +351,31 @@ test("the settings HTTP route saves and clears the reviewing identity", async (t
   assert.equal(Object.hasOwn((await fetch(`${base}/api/workbench-settings`).then((result) => result.json())).settings, "reviewer"), false);
 });
 
-test("first-run setup offers the optional assistance step for every experience", () => {
+test("setup has no assistance step while Catalog publishes no installable assistance content", () => {
+  // Catalog main 3b273faa publishes no item for any assistance tool the step offered (Code Review Graph and
+  // codebase-memory-mcp are recorded there as unsupported-installation), so a choice could never reach Your setup.
   const draft = (experience, role = null) => ({ ...newSetupSettings(), experience, role });
-  assert.deepEqual(setupSteps({ draft: newSetupSettings() }), ["experience", "capabilities", "clients", "review"]);
-  assert.deepEqual(setupSteps({ draft: draft("vibe") }), ["experience", "capabilities", "clients", "review"]);
-  assert.deepEqual(setupSteps({ draft: draft("enterprise", "developer") }), ["experience", "role", "capabilities", "clients", "review"]);
-  assert.deepEqual(setupSteps({ draft: draft("enterprise", "admin") }), ["experience", "role", "organization", "capabilities", "clients", "review"]);
-  assert.deepEqual(setupSteps({ draft: draft("vibe"), editing: true }), ["capabilities", "clients", "review"]);
+  assert.deepEqual(setupSteps({ draft: newSetupSettings() }), ["experience", "clients", "review"]);
+  assert.deepEqual(setupSteps({ draft: draft("vibe") }), ["experience", "clients", "review"]);
+  assert.deepEqual(setupSteps({ draft: draft("enterprise", "developer") }), ["experience", "role", "clients", "review"]);
+  assert.deepEqual(setupSteps({ draft: draft("enterprise", "admin") }), ["experience", "role", "organization", "clients", "review"]);
+  assert.deepEqual(setupSteps({ draft: draft("vibe"), editing: true }), ["clients", "review"]);
   assert.deepEqual(setupSteps({ draft: draft("vibe"), editing: true, editSection: "clients" }), ["clients", "review"]);
+  assert.equal(Object.hasOwn(setupModel, "CAPABILITIES"), false, "no assistance tool is offered");
+});
+
+test("setup screens never name the dropped or renamed assistance tools", () => {
+  const screens = ["onboarding.js", "setup-model.js", "setup-summary.js", "organization.js"].map((name) => readFileSync(new URL(`../../src/app/${name}`, import.meta.url), "utf8")).join("\n")
+    + readFileSync(new URL("../../src/index.html", import.meta.url), "utf8");
+  for (const dropped of [/Headroom/, /token optimization/i, /Workspace help/, /"Code review"/, /Optional assistance/, /Skip (all )?assistance/]) assert.doesNotMatch(screens, dropped);
+});
+
+test("setups saved with retired assistance choices stay readable; nothing new can be chosen", (t) => {
+  const retired = ["code-review", "codebase-memory", "workspace-help", "headroom", "serena", "context-optimization"];
+  assert.deepEqual(settingsErrors({ ...vibe(), capabilities: retired }), {});
+  assert.ok(settingsErrors({ ...vibe(), capabilities: ["code-review-graph"] }).capabilities);
+  const { store, settingsPath } = fixture(t);
+  writeFileSync(settingsPath, JSON.stringify({ ...vibe(), capabilities: ["headroom", "serena"] }));
+  assert.equal(store.read().state, "saved");
+  assert.deepEqual(store.read().settings.capabilities, ["headroom", "serena"]);
 });

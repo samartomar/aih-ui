@@ -96,7 +96,7 @@ try {
   await page.locator('#browse-family option[value="Extensions"]').waitFor({ state: 'attached' });
   if (await page.locator('#setup-dialog').isVisible()) {
     await page.getByRole('radio', { name: /Vibe coder/ }).check();
-    for (let next = 0; next < 4; next++) await page.locator('#setup-next').click();
+    for (let next = 0; next < 3; next++) await page.locator('#setup-next').click();
     await page.locator('#setup-dialog').waitFor({ state: 'hidden' });
   }
   // A real pointer: the element is what is under its own centre, and the mouse presses there.

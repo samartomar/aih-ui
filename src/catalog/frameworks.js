@@ -32,10 +32,7 @@ export function createFrameworkNavigation({ container, onChoose, onFirstStep }) 
     const observedTools = tools.filter(value => value.observed !== false), unobserved = tools.filter(value => value.observed === false);
     const tool = observedTools[0];
     const names = list => list.map(value => value.label ?? value.id).join(', ');
-    const scope = el('p', 'framework-source-note', tools.length ? `Compatibility observations for ${observedTools.length ? names(observedTools) : 'none of your tools'}${unobserved.length ? ` · Not observed by Core: ${names(unobserved)}` : ''} · Workbench host: ${catalog.hostPlatform?.os ?? "unknown OS"} ${catalog.hostPlatform?.arch ?? "unknown architecture"}` : 'Choose your tools to read observed counts.');
-    scope.dataset.tools = tools.map(value => value.id).join(' ');
-    attachTooltip(scope, 'Harness static observations for the loaded items on this OS and architecture, not proof that an item works in this project.'); container.append(scope);
-    if (tool) container.append(el('p', 'framework-source-note', 'Published compatibility evidence, not installed-item counts. Zero observations means not yet confirmed, not unsupported.'));
+    if (!tools.length) container.append(el('p', 'framework-source-note', 'Choose your tools to read observed counts.'));
     const frameworks = catalog.frameworks ?? [];
     if (!frameworks.length) container.append(el('p', '', 'No frameworks available from the configured sources. Existing content is in Filters & your sources.'));
     for (const framework of frameworks) {
@@ -59,6 +56,15 @@ export function createFrameworkNavigation({ container, onChoose, onFirstStep }) 
         for (const row of container.querySelectorAll('[data-framework]')) row.setAttribute('aria-pressed', String(row.dataset.framework === key));
       });
       container.append(button); if (focused === key) button.focus();
+    }
+    // What the counts mean, as a small collapsed note below the frameworks. Its summary names every chosen tool.
+    if (tools.length) {
+      const note = el('details', 'framework-source-note'); note.dataset.compatibilityNote = ''; note.dataset.tools = tools.map(value => value.id).join(' ');
+      const summary = el('summary', '', `Compatibility observations for ${observedTools.length ? names(observedTools) : 'none of your tools'}${unobserved.length ? ` · Not observed by Core: ${names(unobserved)}` : ''}`);
+      attachTooltip(summary, 'Harness static observations for the loaded items on this OS and architecture, not proof that an item works in this project.');
+      note.append(summary, el('p', '', `Workbench host: ${catalog.hostPlatform?.os ?? "unknown OS"} ${catalog.hostPlatform?.arch ?? "unknown architecture"}`),
+        el('p', '', 'Published compatibility evidence, not installed-item counts. Zero observations means not yet confirmed, not unsupported.'));
+      container.append(note);
     }
   }
   const landing = document.getElementById('framework-first-step');

@@ -40,7 +40,7 @@ async function scenario(toolHost) {
   await page.locator('#browse-family option[value="ECC"]').waitFor({ state: 'attached' });
   if (await page.locator('#setup-dialog').isVisible()) {
     await page.getByRole('radio', { name: /Vibe coder/ }).check();
-    for (let index = 0; index < 4; index++) await page.locator('#setup-next').click();
+    for (let index = 0; index < 3; index++) await page.locator('#setup-next').click();
     await page.locator('#setup-dialog').waitFor({ state: 'hidden' });
   }
   await addFromCatalog(page, 'ecc.skill.accessibility');

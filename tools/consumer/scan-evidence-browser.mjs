@@ -47,7 +47,7 @@ export async function runScanEvidenceBrowser({origin,output,fixtureRoot,sourcePa
   }
   try {
     await page.goto(origin+'/');await page.locator('#browse-family option[value="Catalog"]').waitFor({state:'attached'});
-    if(await page.locator('#setup-dialog').isVisible()){await page.getByRole('radio',{name:/Vibe coder/}).check();for(let i=0;i<4;i++)await page.locator('#setup-next').click();await page.locator('#setup-dialog').waitFor({state:'hidden'});}
+    if(await page.locator('#setup-dialog').isVisible()){await page.getByRole('radio',{name:/Vibe coder/}).check();for(let i=0;i<3;i++)await page.locator('#setup-next').click();await page.locator('#setup-dialog').waitFor({state:'hidden'});}
     await chooseCatalogSupport(page, 'all');await chooseCatalogFamily(page, 'Catalog');
     await page.getByRole('button',{name:'Choose alpha',exact:true}).click();await page.locator('#policy-accept:not([disabled])').waitFor();await page.locator('#policy-accept').click();
     await openScanReview(page);await panel.waitFor();

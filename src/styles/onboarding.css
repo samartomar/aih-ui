@@ -19,8 +19,8 @@
 #setup-title:focus { outline: none; }
 .setup-progress { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 14px 0 18px; font-size: var(--type-body); }
 .setup-content { padding: 20px 24px; min-height: 0; overflow-y: auto; }
-.setup-options, .setup-capabilities, .setup-clients { display: grid; gap: 12px; }
-.setup-options, .setup-capabilities { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.setup-options, .setup-clients { display: grid; gap: 12px; }
+.setup-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .setup-clients { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .setup-choice {
   display: flex;
@@ -70,7 +70,7 @@
   .setup-dialog { width: calc(100% - 16px); max-height: calc(100dvh - 16px); }
   .setup-frame { max-height: calc(100dvh - 18px); }
   .setup-header, .setup-content, .setup-footer { padding: 14px; }
-  .setup-options, .setup-capabilities { grid-template-columns: 1fr; }
+  .setup-options { grid-template-columns: 1fr; }
   .setup-clients { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .setup-summary > div { grid-template-columns: 1fr; gap: 4px; }
   .setup-footer { align-items: flex-start; }

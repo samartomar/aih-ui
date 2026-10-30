@@ -17,7 +17,7 @@ async function enter(page, origin, theme) {
   await page.locator('#framework-navigation [data-framework]').first().waitFor();
   if (await page.locator('#setup-dialog').isVisible()) {
     await page.getByRole('radio', { name: /Vibe coder/ }).check();
-    for (let index = 0; index < 4; index++) await page.locator('#setup-next').click();
+    for (let index = 0; index < 3; index++) await page.locator('#setup-next').click();
     await page.locator('#setup-dialog').waitFor({ state: 'hidden' });
   }
   const toggle = page.getByRole('button', { name: `Switch to ${theme} mode`, exact: true });

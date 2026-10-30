@@ -20,7 +20,7 @@ The Policy Workbench user interface for AIH, built as an independent application
 - `src/` owns the live screens, design tokens, and presentation. Tailwind utilities are compiled locally from the classes used in `src/`.
 - `prototype/` is retained as a separate design reference. The running page does not import it.
 - The install record: beside the local setup store, `installed/<sha256 of the project folder's real path>.json` keeps, for each selection Core applied in that folder through this Workbench, its scope, the configuration it was installed with and the selections it required then. Core keeps these facts only in its private ownership records, with no public reader, and its inventory carries neither, so Update reads them here: an update keeps the configuration recorded at install and never reads one from the editable setup in the page. An update leaves to Core only the requirements recorded at install that are still installed; anything else the newer item requires stops the update before Core is asked, naming the item. Each entry also keeps a digest of what Core's inventory showed installed for the selection after Apply (its item identity, tool, origins and members), because Core publishes no digest of its own ownership record. An entry is used only while Core's inventory still shows the same, and a removal through this Workbench drops the entries of what it removed. A selection with no record, or whose entry no longer matches (installed before the record existed, by another tool, or removed and installed again elsewhere), is not updated from here. An update runs install's missing-input check on each replacement, with the host's private inputs kept to the replacements' own selections. Update is refused in an Enterprise setup: Core's managed update request names no organization source and prepares Vibe policy only, so it cannot be checked against the organization as its install is. The record is local state, not a policy artifact, and is never exported.
-- Local onboarding preferences (experience, organization context, requested assistance, explicit AI clients and an optional reviewing identity that defaults "Reviewing as" and is never exported). These are UI settings, not policy artifacts or enterprise authorization.
+- Local onboarding preferences (experience, organization context, explicit AI clients and an optional reviewing identity that defaults "Reviewing as" and is never exported). These are UI settings, not policy artifacts or enterprise authorization.
 - The machine-readiness check and host-configured npm repair: Core inspection and repair results projected as failed, unknown, applied, configured or verified, with no project, saved intent or policy. See [machine readiness](docs/readiness.md).
 - The report page: the readiness records as Core-normalized claims, with the configuration-check score, verified repairs, ranked actions and context series. See [report](docs/report.md).
 - The V9 report presentation (`src/report/`): a validated `@aihq/core/report` snapshot drawn as one offline HTML page, in report mode or as the labelled design sample. This presentation moved here from `@aihq/core`'s `./report/render` export; Core keeps the snapshot data, validation, redaction, claims and calculations, and the renderer reads them only through `@aihq/core/report`. The report page and the offline `tools/render-report.mjs` use the same renderer. See [report](docs/report.md#saved-snapshot-report-v9).
@@ -1194,14 +1194,11 @@ workspace after setup. Existing Developer settings with organization details rem
 readable but those details do not select or approve a policy. Vibe does not require
 enterprise details. No repository is read or verified by setup.
 
-Optional assistance requests (code review, codebase memory, workspace help,
-Headroom, Serena and context/token optimization) are deferred from first-run setup
-and start unselected. They can be edited from the workspace's **Optional assistance**
-section. **Keep current choices** advances without clearing selections. Saved
-choices, including an intentionally empty list, are restored exactly on edit.
-Each explains its proposed benefit and the consequence of skipping. All are
-recorded preferences only: integrations are not installed or connected, no code
-is accessed, and no data is sent to those integrations. The separate client step
+Setup offers no optional assistance step. An assistance tool is offered only when
+Catalog publishes installable content for it, so that choosing it adds that content
+to Your setup and the install; Catalog publishes none for the tools earlier setups
+listed. Setup files that saved those earlier choices stay readable; nothing acts on
+them, and the next edit saves them as none. The separate client step
 uses Core's public `nativeClientIds`; it never infers clients from capabilities.
 
 Completing setup atomically writes the version-1 `aih-ui-settings` record to
@@ -1217,15 +1214,15 @@ On reopening, valid saved settings enter the saved experience. The existing
 catalog and policy authoring remain available; a self-declared Admin/Developer role
 does not enforce permissions. The header shows the saved role and a setup summary
 with the full, copyable settings path returned by the server. **Update my Workbench
-information** opens a draft of the saved Admin organization details (when applicable),
-assistance choices and AI clients. Cancel (or Escape) discards the draft; **Save changes** validates
+information** opens a draft of the saved Admin organization details (when applicable)
+and AI clients. Cancel (or Escape) discards the draft; **Save changes** validates
 and atomically replaces the same local file. Experience and enterprise role are
 fixed in that editor and its server endpoint. The separate **Mode** popup switches
 between Vibe coder, Enterprise Admin and Enterprise Developer. Its required fields
 change with the selection: Admin requires organization name, short ID, policy
 repository and contact emails; Vibe and Developer require no organization details.
 **Save mode** validates and atomically saves just those mode fields into the latest
-setup, preserving AI clients, assistance choices and reviewer identity. Cancel or
+setup, preserving AI clients and reviewer identity. Cancel or
 Escape leaves the saved setup unchanged. Switching away from Admin clears its
 organization details from active setup. The browser remembers a valid Admin profile
 locally for a later switch; required details are validated again before saving.
@@ -1235,8 +1232,7 @@ can also be updated from Settings (**Edit AI tools**).
 
 The installed public packages do not expose an assistance-card contract for
 recommendations, links or recipes: Core's `CAPABILITIES` is a CLI command inventory;
-Catalog runtime descriptors distribute framework runtime material. Richer
-assistance cards await an appropriate published presentation contract.
+Catalog runtime descriptors distribute framework runtime material.
 
 This local file is not proof of enterprise authorization or an approval shared
 with developers on other machines. Those workflows require future public
