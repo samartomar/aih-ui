@@ -25,13 +25,14 @@ async function openPage(context, origin, theme, errors) {
 
 // The page's own answers: the Catalog it browses and the latest Core inventory it was given.
 function recordAnswers(page) {
-  const answers = { catalog: undefined, inventory: undefined };
+  const answers = { catalog: undefined, inventory: undefined, removal: undefined };
   page.on('response', async response => {
-    const operation = response.url().match(/\/api\/authoring-(catalog|managed)$/)?.[1];
+    const operation = response.url().match(/\/api\/authoring-(catalog|managed|remove)$/)?.[1];
     if (!operation) return;
     // A response the page itself could not read (a superseded or aborted request) is no answer.
     const body = await response.json().catch(() => undefined);
     if (operation === 'catalog' && body?.items) answers.catalog = body; else if (operation === 'managed' && body?.selections) answers.inventory = body;
+    else if (operation === 'remove' && body?.removals) answers.removal = body;
   });
   return answers;
 }
@@ -84,6 +85,18 @@ const displayName = item => { const name = item.display?.name ?? item.name; cons
 const setName = (catalog, set) => catalog.frameworks.flatMap(framework => framework.id === set.framework ? framework.sets ?? [] : [])
   .find(candidate => candidate.id === set.setId && (candidate.setSha256 === undefined || candidate.setSha256 === set.setSha256))?.name;
 const setOrigins = selection => (selection.origins ?? []).filter(origin => origin.reasonIncluded === 'in-set' && origin.set).map(origin => origin.set);
+// Every path Core's removal review deletes or writes back, the members of items it freed included (Core lists those under
+// the removal that freed them), and every file its review removes whole (such as an entry file Core created): the
+// preview must show each of them.
+function assertPreviewListsRemovals(review, removal) {
+  const members = (removal?.removals ?? []).flatMap(entry => entry.members ?? []).filter(member => ['remove', 'restore'].includes(member.action)).map(member => member.path);
+  const files = (removal?.preparation?.review?.operations ?? []).filter(operation => operation.effects === 'remove-file').map(operation => operation.details?.target).filter(Boolean);
+  assert.ok(members.length, `Core's removal review touches some member\n${JSON.stringify(removal)}`);
+  const missing = [...new Set([...members, ...files])].filter(path => !review.includes(path));
+  assert.deepEqual(missing, [], `the preview lists every file Core removes\n${review}`);
+  return { members: members.length, files: files.length };
+}
+
 const lines = text => text.split('\n').map(line => line.trim()).filter(Boolean);
 const escape = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const count = (text, pattern) => (text.match(new RegExp(pattern, 'g')) ?? []).length;
@@ -208,6 +221,8 @@ async function runSetRemoval({ origin, output, project, playwrightModule, theme 
     await control.click();
     await section.getByRole('button', { name: 'Confirm remove', exact: true }).waitFor({ timeout: 120_000 });
     const review = await section.innerText();
+    for (let attempt = 0; attempt < 100 && !answers.removal; attempt++) await page.waitForTimeout(100);
+    const previewed = assertPreviewListsRemovals(review, answers.removal);
     // Exactly the kept member, named with the other set, and one reviewed step for each member that leaves.
     assert.deepEqual(lines(review).filter(line => /^[^:]+: Kept; /.test(line)), expectedKept, `review keeps exactly the shared member\n${review}`);
     assert.equal(lines(review).filter(line => /^[^:]+: \d+ members are reviewed for removal\.$/.test(line)).length, removed.length, `review removes exactly ${removed.length} items\n${review}`);
@@ -238,7 +253,7 @@ async function runSetRemoval({ origin, output, project, playwrightModule, theme 
     assert.deepEqual(gone, [], 'every removed file is absent on disk');
     assert.equal(await page.locator(`[data-installed-set^="misc/"]`).count(), 0, 'Misc is no longer listed');
     await page.screenshot({ path: join(output, `${label}-${theme}.png`), fullPage: true });
-    await writeFile(join(output, `${label}-${theme}.json`), JSON.stringify({ status: 'passed', removed: expectedRemoved, kept: expectedKept, review, result, calls, errors }, null, 2));
+    await writeFile(join(output, `${label}-${theme}.json`), JSON.stringify({ status: 'passed', removed: expectedRemoved, kept: expectedKept, previewed, review, result, calls, errors }, null, 2));
     assert.deepEqual(errors, []);
     return { status: 'passed' };
   } finally { await browser.close(); }
@@ -509,12 +524,17 @@ export async function runNeededRemovalTruthBrowser({ origin, output, project, pl
     assert.match(text, /\+ 1 it needs/, `the row names what it needs\n${await listed.locator('#installed-list').innerText()}`);
     assert.equal(await row.locator(`[data-installed-needed="${needed.managementId}"]`).count(), 1, 'the notices are folded under git-guard');
     assert.equal(await listed.locator(`[data-installed-other="${needed.managementId}"]`).count(), 0, 'the notices are not another installed item');
+    answers.removal = undefined;
     await row.locator('> div').first().getByRole('button', { name: 'Remove', exact: true }).click();
-    const message = listed.locator('#installed-message[data-outcome]');
+    const message = listed.locator('#installed-message[data-outcome]'), previewed = [];
     for (let round = 0; round < 5 && !await message.count(); round++) {
       const confirm = row.getByRole('button', { name: 'Confirm remove', exact: true });
       await confirm.or(message).first().waitFor({ timeout: 120_000 });
-      if (await confirm.isVisible()) { await confirm.click(); await listed.waitForFunction(() => !document.querySelector('[aria-busy="true"]'), undefined, { timeout: 240_000 }); }
+      if (await confirm.isVisible()) {
+        for (let attempt = 0; attempt < 100 && !answers.removal; attempt++) await listed.waitForTimeout(100);
+        previewed.push(assertPreviewListsRemovals(await row.innerText(), answers.removal));
+        answers.removal = undefined;
+        await confirm.click(); await listed.waitForFunction(() => !document.querySelector('[aria-busy="true"]'), undefined, { timeout: 240_000 }); }
     }
     await message.waitFor({ timeout: 240_000 });
     const result = await message.innerText();
@@ -526,8 +546,58 @@ export async function runNeededRemovalTruthBrowser({ origin, output, project, pl
     const left = [chosen, needed].flatMap(selection => selection.members.map(member => member.path)).filter(path => path.startsWith(project) && existsSync(path));
     assert.deepEqual(left, [], 'their files are absent on disk');
     await listed.screenshot({ path: join(output, `needed-removal-${theme}.png`), fullPage: true });
-    await writeFile(join(output, `needed-removal-${theme}.json`), JSON.stringify({ status: 'passed', added, row: text, result,
+    await writeFile(join(output, `needed-removal-${theme}.json`), JSON.stringify({ status: 'passed', added, row: text, previewed, result,
       before: before.map(selection => selection.item?.itemId), after: after.map(selection => selection.item?.itemId), errors }, null, 2));
+    assert.deepEqual(errors, []);
+    return { status: 'passed' };
+  } finally { await browser.close(); }
+}
+
+// Two real ECC rule sets, each of whose rules requires ECC's shared notices. Removing the sets one after the other through
+// "Remove this set" must leave nothing of ECC: the notices go with the last set (Core frees what only removed items
+// required), and each preview lists every file Core removes.
+export async function runEccSetsRemovalTruthBrowser({ origin, output, project, playwrightModule, theme = 'dark' }) {
+  const { chromium } = await import(playwrightModule);
+  await mkdir(output, { recursive: true });
+  const browser = await chromium.launch({ headless: true });
+  const errors = [], setIds = ['ecc.rules.typescript', 'ecc.rules.golang'], noticesId = 'ecc.notices';
+  try {
+    const installing = await newContext(browser);
+    await installSets(await openPage(installing, origin, theme, errors), 'ECC', setIds);
+    await installing.close();
+    const { page, answers } = await freshInstalledList(browser, origin, theme, errors);
+    const before = answers.inventory.selections;
+    const ecc = before.filter(selection => selection.item?.framework === 'ecc');
+    const notices = ecc.find(selection => selection.item.itemId === noticesId);
+    assert.ok(notices, `Core lists ${noticesId} installed: ${JSON.stringify(ecc.map(selection => selection.item.itemId))}`);
+    const rounds = [];
+    for (const setId of setIds) {
+      const listed = answers.inventory;
+      answers.removal = undefined;
+      const section = page.locator(`[data-installed-set^="${setId}/"]`);
+      assert.equal(await section.count(), 1, `${setId} is listed as an installed set\n${await page.locator('#installed-list').innerText()}`);
+      await section.locator('> div').first().getByRole('button').first().click();
+      await section.getByRole('button', { name: 'Confirm remove', exact: true }).waitFor({ timeout: 120_000 });
+      const review = await section.innerText();
+      for (let attempt = 0; attempt < 100 && !answers.removal; attempt++) await page.waitForTimeout(100);
+      const previewed = assertPreviewListsRemovals(review, answers.removal);
+      await section.getByRole('button', { name: 'Confirm remove', exact: true }).click();
+      // Each round's outcome is read once Core's list has been read again after it, so an earlier round's message is not taken for it.
+      for (let attempt = 0; attempt < 2400 && answers.inventory === listed; attempt++) await page.waitForTimeout(100);
+      assert.notEqual(answers.inventory, listed, 'the list was read again from Core after the removal');
+      const message = page.locator('#installed-message[data-outcome]');
+      await message.waitFor({ timeout: 60_000 });
+      const result = await message.innerText();
+      assert.equal(await message.getAttribute('data-outcome'), 'removed', result);
+      rounds.push({ setId, previewed, review, result });
+    }
+    const after = answers.inventory?.selections ?? [];
+    assert.deepEqual(after.filter(selection => selection.item?.framework === 'ecc').map(selection => selection.item.itemId), [], 'nothing of ECC is left, its notices included');
+    const left = ecc.flatMap(selection => selection.members.map(member => member.path)).filter(path => path.startsWith(project) && existsSync(path));
+    assert.deepEqual(left, [], 'every ECC file is absent on disk');
+    await page.screenshot({ path: join(output, `ecc-sets-removal-${theme}.png`), fullPage: true });
+    await writeFile(join(output, `ecc-sets-removal-${theme}.json`), JSON.stringify({ status: 'passed', before: ecc.map(selection => selection.item.itemId), rounds,
+      after: after.map(selection => selection.item?.itemId), errors }, null, 2));
     assert.deepEqual(errors, []);
     return { status: 'passed' };
   } finally { await browser.close(); }
