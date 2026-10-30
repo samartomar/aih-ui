@@ -806,7 +806,7 @@ come last and read **Not supplied** until something is actually imported.
 The compact layout uses `--type-source-heading`, `--type-card-title` and
 `--type-card-description` from `tokens.css`; component rules contain no independent heading/card type scale.
 
-### Packages and the header's Your tool
+### Packages and the header's Your tools
 
 The primary header keeps tool choice, Your setup, Settings and theme together.
 The secondary line shows setup status and a keyboard- and touch-accessible
@@ -829,17 +829,17 @@ sets, native tool-fit claims and grouped set actions appear only when their
 owning screen reads the required published contract; presentation does not
 supply those semantics.
 
-**Your tool** in the header is the one AI tool the person works in, and the only
-tool control on the page. Every fact on it comes from the installed Core, read by
-the host through public exports (`tools/service/tools.mjs`, `GET /api/tools` and
-`GET /api/tool-inspection`):
+**Your tools** in the header is every AI tool the person works in, and the only
+tool control on the page. It is always a multi-select: people use several tools.
+Every fact on it comes from the installed Core, read by the host through public
+exports (`tools/service/tools.mjs`, `GET /api/tools` and `GET /api/tool-inspection`):
 
 - the list is Harness `listTools({ includeUnobserved: true })` from
   `@aihq/core/harness`, in registry order, with Harness's labels and surfaces;
-- a tool can be chosen only when `listTools()` also offers it (an observed
-  binding). Every other tool, IDEs included, stays listed and greyed, and its
+- any number of tools can be ticked. A tool `listTools()` does not offer (no
+  observed binding), IDEs included, can be chosen too; it stays greyed, its
   tooltip gives the refusal Core's `selectTool` returns for it (today
-  `tool-not-observed`);
+  `tool-not-observed`), and the page shows no fit and installs nothing for it;
 - the header reads filesystem and configuration facts through Harness
   `inspectToolHost`, with a bounded budget and no client launch. An absent or
   unreadable version stays unchecked. These facts are separate from static
@@ -847,10 +847,11 @@ the host through public exports (`tools/service/tools.mjs`, `GET /api/tools` and
   **Check this machine** remains a separate action with its existing behavior.
 
 The page keeps no tool names, so a reinstalled Core changes the list with no UI
-edit. The choice is a per-viewer convenience: only its tool id is kept in this
-browser's local storage, so it survives a restart of the Workbench, and it is not
-a policy. A saved tool the installed Core no longer offers is named and not
-chosen. The control has a loading, an empty (Core lists no tools), an unavailable
+edit. The choice is a per-viewer convenience: only the tool ids are kept in this
+browser's local storage, so they survive a restart of the Workbench, and it is not
+a policy. Until the person changes it, it is the workspace setup's AI clients
+(together with an older single choice from this browser). A saved tool the
+installed Core no longer lists is named. The control has a loading, an empty (Core lists no tools), an unavailable
 (the installed Core does not export `listTools`) and a failed state; each tooltip
 is reachable by keyboard focus and by touch. The running-page case
 `tools/consumer/your-tool-browser.mjs` checks them against the packed Core, with
@@ -858,16 +859,58 @@ fixtures for the states (`tools/consumer/fixtures/your-tool`).
 
 The workspace setup's **AI clients** -- the clients `@aihq/core` lists in its
 public `nativeClientIds`, saved in the workspace setup file -- are a different
-fact. They are chosen in first-run setup and changed from Settings (**Edit AI
-tools**), and they are not Your tool. The earlier header **AI tools** chip that
-also edited them is replaced by Your tool; its module stays until the dormant-code
-retirement.
+fact, saved in the workspace setup file. They are chosen in first-run setup and
+changed from Settings (**Edit AI tools**); they are where Your tools starts. The
+earlier header **AI tools** chip that also edited them is replaced by Your tools;
+its module stays until the dormant-code retirement.
 
 The catalog's **Catalog target** filter -- the client names a catalog declares,
 which the Support filter reads -- works as before from the catalog's Advanced
-section, so the default page shows one tool control. Browse cards read Harness
-compatibility for Your tool; changing the tool does not silently rewrite saved
-recipe pins.
+section, so the default page shows one tool control. Browse cards judge each item
+in every chosen tool Core selects: Harness `checkCompatibility`, and whether Core's
+`renderDelivery` renders it for that tool. An item is addable when at least one
+chosen tool takes it, and its card names the tools it fits. One Add installs it for
+each of those tools (one selection per tool, each with its own management id; tools
+Core renders to the same project paths, such as Codex CLI and Antigravity CLI under
+`.agents`, share one installation). Saved selections keep the tools they were
+installed for; changing Your tools does not silently rewrite them.
+
+Fit is one test, shared by the card, a single Add, a set Add and Install
+(`checkToolFit` in `tools/consumer/headless.mjs`): Core's compatibility check finds no
+blocker for the tool (the item checked with what its Add brings) and Core renders the
+item for it. A chosen tool that fails it gets nothing; an item no chosen tool passes is
+refused in Core's words. The installed list shows an item installed for several tools
+as one row naming its tools; its Remove and Update cover every copy in one request.
+
+Under Enterprise, the catalog says once whether the host-configured organization
+authority source was read, in the authority-source wording, and what to do when it
+was not. Every Enterprise setup, Admin or Developer, composes an Enterprise policy that
+the host-configured organization policy governs; with no readable source, Add still
+works and Install says, in Core's words, that it needs one.
+
+The organization source is host configuration. When the host configuration names none
+(`AIH_ORGANIZATION_SOURCE`) and the setup is Enterprise with a GitHub policy repository,
+the catalog asks once for the policy file's path and branch (defaults: the file name the
+organization author's export produces, `<short id>.organization-policy.json`, and
+`main`). The page sends only those two values; the host takes the repository from the
+saved setup, saves `{ provider: 'github', repository, path, revision }` as
+`organization-source.json` beside the setup file, and reads it through Core's
+`readGitHubPolicy` with the authentication the host controls file
+(`AIH_CONSUMER_CONTROLS`) holds. No token is stored or shown. The page then says read,
+not found or no access. A source the host configuration names is never replaced.
+
+Organization governance is per tool. In an Enterprise policy, a selection Core renders
+for a tool is governed by `<managementId>--<tool>` (the lead included, since which tool
+leads depends on the developer's choice; copies keep the management id they install
+under). The organization author writes one entry per permitted item and per tool the
+organization targets, each with that tool's rendered recipe identity: **an Admin who
+permits an item permits it for every tool the organization targets**. The targeted
+tools are the clients the draft's targets and entries name, or, when they name none,
+every tool Core observes. Core admits an entry by exact selection id and recipe identity
+(one entry per id), so a supporting document such as a notices file, which Core renders
+beside the items requiring it, is permitted as it is delivered beside the entries the
+baseline permits together: a developer who selects a different subset of those items is
+refused for that document.
 
 The strip also carries the start-up contract-check message, as information
 that blocks nothing. At start-up the host runs the installed Core's

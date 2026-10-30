@@ -81,3 +81,6 @@ export function settingsErrors(value) {
   if (!listOfStrings(value.clients, 100)) errors.clients = "AI client choices must be a list of distinct supported identifiers.";
   return errors;
 }
+
+/** The mode the setup's policy is composed in: every Enterprise setup, Admin or Developer, is an Enterprise policy the organisation governs. */
+export const authoringMode = (settings) => (settings?.experience === "enterprise" ? "enterprise" : "vibe");

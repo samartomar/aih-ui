@@ -17,6 +17,7 @@ import { organizationElements, shellElements, yourToolElements } from "./app/ele
 import { createYourTool } from "./app/your-tool.js";
 import { createOrganization } from "./app/organization.js";
 import { createTheme } from "./app/theme.js";
+import { authoringMode } from "./app/setup-model.js";
 import { createOnboarding } from "./app/onboarding.js";
 import { createPolicyWorkspace } from "./app/policy-workspace.js";
 import { createAuthoringClient } from './app/authoring-client.js';
@@ -44,17 +45,17 @@ async function main() {
     // loads. Every control that offers a client reads that SAME list and keeps
     // no copy of its own.
     const organization = createOrganization({ elements: organizationElements(), onEdit: section => onboarding.edit(section), onModeComplete: applySettings });
-    // Your tool reads Core's tool registry and inspection itself; it is not the workspace setup's AI clients, which
-    // stay in Settings (Edit AI tools).
-    // The header's one canonical tool feeds both the catalog and the authoring context; it is the same
-    // choice, not a Settings client, and it rebinds no saved execution.
-    const yourTool = createYourTool({ elements: yourToolElements(), onChange: tool => { catalog.setTool(tool); authoring.setTool(tool); } });
+    // Your tools reads Core's tool registry and inspection itself. It starts from the workspace setup's AI clients
+    // (Settings, Edit AI tools) and is always a multi-select.
+    // The header's chosen tools feed both the catalog and the authoring context; they rebind no saved execution.
+    const yourTool = createYourTool({ elements: yourToolElements(), onChange: tools => { catalog.setTool(tools); authoring.setTool(tools); } });
 
     function applySettings(settings, location) {
+      yourTool.setSetupClients(settings.clients);
       organization.setSettings(settings, location);
       policyWorkspace.setSettings(settings);
       authoringWorkspace.setSettings(settings);
-      void authoring.setMode(settings.experience === "enterprise" && settings.role === "developer" ? "enterprise" : "vibe");
+      void authoring.setMode(authoringMode(settings));
       void evidenceReview.setDefaultRecipient(settings.reviewer ?? null);
       catalog.setMode(settings);
       catalog.setOrganizationName(settings.role === "admin" ? settings.organization?.name ?? null : null);

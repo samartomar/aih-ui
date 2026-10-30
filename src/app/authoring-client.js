@@ -37,7 +37,7 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
   const headers = { 'x-aih-client': crypto.randomUUID() };
   const listeners = new Set();
   let catalog, bytes = new Uint8Array(), intent, candidate, draftValue, compiled, revision = 0, catalogRevision = 0, hostRevision = 0, folderRevision = 0, reviewEvidence = [], evidenceRevision = 0, recipient, judgments = [], judgmentSummary;
-  let dirty = false, checkpoint, recoveryAvailable, startupSource, selectedTool, selectedToolLabel;
+  let dirty = false, checkpoint, recoveryAvailable, startupSource, selectedTool, selectedToolLabel, selectedTools = [], toolLabels = {};
   // The saved setup's execution mode: an Enterprise Developer's setup is an Enterprise policy, so the host applies and
   // re-checks the organisation source for it. New policies start in it; `ready` settles once start-up and any mode change are done.
   let setupMode, ready = Promise.resolve(), modeChanges = 0, modeFailure;
@@ -52,7 +52,16 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
   // hands over the registry entry; requests carry its canonical id string (Core's selectTool names ids only).
   // Tool changes participate in every surface's snapshot (Q6-R2): subscribers (drawer host facts,
   // catalog re-read) must see the new tool, so setTool notifies like any other identity change.
-  const setTool = tool => { selectedTool = typeof tool === 'string' ? tool : tool?.id ?? null; selectedToolLabel = typeof tool === 'string' ? null : tool?.label ?? null; notify(); };
+  // Your tools: every chosen tool Core has observed goes with each request, so Core is asked about each of them; the
+  // lead (the first) also names the tool for the host's second-copy read and one-server approvals.
+  const setTool = value => {
+    const tools = (Array.isArray(value) ? value : value ? [value] : []).filter(tool => typeof tool === 'string' || tool.observed !== false);
+    const lead = tools[0];
+    selectedTool = typeof lead === 'string' ? lead : lead?.id ?? null; selectedToolLabel = typeof lead === 'string' ? null : lead?.label ?? null;
+    selectedTools = tools.map(tool => typeof tool === 'string' ? tool : tool.id);
+    for (const tool of Array.isArray(value) ? value : value ? [value] : []) if (typeof tool !== 'string' && tool?.label) toolLabels[tool.id] = tool.label;
+    notify();
+  };
   const artifactBytes = () => draftValue?.envelopeBytes ?? bytes;
   const notify = () => {
     const current = artifactBytes();
@@ -75,7 +84,7 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
   async function send(operation, body) {
     const response = await fetch(`/api/authoring-${operation}`, {
       method: 'POST', headers: { ...headers, 'content-type': 'application/json' },
-      body: JSON.stringify({ policyBytes: [...bytes], reviewEvidence: reviewEvidence.map(value => [...value]), ...(reviewEvidenceIds.length ? { reviewEvidenceIds } : {}), ...(recipient ? { recipient } : {}), ...(selectedTool ? { tool: selectedTool } : {}), ...body }),
+      body: JSON.stringify({ policyBytes: [...bytes], reviewEvidence: reviewEvidence.map(value => [...value]), ...(reviewEvidenceIds.length ? { reviewEvidenceIds } : {}), ...(recipient ? { recipient } : {}), ...(selectedTool ? { tool: selectedTool } : {}), ...(selectedTools.length > 1 ? { tools: selectedTools } : {}), ...body }),
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error ?? JSON.stringify(result));
@@ -153,7 +162,7 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
   return {
     get dirty() { return dirty; }, get recoveryAvailable() { return recoveryAvailable; }, get startupSource() { return startupSource; },
     get folderRevision() { return folderRevision; },
-    setTool, get tool() { return selectedTool; }, get toolLabel() { return selectedToolLabel; },
+    setTool, get tool() { return selectedTool; }, get toolLabel() { return selectedToolLabel; }, get tools() { return selectedTools; }, get toolLabels() { return toolLabels; },
     markDownloaded(downloaded = bytes) { const current = artifactBytes(); if (current.length !== downloaded.length || current.some((byte, index) => byte !== downloaded[index])) return; dirty = false; checkpoint = current.slice(); notify(); },
     discard() { revision++; candidate = undefined; notify(); },
     get catalog() { return catalog; }, get intent() { return intent; },

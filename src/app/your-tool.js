@@ -1,5 +1,6 @@
 /*
- * The header's Your tool control: the one AI tool the person works in.
+ * The header's Your tools control: every AI tool the person works in. It is
+ * always a multi-select; people use several tools.
  *
  * Each fact on it comes from Core, read by the host through public exports
  * (tools/service/tools.mjs):
@@ -14,8 +15,10 @@
  *     report says so; nothing is assumed.
  *
  * The choice is a per-viewer convenience kept in this browser's local storage
- * (only the tool id), so it survives a restart of the Workbench. It is not a
- * policy and not the workspace setup's AI clients.
+ * (only the tool ids), so it survives a restart of the Workbench. Until the
+ * person changes it here, it is the AI clients chosen in setup, together with
+ * an older single choice from this browser. It is not a policy. Tools Core has
+ * not observed stay chosen and say so; the page claims no fit for them.
  *
  * States: loading (no answer yet), empty (Core lists no tools), unavailable
  * (this Core publishes no listTools), failed (the host could not read it).
@@ -25,18 +28,35 @@ import { el } from "./dom.js";
 import { iconFor, iconSpan } from "./icons.js";
 import { attachTooltip } from "./tooltip.js";
 
+// The older single-tool choice; read once as part of the starting set, never written.
 export const YOUR_TOOL_KEY = "wb-your-tool";
+export const YOUR_TOOLS_KEY = "wb-your-tools";
 const storage = () => { try { return globalThis.localStorage; } catch { return undefined; } };
 const KEPT = "Kept in this browser only.";
 const NOT_PROOF = "Finding a tool is not proof that it loads content.";
 const SURFACE = { cli: "CLI", ide: "IDE" };
 
+function savedChoice() {
+  try {
+    const value = JSON.parse(storage()?.getItem(YOUR_TOOLS_KEY) ?? "null");
+    return Array.isArray(value) && value.every((id) => typeof id === "string") ? value : null;
+  } catch { return null; }
+}
+
 /** @param elements { yourToolTrigger, yourToolIcon, yourToolName, yourToolPop, yourToolList, yourToolNote } */
 export function createYourTool({ elements, onChange = () => {} }) {
   let list;              // undefined while loading; then the /api/tools answer
   let inspection;        // undefined while checking; then the /api/tool-inspection answer
-  let chosen = null;
-  try { chosen = storage()?.getItem(YOUR_TOOL_KEY) ?? null; } catch { chosen = null; }
+  // A group of checkboxes, never a radio group: everyone uses several tools.
+  elements.yourToolList.setAttribute("role", "group");
+  let saved = savedChoice();
+  let legacy = null;
+  try { legacy = storage()?.getItem(YOUR_TOOL_KEY) ?? null; } catch { legacy = null; }
+  let setupClients = [];
+  // The chosen ids: the saved multi-tool choice, else setup's AI clients with the older single choice.
+  const chosenIds = () => saved ?? [...new Set([...(legacy ? [legacy] : []), ...setupClients])];
+  // Chosen registry tools in Core's registry order; ids the registry does not list are reported in the note.
+  const chosenTools = () => (list?.state === "published" ? list.tools.filter((tool) => chosenIds().includes(tool.id)) : []);
 
   const isOpen = () => !elements.yourToolPop.hidden;
   function setOpen(open) {
@@ -67,26 +87,26 @@ export function createYourTool({ elements, onChange = () => {} }) {
 
   function refusalWords(tool) {
     const reason = tool.refusal?.reason;
-    if (reason === "tool-not-observed") return `Can't be chosen: Core hasn't observed it working (${reason}).`;
-    return reason ? `Can't be chosen: Core refuses it (${reason}).` : "Can't be chosen: Core's listTools() does not offer it, and Core gave no reason.";
+    if (reason === "tool-not-observed") return `Core hasn't observed it working (${reason}), so no fit is shown for it.`;
+    return reason ? `Core refuses it (${reason}), so no fit is shown for it.` : "Core's listTools() does not offer it and gave no reason, so no fit is shown for it.";
   }
 
-  function choose(tool) {
-    chosen = tool.id;
-    try { storage()?.setItem(YOUR_TOOL_KEY, tool.id); } catch { /* Local storage may be unavailable; the choice still applies here. */ }
+  function toggle(tool) {
+    const ids = chosenIds();
+    saved = ids.includes(tool.id) ? ids.filter((id) => id !== tool.id) : [...ids, tool.id];
+    try { storage()?.setItem(YOUR_TOOLS_KEY, JSON.stringify(saved)); } catch { /* Local storage may be unavailable; the choice still applies here. */ }
     render();
-    setOpen(false);
-    elements.yourToolTrigger.focus();
-    onChange(tool);
+    // The list stays open: ticking one tool is often followed by the next.
+    onChange(chosenTools());
   }
 
   function row(tool) {
     const state = ready(tool);
     const button = el("button", "your-tool-option");
     button.type = "button";
-    button.setAttribute("role", "radio");
+    button.setAttribute("role", "checkbox");
     button.dataset.tool = tool.id;
-    button.setAttribute("aria-checked", String(tool.observed && tool.id === chosen));
+    button.setAttribute("aria-checked", String(chosenIds().includes(tool.id)));
     const surface = SURFACE[tool.surface] ?? tool.surface;
     const words = el("span", "your-tool-option-words");
     words.append(el("span", "your-tool-option-name", tool.label ?? tool.id));
@@ -94,14 +114,10 @@ export function createYourTool({ elements, onChange = () => {} }) {
     button.append(iconSpan("tool", state.key, { size: "text-[16px]" }), words);
     if (surface) button.append(el("span", "your-tool-option-surface", surface));
     const head = `${tool.label ?? tool.id}${surface ? ` (${surface})` : ""}.`;
-    if (tool.observed) {
-      attachTooltip(button, `${head} ${state.words} ${NOT_PROOF}`);
-      button.addEventListener("click", () => choose(tool));
-    } else {
-      // Greyed but still focusable, so its reason is reachable by keyboard and touch.
-      button.setAttribute("aria-disabled", "true");
-      attachTooltip(button, `${head} ${refusalWords(tool)} ${state.words}`);
-    }
+    // A tool Core has not observed can still be one of yours; it is shown greyed with Core's reason.
+    if (!tool.observed) button.dataset.unobserved = "true";
+    attachTooltip(button, tool.observed ? `${head} ${state.words} ${NOT_PROOF}` : `${head} ${refusalWords(tool)} ${state.words}`);
+    button.addEventListener("click", () => toggle(tool));
     return button;
   }
 
@@ -146,23 +162,27 @@ export function createYourTool({ elements, onChange = () => {} }) {
     }
 
     elements.yourToolList.append(...list.tools.map(row));
-    const current = list.tools.find((tool) => tool.id === chosen && tool.observed);
-    if (current) {
-      const shown = ready(current);
-      trigger(shown.key, current.label ?? current.id, `Your tool: ${current.label ?? current.id}. ${shown.words} ${KEPT}`);
+    const current = chosenTools(), names = current.map((tool) => tool.label ?? tool.id).join(", ");
+    const lead = current.find((tool) => tool.observed);
+    if (current.length) {
+      const shown = lead ? ready(lead) : { key: "none", words: "" };
+      trigger(shown.key, names, `Your tools: ${names}. ${lead ? shown.words : ""} ${KEPT}`);
     } else {
-      trigger("none", "Choose", `Your tool: not chosen. Choose the AI tool you work in. ${KEPT}`);
+      trigger("none", "Choose", `Your tools: none chosen. Choose every AI tool you work in. ${KEPT}`);
     }
     const observed = list.tools.filter((tool) => tool.observed).length;
-    note(`${observed} of ${list.tools.length} tools in Core's registry can be chosen. ${KEPT}`);
-    if (chosen && !current) note(`Your saved tool "${chosen}" is not one Core offers now; choose again.`);
+    note(`Choose every tool you use. ${observed} of ${list.tools.length} tools in Core's registry have been observed by Core. ${KEPT}`);
+    const unobserved = current.filter((tool) => !tool.observed);
+    if (unobserved.length) note(`${unobserved.map((tool) => tool.label ?? tool.id).join(", ")}: Core hasn't observed ${unobserved.length === 1 ? "it" : "them"} working (tool-not-observed), so no fit is shown and nothing is installed for ${unobserved.length === 1 ? "it" : "them"}.`);
+    const unknown = chosenIds().filter((id) => !list.tools.some((tool) => tool.id === id));
+    if (unknown.length) note(`Not in Core's registry now: ${unknown.join(", ")}.`);
     if (inspection === undefined) note("Checking this machine with Core's inspection…").setAttribute("role", "status");
     else if (inspection.state !== "inspected") note(`Core's inspection didn't run: ${inspection.reason ?? "no reason was given"}.`, "text-error");
     else note(`Icons: Core's offline inspection of this machine${inspection.package?.version ? ` (${inspection.package.name ?? "@aihq/core"} ${inspection.package.version})` : ""}${inspection.status && inspection.status !== "complete" ? `, ${inspection.status}` : ""}. ${NOT_PROOF}`);
   }
 
   elements.yourToolTrigger.addEventListener("click", () => setOpen(!isOpen()));
-  // Arrow keys move between the tools, as in a radio group; Tab still reaches each one, greyed ones included.
+  // Arrow keys move between the tools; Tab still reaches each one, greyed ones included.
   elements.yourToolList.addEventListener("keydown", (event) => {
     const step = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[event.key];
     if (!step) return;
@@ -174,6 +194,8 @@ export function createYourTool({ elements, onChange = () => {} }) {
   });
   document.addEventListener("click", (event) => {
     if (!isOpen()) return;
+    // A tick re-renders the list, so the clicked row is already detached here; it was inside, not outside.
+    if (event.target?.isConnected === false) return;
     if (elements.yourToolPop.contains(event.target) || elements.yourToolTrigger.contains(event.target)) return;
     setOpen(false);
   });
@@ -201,12 +223,19 @@ export function createYourTool({ elements, onChange = () => {} }) {
     async start() {
       list = await read("/api/tools");
       render();
-      onChange(list?.state === "published" ? list.tools.find(tool => tool.id === chosen && tool.observed) ?? null : null);
+      onChange(chosenTools());
       if (list.state !== "published" || list.tools.length === 0) return;
       inspection = await read("/api/tool-inspection");
       render();
     },
-    /** The chosen tool's registry entry, or null. */
-    current: () => (list?.state === "published" ? list.tools.find((tool) => tool.id === chosen && tool.observed) ?? null : null),
+    /** The chosen tools' registry entries, in registry order (each with Core's `observed`). */
+    current: () => chosenTools(),
+    /** Setup's AI clients: the starting choice until the person changes it here. */
+    setSetupClients(clients) {
+      setupClients = Array.isArray(clients) ? clients : [];
+      if (saved) return;
+      render();
+      if (list?.state === "published") onChange(chosenTools());
+    },
   };
 }

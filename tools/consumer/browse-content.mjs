@@ -4,6 +4,7 @@ import * as runtime from '@aihq/core/harness/runtime';
 import { resolveSelections } from '@aihq/catalog/reader';
 import { recipeClient } from './selected-recipe.mjs';
 import { resolveConfiguredSets } from './set-choices.mjs';
+import { checkToolFit, fitReason } from './headless.mjs';
 const platform = () => ({ os: ({ win32: 'windows', darwin: 'macos' })[process.platform] ?? process.platform, arch: process.arch });
 const blocked = entry => entry.support === 'none' || Boolean(entry.notRendered) || Boolean(entry.staticBlockers?.length);
 // One card's fit. A card's Add brings the items it requires ("+ N it needs"), so Core is asked about the card together
@@ -29,7 +30,7 @@ function checkCard({ item, fallback }, common, releases, release) {
     ...(entry.staticBlockers ?? []).map(blocker => ({ ...blocker, itemId: entry.item.itemId }))]);
   return { ...together, items: [{ ...own, staticBlockers: [...(own.staticBlockers ?? []), ...required] }] };
 }
-export async function browseContent(inventories, { tool, releaseSha256, sets = [], configurations = [], inspect = false, itemId, chosen }, project, summarize) {
+export async function browseContent(inventories, { tool, tools, releaseSha256, sets = [], configurations = [], inspect = false, itemId, chosen }, project, summarize) {
   const inventory = inventories.find(entry => entry.release.sha256 === releaseSha256);
   if (!inventory) return { status: 'unavailable', reason: 'This exact source is unavailable. Your saved choices are unchanged.' };
   const release = inventory.release;
@@ -37,22 +38,41 @@ export async function browseContent(inventories, { tool, releaseSha256, sets = [
   const resolution = resolveConfiguredSets({ releases, configurations, sets });
   const selections = resolution.value?.selections ?? []; // A refused set does not invalidate its source's item facts.
   if (typeof harness.selectTool !== 'function' || typeof harness.checkCompatibility !== 'function') return { status: 'unavailable', reason: 'This Core does not publish selected-tool compatibility.', resolution };
-  const selected = harness.selectTool(tool);
-  if (selected.status !== 'selected') return { status: 'unavailable', reason: 'Choose your tool to check its fit.', resolution };
+  // Your tools: each is judged; Core's selectTool decides which can be. The first it selects leads the host read.
+  const answers = (Array.isArray(tools) && tools.length ? tools : [tool]).map(value => ({ value, selected: harness.selectTool(value) }));
+  const chosenTools = [...new Map(answers.filter(answer => answer.selected.status === 'selected').map(answer => [answer.selected.tool.id, answer.selected.tool])).values()];
+  const refusedTools = answers.filter(answer => answer.selected.status !== 'selected' && typeof answer.value === 'string').map(answer => ({ id: answer.value, reason: answer.selected.reason ?? answer.selected.status }));
+  if (!chosenTools.length) return { status: 'unavailable', reason: 'Choose your tool to check its fit.', resolution, refusedTools };
+  const selected = { status: 'selected', tool: chosenTools[0] };
   const setOrigins = item => selections.find(selection => selection.item.releaseSha256 === release.sha256 && selection.item.itemId === item.id)?.origins?.filter(origin => origin.set).map(origin => origin.set) ?? [];
   const binding = harness.toolBindings.find(binding => binding.tool === selected.tool.id);
   const fallbackOf = item => release.items.find(candidate => candidate.id === item.fallback?.itemId);
   const members = release.items.map(item => ({ item, sets: setOrigins(item), ...(item.fallback ? { fallback: fallbackOf(item) } : {}) }));
-  let compatibility;
+  let compatibility, fit;
   try {
     // A browsed card is not an instruction to install every item in the grid.
     // Ask Core about each candidate separately; set fit uses the resolved group.
-    const common = { tool: selected.tool.id, platform: platform(), binding,
-      nativeRoutes: release.nativeRoutes === undefined ? [] : [{ framework: release.framework.id, lines: release.nativeRoutes }] };
-    const checks = members.map(member => checkCard(member, common, releases, release));
-    const chosen = members.filter(member => selections.some(selection => selection.item.releaseSha256 === release.sha256 && selection.item.itemId === member.item.id));
-    const setCheck = harness.checkCompatibility({ ...common, items: chosen });
-    compatibility = { items: checks.flatMap(result => result.items ?? []), sets: setCheck.sets ?? [], pluginRoutes: checks[0]?.pluginRoutes ?? setCheck.pluginRoutes, checks: checks.filter(result => result.status !== 'checked'), setCheck };
+    const judge = selectedTool => {
+      const common = { tool: selectedTool.id, platform: platform(), binding: harness.toolBindings.find(candidate => candidate.tool === selectedTool.id),
+        nativeRoutes: release.nativeRoutes === undefined ? [] : [{ framework: release.framework.id, lines: release.nativeRoutes }] };
+      const checks = members.map(member => checkCard(member, common, releases, release));
+      const chosen = members.filter(member => selections.some(selection => selection.item.releaseSha256 === release.sha256 && selection.item.itemId === member.item.id));
+      const setCheck = harness.checkCompatibility({ ...common, items: chosen });
+      return { items: checks.flatMap(result => result.items ?? []), sets: setCheck.sets ?? [], pluginRoutes: checks[0]?.pluginRoutes ?? setCheck.pluginRoutes, checks: checks.filter(result => result.status !== 'checked'), setCheck };
+    };
+    const judged = chosenTools.map(selectedTool => ({ tool: selectedTool, compatibility: judge(selectedTool) }));
+    compatibility = judged[0].compatibility;
+    // An item fits a tool when Core's check finds no blocker AND Core renders it for that tool (what Add composes), or, for
+    // content Core does not render, when Catalog publishes that tool's recipe.
+    fit = release.items.filter(item => item.role !== 'supporting').map(item => ({ itemId: item.id, tools: judged.map(({ tool: selectedTool, compatibility: checked }) => {
+      const entry = checked.items.find(value => value.item.itemId === item.id);
+      const renderable = Boolean(release.framework?.id && item.contentSha256 && item.behaviourSha256);
+      // The shared fit test Install uses (headless.mjs); content Core does not render needs that tool's Catalog recipe.
+      const shared = renderable ? checkToolFit({ tool: selectedTool.id, entry: inventory, item, scope: 'project', compatibility: entry ?? null }) : undefined;
+      const recipe = renderable ? undefined : recipeClient(item, selectedTool.id);
+      const fits = renderable ? shared.fits : Boolean(entry) && !blocked(entry) && recipe.available;
+      return { tool: selectedTool.id, label: selectedTool.label, fits, ...(fits ? {} : { reason: renderable ? shared.reason : !entry || blocked(entry) ? fitReason(entry) : recipe.reason }) };
+    }) }));
   } catch { return { status: 'failed', reason: 'Compatibility could not be checked.', resolution, platform: platform() }; }
   const dependencies = typeof itemId === 'string' && release.items.some(item => item.id === itemId) ? { itemId, resolution: resolveSelections({ releases, roots: [{ releaseSha256, itemId, scope: 'project', configuration: {} }], skips: [] }) } : undefined;
   // Host facts come from one bounded read-only inspection of everything chosen, whenever the project
@@ -82,12 +102,14 @@ export async function browseContent(inventories, { tool, releaseSha256, sets = [
     const result = await summarize(inventory, item.id);
     scans.push({ itemId: item.id, ...result.itemSummary });
   }
-  return { status: resolution.status === 'ok' ? 'read' : 'refused', ...(resolution.status === 'ok' ? {} : { diagnostics: resolution.diagnostics }), observations: release.items.map(item => ({ itemId: item.id, observations: binding?.layouts[item.kind]?.observations ?? [] })), scans, dependencies, tool: selected.tool, platform: platform(), compatibility, host, resolution,
+  return { status: resolution.status === 'ok' ? 'read' : 'refused', ...(resolution.status === 'ok' ? {} : { diagnostics: resolution.diagnostics }), observations: release.items.map(item => ({ itemId: item.id, observations: binding?.layouts[item.kind]?.observations ?? [] })), scans, dependencies, tool: selected.tool, tools: chosenTools, refusedTools, fit, platform: platform(), compatibility, host, resolution,
     // Whether Core's one-server approval write exists for this tool's MCP registration ('object-keyed' or
     // 'array'), or null/'other' when the shape cannot be written and the person approves in the tool (#162).
     chosenItemIds: chosenItems.map(item => item.id),
     approvalShape: binding?.layouts?.['mcp-server']?.register?.approvalLocation?.shape ?? null,
-    recipes: release.items.map(item => ({ itemId: item.id, ...recipeClient(item, tool) })) };
+    // Content Core renders needs no Catalog per-client recipe: it is addable wherever it fits.
+    recipes: release.items.map(item => ({ itemId: item.id, ...(fit.find(entry => entry.itemId === item.id)?.tools.some(value => value.fits) && item.contentSha256 && item.behaviourSha256 && release.framework?.id
+      ? { available: true } : recipeClient(item, selected.tool.id)) })) };
 }
 
 // The Your setup drawer's one bounded host read across every chosen item, from the same public inspection

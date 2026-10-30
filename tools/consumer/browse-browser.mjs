@@ -3,6 +3,7 @@ import { openSetupAdvanced } from './advanced-browser.mjs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { openPolicyAdvanced, openPolicyFileActions, openSourceDetails, closePolicyDrawer } from './policy-drawer.mjs';
+import { chooseOnlyTool } from './choose-tool.mjs';
 async function enter(page, origin, theme, { hasTool = true } = {}) {
   await page.goto(origin + '/');
   await page.locator('#framework-navigation [data-framework]').first().waitFor();
@@ -89,7 +90,7 @@ export async function runBrowseBrowser({ origin, output, playwrightModule, expec
       assert.ok(setChoices(setsPolicy).every(choice => choice.origins.length));
       assert.ok(setsPolicy.metadata['aih.workbench'].roots.some(root => root.itemId === basics.id));
       await page.screenshot({ path: join(output, `${theme}-extensions.png`), animations: 'disabled' });
-      await page.locator('#your-tool-trigger').click(); await page.locator('[data-tool="copilot"]').click();
+      await chooseOnlyTool(page, 'copilot');
       await page.locator('#catalog-search').fill('grill-me');
       const unavailable = card.getByRole('button', { name: `Remove ${grill.id}`, exact: true });
       await unavailable.waitFor();
@@ -98,7 +99,7 @@ export async function runBrowseBrowser({ origin, output, playwrightModule, expec
       const unavailableCard = page.locator('#cards-grid [data-card-id]').filter({ has: page.locator('button[aria-label^="Add "]:disabled') }).first();
       await unavailableCard.waitFor(); assert.match(await unavailableCard.locator('[data-fact=state]').filter({ hasText: 'Can’t be added yet' }).getAttribute('title'), /No unambiguous Catalog recipe/);
       const unchanged = await save(page, join(output, `${theme}-unavailable-preserved.json`)); assert.deepEqual(unchanged, setsPolicy);
-      await page.locator('#your-tool-trigger').click(); await page.locator('[data-tool="claude"]').click();
+      await chooseOnlyTool(page, 'claude');
       await framework(page, expected.ecc);
       await page.locator('#starting-sets .more-sets > summary').click();
       await page.locator(`[data-set-id="${expected.ecc.optionSet.id}"]`).click();
@@ -293,14 +294,17 @@ export async function runBrowseFactsBrowser({ origin, output, playwrightModule, 
       outcomes.push({ theme, row: specimen.row, name: specimen.name, state: specimen.result.summary.state });
     }
     current = { fallback: true };
-    await page.locator('#your-tool-trigger').click(); await page.locator('[data-tool="kiro"]').click();
+    // Your tools is a multi-select: Kiro CLI alone is Kiro ticked and Claude Code unticked.
+    await chooseOnlyTool(page, 'kiro');
     await framework(page, expected.fallback); await page.locator('#catalog-search').fill(''); await page.locator('#browse-all-items').check();
     const fallback = page.locator('#browse-unsupported'); await fallback.locator('> summary').waitFor(); await fallback.locator('> summary').click();
     await fallback.getByText(new RegExp(`Installed as a ${expected.fallback.kind}`)).waitFor();
     await page.screenshot({ path: join(output, `${theme}-fallback.png`) });
-    await page.locator('#your-tool-trigger').click(); await page.locator('[data-tool="claude"]').click();
+    await chooseOnlyTool(page, 'claude');
     current = specimens.at(-1); await framework(page, expected.additional); await page.locator('#catalog-search').fill('grill-me'); await page.locator('#browse-all-items').check();
-    const policy = page.locator('#cards-grid [data-fact="state"]').filter({ hasText: 'Organization policy unavailable' }); await policy.first().waitFor();
+    // Enterprise with no organization source configured by the host: said once, with what to do, never a silent nothing.
+    const policy = page.locator('#organization-policy-note[data-policy-state="not-configured"]'); await policy.waitFor();
+    assert.match(await policy.innerText(), /No organization authority source is configured by the host\. Enterprise policies cannot be admitted until one is\./);
     for (const state of ['unavailable', 'failed']) {
       current = { boundaryResponse: { status: state, reason: `Controlled ${state} browse fixture` } };
       await framework(page, expected.prepared); await framework(page, expected.additional);
@@ -393,7 +397,7 @@ export async function runPluginRoutesBrowser({ origin, output, expected, playwri
     await page.locator('#cards-grid [data-card-id]').first().locator('.wb-card-title').click(); await page.locator('#inspector-browse-facts [data-plugin-routes="listed"]').waitFor();
     await page.screenshot({ path: join(output, theme + '-inspector.png') }); await page.locator('#close-inspector-btn').click();
     for (const tool of ['codex', 'copilot', 'antigravity', 'kiro']) {
-      await page.locator('#your-tool-trigger').click(); await page.locator(`[data-tool="${tool}"]`).click();
+      await chooseOnlyTool(page, tool);
       const value = expected.routes.byTool[tool][0];
       const shown = page.locator(`#framework-plugin-routes[data-plugin-routes="${value.state}"]`); await shown.first().waitFor({ state: 'attached' });
       if (value.state === 'listed') for (const line of value.lines) assert.ok((await shown.first().innerText()).includes(line));
@@ -408,7 +412,7 @@ export async function runPluginRoutesBrowser({ origin, output, expected, playwri
     const unknown = await (await context.request.post(origin + '/api/authoring-browse-content', { headers: { origin }, data: { ...request, tool: 'unknown-public-tool' } })).json();
     assert.equal(unknown.status, 'unavailable');
     outcomes.push({ theme, unknownTool: 'unavailable', reason: unknown.reason });
-    await page.locator('#your-tool-trigger').click(); await page.locator('[data-tool="claude"]').click();
+    await chooseOnlyTool(page, 'claude');
     await framework(page, expected.prepared); await page.locator('#framework-plugin-routes[data-plugin-routes="not-supplied"]').first().waitFor();
     await framework(page, expected.routes);
     let mode = 'unavailable', held = [], waiting = false;
@@ -517,7 +521,7 @@ export async function runBrowseFeedbackBrowser({ origin, output, expected, playw
     assert.equal(await page.locator(`button[data-set-id="${id}"]`).getAttribute('aria-pressed'), 'false');
     assert.ok(await cards.count() > 0, 'Last-set deselection leaves a browsable framework');
     for (const tool of ['codex', 'claude']) {
-      await page.locator('#your-tool-trigger').click(); await page.locator(`[data-tool="${tool}"]`).click(); await settled();
+      await chooseOnlyTool(page, tool); await settled();
       assert.ok(await cards.count() > 0, `${tool}: no invisible legacy support filter`);
     }
     await framework(page, expected.ecc); await settled();

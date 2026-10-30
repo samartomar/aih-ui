@@ -5,6 +5,7 @@ import { copiesWords, reasonWords } from '../app/tool-host-warnings.js';
 import { itemDisplayName } from './item-name.js';
 import { sourcePresentation } from './source-facts.js';
 import { mcpApprovalView } from '../app/mcp-approval.js';
+import { toolFit, toolNames } from './tool-fit.js';
 export function badge(group, key, words, explanation) {
   const node = el('span', 'browse-fact'); node.append(iconSpan(group, key), el('span', '', words));
   node.addEventListener('click', event => event.stopPropagation());
@@ -28,7 +29,16 @@ export function itemBrowseFacts(item, browse, tool) {
     : `Delivered in ${label}; not yet seen in use`;
   if (!fit) words = browse?.status === 'failed' ? 'Tool fit failed' : browse?.status ? 'Tool fit unavailable' : 'Tool fit loading';
   if (fit?.boundAs) { fitKey = 'fallback'; words = `Installed as a ${fit.boundAs.kind} in ${tool?.label ?? 'this tool'}`; }
-  const explanation = !fit ? (browse?.reason ?? 'Tool fit is loading or unavailable. Choose your tool; no successful use is assumed.') : `${fit.reason} ${fit.notRendered?.detail ?? ''} ${(fit.staticBlockers ?? []).map(value => value.detail).join(' ')} ${observed ? `Observed ${observed.observedAt}, ${observed.os} ${observed.arch}, tool ${observed.toolVersion}.` : `No observation on ${browse.platform?.os ?? 'unknown OS'} ${browse.platform?.arch ?? 'unknown architecture'}.`} A fallback label describes the published binding, not an installed-file check. Host facts ${host?.status ?? 'unchecked'}; static observation is not proof of use here.`;
+  // Several chosen tools: the item is judged in each, and it fits where Core says it does.
+  const across = toolFit(item, browse);
+  if (across.judged && across.fits.length + across.misses.length > 1) {
+    const misses = across.misses.map(miss => `${miss.label}: ${miss.reason}`).join(' ');
+    if (!across.addable) return { fit, scan, recipe, fitKey: 'none', words: 'Doesn’t work in any of your tools', explanation: misses, across };
+    if (!across.fits.some(value => value.tool === tool?.id)) fitKey = 'unconfirmed';
+    return { fit, scan, recipe, fitKey, words: `Fits ${toolNames(across.fits)}`, across,
+      explanation: `Core takes it in ${toolNames(across.fits)}.${misses ? ` Not in ${misses}` : ''} Static fit, not proof of use here.` };
+  }
+  const explanation = !fit ?(browse?.reason ?? 'Tool fit is loading or unavailable. Choose your tool; no successful use is assumed.') : `${fit.reason} ${fit.notRendered?.detail ?? ''} ${(fit.staticBlockers ?? []).map(value => value.detail).join(' ')} ${observed ? `Observed ${observed.observedAt}, ${observed.os} ${observed.arch}, tool ${observed.toolVersion}.` : `No observation on ${browse.platform?.os ?? 'unknown OS'} ${browse.platform?.arch ?? 'unknown architecture'}.`} A fallback label describes the published binding, not an installed-file check. Host facts ${host?.status ?? 'unchecked'}; static observation is not proof of use here.`;
   return { fit, scan, recipe, fitKey, words, explanation };
 }
 export function renderBrowseFacts(item, browse, tool, { detailed = false, onApprove = undefined, approved = false, approvalError = undefined } = {}) {
@@ -91,7 +101,8 @@ export function renderBrowseFacts(item, browse, tool, { detailed = false, onAppr
     'Read-only Core host inspection of your project folder. No client was launched; the Workbench does not decide what counts as a duplicate.'));
   if (facts.recipe && !facts.recipe.available) node.append(badge('state', 'info', 'Can’t be added yet', facts.recipe.reason));
   const policy = browse?.policy?.find(value => value.itemId === item.id)?.preview;
-  if (browse?.enterprise && !policy) node.append(badge('state', 'policy', browse.status === 'failed' ? 'Organization policy failed' : browse.status ? 'Organization policy unavailable' : 'Organization policy loading', 'An organization preference grants no authority. The badge waits for Core’s preview over the host-configured source.'));
+  // An organization policy the host could not read is said once on the page (organization-policy.js), not on every card.
+  if (browse?.enterprise && !policy && (!browse.organizationPolicy || browse.organizationPolicy.status === 'ok')) node.append(badge('state', 'policy', browse.status === 'failed' ? 'Organization policy failed' : browse.status ? 'Organization policy unavailable' : 'Organization policy loading', 'An organization preference grants no authority. The badge waits for Core’s preview over the host-configured source.'));
   if (policy) node.append(badge('state', 'policy', policy.status === 'ok' ? `Organization policy · ${policy.value.enforced.admitted ? 'advisory preview' : 'blocked'}` : 'Organization policy unavailable', JSON.stringify(policy)));
   if (detailed) node.append(renderFrameworkRoutes(facts.fit?.item.framework, browse, tool, { inspector: true }));
 

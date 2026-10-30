@@ -4,16 +4,17 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { listTools } from '@aihq/core/harness';
 
-// V1 header Your tool, on the running page. The list is the installed packed Core's own listTools({ includeUnobserved:
-// true }), read here through the same public export the host reads: observed tools (listTools()) can be chosen, every
-// other tool stays listed and greyed with Core's refusal reason. Each ready icon is the tool's state in the host's Core
+// V1 header Your tools, on the running page: always a multi-select. The list is the installed packed Core's own
+// listTools({ includeUnobserved: true }), read here through the same public export the host reads: several tools are
+// chosen at once; a tool Core has not observed (listTools() does not offer it) can be chosen too, stays greyed with
+// Core's refusal reason and gets no fit. Each ready icon is the tool's state in the host's Core
 // inspection answer (read-only file facts on the ordinary host). The choice survives a restart of the host, there is one tool control, every row's tooltip is
 // reachable by keyboard focus and touch, and its words meet 4.5:1 in the theme shown. The empty, loading, unavailable
 // and failed states, and the icons' checking and failed states, come from fixtures (fixtures/your-tool) served in place of
 // the host's answers.
 const here = dirname(fileURLToPath(import.meta.url));
 const STATES = join(here, 'fixtures', 'your-tool');
-const KEY = 'wb-your-tool';
+const KEY = 'wb-your-tools';
 
 const luminance = ([r, g, b]) => { const [x, y, z] = [r, g, b].map(v => v / 255).map(c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)); return 0.2126 * x + 0.7152 * y + 0.0722 * z; };
 const contrast = (a, b) => { const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
@@ -81,16 +82,17 @@ export async function runYourToolBrowser({ origin, output, playwrightModule, the
     // The icons settle once the inspection has answered.
     await page.locator('#your-tool-list [data-icon="tool:checking"]').first().waitFor({ state: 'detached' });
     const shown = await rows(page).evaluateAll(nodes => nodes.map(node => ({ id: node.dataset.tool, name: node.querySelector('.your-tool-option-name').textContent,
-      disabled: node.getAttribute('aria-disabled') === 'true', icon: node.querySelector('[data-icon]').dataset.icon, tip: node.dataset.tooltip })));
+      disabled: node.dataset.unobserved === 'true', role: node.getAttribute('role'), icon: node.querySelector('[data-icon]').dataset.icon, tip: node.dataset.tooltip })));
     assert.deepEqual(shown.map(row => [row.id, row.name]), all.map(tool => [tool.id, tool.label]), 'The list is Core\'s listTools({ includeUnobserved: true }), in its order and with its labels.');
     for (const row of shown) {
-      assert.equal(row.disabled, !observed.has(row.id), `${row.id}: choosable exactly when listTools() offers it`);
+      assert.equal(row.role, 'checkbox', `${row.id}: one of several choices, never a radio`);
+      assert.equal(row.disabled, !observed.has(row.id), `${row.id}: greyed exactly when listTools() does not offer it`);
       const found = inspection.tools.find(tool => tool.id === row.id);
       if (inspection.method === 'read-only-host') {
         assert.equal(row.icon, `tool:${found?.host?.installedVersion?.state === 'known' ? 'binary' : 'not-reported'}`, `${row.id}: only a known file version has the version-found icon`);
         if (!row.disabled) assert.match(row.tip, /No client was launched|client was not launched/, 'Host facts do not claim native use');
       } else assert.equal(row.icon, `tool:${found ? found.state : 'not-reported'}`, `${row.id}: the legacy inspection fixture reports its own state`);
-      if (row.disabled) assert.match(row.tip, /Can't be chosen: Core hasn't observed it working \(tool-not-observed\)\./, `${row.id}: greyed with Core's reason`);
+      if (row.disabled) assert.match(row.tip, /Core hasn't observed it working \(tool-not-observed\), so no fit is shown for it\./, `${row.id}: greyed with Core's reason`);
     }
     assert.ok(shown.some(row => row.disabled && all.find(tool => tool.id === row.id).surface === 'ide'), 'Unobserved IDEs are listed, greyed.');
     await page.screenshot({ path: join(output, `01-your-tool-list-${theme}.png`) });
@@ -101,15 +103,26 @@ export async function runYourToolBrowser({ origin, output, playwrightModule, the
     const icons = await page.locator('#your-tool-list .material-symbols-outlined').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).color));
     for (const colour of icons) assert.ok(contrast(rgb(colour), rgb(measured.background)) >= 4.5, `an icon meets 4.5:1 in ${theme} (${colour})`);
 
-    // A greyed tool does nothing when clicked; an observed one becomes Your tool.
-    const unobserved = shown.find(row => row.disabled), first = shown.find(row => !row.disabled);
-    await page.locator(`#your-tool-list > button[data-tool="${unobserved.id}"]`).click({ force: true });
-    assert.equal(await page.evaluate(key => localStorage.getItem(key), KEY), null, 'A greyed tool cannot be chosen.');
-    await page.locator(`#your-tool-list > button[data-tool="${first.id}"]`).click();
-    await page.locator('#your-tool-pop').waitFor({ state: 'hidden' });
+    // Several tools at once: ticking a second keeps the first, and the list stays open. A greyed tool can be one of yours;
+    // the page says Core gives it no fit.
+    const unobserved = shown.find(row => row.disabled), [first, second] = shown.filter(row => !row.disabled);
+    const row = id => page.locator(`#your-tool-list > button[data-tool="${id}"]`);
+    const stored = () => page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), KEY);
+    await row(first.id).click();
+    await row(second.id).click();
+    assert.equal(await page.locator('#your-tool-pop').isVisible(), true, 'The list stays open for the next tool.');
+    for (const id of [first.id, second.id]) assert.equal(await row(id).getAttribute('aria-checked'), 'true');
+    assert.equal(await page.locator('#your-tool-name').innerText(), `${first.name}, ${second.name}`);
+    await row(unobserved.id).click();
+    assert.deepEqual(await stored(), [first.id, second.id, unobserved.id]);
+    assert.match(await page.locator('#your-tool-note').innerText(), new RegExp(`${unobserved.name}: Core hasn't observed it working \\(tool-not-observed\\), so no fit is shown and nothing is installed for it\\.`));
+    await row(unobserved.id).click();
+    await row(second.id).click();
+    assert.equal(await row(second.id).getAttribute('aria-checked'), 'false');
     assert.equal(await page.locator('#your-tool-name').innerText(), first.name);
-    assert.deepEqual(await page.evaluate(() => Object.keys(localStorage).filter(key => key.includes('tool'))), [KEY], 'Only the tool id is kept in browser storage.');
-    assert.equal(await page.evaluate(key => localStorage.getItem(key), KEY), first.id);
+    assert.deepEqual(await page.evaluate(() => Object.keys(localStorage).filter(key => key.includes('tool'))), [KEY], 'Only the tool ids are kept in browser storage.');
+    assert.deepEqual(await stored(), [first.id]);
+    await page.keyboard.press('Escape');
 
     // Keyboard: the trigger's tooltip, then a greyed row's reason, each in the focus bubble.
     await page.locator('#your-setup').focus();
@@ -118,11 +131,11 @@ export async function runYourToolBrowser({ origin, output, playwrightModule, the
     await bubble(page).waitFor({ state: 'visible' });
     assert.equal(await bubble(page).innerText(), await trigger(page).getAttribute('data-tooltip'));
     const expectedInspection = inspection.method === 'read-only-host' ? '(?:Host version unchecked:|Version )' : "Core's inspection";
-    assert.match(await bubble(page).innerText(), new RegExp(`^Your tool: ${first.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\. ${expectedInspection}`));
+    assert.match(await bubble(page).innerText(), new RegExp(`^Your tools: ${first.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\. ${expectedInspection}`));
     await page.keyboard.press('Enter');
     await page.locator('#your-tool-pop').waitFor();
     assert.equal(await page.locator(`#your-tool-list > button[data-tool="${first.id}"]`).evaluate(node => node === document.activeElement), true, 'Opening focuses Your tool.');
-    // Arrow keys move between tools, as in a radio group.
+    // Arrow keys move between tools.
     const at = all.findIndex(tool => tool.id === first.id);
     await page.keyboard.press('ArrowDown');
     assert.equal(await page.evaluate(() => document.activeElement?.dataset.tool), all[(at + 1) % all.length].id, 'ArrowDown moves to the next tool.');
@@ -137,13 +150,15 @@ export async function runYourToolBrowser({ origin, output, playwrightModule, the
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
 
-    // Touch: tapping a greyed tool shows its reason and leaves the choice alone.
+    // Touch: tapping a greyed tool shows its reason and ticks it; tapping again unticks it.
     await open(page);
     await bubble(page).evaluate(node => { node.hidden = true; });
     await greyed.tap({ force: true });
     await bubble(page).waitFor({ state: 'visible' });
     assert.equal(await bubble(page).innerText(), unobserved.tip, 'Its reason shows on touch.');
-    assert.equal(await page.evaluate(key => localStorage.getItem(key), KEY), first.id);
+    assert.deepEqual(await stored(), [first.id, unobserved.id]);
+    await greyed.tap({ force: true });
+    assert.deepEqual(await stored(), [first.id]);
     await page.screenshot({ path: join(output, `03-your-tool-touch-${theme}.png`) });
     await page.close();
 
@@ -153,7 +168,7 @@ export async function runYourToolBrowser({ origin, output, playwrightModule, the
       page = await openPage(context, origin, theme);
       page.on('pageerror', error => errors.push(error.message));
       await page.locator(`#your-tool-trigger[data-your-tool="listed"]`).waitFor();
-      assert.equal(await page.locator('#your-tool-name').innerText(), first.name, 'Your tool survives a restart of the Workbench.');
+      assert.equal(await page.locator('#your-tool-name').innerText(), first.name, 'Your tools survive a restart of the Workbench.');
       await open(page);
       assert.equal(await page.locator(`#your-tool-list > button[data-tool="${first.id}"]`).getAttribute('aria-checked'), 'true');
       await page.screenshot({ path: join(output, `04-your-tool-after-restart-${theme}.png`) });
@@ -212,7 +227,8 @@ export async function runYourToolBrowser({ origin, output, playwrightModule, the
     await page.locator('#your-tool-list [data-icon="tool:inspection-failed"]').first().waitFor();
     assert.equal(await page.locator('#your-tool-list [data-icon="tool:inspection-failed"]').count(), all.length, 'Every icon reads failed when the inspection failed.');
     assert.match(await rows(page).first().getAttribute('data-tooltip'), /Core's inspection didn't run: core service did not answer within 120s\./);
-    assert.equal(await page.locator('#your-tool-list > button:not([aria-disabled])').count(), observed.size, 'A failed inspection leaves the observed tools choosable.');
+    assert.equal(await page.locator('#your-tool-list > button[data-unobserved="true"]').count(), all.length - observed.size, 'A failed inspection changes no tool\'s observed state.');
+    assert.equal(await page.locator('#your-tool-list > button[aria-disabled]').count(), 0, 'and leaves every tool choosable.');
     await page.screenshot({ path: join(output, `06-your-tool-icons-failed-${theme}.png`) });
     await failedContext.close();
     assert.deepEqual(errors, [], 'The page raised no errors.');
