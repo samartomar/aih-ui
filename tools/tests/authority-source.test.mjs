@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { authorityFromResult, changeSummary, compareRevision, reviewFreshness, revisionOf, setupInstructions, sourceRows } from '../../src/app/authority-source.js';
+import { authorityFromResult, changeSummary, compareRevision, reviewFreshness, revisionOf, sourceRows } from '../../src/app/authority-source.js';
 
 const source = { provider: 'github', repository: { owner: 'acme', name: 'policies' }, path: 'org/policy.json', revision: { kind: 'branch', value: 'main' } };
 const authority = (commit = 'c1', blob = 'b1', digest = 'd1') => ({ source, resolvedCommit: commit, blobId: blob, contentDigest: digest, policyId: 'team', retrievedAt: '2026-01-01T00:00:00Z' });
@@ -44,8 +44,4 @@ test('authority is read from Refresh and Prepare results only when ok', () => {
   assert.equal(authorityFromResult({ status: 'refused', authority: { source } }), undefined);
   assert.equal(authorityFromResult({ status: 'ok', value: { mode: 'vibe', authority: null } }), undefined);
   assert.equal(authorityFromResult({ status: 'superseded' }), undefined);
-});
-test('setup instructions name the host variables and file shapes the reader uses', () => {
-  const text = setupInstructions();
-  for (const part of ['AIH_ORGANIZATION_SOURCE', 'AIH_CONSUMER_CONTROLS', '"provider": "github"', '"repository"', '"owner"', '"name"', '"path"', '"revision"', '"kind"', 'branch', 'tag', 'commit', '"authentication"', '"bearer"', '"token"', 'Restart']) assert.ok(text.includes(part), part);
 });

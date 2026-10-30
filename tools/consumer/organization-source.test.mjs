@@ -74,5 +74,6 @@ test('a path or branch that is not a plain file and ref is refused, and a source
   const configured = await withHost(t, { organizationSource: { provider: 'local', path: join(tmpdir(), 'organization.json') } });
   const fixed = await configured.post('organization-source', { path: 'gosam.organization-policy.json', branch: 'main' });
   assert.equal(fixed.status, 'refused');
-  assert.match(fixed.diagnostics[0].message, /AIH_ORGANIZATION_SOURCE/);
+  assert.match(fixed.diagnostics[0].message, /^The Workbench host already names its organization policy source in its own configuration\./);
+  assert.doesNotMatch(fixed.diagnostics[0].message, /AIH_/, 'host configuration is named only in the README');
 });

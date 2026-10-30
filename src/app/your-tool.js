@@ -33,7 +33,7 @@ import { coreSentence } from "./core-words.js";
 export function refusalWords(tool) {
   const reason = tool.refusal?.reason;
   if (reason === "tool-not-observed") return "Core hasn't observed it working, so no fit is shown for it.";
-  if (!reason) return "Core's listTools() does not offer it and gave no reason, so no fit is shown for it.";
+  if (!reason) return "Core doesn't offer it and gave no reason, so no fit is shown for it.";
   const sentence = coreSentence(reason);
   return `Core refuses it, so no fit is shown for it.${sentence ? ` ${sentence}` : ""}`;
 }

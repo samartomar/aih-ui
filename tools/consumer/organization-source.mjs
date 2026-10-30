@@ -63,7 +63,7 @@ export async function organizationSourceStep({ body, setupSettingsPath, configur
     const request = requestOf(readSetup(setupSettingsPath));
     return { answer: request ? { status: 'not-configured', request } : { status: 'not-configured' } };
   }
-  if (fixed) return refused('The host configuration (AIH_ORGANIZATION_SOURCE) names the organisation source; change it there and restart the Workbench.');
+  if (fixed) return refused('The Workbench host already names its organization policy source in its own configuration. Change it there and restart the Workbench.');
   const request = requestOf(readSetup(setupSettingsPath));
   if (!request) return refused('The saved setup names no GitHub policy repository for an Enterprise setup.');
   const [owner, name] = request.repository.split('/');

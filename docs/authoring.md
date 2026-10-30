@@ -537,8 +537,11 @@ of imported policy/source/review JSON. The local preview also accepts a host-own
 enter the browser or exported policy. Supply authentication to both Prepare and
 Apply through host controls. Portable organization origins remain provenance only.
 The Policy workspace shows the configured source read-only (repository, path, requested
-revision, resolved commit, blob and digest) or, when none is configured, the setup
-instructions. Refresh reads it again and reports the revision as unchanged or changed; a
+revision, resolved commit, blob and digest) or, when none is configured, says that no
+organization policy is connected and what the person can do; how the host configures a
+source is described in the README, never on the page. A failed read says what to do in
+plain words (fix the file, give the host read access, or ask whoever runs the Workbench),
+never Core's codes. Refresh reads it again and reports the revision as unchanged or changed; a
 changed revision marks an already prepared review stale and disables Apply until the
 effects are prepared again. No browser control sets or overrides the source.
 `check:workbench` demonstrates the not-configured, configured and changed-revision states

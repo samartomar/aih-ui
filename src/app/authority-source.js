@@ -40,20 +40,3 @@ export function authorityFromResult(result) {
   const authority = result?.value?.authority ?? result?.authority?.value?.authority;
   return revisionOf(authority) ? authority : undefined;
 }
-export function setupInstructions() {
-  return [
-    'Organization authority is read from a source the host configures; this page cannot set it.',
-    '',
-    'Set AIH_ORGANIZATION_SOURCE to the path of a host JSON file:',
-    '{ "provider": "github", "repository": { "owner": "<owner>", "name": "<repository>" },',
-    '  "path": "<path to the organization policy>", "revision": { "kind": "branch", "value": "<name>" } }',
-    'revision.kind is branch, tag or commit.',
-    'Or name a local organization policy file:',
-    '{ "provider": "local", "path": "<absolute path to the organization policy file>" }',
-    '',
-    'Optional credentials go only in the host controls file named by AIH_CONSUMER_CONTROLS:',
-    '{ "authentication": { "kind": "bearer", "token": "<token>" } }',
-    '',
-    'Restart the Workbench after changing either file.',
-  ].join('\n');
-}

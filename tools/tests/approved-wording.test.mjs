@@ -11,7 +11,9 @@ import { confirmRemoval, previewRemoval, removalMemberWords } from '../../src/ap
 import { confirmUpdate, previewUpdate } from '../../src/app/installed-update.js';
 import { replacedNames } from '../../src/catalog/item-name.js';
 import { refusalWords, unobservedWords } from '../../src/app/your-tool.js';
-import { organizationPolicyNotice, sourceAnswerWords } from '../../src/catalog/organization-policy.js';
+import { organizationPolicyNotice, readFailureWords, sourceAnswerWords } from '../../src/catalog/organization-policy.js';
+import { coreSentence } from '../../src/app/core-words.js';
+import { createAuthoringClient } from '../../src/app/authoring-client.js';
 
 const APPROVED = '(owner-approved 2026-10-30)';
 const fill = (sentence, values) => sentence.replace(/\{([^}]+)\}/g, (_, key) => {
@@ -200,37 +202,52 @@ test('every amendment 3.2.3 row named in the source is marked approved, and none
 
 // The Your tools and organisation policy sentences the owner corrected on 2026-10-30: plain words, never a Core code.
 const github = { provider: 'github', repository: { owner: 'samartomar', name: 'test' }, path: 'gosam.organization-policy.json', revision: { kind: 'branch', value: 'main' } };
+const local = { provider: 'local', fileName: 'organization.json' };
 const enterprise = policyRepo => ({ experience: 'enterprise', role: 'admin', organization: { policyRepo } });
-const unread = (reason, message, code = 'AUTHORITY_UNAVAILABLE') => ({ status: 'unreadable', source: github, diagnostics: [{ code, reason, message }] });
+const unread = (reason, message, code = 'AUTHORITY_UNAVAILABLE', source = github) => ({ status: 'unreadable', source, diagnostics: [{ code, reason, message }] });
 const NO_ACCESS = 'Give the Workbench host read access to the repository, then try again.';
+const FIX_FILE = "The policy file isn't a valid organization policy. Fix it in the repository, then try again.";
+const ASK_HOST = 'Ask whoever runs this Workbench to check the policy file.';
+const ROW_50 = "Organization policy not read. No organization policy is connected, so Enterprise policies can't be admitted. Add your organization's policy repository in setup, or ask whoever runs this Workbench to connect a local policy file.";
+const NOT_GITHUB = "Organization policy not read. The Workbench reads policy repositories on GitHub only, and gitlab.com/acme/policies isn't one. Save a GitHub repository in setup, or ask whoever runs this Workbench to connect a local policy file.";
 
 test("row 42: the tools Core hasn't observed, without Core's code", () => {
   assert.equal(unobservedWords(['Cursor']), "Cursor: Core hasn't observed it working, so no fit is shown and nothing is installed for it.");
   assert.equal(unobservedWords(['Cursor', 'Kiro IDE']), "Cursor, Kiro IDE: Core hasn't observed them working, so no fit is shown and nothing is installed for them.");
 });
 
-test("row 43: a tool Core refuses says Core's reason sentence, never its code", () => {
+test("row 43: a tool Core refuses says Core's reason sentence, never its code or a function name", () => {
   assert.equal(refusalWords({ refusal: { code: 'PREREQUISITE_UNAVAILABLE', reason: 'tool-not-observed' } }), "Core hasn't observed it working, so no fit is shown for it.");
   assert.equal(refusalWords({ refusal: { code: 'INPUT_INVALID', reason: 'unknown-tool' } }), 'Core refuses it, so no fit is shown for it.');
   assert.equal(refusalWords({ refusal: { code: 'INPUT_INVALID', reason: 'This tool is not in the registry.' } }), 'Core refuses it, so no fit is shown for it. This tool is not in the registry.');
+  assert.equal(refusalWords({ refusal: { code: 'INPUT_INVALID' } }), "Core doesn't offer it and gave no reason, so no fit is shown for it.");
+  assert.equal(refusalWords({}), "Core doesn't offer it and gave no reason, so no fit is shown for it.");
 });
 
-test('row 50 only when setup saves no policy repository; with one, the asked-once form is the only note', () => {
-  const row50 = "Organization policy not read. No organization policy is connected, so Enterprise policies can't be admitted. Add your organization's policy repository in setup, or ask whoever runs this Workbench to connect a local policy file.";
-  assert.equal(organizationPolicyNotice({ status: 'not-configured' }, enterprise('')).text, row50);
-  assert.equal(organizationPolicyNotice({ status: 'not-configured' }, { experience: 'enterprise', role: 'developer' }).text, row50);
+test('row 50 only when setup saves no policy repository; a saved one is asked about once, or says why it cannot be', () => {
+  assert.equal(organizationPolicyNotice({ status: 'not-configured' }, enterprise('')).text, ROW_50);
+  assert.equal(organizationPolicyNotice({ status: 'not-configured' }, { experience: 'enterprise', role: 'developer' }).text, ROW_50);
   const asked = organizationPolicyNotice({ status: 'not-configured', request: { repository: 'samartomar/test', path: 'gosam.organization-policy.json', branch: 'main' } }, enterprise('https://github.com/samartomar/test'));
   assert.equal(asked.text, 'Organization policy not read yet. Name the policy file in samartomar/test and its branch, and the Workbench reads it from GitHub. Enterprise policies cannot be admitted until it is read.');
   assert.ok(asked.request, 'the asked-once form');
-  // A saved repository the host cannot ask about is not told to add one in setup.
-  assert.equal(organizationPolicyNotice({ status: 'not-configured' }, enterprise('gitlab.com/acme/policies')), null);
+  // A saved repository the host cannot ask about is never silent, and is not told to add one in setup.
+  assert.equal(organizationPolicyNotice({ status: 'not-configured' }, enterprise('gitlab.com/acme/policies')).text, NOT_GITHUB);
+  assert.equal(organizationPolicyNotice({ status: 'not-configured' }, enterprise('https://github.com/samartomar/test')).text,
+    "Organization policy not read. The Workbench host couldn't read the saved setup, so it can't ask for the policy file in https://github.com/samartomar/test. Save your setup again, or ask whoever runs this Workbench to connect a local policy file.");
 });
 
-test("row 51: Core's reader message only when it is a sentence, then what to do", () => {
-  assert.equal(organizationPolicyNotice({ status: 'invalid', source: github, diagnostics: [{ code: 'ORGANIZATION_INVALID', reason: 'policy-invalid', message: 'The organization policy is not valid JSON.' }] }, enterprise('https://github.com/samartomar/test')).text,
-    `Organization policy couldn’t be read from samartomar/test: The organization policy is not valid JSON. ${NO_ACCESS}`);
-  assert.equal(organizationPolicyNotice(unread('network-unavailable', 'network-unavailable'), enterprise('https://github.com/samartomar/test')).text,
-    `Organization policy couldn’t be read from samartomar/test. ${NO_ACCESS}`);
+test("row 51: Core's reader message only when it is a sentence, then the fix that fits the failure", () => {
+  const settings = enterprise('https://github.com/samartomar/test');
+  assert.equal(organizationPolicyNotice({ status: 'invalid', source: github, diagnostics: [{ code: 'ORGANIZATION_INVALID', message: 'The organization policy is not valid JSON.' }] }, settings).text,
+    `Organization policy couldn’t be read from samartomar/test: The organization policy is not valid JSON. ${FIX_FILE}`);
+  // A file that was read but is not a valid policy is fixed in the file, not with read access.
+  assert.equal(organizationPolicyNotice({ status: 'invalid', source: github, diagnostics: [{ code: 'ORGANIZATION_INVALID', message: 'policy-invalid' }] }, settings).text,
+    `Organization policy couldn’t be read from samartomar/test. ${FIX_FILE}`);
+  assert.equal(organizationPolicyNotice(unread('network-unavailable', 'network-unavailable'), settings).text, `Organization policy couldn’t be read from samartomar/test. ${NO_ACCESS}`);
+  // A local source has no repository to give access to.
+  assert.equal(organizationPolicyNotice(unread('source-missing-or-inaccessible', 'x', 'AUTHORITY_UNAVAILABLE', local), settings).text, `Organization policy couldn’t be read from organization.json. ${ASK_HOST}`);
+  assert.equal(organizationPolicyNotice({ status: 'invalid', source: local, diagnostics: [] }, settings).text,
+    `Organization policy couldn’t be read from organization.json. The policy file isn't a valid organization policy. ${ASK_HOST}`);
 });
 
 test('rows 55 and 57: no access says to give the Workbench host read access', () => {
@@ -238,18 +255,105 @@ test('rows 55 and 57: no access says to give the Workbench host read access', ()
   assert.equal(organizationPolicyNotice(unread('authentication-required-or-denied', 'x'), enterprise('https://github.com/samartomar/test')).text, `Organization policy: no access to samartomar/test. ${NO_ACCESS}`);
 });
 
-// A Core code: lower-case words joined by hyphens, in parentheses or standing alone after a colon.
-const CORE_CODE = /\(\s*[a-z]+(?:-[a-z]+)+\s*\)|:\s*[a-z]+(?:-[a-z]+)+\s*(?:[.;,]|$)/m;
+test("the asked-once form's other answers say what to do, never only that Core gave no reason", () => {
+  assert.equal(sourceAnswerWords({ status: 'invalid', diagnostics: [{ code: 'ORGANIZATION_INVALID', message: 'policy-invalid' }] }), `Not read. ${FIX_FILE}`);
+  assert.equal(sourceAnswerWords({ status: 'invalid', diagnostics: [{ message: 'The organization policy is not valid JSON.' }] }), `The organization policy is not valid JSON. ${FIX_FILE}`);
+  assert.equal(sourceAnswerWords({ status: 'unreadable', diagnostics: [] }), `Not read. ${NO_ACCESS}`);
+  assert.equal(sourceAnswerWords({ status: 'refused', diagnostics: [{ code: 'INPUT_INVALID', message: 'Name a .json file in the repository and a branch, with no spaces or special characters.' }] }),
+    'Name a .json file in the repository and a branch, with no spaces or special characters.');
+  assert.equal(sourceAnswerWords({ status: 'refused', diagnostics: [] }), 'Not read. Check the file path and branch, then try again.');
+});
+
+test("Core's text is shown only as a plain sentence: codes, host variables, function names and paths are dropped", () => {
+  for (const value of ['AUTHORITY_UNAVAILABLE: The source is unavailable.', 'Tool-not-observed: x.', 'Call readGitHubPolicy() with a token.', 'Could not read /home/host/controls.json.',
+    'The host configuration (AIH_ORGANIZATION_SOURCE) names the organisation source; change it there and restart the Workbench.',
+    'tool-not-observed', 'x-y-z', 'Failed at C:\\host\\policy.json.', 'Read org/policy.json first.'])
+    assert.equal(coreSentence(value), undefined, value);
+  for (const value of ['The organization policy is not valid JSON.', 'Unauthorized access to this file.']) assert.equal(coreSentence(value), value);
+  // Through the page: a host refusal that names a variable never reaches the asked-once form.
+  assert.equal(sourceAnswerWords({ status: 'refused', diagnostics: [{ code: 'INPUT_INVALID', message: 'The host configuration (AIH_ORGANIZATION_SOURCE) names the organisation source; change it there and restart the Workbench.' }] }),
+    'Not read. Check the file path and branch, then try again.');
+});
+
+// The Admin authority-source panel, rendered on a small DOM with the host's answers stubbed.
+function panelPage(t, answers) {
+  const nodes = new Map(), created = [];
+  const element = tagName => {
+    const node = { tagName, children: [], dataset: {}, listeners: {}, attributes: {}, value: '', textContent: '', options: [], hidden: false, title: '',
+      classList: { add() {}, remove() {}, toggle() {} }, getAttribute(key) { return this.attributes[key] ?? null; }, setAttribute(key, value) { this.attributes[key] = String(value); }, removeAttribute(key) { delete this.attributes[key]; },
+      after() {}, before() {}, focus() {}, scrollIntoView() {}, contains(target) { return target === this || this.children.some(child => child.contains?.(target)); },
+      closest() { return null; }, get childNodes() { return this.children; },
+      addEventListener(name, listener) { const prior = this.listeners[name]; this.listeners[name] = prior ? (...args) => { prior(...args); return listener(...args); } : listener; },
+      append(...children) { for (const child of children) { if (typeof child !== 'object') continue; child.parentElement = this; this.children.push(child); } }, prepend(...children) { this.children.unshift(...children); },
+      replaceChildren(...children) { this.children = children; }, get lastChild() { return this.children.at(-1); } };
+    created.push(node); return node;
+  };
+  const prior = { document: globalThis.document, Option: globalThis.Option, window: globalThis.window, fetch: globalThis.fetch };
+  t.after(() => { for (const [key, value] of Object.entries(prior)) { if (value === undefined) delete globalThis[key]; else globalThis[key] = value; } });
+  globalThis.window = { addEventListener() {}, matchMedia: () => ({ matches: false, addEventListener() {} }) };
+  globalThis.document = { body: element('body'), addEventListener() {}, dispatchEvent() {}, createElement: element, createTextNode: textContent => ({ textContent }),
+    getElementById(id) { if (!nodes.has(id)) { const node = element('div'); node.id = id; nodes.set(id, node); } return nodes.get(id); }, querySelector: () => element('div') };
+  globalThis.Option = function(textContent, value) { return { textContent, value }; };
+  globalThis.fetch = async url => ({ ok: true, json: async () => answers[url] ?? { status: 'refused', diagnostics: [] } });
+  const shown = node => node.hidden ? '' : [node.textContent, ...node.children.map(shown)].join(' ');
+  return { panel: () => shown(created.find(node => node.id === 'authority-source')), byId: id => created.find(node => node.id === id) };
+}
+async function openPanel(t, { organizationSource = null, policyRepo = '', read } = {}) {
+  const page = panelPage(t, { '/api/authoring-catalog': { items: [], templates: [], organizationSource },
+    '/api/workbench-settings': { ok: true, settings: enterprise(policyRepo) }, ...(read ? { '/api/authoring-authority-source': read } : {}) });
+  const client = createAuthoringClient({ sessionRecovery: false });
+  await client.loadCatalog();
+  const { createAuthoringWorkspace } = await import('../../src/app/authoring-workspace.js');
+  createAuthoringWorkspace(client);
+  for (let turn = 0; turn < 20; turn++) await new Promise(resolve => setImmediate(resolve));
+  return page;
+}
+const HOST_TEXT = /AIH_[A-Z_]+|controls file|"provider"|Copy setup instructions|\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b|\b\w+\(\)/;
+
+test('the Admin authority-source panel says the row 50 words with no source, and never host configuration', async t => {
+  const page = await openPanel(t);
+  const text = page.panel();
+  assert.ok(text.includes(ROW_50), text);
+  assert.doesNotMatch(text, HOST_TEXT, text);
+  assert.equal(page.byId('authority-source-setup'), undefined, 'no setup instructions');
+  assert.equal(page.byId('authority-source-copy'), undefined, 'no Copy button');
+  const gitlab = await openPanel(t, { policyRepo: 'gitlab.com/acme/policies' });
+  assert.ok(gitlab.panel().includes(NOT_GITHUB), gitlab.panel());
+  const saved = await openPanel(t, { policyRepo: 'https://github.com/samartomar/test' });
+  assert.ok(saved.panel().includes('Organization policy not read yet. Name the policy file in https://github.com/samartomar/test and its branch in the catalog, and the Workbench reads it from GitHub.'), saved.panel());
+});
+
+test("the Admin authority-source panel says a failed read in the catalog's plain words, never Core's codes", async t => {
+  const cases = [
+    [{ status: 'refused', readStatus: 'unreadable', source: github, diagnostics: [{ code: 'AUTHORITY_UNAVAILABLE', reason: 'authentication-required-or-denied', message: 'Bad credentials' }] }, `Organization policy: no access to samartomar/test. ${NO_ACCESS}`],
+    [{ status: 'refused', readStatus: 'unreadable', source: github, diagnostics: [{ code: 'AUTHORITY_UNAVAILABLE', reason: 'source-missing-or-inaccessible', message: 'Not Found' }] }, 'Organization policy not found: samartomar/test gosam.organization-policy.json (branch main) does not have it, or the host cannot see it. Check the file path and branch.'],
+    [{ status: 'refused', readStatus: 'invalid', source: github, diagnostics: [{ code: 'POLICY_INVALID', message: 'policy-invalid', details: { diagnostics: [{ code: 'SCHEMA', reason: 'x-y' }] } }] }, `Organization policy couldn’t be read from samartomar/test. ${FIX_FILE}`],
+    [{ status: 'refused', readStatus: 'unreadable', source: local, diagnostics: [{ code: 'AUTHORITY_UNAVAILABLE', reason: 'source-missing-or-inaccessible', message: 'ENOENT: /host/organization.json' }] }, `Organization policy couldn’t be read from organization.json. ${ASK_HOST}`],
+  ];
+  for (const [read, words] of cases) {
+    const page = await openPanel(t, { organizationSource: read.source, policyRepo: 'https://github.com/samartomar/test', read });
+    await page.byId('authority-source-refresh').listeners.click();
+    for (let turn = 0; turn < 20; turn++) await new Promise(resolve => setImmediate(resolve));
+    assert.equal(page.byId('authority-source-diagnostics').textContent, words);
+    assert.doesNotMatch(page.panel(), HOST_TEXT, page.panel());
+    assert.doesNotMatch(page.panel(), CORE_CODE, page.panel());
+  }
+});
+
+// A Core code: lower-case words joined by hyphens, in parentheses or standing alone after a colon; or a function name.
+const CORE_CODE = /\(\s*[a-z]+(?:-[a-z]+)+\s*\)|:\s*[a-z]+(?:-[a-z]+)+\s*(?:[.;,]|$)|\b\w+\(\)/m;
 test('no Your tools or organisation policy text on the page says a Core code', () => {
-  assert.match('Cursor (tool-not-observed)', CORE_CODE); assert.match('couldn’t be read: network-unavailable.', CORE_CODE);
+  assert.match('Cursor (tool-not-observed)', CORE_CODE); assert.match('couldn’t be read: network-unavailable.', CORE_CODE); assert.match("Core's listTools() does not offer it", CORE_CODE);
   assert.doesNotMatch('Organization policy read: gosam-baseline from samartomar/test', CORE_CODE, 'a policy id followed by more words is a name');
   const codes = ['tool-not-observed', 'unknown-tool', 'authentication-required-or-denied', 'source-missing-or-inaccessible', 'network-unavailable', 'policy-invalid'];
-  const said = [unobservedWords(['Cursor']), unobservedWords(['Cursor', 'Kiro IDE'])];
+  const said = [unobservedWords(['Cursor']), unobservedWords(['Cursor', 'Kiro IDE']), refusalWords({}), refusalWords({ refusal: { code: 'INPUT_INVALID' } })];
   for (const reason of [...codes, undefined]) said.push(refusalWords({ refusal: { code: 'PREREQUISITE_UNAVAILABLE', reason } }));
-  for (const settings of [enterprise(''), enterprise('https://github.com/samartomar/test'), enterprise('gitlab.com/acme/policies')]) {
+  for (const settings of [enterprise(''), enterprise('https://github.com/samartomar/test'), enterprise('gitlab.com/acme/policies'), null]) {
     for (const answer of [{ status: 'not-configured' }, { status: 'not-configured', request: { repository: 'samartomar/test', path: 'p.json', branch: 'main' } }, { status: 'ok', source: github, policyId: 'gosam-baseline' },
-      ...codes.flatMap(reason => ['unreadable', 'invalid'].map(status => ({ ...unread(reason, reason), status }))), { status: 'unreadable', source: { provider: 'local', path: '/host/policy.json' }, diagnostics: [] }]) {
-      const notice = organizationPolicyNotice(answer, settings); if (notice) said.push(notice.text);
+      ...codes.flatMap(reason => ['unreadable', 'invalid'].flatMap(status => [github, local].map(source => ({ ...unread(reason, reason, 'AUTHORITY_UNAVAILABLE', source), status })))),
+      { status: 'unreadable', source: local, diagnostics: [] }]) {
+      const notice = organizationPolicyNotice(answer, settings); assert.ok(notice?.text, `a note for ${JSON.stringify(answer)}`); said.push(notice.text);
+      if (answer.diagnostics) said.push(readFailureWords(answer).text);
     }
   }
   for (const status of ['read', 'not-found', 'no-access', 'invalid', 'unreadable', 'refused'])
@@ -258,5 +362,6 @@ test('no Your tools or organisation policy text on the page says a Core code', (
     assert.doesNotMatch(words, CORE_CODE, words);
     for (const code of codes) assert.ok(!words.includes(code), `"${words}" says Core's ${code}`);
     assert.doesNotMatch(words, /AIH_[A-Z_]+|controls file|[A-Z]+_[A-Z_]+/, `"${words}" names host configuration or a Core code`);
+    assert.ok(!words.includes('Core gave no reason.'), `"${words}" says what to do`);
   }
 });

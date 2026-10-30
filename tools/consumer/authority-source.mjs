@@ -24,5 +24,6 @@ export async function readAuthoritySource({ organizationSource, controls } = {})
   if (organizationSource === undefined) return { status: 'not-configured', source: null, authority: null, diagnostics: [] };
   const result = await readOrganization({ organizationSource, controls });
   if (result.status === 'ok') return { status: 'ok', source: pageSource(result.read.source), authority: result.authority, diagnostics: [] };
-  return { status: 'refused', source: pageSource(result.read.source ?? null), authority: null, diagnostics: result.diagnostics };
+  // readStatus says whether the source could not be read (unreadable) or was read and is not a valid policy (invalid).
+  return { status: 'refused', readStatus: result.status, source: pageSource(result.read.source ?? null), authority: null, diagnostics: result.diagnostics };
 }

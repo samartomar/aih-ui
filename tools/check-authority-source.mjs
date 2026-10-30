@@ -48,8 +48,10 @@ try {
   fixture.install(); browser = await chromium.launch({ headless: true });
   await start('not-configured');
   await page.locator('#authority-source[data-state="not-configured"]').waitFor();
-  const setup = await page.locator('#authority-source-setup').textContent();
-  assert.match(setup, /AIH_ORGANIZATION_SOURCE/); assert.match(setup, /"provider":\s*"github"/);
+  // How to configure a source is in the README; the panel says only what the person can do, in plain words.
+  const panel = await page.locator('#authority-source').innerText();
+  assert.match(panel, /No organization policy is connected, so Enterprise policies can't be admitted\./);
+  assert.doesNotMatch(panel, /AIH_|controls file|"provider"/); assert.equal(await page.locator('#authority-source-copy').count(), 0);
   assert.equal(fixture.requests.length, 0);
   states.push('not-configured'); await captureAuthority(page, output, 'not-configured');
   await context.close(); await closeServer();
@@ -83,6 +85,7 @@ try {
   // A failed read must not clear the stale review it already showed.
   fixture.withdraw(); await page.locator('#authority-source-refresh').click();
   await page.locator('#authority-source[data-state="refused"]').waitFor();
+  assert.doesNotMatch(await page.locator('#authority-source-diagnostics').innerText(), /\b[A-Z]+_[A-Z_]+\b|\([a-z]+(?:-[a-z]+)+/, 'no Core code in a failed read');
   await page.locator('#authority-source-review[data-review="stale"]').waitFor(); assert.equal(await apply.isDisabled(), true);
   states.push('refused', 'stale');
   assert.ok(fixture.requests.every(path => path.startsWith(`/repos/${fixture.source.repository.owner}/${fixture.source.repository.name}/git/`)));

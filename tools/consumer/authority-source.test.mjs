@@ -99,7 +99,7 @@ test('a local source reaches the page by its file name only, never its folder', 
     for (const value of [catalog, read, authority, ready]) assert.ok(!JSON.stringify(value).includes(folder), JSON.stringify(value));
     const missing = await startConsumer({ organizationSource: unreadable, projectRoot, controls: { logging: 'off' } }); started.push(missing);
     const refused = await post(missing, 'authority-source'), refusedAuthority = await post(missing, 'authority', { policyBytes });
-    assert.equal(refused.status, 'refused'); assert.equal(refusedAuthority.status, 'refused');
+    assert.equal(refused.status, 'refused'); assert.equal(refusedAuthority.status, 'refused'); assert.equal(refused.readStatus, 'unreadable');
     assert.deepEqual(refused.source, { provider: 'local', fileName: 'missing.json' });
     for (const value of [refused, refusedAuthority]) assert.ok(!JSON.stringify(value).includes(folder), JSON.stringify(value));
   } finally {

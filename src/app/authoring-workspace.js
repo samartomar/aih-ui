@@ -7,7 +7,8 @@ import { createTrialsView } from './trials-view.js';
 import { createImprovementsView } from './improvements-view.js';
 import { createWorkspaceView } from './workspace-view.js';
 import { createOrganizationAuthorView } from './organization-author.js';
-import { authorityFromResult, changeSummary, compareRevision, reviewFreshness, revisionOf, setupInstructions, sourceLabel, sourceRows, staleReviewMessage } from './authority-source.js';
+import { authorityFromResult, changeSummary, compareRevision, reviewFreshness, revisionOf, sourceLabel, sourceRows, staleReviewMessage } from './authority-source.js';
+import { notConnectedWords, readFailureWords } from '../catalog/organization-policy.js';
 import { ENTERPRISE_SETUP_NOTICE, isJourneyEnvelope, importLimitError } from './authoring-client.js';
 import { dependencyRows } from './dependency-set.js';
 import { createInstallPanel } from './install-panel.js';
@@ -237,13 +238,10 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   const sourceChange = el('p', 'text-on-surface-variant break-all'); sourceChange.id = 'authority-source-change'; sourceChange.setAttribute('role', 'status');
   const sourceReview = el('p', 'text-on-surface-variant'); sourceReview.id = 'authority-source-review';
   const sourceDiagnostics = el('p', 'text-on-surface-variant'); sourceDiagnostics.id = 'authority-source-diagnostics';
-  const sourceSetup = el('pre', 'whitespace-pre-wrap break-words text-[10px]'); sourceSetup.id = 'authority-source-setup'; sourceSetup.textContent = setupInstructions();
-  const sourceCopy = button('Copy setup instructions', safe(async () => { await navigator.clipboard.writeText(setupInstructions()); sourceCopy.textContent = 'Copied'; }));
-  sourceCopy.id = 'authority-source-copy';
   const sourceRefresh = button('Refresh', safe(async () => readSource())); sourceRefresh.id = 'authority-source-refresh';
-  source.append(sourceFacts, sourceChange, sourceReview, sourceDiagnostics, sourceSetup, sourceCopy, sourceRefresh);
+  source.append(sourceFacts, sourceChange, sourceReview, sourceDiagnostics, sourceRefresh);
   host.after(source);
-  let known, latest, latestAuthority, sourceRead = false, sourceAttempt = 0, sourceState;
+  let known, latest, latestAuthority, sourceRead = false, sourceAttempt = 0, sourceState, setupSettings;
   const configuredSource = () => client.catalog?.organizationSource ?? null;
   const dash = '—';
   function renderSource() {
@@ -257,9 +255,9 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     factValues.retrieved.textContent = latestAuthority?.retrievedAt ?? dash; factValues.policy.textContent = latestAuthority?.policyId ?? dash;
     const none = sourceState === 'not-configured';
     sourceFacts.hidden = sourceChange.hidden = sourceReview.hidden = sourceRefresh.hidden = none || sourceState === undefined;
-    sourceSetup.hidden = sourceCopy.hidden = !none;
     sourceNote.textContent = sourceState === undefined ? 'Reading host configuration…'
-      : none ? 'No organization authority source is configured by the host. Enterprise policies cannot be admitted until one is.'
+      // How to connect a source is in the README; the page says only what the person can do.
+      : none ? notConnectedWords(setupSettings?.organization?.policyRepo, { asked: true })
       : [sourceLabel(configured), 'Read-only. The host configures this source; this page can only read it again.'].filter(Boolean).join('. ');
     // A failed read keeps the last known revision: an established stale review stays stale.
     const freshness = reviewFreshness(prepared?.review, known);
@@ -284,7 +282,8 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     if (result.status === 'ok' && revisionOf(result.authority)) noteAuthority(result.authority);
     else {
       latest = undefined; latestAuthority = undefined; sourceState = 'refused'; delete sourceChange.dataset.change; sourceChange.textContent = '';
-      sourceDiagnostics.textContent = failure(result);
+      // Never Core's codes: the same plain words as the catalog's note, with what to do.
+      sourceDiagnostics.textContent = readFailureWords({ status: result.readStatus ?? 'unreadable', source: result.source ?? configuredSource(), diagnostics: result.diagnostics }).text;
     }
     renderSource();
   }
@@ -676,6 +675,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   reviewPanel.node.append(folderRow.node, choicesView.node, installPanel.node, installedPanel.node, advanced);
   organizationAuthor.node.hidden = true;
   const setRole = settings => {
+    setupSettings = settings; renderSource();
     organizationAuthor.node.hidden = settings?.role !== 'admin';
   };
   import('./settings-client.js').then(({ loadSetup }) => loadSetup()).then(result => setRole(result.settings)).catch(() => {});
