@@ -10,3 +10,12 @@ test('an all-kept update result is kept, not updated', async () => {
   assert.equal(result.results[0].state, 'kept');
   assert.match(result.message, /\/project\/NOTE\.md: kept/);
 });
+test('an update whose answer never arrived is unknown, never failed', async () => {
+  const entry = { name: 'Note', managementId: 'm-note', scope: 'project', replacement: {} };
+  const preview = { canConfirm: true, entries: [entry], steps: [{ members: [] }], scope: 'project', sessionId: 'session', review: { reviewDigest: 'digest' } };
+  const sent = [];
+  const result = await confirmUpdate({ preview, request: async (operation, body) => { sent.push(body); return { status: 'unknown', diagnostics: [{ code: 'APPLY_UNKNOWN', message: 'This page lost contact with the Workbench while it was running.' }] }; } });
+  assert.equal(result.outcome, 'unknown');
+  assert.equal(result.message, 'Update outcome unknown: This page lost contact with the Workbench while it was running.');
+  assert.equal(sent[0].purpose, 'update');
+});

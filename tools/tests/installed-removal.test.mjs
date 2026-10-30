@@ -123,3 +123,14 @@ test('stale Apply is not retried silently and keeps the original reason', async 
   assert.equal(result.outcome, 'failed');
   assert.match(result.message, /The reviewed files changed/);
 });
+test("a removal whose answer never arrived is unknown, never Couldn't confirm it's gone", async () => {
+  const calls = [];
+  const request = async (operation, body) => { calls.push([operation, body]); return operation === 'remove' ? ready()
+    : { status: 'unknown', diagnostics: [{ code: 'APPLY_UNKNOWN', message: 'This page lost contact with the Workbench while it was running.' }] }; };
+  const preview = await previewRemoval({ entries, request, mode: 'vibe' });
+  const result = await confirmRemoval({ preview, request, mode: 'vibe' });
+  assert.equal(result.outcome, 'unknown');
+  assert.equal(result.message, 'Removal outcome unknown: This page lost contact with the Workbench while it was running.');
+  assert.deepEqual(result.results, []);
+  assert.equal(calls.at(-1)[1].purpose, 'remove');
+});

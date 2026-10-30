@@ -86,3 +86,9 @@ test('a non-stale refusal of the held handle shows a fresh review without applyi
   assert.equal(result.preparation.sessionId, 'fresh-session');
   assert.ok(!calls.some(call => call === 'apply:fresh-session'), 'fresh work must never be applied unseen');
 });
+test('an Apply answer that never arrived is its own unknown state: nothing is prepared and nothing is shown as done', async () => {
+  const calls = [], unknown = { status: 'unknown', diagnostics: [{ code: 'APPLY_UNKNOWN', message: 'lost' }] };
+  const result = await applyIfUnchanged({ held, prepare: async () => { calls.push('prepare'); return {}; }, readyPreparation: () => undefined,
+    apply: async () => { calls.push('apply'); return unknown; } });
+  assert.equal(result.state, 'unknown'); assert.equal(result.run, unknown); assert.deepEqual(calls, ['apply']);
+});

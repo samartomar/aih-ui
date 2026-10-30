@@ -84,7 +84,9 @@ export async function confirmRemoval({ preview, request, mode }) {
     return { results, outcome: 'nothing-removed', message: results.map(result => result.message).join(' ') || 'Nothing was removed.' };
   }
   const prepare = () => request('remove', { removals: preview.selectors, scope: preview.scope, mode });
-  const attempt = await applyIfUnchanged({ held: preview, prepare, readyPreparation, apply: approval => request('apply', approval) });
+  const attempt = await applyIfUnchanged({ held: preview, prepare, readyPreparation, apply: approval => request('apply', { ...approval, purpose: 'remove' }) });
+  // Pending owner approval as contract amendment 3.2.3 row 24.
+  if (attempt.state === 'unknown') return { results: [], outcome: 'unknown', message: `Removal outcome unknown: ${diagnosticWords(attempt.run)}` };
   if (attempt.state !== 'applied') {
     const reason = [attempt.reason, diagnosticWords(attempt.result?.preparation, attempt.result)].filter(Boolean).join(' ');
     const next = attempt.preparation && attempt.result ? present(preview.steps.map(step => step.entry), attempt.result) : undefined;

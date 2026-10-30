@@ -39,7 +39,9 @@ function outcome(entry, step, run) {
 export async function confirmUpdate({ preview, request, tool }) {
   if (!preview.canConfirm) return { outcome: 'failed', message: preview.steps.map(step => step.message).join(' ') };
   const prepare = () => request('update', { updates: preview.entries.map(entry => ({ ...entry, managementId: entry.managementId, replacement: entry.replacement })), scope: preview.scope, tool });
-  const attempt = await applyIfUnchanged({ held: preview, prepare, readyPreparation, apply: approval => request('apply', { ...approval, ...(preview.allowPartial ? { allowPartial: true } : {}) }) });
+  const attempt = await applyIfUnchanged({ held: preview, prepare, readyPreparation, apply: approval => request('apply', { ...approval, purpose: 'update', ...(preview.allowPartial ? { allowPartial: true } : {}) }) });
+  // Pending owner approval as contract amendment 3.2.3 row 25.
+  if (attempt.state === 'unknown') return { outcome: 'unknown', message: `Update outcome unknown: ${diagnosticWords(attempt.run)}` };
   if (attempt.state !== 'applied') return { outcome: 'failed', message: `Update was not applied: ${[attempt.reason, diagnosticWords(attempt.result?.preparation, attempt.result)].filter(Boolean).join(' ')}` };
   const results = preview.entries.map((entry, index) => outcome(entry, preview.steps[index], attempt.run));
   return { results, outcome: results.some(result => result.state === 'failed') ? 'failed' : results.some(result => result.state === 'updated') ? 'updated' : 'kept', message: results.map(result => result.message).join(' ') };

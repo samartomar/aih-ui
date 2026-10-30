@@ -69,11 +69,13 @@ export function staleReason(...results) {
  * - Otherwise the held run is the result.
  * `readyPreparation(result)` returns the prepared {sessionId, review} or undefined.
  * Returns {state:'not-ready', result, preparation?, reason?} | {state:'stale', preparation, reason, run?} |
- * {state:'superseded', preparation, run} | {state:'applied', preparation, run}.
+ * {state:'superseded', preparation, run} | {state:'unknown', preparation, run} | {state:'applied', preparation, run}.
  */
 export async function applyIfUnchanged({ held, prepare, readyPreparation, apply }) {
   if (held?.sessionId && held?.review?.reviewDigest) {
     const run = await apply({ sessionId: held.sessionId, reviewDigest: held.review.reviewDigest });
+    // Core's answer never reached the page: Core may still be writing, so nothing is prepared or shown as done.
+    if (run?.status === 'unknown') return { state: 'unknown', preparation: held, run };
     const reason = staleReason(run);
     if (!reason && run?.status !== 'refused' && run?.status !== 'superseded') return { state: 'applied', preparation: held, run };
     if (!reason && run?.status === 'superseded') return { state: 'superseded', preparation: held, run };
