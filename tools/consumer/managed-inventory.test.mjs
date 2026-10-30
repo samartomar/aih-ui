@@ -219,3 +219,21 @@ test('Project basics facts are digest-bound in the composed selection and read-b
   assert.equal(reopened.value.editing, 'available', JSON.stringify(reopened.value.diagnostics ?? []));
   assert.deepEqual(reopened.value.policy.selections.find(candidate => candidate.item?.itemId === item.id).projectFacts, projectFacts.facts);
 });
+
+test('Project basics composes without projectFacts when the project yields no facts', async () => {
+  const prepared = await readInstalledPreparedContent({ root: catalogRoot, frameworkId: 'project-basics' });
+  assert.equal(prepared.valid, true, JSON.stringify(prepared.diagnostics));
+  const materials = await Promise.all(prepared.release.items.flatMap(item => item.materials).map(async material => ({
+    ...material, path: material.packagePath, bytes: new Uint8Array(await readFile(join(catalogRoot, material.packagePath))),
+  })));
+  const inventory = { family: 'Project basics', release: prepared.release, materialSource: { kind: 'local', input: 'maintained' }, materials };
+  const item = prepared.release.items.find(item => item.kind === 'rule' && item.payload?.placement === 'entry-block');
+  const root = { releaseSha256: prepared.release.sha256, itemId: item.id, itemSha256: item.itemSha256, scope: 'project', configuration: {}, originIds: ['direct'] };
+  const intent = freshAuthoring(); intent.roots.push(root);
+  // An empty project folder: Core's detector completes with no facts, and execution policy allows no empty projectFacts.
+  const composed = await composeAuthoring({ intent, inventories: [inventory], tool: 'claude', projectFacts: { status: 'complete', facts: [] } });
+  assert.equal(composed.status, 'ok', JSON.stringify(composed.diagnostics ?? []));
+  const basics = composed.value.policy.selections.filter(candidate => candidate.item?.itemId?.startsWith('project-basics.'));
+  assert.equal(basics.length, 3);
+  assert.ok(basics.every(selection => !Object.hasOwn(selection, 'projectFacts')), JSON.stringify(basics.map(selection => selection.projectFacts)));
+});

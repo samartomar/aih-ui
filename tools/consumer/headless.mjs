@@ -224,7 +224,8 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
     }
     selections.push({ ...prior, id: prior?.id ?? selection.id, managementId, scope: selection.scope, configuration: configured.selection.configuration,
       ...(bundle ? { item: bundle.item, tool: bundle.tool, name: bundle.name, kind: bundle.kind, origins: bundle.origins } : {}),
-      ...(bundle?.item.framework === 'project-basics' && Array.isArray(projectFacts?.facts) ? { projectFacts: structuredClone(projectFacts.facts) } : {}),
+      // projectFacts is optional metadata of at least one fact; a project with none found carries no field.
+      ...(bundle?.item.framework === 'project-basics' && Array.isArray(projectFacts?.facts) && projectFacts.facts.length ? { projectFacts: structuredClone(projectFacts.facts) } : {}),
       ...(rendered ? { bindingDigest: rendered.bindingDigest,
         ...(item.scan?.length ? { scanRecords: structuredClone(item.scan), itemMaterials: item.materials.map(material => ({ materialId: material.id, relPath: material.relPath, path: material.packagePath,
           sha256: material.sha256, byteLength: material.byteLength, role: material.role })) } : {}) } : {}),
