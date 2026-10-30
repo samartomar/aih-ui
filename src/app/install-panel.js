@@ -288,6 +288,11 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
       title.textContent = 'Install your setup into your project'; where.textContent = ''; filesHeading.textContent = 'What will be installed'; files.replaceChildren();
       message.textContent = 'Choose a project folder above to install your setup.'; return;
     }
+    // An Enterprise setup with a non-Enterprise policy is not prepared; the page's one notice says why.
+    if (client.modeMismatch) {
+      shownFor = undefined; preview = undefined; install.disabled = true; delete message.dataset.outcome;
+      files.replaceChildren(); named.replaceChildren(); message.textContent = ''; return;
+    }
     const key = client.bytes.join(',');
     if (key === shownFor) return;
     // Nothing chosen: there is nothing to prepare, and Install says so (#144).

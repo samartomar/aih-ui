@@ -124,6 +124,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     const framework = currentFramework(), tool = chosenTool?.id;
     const result = await authoring.propose({ type: 'select-sets', sets: requests, configurations: browseChoice(framework).configurations, releaseSha256: framework?.sha256, tool });
     if (result.status === 'ok' && authoring.candidate && !result.diagnostics?.length) authoring.accept();
+    // Refused because the setup is Enterprise and the policy is not: the page's one notice already says so.
+    if (result.diagnostics?.some(value => value.code === 'ENTERPRISE_SETUP_REQUIRED')) { setFeedback = undefined; renderSetGuidance(); return; }
     setFeedback = { framework: framework?.sha256, tool, result, requests };
     renderSetGuidance();
   }

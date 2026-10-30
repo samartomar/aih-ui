@@ -8,7 +8,7 @@ import { createImprovementsView } from './improvements-view.js';
 import { createWorkspaceView } from './workspace-view.js';
 import { createOrganizationAuthorView } from './organization-author.js';
 import { authorityFromResult, changeSummary, compareRevision, reviewFreshness, revisionOf, setupInstructions, sourceLabel, sourceRows, staleReviewMessage } from './authority-source.js';
-import { isJourneyEnvelope, importLimitError } from './authoring-client.js';
+import { ENTERPRISE_SETUP_NOTICE, isJourneyEnvelope, importLimitError } from './authoring-client.js';
 import { dependencyRows } from './dependency-set.js';
 import { createInstallPanel } from './install-panel.js';
 import { addItem, addedMessage, chosenRoot, removeItem, undoAdd } from './one-click-add.js';
@@ -55,7 +55,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   const file = el('input'); file.type = 'file'; file.accept = 'application/json,.json'; file.id = 'policy-open'; file.setAttribute('aria-label', 'Open saved project policy');
   const accepted = el('div', 'space-y-2'); accepted.id = 'policy-roots'; roots.append(accepted);
   const accept = button('Add to setup', () => {
-    client.accept();
+    if (client.accept()?.status === 'refused') return;
     showStatus(client.draft ? 'Draft change accepted. Save the draft to keep it; compile a resolved scope to produce an executable policy.'
       : client.catalog?.executionAvailable ? 'Your setup is updated. Install it into your project folder below.' : 'Your setup is updated. Download it from Advanced to keep it.');
     if (!installPanel.node.hidden) installPanel.node.scrollIntoView({ block: 'nearest' });
@@ -70,6 +70,18 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   const originalDownload = button('Download original artifact', () => original && download(original, 'policy.original.json'));
   originalDownload.disabled = true;
   const goToPolicy = () => reviewPanel.open();
+  // One page-wide notice while the setup is Enterprise and the open policy is not. Starting a new Enterprise setup
+  // leaves the earlier choices as they were: their file stays available from Download original artifact.
+  const modeNotice = el('div', 'shrink-0 px-3 py-2 flex flex-wrap items-center gap-3 bg-error-container text-on-error-container text-[12px] border-b border-wb-border');
+  modeNotice.id = 'enterprise-setup-notice'; modeNotice.setAttribute('role', 'alert'); modeNotice.hidden = true;
+  const startEnterprise = button('Start a new Enterprise setup', safe(async () => {
+    const previous = client.bytes;
+    const result = await client.startSetupPolicy();
+    if (result.status === 'ok' && previous.length) { original = previous; originalDownload.disabled = false; }
+  }));
+  startEnterprise.id = 'enterprise-setup-start';
+  modeNotice.append(el('p', '', ENTERPRISE_SETUP_NOTICE), startEnterprise);
+  document.querySelector('.wb-status-line')?.after(modeNotice);
   // Check Policy moved from the header into the drawer's Advanced section; it keeps its id and behaviour.
   let checking = false;
   const check = button('Check Policy', () => {}); check.id = 'check-project-policy'; check.title = 'Validate the current project policy and its exact sources';
@@ -456,10 +468,13 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     if (outcome.status === 'refused') { showStatus(`${refusedText} ${failure(outcome.result)}`); reviewPanel.open(); }
     else showStatus(`${reviewText} ${failure(outcome.result)}`);
   }
+  // Refused because the setup is Enterprise and the policy is not: the page's one notice already says so.
+  const outsideOrganisation = outcome => outcome.result?.diagnostics?.some(value => value.code === 'ENTERPRISE_SETUP_REQUIRED')
+    && (modeNotice.scrollIntoView({ block: 'nearest' }), startEnterprise.focus(), true);
   async function add(item) {
     const name = item.label ?? item.id;
     const outcome = await addItem(client, item).catch(thrown);
-    if (outcome.status === 'superseded') return;
+    if (outcome.status === 'superseded' || outsideOrganisation(outcome)) return;
     diagnostics.textContent = JSON.stringify(outcome.result, null, 2);
     if (outcome.status !== 'added') return openReview(outcome, `Nothing was added: ${name} was refused.`, `${name} is not added yet. Read what the check reported, then Add to setup or Cancel.`);
     const text = addedMessage({ name, needed: outcome.needed, draft: outcome.draft });
@@ -479,7 +494,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   async function remove(item) {
     const name = item.label ?? item.id;
     const outcome = await removeItem(client, item).catch(thrown);
-    if (outcome.status === 'superseded') return;
+    if (outcome.status === 'superseded' || outsideOrganisation(outcome)) return;
     diagnostics.textContent = JSON.stringify(outcome.result, null, 2);
     if (outcome.status !== 'removed') return openReview(outcome, `${name} is still in your ${setupWord()}.`, `Removing ${name} is not done yet. Read what the check reported, then Update setup or Cancel.`);
     const text = `Removed ${name} from your ${setupWord()}.`;
@@ -488,7 +503,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   }
   async function addBack(name, item) {
     const outcome = await addItem(client, item).catch(thrown);
-    if (outcome.status === 'superseded') return;
+    if (outcome.status === 'superseded' || outsideOrganisation(outcome)) return;
     diagnostics.textContent = JSON.stringify(outcome.result, null, 2);
     if (outcome.status !== 'added') return openReview(outcome, `Undo did not change your ${setupWord()}: ${name} was refused.`, `Undo for ${name} is not done yet. Read what the check reported, then Add to setup or Cancel.`);
     const text = `Undone: ${name} is back in your ${setupWord()}.`;
@@ -514,6 +529,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     render(); if (client.candidate) reviewPanel.open();
   }
   function render() {
+    modeNotice.hidden = !client.modeMismatch;
     const intent = client.intent, draft = client.draft, current = draft ? draft.roots : intent?.roots ?? [];
     accept.disabled = !client.candidate; save.disabled = !client.bytes.length || !intent || checking; save.hidden = Boolean(draft && !intent);
     originalDownload.disabled = !original?.length;

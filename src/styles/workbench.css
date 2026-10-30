@@ -323,7 +323,7 @@ body:has(#added-notice:not([hidden])) #cards-grid { padding-bottom: 10rem; }
   }
   body:has(#main-content) > header > div > * { flex-shrink: 0; }
   body:has(#main-content) > header > div:last-child { justify-content: flex-end; }
-  body:has(#main-content) > div:nth-child(3) {
+  body:has(#main-content) > #workbench-panels {
     height: auto !important;
     flex: 1 1 auto;
     min-height: 0;
@@ -372,7 +372,7 @@ body.wb-page:has(#main-content) { display: flex; flex-direction: column; }
 body:has(#main-content) > header { height: auto; min-height: 48px; padding-block: 6px; flex-wrap: wrap; gap: 6px; }
 body:has(#main-content) > header > div { flex-wrap: wrap; overflow: visible; min-width: 0; white-space: normal; }
 body:has(#main-content) > header > div:last-child { margin-left: auto; }
-body:has(#main-content) > div:nth-child(3) { flex: 1; min-height: 0; height: auto !important; }
+body:has(#main-content) > #workbench-panels { flex: 1; min-height: 0; height: auto !important; }
 body:has(#main-content) :where(p, label, select, input, button, summary, a, code, pre),
 body:has(#main-content) :where(#nav-rail, #catalog-workspace, #inspector-rail, #framework-matrix-tabs, .wb-chrome) :where(span, div) { font-size: max(13px, 1em); }
 body:has(#main-content) .material-symbols-outlined { font-size: 16px; }

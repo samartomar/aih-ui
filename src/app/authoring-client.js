@@ -15,6 +15,8 @@ export function importLimitError(size, bytes) {
   if (bytes && size > IMPORT_LIMITS.policy && !isJourneyEnvelope(bytes)) return 'Policy exceeds the public byte limit of 1 MB.';
   return undefined;
 }
+// Pending owner approval as contract amendment 3.2.3 row 18.
+export const ENTERPRISE_SETUP_NOTICE = "These choices were made outside your organisation's policy. Start a new Enterprise setup to install them under it.";
 const refusal = (code, message) => ({ status: 'refused', diagnostics: [{ code, message }] });
 const asDraft = ({ originalBytes: _kept, ...value }) => ({ ...value,
   envelopeBytes: Uint8Array.from(value.envelopeBytes), savedIntentBytes: Uint8Array.from(value.savedIntentBytes) });
@@ -30,8 +32,13 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
   let dirty = false, checkpoint, recoveryAvailable, startupSource, selectedTool, selectedToolLabel;
   // The saved setup's execution mode: an Enterprise Developer's setup is an Enterprise policy, so the host applies and
   // re-checks the organisation source for it. New policies start in it; `ready` settles once start-up and any mode change are done.
-  let setupMode, ready = Promise.resolve(), modeChanges = 0;
+  let setupMode, ready = Promise.resolve(), modeChanges = 0, modeFailure;
   const policyMode = () => { try { return JSON.parse(new TextDecoder().decode(bytes)).mode; } catch { return undefined; } };
+  // An Enterprise setup whose open policy is not an Enterprise policy: the organisation source would not be applied,
+  // so nothing is proposed, prepared or installed from it until a new Enterprise setup is started.
+  const outsideOrganisation = () => setupMode === 'enterprise' && policyMode() !== 'enterprise';
+  const refuseOutside = () => refusal('ENTERPRISE_SETUP_REQUIRED', ENTERPRISE_SETUP_NOTICE);
+  const HOST_WRITES = new Set(['prepare', 'finish', 'apply']);
   // The header's canonical tool as ephemeral page context: it rides composing/editing/compiling requests,
   // never the saved policy bytes, and never rebinding a recorded selection's own tool identity. The header
   // hands over the registry entry; requests carry its canonical id string (Core's selectTool names ids only).
@@ -122,6 +129,7 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
     // Host results still out (an Install preview, an installed list) were for the previous project folder; they come back superseded.
     discardHostWork() { hostRevision++; folderRevision++; notify(); },
     async requestHost(operation, body = {}) {
+      if (HOST_WRITES.has(operation) && outsideOrganisation()) return refuseOutside();
       const attempt = ++hostRevision, draft = revision, folder = folderRevision;
       const result = await request(operation, body);
       return attempt === hostRevision && draft === revision && folder === folderRevision ? result : { status: 'superseded' };
@@ -147,17 +155,29 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
       catalog = value; notify(); return catalog;
     },
     start() { const run = this.startNow(); ready = run.then(() => {}, () => {}); return run; },
-    // Only a policy with nothing chosen yet is replaced; an opened file or recorded choices keep their own mode.
+    // A policy with nothing chosen yet is remade in the setup's mode; recorded or pending choices are never moved.
     // Choices made meanwhile wait for it, so none lands on the policy it replaces.
     setMode(mode) {
       if (mode !== 'vibe' && mode !== 'enterprise') return ready;
       setupMode = mode; modeChanges++;
       ready = ready.then(async () => {
         if (setupMode !== mode || draftValue || candidate || !intent || intent.roots?.length || policyMode() === mode) return;
-        const result = await this.newDraft(mode);
-        if (result.status === 'ok') { dirty = false; notify(); }
-      }).catch(() => {}).finally(() => { modeChanges--; });
+        await this.startSetupPolicy();
+      }).catch(() => {}).finally(() => { modeChanges--; notify(); });
       return ready;
+    },
+    // True while the setup is Enterprise but the open policy is not, outside a mode change still in progress.
+    get modeMismatch() { return !modeChanges && outsideOrganisation(); },
+    // The last refused or failed request for a new policy in the setup's mode, until one succeeds.
+    get modeFailure() { return modeFailure; },
+    // A new, empty policy in the setup's mode. The previous policy's choices are not carried over.
+    async startSetupPolicy() {
+      let result;
+      try { result = await this.newDraft(setupMode); }
+      catch (error) { result = refusal('SOURCE_UNAVAILABLE', error?.message ?? String(error)); }
+      if (result.status === 'ok') { modeFailure = undefined; dirty = false; }
+      else if (result.status !== 'superseded') modeFailure = result;
+      notify(); return result;
     },
     async startNow() {
       await this.loadCatalog();
@@ -188,8 +208,9 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
     importBytes(value) { artifact++; revision++; bytes = value.slice(); dirty = false; checkpoint = bytes.slice(); intent = undefined; keepJudgments(); candidate = undefined; draftValue = undefined; compiled = undefined; notify(); },
     // While a draft is open every edit goes through the draft operations: the recorded
     // choices are never composed as an executable policy until an explicit compile.
-    async propose(operation) { if (modeChanges) await ready; return draftValue ? this.proposeDraft(operation) : this.proposeRequest('edit', { operation }); },
+    async propose(operation) { if (modeChanges) await ready; if (outsideOrganisation()) return refuseOutside(); return draftValue ? this.proposeDraft(operation) : this.proposeRequest('edit', { operation }); },
     async proposeDraft(operation) {
+      if (outsideOrganisation()) return refuseOutside();
       if (!draftValue) return refusal('INPUT_INVALID', 'Open a draft before editing it.');
       const attempt = ++revision; candidate = undefined; notify();
       const result = await request('draft-edit', { envelopeBytes: [...draftValue.envelopeBytes], operation, policyBytes: undefined });
@@ -305,6 +326,7 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
     },
     async proposeRequest(operation, body = {}) {
       if (modeChanges) await ready;
+      if (outsideOrganisation()) return refuseOutside();
       const attempt = ++revision; candidate = undefined; notify();
       const result = await request(operation, body);
       if (attempt !== revision) return { status: 'superseded' };
@@ -313,6 +335,8 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
     },
     accept() {
       if (!candidate) return;
+      // A choice proposed before the setup became Enterprise stays pending; it is not added to a non-Enterprise policy.
+      if (outsideOrganisation()) return refuseOutside();
       if (!candidate.envelopeBytes) return this.publish(candidate);
       revision++; draftValue = candidate; candidate = undefined; compiled = undefined; intent = undefined; keepJudgments(draftValue);
       bytes = draftValue.savedIntentBytes.slice(); notify();
