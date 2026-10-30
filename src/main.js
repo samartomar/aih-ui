@@ -54,6 +54,7 @@ async function main() {
       organization.setSettings(settings, location);
       policyWorkspace.setSettings(settings);
       authoringWorkspace.setSettings(settings);
+      void authoring.setMode(settings.experience === "enterprise" && settings.role === "developer" ? "enterprise" : "vibe");
       void evidenceReview.setDefaultRecipient(settings.reviewer ?? null);
       catalog.setMode(settings);
       catalog.setOrganizationName(settings.role === "admin" ? settings.organization?.name ?? null : null);
