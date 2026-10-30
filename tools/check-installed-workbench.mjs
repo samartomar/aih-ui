@@ -254,7 +254,7 @@ for (const theme of THEMES) {
   for (const action of ['finish', 'remove']) {
     const interruptedProject = join(consumerDir, `ui168-interrupted-${theme}-${action}-${randomUUID().slice(0, 8)}`);
     const interrupted = await withHost(interruptedProject, { interrupt: true, kill: true }, async origin =>
-      await runUi168InterruptStartBrowser({ origin, output: join(consumerDir, `ui168-interrupted-evidence-${theme}-${action}`), playwrightModule: playwrightPath, theme }));
+      await runUi168InterruptStartBrowser({ origin, output: join(consumerDir, `ui168-interrupted-evidence-${theme}-${action}`), project: interruptedProject, playwrightModule: playwrightPath, theme }));
     await withHost(interruptedProject, {}, async origin =>
       await caseOutcome(`UI168 interrupted install ${action} (${theme})`, await runUi168InterruptedVerifyBrowser({ origin, output: join(consumerDir, `ui168-interrupted-evidence-${theme}-${action}`), saved: interrupted.result.saved, action, playwrightModule: playwrightPath, theme })));
   }

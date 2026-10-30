@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { addFromCatalog, chooseCatalogFamily, closePolicyDrawer, drawer, openPolicyDrawer, openPolicyFileActions } from './policy-drawer.mjs';
 import { openPolicyWorkspace, openSetupAdvanced } from './advanced-browser.mjs';
@@ -20,7 +21,7 @@ async function openPage(browser, origin, theme) {
   return { context, page };
 }
 
-export async function runUi168InterruptStartBrowser({ origin, output, playwrightModule, theme = 'dark' }) {
+export async function runUi168InterruptStartBrowser({ origin, output, project, playwrightModule, theme = 'dark' }) {
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true });
@@ -38,6 +39,13 @@ export async function runUi168InterruptStartBrowser({ origin, output, playwright
     const applying = page.waitForRequest(request => request.url().endsWith('/api/authoring-apply'));
     await page.locator('#install-button').click();
     await applying;
+    // The host is killed as soon as this returns: only once Core's Apply has begun (the interrupting host's marker) is
+    // there an interrupted run for Core to report; a request still in flight would leave nothing behind.
+    const started = join(project, 'apply-started');
+    for (let waited = 0; !existsSync(started); waited += 50) {
+      if (waited > 60_000) throw new Error('Core never began the Apply the page requested');
+      await new Promise(done => setTimeout(done, 50));
+    }
     await context.close();
     return { status: 'passed', saved };
   } finally { await browser.close(); }
