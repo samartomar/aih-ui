@@ -41,14 +41,17 @@ async function main() {
     const authoringWorkspace = createAuthoringWorkspace(authoring, { onBackToCatalog: () => { shell.showCatalog(); catalog.focusCatalog(); } });
     const evidenceReview = createEvidenceReview(authoring, result => authoringWorkspace.present(result));
 
-    // Core's supported targets arrive with the preview summary the catalog
-    // loads. Every control that offers a client reads that SAME list and keeps
-    // no copy of its own.
+    // Core's tool list (Harness listTools, src/app/tool-list.js) is read once by
+    // Your tools; setup's step and the settings summary show that SAME list, by
+    // Core's labels. Core's policy targets arrive with the preview summary the
+    // catalog loads, for the controls that write policy targets.
     const organization = createOrganization({ elements: organizationElements(), onEdit: section => onboarding.edit(section), onModeComplete: applySettings });
-    // Your tools reads Core's tool registry and inspection itself. It starts from the workspace setup's AI clients
-    // (Settings, Edit AI tools) and is always a multi-select.
+    // Your tools reads Core's tool list and inspection itself. Every tool chosen in setup (Settings, Edit your tools)
+    // is chosen in it, and it is always a multi-select.
     // The header's chosen tools feed both the catalog and the authoring context; they rebind no saved execution.
-    const yourTool = createYourTool({ elements: yourToolElements(), onChange: tools => { catalog.setTool(tools); authoring.setTool(tools); } });
+    // Its tool list is the one setup offers and the settings summary names, by Core's labels.
+    const yourTool = createYourTool({ elements: yourToolElements(), onChange: tools => { catalog.setTool(tools); authoring.setTool(tools); },
+      onList: list => { onboarding.setTools(list); organization.setTools(list); } });
 
     function applySettings(settings, location) {
       yourTool.setSetupClients(settings.clients);
@@ -81,8 +84,6 @@ async function main() {
       onReselectEntry: () => shell.openInspector(),
       onSummary: (summary) => {
         const coreTargets = summary?.coreTargets ?? null;
-        organization.setTargets(coreTargets);
-        onboarding.setTargets(coreTargets);
         authoringWorkspace.setTargets(coreTargets);
       },
     });

@@ -6,8 +6,8 @@ import { listTools } from '@aihq/core/harness';
 
 // V1 header Your tools, on the running page: always a multi-select. The list is the installed packed Core's own
 // listTools({ includeUnobserved: true }), read here through the same public export the host reads: several tools are
-// chosen at once; a tool Core has not observed (listTools() does not offer it) can be chosen too, stays greyed with
-// Core's refusal reason and gets no fit. Each ready icon is the tool's state in the host's Core
+// chosen at once; a tool Core has not observed (listTools() does not offer it) can be chosen too, stays greyed, says
+// "Not supported yet" in words and gets no fit. Each ready icon is the tool's state in the host's Core
 // inspection answer (read-only file facts on the ordinary host). The choice survives a restart of the host, there is one tool control, every row's tooltip is
 // reachable by keyboard focus and touch, and its words meet 4.5:1 in the theme shown. The empty, loading, unavailable
 // and failed states, and the icons' checking and failed states, come from fixtures (fixtures/your-tool) served in place of
@@ -92,7 +92,7 @@ export async function runYourToolBrowser({ origin, output, playwrightModule, the
         assert.equal(row.icon, `tool:${found?.host?.installedVersion?.state === 'known' ? 'binary' : 'not-reported'}`, `${row.id}: only a known file version has the version-found icon`);
         if (!row.disabled) assert.match(row.tip, /No client was launched|client was not launched/, 'Host facts do not claim native use');
       } else assert.equal(row.icon, `tool:${found ? found.state : 'not-reported'}`, `${row.id}: the legacy inspection fixture reports its own state`);
-      if (row.disabled) assert.match(row.tip, /Core hasn't observed it working \(tool-not-observed\), so no fit is shown for it\./, `${row.id}: greyed with Core's reason`);
+      if (row.disabled) assert.match(row.tip, /Not supported yet: Core can't check fit or install content for it yet, so no fit is shown for it\. It stays chosen\./, `${row.id}: greyed and said so in words`);
     }
     assert.ok(shown.some(row => row.disabled && all.find(tool => tool.id === row.id).surface === 'ide'), 'Unobserved IDEs are listed, greyed.');
     await page.screenshot({ path: join(output, `01-your-tool-list-${theme}.png`) });
@@ -115,12 +115,12 @@ export async function runYourToolBrowser({ origin, output, playwrightModule, the
     assert.equal(await page.locator('#your-tool-name').innerText(), `${first.name}, ${second.name}`);
     await row(unobserved.id).click();
     assert.deepEqual(await stored(), [first.id, second.id, unobserved.id]);
-    assert.match(await page.locator('#your-tool-note').innerText(), new RegExp(`${unobserved.name}: Core hasn't observed it working \\(tool-not-observed\\), so no fit is shown and nothing is installed for it\\.`));
+    assert.match(await page.locator('#your-tool-note').innerText(), new RegExp(`${unobserved.name}: not supported yet\\. Core can't check fit or install content for it yet, so no fit is shown and nothing is installed for it\\. It stays chosen\\.`));
     await row(unobserved.id).click();
     await row(second.id).click();
     assert.equal(await row(second.id).getAttribute('aria-checked'), 'false');
     assert.equal(await page.locator('#your-tool-name').innerText(), first.name);
-    assert.deepEqual(await page.evaluate(() => Object.keys(localStorage).filter(key => key.includes('tool'))), [KEY], 'Only the tool ids are kept in browser storage.');
+    assert.deepEqual(await page.evaluate(() => Object.keys(localStorage).filter(key => key.includes('tool')).sort()), [KEY, `${KEY}-setup`], 'Only the tool ids are kept in browser storage.');
     assert.deepEqual(await stored(), [first.id]);
     await page.keyboard.press('Escape');
 
@@ -198,8 +198,8 @@ export async function runYourToolBrowser({ origin, output, playwrightModule, the
     release();
     await page.locator('#your-tool-trigger[data-your-tool="empty"]').waitFor();
     await loadingContext.close();
-    for (const [state, name, words] of [['empty', 'None listed', /Core's tool registry lists no tools\./],
-      ['unavailable', 'Not published', /Not published: The installed @aihq\/core\/harness does not export listTools\./],
+    for (const [state, name, words] of [['empty', 'None listed', /^Core lists no tools\.$/],
+      ['unavailable', 'Not published', /Not published: The installed Core does not publish its tool list\./],
       ['failed', "Couldn't load", /The tool list couldn't be read: core service exited 1: fixture failure\./]]) {
       const stateContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
       page = await openPage(stateContext, origin, theme, { route: fixture(state) });

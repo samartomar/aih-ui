@@ -857,12 +857,18 @@ is reachable by keyboard focus and by touch. The running-page case
 `tools/consumer/your-tool-browser.mjs` checks them against the packed Core, with
 fixtures for the states (`tools/consumer/fixtures/your-tool`).
 
-The workspace setup's **AI clients** -- the clients `@aihq/core` lists in its
-public `nativeClientIds`, saved in the workspace setup file -- are a different
-fact, saved in the workspace setup file. They are chosen in first-run setup and
-changed from Settings (**Edit AI tools**); they are where Your tools starts. The
-earlier header **AI tools** chip that also edited them is replaced by Your tools;
-its module stays until the dormant-code retirement.
+There is one tool list. First-run setup's **Your tools** step offers the same
+Harness `listTools({ includeUnobserved: true })` answer as the header, in Core's
+order and by Core's labels, and the setup file saves those ids; the host checks a
+saved choice against that list. Every tool chosen in setup is chosen in the
+header: setup's tools start the header's choice, and a tool setup newly chooses
+later joins a saved header choice (a tool unticked in the header stays unticked
+until setup's choice changes). A tool Core does not support yet stays chosen and
+says "Not supported yet"; no raw tool id or Core function name is shown. Setup's
+tools are changed from Settings (**Edit your tools**). The FRAMEWORKS rail's
+observations note names every chosen tool and which have none yet. The earlier
+header **AI tools** chip is replaced by Your tools; its module stays until the
+dormant-code retirement.
 
 The catalog's **Catalog target** filter -- the client names a catalog declares,
 which the Support filter reads -- works as before from the catalog's Advanced
@@ -1260,8 +1266,8 @@ Escape leaves the saved setup unchanged. Switching away from Admin clears its
 organization details from active setup. The browser remembers a valid Admin profile
 locally for a later switch; required details are validated again before saving.
 Mode changes update presentation only and grant no organization authority.
-AI client choices
-can also be updated from Settings (**Edit AI tools**).
+Your tools
+can also be updated from Settings (**Edit your tools**).
 
 The installed public packages do not expose an assistance-card contract for
 recommendations, links or recipes: Core's `CAPABILITIES` is a CLI command inventory;

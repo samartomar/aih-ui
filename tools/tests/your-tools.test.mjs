@@ -69,13 +69,31 @@ test('Your tools starts from the AI clients chosen in setup, in Core registry or
   assert.equal(control.current().find(tool => tool.id === 'cursor').observed, false);
   const text = textOf(elements.yourToolName);
   for (const label of ['Claude Code', 'Codex CLI', 'Kiro CLI', 'Cursor']) assert.match(text, new RegExp(label));
-  assert.match(textOf(elements.yourToolNote), /Cursor.*Core hasn.t observed/);
+  assert.match(textOf(elements.yourToolNote), /Cursor: not supported yet/);
 });
 
-test('a saved multi-tool choice wins over setup clients and the old single choice', async t => {
-  const { control } = await mount(t, { saved: { [YOUR_TOOLS_KEY]: JSON.stringify(['kiro', 'codex']), [YOUR_TOOL_KEY]: 'claude' } });
+test('a tool Core does not support yet stays chosen and says so in words, never by a code or a Core function name', async t => {
+  const { elements, control } = await mount(t);
+  control.setSetupClients(['cursor', 'claude']);
+  assert.deepEqual(control.current().map(tool => tool.id), ['claude', 'cursor'], 'never silently dropped or unticked');
+  const cursor = rows(elements).find(row => row.dataset.tool === 'cursor');
+  assert.equal(cursor.attributes['aria-checked'], 'true');
+  assert.match(textOf(cursor), /Not supported yet/);
+  const shown = [textOf(elements.yourToolList), textOf(elements.yourToolNote), textOf(elements.yourToolName), ...rows(elements).map(row => row.title), elements.yourToolTrigger.title].join(' ');
+  assert.doesNotMatch(shown, /tool-not-observed|PREREQUISITE_UNAVAILABLE|listTools|nativeClientIds|registry/);
+});
+
+test('every tool chosen in setup is chosen in the header, beside a saved header choice', async t => {
+  const { elements, control, store } = await mount(t, { saved: { [YOUR_TOOLS_KEY]: JSON.stringify(['kiro', 'codex']), [YOUR_TOOL_KEY]: 'claude' } });
+  control.setSetupClients(['claude']);
+  assert.deepEqual(control.current().map(tool => tool.id), ['claude', 'codex', 'kiro']);
+  // Unticked here afterwards, it stays unticked until setup's choice changes again.
+  rows(elements).find(row => row.dataset.tool === 'claude').listeners.click();
   control.setSetupClients(['claude']);
   assert.deepEqual(control.current().map(tool => tool.id), ['codex', 'kiro']);
+  control.setSetupClients(['claude', 'cursor']);
+  assert.deepEqual(control.current().map(tool => tool.id), ['codex', 'kiro', 'cursor'], 'a tool newly chosen in setup joins the header');
+  assert.deepEqual(JSON.parse(store.get(YOUR_TOOLS_KEY)), ['kiro', 'codex', 'cursor']);
 });
 
 // Core's answers for one item across three chosen tools: Claude Code has no project location for it, Codex fits.
