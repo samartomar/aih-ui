@@ -66,9 +66,14 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
     const item = client.catalog?.items.find(entry => entry.id === itemId); if (!item) return undefined;
     return itemDisplayName({ name: item.display?.name ?? item.name ?? item.label, payload: { namespace: item.namespace ?? item.payload?.namespace } }, item.id);
   };
-  // The name Catalog publishes for the exact recorded set; the set id when this Catalog no longer offers it.
-  const setName = set => (client.catalog?.frameworks ?? []).filter(framework => framework.id === set.framework).flatMap(framework => framework.sets ?? [])
-    .find(candidate => candidate.id === set.setId && (candidate.setSha256 === undefined || candidate.setSha256 === set.setSha256))?.name ?? set.setId;
+  // The name Catalog publishes for the recorded set: the exact set first, else the set of that id in the same framework,
+  // as a newer release publishes it once an update changes the set's digest. Undefined when this Catalog no longer
+  // offers the set id at all; the raw id is never shown.
+  const setName = set => {
+    const candidates = (client.catalog?.frameworks ?? []).filter(framework => framework.id === set.framework).flatMap(framework => framework.sets ?? [])
+      .filter(candidate => candidate.id === set.setId);
+    return (candidates.find(candidate => candidate.setSha256 === undefined || candidate.setSha256 === set.setSha256) ?? candidates[0])?.name;
+  };
   // The recorded tool's label for the approval wording.
   const toolLabel = tool => (tool === client.tool ? client.toolLabel : undefined) ?? tool ?? 'your tool';
   const requestHost = (operation, body) => client.requestHost(operation, body);
@@ -229,14 +234,17 @@ export function createInstalledPanel({ client, el, button, onRemoved = () => {},
       const section = el('li', 'space-y-1'); section.dataset.installedSet = `${group.set.setId}/${group.set.setSha256}`;
       // The set the user picked, by the name Catalog publishes; its exact recorded identity stays in the tooltip.
       const name = setName(group.set);
-      const heading = el('p', 'text-[11px] font-medium text-on-surface-variant', name);
+      const heading = el('p', 'text-[11px] font-medium text-on-surface-variant', name ?? '');
       heading.title = `${group.set.framework}/${group.set.setId}/${group.set.setSha256}`;
       // Core removes only this set's origin from a member another set or a direct choice still owns, and what only
       // this set's own members need goes with them. The contract's sentence names the other set; a member kept only
       // for a direct choice or a requirement has no sentence, so its removal shows Core's action.
-      const removals = setRemovalEntries(group).map(({ keptFor, ...entry }) => keptFor?.length ? { ...entry, kept: `Kept; also part of ${keptFor.map(setName).join(', ')}` } : entry);
+      const removals = setRemovalEntries(group).map(({ keptFor, ...entry }) => {
+        const names = (keptFor ?? []).map(setName).filter(Boolean);
+        return names.length ? { ...entry, kept: `Kept; also part of ${names.join(', ')}` } : entry;
+      });
       const { remove: removeSet, area: setArea } = removeControl(removals, [], 'Remove this set');
-      removeSet.setAttribute('aria-label', `Remove this set: ${name}`);
+      removeSet.setAttribute('aria-label', name ? `Remove this set: ${name}` : 'Remove this set');
       const setHead = el('div', 'flex flex-wrap items-center gap-2'); setHead.append(heading, removeSet);
       const rows = el('ul', 'space-y-1');
       let any = false;

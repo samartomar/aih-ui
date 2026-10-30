@@ -377,8 +377,21 @@ export async function runUpdateOneBrowser({ origin, output, playwrightModule, th
     });
     await page.screenshot({ path: join(output, `update-one-${theme}.png`), fullPage: true });
     const after = await freshInstalledList(browser, origin, theme, errors, { catalog: false });
+    // The newer release's set has a digest of its own; the installed set keeps the name Catalog publishes for its id.
+    const offeredSets = await after.page.evaluate(async () => (await (await fetch('/api/authoring-catalog')).json()).frameworks
+      .flatMap(framework => (framework.sets ?? []).map(set => ({ framework: framework.id, id: set.id, name: set.name, setSha256: set.setSha256 }))));
+    const headings = await after.page.locator('#installed-list [data-installed-set]').evaluateAll(sections => sections.map(section =>
+      ({ set: section.dataset.installedSet, heading: section.querySelector('p')?.textContent ?? '', exact: section.querySelector('p')?.title ?? '' })));
+    assert.ok(headings.length, 'the installed list has a set section');
+    for (const { set, heading, exact } of headings) {
+      const [framework, setId, setSha256] = exact.split('/');
+      const offered = offeredSets.find(entry => entry.framework === framework && entry.id === setId);
+      assert.ok(offered, `the newer Catalog offers ${setId}`);
+      assert.equal(heading, offered.name, `the ${set} heading is Catalog's name for the set${offered.setSha256 === setSha256 ? '' : ' after its digest changed'}`);
+      assert.notEqual(heading, setId, 'no raw set id as a heading');
+    }
     assert.deepEqual(errors, []);
-    await writeFile(join(output, `update-one-${theme}.json`), JSON.stringify({ status: 'passed', itemId, managementId: selection.managementId, review, result, sent, errors }, null, 2));
+    await writeFile(join(output, `update-one-${theme}.json`), JSON.stringify({ status: 'passed', itemId, managementId: selection.managementId, review, result, sent, headings, errors }, null, 2));
     return { status: 'passed', managementId: selection.managementId, members: selection.members.map(member => member.path), result, sent, inventory: after.answers.inventory };
   } finally { await browser.close(); }
 }

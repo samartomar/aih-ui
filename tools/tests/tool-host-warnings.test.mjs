@@ -57,3 +57,13 @@ test('unavailable per-item copy facts stay unchecked and preserve actual warning
   assert.match(copiesWords(mixed, 'skill-a'), /Second copy[\s\S]*Couldn't check.*Permission denied/);
   assert.match(drawerCopiesWords(mixed), /Second copy[\s\S]*Couldn't check.*Permission denied/);
 });
+
+test('a reason code Core gives for an unchecked copy is never shown; the contract sentence stands alone', () => {
+  const partial = host('incomplete', { items: [{ itemId: 'skill-a', copies: {
+    user: { state: 'unavailable', reason: 'user-root-not-observed' },
+    parentFolders: { state: 'none' }, plugins: { state: 'none' },
+  } }] });
+  assert.equal(copiesWords(partial, 'skill-a'), "Couldn't check whether your tool already has this.");
+  assert.equal(drawerCopiesWords(partial), "Couldn't check whether your tool already has this.");
+  assert.equal(copiesWords(host('refused', { items: [] }), 'skill-a'), "Couldn't check whether your tool already has this.", 'no bare status word either');
+});

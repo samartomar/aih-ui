@@ -80,3 +80,27 @@ test('the panel places each interactive row in exactly one set section, noting f
   assert.ok(other, 'no-origin rows stay explicit outside the set sections');
   assert.equal(walk(other).filter(entry => entry.tag === 'button').length, 1, 'its removal control is present');
 });
+
+test('a set heading keeps the name Catalog publishes for the set id when the recorded set digest is older, never the raw id', async () => {
+  const { createInstalledPanel } = await import('../../src/app/installed-panel.js');
+  const recorded = { framework: 'ecc', setId: 'ecc.rules.typescript', setSha256: 'a'.repeat(64) };
+  const gone = { framework: 'ecc', setId: 'ecc.rules.gone', setSha256: 'c'.repeat(64) };
+  const state = { file: 'matches', update: 'current', policy: null, approval: null, install: 'complete' };
+  const selections = [
+    { managementId: 'm-1', name: 'coding-style', origins: [{ reasonIncluded: 'in-set', set: recorded }], members: [{ fileState: 'matches' }] },
+    { managementId: 'm-2', name: 'old', origins: [{ reasonIncluded: 'in-set', set: gone }], members: [{ fileState: 'matches' }] },
+  ];
+  // After an update Catalog's set has a new digest; the framework still publishes its display name.
+  const frameworks = [{ id: 'ecc', sets: [{ id: 'ecc.rules.typescript', name: 'rules (typescript)', setSha256: 'b'.repeat(64) }] }];
+  const client = { catalog: { executionAvailable: true, items: [], frameworks }, requestCurrent: async () => ({ status: 'complete', selections }), intent: { roots: [] }, bytes: new Uint8Array() };
+  const el = (tag, className = '', text) => fake(tag, className, text);
+  const button = (label, action) => { const node = fake('button', '', label); node.addEventListener('click', action); return node; };
+  const panel = createInstalledPanel({ client, el, button });
+  await panel.refresh();
+  const sections = walk(panel.node).filter(entry => entry.dataset.installedSet);
+  const heading = setId => walk(sections.find(entry => entry.dataset.installedSet.startsWith(`${setId}/`))).find(entry => entry.tag === 'p');
+  assert.equal(heading('ecc.rules.typescript').textContent, 'rules (typescript)', 'the name is resolved by set id within the framework');
+  assert.equal(heading('ecc.rules.typescript').title, `ecc/ecc.rules.typescript/${'a'.repeat(64)}`, 'the exact recorded identity stays in the tooltip');
+  for (const node of walk(panel.node)) assert.doesNotMatch(node.textContent, /ecc\.rules\./, 'no raw set id is shown');
+  for (const node of walk(panel.node)) assert.doesNotMatch(node.attributes['aria-label'] ?? '', /ecc\.rules\./, 'no raw set id is announced');
+});

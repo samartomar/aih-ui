@@ -20,7 +20,7 @@ export function secondCopyWarnings(host) {
 export function hostCopiesState(host, itemId) {
   if (!host) return { state: 'loading' };
   if (host.status === 'unavailable') return { state: 'unavailable', reason: host.reason };
-  if (['failed', 'invalid', 'refused', 'cancelled'].includes(host.status)) return { state: 'failed', reason: host.reason ?? host.status };
+  if (['failed', 'invalid', 'refused', 'cancelled'].includes(host.status)) return { state: 'failed', reason: host.reason };
   const all = host.items ?? [];
   if (!all.length) return { state: 'empty' };
   const inspected = all.filter(item => itemId === undefined || item.itemId === itemId);
@@ -30,6 +30,9 @@ export function hostCopiesState(host, itemId) {
 }
 
 const COULD_NOT = "Couldn't check whether your tool already has this.";
+// Core names why a copy went unchecked by a code such as user-root-not-observed. The contract has no sentence for
+// any of them, so a code is dropped and the contract sentence stands alone; the Workbench's own sentences stay.
+const reasonWords = reason => typeof reason === 'string' && !/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(reason) ? reason : '';
 const warningWords = warnings => warnings.map(warning => `Second copy: ${warning.key} is also in ${WHERE[warning.where] ?? warning.where} (${warning.path}).`).join(' ');
 
 /**
@@ -41,7 +44,7 @@ export function copiesWords(host, itemId, { chosen = true } = {}) {
   const state = hostCopiesState(host, itemId);
   if (state.state === 'loading') return 'Checking whether your tool already has this…';
   const warning = warningWords(secondCopyWarnings(host).filter(warning => warning.itemId === itemId));
-  if (state.state === 'unavailable' || state.state === 'failed') return [warning, `${COULD_NOT} ${state.reason ?? ''}`.trim()].filter(Boolean).join(' ');
+  if (state.state === 'unavailable' || state.state === 'failed') return [warning, `${COULD_NOT} ${reasonWords(state.reason)}`.trim()].filter(Boolean).join(' ');
   if (state.state === 'empty') return "Couldn't check: nothing is chosen yet.";
   if (!chosen) return "Couldn't check: only your chosen content is checked for a second copy.";
   if (!warning) return 'No second copy reported by your tool.';
@@ -53,7 +56,7 @@ export function drawerCopiesWords(host) {
   const state = hostCopiesState(host);
   if (state.state === 'loading') return 'Checking whether your tool already has your chosen content…';
   const warning = warningWords(secondCopyWarnings(host));
-  if (state.state === 'unavailable' || state.state === 'failed') return [warning, `${COULD_NOT} ${state.reason ?? ''}`.trim()].filter(Boolean).join(' ');
+  if (state.state === 'unavailable' || state.state === 'failed') return [warning, `${COULD_NOT} ${reasonWords(state.reason)}`.trim()].filter(Boolean).join(' ');
   if (state.state === 'empty') return "Couldn't check for a second copy: nothing is chosen yet.";
   if (!warning) return 'Your tool reported no second copies of your chosen content.';
   return warning;
