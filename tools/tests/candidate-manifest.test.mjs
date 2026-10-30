@@ -178,3 +178,21 @@ test('an update-source Catalog whose bytes differ or are missing is refused nami
   rmSync(join(root, 'tarballs', 'aihq-catalog-0.0.1.tgz'));
   await assert.rejects(verifyManifest(read), refused('CANDIDATE_TARBALL_MISSING', /updateSourceCatalogs\[0\]/));
 });
+
+test('prepared frameworks are optional, absent from the identity unless named, and kept in order when named', t => {
+  const { manifest } = area(t);
+  const plain = readManifest(manifest());
+  assert.equal(plain.preparedFrameworks, undefined);
+  assert.equal('preparedFrameworks' in candidateIdentity(plain), false);
+  const read = readManifest(manifest(value => ({ ...value, preparedFrameworks: ['ecc', 'superpowers', 'extensions'] })));
+  assert.deepEqual(read.preparedFrameworks, ['ecc', 'superpowers', 'extensions']);
+  assert.deepEqual(candidateIdentity(read).preparedFrameworks, ['ecc', 'superpowers', 'extensions']);
+  assert.deepEqual(absoluteManifest(read).preparedFrameworks, ['ecc', 'superpowers', 'extensions']);
+});
+
+test('prepared frameworks that are not a list of 1 to 16 distinct framework ids are refused', t => {
+  const { manifest } = area(t);
+  for (const preparedFrameworks of ['ecc', [], ['ecc', 'ecc'], ['ECC'], ['../ecc'], ['ecc', 7], Array.from({ length: 17 }, (_, i) => `f${i}`), [{ id: 'ecc' }]]) {
+    assert.throws(() => readManifest(manifest(value => ({ ...value, preparedFrameworks }))), refused('CANDIDATE_MANIFEST_INVALID', /preparedFrameworks/), JSON.stringify(preparedFrameworks));
+  }
+});

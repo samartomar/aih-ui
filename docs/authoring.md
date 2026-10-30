@@ -75,7 +75,7 @@ and Core checks actual applicability during preparation.
 
 ### Focused regression command
 
-With Node 24.15–24.x and reviewed local archives, run:
+With Node 26.12.1–26.x and reviewed local archives, run:
 
 ```sh
 npm ci --ignore-scripts

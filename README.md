@@ -293,13 +293,36 @@ Personal page grants remain separate. Discovery/checking does
 not change those pins; the ordinary source-change review proposes an explicit
 update. A historical inspection package without a baseline keeps that absence.
 
+`preparedFrameworks` is optional: a list of 1 to 16 distinct framework ids from
+the pinned Catalog's own prepared content. Without it the rail reads **No
+frameworks available** and there are no starting sets. To walk the frameworks
+the journey uses:
+
+```json
+"preparedFrameworks": ["extensions", "ecc", "superpowers"]
+```
+
+Start writes `run/framework-sources.json`, one prepared selection per id
+(`root` is the Catalog installed in the candidate's consumer; `archivePath` and
+`archiveSha256` are the `packages.catalog` tarball), and gives the Workbench
+that file as `AIH_FRAMEWORK_SOURCES` (see [Framework sources](#framework-sources)).
+That is the only framework-source input: the launcher still drops every `AIH_*`
+setting from your shell, so an `AIH_FRAMEWORK_SOURCES` you set yourself is ignored.
+The printed identity lists the ids. An id the Catalog does not prepare shows as
+a failed internal source in the rail; the others stay browsable.
+
 Start refuses a tarball whose digest differs from the manifest before it writes
 anything.
 
 ### Start, stop, reset, report
 
 For an installed local release, pin the UI archive too with a top-level `ui`
-entry containing `tarball`, `sha256` and `commit`, like each dependency. Use a
+entry containing `tarball`, `sha256` and `commit`, like each dependency. Make the
+UI archive with `npm pack` in the checkout. The `files` list in `package.json`
+ships only the runtime: `src/` without the local Tailwind build (start builds it
+in the installed UI), the schemas, the exported contract fixtures, the candidate,
+preview, server, service and consumer tools, the README and `docs/*.md`. Tests,
+scratch, notes and repository tooling stay out. Use a
 data directory **outside source Git workspaces** and run preflight first:
 
 ```powershell
@@ -307,14 +330,35 @@ node tools/candidate.mjs preflight --manifest C:\path\to\candidate.json --data C
 node tools/candidate.mjs upgrade --manifest C:\path\to\candidate.json --data C:\local\workbench --port 4894
 ```
 
-`preflight` reads all pinned archives, checks package identities, Node/npm/tar,
+`preflight` reads all pinned archives, checks package identities, Node (26.12.1 through 26.x, the engine range of the current Core and Catalog archives; any other Node is refused with that range)/npm/tar,
 the destination and port, and verifies any existing recorded process identity.
-It writes no candidate state and stops nothing. `upgrade` repeats preflight,
+It writes no candidate state and stops nothing. Plain `node` is enough on
+Windows, macOS and Linux: npm is found through `npm_execpath` when npm started
+the command, then `npm` on `PATH`, then npm's own layout beside Node. `upgrade` repeats preflight,
 installs the UI, its pinned frontend dependencies and the three public packages
 with lifecycle scripts disabled, then compares every installed package file to
 its archive. Installation and dependency resolution finish before a running
 candidate is stopped. The new server runs the installed UI's existing candidate
 launcher, including its ordinary browser/package-identity smoke check.
+
+`node tools/check-candidate-install.mjs <packs.json> <new-output-directory> [--port 4894]`
+runs this documented path end to end on Node 26.12.1–26.x from a clean folder.
+`packs.json` names the Core, Catalog and Scan tarballs and their commits
+(`{ "core": { "tarball", "commit" }, "catalog": …, "scan": … }`). The output
+directory must be new and outside every Git workspace. With plain `node` and no
+`npm_execpath`, the check packs this checkout and refuses tests or scratch in the
+archive. It writes a manifest pinning that UI with
+`preparedFrameworks: ["extensions", "ecc", "superpowers"]`, runs `preflight`,
+then `upgrade` (install, start and the smoke check), and opens the page in
+Playwright. There it requires a styled page, the three frameworks in the rail,
+**Add chosen sets** taking a real pointer click (the button is the element under
+its own centre), and **Your setup** opening and closing by pointer. It stops the
+candidate and keeps the packs, logs, screenshots and `receipt.json` in the output
+directory. `--checkout <dir>` packs and runs another checkout of this repository,
+such as an older commit, with this check. The checkout must be clean:
+`git status --porcelain --untracked-files=all` must list nothing, so the archive
+is exactly the commit the manifest and the receipt record (`commit`,
+`treeClean: true`). A dirty checkout is refused before anything is created.
 
 Each exact manifest has a release directory under `releases/` and a
 `checkpoint.json` recording phases, elapsed times, installed tree digests,
@@ -861,9 +905,10 @@ does not answer within two minutes is the failed state.
 `package-support-1.1.json`, exported as `aih-ui/package-support-1.1.json`, is
 the Workbench's package-support declaration in Core's published
 `urn:aihq:package-support:1.1.0` format. Runtime support is per public entry:
-`aih-ui/stored-results` supports Node `>=24.15.0 <25 || >=26.12.1 <27`.
-The other Node entries retain `>=24.15.0 <25`; journey, workspace and batch
-retain their portable classification. A reader's entry range does not override
+every Node entry supports Node `>=26.12.1 <27`, the engines range of the current
+Core and Catalog archives and the range the owner-testing candidate accepts
+(`NODE_RANGE` in `tools/candidate/upgrade.mjs`; a test keeps the two equal).
+Journey, workspace and batch retain their portable classification. A reader's entry range does not override
 a dependency package's installation engine range or establish runtime support
 for the application host. It names what the Workbench actually reads and writes:
 
@@ -1243,7 +1288,7 @@ loopback URL and exact package hashes. Without `AIH_CONSUMER_PROJECT`, browsing,
 authoring, download and reopen work while Prepare/Apply stay unavailable. An
 explicit host-configured disposable target enables review and approval; the
 browser cannot supply material roots, and can change the project folder only through the host's checked choice above. `AIH_CONSUMER_CONTROLS`
-may name a host-owned controls JSON file. The current reviewed producer archives require Node 26.12.1 through 26.x for this mixed-package host. This host requirement does not broaden the per-entry support declaration above.
+may name a host-owned controls JSON file. The current reviewed producer archives require Node 26.12.1 through 26.x for this mixed-package host. The per-entry support declaration names the same range.
 
 The page saves ordinary execution policy JSON plus namespaced
 `aih.workbench` metadata describing exact source identity, explicit roots and

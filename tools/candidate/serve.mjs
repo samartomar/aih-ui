@@ -12,7 +12,8 @@
  * SIGINT/SIGTERM (neither can be handled while npm blocks it during installation, so stop then ends its process tree after
  * checking its command line). The launcher gave it exactly the environment it runs with: the candidate's
  * disposable account home (HOME, USERPROFILE, APPDATA, XDG_*) so Core's records land there and never in the real account's, its
- * own temporary directory, and no AIH_* host setting but the ones this process sets from the samples it made. A sample that
+ * own temporary directory, and no AIH_* host setting but the ones this process sets from the samples it made and the manifest
+ * (AIH_FRAMEWORK_SOURCES from preparedFrameworks, written into the run directory). A sample that
  * could not be made leaves its host input unset, so the product shows its own "not configured" state.
  * While the TLS-interception condition is staged (tls-interception.mjs) and the readiness sample exists, it also starts the interceptor
  * after the installation and gives only the processes it starts afterwards the environment that reaches it.
@@ -33,6 +34,7 @@ import { readServerRecord } from './process.mjs';
 import { installLocalAuthority } from './local-authority.mjs';
 import { seedSamples } from './samples.mjs';
 import { activateStagedCondition } from './tls-interception.mjs';
+import { writePreparedFrameworkSources } from './framework-sources.mjs';
 import { verifyInstalledArchive } from './upgrade.mjs';
 
 const say = message => process.stdout.write(`${new Date().toISOString()} ${message}\n`);
@@ -122,6 +124,12 @@ async function main() {
         // Operator configuration, verified independently of report bytes; never infer trust from an artifact.
         if (read.hostInputs.evidenceSources) process.env.AIH_SCAN_EVIDENCE_SOURCES = read.hostInputs.evidenceSources.path;
         if (read.hostInputs.reviewTrust) process.env.AIH_REVIEW_TRUST = read.hostInputs.reviewTrust.path;
+        // The manifest's one framework-source input: the pinned Catalog's prepared content, never a setting from the launching shell.
+        const frameworkSources = writePreparedFrameworkSources({ frameworks: read.preparedFrameworks, consumerDir, runDir: layout.run, catalog: packages.catalog });
+        if (frameworkSources) {
+          process.env.AIH_FRAMEWORK_SOURCES = frameworkSources;
+          say(`framework sources: ${read.preparedFrameworks.join(', ')} from the pinned Catalog's prepared content`);
+        }
         if (updateSourceRoots.length) delete process.env.AIH_MAINTENANCE_SOURCE;
         // A staged condition (tls-interception.mjs) starts only now, after every install: npm's own installs and this process never see it,
         // and only the processes started from here on (the readiness check and what Core runs from it) inherit its environment.
