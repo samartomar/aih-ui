@@ -56,7 +56,9 @@ export async function runSimplePathBrowser({ origin, output, playwrightModule, t
     await page.getByRole('button', { name: `Add ${item}`, exact: true }).click();
     const added = page.locator('#added-notice-message').filter({ hasText: /^Added / });
     await added.waitFor();
-    assert.match(await added.innerText(), /it needs/, 'The confirmation names the items it needs.');
+    const addedText = await added.innerText();
+    const addedNeeds = addedText.match(/\+ (\d+) it needs \((.+)\)/);
+    assert.ok(addedNeeds, `The confirmation names the items it needs: ${addedText}`);
     assert.equal(await page.locator('#policy-review-panel').isVisible(), false, 'No review opens for a clean Add.');
     assert.equal(await page.locator('#policy-accept').isVisible(), false, 'There is no separate Accept step.');
     const saved = JSON.parse(await page.locator('#policy-bytes').textContent());
@@ -73,7 +75,9 @@ export async function runSimplePathBrowser({ origin, output, playwrightModule, t
     assert.equal(await drawer.locator('#policy-proposal-actions').isVisible(), false, 'Nothing is left waiting to be accepted.');
     const choice = drawer.locator(`#setup-choices-list [data-choice-item="${item}"]`);
     await choice.waitFor();
-    assert.match(await choice.locator('summary').innerText(), /^\+ \d+ it needs$/);
+    // The same items the Add named, folded under the chosen item.
+    assert.equal(await choice.locator('summary').innerText(), `+ ${addedNeeds[1]} it needs`);
+    assert.deepEqual((await choice.locator('details li').allTextContents()).sort(), addedNeeds[2].split(', ').sort());
     const setupAdvanced = drawer.locator('#setup-advanced');
     assert.equal(await drawer.locator('details > summary').filter({ hasText: /^Advanced$/ }).count(), 1, 'Your setup has one Advanced section.');
     assert.equal(await setupAdvanced.evaluate(node => node.open), false);

@@ -75,7 +75,7 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
     const source = draft ? draft.intent : intent;
     const roots = source?.roots ?? [];
     const items = client.catalog?.items ?? [];
-    const needs = setupNeeds({ intent, draft, policyBytes: draft ? undefined : client.bytes });
+    const needs = setupNeeds({ intent, draft, policyBytes: draft ? undefined : client.bytes, items });
     const entries = choiceLines({ roots, needs, items });
     title.textContent = entries.length ? `Your choices (${entries.length})` : 'Your choices';
     empty.hidden = Boolean(entries.length);

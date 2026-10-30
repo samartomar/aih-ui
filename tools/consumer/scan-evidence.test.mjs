@@ -179,8 +179,15 @@ test('unsupported report schema remains explicit in source diagnostics without a
   const root=await mkdtemp(join(tmpdir(),'ui88-unsupported-'));
   try {
     const path=join(root,'report.json');await writeFile(path,JSON.stringify({schema:'urn:aihq:scan:report:9.0.0'}));
-    const host=createScanEvidenceHost({sources:[{id:'configured',path,format:'report'}]});
-    const result=await host.check(await scanFixture());assert.equal(result.status,'selected');
+    // One unsupported configured report fails only its own source: the baseline and a readable source keep working.
+    const readable=join(root,'readable.json');await writeFile(readable,await fixture('s2.json'));
+    const host=createScanEvidenceHost({sources:[{id:'configured',path,format:'report'},{id:'readable',path:readable,format:'artifact'}]});
+    const result=await host.check(await scanFixture());assert.equal(result.status,'selected',JSON.stringify(result.diagnostics));
+    const without=await createScanEvidenceHost({sources:[{id:'readable',path:readable,format:'artifact'}]}).check(await scanFixture());
+    assert.equal(without.status,'selected');assert.equal(typeof without.selectedScanId,'string');
+    assert.equal(result.selectedScanId,without.selectedScanId,'the readable source is still selected');
+    assert.deepEqual(result.checks.filter(value=>value.sourceId!=='configured'),without.checks,'every other source checks as it does alone');
+    assert.equal(result.checks.find(value=>value.sourceId==='readable').status,'succeeded');
     const check=result.checks.find(value=>value.sourceId==='configured');assert.equal(check.status,'failed');
     const diagnostic=check.diagnostics[0];assert.equal(diagnostic.code,'unsupported-format');
     assert.equal(diagnostic.path,'$.schema');assert.equal(diagnostic.encountered,'urn:aihq:scan:report:9.0.0');
