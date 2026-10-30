@@ -340,6 +340,22 @@ its archive. Installation and dependency resolution finish before a running
 candidate is stopped. The new server runs the installed UI's existing candidate
 launcher, including its ordinary browser/package-identity smoke check.
 
+`node tools/check-candidate-install.mjs <packs.json> <new-output-directory> [--port 4894]`
+runs this documented path end to end on Node 26.12.1–26.x from a clean folder.
+`packs.json` names the Core, Catalog and Scan tarballs and their commits
+(`{ "core": { "tarball", "commit" }, "catalog": …, "scan": … }`). The output
+directory must be new and outside every Git workspace. With plain `node` and no
+`npm_execpath`, the check packs this checkout and refuses tests or scratch in the
+archive. It writes a manifest pinning that UI with
+`preparedFrameworks: ["extensions", "ecc", "superpowers"]`, runs `preflight`,
+then `upgrade` (install, start and the smoke check), and opens the page in
+Playwright. There it requires a styled page, the three frameworks in the rail,
+**Add chosen sets** taking a real pointer click (the button is the element under
+its own centre), and **Your setup** opening and closing by pointer. It stops the
+candidate and keeps the packs, logs, screenshots and `receipt.json` in the output
+directory. `--checkout <dir>` packs and runs another checkout of this repository,
+such as an older commit, with this check.
+
 Each exact manifest has a release directory under `releases/` and a
 `checkpoint.json` recording phases, elapsed times, installed tree digests,
 the previous manifest, and hashes of retained account/configuration/sample
