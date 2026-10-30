@@ -15,7 +15,7 @@ export function importLimitError(size, bytes) {
   if (bytes && size > IMPORT_LIMITS.policy && !isJourneyEnvelope(bytes)) return 'Policy exceeds the public byte limit of 1 MB.';
   return undefined;
 }
-// Pending owner approval as contract amendment 3.2.3 row 18.
+// Contract amendment 3.2.3 row 18 (owner-approved 2026-10-30).
 export const ENTERPRISE_SETUP_NOTICE = "These choices were made outside your organisation's policy. Start a new Enterprise setup to install them under it.";
 const refusal = (code, message) => ({ status: 'refused', diagnostics: [{ code, message }] });
 const APPLY_POLL_MS = 1000, APPLY_LOST_POLLS = 60;
@@ -99,7 +99,7 @@ export function createAuthoringClient({ sessionRecovery = true } = {}) {
       const result = await fetch('/api/authoring-apply-status', { method: 'POST', headers: { 'x-aih-client': job.client, 'content-type': 'application/json' },
         body: JSON.stringify({ applyId: job.applyId }) }).then(response => response.ok ? response.json() : undefined).catch(() => undefined);
       if (!result) {
-        // Pending owner approval as contract amendment 3.2.3 row 21.
+        // Contract amendment 3.2.3 row 21 (owner-approved 2026-10-30).
         if (++lost >= giveUpAfter) return { ...applyUnknown('This page lost contact with the Workbench while it was running.'), resumable: true };
         continue;
       }

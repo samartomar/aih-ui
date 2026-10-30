@@ -72,7 +72,7 @@ test('a reviewable update asks the person to check the replacement', async () =>
   assert.equal(preview.message, 'Nothing has been updated yet. Check the replacement, then confirm.');
 });
 
-// Pending owner approval as contract amendment 3.2.3 row 26: a requirement the newer item adds is named, not dropped.
+// Contract amendment 3.2.3 row 26 (owner-approved 2026-10-30): a requirement the newer item adds is named, not dropped.
 test('an update whose newer item needs something not installed names it and goes no further', async () => {
   const nameOf = ref => ({ 'ecc.rule.README': 'README' })[ref.itemId];
   const sent = [];
@@ -106,7 +106,7 @@ test('an install record the host cannot read is named without the host\'s error 
   const preview = await ask({ disposition: 'unavailable', diagnostics: [{ code: 'RECORD_UNAVAILABLE', reason: 'record-unavailable',
     message: 'This Workbench cannot read its record of what it installed in this folder.' , detail: 'EACCES: permission denied, open \'/home/someone/.aih/installed/abc.json\'' }] });
   assert.equal(preview.canConfirm, false);
-  assert.equal(preview.message, 'Update cannot go ahead: this Workbench cannot read its record of what it installed in this folder, so no update can be checked. Nothing was updated.');
+  assert.equal(preview.message, 'Update cannot go ahead: This Workbench cannot read its record of what it installed in this folder, so no update can be checked. Nothing was updated.');
   assert.doesNotMatch(preview.message, /\/home\/|EACCES/);
 });
 test('an Update in an Enterprise setup says why it cannot go ahead', async () => {

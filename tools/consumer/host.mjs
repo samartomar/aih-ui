@@ -311,7 +311,7 @@ export function createHost({ projectRoot, materialRoots, organizationSource, rec
           installRecord.record(installs.filter(entry => shown.has(selectionKey(entry.scope, entry.managementId)))
             .map(entry => ({ ...entry, installed: installedIdentity(shown.get(selectionKey(entry.scope, entry.managementId))) })), forget);
         } catch {
-          // Pending owner approval as contract amendment 3.2.3 row 30.
+          // Contract amendment 3.2.3 row 30 (owner-approved 2026-10-30).
           return { ...result, diagnostics: [...(result.diagnostics ?? []), { code: 'RECORD_UNAVAILABLE', reason: 'record-unavailable', message: 'Installed, but this Workbench could not record it, so it cannot be updated from here.' }] };
         }
       }

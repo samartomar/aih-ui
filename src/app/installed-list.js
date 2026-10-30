@@ -4,6 +4,8 @@
 // come from the compiled policy (each selection's `requires`, as Catalog resolved it). Nothing here decides a
 // dependency, an update state or an admission state itself.
 
+import { listNames } from './host-review.js';
+
 /** Selection ids in an order where every item comes before the items it requires. */
 export function removalOrder(ids, byId) {
   const wanted = new Set(ids), done = new Set(), ordered = [];
@@ -132,7 +134,7 @@ export function setLabeller(frameworks = []) {
       .filter(candidate => candidate.id === set.setId);
     const exact = candidates.find(candidate => candidate.setSha256 === undefined || candidate.setSha256 === set.setSha256);
     if (exact) return exact.name;
-    // Pending owner approval as contract amendment 3.2.3 row 32.
+    // Contract amendment 3.2.3 row 32 (owner-approved 2026-10-30).
     return candidates[0] ? `${candidates[0].name} (earlier release)` : undefined;
   };
 }
@@ -143,8 +145,9 @@ export function setLabeller(frameworks = []) {
 export function keptWords(keptFor = [], heading, label) {
   const labels = keptFor.map(label);
   const named = [...new Set(labels.filter(name => name && name !== heading))];
-  if (named.length) return `Kept; also part of ${named.join(', ')}`;
-  // Pending owner approval as contract amendment 3.2.3 rows 33 and 34.
+  // Contract amendment 3.2.3 row 9 (owner-approved 2026-10-30).
+  if (named.length) return `Kept; also part of ${listNames(named)}`;
+  // Contract amendment 3.2.3 rows 33 and 34 (owner-approved 2026-10-30).
   if (labels.some(name => name && name === heading)) return 'Kept; also part of another release of this set';
   if (labels.length) return 'Kept; also part of a set this catalog no longer offers';
   return undefined;

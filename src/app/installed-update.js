@@ -5,23 +5,23 @@ const readyPreparation = result => result?.disposition === 'prepared' && ['ready
 
 // The host's refusals, in the page's words with the page's names for both items; never the host's own error text.
 const REFUSALS = {
-  // Pending owner approval as contract amendment 3.2.3 row 26.
+  // Contract amendment 3.2.3 row 26 (owner-approved 2026-10-30).
   // The newer item needs something nothing installed provides.
   'requirement-not-installed': ({ name, required }) =>
     `${name} needs ${required}, which is not installed`,
-  // Pending owner approval as contract amendment 3.2.3 row 27.
+  // Contract amendment 3.2.3 row 27 (owner-approved 2026-10-30).
   // The newer item needs an installed item the install did not need.
   'requirement-not-recorded': ({ name, required }) =>
     `${name} now needs ${required}, which it did not need when it was installed`,
-  // Pending owner approval as contract amendment 3.2.3 row 28.
+  // Contract amendment 3.2.3 row 28 (owner-approved 2026-10-30).
   // No entry, or one that no longer matches what Core shows installed.
   'install-not-recorded': ({ name }) =>
     `${name} has no record of how this Workbench installed it, so its update cannot be checked`,
-  // Pending owner approval as contract amendment 3.2.3 row 29.
+  // Contract amendment 3.2.3 row 29 (owner-approved 2026-10-30).
   // The record exists but cannot be read; its error is not shown.
   'record-unavailable': () =>
-    'this Workbench cannot read its record of what it installed in this folder, so no update can be checked',
-  // Pending owner approval as contract amendment 3.2.3 row 31.
+    'This Workbench cannot read its record of what it installed in this folder, so no update can be checked',
+  // Contract amendment 3.2.3 row 31 (owner-approved 2026-10-30).
   // Core's update request names no organization source.
   'enterprise-update-unavailable': () =>
     'Update is not available in an Enterprise setup, because Core cannot yet check an update against the organization\'s rules',
@@ -91,7 +91,7 @@ export async function confirmUpdate({ preview, request, tool, mode = preview.mod
   if (!preview.canConfirm) return { outcome: 'failed', message: preview.steps.map(step => step.message).join(' ') };
   const prepare = () => request('update', { updates: preview.entries.map(entry => ({ ...entry, managementId: entry.managementId, replacement: entry.replacement })), scope: preview.scope, tool, mode });
   const attempt = await applyIfUnchanged({ held: preview, prepare, readyPreparation, apply: approval => request('apply', { ...approval, purpose: 'update', ...(preview.allowPartial ? { allowPartial: true } : {}) }) });
-  // Pending owner approval as contract amendment 3.2.3 row 25.
+  // Contract amendment 3.2.3 row 25 (owner-approved 2026-10-30).
   if (attempt.state === 'unknown') return { outcome: 'unknown', message: `Update outcome unknown: ${diagnosticWords(attempt.run)}` };
   if (attempt.state !== 'applied') return { outcome: 'failed', message: `Update was not applied: ${[attempt.reason, diagnosticWords(attempt.result?.preparation, attempt.result)].filter(Boolean).join(' ')}` };
   const results = preview.entries.map((entry, index) => outcome(entry, preview.steps[index], attempt.run));

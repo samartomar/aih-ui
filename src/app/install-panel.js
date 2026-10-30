@@ -46,7 +46,7 @@ export function installOutcome(run, files, project) {
   // The page moved on after sending Apply; the host may already have written files.
   if (run.status === 'superseded') return { ok: false, message: 'The page changed while Install was running, so it cannot tell whether any files were written. Check what is installed in this project before installing again.' };
   // Core's result never reached the page: it may have finished, so this is neither a failure nor a success.
-  // Pending owner approval as contract amendment 3.2.3 row 23.
+  // Contract amendment 3.2.3 row 23 (owner-approved 2026-10-30).
   if (run.status === 'unknown') return { ok: false, state: 'unknown', message: `Install outcome unknown: ${[...(run.diagnostics ?? [])].map(diagnostic => diagnostic.message ?? diagnostic.code).join(' ')}` };
   // Run result 1.4: Core checked each touched member directly on disk. Only a complete run whose every intended
   // write member was written and found present-matching is confirmed; kept, restored, unchecked, absent or
@@ -69,7 +69,7 @@ export function installOutcome(run, files, project) {
   return { ok: false, message: `Install did not finish${reason ? `: ${reason}` : '. Nothing else was changed by this page.'} Check what is installed in this project before installing again.` };
 }
 
-// Pending owner approval as contract amendment 3.2.3 row 19.
+// Contract amendment 3.2.3 row 19 (owner-approved 2026-10-30).
 export const APPLY_RUNNING_MESSAGE = 'Install is still running in this project folder.';
 
 const readyPreparation = result => { const preparation = result?.preparation ?? result; return preparation?.status === 'ready' && preparation.sessionId && preparation.review ? preparation : undefined; };
@@ -90,7 +90,7 @@ async function showFirstRun(client, review, line) {
 export function firstRunWords(entries, frameworks) {
   return entries.map(entry => {
     const name = setDisplayName(frameworks, entry.set);
-    // Pending owner approval as contract amendment 3.2.3 row 36.
+    // Contract amendment 3.2.3 row 36 (owner-approved 2026-10-30).
     return entry.firstRun
       ? `First step: ${entry.firstRun.name} (${entry.firstRun.kind}) — the step ${name ? `its set ${name}` : 'its set'} declares to run first. It does not run by itself.`
       : `First-step guidance unavailable for ${name ? `set ${name}` : UNNAMED_SET}: ${entry.reason}`;

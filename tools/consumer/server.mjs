@@ -234,7 +234,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource,
         if (operation === 'apply-status') {
           const job = applyJobs.get(body.applyId);
           if (!job || job.clientId !== (request.headers['x-aih-client'] ?? null)) return send(response, 200, { status: 'unknown', diagnostics: [{ code: 'APPLY_UNKNOWN',
-            // Pending owner approval as contract amendment 3.2.3 row 22.
+            // Contract amendment 3.2.3 row 22 (owner-approved 2026-10-30).
             message: 'This Workbench no longer holds that result.' }] });
           return send(response, 200, job.result ?? { status: 'running', elapsedMs: Date.now() - job.started });
         }

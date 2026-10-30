@@ -49,7 +49,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   const internalNotice = el('details', 'text-on-surface-variant'); internalNotice.id = 'policy-internal-content';
   const internalSummary = el('summary', '', 'Internal content · not verified');
   // The recorded Catalog package, version and archive digest as labelled values; the saved JSON stays in the policy file.
-  // The labels Package, Version and Archive digest are pending owner approval as contract amendment 3.2.3 row 17.
+  // The labels Package, Version and Archive digest are contract amendment 3.2.3 row 17 (owner-approved 2026-10-30).
   const internalProvenance = el('div', 'space-y-2'); internalNotice.append(internalSummary, internalProvenance);
   const proposal = el('div', 'space-y-2'); proposal.id = 'policy-proposal'; proposal.setAttribute('role', 'status'); review.after(proposal);
   const status = el('p', 'wb-status-area text-on-surface-variant'); status.id = 'policy-status'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite'); controls.after(status);
@@ -75,6 +75,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
   // leaves the earlier choices as they were: their file stays available from Download original artifact.
   const modeNotice = el('div', 'shrink-0 px-3 py-2 flex flex-wrap items-center gap-3 bg-error-container text-on-error-container text-[12px] border-b border-wb-border');
   modeNotice.id = 'enterprise-setup-notice'; modeNotice.setAttribute('role', 'alert'); modeNotice.hidden = true;
+  // Contract amendment 3.2.3 row 18 (owner-approved 2026-10-30).
   const startEnterprise = button('Start a new Enterprise setup', safe(async () => {
     const previous = client.bytes;
     const result = await client.startSetupPolicy();
@@ -563,6 +564,7 @@ export function createAuthoringWorkspace(client, { onBackToCatalog = () => {} } 
     internalProvenance.replaceChildren(...(internalSources.length ? [el('p', '', 'Baseline unbound; unauthenticated, non-production.'),
       ...[...internalContents.values()].map(content => {
         const list = el('dl', 'space-y-1');
+        // Contract amendment 3.2.3 row 17 (owner-approved 2026-10-30).
         for (const [label, value] of [['Package', content.provenance?.package?.name], ['Version', content.provenance?.package?.version], ['Archive digest', content.archiveSha256]]) {
           const group = el('div', 'flex flex-wrap gap-x-2'); group.append(el('dt', 'text-outline', label), el('dd', 'text-on-surface break-all', value ?? '—')); list.append(group);
         }

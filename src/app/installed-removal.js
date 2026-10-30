@@ -50,9 +50,11 @@ export async function previewRemoval({ entries, request, mode }) {
   return present(entries, result);
 }
 
+// Contract amendment 3.2.3 row 13 (owner-approved 2026-10-30).
+const RESTORED = 'put back the way it was before install';
 function memberOutcome(entry, run) {
   if (entry.state === 'kept') return { name: entry.entry.name, state: 'kept', message: entry.message };
-  // `removed` is the contract's state for a member whose absence Core confirmed; it has no sentence of its own.
+  // Contract amendment 3.2.3 row 12 (owner-approved 2026-10-30).
   if (entry.state === 'absent') return { name: entry.entry.name, state: 'absent', message: `${entry.entry.name}: removed` };
   if (entry.state === 'kept-shared') return run?.completion === 'complete'
     ? { name: entry.entry.name, state: 'kept', message: `${entry.entry.name}: ${entry.message}` }
@@ -62,7 +64,7 @@ function memberOutcome(entry, run) {
   const keptPaths = new Set(keptFiles.map(file => file.path));
   if (run?.completion === 'complete' && members.length) {
     if (members.every(member => member.outcome === 'restored' && member.check === 'present-matching'))
-      return { name: entry.entry.name, state: 'restored', message: `${entry.entry.name}: restored` };
+      return { name: entry.entry.name, state: 'restored', message: `${entry.entry.name}: ${RESTORED}` };
     if (members.every(member => member.check === 'absent' || (member.outcome === 'restored' && member.check === 'present-matching') || (keptPaths.has(member.path) && member.outcome === 'kept'))) {
       const kept = members.filter(member => keptPaths.has(member.path) && member.outcome === 'kept');
       if (kept.length) {
@@ -71,7 +73,7 @@ function memberOutcome(entry, run) {
         return { name: entry.entry.name, state: 'kept', message: `${entry.entry.name}: ${[...new Set(reasons)].join('; ')}` };
       }
       const restored = members.some(member => member.outcome === 'restored');
-      return { name: entry.entry.name, state: restored ? 'restored' : 'absent', message: `${entry.entry.name}: ${restored ? 'restored' : 'removed'}` };
+      return { name: entry.entry.name, state: restored ? 'restored' : 'absent', message: `${entry.entry.name}: ${restored ? RESTORED : 'removed'}` };
     }
   }
   const reason = diagnosticWords(run);
@@ -85,7 +87,7 @@ export async function confirmRemoval({ preview, request, mode }) {
   }
   const prepare = () => request('remove', { removals: preview.selectors, scope: preview.scope, mode });
   const attempt = await applyIfUnchanged({ held: preview, prepare, readyPreparation, apply: approval => request('apply', { ...approval, purpose: 'remove' }) });
-  // Pending owner approval as contract amendment 3.2.3 row 24.
+  // Contract amendment 3.2.3 row 24 (owner-approved 2026-10-30).
   if (attempt.state === 'unknown') return { results: [], outcome: 'unknown', message: `Removal outcome unknown: ${diagnosticWords(attempt.run)}` };
   if (attempt.state !== 'applied') {
     const reason = [attempt.reason, diagnosticWords(attempt.result?.preparation, attempt.result)].filter(Boolean).join(' ');

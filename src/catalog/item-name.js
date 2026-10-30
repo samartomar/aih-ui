@@ -16,6 +16,6 @@ export function replacedNames(supersedes = [], items = []) {
     const name = current ? itemDisplayName({ ...current, name: current.display?.name ?? current.name ?? current.label }) : entry.name;
     if (!name) unnamed++; else if (!names.includes(name)) names.push(name);
   }
-  // Pending owner approval as contract amendment 3.2.3 row 35.
+  // Contract amendment 3.2.3 row 35 (owner-approved 2026-10-30).
   return unnamed ? [...names, `${unnamed} earlier item${unnamed === 1 ? '' : 's'}`] : names;
 }

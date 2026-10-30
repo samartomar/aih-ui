@@ -49,7 +49,7 @@ function stateBadges(state = {}, el) {
   return chips;
 }
 
-// Pending owner approval as contract amendment 3.2.3 rows 19 and 20.
+// Contract amendment 3.2.3 rows 19 and 20 (owner-approved 2026-10-30).
 export const APPLY_RUNNING_NOTE = 'Install is still running in this project folder. What is installed shows here once it has finished.';
 export function createInstalledPanel({ client, el, button, onRemoved = () => {}, onFinish = () => {}, onInventory = () => {} }) {
   const node = el('section', 'p-3 rounded border border-wb-border bg-surface-container-low space-y-2'); node.id = 'installed-panel'; node.hidden = true;
