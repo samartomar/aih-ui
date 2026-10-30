@@ -237,3 +237,24 @@ test('Project basics composes without projectFacts when the project yields no fa
   assert.equal(basics.length, 3);
   assert.ok(basics.every(selection => !Object.hasOwn(selection, 'projectFacts')), JSON.stringify(basics.map(selection => selection.projectFacts)));
 });
+
+test('Project basics facts are decided by the new facts alone, so facts no longer found leave the selections', async () => {
+  const prepared = await readInstalledPreparedContent({ root: catalogRoot, frameworkId: 'project-basics' });
+  const materials = await Promise.all(prepared.release.items.flatMap(item => item.materials).map(async material => ({
+    ...material, path: material.packagePath, bytes: new Uint8Array(await readFile(join(catalogRoot, material.packagePath))),
+  })));
+  const inventory = { family: 'Project basics', release: prepared.release, materialSource: { kind: 'local', input: 'maintained' }, materials };
+  const item = prepared.release.items.find(item => item.kind === 'rule' && item.payload?.placement === 'entry-block');
+  const intent = freshAuthoring(); intent.roots.push({ releaseSha256: prepared.release.sha256, itemId: item.id, itemSha256: item.itemSha256, scope: 'project', configuration: {}, originIds: ['direct'] });
+  const basics = composed => composed.value.policy.selections.filter(selection => selection.item?.framework === 'project-basics');
+  const first = await composeAuthoring({ intent, inventories: [inventory], tool: 'claude', projectFacts: { status: 'complete', facts: [{ field: 'stack', value: 'node', confidence: 'detected' }] } });
+  assert.equal(first.status, 'ok', JSON.stringify(first.diagnostics ?? []));
+  assert.equal(basics(first).filter(selection => selection.projectFacts?.length === 1).length, 3);
+  const again = await composeAuthoring({ basePolicyBytes: first.value.policyBytes, intent: first.value.intent, inventories: [inventory], tool: 'claude', projectFacts: { status: 'complete', facts: [] } });
+  assert.equal(again.status, 'ok', JSON.stringify(again.diagnostics ?? []));
+  assert.deepEqual(basics(again).map(selection => Object.hasOwn(selection, 'projectFacts')), [false, false, false]);
+  // No folder, no facts passed: what was recorded stays.
+  const kept = await composeAuthoring({ basePolicyBytes: first.value.policyBytes, intent: first.value.intent, inventories: [inventory], tool: 'claude' });
+  assert.equal(kept.status, 'ok', JSON.stringify(kept.diagnostics ?? []));
+  assert.equal(basics(kept).filter(selection => selection.projectFacts?.length === 1).length, 3);
+});
