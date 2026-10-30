@@ -164,6 +164,15 @@ export function stillNeededWords(names) {
   // Contract amendment 3.2.3 row 10 (owner-approved 2026-10-30).
   return names?.length ? `Kept; still needed by ${listNames(names)}` : undefined;
 }
+/**
+ * For each installed selection, the installed selections Core's inventory records as requiring it: management id → [{
+ * managementId, name }]. A requirement resolves at the requiring entry's own scope, as Core's requiredBy names none.
+ */
+export function installedRequirers(inventory, name = recordedName) {
+  const selections = inventory?.selections ?? [], requirer = requirerIn(selections);
+  return new Map(selections.map(entry => [entry.managementId, [...new Map((entry.origins ?? []).filter(origin => origin.reasonIncluded === 'required-by')
+    .map(origin => requirer(entry, origin)).filter(Boolean).map(owner => [owner.managementId, { managementId: owner.managementId, name: name(owner) }])).values()]]));
+}
 // A recorded origin that owns the item (a set or a direct choice), not one that only requires it.
 const owners = entry => (entry.origins ?? []).filter(origin => origin.reasonIncluded !== 'required-by');
 const sameSet = (a, b) => Boolean(a && b) && a.framework === b.framework && a.setId === b.setId && a.setSha256 === b.setSha256;
@@ -265,5 +274,5 @@ export function groupInstalled({ inventory, policy, intent, label = () => undefi
   const setupInstalled = byId.size > 0 && [...byId.values()].every(entry => installed.has(entry.managementId));
   return { readable: true, partial: inventory.status !== 'complete', groups, others, notInstalled: chosen.filter(item => !isInstalled(item)), setupInstalled,
     // Grouping purely from recorded origins, independent of the draft; legacy rows stay explicit under set:null.
-    originGroups: originGroups(inventory, { name: nameOf }) };
+    originGroups: originGroups(inventory, { name: nameOf }), requirers: installedRequirers(inventory, nameOf) };
 }

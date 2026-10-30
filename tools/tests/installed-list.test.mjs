@@ -167,3 +167,15 @@ test('a chosen item outside the draft is listed with the items Core records it r
   assert.deepEqual(guardGroup.kept.map(item => [item.managementId, item.neededBy]), [['m-notices', ['TDD']]]);
   assert.deepEqual(view.others, []);
 });
+
+test('installedRequirers names, per installed selection, the installed selections Core records as requiring it, at their own scope', async () => {
+  const { installedRequirers } = await import('../../src/app/installed-list.js');
+  const req = itemId => ({ reasonIncluded: 'required-by', requiredBy: { framework: 'ecc', itemId } });
+  const requirers = installedRequirers({ selections: [
+    { managementId: 'm-readme', scope: 'project', name: 'README', item: { framework: 'ecc', itemId: 'readme' }, origins: [req('tdd'), req('lint'), req('gone')] },
+    { managementId: 'm-tdd', scope: 'project', name: 'tdd', item: { framework: 'ecc', itemId: 'tdd' }, origins: [{ reasonIncluded: 'chosen' }] },
+    { managementId: 'm-lint', scope: 'user', name: 'lint', item: { framework: 'ecc', itemId: 'lint' }, origins: [{ reasonIncluded: 'chosen' }] },
+  ] });
+  assert.deepEqual(requirers.get('m-readme'), [{ managementId: 'm-tdd', name: 'tdd' }], 'a requirer at another scope or not installed is not named');
+  assert.deepEqual(requirers.get('m-tdd'), []);
+});

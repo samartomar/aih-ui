@@ -1,7 +1,13 @@
 import { applyIfUnchanged, diagnosticWords } from './host-review.js';
+import { stillNeededWords } from './installed-list.js';
 
 const readyPreparation = result => result?.disposition === 'prepared' && result.preparation?.status === 'ready' && result.preparation.sessionId && result.preparation.review
   ? result.preparation : undefined;
+
+/** The kept sentence for an item still required: by the requirers' names, or, when none can be named, without them. */
+export const keptRequiredWords = names => stillNeededWords(names)
+  // Contract amendment 3.2.3 row 37 (pending owner approval).
+  ?? 'Kept; still needed by another installed item';
 
 // The contract's sentence for a kept member ("Kept; also part of {set}") when the other owner is a named set, or for a
 // member Core keeps because it changed after install; for any other kept member the contract has no sentence, so
@@ -10,6 +16,9 @@ export function removalMemberWords(member, entry) {
   if ((member.action === 'keep-shared' || member.reason === 'another-origin') && entry?.kept) return entry.kept;
   // Contract amendment 3.2.3 row 11 (owner-approved 2026-10-30).
   if (member.action === 'keep-changed') return 'Kept; you changed it after install';
+  // Core's plan names no requirer: the installed items Core's inventory records as requiring this one (`requiredBy`),
+  // other than those leaving in the same removal, say who still needs it.
+  if (member.action === 'keep-required') return keptRequiredWords((entry?.requiredBy ?? []).map(owner => owner.name));
   return member.action ?? member.reason ?? 'keep-shared';
 }
 

@@ -12,6 +12,8 @@ import { confirmUpdate, previewUpdate } from '../../src/app/installed-update.js'
 import { replacedNames } from '../../src/catalog/item-name.js';
 
 const APPROVED = '(owner-approved 2026-10-30)';
+// Rows the page shows that the owner has not approved yet; each says the proposed sentence and carries PENDING.
+const PENDING = '(pending owner approval)', PENDING_ROWS = new Set([37]);
 const fill = (sentence, values) => sentence.replace(/\{([^}]+)\}/g, (_, key) => {
   assert.ok(Object.hasOwn(values, key), `a sample value for {${key}}`); return values[key];
 });
@@ -54,6 +56,11 @@ const ROWS = [
     return keptWords(entry.keptFor, 'rules', setLabeller(frameworks), entry.chosen);
   }],
   [10, 'src/app/installed-list.js', 'Kept; still needed by {names}', { names: 'tdd and README' }, () => stillNeededWords(['tdd', 'README'])],
+  // Core's removal plan keeps a member as required without naming who requires it: the names come from Core's inventory.
+  [10, 'src/app/installed-list.js', 'Kept; still needed by {names}', { names: 'tdd' },
+    () => removalMemberWords({ kind: 'file', path: '/project/0.md', action: 'keep-required', reason: 'licence-or-notice' }, { ...removed, requiredBy: [{ managementId: 'm-2', name: 'tdd' }] })],
+  [37, 'src/app/installed-removal.js', 'Kept; still needed by another installed item', {},
+    () => removalMemberWords({ kind: 'file', path: '/project/0.md', action: 'keep-required', reason: 'licence-or-notice' }, { ...removed, requiredBy: [] })],
   [11, 'src/app/installed-removal.js', 'Kept; you changed it after install', {},
     () => removalMemberWords({ kind: 'file', path: '/project/0.md', action: 'keep-changed', reason: 'managed-content-changed' }, removed)],
   [14, 'src/app/installed-removal.js', "Couldn't confirm it's kept.", {},
@@ -102,9 +109,9 @@ const ROWS = [
 ];
 
 const markedRows = (lines, at) => [...lines.slice(Math.max(0, at - 3), at + 1).join('\n')
-  .matchAll(/Contract amendment 3\.2\.3 rows? (\d+(?:(?:, | and )\d+)*) \(owner-approved 2026-10-30\)/g)].flatMap(marker => marker[1].match(/\d+/g).map(Number));
+  .matchAll(/Contract amendment 3\.2\.3 rows? (\d+(?:(?:, | and )\d+)*) \((?:owner-approved 2026-10-30|pending owner approval)\)/g)].flatMap(marker => marker[1].match(/\d+/g).map(Number));
 
-for (const [row, file, sentence, values, page, words] of ROWS) test(`row ${row}: "${sentence}" is the approved wording in ${file}`, async () => {
+for (const [row, file, sentence, values, page, words] of ROWS) test(`row ${row}: "${sentence}" is the ${PENDING_ROWS.has(row) ? 'proposed' : 'approved'} wording in ${file}`, async () => {
   if (page) assert.equal(await page(), fill(sentence, values), 'the page says the amendment\'s sentence');
   // Where the page builds the sentence, its marker sits by the sentence's first fixed words.
   const anchor = words ?? (page ? sentence.split('{')[0] || sentence.split('}').at(-1).split('{')[0] : sentence);
@@ -115,12 +122,14 @@ for (const [row, file, sentence, values, page, words] of ROWS) test(`row ${row}:
 });
 
 test('a compliant, current, matching installed item shows no state, and no chip says a Core code', () => {
-  for (const policy of ['required', 'recommended', 'permitted', null, undefined])
+  for (const policy of ['required', 'recommended', 'permitted', 'non-compliant', null, undefined])
     assert.deepEqual(stateWords({ file: 'matches', update: 'current', policy, approval: 'not-needed', install: 'complete' }), [], `policy ${policy}`);
   const codes = ['superseded', 'no-longer-offered', 'revoked', 'missing', 'block-changed', 'block-missing', 'unknown', 'changed', 'unchecked'];
   for (const state of [{ update: 'superseded' }, { update: 'no-longer-offered' }, { update: 'revoked' }, { file: 'missing' }, { file: 'block-changed' }, { file: 'block-missing' },
     { policy: 'unknown' }, { files: ['missing', 'block-changed', 'block-missing', 'changed'] }])
     for (const words of stateWords(state)) assert.ok(!codes.includes(words) && /^[A-Z]/.test(words), `${JSON.stringify(state)} says "${words}"`);
+  // Core's inventory policy refusals say the contract's policy sentence.
+  for (const policy of ['prohibited', 'not-admitted']) assert.deepEqual(stateWords({ policy }), ['Doesn’t meet your organisation’s policy'], policy);
   // Row 5 keeps naming the file when Core gives its path.
   assert.deepEqual(stateWords({ file: 'block-changed', blockFiles: ['/p/CLAUDE.md'] }), ['The AIH block in CLAUDE.md was edited']);
 });
@@ -148,11 +157,14 @@ test('every amendment 3.2.3 row named in the source is marked approved, and none
   for (const path of [...sources('src'), ...sources('tools')]) {
     const text = readFileSync(path, 'utf8');
     if (path.endsWith('/approved-wording.test.mjs')) continue;
-    assert.doesNotMatch(text, /pending owner approval/i, path);
     for (const [, rows, after] of text.matchAll(/amendment 3\.2\.3 (rows? \d+(?:(?:, | and )\d+)*)(.{0,40})/gs)) {
-      assert.ok(after.replace(/\s*\/\/\s*/g, ' ').startsWith(` ${APPROVED}`), `${path}: amendment 3.2.3 ${rows} carries "${APPROVED}"`);
-      for (const row of rows.match(/\d+/g).map(Number)) { assert.ok(row >= 1 && row <= 36, `${path}: row ${row} is in the amendment`); named.add(row); }
+      const numbers = rows.match(/\d+/g).map(Number), pending = numbers.every(row => PENDING_ROWS.has(row));
+      const marker = pending ? PENDING : APPROVED;
+      assert.ok(after.replace(/\s*\/\/\s*/g, ' ').startsWith(` ${marker}`), `${path}: amendment 3.2.3 ${rows} carries "${marker}"`);
+      for (const row of numbers) { assert.ok((row >= 1 && row <= 36) || PENDING_ROWS.has(row), `${path}: row ${row} is in the amendment or pending`); named.add(row); }
     }
+    // "pending owner approval" appears only on a pending row's marker.
+    assert.equal((text.match(/pending owner approval/gi) ?? []).length, [...text.matchAll(/amendment 3\.2\.3 rows? \d+(?:(?:, | and )\d+)* \(pending owner approval\)/g)].length, path);
   }
   const checked = new Set(ROWS.map(([row]) => row));
   assert.deepEqual([...named].filter(row => !checked.has(row)), [], 'every row named in the source has its wording checked here');
