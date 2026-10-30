@@ -316,7 +316,12 @@ anything.
 ### Start, stop, reset, report
 
 For an installed local release, pin the UI archive too with a top-level `ui`
-entry containing `tarball`, `sha256` and `commit`, like each dependency. Use a
+entry containing `tarball`, `sha256` and `commit`, like each dependency. Make the
+UI archive with `npm pack` in the checkout. The `files` list in `package.json`
+ships only the runtime: `src/` without the local Tailwind build (start builds it
+in the installed UI), the schemas, the exported contract fixtures, the candidate,
+preview, server, service and consumer tools, the README and `docs/*.md`. Tests,
+scratch, notes and repository tooling stay out. Use a
 data directory **outside source Git workspaces** and run preflight first:
 
 ```powershell
