@@ -382,3 +382,12 @@ test('a suggestion made after a re-check carries the new installed fact, not the
   const run = presence => clientChoice(CATALOG, ['claude'], { coreClients: ['claude'], observations: observationsFrom([{ id: 'claude', presence }]) }).client.installed.state;
   assert.deepEqual([run('runnable'), run('absent')], ['found', 'not-found']);
 });
+
+test('a guided choice shows Catalog\'s description as what the catalog says, its provider note included', () => {
+  const note = 'Unverified provider: acquired from a shared configuration key.';
+  const noted = CATALOG.map(entry => entry.id === 'mattpocock.tdd' ? { ...entry, kind: 'mcp-server', nameBasis: 'key', description: note } : entry);
+  const result = suggestStarters({ goal: 'fix a bug', detections: [], catalogItems: noted });
+  const tdd = result.choices.find(choice => choice.itemId === 'mattpocock.tdd');
+  assert.ok(tdd, JSON.stringify(result));
+  assert.equal(tdd.catalogDescription, note);
+});

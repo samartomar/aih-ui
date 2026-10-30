@@ -39,7 +39,7 @@ import { identity, sourceDetailRows, sourceIdentity, statementsOf } from "./entr
 import { iconFor } from "../app/icons.js";
 import { attachTooltip, clearTooltip } from "../app/tooltip.js";
 import { scopeCountOf } from "./selectors.js";
-import { itemDisplayName } from './item-name.js';
+import { itemDisplayName, replacedNames } from './item-name.js';
 
 /* These Catalog inspector slots have no verified per-entry scan input. */
 const DETECTOR_RUN_STATE_ABSENT =
@@ -191,7 +191,7 @@ export function createDetails({ elements, authoring, subscribeSecurity }) {
         const support = (closure?.value?.selections ?? []).map(selection => authoring?.catalog?.items.find(value => value.root.releaseSha256 === selection.item.releaseSha256 && value.id === selection.item.itemId)).filter(value => value?.role === 'supporting');
         comes.append(el('p', '', closure?.status === 'ok' ? support.length ? support.map(value => value.name ?? value.label).join(' · ') : 'No supporting content in Catalog’s resolved closure.' : closure ? 'Catalog could not resolve supporting content with the current configuration.' : 'Supporting-content closure unchecked.'));
  context.append(comes);
-        const replaces = el('div', 'inspector-row'); replaces.append(el('strong', '', 'Replaces'), el('p', '', item.supersedes?.length ? item.supersedes.map(value => value.itemId).join(' · ') : 'No replacements declared.')); context.append(replaces);
+        const replaces = el('div', 'inspector-row'); replaces.append(el('strong', '', 'Replaces'), el('p', '', item.supersedes?.length ? replacedNames(item.supersedes, authoring?.catalog?.items).join(' · ') : 'No replacements declared.')); context.append(replaces);
         const copies = el('div', 'inspector-row'); copies.append(el('strong', '', 'Also seen by your tool'), el('p', '', copiesWords(browse?.host, item.id, { chosen: browse?.host?.items?.some(hostItem => hostItem.itemId === item.id) ?? false }))); context.append(copies);
         const start = el('div', 'inspector-row'); start.append(el('strong', '', 'How it starts'), el('p', '', item.payload?.invocation ?? 'Activation not published.')); context.append(start);
         const files = el('details'); files.append(el('summary', '', 'Files'), el('pre', 'browse-json', item.materials.map(value => value.relPath ?? value.path ?? value.packagePath).join('\n'))); context.append(files);

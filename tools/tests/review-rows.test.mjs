@@ -28,7 +28,7 @@ test('prepared-work 1.6 selections name the rows; operations attach by published
   const first = rows[0];
   assert.equal(first.heading, 'Grill me');
   assert.deepEqual(first.sets.map(s => s.setId), ['starter']);
-  assert.deepEqual(first.how, ['Chosen by you', 'Required by other']);
+  assert.deepEqual(first.how, ['Chosen by you', 'Required by another item'], 'an item this Catalog does not list is not named by its id');
   assert.equal(first.effects.length, 2);
   assert.deepEqual(first.blockers, ['Another tool owns this file.'], 'Core’s reason, verbatim');
   assert.equal(rows[1].heading, 'Selection s2 (its recorded metadata is unavailable)', 'missing name stays explicit');
@@ -117,4 +117,11 @@ test('the guidance folder is the common directory of user-scope operation target
     operation('u2', { scope: 'user', details: { target: 'C:\\Users\\me\\.claude\\rules\\x.md' } })] })), 'C:\\Users\\me\\.claude');
   assert.equal(guidanceFolder(review({ operations: [operation('p1', { scope: 'project', details: { target: 'C:\\p\\x' } })] })), null);
   assert.equal(guidanceFolder(review({})), null);
+});
+
+test('a required-by row names the item that needs it as the catalog does, never by its id', () => {
+  const r = review({ selections: [{ selectionId: 's1', managementId: 'm1', scope: 'project', name: 'Notices',
+    origins: [{ reasonIncluded: 'required-by', requiredBy: { framework: 'ecc', itemId: 'ecc.rule.typescript.coding-style' } }] }] });
+  const { rows } = reviewRows(r, { items: [{ id: 'ecc.rule.typescript.coding-style', name: 'coding-style', payload: { namespace: 'typescript' } }] });
+  assert.deepEqual(rows[0].how, ['Required by coding-style (typescript)']);
 });

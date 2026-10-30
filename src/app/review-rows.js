@@ -24,11 +24,16 @@ export function reviewRows(review, { operationSelections = [], items = [] } = {}
     if (linked) rowConflicts.set(linked[0], [...(rowConflicts.get(linked[0]) ?? []), words(diagnostic)].filter(Boolean));
     else global.push(words(diagnostic));
   }
+  // The item that needs this one, by the name the catalog gives it; one this Catalog does not list is not named by id.
+  const requiredByName = ref => {
+    const item = items.find(value => value.id === ref?.itemId);
+    return item ? itemDisplayName({ ...item, name: item.display?.name ?? item.name ?? item.label }) : 'another item';
+  };
   const rows = (review?.selections ?? []).map(row => {
     const operations = bySelection.get(row.selectionId) ?? [];
     const sets = (row.origins ?? []).map(origin => origin.set).filter(Boolean);
     const how = (row.origins ?? []).map(origin => origin.reasonIncluded === 'chosen' ? 'Chosen by you'
-      : origin.reasonIncluded === 'required-by' ? `Required by ${origin.requiredBy?.itemId ?? 'another item'}` : '').filter(Boolean);
+      : origin.reasonIncluded === 'required-by' ? `Required by ${requiredByName(origin.requiredBy)}` : '').filter(Boolean);
     return {
       selectionId: row.selectionId, managementId: row.managementId, scope: row.scope,
       heading: row.name ? itemDisplayName({ ...row, payload: items.find(item => item.id === row.item?.itemId)?.payload ?? row.payload }) : `Selection ${row.selectionId} (its recorded metadata is unavailable)`,

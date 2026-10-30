@@ -3,6 +3,7 @@
 // advanced Prepare and Apply buttons stay where they are; this reuses the same host operations.
 
 import { applyIfUnchanged, diagnosticWords, fileCount, installFiles, IN_PLACE, listNames, relativeTarget, staleReason } from './host-review.js';
+import { setDisplayName, UNNAMED_SET } from '../catalog/set-name.js';
 import { reviewRows, groupReviewRows, sizeWords, guidanceFolder, scanReviewWords } from './review-rows.js';
 
 export { relativeTarget } from './host-review.js';
@@ -82,9 +83,17 @@ async function showFirstRun(client, review, line) {
   if (!sets.length) return;
   const result = await client.request('first-run', { sets }).catch(() => undefined);
   if (result?.status !== 'ok') { line.textContent = 'First-step guidance unavailable: the checked sources could not be asked.'; return; }
-  line.textContent = result.value.map(entry => entry.firstRun
-    ? `First step: ${entry.firstRun.name} (${entry.firstRun.kind}) — the step its set ${entry.set.setId} declares to run first. It does not run by itself.`
-    : `First-step guidance unavailable for set ${entry.set.setId}: ${entry.reason}`).join(' ');
+  line.textContent = firstRunWords(result.value, client.catalog?.frameworks);
+}
+
+/** The first-step line for each recorded set, which it names as Catalog does. */
+export function firstRunWords(entries, frameworks) {
+  return entries.map(entry => {
+    const name = setDisplayName(frameworks, entry.set);
+    return entry.firstRun
+      ? `First step: ${entry.firstRun.name} (${entry.firstRun.kind}) — the step ${name ? `its set ${name}` : 'its set'} declares to run first. It does not run by itself.`
+      : `First-step guidance unavailable for ${name ? `set ${name}` : UNNAMED_SET.toLowerCase()}: ${entry.reason}`;
+  }).join(' ');
 }
 
 function refusal(result) {
@@ -142,6 +151,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
   // Named prepared-work 1.6 rows: Core's selections name them; operations attach by published selectionId;
   // blockers and global lines are Core's words, verbatim (#165).
   function namedRows(review, operationSelections, project) {
+    const setName = set => setDisplayName(client.catalog?.frameworks, set) ?? UNNAMED_SET;
     const { rows, global, excluded } = reviewRows(review, { operationSelections, items: client.catalog?.items ?? [] });
     const rowNode = row => {
       const item = el('li', 'space-y-0.5'); item.dataset.reviewSelection = row.selectionId;
@@ -149,7 +159,8 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
       head.append(el('span', 'font-medium', row.heading));
       if (row.kind) head.append(el('span', 'text-[11px] text-on-surface-variant', row.kind));
       if (row.how.length) head.append(el('span', 'text-[11px] text-on-surface-variant', row.how.join('; ')));
-      if (row.sets.length) head.append(...row.sets.map(set => { const chip = el('span', 'text-[11px] text-on-surface-variant', `${set.setId} · exact set ${set.setSha256}`); chip.title = `${set.framework}/${set.setId}/${set.setSha256}`; return chip; }));
+      // Each set by the name Catalog publishes; its exact recorded identity stays in the tooltip.
+      if (row.sets.length) head.append(...row.sets.map(set => { const chip = el('span', 'text-[11px] text-on-surface-variant', setName(set)); chip.title = `${set.framework}/${set.setId}/${set.setSha256}`; return chip; }));
       item.append(head);
       const meta = [row.scope === 'user' ? 'Your folders' : 'This project',
         row.framework ? `Framework: ${row.framework}` : null,
@@ -169,7 +180,7 @@ export function createInstallPanel({ client, el, button, onInstalled = () => {} 
     const { sections, individuals } = groupReviewRows(rows);
     for (const group of sections) {
       const section = el('li', 'space-y-1'); section.dataset.reviewSet = group.key;
-      const heading = el('p', 'text-[11px] font-medium text-on-surface-variant', `${group.set.setId} · exact set ${group.set.setSha256}`);
+      const heading = el('p', 'text-[11px] font-medium text-on-surface-variant', setName(group.set));
       heading.title = group.key;
       const list = el('ul', 'space-y-0.5');
       for (const row of group.rows) list.append(rowNode(row));

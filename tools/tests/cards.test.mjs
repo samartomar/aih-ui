@@ -202,3 +202,13 @@ test('tool hints use registry labels and variants name the referenced item', t =
   assert.match(words, /Claude Code version of tdd/);
   assert.doesNotMatch(words, /Written for claude-code|Variant of base-rule/);
 });
+
+test("a chosen item whose tool check did not run is named on its card, never by its id or Core's code", t => {
+  const browse = { chosenItemIds: ["fixture"], host: { status: "unavailable", reason: "user-root-not-observed" } };
+  const { node } = renderCard(t, "Described", undefined, { browse, authoringItem: { id: "acme.fixture-rule", name: "coding-style", role: "choosable", payload: { namespace: "typescript" } } });
+  const words = descendants(node).filter(value => value.dataset.state === "not-reported").map(value => descendants(value).map(child => child.textContent).join(""));
+  assert.deepEqual(words, [], "the fixture's own id is not chosen");
+  const chosen = renderCard(t, "Described", undefined, { browse: { ...browse, chosenItemIds: ["acme.fixture-rule"] }, authoringItem: { id: "acme.fixture-rule", name: "coding-style", role: "choosable", payload: { namespace: "typescript" } } });
+  const badge = descendants(chosen.node).find(value => value.dataset.state === "not-reported");
+  assert.equal(badge.children[1].textContent, "Couldn't check whether your tool already has coding-style (typescript).");
+});

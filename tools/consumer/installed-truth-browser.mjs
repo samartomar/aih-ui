@@ -44,6 +44,18 @@ async function newContext(browser) {
 
 // Chooses exactly these starting sets of one framework through the set picker, adds them and installs.
 async function installSets(page, family, setIds) {
+  await pickSets(page, family, setIds);
+  await page.locator('[data-add-sets]').click();
+  await page.waitForFunction(() => document.getElementById('framework-guidance').textContent.includes('Chosen sets added'));
+  await openPolicyDrawer(page);
+  await page.locator('#install-button:not([disabled])').waitFor({ timeout: 180_000 });
+  await page.locator('#install-button').click();
+  await page.locator('#install-message[data-outcome]').waitFor({ timeout: 240_000 });
+  assert.equal(await page.locator('#install-message').getAttribute('data-outcome'), 'installed', await page.locator('#install-message').innerText());
+}
+
+// Ticks exactly these starting sets of one framework in the set picker, without adding them.
+async function pickSets(page, family, setIds) {
   await chooseCatalogFamily(page, family);
   const more = page.locator('#starting-sets details > summary').filter({ hasText: /More sets/ });
   if (await more.count() && !await more.first().evaluate(node => node.parentElement.open)) await more.first().click();
@@ -54,13 +66,6 @@ async function installSets(page, family, setIds) {
     if ((await choice.getAttribute('aria-pressed') === 'true') !== setIds.includes(id)) await choice.click();
   }
   for (const id of setIds) assert.equal(await page.locator(`#starting-sets [data-set-id="${id}"]`).getAttribute('aria-pressed'), 'true', `set ${id} is chosen`);
-  await page.locator('[data-add-sets]').click();
-  await page.waitForFunction(() => document.getElementById('framework-guidance').textContent.includes('Chosen sets added'));
-  await openPolicyDrawer(page);
-  await page.locator('#install-button:not([disabled])').waitFor({ timeout: 180_000 });
-  await page.locator('#install-button').click();
-  await page.locator('#install-message[data-outcome]').waitFor({ timeout: 240_000 });
-  assert.equal(await page.locator('#install-message').getAttribute('data-outcome'), 'installed', await page.locator('#install-message').innerText());
 }
 
 // A fresh session: nothing of the installing session's draft is open, so the list can only come from Core.
@@ -542,6 +547,119 @@ export async function runNeededRemovalTruthBrowser({ origin, output, project, pl
     await listed.screenshot({ path: join(output, `needed-removal-${theme}.png`), fullPage: true });
     await writeFile(join(output, `needed-removal-${theme}.json`), JSON.stringify({ status: 'passed', added, row: text, result,
       before: before.map(selection => selection.item?.itemId), after: after.map(selection => selection.item?.itemId), errors }, null, 2));
+    assert.deepEqual(errors, []);
+    return { status: 'passed' };
+  } finally { await browser.close(); }
+}
+
+// Raw identities in a screen's visible text: every Catalog item id (and those of the items they replace) and set id, every Core management id and recorded
+// set id, and every sha256 (or its 16-character prefix) the page's Catalog and Core answers carry. An id is matched
+// as a whole token, not inside a path or a longer id; an id that is one plain word (a set id such as "engineering") only
+// where it stands alone as a line, as a label would, since prose uses the word too. An id that is also a published name
+// (an item or set named by its id) is a name, and is skipped. Catalog's own descriptions are shown as Catalog wrote
+// them (an MCP server's provider note may name another item), so that prose is taken out before the scan.
+const TOKEN = /[A-Za-z0-9_./-]/;
+const prose = value => value.replace(/\s+/g, ' ').trim();
+export function rawIdentities(text, { catalog, inventory }) {
+  const descriptions = [...new Set([...catalog.items.map(item => item.description),
+    ...catalog.frameworks.flatMap(framework => [framework.description, ...(framework.sets ?? []).map(set => set.description)])]
+    .filter(value => typeof value === 'string' && prose(value).length >= 20).map(prose))].sort((a, b) => b.length - a.length);
+  text = text.split('\n').map(line => descriptions.reduce((rest, description) => rest.split(description).join(' '), prose(line))).join('\n');
+  const names = new Set([...catalog.items.flatMap(item => [item.name, item.label, item.display?.name, displayName(item)]),
+    ...catalog.frameworks.flatMap(framework => [framework.name, ...(framework.sets ?? []).map(set => set.name)])].filter(Boolean));
+  const ids = new Map();
+  for (const item of catalog.items) {
+    ids.set(item.id, 'item id');
+    for (const entry of item.supersedes ?? []) ids.set(entry.itemId, 'item id');
+  }
+  for (const framework of catalog.frameworks) for (const set of framework.sets ?? []) ids.set(set.id, 'set id');
+  for (const selection of inventory?.selections ?? []) {
+    ids.set(selection.managementId, 'management id'); if (selection.item?.itemId) ids.set(selection.item.itemId, 'item id');
+    for (const set of setOrigins(selection)) ids.set(set.setId, 'set id');
+  }
+  const found = [], named = [];
+  for (const [id, what] of ids) {
+    if (typeof id !== 'string' || !id) continue;
+    if (names.has(id)) { named.push(id); continue; }
+    if (/^[a-z]+$/.test(id)) {
+      if (lines(text).includes(id)) found.push({ what, value: id, context: `${id} (a line of its own)` });
+      continue;
+    }
+    for (let at = text.indexOf(id); at !== -1; at = text.indexOf(id, at + 1)) {
+      if (TOKEN.test(text[at - 1] ?? '') || TOKEN.test(text[at + id.length] ?? '')) continue;
+      found.push({ what, value: id, context: text.slice(Math.max(0, at - 60), at + id.length + 60) });
+      break;
+    }
+  }
+  const shas = new Set(JSON.stringify([catalog, inventory ?? null]).match(/[0-9a-f]{64}/g) ?? []);
+  for (const sha of shas) {
+    const at = text.indexOf(sha.slice(0, 16));
+    if (at !== -1) found.push({ what: 'sha256', value: sha, context: text.slice(Math.max(0, at - 60), at + 76) });
+  }
+  for (const match of text.matchAll(/[0-9a-f]{64}/g)) if (!shas.has(match[0])) found.push({ what: 'sha256', value: match[0], context: text.slice(Math.max(0, match.index - 60), match.index + 124) });
+  return { found, named: [...new Set(named)] };
+}
+
+// Pick, review, Your setup, install and the installed list say names only. Two overlapping Extensions sets are picked,
+// an item that replaces another is inspected, the sets are added and reviewed, installed, and the installed list read
+// back in a fresh session. Each screen's visible text is kept, then scanned against every identity the page's Catalog
+// and the final Core inventory carry; the scan fails on any raw item id, management id, set id or sha256.
+export async function runNoRawIdsBrowser({ origin, output, playwrightModule, theme = 'dark' }) {
+  const { chromium } = await import(playwrightModule);
+  await mkdir(output, { recursive: true });
+  const browser = await chromium.launch({ headless: true });
+  const errors = [], screens = {};
+  const keep = async (name, page, locator = page.locator('body')) => {
+    screens[name] = await locator.innerText();
+    await page.screenshot({ path: join(output, `no-raw-ids-${name}-${theme}.png`), fullPage: true });
+  };
+  try {
+    const context = await newContext(browser);
+    const page = await openPage(context, origin, theme, errors);
+    const answers = recordAnswers(page);
+    await page.reload();
+    await page.locator('#browse-family option[value="Extensions"]').waitFor({ state: 'attached' });
+    for (let attempt = 0; attempt < 100 && !answers.catalog; attempt++) await page.waitForTimeout(100);
+    const { catalog } = answers;
+    assert.ok(catalog?.items?.length, 'the page received its Catalog');
+    // Pick: the sets ticked in the picker, then the inspector of an Extensions item that replaces another.
+    const extensions = catalog.frameworks.find(framework => framework.id === 'extensions' && framework.sets?.some(set => set.id === 'misc'));
+    await pickSets(page, extensions.name, ['extensions.template.specialists', 'misc']);
+    await keep('pick', page);
+    const replacing = catalog.items.find(item => item.supersedes?.length && item.root?.releaseSha256 === extensions.sha256);
+    assert.ok(replacing, 'Catalog publishes an Extensions item that replaces another');
+    await page.locator('#catalog-search').fill(replacing.name ?? replacing.label);
+    const card = page.locator(`#cards-grid [data-card-id="${replacing.root.releaseSha256}/${replacing.id}"]`);
+    await card.locator('.wb-card-title').click();
+    await page.locator('#inspector-browse-facts').waitFor();
+    assert.match(await page.locator('#inspector-browse-facts').innerText(), /Replaces/, 'the inspector says what the item replaces');
+    await keep('inspector', page);
+    await page.locator('#close-inspector-btn').click();
+    await page.locator('#catalog-search').fill('');
+    // Review and Your setup: the drawer once the sets are added and Core's review is ready, with its disclosures open.
+    await page.locator('#starting-sets [data-add-sets]').click();
+    await page.waitForFunction(() => document.getElementById('framework-guidance').textContent.includes('Chosen sets added'), undefined, { timeout: 600_000 });
+    await openPolicyDrawer(page);
+    await page.locator('#install-button:not([disabled])').waitFor({ timeout: 600_000 });
+    const drawer = page.locator('#policy-review-panel');
+    for (const summary of await drawer.locator('#install-details > summary, details.setup-choice-needs > summary').all()) if (!await summary.evaluate(node => node.parentElement.open)) await summary.click();
+    assert.ok(await drawer.locator('[data-review-set]').count(), 'the review groups its rows under the picked sets');
+    assert.ok(await drawer.locator('[data-choice-set]').count(), 'Your choices groups its rows under the picked sets');
+    await keep('review-and-setup', page, drawer);
+    await page.locator('#install-button').click();
+    await page.locator('#install-message[data-outcome]').waitFor({ timeout: 900_000 });
+    assert.equal(await page.locator('#install-message').getAttribute('data-outcome'), 'installed', await page.locator('#install-message').innerText());
+    await keep('install', page, drawer);
+    await context.close();
+    // Installed: the list Core reads back in a fresh session.
+    const after = await freshInstalledList(browser, origin, theme, errors);
+    await keep('installed', after.page, after.page.locator('#policy-review-panel'));
+    const inventory = after.answers.inventory;
+    const scans = Object.fromEntries(Object.entries(screens).map(([name, text]) => [name, rawIdentities(text, { catalog: after.answers.catalog ?? catalog, inventory })]));
+    await writeFile(join(output, `no-raw-ids-${theme}.json`), JSON.stringify({ replacing: replacing.id, selections: inventory.selections.length,
+      scans: Object.fromEntries(Object.entries(scans).map(([name, scan]) => [name, scan.found])), namedIds: [...new Set(Object.values(scans).flatMap(scan => scan.named))], screens, errors }, null, 2));
+    const raw = Object.fromEntries(Object.entries(scans).filter(([, scan]) => scan.found.length).map(([name, scan]) => [name, scan.found]));
+    assert.deepEqual(raw, {}, 'no raw identity on any screen');
     assert.deepEqual(errors, []);
     return { status: 'passed' };
   } finally { await browser.close(); }

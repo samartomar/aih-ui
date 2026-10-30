@@ -3,6 +3,12 @@ import { iconSpan } from '../app/icons.js';
 import { attachTooltip } from '../app/tooltip.js';
 import { createConfigurationEditor } from '../app/configuration-editor.js';
 import { itemDisplayName } from './item-name.js';
+import { setDisplayName } from './set-name.js';
+/** One set's observed counts, under the name Catalog publishes for the set. */
+export function setFitWords(value, framework) {
+  const name = setDisplayName([framework], { framework: framework?.id, setId: value.set?.setId ?? value.setId, setSha256: value.set?.setSha256 }) ?? 'Set';
+  return `${name} · ${value.members.native} observed · ${value.members.unconfirmed} unconfirmed · ${value.members.none} unavailable`;
+}
 // UI state only. All membership/option expansion is returned by Catalog.
 export function createStartingSets({ container, onChange, onAdd }) {
   let shownFramework;
@@ -80,7 +86,7 @@ export function createStartingSets({ container, onChange, onAdd }) {
     else if (!Array.isArray(result?.resolution?.value?.selections)) controls.append(el('span', 'set-note', 'Showing all content while set choices need attention. Your selected sets are unchanged.'));
     if (result?.status === 'read') {
       const fit = result.compatibility?.sets ?? [];
-      for (const value of fit) { const badge = el('span', 'browse-fact', `${value.set?.setId ?? value.setId ?? 'Set'} · ${value.members.native} observed · ${value.members.unconfirmed} unconfirmed · ${value.members.none} unavailable`); badge.append(iconSpan('state', 'info')); attachTooltip(badge, JSON.stringify(value)); controls.append(badge); }
+      for (const value of fit) { const badge = el('span', 'browse-fact', setFitWords(value, framework)); badge.append(iconSpan('state', 'info')); attachTooltip(badge, JSON.stringify(value)); controls.append(badge); }
     } else controls.append(el('span', 'set-note', result?.status === 'refused' ? 'Set choices refused. All items remains available; adjust choices before adding.' : result?.reason ?? (result?.diagnostics?.map(value => value.message).join(' ') || 'Reading set membership and tool fit…')));
     container.append(controls);
     if (result?.resolution?.status === 'refused') {

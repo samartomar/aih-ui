@@ -1,7 +1,9 @@
 import { el } from '../app/dom.js';
 import { iconFor, iconSpan } from '../app/icons.js';
 import { attachTooltip } from '../app/tooltip.js';
-import { copiesWords } from '../app/tool-host-warnings.js';
+import { copiesWords, reasonWords } from '../app/tool-host-warnings.js';
+import { itemDisplayName } from './item-name.js';
+import { sourcePresentation } from './source-facts.js';
 import { mcpApprovalView } from '../app/mcp-approval.js';
 export function badge(group, key, words, explanation) {
   const node = el('span', 'browse-fact'); node.append(iconSpan(group, key), el('span', '', words));
@@ -83,7 +85,7 @@ export function renderBrowseFacts(item, browse, tool, { detailed = false, onAppr
   // An unavailable host answer is said per chosen item, never implied clean (Q6).
   const artifactChosen = (browse?.chosenItemIds ?? []).includes(item.id);
   if (!inspected && !warned && artifactChosen && browse?.host && !['read', 'checked'].includes(browse.host.status))
-    node.append(badge('state', 'not-reported', `Couldn't check whether your tool already has ${item.id}${browse.host.reason ? `: ${browse.host.reason}` : '.'}`,
+    node.append(badge('state', 'not-reported', `Couldn't check whether your tool already has ${itemDisplayName({ ...item, name: sourcePresentation(item).name })}. ${reasonWords(browse.host.reason)}`.trim(),
       'Read-only Core host inspection did not run for this item; no second-copy claim is made either way.'));
   if (inspected || warned) node.append(badge('state', 'two-copies', copiesWords(browse?.host, item.id, { chosen: inspected }),
     'Read-only Core host inspection of your project folder. No client was launched; the Workbench does not decide what counts as a duplicate.'));

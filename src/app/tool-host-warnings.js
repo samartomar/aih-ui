@@ -32,7 +32,7 @@ export function hostCopiesState(host, itemId) {
 const COULD_NOT = "Couldn't check whether your tool already has this.";
 // Core names why a copy went unchecked by a code such as user-root-not-observed. The contract has no sentence for
 // any of them, so a code is dropped and the contract sentence stands alone; the Workbench's own sentences stay.
-const reasonWords = reason => typeof reason === 'string' && !/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(reason) ? reason : '';
+export const reasonWords = reason => typeof reason === 'string' && !/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(reason) ? reason : '';
 const warningWords = warnings => warnings.map(warning => `Second copy: ${warning.key} is also in ${WHERE[warning.where] ?? warning.where} (${warning.path}).`).join(' ');
 
 /**

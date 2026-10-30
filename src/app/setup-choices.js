@@ -9,6 +9,7 @@ import { setupNeeds } from './setup-needs.js';
 import { compact } from './compact.js';
 import { copiesWords, drawerCopiesWords, secondCopyWarnings } from './tool-host-warnings.js';
 import { itemDisplayName } from '../catalog/item-name.js';
+import { setDisplayName, UNNAMED_SET } from '../catalog/set-name.js';
 
 const entryKey = ref => `${ref.releaseSha256}/${ref.itemId}`;
 const itemKey = item => `${item.root?.releaseSha256}/${item.id}`;
@@ -41,6 +42,8 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
   const hostLine = el('p', 'text-on-surface-variant text-[11px]'); hostLine.id = 'setup-choices-host-copies'; hostLine.setAttribute('role', 'status');
   node.append(title, empty, list, hostLine);
   let removing = false;
+  // A saved set request by the name Catalog publishes for it; its exact identity stays in the tooltip.
+  const setName = request => setDisplayName(client.catalog?.frameworks, { releaseSha256: request?.release?.releaseSha256, setId: request?.setId, setSha256: request?.setSha256 }) ?? UNNAMED_SET;
 
   function line({ root, item, name, needed }) {
     const row = el('li', 'flex flex-wrap items-center gap-x-2 gap-y-0.5'); row.dataset.choiceItem = root.itemId;
@@ -130,7 +133,7 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
       const section = el('li', 'space-y-1'); section.dataset.leftOut = key;
       const heading = el('p', 'text-[11px] font-medium text-on-surface-variant');
       if (group.request) {
-        heading.textContent = `Left out from ${group.request.setId} · exact set ${group.request.setSha256}`;
+        heading.textContent = `Left out from ${setName(group.request)}`;
         heading.title = key;
         heading.dataset.leftOutSet = group.request.setId;
       } else if (key === 'unknown') { heading.textContent = 'Left out — origin no longer recorded'; heading.dataset.leftOutSet = 'unknown'; }
@@ -141,11 +144,11 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
         const qualified = `${exclusion.memberFramework}/${exclusion.itemId}`;
         const matches = exclusion.setLeftOut ? items.filter(item => item.id === exclusion.itemId && frameworkOf.get(item.root?.releaseSha256) === exclusion.memberFramework) : [];
         const name = exclusion.setLeftOut
-          ? (matches.length === 1 ? matches[0].label ?? qualified : qualified)
-          : byKey.get(`${exclusion.releaseSha256}/${exclusion.itemId}`)?.label ?? exclusion.itemId;
+          ? (matches.length === 1 ? itemDisplayName(matches[0], qualified) : qualified)
+          : itemDisplayName(byKey.get(`${exclusion.releaseSha256}/${exclusion.itemId}`), exclusion.itemId);
         const setFramework = frameworkOf.get(group.request?.release?.releaseSha256);
         const cross = exclusion.memberFramework && setFramework && exclusion.memberFramework !== setFramework ? ` [${exclusion.memberFramework}]` : '';
-        const why = exclusion.reason ? ` — ${exclusion.reason}` : exclusion.setLeftOut ? ` — left out of set ${group.request?.setId ?? ''}`.replace(/ $/, '') : ' — recorded left-out choice';
+        const why = exclusion.reason ? ` — ${exclusion.reason}` : exclusion.setLeftOut ? ` — left out of set ${group.request ? setName(group.request) : ''}`.replace(/ $/, '') : ' — recorded left-out choice';
         row.textContent = `${name}${cross}${exclusion.scope === 'user' ? ' (your folders)' : ''}${why}`;
         row.dataset.leftOutItem = exclusion.itemId;
         rows.append(row);
@@ -192,7 +195,7 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
       if (!members.length) continue;
       const head = el('p', 'text-[11px] font-medium text-on-surface-variant');
       if (group.request) {
-        head.textContent = `${group.request.setId} · exact set ${group.request.setSha256}`;
+        head.textContent = setName(group.request);
         head.title = keyOf(group.request);
         head.dataset.choiceSet = group.request.setId;
       } else { head.textContent = 'Individual choices'; head.dataset.choiceSet = 'individual'; }
@@ -208,8 +211,12 @@ export function createSetupChoices({ client, el, button, onRemove = async () => 
           rowsNode.append(ref);
           continue;
         }
-        // Q7-R2: every further membership keeps its exact identity, not a bare id.
-        if (all.length > 1) row.children[0].append(el('span', 'text-on-surface-variant text-[11px]', `Also in: ${all.slice(1).map(request => `${request.setId} · ${request.setSha256}`).join(', ')}`));
+        // Q7-R2: every further membership is named; its exact identity stays in the tooltip.
+        if (all.length > 1) {
+          const also = el('span', 'ml-2 text-on-surface-variant text-[11px]', `Also in: ${all.slice(1).map(setName).join(', ')}`);
+          also.title = all.slice(1).map(keyOf).join(', ');
+          row.children[0].append(also);
+        }
         placed.add(entry);
         rowsNode.append(row);
       }

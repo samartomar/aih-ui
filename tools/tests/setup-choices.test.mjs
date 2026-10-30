@@ -44,7 +44,7 @@ test('Q7-R: chosen rows group under recorded exact set identities, with simultan
   ];
   const intent = { roots, pins: [], provenance: [{ releaseSha256: REL,
     materialSource: { workbenchSetChoices: { choices: [{ originId: originSet, request: { setId: 'starter', setSha256: SHA, release: { releaseSha256: REL } } }] } } }] };
-  const client = { intent, catalog: { items }, bytes: [] };
+  const client = { intent, catalog: { items, frameworks: [{ id: 'ecc', sha256: REL, sets: [{ id: 'starter', name: 'Starter kit', setSha256: SHA }] }] }, bytes: [] };
   const button = (label, action) => { const node = fake('button', '', label); node.addEventListener('click', action); return node; };
   const view = createSetupChoices({ client, el: fake, button });
   view.render();
@@ -52,7 +52,7 @@ test('Q7-R: chosen rows group under recorded exact set identities, with simultan
   const starter = groups.get(`${REL}/starter/${SHA}`);
   assert.ok(starter, 'the group key is the exact recorded set identity');
   const heading = walk(starter).find(node => node.dataset.choiceSet);
-  assert.match(heading.textContent, /starter/);
+  assert.equal(heading.textContent, 'Starter kit', 'the heading is the name Catalog publishes for the set');
   assert.equal(heading.title, `${REL}/starter/${SHA}`, 'the heading identity is fully qualified');
   const members = walk(starter).filter(node => node.dataset.choiceItem).map(node => node.dataset.choiceItem).sort();
   assert.deepEqual(members, ['grill-me', 'tdd'], 'named rows belong to the correct set');
@@ -82,7 +82,7 @@ test('Q7-R: one chosen item in TWO actual sets, and left-out items grouped under
   const origins = [{ id: 'direct', kind: 'direct' }, { id: originA, kind: 'direct' }, { id: originB, kind: 'direct' }];
   const intent = { roots, pins: [], origins,
     exclusions: [
-      { originId: originA, releaseSha256: REL, itemId: 'notices', scope: 'project', reason: 'alpha left it out' },
+      { originId: originA, releaseSha256: REL, itemId: 'notices', scope: 'project', reason: 'not needed here' },
       { originId: originB, releaseSha256: REL, itemId: 'grilling', scope: 'project' },
       { originId: 'direct', releaseSha256: REL, itemId: 'git-guard.scripts', scope: 'project', reason: 'left out by me' },
     ],
@@ -94,8 +94,14 @@ test('Q7-R: one chosen item in TWO actual sets, and left-out items grouped under
       { originId: originB, request: { setId: 'beta', setSha256: SHA2, release: { releaseSha256: REL } } },
     ] } } }] };
   const button = (label, action) => { const node = fake('button', '', label); node.addEventListener('click', action); return node; };
-  const view = createSetupChoices({ client: { intent, catalog: { items, frameworks: [{ id: 'ecc', sha256: REL }] }, bytes: [] }, el: fake, button });
+  const frameworks = [{ id: 'ecc', sha256: REL, sets: [{ id: 'alpha', name: 'Alpha starter', setSha256: SHA1 }, { id: 'beta', name: 'Beta helpers', setSha256: SHA2 }] }];
+  const view = createSetupChoices({ client: { intent, catalog: { items, frameworks }, bytes: [] }, el: fake, button });
   view.render();
+  // Every set is said by the name Catalog publishes; its exact identity stays in the tooltip.
+  const shown = walk(view.node).map(node => node.textContent).join('\n');
+  for (const raw of ['alpha', 'beta', SHA1, SHA2]) assert.doesNotMatch(shown, new RegExp(`(^|[^A-Za-z])${raw}($|[^A-Za-z])`, 'm'), `no raw ${raw.slice(0, 8)} on the page`);
+  assert.equal(walk(view.node).find(node => node.dataset.choiceSet === 'alpha').textContent, 'Alpha starter');
+  assert.equal(walk(view.node).find(node => node.dataset.leftOutSet === 'beta').textContent, 'Left out from Beta helpers');
   const groups = new Map(walk(view.node).filter(node => node.dataset.choiceGroup).map(group => [group.dataset.choiceGroup, group]));
   assert.ok(groups.get(`${REL}/alpha/${SHA1}`), 'first set group by full identity');
   // beta has no chosen rows of its own (tdd renders once in alpha with an Also-in note); its group shows in left-out.
@@ -104,7 +110,8 @@ test('Q7-R: one chosen item in TWO actual sets, and left-out items grouped under
   assert.equal(walk(view.node).filter(node => node.dataset.choiceItem === 'tdd').length, 1, 'the simultaneous member renders exactly once (no duplicated Remove)');
   const tddRow = walk(view.node).find(node => node.dataset.choiceItem === 'tdd');
   const note = walk(tddRow).find(node => /Also in:/.test(node.textContent));
-  assert.ok(note && /beta · /.test(note.textContent), 'the further membership keeps its exact identity (Q7-R2)');
+  assert.ok(note && note.textContent === 'Also in: Beta helpers', 'the further membership is named (Q7-R2)');
+  assert.equal(note.title, `${REL}/beta/${SHA2}`, 'and keeps its exact identity in the tooltip');
   const betaChosen = groups.get(`${REL}/beta/${SHA2}`);
   assert.ok(betaChosen, 'the secondary set group stays visible (Q7-R2)');
   const reference = walk(betaChosen).find(node => node.dataset.setReference === 'tdd');
@@ -115,7 +122,7 @@ test('Q7-R: one chosen item in TWO actual sets, and left-out items grouped under
   const alphaLeft = leftGroups.get(`${REL}/alpha/${SHA1}`);
   assert.ok(alphaLeft, 'set-owned left-out group by full identity');
   const alphaRow = walk(alphaLeft).find(node => node.dataset.leftOutItem === 'notices');
-  assert.match(alphaRow.textContent, /Extensions licenses and notices — alpha left it out/, 'named left-out item under its authoring set with its reason');
+  assert.match(alphaRow.textContent, /Extensions licenses and notices — not needed here/, 'named left-out item under its authoring set with its reason');
   const betaLeft = leftGroups.get(`${REL}/beta/${SHA2}`);
   const betaRow = walk(betaLeft).find(node => node.dataset.leftOutItem === 'grilling');
   assert.match(betaRow.textContent, /grilling — recorded left-out choice/, 'no fabricated reason when none is recorded');
@@ -126,7 +133,7 @@ test('Q7-R: one chosen item in TWO actual sets, and left-out items grouped under
   // under that set's exact identity, keeping the member's own framework, with a truthful neutral reason.
   const falseMember = walk(alphaLeft).find(node => node.dataset.leftOutItem === 'grilling');
   assert.ok(falseMember, 'the false set member has a named left-out row under its set');
-  assert.match(falseMember.textContent, /other-framework\/grilling \[other-framework\] — left out of set alpha/, 'exact member identity and truthful reason, no fabricated origin or release');
+  assert.match(falseMember.textContent, /other-framework\/grilling \[other-framework\] — left out of set Alpha starter/, 'exact member identity and truthful reason, no fabricated origin or release');
   // Live draft: the same render reads the draft's live intent, not the saved base.
   const draft = { intent };
   const draftView = createSetupChoices({ client: { draft, intent: { roots: [], pins: [] }, catalog: { items, frameworks: [{ id: 'ecc', sha256: REL }] }, bytes: [] }, el: fake, button });
