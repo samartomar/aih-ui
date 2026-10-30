@@ -115,7 +115,11 @@ export async function runSetupIdentityBrowser({ origin, output, playwrightModule
         // Extensions' own pre-ticked starting sets, added the way a person adds them.
         const added = page.waitForResponse(response => /authoring-(?:draft-edit|edit)$/.test(response.url()));
         await page.locator('[data-add-sets]').click();
-        assert.equal((await (await added).json()).status, 'ok', 'Catalog resolves the chosen Extensions sets');
+        const answer = await (await added).text();
+        assert.equal(JSON.parse(answer).status, 'ok', 'Catalog resolves the chosen Extensions sets');
+        // Every item id the page's setup now records, from the page's own answer.
+        const itemIds = [...new Set([...answer.matchAll(/"itemId":"([^"]+)"/g)].map(match => match[1]))];
+        assert.ok(itemIds.length > 0, 'The setup records item ids');
         await page.waitForFunction(() => document.getElementById('framework-guidance').textContent.includes('Chosen sets added'));
         await openPolicyDrawer(page);
         const identity = page.locator('#policy-internal-content'), summary = identity.locator('> summary');
@@ -125,14 +129,16 @@ export async function runSetupIdentityBrowser({ origin, output, playwrightModule
         const panel = await page.locator('#policy-review-panel').innerText();
         for (const invented of [/archive sha256/i, /From @aihq\/catalog/, /the Catalog package/, /Release list not signed yet/]) assert.doesNotMatch(panel, invented, `Your setup shows no ${invented}`);
         if (!await identity.evaluate(node => node.open)) await summary.click();
-        const details = await identity.locator('pre').innerText();
-        const recorded = JSON.parse(details.slice(details.indexOf('\n') + 1)).map(source => source.materialSource.internalContent);
-        assert.ok(recorded.length > 0, 'The details name the recorded internal content');
-        for (const content of recorded) {
-          assert.equal(content.archiveSha256, catalogSha256, 'The details carry the loaded Catalog archive digest');
-          assert.equal(content.provenance.package.name, catalogPackage.name, 'The details carry the Catalog package name');
-          assert.equal(content.provenance.package.version, catalogPackage.version, 'The details carry the Catalog package version');
-        }
+        // No raw item id and no saved JSON on screen.
+        const shown = await identity.innerText();
+        const ids = itemIds.filter(id => shown.includes(id));
+        assert.deepEqual(ids, [], `The details show no raw item ids (${ids.length} shown)`);
+        assert.doesNotMatch(shown, /[{}]|"materialSource"|"releaseSha256"/, 'The details show no saved JSON');
+        // The details are labelled values, Package, Version and Archive digest, once per recorded internal content.
+        const values = await identity.locator('dl').evaluateAll(lists => lists.map(list => Object.fromEntries(
+          [...list.querySelectorAll('dt')].map(term => [term.textContent.trim(), term.nextElementSibling?.textContent.trim()]))));
+        assert.deepEqual(values, [{ Package: catalogPackage.name, Version: catalogPackage.version, 'Archive digest': catalogSha256 }],
+          'The details show the Catalog package, version and archive digest as labelled values');
         assert.ok((await page.locator('#policy-review-panel').innerText()).includes(catalogSha256), 'The opened details show the digest');
         await page.screenshot({ animations: 'disabled', path: join(output, `${theme}-setup-identity.png`) });
       }
