@@ -217,9 +217,8 @@ async function runEnterpriseAdmin({ project, output, playwrightModule, theme }) 
   };
   await edit({ kind: 'set-policy-id', policyId: 'gosam-baseline' });
   await edit({ kind: 'set-source', source: { provider: 'github', repository: { owner: 'samartomar', name: 'test' }, path: 'gosam.organization-policy.json', revision: { kind: 'branch', value: 'main' } } });
-  // The Admin permits the Superpowers set as Catalog offers it (its default members). A notices file is rendered beside the
-  // items requiring it, so its recipe identity depends on which of them are selected; one organisation entry holds one
-  // identity, so the baseline permits it as it is delivered beside this exact set.
+  // The Admin permits the Superpowers set as Catalog offers it (its default members). Its notices are one copy in the
+  // neutral notices folder with one recipe identity whatever requires them, so one organisation entry permits them.
   const set = superpowers.release.sets.find(candidate => candidate.offer === 'pre-ticked');
   for (const member of set.members.filter(candidate => candidate.defaultOn)) await edit({ kind: 'add-entry', releaseSha256: superpowers.release.sha256, itemId: member.item.itemId, scope: 'project' });
   const { records } = (await readJourneyEnvelope(Uint8Array.from(state.value.envelopeBytes))).value;
