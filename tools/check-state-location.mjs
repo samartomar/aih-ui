@@ -31,7 +31,7 @@ try {
   for (const mode of (process.env.AIH_STATE_LOCATION_CASE ? [process.env.AIH_STATE_LOCATION_CASE] : ['published', 'relocated', 'unavailable'])) {
     console.log(`State location: ${mode}`);
     const unavailable = mode === 'unavailable';
-    const { loadCoreState } = await import(pathToFileURL(join(consumerDir, 'consumer/core-state-location.mjs')).href);
+    const { loadCoreState } = await import(pathToFileURL(join(consumerDir, 'consumer/core-state-loader.mjs')).href);
     const packedCore = await loadCoreState();
     const stateRoot = mode === 'published' ? packedCore.resolveStateLocation().root : join(process.env.HOME, 'published-core-records');
     const project = join(output, `${mode}-project`);

@@ -30,17 +30,16 @@ import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { createRequire } from 'node:module';
 import { pageAssets } from './server/assets.mjs';
 import { buildCss } from './build-css.mjs';
 import { stageNewerCatalog as stageNewerCatalogIn } from './newer-catalog.mjs';
 import { homeEnvironment } from './consumer/home-environment.mjs';
 import { OWNER_SETTINGS, runEnterpriseAdminBrowser, runYourToolsBrowser } from './consumer/your-tools-browser.mjs';
 import { runSetupAssistanceBrowser } from './consumer/setup-assistance-browser.mjs';
-import { runOneToolListBrowser } from './consumer/one-tool-list-browser.mjs';
 import { installEccSetsBrowser, readEccInstalledBrowser, runEccSetsRemovalTruthBrowser, runInstalledListTruthBrowser, runNamespacedRuleTruthBrowser, runNeededRemovalTruthBrowser, runNoRawIdsBrowser, runSetRemovalTruthBrowser, runSharedBlockTruthBrowser, runUpdateBlockedBrowser, runUpdateOneBrowser, runUpdateOneInstallBrowser } from './consumer/installed-truth-browser.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -49,6 +48,8 @@ const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 await buildCss(repo);
 const args = process.argv.slice(2);
 const consumerDir = resolve(args[0]);
+// Core is an optional peer the checkout does not install: the one-tool-list case reads it from the packed consumer.
+const { runOneToolListBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/one-tool-list-browser.mjs')).href);
 const theme = args.includes('--theme') ? args[args.indexOf('--theme') + 1] : 'dark';
 const option = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
 const packs = { 'update-one': option('--update-pack'), 'update-requirement': option('--requirement-pack') };
@@ -237,7 +238,7 @@ async function runEnterpriseAdmin({ project, output, playwrightModule, theme }) 
 // requirers when it decides what a removal frees, so the other project's ECC is still listed afterwards, file for file.
 async function runEccSetsRemoval({ project, output, playwrightModule, theme }) {
   const other = `${project}-other`;
-  const installed = await withHost(other, origin => installEccSetsBrowser({ origin, playwrightModule, theme }));
+  const installed = await withHost(other, origin => installEccSetsBrowser({ origin, output: join(output, 'other-project'), playwrightModule, theme }));
   if (installed.status !== 'passed') return installed;
   if (!installed.itemIds.includes('ecc.notices')) throw new Error(`the other project has no ecc.notices: ${installed.itemIds.join(', ')}`);
   const treeBefore = await treeHashes(other);

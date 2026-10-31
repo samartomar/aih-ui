@@ -102,7 +102,7 @@ async function main() {
       // Host configuration is read when the Workbench is created, so the samples and the environment exist before that.
       async beforeServe({ consumerDir }) {
         // Installation runs no lifecycle scripts. Record the published location before the first Core operation.
-        const { loadCoreState } = await import(pathToFileURL(join(consumerDir, 'consumer/core-state-location.mjs')).href);
+        const { loadCoreState } = await import(pathToFileURL(join(consumerDir, 'consumer/core-state-loader.mjs')).href);
         const { stateLocation } = await loadCoreState();
         recordRealHome(layout, userInfo().homedir, stateLocation?.root);
         if (packages.previousCatalog) process.env.AIH_CONSUMER_PREVIOUS_CATALOG = extractPackage(packages.previousCatalog.tarball, join(layout.run, 'previous-catalog'));

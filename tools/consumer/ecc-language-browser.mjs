@@ -103,7 +103,7 @@ try {
   await page.reload();
   await openPolicyDrawer(page);
   const review = await page.locator('#install-review-rows').innerText();
-  assert.match(review, /coding-style \(typescript\)/);
+  assert.match(review, /TypeScript and JavaScript Coding Style \(typescript\)/);
   await page.locator('#install-button:not([disabled])').waitFor();
   console.log('F20 stage: install');
   await page.locator('#install-button').click();

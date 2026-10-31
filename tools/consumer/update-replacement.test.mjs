@@ -103,7 +103,7 @@ async function installedRule(t) {
   assert.equal((await host.applyApproved({ sessionId: prepared.sessionId, reviewDigest: prepared.review.reviewDigest })).completion, 'complete');
   const selection = composed.value.policy.selections.find(candidate => candidate.item?.itemId === ruleItem.id);
   const { configuration: _configuration, originIds: _origins, ...replacement } = ruleRoot;
-  return { host, scratch, projectRoot, composed, selection, entry: { name: 'coding-style (typescript)', managementId: selection.managementId, scope: 'project', replacement } };
+  return { host, scratch, projectRoot, composed, selection, entry: { name: 'TypeScript and JavaScript Coding Style (typescript)', managementId: selection.managementId, scope: 'project', replacement } };
 }
 // The one record file of a test's store, read and rewritten as another program might leave it.
 async function recordFile(scratch) {
@@ -141,7 +141,7 @@ test('a replacement rendered for a binding Core no longer ships is refused, and 
   assert.equal(preview.steps[0].state, 'blocked');
   const words = result.updates[0].diagnostics.find(item => item.reason === 'binding-changed').message;
   assert.match(words, /was rendered for another binding/);
-  assert.equal(preview.message, `Update cannot go ahead: coding-style (typescript): ${words.replace(/\.$/, '')}. Nothing was updated.`);
+  assert.equal(preview.message, `Update cannot go ahead: TypeScript and JavaScript Coding Style (typescript): ${words.replace(/\.$/, '')}. Nothing was updated.`);
 });
 
 // An install record describes an installation only while Core still shows it: a removal through the Workbench drops the
@@ -188,11 +188,11 @@ test('an update whose newer item needs an input the install did not record is na
   const supplied = updateInputs({ updates: [{ managementId: selection.managementId, selection: replacement }], inventories: newer, held });
   assert.deepEqual(supplied.privateInputs, { [selection.id]: { apiToken: 'secret' } }, 'only the replacement\'s own private inputs are offered');
   assert.deepEqual(supplied.needs.map(need => [need.managementId, need.inputs]), [[selection.managementId, ['teamName']]]);
-  assert.deepEqual(supplied.diagnostics.map(item => [item.reason, item.message]), [['input-needed', 'coding-style: Needs teamName']]);
+  assert.deepEqual(supplied.diagnostics.map(item => [item.reason, item.message]), [['input-needed', 'TypeScript and JavaScript Coding Style: Needs teamName']]);
   const missing = updateInputs({ updates: [{ managementId: selection.managementId, selection: replacement }], inventories: newer, held: {} });
-  assert.deepEqual(missing.diagnostics.map(item => item.message), ['coding-style: Needs teamName, Needs apiToken']);
+  assert.deepEqual(missing.diagnostics.map(item => item.message), ['TypeScript and JavaScript Coding Style: Needs teamName, Needs apiToken']);
   const preview = await previewUpdate({ entries: [entry], tool: 'claude', request: async () => ({ disposition: 'invalid', needs: missing.needs, diagnostics: missing.diagnostics }) });
-  assert.equal(preview.message, 'Update cannot go ahead: coding-style: Needs teamName, Needs apiToken. Nothing was updated.');
+  assert.equal(preview.message, 'Update cannot go ahead: TypeScript and JavaScript Coding Style: Needs teamName, Needs apiToken. Nothing was updated.');
   assert.deepEqual(updateInputs({ updates: [{ managementId: selection.managementId, selection: replacement }], inventories, held }).needs, [], 'the installed item needs nothing');
 });
 

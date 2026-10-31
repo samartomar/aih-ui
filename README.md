@@ -244,14 +244,14 @@ example, with the three tarballs beside the manifest:
       "commit": "ff427f7"
     },
     "catalog": {
-      "tarball": "aihq-catalog-0.1.0-main-3b273faa-sha256-d17c7570e12dd79ac2c511a9f714b3ca0f89816364fc51d4d98ab13175b86b52.tgz",
-      "sha256": "d17c7570e12dd79ac2c511a9f714b3ca0f89816364fc51d4d98ab13175b86b52",
-      "commit": "3b273faa68de301117e6f5631395d74741d7822f"
+      "tarball": "aihq-catalog-0.1.0-main-e8fe3662-sha256-32f97289595543838c4443c87a7890de8154ade2daa22456b9bc8159aea42e3b.tgz",
+      "sha256": "32f97289595543838c4443c87a7890de8154ade2daa22456b9bc8159aea42e3b",
+      "commit": "e8fe3662f0a869184b307ffda46daefea677fee2"
     },
     "scan": {
-      "tarball": "aihq-scan-0.5.0-main-9bbed5ae-sha256-a15f445acf940b7556d59c5d8ff61fae531085cac1bf3e062287f2175591f707.tgz",
-      "sha256": "a15f445acf940b7556d59c5d8ff61fae531085cac1bf3e062287f2175591f707",
-      "commit": "9bbed5ae"
+      "tarball": "aihq-scan-0.5.0-main-59c88a2f-sha256-450faff2dd30ae9d9814a16a8b6638ad4f9f8a5c8ab333048c103eaab1050087.tgz",
+      "sha256": "450faff2dd30ae9d9814a16a8b6638ad4f9f8a5c8ab333048c103eaab1050087",
+      "commit": "59c88a2f905381f4a9f56c809556fd611c08838f"
     }
   }
 }
