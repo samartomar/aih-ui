@@ -1,5 +1,5 @@
 import { el, collectIds } from "./dom.js";
-import { NOT_SUPPORTED_YET, listedTools, setupToolsNotice, toolLabels, toolNames } from "./tool-list.js";
+import { NOT_SUPPORTED_YET, listedTools, readToolList, setupToolsNotice, toolLabels, toolNames } from "./tool-list.js";
 import { REVIEWER_KINDS, newSetupSettings, setupSteps, experienceLabel, organizationErrors, settingsErrors } from "./setup-model.js";
 import { reviewerText, setupSummary } from "./setup-summary.js";
 import { loadSetup, saveSetup, updateSetup } from "./settings-client.js";
@@ -18,7 +18,9 @@ export function createOnboarding({ onComplete, onSaved = () => {}, onCloseEdit =
   // Core's tool list, the one the header's Your tools shows (src/app/tool-list.js): null until it is read.
   let tools = null;
   let labels = {};
-  let toolsNotice = "Loading your tools… Tools you already chose stay chosen; you can continue and choose them later from Settings.";
+  // While the list is on its way the step says only that; the notice that the tools couldn't be loaded is for a failure.
+  let toolsNotice = null;
+  let toolsRead = null;
   let savedProblem = null;
   let loading = true;
   let saving = false;
@@ -97,7 +99,9 @@ export function createOnboarding({ onComplete, onSaved = () => {}, onCloseEdit =
   function renderClients() {
     elements.setupDescription.textContent = "Choose every AI tool you use; most people use several. Choosing one doesn't install it or check that it's connected. A tool marked Not supported yet stays chosen; the Workbench can't check or install content for it yet.";
     if (!tools?.length) {
-      elements.setupContent.append(el("p", "setup-notice", toolsNotice));
+      const notice = el("p", "setup-notice", toolsNotice ?? "Loading your tools…");
+      notice.setAttribute("role", toolsNotice ? "alert" : "status");
+      elements.setupContent.append(notice);
       return;
     }
     const group = el("fieldset", "setup-clients");
@@ -274,6 +278,9 @@ export function createOnboarding({ onComplete, onSaved = () => {}, onCloseEdit =
     savedProblem = null;
     reviewerKind = "individual";
     step = 0;
+    // Setup reads Core's tool list itself too (the host answers both reads from one listTools call), so its step never
+    // depends on another control handing the list over. Whichever answer comes first is shown.
+    if (!tools?.length && !toolsRead) toolsRead = readToolList().then(setTools).finally(() => { toolsRead = null; });
     if (!elements.setupDialog.open) elements.setupDialog.showModal();
     render();
     try {
@@ -326,12 +333,16 @@ export function createOnboarding({ onComplete, onSaved = () => {}, onCloseEdit =
   return {
     start,
     edit: section => start(true, section),
-    /** Core's tool list, as the header read it (src/app/tool-list.js). */
-    setTools(list) {
-      tools = listedTools(list);
-      labels = toolLabels(list);
-      toolsNotice = setupToolsNotice(list) ?? toolsNotice;
-      if (elements.setupDialog.open && !loading && current() === "clients") render();
-    },
+    /** Core's tool list as the header read it; setup also reads it itself. */
+    setTools,
   };
+  /** Core's tool list (src/app/tool-list.js), from setup's own read or the header's. A failure never replaces a list. */
+  function setTools(list) {
+    if (tools?.length && !listedTools(list)?.length) return;
+    tools = listedTools(list);
+    labels = toolLabels(list);
+    toolsNotice = setupToolsNotice(list);
+    // Shown at once when the person is on the step; otherwise when they reach it.
+    if (elements.setupDialog.open && !loading && current() === "clients") render();
+  }
 }
