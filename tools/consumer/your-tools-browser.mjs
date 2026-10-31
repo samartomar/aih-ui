@@ -93,8 +93,9 @@ export async function runYourToolsBrowser({ origin, output, project, playwrightM
     const added = answers.edits.at(-1);
     assert.equal(added.status, 'ok', JSON.stringify(added.diagnostics ?? []));
     const tools = added.value.policy.selections.filter(selection => selection.item?.itemId === itemId).map(selection => selection.tool).sort();
-    // Tools that share a project location (Codex CLI and Antigravity CLI both read .agents) get the one installation.
-    assert.ok(tools.length > 1 && tools.every(value => fits.includes(value)), `one Add goes to the chosen tools Core renders it for: ${tools.join(', ')} of ${fits.join(', ')}`);
+    // Every chosen tool it fits gets its own copy, also tools that share a project location (Codex CLI and Antigravity CLI
+    // both read .agents): none is left out.
+    assert.deepEqual(tools, [...fits].sort(), `one Add goes to each chosen tool Core renders it for: ${tools.join(', ')} of ${fits.join(', ')}`);
     assert.equal(await card.innerText(), 'Remove');
     await page.screenshot({ path: join(output, `your-tools-added-${theme}.png`) });
 

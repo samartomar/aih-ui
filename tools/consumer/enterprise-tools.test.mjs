@@ -3,7 +3,8 @@
 // organisation targets, each tool by its own entry, so every tool's copy of the item is admitted and installed.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +17,7 @@ import * as harness from '@aihq/core/harness';
 import { deriveRecipeIdentity } from '@aihq/core/contracts';
 
 const catalogRoot = dirname(fileURLToPath(import.meta.resolve('@aihq/catalog/package.json')));
+const coreVersion = JSON.parse(readFileSync(join(dirname(catalogRoot), 'core', 'package.json'), 'utf8')).version;
 const inventories = await installedFamilies({ root: catalogRoot, sourceInput: 'managed-inventory-index' });
 const superpowers = inventories.find(entry => entry.family === 'Superpowers'), ecc = inventories.find(entry => entry.family === 'ECC');
 const skill = superpowers.release.items.find(item => item.id === 'superpowers.skill.brainstorming');
@@ -155,7 +157,7 @@ test('Codex misses and Claude succeeds: an entry that does not work in Codex is 
   const ids = JSON.parse(new TextDecoder().decode(Uint8Array.from(exported.value.candidateBytes))).selections.map(entry => entry.selectionId);
   assert.ok(ids.includes('project--aihq.catalog--ecc.rule.typescript.coding-style--claude'), ids.join(', '));
   assert.ok(!ids.some(id => id.startsWith('project--aihq.catalog--ecc.rule.typescript.coding-style--codex')), ids.join(', '));
-  assert.match(exported.value.explanation, /## Not permitted in every tool\n\n- TypeScript\/JavaScript Coding Style is not permitted for Codex CLI because it doesn’t work there: /);
+  assert.match(exported.value.explanation, /## Not permitted in every tool\n\n- TypeScript and JavaScript Coding Style is not permitted for Codex CLI because it doesn’t work there: /);
 });
 
 // When the tool the entry missed is one the item fits, a developer installs it there, so the baseline must permit it
@@ -231,21 +233,30 @@ test('each chosen tool gets every copy the fit rule admits, also where another t
     policyBytes = added.value.policyBytes;
   }
   const policy = JSON.parse(new TextDecoder().decode(policyBytes));
-  // The exception: Core gives an executable file or a configuration entry to one selection, so Antigravity CLI reads the
-  // brainstorming scripts Codex CLI's copy writes and Copilot CLI the .mcp.json entry Claude Code's copy writes, and the Add says so.
-  const installed = { ...rule, antigravity: rule.antigravity.filter(id => id !== 'superpowers.skill.brainstorming'), copilot: rule.copilot.filter(id => id !== server.id) };
-  assert.ok(rule.antigravity.includes('superpowers.skill.brainstorming'));
   const composed = tool => policy.selections.filter(selection => selection.tool === tool).map(selection => selection.item.itemId).sort();
-  for (const tool of tools) assert.deepEqual(composed(tool), installed[tool], `${tool}: the developer's policy holds each copy the rule admits`);
-  const brainstorming = await editAuthoring({ policyBytes: (await composeAuthoring({ intent: freshAuthoring(), inventories, basePolicyBytes: ENTERPRISE })).value.policyBytes, inventories, tool: tools[0], tools,
-    operation: { type: 'select', root: rootOf(superpowers, skill) } });
-  assert.deepEqual(brainstorming.value.diagnostics?.map(({ code, tool, sharedWith }) => ({ code, tool, sharedWith })), [{ code: 'TOOL_COPY_SHARED', tool: 'antigravity', sharedWith: 'codex' }]);
-  assert.match(brainstorming.value.diagnostics[0].message, /^brainstorming has no separate copy for Antigravity CLI: it reads the files Codex CLI’s copy writes, and Core writes an executable file for one tool only\.$/);
+  for (const tool of tools) assert.deepEqual(composed(tool), rule[tool], `${tool}: the developer's policy holds each copy the rule admits`);
   const installing = host(project, { provider: 'local', path: file });
+  // Needs Core 1.0.0-dev.56: dev.55 reports a second copy's executable files as existing content within one Prepare and
+  // gives a second selection of the same configuration entry an empty claim.
+  const needs = `(this needs Core 1.0.0-dev.56 or later, which installs two tools' copies of one executable file or configuration entry; installed Core is ${coreVersion})`;
   const prepared = await installing.prepareSession({ policyText: new TextDecoder().decode(policyBytes) });
-  assert.equal(prepared.status, 'ready', JSON.stringify(prepared.diagnostics ?? prepared).slice(0, 1500));
+  assert.equal(prepared.status, 'ready', `${needs} ${JSON.stringify(prepared.diagnostics ?? prepared).slice(0, 1500)}`);
   const applied = await installing.applyApproved({ sessionId: prepared.sessionId, reviewDigest: prepared.review.reviewDigest });
   assert.equal(applied.completion, 'complete', JSON.stringify(applied).slice(0, 1500));
   const listed = (await installing.managedInventory()).selections;
-  for (const tool of tools) assert.deepEqual(listed.filter(selection => selection.tool === tool).map(selection => selection.item.itemId).sort(), installed[tool], `${tool}: Core installs each copy`);
+  for (const tool of tools) assert.deepEqual(listed.filter(selection => selection.tool === tool).map(selection => selection.item.itemId).sort(), rule[tool], `${tool}: Core installs each copy`);
+
+  // Removing one tool's copy keeps what another tool's copy still owns: Antigravity CLI's brainstorming scripts in .agents
+  // when Codex CLI's copy goes, and Copilot CLI's .mcp.json entry when Claude Code's server goes.
+  const copyOf = (itemId, tool) => policy.selections.find(selection => selection.item.itemId === itemId && selection.tool === tool).managementId;
+  const removal = await installing.prepareRemovalSession({ removals: [{ managementId: copyOf(skill.id, 'codex') }, { managementId: copyOf(server.id, 'claude') }], scope: 'project', mode: 'enterprise' });
+  assert.equal(removal.disposition, 'prepared', JSON.stringify(removal).slice(0, 1500));
+  const removed = await installing.applyApproved({ sessionId: removal.preparation.sessionId, reviewDigest: removal.preparation.review.reviewDigest });
+  assert.equal(removed.completion, 'complete', JSON.stringify(removed).slice(0, 1500));
+  for (const name of ['SKILL.md', 'scripts/start-server.sh', 'scripts/stop-server.sh']) assert.ok(existsSync(join(project, '.agents/skills/brainstorming', name)), `Antigravity CLI keeps ${name}`);
+  const servers = JSON.parse(await readFile(join(project, '.mcp.json'), 'utf8')).mcpServers ?? {};
+  assert.ok(Object.keys(servers).length === 1, `Copilot CLI keeps its .mcp.json entry for ${server.id}: ${JSON.stringify(servers)}`);
+  const after = (await installing.managedInventory()).selections;
+  assert.ok(after.some(selection => selection.item?.itemId === skill.id && selection.tool === 'antigravity'), 'Antigravity CLI\'s brainstorming is still listed');
+  assert.ok(after.some(selection => selection.item?.itemId === server.id && selection.tool === 'copilot'), 'Copilot CLI\'s server is still listed, with its item and tool');
 });
