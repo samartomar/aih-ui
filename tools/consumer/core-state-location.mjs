@@ -20,9 +20,3 @@ export function readCoreState(coreState) {
     return { status: 'available', root: location.root, descriptor: coreState.stateLocation.root };
   } catch { return { status: 'unavailable', reason: stateLocationUnavailable }; }
 }
-
-// Call from the installed consumer, so Node follows the package's import export map.
-export async function loadCoreState() {
-  const [core, contracts] = await Promise.all([import('@aihq/core'), import('@aihq/core/contracts')]);
-  return { resolveStateLocation: core.resolveStateLocation, stateLocation: contracts.stateLocation };
-}

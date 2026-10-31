@@ -43,11 +43,24 @@ async function newContext(browser) {
   return context;
 }
 
-// Chooses exactly these starting sets of one framework through the set picker, adds them and installs.
-async function installSets(page, family, setIds) {
+// The framework guidance before any Add: the prompt the page shows with and without a chosen tool (controller.js).
+const GUIDANCE_PROMPTS = ['Choose content below.', 'Choose your tools in the header'];
+
+// Chooses exactly these starting sets of one framework through the set picker, adds them and installs. Add's answer
+// replaces the guidance prompt, as long as Core takes (the same 600 s as the other Add waits); anything but "Chosen sets
+// added" fails with the page's own words, and a screenshot of the page is kept in the case's output.
+async function installSets(page, family, setIds, output) {
   await pickSets(page, family, setIds);
   await page.locator('[data-add-sets]').click();
-  await page.waitForFunction(() => document.getElementById('framework-guidance').textContent.includes('Chosen sets added'));
+  try {
+    await page.waitForFunction(prompts => { const text = document.getElementById('framework-guidance').textContent.trim();
+      return text && !prompts.some(prompt => text.startsWith(prompt)); }, GUIDANCE_PROMPTS, { timeout: 600_000 });
+    const guidance = (await page.locator('#framework-guidance').textContent()).trim();
+    assert.match(guidance, /^Chosen sets added/, `Adding ${family} sets ${setIds.join(', ')}: ${guidance}`);
+  } catch (error) {
+    if (output) { await mkdir(output, { recursive: true }); await page.screenshot({ path: join(output, `add-sets-failed-${family}-${Date.now()}.png`), fullPage: true }).catch(() => {}); }
+    throw error;
+  }
   await openPolicyDrawer(page);
   await page.locator('#install-button:not([disabled])').waitFor({ timeout: 180_000 });
   await page.locator('#install-button').click();
@@ -116,7 +129,7 @@ export async function runInstalledListTruthBrowser({ origin, output, project, pl
   const errors = [];
   try {
     const installing = await newContext(browser);
-    await installSets(await openPage(installing, origin, theme, errors), 'Superpowers', ['superpowers']);
+    await installSets(await openPage(installing, origin, theme, errors), 'Superpowers', ['superpowers'], output);
     await installing.close();
     const { page, answers: before } = await freshInstalledList(browser, origin, theme, errors);
     // One installed file is edited by hand, as a person might; Core then reports it changed.
@@ -189,7 +202,7 @@ async function runSetRemoval({ origin, output, project, playwrightModule, theme 
   const sharedId = 'extensions.skill.setup-pre-commit';
   try {
     const installing = await newContext(browser);
-    await installSets(await openPage(installing, origin, theme, errors), 'Extensions', ['extensions.template.specialists', 'misc']);
+    await installSets(await openPage(installing, origin, theme, errors), 'Extensions', ['extensions.template.specialists', 'misc'], output);
     await installing.close();
     const { page, answers } = await freshInstalledList(browser, origin, theme, errors);
     const { catalog } = answers, before = answers.inventory.selections;
@@ -702,13 +715,13 @@ const ECC_NOTICES = 'ecc.notices';
 const eccOf = inventory => (inventory?.selections ?? []).filter(selection => selection.item?.framework === 'ecc');
 
 // The same ECC sets installed through the page in this host's project; what Core then lists of ECC there.
-export async function installEccSetsBrowser({ origin, playwrightModule, theme = 'dark' }) {
+export async function installEccSetsBrowser({ origin, output, playwrightModule, theme = 'dark' }) {
   const { chromium } = await import(playwrightModule);
   const browser = await chromium.launch({ headless: true });
   const errors = [];
   try {
     const installing = await newContext(browser);
-    await installSets(await openPage(installing, origin, theme, errors), 'ECC', ECC_SETS);
+    await installSets(await openPage(installing, origin, theme, errors), 'ECC', ECC_SETS, output);
     await installing.close();
     const { answers } = await freshInstalledList(browser, origin, theme, errors);
     assert.deepEqual(errors, []);
@@ -743,7 +756,7 @@ export async function runEccSetsRemovalTruthBrowser({ origin, output, project, p
   const errors = [], evidence = { together: undefined, rounds: [] };
   const install = async () => {
     const installing = await newContext(browser);
-    await installSets(await openPage(installing, origin, theme, errors), 'ECC', ECC_SETS);
+    await installSets(await openPage(installing, origin, theme, errors), 'ECC', ECC_SETS, output);
     await installing.close();
     const listed = await freshInstalledList(browser, origin, theme, errors);
     const ecc = eccOf(listed.answers.inventory);

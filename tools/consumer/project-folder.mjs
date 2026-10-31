@@ -6,7 +6,8 @@ import { realpath, stat, opendir } from 'node:fs/promises';
 import { homedir, userInfo } from 'node:os';
 import { isAbsolute, parse, sep, dirname, join } from 'node:path';
 
-import { readCoreState, stateRootForHome, loadCoreState } from './core-state-location.mjs';
+import { readCoreState, stateRootForHome } from './core-state-location.mjs';
+import { loadCoreState } from './core-state-loader.mjs';
 
 const refused = reason => ({ status: 'refused', reason });
 const comparable = path => process.platform === 'win32' ? path.toLowerCase() : path;

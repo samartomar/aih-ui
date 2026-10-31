@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: samartomar/aih-scan
-          ref: 943a104d15714a1e160218feb54ddad0f646e0d5
+          ref: 59c88a2f905381f4a9f56c809556fd611c08838f
           path: .ci/scan
           persist-credentials: false
       - name: Build reviewed package checkpoints

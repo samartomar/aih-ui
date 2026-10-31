@@ -239,7 +239,7 @@ async function runEnterpriseAdmin({ project, output, playwrightModule, theme }) 
 // requirers when it decides what a removal frees, so the other project's ECC is still listed afterwards, file for file.
 async function runEccSetsRemoval({ project, output, playwrightModule, theme }) {
   const other = `${project}-other`;
-  const installed = await withHost(other, origin => installEccSetsBrowser({ origin, playwrightModule, theme }));
+  const installed = await withHost(other, origin => installEccSetsBrowser({ origin, output: join(output, 'other-project'), playwrightModule, theme }));
   if (installed.status !== 'passed') return installed;
   if (!installed.itemIds.includes('ecc.notices')) throw new Error(`the other project has no ecc.notices: ${installed.itemIds.join(', ')}`);
   const treeBefore = await treeHashes(other);

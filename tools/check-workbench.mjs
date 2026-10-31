@@ -37,7 +37,7 @@ const isolated = { ...process.env, ...homeEnvironment(join(output, 'account-home
   PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH ?? join(realCache, 'ms-playwright') };
 // Listing metadata only, never contents: the run fails if the real home's Core records change. It runs on exit, so a
 // stage that throws (a timeout, say) is still checked.
-const { loadCoreState } = await import(pathToFileURL(join(output, 'consumer/core-state-location.mjs')).href);
+const { loadCoreState } = await import(pathToFileURL(join(output, 'consumer/core-state-loader.mjs')).href);
 const { stateLocation } = await loadCoreState();
 const realCoreBefore = snapshotCoreHome(homedir(), stateLocation?.root);
 process.on('exit', () => {
@@ -100,10 +100,11 @@ if (process.exitCode === 0) {
 if (process.exitCode === 0) {
   // The reviewed-batch journey runs several fresh Core prepares and applies, in a disposable account home, so this stage takes longer.
   // The visual-groundwork journey adds about 50s per theme on a hosted runner (and as much again for its real-engine
-  // "can't read" run once Core publishes checkContracts), and the Your tool journey about 65s per theme, so the stage
-  // budget is 12 minutes.
+  // "can't read" run once Core publishes checkContracts), and the Your tool journey about 65s per theme. On Linux the
+  // whole stage measured 662s and 694s, its last journey starting at 653-706s, with no one journey growing between
+  // runs (Your tool light 60-87s, Maintenance 49-71s under load), so the stage budget is 15 minutes.
   const integrated = spawnSync(process.execPath, [join(repo, 'tools/check-integrated-workbench.mjs'), output], {
-    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 720_000, env: isolated,
+    cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 5_000_000, timeout: 900_000, env: isolated,
   });
   writeFileSync(join(output, 'prototype-check.log'), `${integrated.stdout ?? ''}${integrated.stderr ?? ''}`);
   process.stdout.write(integrated.stdout ?? ''); process.stderr.write(integrated.stderr ?? '');
