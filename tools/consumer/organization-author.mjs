@@ -6,7 +6,7 @@ import { deriveRecipeIdentity, parseOrganizationPolicy, previewOrganizationOblig
 import { listTools, nativeClientIds } from '@aihq/core/harness';
 import { isCheckedRelease, listItems } from '@aihq/catalog/reader';
 import { refuse, ok, stable } from './primitives.mjs';
-import { composeAuthoring, fitReason, freshAuthoring, inlineRecipelessSelections, renderRecipe, toolCopyId } from './headless.mjs';
+import { checkToolFit, composeAuthoring, fitReason, freshAuthoring, inlineRecipelessSelections, renderRecipe, toolCopyId } from './headless.mjs';
 import { describeAuthoringSubject } from './review-bindings.mjs';
 import { managementIdOf } from './intent-shape.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
@@ -281,6 +281,23 @@ async function identityOf(index, ref) {
   const described = hit ? await describeAuthoringSubject({ inventory: hit.inventory, itemId: ref.itemId }) : undefined;
   return described?.status === 'ok' ? described.value.recipeIdentity : undefined;
 }
+const toolName = tool => listTools({ includeUnobserved: true }).find(candidate => candidate.id === tool)?.label ?? tool;
+/**
+ * What becomes of an entry in each targeted tool it could not be permitted for, when another tool's copy was permitted.
+ * misses: [{ tool, message }]; fitOf(tool): the Workbench's own fit check for that tool (checkToolFit).
+ * A tool the item fits is one a developer installs it in, so the baseline must admit it there: that is a problem that
+ * blocks export. A tool it does not fit is never installed there, so the entry is left out for it, said in words.
+ */
+export function missedTools({ label, misses, fitOf }) {
+  const byTool = new Map();
+  for (const { tool, message } of misses) byTool.set(tool, [...(byTool.get(tool) ?? []), message]);
+  return [...byTool].map(([tool, messages]) => {
+    const fit = fitOf(tool), name = toolName(tool);
+    return fit.fits
+      ? { tool, reason: 'cannot-compose', message: `${label} works in ${name}, so developers can install it there, but the baseline could not permit it there: ${messages.join(' ')}` }
+      : { tool, reason: 'not-for-tool', message: `${label} is not permitted for ${name} because it doesn’t work there: ${fit.reason}` };
+  });
+}
 const catalogMessage = diagnostics => (diagnostics ?? []).map(diagnostic => diagnostic.message).filter(Boolean).join(' ') || 'Catalog could not compose this item.';
 
 // Decide which entries can be part of a document and what Core-assigned identity each carries.
@@ -321,17 +338,17 @@ async function assemble({ record, index, inventories }) {
           const joint = await jointFor(tool);
           const composed = joint.status === 'ok' && joint.value.policy.selections.some(candidate => candidate.item?.itemId === entry.item.itemId && candidate.scope === composeScope && candidate.tool === tool)
             ? joint : await composeRoots([{ ...ref, configuration }], inventories, tool);
-          if (composed.status !== 'ok') { misses.push(`${tool}: ${catalogMessage(composed.diagnostics)}`); continue; }
+          if (composed.status !== 'ok') { misses.push({ tool, message: catalogMessage(composed.diagnostics) }); continue; }
           const { policy } = composed.value, selection = policy.selections.find(candidate => candidate.item?.itemId === entry.item.itemId && candidate.scope === composeScope && candidate.tool === tool);
           const recipeIdentity = selection && await renderedIdentity(selection, inventories, policy);
-          if (!recipeIdentity) { misses.push(`${tool}: Catalog composed no selection for ${label}.`); continue; }
+          if (!recipeIdentity) { misses.push({ tool, message: `Catalog composed no selection for ${label}.` }); continue; }
           const dependencies = [];
           // What this entry brings with it in that composition: its required items, not the other entries.
           const brought = new Set(composed.value.inclusions.filter(inclusion => inclusion.root.itemId === entry.item.itemId && inclusion.item.itemId !== entry.item.itemId).map(inclusion => inclusion.item.itemId));
           for (const other of policy.selections) {
             if (other === selection || other.tool !== tool || !brought.has(other.item?.itemId)) continue;
             const identity = await renderedIdentity(other, inventories, policy);
-            if (!identity) { misses.push(`${tool}: no recipe for the dependency ${other.item?.itemId} of ${label}.`); continue; }
+            if (!identity) { misses.push({ tool, message: `There is no recipe for ${other.item?.itemId}, which ${label} requires.` }); continue; }
             const dependencyRef = { releaseSha256: composed.value.intent.pins.find(pin => pin.itemId === other.item.itemId)?.releaseSha256 ?? entry.item.releaseSha256, itemId: other.item.itemId, scope: other.scope };
             dependencies.push({ ref: dependencyRef, selectionId: other.organizationSelectionId, recipeIdentity: identity, configuration: structuredClone(other.configuration) });
           }
@@ -340,11 +357,15 @@ async function assemble({ record, index, inventories }) {
           // A prohibition, or a value left to developers, names what Core renders for the tool; nothing is composed or installed.
           const delivered = renderRecipe({ tool, entry: hit.inventory, item: hit.item, scope: composeScope });
           const identity = delivered.refused ? undefined : await deriveRecipeIdentity({ recipe: delivered.recipe.inline });
-          if (identity?.status !== 'ok') { misses.push(`${tool}: ${fitReason(undefined, delivered)}`); continue; }
+          if (identity?.status !== 'ok') { misses.push({ tool, message: fitReason(undefined, delivered) }); continue; }
           authored.push({ entry, position, hit, label, supported, tool, selectionId: toolCopyId(managementId, tool), recipeIdentity: identity.value.recipeIdentity, configuration: null, dependencies: [] });
         }
       }
-      if (authored.length === before) { omit('cannot-compose', `${label} doesn’t work in any tool the organisation targets. ${misses.join(' ')}`); continue; }
+      if (authored.length === before) { omit('cannot-compose', `${label} doesn’t work in any tool the organisation targets. ${misses.map(miss => `${toolName(miss.tool)}: ${miss.message}`).join(' ')}`); continue; }
+      // Another tool's copy was permitted; a tool missed here is never dropped silently.
+      for (const missed of missedTools({ label, misses, fitOf: tool => checkToolFit({ tool, entry: hit.inventory, item: hit.item, scope: composeScope }) }))
+        if (missed.reason === 'cannot-compose') omit('cannot-compose', missed.message);
+        else omitted.push({ ...base, reason: missed.reason, tool: missed.tool, message: missed.message });
       if (!composes && entry.obligation !== 'prohibited') omitted.push({ ...base, reason: 'needs-declared-value', message: `${label} requires ${missing.join(', ')} but Catalog declares no default and the baseline leaves the value to developers. The example selection leaves it out; Core still reports whether the requirement is fulfilled.` });
       continue;
     }
@@ -444,7 +465,7 @@ async function previewTarget({ target, built, compose, inheritedContradictions, 
   const { candidate, assembled, index } = built, { parsed } = candidate;
   const meta = candidate.document.metadata['aih.workbench'].entries;
   const empty = { target: { ...target }, selection: [], advisory: [], fulfillment: [], contradictions: [...inheritedContradictions], unsupported: [], omitted: [] };
-  const entryOmissions = assembled.omitted.map(({ entryId, itemId, label, reason }) => ({ entryId, itemId, label, reason }));
+  const entryOmissions = assembled.omitted.map(({ entryId, itemId, label, reason, tool, message }) => ({ entryId, itemId, label, reason, ...(tool ? { tool } : {}), ...(message ? { message } : {}) }));
   const refused = diagnostics => ({ ...empty, status: 'refused', diagnostics, enforced: { admitted: false, diagnostics: [] }, omitted: entryOmissions });
   if (!parsed.valid) return refused(parsed.diagnostics);
   const organization = parsed.document;
@@ -595,6 +616,8 @@ function explanationOf({ record, candidate, built, handoff, sequence }) {
     lines.push('');
   }
   if (!specs.length) lines.push('This baseline has no entries.', '');
+  const notForTool = built.assembled.omitted.filter(entry => entry.reason === 'not-for-tool');
+  if (notForTool.length) lines.push('## Not permitted in every tool', '', ...notForTool.map(entry => `- ${entry.message}`), '');
   lines.push('## Where it is read', '', `- Repository: \`${handoff.repository}\``, `- Path: \`${handoff.path}\``, `- Ref: \`${handoff.ref}\``, '', '## Activation', '', handoff.activation, '');
   return lines.join('\n');
 }

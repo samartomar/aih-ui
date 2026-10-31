@@ -23,6 +23,8 @@ export function previewSectionText(section, value) {
   return (value ?? []).map(row => {
     const label = row.label ?? row.itemId ?? row.id ?? '';
     if (section === 'unsupported') return row.message ?? `${label}: ${row.status ?? ''}`;
+    // An entry left out of the baseline, in the author's words (for one tool, or altogether).
+    if (section === 'omitted' && row.message) return row.message;
     if (section === 'selection') return `${label} · ${row.scope} · ${row.origin === 'dependency' ? `dependency of ${(row.requiredBy ?? []).join(', ')}` : 'authored'}`;
     // Core's status verbatim: an undeclared fact keeps a requirement unknown, never fulfilled.
     if (section === 'fulfillment' || section === 'advisory') return `${label}: ${row.status} (${row.applicability}${row.unknown?.length ? `; undeclared ${row.unknown.join(', ')}` : ''})`;

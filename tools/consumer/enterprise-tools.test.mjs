@@ -9,7 +9,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { composeAuthoring, editAuthoring, freshAuthoring, renderRecipe } from './headless.mjs';
 import { installedFamilies } from './installed-families.mjs';
-import { runOrganizationAuthor } from './organization-author.mjs';
+import { missedTools, runOrganizationAuthor } from './organization-author.mjs';
 import { readJourneyEnvelope } from './journey.mjs';
 import { createHost } from './host.mjs';
 import * as harness from '@aihq/core/harness';
@@ -27,10 +27,16 @@ const host = (projectRoot, organizationSource) => createHost({ projectRoot, orga
 
 // The Admin's path: a baseline that permits the item, targeting Claude Code and Codex CLI, exported by the Workbench.
 async function authoredPolicy(clients, picks = [[superpowers, skill]]) {
-  let state = await runOrganizationAuthor('organization-new', {}, { inventories });
+  const exported = await exportBaseline(clients, picks);
+  assert.equal(exported.status, 'ok', JSON.stringify(exported.diagnostics ?? exported));
+  return JSON.parse(new TextDecoder().decode(Uint8Array.from(exported.value.candidateBytes)));
+}
+// The author's export answer itself, read against `using` (the installed inventories unless a test changes them).
+async function exportBaseline(clients, picks, using = inventories) {
+  let state = await runOrganizationAuthor('organization-new', {}, { inventories: using });
   assert.equal(state.status, 'ok', JSON.stringify(state));
   const edit = async operation => {
-    state = await runOrganizationAuthor('organization-edit', { envelopeBytes: [...state.value.envelopeBytes], operation }, { inventories });
+    state = await runOrganizationAuthor('organization-edit', { envelopeBytes: [...state.value.envelopeBytes], operation }, { inventories: using });
     assert.equal(state.status, 'ok', JSON.stringify(state.diagnostics ?? state));
     return state;
   };
@@ -40,9 +46,7 @@ async function authoredPolicy(clients, picks = [[superpowers, skill]]) {
   const record = (await readJourneyEnvelope(Uint8Array.from(state.value.envelopeBytes))).value.records.find(value => value.id === 'organization-draft');
   for (const entry of record.entries) await edit({ kind: 'set-obligation', entryId: entry.id, obligation: 'permitted' });
   for (const client of clients) await edit({ kind: 'add-target', scope: 'project', client });
-  const exported = await runOrganizationAuthor('organization-export', { envelopeBytes: [...state.value.envelopeBytes] }, { inventories });
-  assert.equal(exported.status, 'ok', JSON.stringify(exported.diagnostics ?? exported));
-  return JSON.parse(new TextDecoder().decode(Uint8Array.from(exported.value.candidateBytes)));
+  return runOrganizationAuthor('organization-export', { envelopeBytes: [...state.value.envelopeBytes] }, { inventories: using });
 }
 
 test('an exported baseline permits the item for each targeted tool, by its own entry', async () => {
@@ -134,6 +138,37 @@ test('ECC\'s notices are permitted by one recipe identity, admitted for every re
     assert.ok(notices[0].members.length > 0 && notices[0].members.every(member => member.path.startsWith(join(target, '.aih', 'notices', 'ecc', 'ecc.notices'))),
       JSON.stringify(notices[0].members.map(member => member.path)));
   }
+});
+
+// A tool the organisation targets is never dropped silently when another tool's copy is permitted. Here the rule's
+// text is not the text its material declares: Claude Code copies the file and still renders it, Codex CLI's marker
+// block refuses it. Codex never installs it (its fit fails too), so the baseline leaves it out for Codex, in words.
+test('Codex misses and Claude succeeds: an entry that does not work in Codex is left out for Codex and says so', async () => {
+  const rule = ecc.release.items.find(item => item.id === 'ecc.rule.typescript.coding-style');
+  const path = rule.materials.find(material => material.id === 'asset-0').packagePath;
+  const changed = { ...ecc, materials: ecc.materials.map(material => material.path === path ? { ...material, bytes: new TextEncoder().encode('changed text') } : material) };
+  const using = inventories.map(entry => entry === ecc ? changed : entry);
+  assert.equal(renderRecipe({ tool: 'claude', entry: changed, item: rule, scope: 'project' }).refused, undefined, 'Claude Code still renders it');
+  assert.ok(renderRecipe({ tool: 'codex', entry: changed, item: rule, scope: 'project' }).refused, 'Codex CLI refuses it');
+  const exported = await exportBaseline(['claude', 'codex'], [[changed, rule]], using);
+  assert.equal(exported.status, 'ok', JSON.stringify(exported.diagnostics ?? exported));
+  const ids = JSON.parse(new TextDecoder().decode(Uint8Array.from(exported.value.candidateBytes))).selections.map(entry => entry.selectionId);
+  assert.ok(ids.includes('project--aihq.catalog--ecc.rule.typescript.coding-style--claude'), ids.join(', '));
+  assert.ok(!ids.some(id => id.startsWith('project--aihq.catalog--ecc.rule.typescript.coding-style--codex')), ids.join(', '));
+  assert.match(exported.value.explanation, /## Not permitted in every tool\n\n- TypeScript\/JavaScript Coding Style is not permitted for Codex CLI because it doesn’t work there: /);
+});
+
+// When the tool the entry missed is one the item fits, a developer installs it there, so the baseline must permit it
+// there: that blocks export instead of exporting a baseline that refuses the developer.
+test('a missed tool the item fits blocks export; one it does not fit is left out for that tool', () => {
+  const misses = [{ tool: 'codex', message: 'Catalog composed no selection for Rule.' }];
+  const [blocks] = missedTools({ label: 'Rule', misses, fitOf: () => ({ fits: true }) });
+  assert.deepEqual(blocks, { tool: 'codex', reason: 'cannot-compose',
+    message: 'Rule works in Codex CLI, so developers can install it there, but the baseline could not permit it there: Catalog composed no selection for Rule.' });
+  const [left] = missedTools({ label: 'Rule', misses, fitOf: () => ({ fits: false, reason: 'Codex CLI has no hooks.' }) });
+  assert.deepEqual(left, { tool: 'codex', reason: 'not-for-tool', message: 'Rule is not permitted for Codex CLI because it doesn’t work there: Codex CLI has no hooks.' });
+  // Two misses for one tool are one outcome, with both reasons.
+  assert.equal(missedTools({ label: 'Rule', misses: [...misses, { tool: 'codex', message: 'Second.' }], fitOf: () => ({ fits: true }) }).length, 1);
 });
 
 test('a set Add takes only the chosen tools that pass the card\'s fit: no compatibility blocker and Core renders it', async () => {
