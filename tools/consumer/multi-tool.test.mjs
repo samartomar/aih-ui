@@ -60,12 +60,12 @@ test('an MCP server Core cannot place for Codex CLI goes to Claude Code only, an
   assert.deepEqual(more.value.policy.selections.filter(selection => selection.item?.itemId === skill.id).map(selection => selection.tool), ['claude']);
 });
 
-test('tools that share a project location get one installation, not a conflicting second copy', async () => {
+test('tools that share a project location each get their own copy of a skill', async () => {
   const intent = freshAuthoring(); intent.roots.push(rootOf(skill));
   const composed = await composeAuthoring({ intent, inventories, tool: 'codex', tools: ['codex', 'antigravity'] });
   assert.equal(composed.status, 'ok', JSON.stringify(composed.diagnostics ?? []));
-  assert.deepEqual(composed.value.policy.selections.filter(selection => selection.item?.itemId === skill.id).map(selection => selection.tool), ['codex'],
-    'Core renders both to the same .agents paths, so Codex CLI\'s installation serves Antigravity CLI too');
+  assert.deepEqual(composed.value.policy.selections.filter(selection => selection.item?.itemId === skill.id).map(selection => selection.tool), ['codex', 'antigravity'],
+    'Core renders both to the same .agents paths and keeps a shared file while another selection owns it');
 });
 
 test('the browse answer judges each item in every chosen tool, from Core', async () => {

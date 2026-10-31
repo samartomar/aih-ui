@@ -6,7 +6,7 @@ import { deriveRecipeIdentity, parseOrganizationPolicy, previewOrganizationOblig
 import { listTools, nativeClientIds } from '@aihq/core/harness';
 import { isCheckedRelease, listItems } from '@aihq/catalog/reader';
 import { refuse, ok, stable } from './primitives.mjs';
-import { checkToolFit, composeAuthoring, fitReason, freshAuthoring, inlineRecipelessSelections, renderRecipe, toolCopyId } from './headless.mjs';
+import { checkToolFit, checkTogether, composeAuthoring, fitReason, freshAuthoring, inlineRecipelessSelections, renderRecipe, toolCopyId } from './headless.mjs';
 import { describeAuthoringSubject } from './review-bindings.mjs';
 import { managementIdOf } from './intent-shape.mjs';
 import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJourneyEnvelope, JOURNEY_RECORD_KINDS } from './journey.mjs';
@@ -309,13 +309,25 @@ async function assemble({ record, index, inventories }) {
   // requiring it (Harness renderSelectionDelivery), so it is permitted as Core delivers it for all of them. A notice or
   // licence is the same recipe for any requiring set.
   const together = new Map();
+  // Only the entries that tool takes are composed for it (Core's check of them together, and Core renders each), so an item
+  // a tool does not read leaves the rest of its composition, and a supporting document sits beside the items it does read.
   const jointFor = tool => {
-    if (!together.has(tool)) together.set(tool, composeRoots(record.entries.flatMap(entry => {
-      const hit = found(index, entry);
-      if (!hit || !rendersPerTool(hit) || entry.obligation === undefined || entry.obligation === 'prohibited' || !hit.item.scopes.includes(entry.scope)) return [];
-      const { configuration, missing } = exampleConfiguration(hit.item, entry);
-      return missing.length ? [] : [{ ...entry.item, scope: entry.scope, configuration }];
-    }), inventories, tool));
+    if (!together.has(tool)) {
+      const candidates = record.entries.flatMap(entry => {
+        const hit = found(index, entry);
+        if (!hit || !rendersPerTool(hit) || entry.obligation === undefined || entry.obligation === 'prohibited' || !hit.item.scopes.includes(entry.scope)) return [];
+        const { configuration, missing } = exampleConfiguration(hit.item, entry);
+        return missing.length ? [] : [{ hit, root: { ...entry.item, scope: entry.scope, configuration } }];
+      });
+      const checked = new Map();
+      const fits = ({ hit, root }) => {
+        if (hit.item.kind === 'document' && hit.item.payload?.placement !== 'project-folder') return true;
+        if (!checked.has(hit.inventory)) checked.set(hit.inventory, checkTogether({ tool, entry: hit.inventory, items: candidates.filter(other => other.hit.inventory === hit.inventory).map(other => other.hit.item) }));
+        const compatibility = checked.get(hit.inventory)?.items?.find(value => value.item.itemId === hit.item.id);
+        return checkToolFit({ tool, entry: hit.inventory, item: hit.item, scope: root.scope, ...(compatibility ? { compatibility } : {}) }).fits;
+      };
+      together.set(tool, composeRoots(candidates.filter(fits).map(candidate => candidate.root), inventories, tool));
+    }
     return together.get(tool);
   };
   for (const [position, entry] of record.entries.entries()) {

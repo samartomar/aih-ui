@@ -133,8 +133,10 @@ const projected = selections => sorted(selections.map(({ id, managementId, organ
 
 // Another chosen tool's copy of a selection: the same item, its own selection and management identity.
 export const toolCopyId = (id, tool) => `${id}--${tool}`;
-// The paths a rendered recipe writes, as Core names them in its operations.
-const targetsOf = recipe => (recipe?.inline?.operations ?? []).filter(operation => operation.target).map(operation => JSON.stringify(operation.target));
+// What a rendered recipe writes that Core gives one selection only: an executable file (a write with a file mode) and a
+// configuration entry, as Core names their targets.
+const executablesOf = recipe => (recipe?.inline?.operations ?? []).filter(operation => operation.target && (operation.mode !== undefined || operation.kind === 'config.entries'))
+  .map(operation => JSON.stringify(operation.target));
 const isToolCopy = selection => Boolean(selection.tool && selection.managementId?.endsWith(`--${selection.tool}`));
 async function build({ intent, inventories, base, capture = false, historicalV2 = false, tool = undefined, tools = undefined, grantApproval = undefined, revokeApproval = undefined, strictOrigins = true, projectFacts = undefined }) {
   if (intent && new TextEncoder().encode(JSON.stringify(intent)).length > 850_000) return refuse('POLICY_BOUND_EXCEEDED', '/metadata/aih.workbench', 'Intent exceeds 850,000 UTF-8 bytes; reduce selected state.');
@@ -157,7 +159,7 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
   }
   if (!canonicalTool && chosenTools.length) canonicalTool = chosenTools[0];
   if (canonicalTool && !chosenTools.includes(canonicalTool)) chosenTools.unshift(canonicalTool);
-  const copies = [], compatibilityOf = new Map();
+  const copies = [], notes = [], compatibilityOf = new Map();
   // The one-server approval opt-in is exactly { framework, itemId }, ephemeral and explicit. `false`-less
   // revocation uses revokeApproval with the same shape; both never carry a value.
   const approvalShape = value => value !== undefined && (!value || typeof value.framework !== 'string' || typeof value.itemId !== 'string' || Object.keys(value).length !== 2);
@@ -213,13 +215,17 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
           && index.releases[candidate.item.releaseSha256]?.framework?.id === origin.requiredBy?.framework);
         return other ? index.items.get(pinKey(other.item)) : undefined;
       }) : [];
-    const together = value => {
-      const key = `${value}/${entry.release.sha256}`;
-      if (!compatibilityOf.has(key)) compatibilityOf.set(key, checkTogether({ tool: value, entry, items: resolved.selections.filter(other => other.item.releaseSha256 === entry.release.sha256)
+    const togetherOf = (value, release, member) => {
+      const key = `${value}/${release.release.sha256}`;
+      if (!compatibilityOf.has(key)) compatibilityOf.set(key, checkTogether({ tool: value, entry: release, items: resolved.selections.filter(other => other.item.releaseSha256 === release.release.sha256)
         .map(other => index.items.get(pinKey(other.item)).item) }));
-      return compatibilityOf.get(key)?.items?.find(value => value.item.itemId === item.id) ?? null;
+      return compatibilityOf.get(key)?.items?.find(value => value.item.itemId === member.id) ?? null;
     };
-    const fitFor = value => checkToolFit({ tool: value, entry, item, scope: selection.scope, requirers: requirerFound.map(required => required.item), ...(requirerFound.length ? {} : { compatibility: together(value) }) });
+    const together = value => togetherOf(value, entry, item);
+    // A supporting document sits beside the requiring items that tool takes; one a tool does not read is not beside it there.
+    const requirersFor = value => requirerFound.filter(required => checkToolFit({ tool: value, entry: required.entry, item: required.item, scope: selection.scope,
+      compatibility: togetherOf(value, required.entry, required.item) }).fits).map(required => required.item);
+    const fitFor = value => checkToolFit({ tool: value, entry, item, scope: selection.scope, requirers: requirersFor(value), ...(requirerFound.length ? {} : { compatibility: together(value) }) });
     const rendersFor = value => renderable && !requirerFound.some(required => !required) && fitFor(value).fits;
     // A new item goes to the first chosen tool that passes the shared fit test; none passing refuses it with Core's reason.
     const renderTool = identityPrior?.tool ?? (renderable && chosenTools.length ? chosenTools.find(rendersFor) : canonicalTool);
@@ -264,7 +270,7 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
         `The server's recorded tool ${bundle.tool} does not match the requested tool ${canonicalTool}; remove and reselect it explicitly before changing approval.`);
       const requirers = requirerFound;
       if (requirers.some(required => !required)) return refuse('PREREQUISITE_UNAVAILABLE', '/selections', 'Catalog could not name the item requiring this document.');
-      const delivered = renderRecipe({ tool: renderTool, entry, item, scope: selection.scope, requirers: requirers.map(required => required.item), ...(ticked ? { grantApproval } : {}) });
+      const delivered = renderRecipe({ tool: renderTool, entry, item, scope: selection.scope, requirers: requirersFor(renderTool), ...(ticked ? { grantApproval } : {}) });
       const { refused } = delivered;
       if (refused) return refuse('PREREQUISITE_UNAVAILABLE', ticked ? '/grantApproval' : '/selections',
         refused.guidance ?? refused.message ?? refused.reason ?? 'Core refused the content delivery.', undefined,
@@ -302,7 +308,7 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
       requires: [], recipe });
     // Execution policy 1.6.0: the plain rendering Core reproduces at Prepare is left out of the policy when its release (and each
     // requiring item's) can be named. A one-server approval is not a recipe-less input, so it stays inline.
-    if (rendered && recipe === renderedRecipe && !ticked && nameReleases([entry, ...requirerEntries])) {
+    if (rendered && recipe === renderedRecipe && !ticked && requirersFor(renderTool).length === requirerFound.length && nameReleases([entry, ...requirerEntries])) {
       delete selections.at(-1).recipe;
       recipelessRecipes.set(selections.at(-1).id, recipe);
     }
@@ -312,16 +318,26 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
       const lead = selections.at(-1);
       const recorded = identityPrior ? (base?.selections ?? []).filter(candidate => candidate.managementId?.startsWith(`${lead.managementId}--`)
         && candidate.scope === selection.scope && candidate.item?.itemId === item.id && candidate.tool && candidate.tool !== lead.tool).map(candidate => candidate.tool) : null;
-      // Tools that share a project location (Core renders the same target paths) get the one installation already there.
-      const written = new Set(targetsOf(renderedRecipe));
+      // Each tool has its own copy, also where Core renders it to the paths another tool's copy writes: Core keeps a shared
+      // file while another selection still owns it. An executable file or a configuration entry is the exception: Core gives
+      // it one selection, so the tool that reads it there uses the copy already written, said in words.
+      const executables = new Map(executablesOf(renderedRecipe).map(target => [target, lead.tool]));
       for (const other of recorded ?? chosenTools.filter(value => value !== lead.tool && rendersFor(value))) {
-        const delivered = renderRecipe({ tool: other, entry, item, scope: selection.scope, requirers: requirerFound.map(required => required.item) });
+        const delivered = renderRecipe({ tool: other, entry, item, scope: selection.scope, requirers: requirersFor(other) });
         if (delivered.refused) return refuse('PREREQUISITE_UNAVAILABLE', '/selections', delivered.refused.guidance ?? delivered.refused.message ?? delivered.refused.reason ?? 'Core refused the content delivery.', undefined,
           { owner: 'core', diagnostics: delivered.refused.diagnostics ?? (delivered.refused.code ? [{ code: delivered.refused.code, message: delivered.refused.reason ?? delivered.refused.message }] : []) });
-        const targets = targetsOf(delivered.recipe);
-        if (!recorded && targets.some(target => written.has(target))) continue;
-        for (const target of targets) written.add(target);
-        copies.push({ lead, tool: other, delivered, recipeless: recipelessRecipes.has(lead.id) });
+        const shared = !delivered.refused && !recorded ? executablesOf(delivered.recipe).find(target => executables.has(target)) : undefined;
+        const kindOf = target => delivered.recipe.inline.operations.some(operation => JSON.stringify(operation.target) === target && operation.kind === 'config.entries') ? 'a configuration entry' : 'an executable file';
+        if (shared) {
+          const label = value => harness.listTools?.({ includeUnobserved: true }).find(candidate => candidate.id === value)?.label ?? value;
+          notes.push({ code: 'TOOL_COPY_SHARED', path: '/selections', itemId: item.id, tool: other, sharedWith: executables.get(shared),
+            message: `${item.name ?? item.label ?? item.id} has no separate copy for ${label(other)}: it reads the files ${label(executables.get(shared))}’s copy writes, and Core writes ${kindOf(shared)} for one tool only.` });
+          continue;
+        }
+        if (!delivered.refused) for (const target of executablesOf(delivered.recipe)) executables.set(target, other);
+        // Core renders a recipe-less document beside every item its origins name; one rendered beside only the items this
+        // tool reads carries that recipe inline.
+        copies.push({ lead, tool: other, delivered, recipeless: recipelessRecipes.has(lead.id) && requirersFor(other).length === requirerFound.length });
       }
     }
     const pinRecipe = rendered ? recipeDescriptor({ id: recipe.inline.id, path: `inline:${recipe.inline.id}`,
@@ -391,7 +407,7 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
   if (policyBytes.length > 1_000_000 || new TextEncoder().encode(JSON.stringify(next)).length > 850_000) return refuse('POLICY_BOUND_EXCEEDED', '', 'Policy exceeds the Core or consumer byte bound; reduce selected state.');
   const parsed = parsePolicy(new TextDecoder().decode(policyBytes));
   if (!parsed.valid) return refuse('INPUT_INVALID', '', 'Core refused the composed execution policy.', undefined, { owner: 'core', diagnostics: parsed.diagnostics });
-  return ok({ policyBytes, intent: next, policy, inclusions: resolved.inclusions, optional: resolved.optional });
+  return ok({ policyBytes, intent: next, policy, inclusions: resolved.inclusions, optional: resolved.optional, ...(notes.length ? { diagnostics: notes } : {}) });
 }
 // Saved judgments are always reported as derived applicability; a failure to describe them never gates editing.
 async function reviewView({ intent, inventories, reviewEvidence, comparisons, recipient }) {

@@ -7,7 +7,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { composeAuthoring, editAuthoring, freshAuthoring, renderRecipe } from './headless.mjs';
+import { checkToolFit, checkTogether, composeAuthoring, editAuthoring, freshAuthoring, renderRecipe } from './headless.mjs';
 import { installedFamilies } from './installed-families.mjs';
 import { missedTools, runOrganizationAuthor } from './organization-author.mjs';
 import { readJourneyEnvelope } from './journey.mjs';
@@ -132,11 +132,11 @@ test('ECC\'s notices are permitted by one recipe identity, admitted for every re
     assert.equal(applied.completion, 'complete', JSON.stringify(applied).slice(0, 1500));
     const listed = (await installing.managedInventory()).selections;
     for (const rule of chosen) assert.deepEqual(listed.filter(selection => selection.item?.itemId === rule.id).map(selection => selection.tool).sort(), ['claude', 'codex'], `${rule.id} is installed for both tools`);
-    // Both tools render the notices to the same place, so they are installed once there, required by every rule installed.
+    // Both tools render the notices to the same place: each tool has its own copy there, required by its own rules.
     const notices = listed.filter(selection => selection.item?.itemId === 'ecc.notices');
-    assert.equal(notices.length, 1, JSON.stringify(notices.map(({ tool, members }) => ({ tool, members: members.map(member => member.path) }))));
-    assert.ok(notices[0].members.length > 0 && notices[0].members.every(member => member.path.startsWith(join(target, '.aih', 'notices', 'ecc', 'ecc.notices'))),
-      JSON.stringify(notices[0].members.map(member => member.path)));
+    assert.deepEqual(notices.map(selection => selection.tool).sort(), ['claude', 'codex'], JSON.stringify(notices.map(({ tool, members }) => ({ tool, members: members.map(member => member.path) }))));
+    for (const copy of notices) assert.ok(copy.members.length > 0 && copy.members.every(member => member.path.startsWith(join(target, '.aih', 'notices', 'ecc', 'ecc.notices'))),
+      JSON.stringify(copy.members.map(member => member.path)));
   }
 });
 
@@ -190,4 +190,62 @@ test('a set Add takes only the chosen tools that pass the card\'s fit: no compat
     assert.ok(!toolsOf(id).includes('kiro'), `${id} is not installed for Kiro CLI, which Core blocks`);
     assert.ok(toolsOf(id).includes('claude'), `${id} goes to Claude Code`);
   }
+});
+
+// The Workbench's fit rule for a tool and an item: Core's compatibility check, for the items an Add brings together, finds
+// no blocker for the tool, and Harness renders the item for it (a supporting document beside the requiring items that fit
+// that tool). Each chosen tool gets a copy of every item the rule admits there, also where another tool's copy is written
+// to the same paths (Codex CLI and Antigravity CLI read .agents; Claude Code and Copilot CLI read .mcp.json; every tool
+// reads the notices folder). The organisation author permits exactly those copies, and Core admits and installs them.
+test('each chosen tool gets every copy the fit rule admits, also where another tool writes the same paths', async t => {
+  const tools = ['claude', 'codex', 'copilot', 'antigravity'];
+  const server = ecc.release.items.find(item => item.kind === 'mcp-server' && !Object.keys(item.requirements?.inputs ?? {}).length && !Object.keys(item.inputs ?? {}).length);
+  const pick = (entry, ...ids) => ids.map(id => entry.release.items.find(item => item.id === id));
+  const chosen = [[ecc, [...pick(ecc, 'ecc.skill.tdd-workflow', 'ecc.agent.a11y-architect'), server]], [superpowers, pick(superpowers, 'superpowers.skill.brainstorming', 'superpowers.hook.session-start')]];
+  const documents = [[ecc, pick(ecc, 'ecc.notices')[0]], [superpowers, pick(superpowers, 'superpowers.notices')[0]]];
+  const requires = (item, document) => (item.dependencies?.requires ?? []).some(ref => (ref.itemId ?? ref) === document.id);
+  const rule = Object.fromEntries(tools.map(tool => {
+    const fits = chosen.flatMap(([entry, items]) => {
+      const together = checkTogether({ tool, entry, items: [...items, ...documents.filter(([other]) => other === entry).map(([, document]) => document)] });
+      return items.filter(item => checkToolFit({ tool, entry, item, compatibility: together.items.find(value => value.item.itemId === item.id) }).fits).map(item => [entry, item]);
+    });
+    const notices = documents.filter(([entry, document]) => {
+      const requirers = fits.filter(([other, item]) => other === entry && requires(item, document)).map(([, item]) => item);
+      return requirers.length && !renderRecipe({ tool, entry, item: document, scope: 'project', requirers }).refused;
+    });
+    return [tool, [...fits, ...notices].map(([, item]) => item.id).sort()];
+  }));
+  assert.ok(rule.antigravity.includes('ecc.skill.tdd-workflow') && rule.copilot.includes(server.id) && rule.codex.includes('ecc.notices'), JSON.stringify(rule));
+
+  const organization = await authoredPolicy(tools, [...chosen.flatMap(([entry, items]) => items.map(item => [entry, item])), ...documents]);
+  const permitted = tool => organization.selections.map(entry => entry.selectionId.split('--')).filter(parts => parts.at(-1) === tool).map(parts => parts.at(-2)).sort();
+  for (const tool of tools) assert.deepEqual(permitted(tool), rule[tool], `${tool}: the baseline permits each copy the rule admits`);
+
+  const scratch = await mkdtemp(join(tmpdir(), 'aih-enterprise-copies-')), project = join(scratch, 'project'), file = join(scratch, 'organization.json');
+  await mkdir(project, { recursive: true }); t.after(() => rm(scratch, { recursive: true, force: true }));
+  await writeFile(file, JSON.stringify(organization));
+  let policyBytes = (await composeAuthoring({ intent: freshAuthoring(), inventories, basePolicyBytes: ENTERPRISE })).value.policyBytes;
+  for (const [entry, items] of chosen) for (const item of items) {
+    const added = await editAuthoring({ policyBytes, inventories, tool: tools[0], tools, operation: { type: 'select', root: rootOf(entry, item) } });
+    assert.equal(added.status, 'ok', `${item.id}: ${JSON.stringify(added.diagnostics ?? [])}`);
+    policyBytes = added.value.policyBytes;
+  }
+  const policy = JSON.parse(new TextDecoder().decode(policyBytes));
+  // The exception: Core gives an executable file or a configuration entry to one selection, so Antigravity CLI reads the
+  // brainstorming scripts Codex CLI's copy writes and Copilot CLI the .mcp.json entry Claude Code's copy writes, and the Add says so.
+  const installed = { ...rule, antigravity: rule.antigravity.filter(id => id !== 'superpowers.skill.brainstorming'), copilot: rule.copilot.filter(id => id !== server.id) };
+  assert.ok(rule.antigravity.includes('superpowers.skill.brainstorming'));
+  const composed = tool => policy.selections.filter(selection => selection.tool === tool).map(selection => selection.item.itemId).sort();
+  for (const tool of tools) assert.deepEqual(composed(tool), installed[tool], `${tool}: the developer's policy holds each copy the rule admits`);
+  const brainstorming = await editAuthoring({ policyBytes: (await composeAuthoring({ intent: freshAuthoring(), inventories, basePolicyBytes: ENTERPRISE })).value.policyBytes, inventories, tool: tools[0], tools,
+    operation: { type: 'select', root: rootOf(superpowers, skill) } });
+  assert.deepEqual(brainstorming.value.diagnostics?.map(({ code, tool, sharedWith }) => ({ code, tool, sharedWith })), [{ code: 'TOOL_COPY_SHARED', tool: 'antigravity', sharedWith: 'codex' }]);
+  assert.match(brainstorming.value.diagnostics[0].message, /^brainstorming has no separate copy for Antigravity CLI: it reads the files Codex CLI’s copy writes, and Core writes an executable file for one tool only\.$/);
+  const installing = host(project, { provider: 'local', path: file });
+  const prepared = await installing.prepareSession({ policyText: new TextDecoder().decode(policyBytes) });
+  assert.equal(prepared.status, 'ready', JSON.stringify(prepared.diagnostics ?? prepared).slice(0, 1500));
+  const applied = await installing.applyApproved({ sessionId: prepared.sessionId, reviewDigest: prepared.review.reviewDigest });
+  assert.equal(applied.completion, 'complete', JSON.stringify(applied).slice(0, 1500));
+  const listed = (await installing.managedInventory()).selections;
+  for (const tool of tools) assert.deepEqual(listed.filter(selection => selection.tool === tool).map(selection => selection.item.itemId).sort(), installed[tool], `${tool}: Core installs each copy`);
 });
