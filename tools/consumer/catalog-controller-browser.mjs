@@ -62,7 +62,7 @@ async function openController(options = {}) {
   await page.goto(origin, { waitUntil: 'domcontentloaded' });
   await page.evaluate(async ({ items, framework, options }) => {
     const { createCatalog } = await import('/catalog/controller.js');
-    const requests = [], pending = [], approvalRequests = [];
+    const requests = [], pending = [], approvalRequests = [], proposals = [];
     const scope = options.scope ?? 'project';
     const authoring = {
       catalog: { frameworks: [framework], items },
@@ -77,13 +77,14 @@ async function openController(options = {}) {
         if (operation === 'browse-content') return new Promise(resolve => pending.push({ body, resolve }));
         return Promise.resolve({ status: 'ok' });
       },
+      propose(edit) { return new Promise(resolve => proposals.push({ edit, resolve })); },
       recordApproval(operation) { approvalRequests.push(operation); return Promise.resolve(options.approvalResult ?? { status: 'ok' }); },
     };
     const catalog = createCatalog({ authoring, onSummary() {}, onSelectEntry() {} });
-    window.ui165Controller = { catalog, authoring, requests, pending, approvalRequests };
+    window.ui165Controller = { catalog, authoring, requests, pending, approvalRequests, proposals };
     catalog.setTool(options.tool ?? { id: 'claude', label: 'Claude Code' });
     await catalog.start();
-  }, { items: options.items ?? [ecc, legacy], framework, options });
+  }, { items: options.items ?? [ecc, legacy], framework: options.framework ?? framework, options });
   await page.waitForFunction(() => window.ui165Controller.pending.length === 1);
   return page;
 }
@@ -95,6 +96,42 @@ function browseResult(marker) {
     resolution: { status: 'ok', value: { selections: [] } },
     host: { status: 'unavailable', reason: 'Not requested in this controller fixture.' },
   };
+}
+
+// A set Add says it is working until the host answers, and a second press meanwhile does nothing. The More sets list
+// closes on a pointer anywhere else and on Escape, so it never stays over the Add button.
+async function setAdd() {
+  const page = await openController({ framework: { ...framework, sets: eccFamily.release.sets } });
+  const sets = page.locator('#starting-sets'), guidance = page.locator('#framework-guidance');
+  await sets.locator('.more-sets > summary').click();
+  assert.equal(await sets.locator('.more-sets').evaluate(node => node.open), true);
+  await page.locator('#framework-guidance').dispatchEvent('pointerdown');
+  assert.equal(await sets.locator('.more-sets').evaluate(node => node.open), false, 'a pointer elsewhere closes More sets');
+  await sets.locator('.more-sets > summary').click();
+  await page.keyboard.press('Escape');
+  assert.equal(await sets.locator('.more-sets').evaluate(node => node.open), false, 'Escape closes More sets');
+  assert.equal(await page.evaluate(() => document.activeElement?.tagName), 'SUMMARY', 'focus returns to its summary');
+  await sets.locator('.more-sets > summary').click();
+  await sets.locator('.more-sets [data-set-id]').first().click();
+  assert.equal(await sets.locator('.more-sets').evaluate(node => node.open), true, 'choosing a set inside the list keeps it open');
+  const add = sets.locator('[data-add-sets]');
+  await add.click();
+  await guidance.filter({ hasText: 'Adding chosen sets…' }).waitFor();
+  assert.equal(await add.getAttribute('aria-busy'), 'true');
+  assert.equal(await add.getAttribute('aria-disabled'), 'true');
+  await add.click({ force: true });
+  assert.equal(await page.evaluate(() => window.ui165Controller.proposals.length), 1, 'a second press while adding does nothing');
+  await page.evaluate(() => window.ui165Controller.proposals[0].resolve({ status: 'ok', diagnostics: [] }));
+  await guidance.filter({ hasText: 'Chosen sets added.' }).waitFor();
+  assert.equal(await add.getAttribute('aria-busy'), null);
+  assert.equal(await add.getAttribute('aria-disabled'), null);
+  // A failed Add clears the working state too, and says why.
+  await add.click();
+  await guidance.filter({ hasText: 'Adding chosen sets…' }).waitFor();
+  await page.evaluate(() => window.ui165Controller.proposals[1].resolve({ status: 'refused', diagnostics: [{ code: 'INPUT_INVALID', message: 'Exact set refusal.' }] }));
+  await guidance.filter({ hasText: 'Exact set refusal.' }).waitFor();
+  assert.equal(await add.getAttribute('aria-busy'), null);
+  await page.close();
 }
 
 async function noFramework() {
@@ -351,6 +388,7 @@ try {
   if (!only || only === 'preview-queue') { await previewQueue(); passed++; console.log('✔ a changed snapshot queues a fresh preview with truthful paths'); }
   if (!only || only === 'stale-install') { await staleInstall(); passed++; console.log('✔ Install keeps stale and fresh preparation reasons together'); }
   if (!only || only === 'approval-identity') { await approvalIdentity(); passed++; console.log('✔ approval ticks bind exact item, scope and tool'); }
+  if (!only || only === 'set-add') { await setAdd(); passed++; console.log('✔ set Add shows it is working, ignores a second press, and More sets closes on a pointer elsewhere or Escape'); }
   if (!only || only === 'approval-failure') { await approvalFailure(); passed++; console.log('✔ approval failures restore ticks and show exact reasons'); }
   assert.deepEqual(errors, []);
   console.log(`catalog-controller browser: pass ${passed} fail 0`);

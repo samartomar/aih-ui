@@ -64,7 +64,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   // The organization policy's last read state stays shown while the next browse answer is read.
   let enterprise = false, setupSettings = null, organizationPolicy;
   const savedSetSources = new Set();
-  let setFeedback;
+  let setFeedback, addingSets = false;
   try {
     const prior = JSON.parse(sessionStorage.getItem('aih-ui-framework-context') ?? 'null');
     if (typeof prior?.name === 'string' && typeof prior.source === 'string') state.lastFramework = prior;
@@ -129,13 +129,17 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     if (factsOnly) { cards.updateFacts(cardsModel()); details.render(detailsModel(selectedEntry())); } else render();
   }
   async function addSets(requests) {
+    if (addingSets) return;
     const framework = currentFramework(), tool = chosenTool?.id;
-    const result = await authoring.propose({ type: 'select-sets', sets: requests, configurations: browseChoice(framework).configurations, releaseSha256: framework?.sha256, tool, tools: fitTools() });
-    if (result.status === 'ok' && authoring.candidate && !result.diagnostics?.length) authoring.accept();
-    // Refused because the setup is Enterprise and the policy is not: the page's one notice already says so.
-    if (result.diagnostics?.some(value => value.code === 'ENTERPRISE_SETUP_REQUIRED')) { setFeedback = undefined; renderSetGuidance(); return; }
-    setFeedback = { framework: framework?.sha256, tool, result, requests };
-    renderSetGuidance();
+    // The host resolves the sets and composes them, which can wait behind the fit reads; until it answers, the page says so.
+    addingSets = true; setFeedback = undefined; render();
+    try {
+      const result = await authoring.propose({ type: 'select-sets', sets: requests, configurations: browseChoice(framework).configurations, releaseSha256: framework?.sha256, tool, tools: fitTools() });
+      if (result.status === 'ok' && authoring.candidate && !result.diagnostics?.length) authoring.accept();
+      // Refused because the setup is Enterprise and the policy is not: the page's one notice already says so.
+      if (result.diagnostics?.some(value => value.code === 'ENTERPRISE_SETUP_REQUIRED')) return;
+      setFeedback = { framework: framework?.sha256, tool, result, requests };
+    } finally { addingSets = false; render(); }
   }
   // Asked once: the policy file and branch in the setup's repository. The host saves the source and reads it; the page
   // sends only these two values.
@@ -164,6 +168,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     const guidance = document.getElementById('framework-guidance');
     if (setFeedback && (setFeedback.framework !== currentFramework()?.sha256 || setFeedback.tool !== chosenTool?.id)) setFeedback = undefined;
     const { result, requests } = setFeedback ?? {};
+    if (addingSets) { guidance.textContent = 'Adding chosen sets…'; return; }
     guidance.textContent = result
       ? result.status === 'ok' ? 'Chosen sets added. Review Your setup; save to keep the exact options and origins.' : (result.diagnostics?.map(value => value.message).join(' ') || 'The selected sets could not be added.')
       : chosenTool ? 'Choose content below. Add it to Your setup, then review your choices.' : 'Choose your tools in the header, then explore the framework below.';
@@ -375,7 +380,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     renderSetGuidance();
     const choice = browseChoice(selectedFramework);
     readBrowse(selectedFramework, choice, Boolean(state.selectedId));
-    startingSets.render({ framework: selectedFramework, frameworks: authoring.catalog?.frameworks, ...choice, allItems: showsAllContent(selectedFramework, choice), result: browseResult, hasTool: Boolean(chosenTool), saved: savedSetSources.has(selectedFramework?.sha256), items: authoring.catalog?.items ?? [] });
+    startingSets.render({ framework: selectedFramework, frameworks: authoring.catalog?.frameworks, ...choice, allItems: showsAllContent(selectedFramework, choice), result: browseResult, hasTool: Boolean(chosenTool), saved: savedSetSources.has(selectedFramework?.sha256), adding: addingSets, items: authoring.catalog?.items ?? [] });
     let quiet = document.getElementById('browse-unsupported');
     if (!quiet) { quiet = el('details', 'browse-unsupported'); quiet.id = 'browse-unsupported'; elements.cards.cardsGrid.before(quiet); }
     const blocked = browseEntries().filter(unusable); quiet.hidden = !blocked.length;

@@ -47,7 +47,8 @@ async function newContext(browser) {
 async function installSets(page, family, setIds) {
   await pickSets(page, family, setIds);
   await page.locator('[data-add-sets]').click();
-  await page.waitForFunction(() => document.getElementById('framework-guidance').textContent.includes('Chosen sets added'));
+  // The host resolves and composes the sets behind the fit reads each set toggle started, so this waits as the other set Adds do.
+  await page.waitForFunction(() => document.getElementById('framework-guidance').textContent.includes('Chosen sets added'), undefined, { timeout: 600_000 });
   await openPolicyDrawer(page);
   await page.locator('#install-button:not([disabled])').waitFor({ timeout: 180_000 });
   await page.locator('#install-button').click();

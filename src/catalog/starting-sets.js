@@ -12,6 +12,13 @@ export function setFitWords(value, framework) {
 // UI state only. All membership/option expansion is returned by Catalog.
 export function createStartingSets({ container, onChange, onAdd }) {
   let shownFramework;
+  // The More sets list sits over what follows it; a pointer anywhere else, or Escape, closes it.
+  const openMore = () => { const more = container.querySelector('.more-sets'); return more?.open ? more : undefined; };
+  document.addEventListener('pointerdown', event => { const more = openMore(); if (more && !more.contains(event.target)) more.open = false; });
+  document.addEventListener('keydown', event => {
+    const more = event.key === 'Escape' ? openMore() : undefined; if (!more) return;
+    more.open = false; if (more.contains(document.activeElement)) more.querySelector('summary').focus();
+  });
   function button(set, chosen, update) {
     const node = el('button', 'set-choice', set.name); node.type = 'button';
     node.dataset.setId = set.id; node.setAttribute('aria-pressed', String(chosen));
@@ -19,7 +26,7 @@ export function createStartingSets({ container, onChange, onAdd }) {
     attachTooltip(node, `${set.description ?? set.name} · ${set.offer}. Exact set ${set.setSha256}.`);
     node.addEventListener('click', () => update(set.id)); return node;
   }
-  return { render({ framework, requests, configurations = [], result, allItems, items, frameworks = [], hasTool, saved = false }) {
+  return { render({ framework, requests, configurations = [], result, allItems, items, frameworks = [], hasTool, saved = false, adding = false }) {
     const same = shownFramework === framework?.sha256;
     const open = same ? { more: container.querySelector('.more-sets')?.open, members: container.querySelector('.set-members')?.open, inputs: container.querySelector('.set-inputs')?.open } : {};
     const active = container.contains(document.activeElement) ? document.activeElement : null;
@@ -76,7 +83,9 @@ export function createStartingSets({ container, onChange, onAdd }) {
     const controls = el('div', 'set-footer');
     if (requests.length || saved) {
       const add = el('button', 'set-add', !requests.length ? 'Remove chosen sets' : saved ? 'Update chosen sets' : 'Add chosen sets'); add.type = 'button'; add.dataset.addSets = '';
-      if (!hasTool) add.setAttribute('aria-disabled', 'true');
+      if (!hasTool || adding) add.setAttribute('aria-disabled', 'true');
+      // While an Add is with the host it says so, and a second press does nothing.
+      if (adding) add.setAttribute('aria-busy', 'true');
       add.addEventListener('click', () => { if (add.getAttribute('aria-disabled') !== 'true') onAdd(requests); }); attachTooltip(add, hasTool ? 'Add the exact members Catalog resolves, with options, exclusions and qualified set origins. No installation runs.' : 'Choose your tool in the header before adding sets. Your existing choices are unchanged.'); controls.append(add);
     }
     const all = el('label', 'set-all'); const tick = el('input'); tick.type = 'checkbox'; tick.id = 'browse-all-items'; tick.checked = allItems;
