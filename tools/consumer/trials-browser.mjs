@@ -151,7 +151,7 @@ export async function runTrialsBrowser({ origin, output, playwrightModule, setti
     else {
       // An installed Core that does not publish its client list cannot validate a client choice; the same saved-setup file is
       // then written directly, which is all the endpoint would have done.
-      assert.equal(setup.status, 422, JSON.stringify(setup.body)); assert.match(setup.body.error, /supported AI clients are unavailable/);
+      assert.equal(setup.status, 422, JSON.stringify(setup.body)); assert.match(setup.body.error, /tool list is unavailable/);
       assert.ok(settingsPath, 'The host supplies the setup file location.');
       const saved = JSON.parse(await readFile(settingsPath, 'utf8')); previousSettings = saved;
       await writeFile(settingsPath, JSON.stringify({ ...saved, clients: CLIENTS }, null, 2) + '\n');

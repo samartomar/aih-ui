@@ -40,14 +40,16 @@ function readBody(request, limit) {
  * @param tools, toolInspection the header's Your tool answers, each started on first request (tools/server/tools-summary.mjs)
  */
 export function createApi({ summary, settingsPath, contractCheck, tools, toolInspection }) {
-  const settings = createSettingsStore({ coreTargets: summary?.coreTargets, settingsPath });
+  // Setup's tools are checked against Core's tool list, the one GET /api/tools gives the page.
+  const store = async () => createSettingsStore({ tools: tools ? await tools() : undefined, settingsPath });
+  const settings = createSettingsStore({ settingsPath });
 
   const ROUTES = {
     "GET /api/workbench-settings": () => settings.read(),
-    "POST /api/workbench-settings": (body) => settings.create(body),
-    "POST /api/workbench-settings/update": (body) => settings.update(body),
+    "POST /api/workbench-settings": async (body) => (await store()).create(body),
+    "POST /api/workbench-settings/update": async (body) => (await store()).update(body),
     "POST /api/workbench-settings/mode": (body) => settings.switchMode(body),
-    "POST /api/workbench-settings/clients": (body) => settings.updateClients(body),
+    "POST /api/workbench-settings/clients": async (body) => (await store()).updateClients(body),
     /** Provenance of what is actually installed. */
     "GET /api/packages": () => ({ ok: true, ...summary }),
     /** The start-up contract check; it answers once the check the host started has finished. */

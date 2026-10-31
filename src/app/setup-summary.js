@@ -1,6 +1,6 @@
 import { el } from "./dom.js";
 import { experienceLabel } from "./setup-model.js";
-import { clientLabel } from "./core-targets.js";
+import { toolNames } from "./tool-list.js";
 
 export const reviewerText = (settings) => settings.reviewer ? `${settings.reviewer.kind} ${settings.reviewer.id}` : "Not set — saved review judgments show as imported";
 
@@ -22,7 +22,7 @@ export function setupSummary(settings, location, labels = {}) {
   } else if (settings.role === "developer") {
     row("Organization policy", "Read by your configured execution host; prepare your project policy in the Workbench");
   }
-  row("AI clients", settings.clients.map(id => clientLabel(labels, id) || id).join(", ") || "None selected");
+  row("Your tools", toolNames(labels, settings.clients) || "None chosen");
   row("Reviewing as", reviewerText(settings)).dataset.setupReviewer = "";
   section.append(list);
   section.append(el("p", "setup-notice", "Local preferences. Saving them does not install tools, read your repository, share data or verify enterprise approval."));

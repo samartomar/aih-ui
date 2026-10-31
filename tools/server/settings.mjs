@@ -8,8 +8,12 @@ import { SETTINGS_LOCATION, settingsErrors } from "../../src/app/setup-model.js"
 const WORKSPACE = fileURLToPath(new URL("../../", import.meta.url));
 export const SETTINGS_PATH = resolve(WORKSPACE, SETTINGS_LOCATION);
 
-/** The optional path is for isolated local tests; HTTP callers never choose it. */
-export function createSettingsStore({ coreTargets, settingsPath = SETTINGS_PATH }) {
+/**
+ * @param tools Core's tool list as GET /api/tools answers it (Harness listTools with unobserved tools): setup's tools
+ *   are checked against the same list the page offers them from, so a saved id is one the header can choose.
+ * The optional path is for isolated local tests; HTTP callers never choose it.
+ */
+export function createSettingsStore({ tools, settingsPath = SETTINGS_PATH }) {
   settingsPath = resolve(settingsPath);
   const location = settingsPath;
   function guardPath() {
@@ -34,8 +38,8 @@ export function createSettingsStore({ coreTargets, settingsPath = SETTINGS_PATH 
   }
   function clientError(clients) {
     if (!clients.length) return null;
-    if (coreTargets?.state !== "published" || !Array.isArray(coreTargets.targets)) return "Core's supported AI clients are unavailable. Continue without a client selection.";
-    return clients.some((client) => !coreTargets.targets.includes(client)) ? "Select AI clients from the installed Core's published list." : null;
+    if (tools?.state !== "published" || !Array.isArray(tools.tools)) return "Core's tool list is unavailable. Continue without choosing tools.";
+    return clients.some((client) => !tools.tools.some((tool) => tool?.id === client)) ? "Choose your tools from the list Core offers." : null;
   }
   function write(settings) {
     guardPath();

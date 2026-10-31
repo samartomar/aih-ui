@@ -10,10 +10,11 @@ import { createApi } from "../server/api.mjs";
 import { createStaticServer, listen } from "../server/static.mjs";
 
 const testRoot = fileURLToPath(new URL("../../.tmp/", import.meta.url));
-const coreTargets = { state: "published", targets: ["fixture-client-a", "fixture-client-b"] };
+// Core's tool list as GET /api/tools answers it: setup's tools are checked against it.
+const tools = { state: "published", tools: [{ id: "fixture-client-a", label: "Fixture A" }, { id: "fixture-client-b", label: "Fixture B" }] };
 const vibe = () => ({ ...emptySettings(), experience: "vibe" });
 const enterprise = (role = "admin") => ({ ...emptySettings(), experience: "enterprise", role, organization: { name: "Setup fixture", shortId: "setup-fixture", policyRepo: "github.com/example/policy", emails: ["admin@example.com"] }, capabilities: ["headroom"], clients: ["fixture-client-a"] });
-function fixture(t, targets = coreTargets) {
+function fixture(t, targets = tools) {
   mkdirSync(testRoot, { recursive: true });
   const directory = mkdtempSync(join(testRoot, "settings-test-"));
   const settingsPath = join(directory, "settings.v1.json");
@@ -25,14 +26,14 @@ function fixture(t, targets = coreTargets) {
     }
     rmdirSync(directory);
   });
-  return { store: createSettingsStore({ coreTargets: targets, settingsPath }), settingsPath, directory };
+  return { store: createSettingsStore({ tools: targets, settingsPath }), settingsPath, directory };
 }
 
 test("first run is missing; Vibe settings survive reopening the store", (t) => {
   const { store, settingsPath } = fixture(t);
   assert.equal(store.read().state, "missing");
   assert.equal(store.create(vibe()).ok, true);
-  assert.deepEqual(createSettingsStore({ coreTargets, settingsPath }).read().settings, vibe());
+  assert.deepEqual(createSettingsStore({ tools, settingsPath }).read().settings, vibe());
 });
 
 test("Admin and Developer records preserve explicit capabilities and clients", (t) => {
@@ -91,7 +92,7 @@ test("an unavailable Core client list permits skipping but does not invent targe
 test("existing client choices survive when a later Core list omits them", (t) => {
   const { store, settingsPath } = fixture(t);
   store.create(enterprise());
-  const later = createSettingsStore({ settingsPath, coreTargets: { state: "published", targets: ["fixture-client-b"] } });
+  const later = createSettingsStore({ settingsPath, tools: { state: "published", tools: [{ id: "fixture-client-b" }] } });
   assert.equal(later.read().state, "saved");
   assert.deepEqual(later.updateClients({ clients: ["fixture-client-a", "fixture-client-b"] }).settings.clients, ["fixture-client-a", "fixture-client-b"]);
   assert.equal(later.updateClients({ clients: ["invented"] }).ok, false);
@@ -141,7 +142,7 @@ test("editing organization, contacts, assistance and clients persists atomically
     next.capabilities = [];
     next.clients = ["fixture-client-b"];
     assert.deepEqual(store.update(next).settings, next);
-    assert.deepEqual(createSettingsStore({ settingsPath, coreTargets }).read().settings, next);
+    assert.deepEqual(createSettingsStore({ settingsPath, tools }).read().settings, next);
     assert.deepEqual(readdirSync(directory), ["settings.v1.json"]);
   }
 });
@@ -164,7 +165,7 @@ test("editing preserves deliberately empty choices and previously saved unlisted
   assert.deepEqual(store.update(vibe()).settings.capabilities, []);
   const selected = { ...vibe(), clients: ["fixture-client-a"] };
   store.update(selected);
-  const later = createSettingsStore({ settingsPath, coreTargets: { state: "unavailable" } });
+  const later = createSettingsStore({ settingsPath, tools: { state: "unavailable" } });
   assert.deepEqual(later.update({ ...selected, capabilities: ["headroom"] }).settings.clients, selected.clients);
   assert.equal(later.update({ ...selected, clients: ["invented"] }).ok, false);
 });
@@ -187,7 +188,7 @@ test("missing, invalid or deleted setup cannot be recreated by edit", (t) => {
 test("settings update HTTP route enforces JSON, same origin and fixed persona", async (t) => {
   const { store, settingsPath, directory } = fixture(t);
   store.create(enterprise());
-  const api = createApi({ consumerDir: directory, runDir: directory, summary: { coreTargets }, settingsPath });
+  const api = createApi({ consumerDir: directory, runDir: directory, summary: {}, tools: async () => tools, settingsPath });
   const server = createStaticServer(directory, api);
   const address = await listen(server, 0);
   t.after(() => new Promise((resolveClose) => { server.closeAllConnections(); server.close(resolveClose); }));
@@ -223,7 +224,7 @@ test("mode switching saves all three modes and preserves the latest unrelated pr
     const result = store.switchMode(mode);
     assert.equal(result.ok, true);
     assert.deepEqual(result.settings, withReviewer({ ...vibe(), ...mode, capabilities: ["headroom"], clients: ["fixture-client-b"] }));
-    assert.deepEqual(createSettingsStore({ coreTargets, settingsPath }).read().settings, result.settings);
+    assert.deepEqual(createSettingsStore({ tools, settingsPath }).read().settings, result.settings);
   }
   assert.deepEqual(readdirSync(join(settingsPath, "..")), ["settings.v1.json"]);
 });
@@ -250,14 +251,14 @@ test("mode changes require saved setup and preserve clients no longer published 
   const mode = { experience: "enterprise", role: "developer", organization: null };
   assert.equal(store.switchMode(mode).status, 409);
   store.create({ ...vibe(), clients: ["fixture-client-a"] });
-  const offline = createSettingsStore({ coreTargets: null, settingsPath });
+  const offline = createSettingsStore({ tools: null, settingsPath });
   assert.deepEqual(offline.switchMode(mode).settings.clients, ["fixture-client-a"]);
 });
 
 test("mode HTTP route enforces origin and JSON and validates required Admin details", async (t) => {
   const { store, settingsPath, directory } = fixture(t);
   store.create(vibe());
-  const server = createStaticServer(directory, createApi({ summary: { coreTargets }, settingsPath }));
+  const server = createStaticServer(directory, createApi({ summary: {}, tools: async () => tools, settingsPath }));
   const address = await listen(server, 0);
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
   const base = `http://127.0.0.1:${address.port}`;
@@ -277,14 +278,14 @@ test("an optional reviewing identity saves, reopens in a new store and clears on
   const { store, settingsPath } = fixture(t);
   const saved = withReviewer(vibe());
   assert.deepEqual(store.create(saved).settings, saved);
-  assert.deepEqual(createSettingsStore({ coreTargets, settingsPath }).read().settings, saved);
+  assert.deepEqual(createSettingsStore({ tools, settingsPath }).read().settings, saved);
   const organization = withReviewer(vibe(), { kind: "organization", id: "Platform Team" });
   assert.deepEqual(store.update(organization).settings.reviewer, { kind: "organization", id: "Platform Team" });
-  assert.deepEqual(createSettingsStore({ coreTargets, settingsPath }).read().settings, organization);
+  assert.deepEqual(createSettingsStore({ tools, settingsPath }).read().settings, organization);
   const cleared = store.update(vibe());
   assert.equal(cleared.ok, true);
   assert.equal(Object.hasOwn(cleared.settings, "reviewer"), false);
-  const reopened = createSettingsStore({ coreTargets, settingsPath }).read();
+  const reopened = createSettingsStore({ tools, settingsPath }).read();
   assert.equal(reopened.state, "saved");
   assert.equal(Object.hasOwn(JSON.parse(readFileSync(settingsPath, "utf8")), "reviewer"), false);
   assert.deepEqual(reopened.settings, vibe());
@@ -332,13 +333,13 @@ test("a client change keeps the saved reviewing identity", (t) => {
   store.create(withReviewer(enterprise()));
   const updated = store.updateClients({ clients: ["fixture-client-b"] });
   assert.deepEqual(updated.settings.reviewer, { kind: "individual", id: "alice" });
-  assert.deepEqual(createSettingsStore({ coreTargets, settingsPath }).read().settings, { ...withReviewer(enterprise()), clients: ["fixture-client-b"] });
+  assert.deepEqual(createSettingsStore({ tools, settingsPath }).read().settings, { ...withReviewer(enterprise()), clients: ["fixture-client-b"] });
 });
 
 test("the settings HTTP route saves and clears the reviewing identity", async (t) => {
   const { store, directory } = fixture(t);
   store.create(enterprise());
-  const api = createApi({ consumerDir: directory, runDir: directory, summary: { coreTargets }, settingsPath: join(directory, "settings.v1.json") });
+  const api = createApi({ consumerDir: directory, runDir: directory, summary: {}, tools: async () => tools, settingsPath: join(directory, "settings.v1.json") });
   const server = createStaticServer(directory, api);
   const address = await listen(server, 0);
   t.after(() => new Promise((resolveClose) => { server.closeAllConnections(); server.close(resolveClose); }));
@@ -378,4 +379,22 @@ test("setups saved with retired assistance choices stay readable; nothing new ca
   writeFileSync(settingsPath, JSON.stringify({ ...vibe(), capabilities: ["headroom", "serena"] }));
   assert.equal(store.read().state, "saved");
   assert.deepEqual(store.read().settings.capabilities, ["headroom", "serena"]);
+});
+
+test("setup's tools are checked against Core's tool list, the one the header shows, not a separate client list", async (t) => {
+  const { settingsPath, directory } = fixture(t);
+  // listTools({ includeUnobserved: true }) also holds tools no policy client list names, such as an IDE build.
+  const list = { state: "published", tools: [{ id: "claude", label: "Claude Code" }, { id: "kiro-ide", label: "Kiro IDE" }] };
+  const api = createApi({ summary: { coreTargets: { state: "published", targets: ["claude", "codex"] } }, tools: async () => list, settingsPath });
+  const server = createStaticServer(directory, api);
+  const address = await listen(server, 0);
+  t.after(() => new Promise((resolveClose) => { server.closeAllConnections(); server.close(resolveClose); }));
+  const base = `http://127.0.0.1:${address.port}`;
+  const post = (path, body) => fetch(`${base}${path}`, { method: "POST", headers: { "content-type": "application/json", origin: base }, body: JSON.stringify(body) });
+  const refused = await post("/api/workbench-settings", { ...vibe(), clients: ["codex"] });
+  assert.equal(refused.status, 422, "a client outside Core's tool list is refused");
+  assert.match((await refused.json()).error, /list Core offers/);
+  const saved = await post("/api/workbench-settings", { ...vibe(), clients: ["claude", "kiro-ide"] });
+  assert.equal(saved.status, 200);
+  assert.deepEqual((await saved.json()).settings.clients, ["claude", "kiro-ide"]);
 });

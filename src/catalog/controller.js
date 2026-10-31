@@ -23,6 +23,7 @@ import { loadContractCheck } from "../app/contract-check.js";
 import { createToolbar } from "./toolbar.js";
 import { projectItems, capabilityFacts, declaredTargets, supportedEntries } from "./authoring-model.js";
 import { publishedClients } from "../app/core-targets.js";
+import { toolLabels } from "../app/tool-list.js";
 import { inventoryCounts, scopeTotal, selectedScope, visibleEntries, sourceScopes, sourceFilterValue } from "./selectors.js";
 import { emptyView, restoreView, saveView } from "./view-state.js";
 import { attachTooltip } from "../app/tooltip.js";
@@ -57,7 +58,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
   };
   // Your tools: every chosen tool (Core-observed or not). The lead is the first one Core has observed; it is the tool
   // for the host's second-copy read and one-server approvals. Fit is judged across all of the observed ones.
-  let restoredView = false, chosenTools = [], chosenTool = null, legacyBrowsing = false;
+  let restoredView = false, chosenTools = [], chosenTool = null, legacyBrowsing = false, toolListLabels = {};
   const fitTools = () => chosenTools.filter(tool => tool.observed !== false).map(tool => tool.id);
   const toolsLabel = () => chosenTools.map(tool => tool.label ?? tool.id).join(', ');
   let browseKey, browseContentKey, browseResult, browseAttempt = 0;
@@ -278,7 +279,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     } catch { return false; }
   };
   const browseContext = () => ({
-    toolLabels: publishedClients(state.summary?.coreTargets)?.labels ?? {},
+    // A tool in Core's tool list is named as the header names it; other hinted ids keep Core's client label.
+    toolLabels: { ...(publishedClients(state.summary?.coreTargets)?.labels ?? {}), ...toolListLabels },
     items: state.entries.map(entry => entry.authoringItem).filter(Boolean),
   });
   function cardsModel() {
@@ -411,7 +413,7 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     const cardsView = cardsModel();
     const scoped = browseEntries();
     const count = status => scoped.filter(entry => capabilityFacts(entry.authoringItem, target.value).some(fact => fact.support === status)).length;
-    counts.textContent = selectedFramework ? `Framework fit follows ${chosenTools.length ? toolsLabel() : 'Your tools in the header'}. Published observations and unavailable content are shown separately; legacy target filters are inactive.` : `${publishedClients(state.summary?.coreTargets)?.ids.length ?? 'Unknown'} Core clients are listed in setup; this catalog declares ${target.options.length} target clients. Target declarations do not establish installation. ${target.value || 'No declared target'} · ${scoped.length} items in family/search/source scope: ${count('supported')} with supported facts · ${count('unsupported')} with unsupported facts · ${count('unknown')} with unknown facts. Mixed items can count in more than one group.`;
+    counts.textContent = selectedFramework ? `Framework fit follows ${chosenTools.length ? toolsLabel() : 'Your tools in the header'}. Published observations and unavailable content are shown separately; legacy target filters are inactive.` : `This catalog declares ${target.options.length} target clients. Target declarations do not establish installation. ${target.value || 'No declared target'} · ${scoped.length} items in family/search/source scope: ${count('supported')} with supported facts · ${count('unsupported')} with unsupported facts · ${count('unknown')} with unknown facts. Mixed items can count in more than one group.`;
     const availableKinds = visibleByTool(browseEntries({ ...state.view, kind: null }));
     const filteredCounts = inventoryCounts(availableKinds);
     provenance.render({
@@ -496,6 +498,8 @@ export function createCatalog({ authoring, onSelectEntry, onReselectEntry = () =
     sourceUnavailable: message => { if (!authoring.catalog) frameworks.setFailure(message); },
     setMode: settings => { enterprise = ['admin', 'developer'].includes(settings?.role); setupSettings = settings ?? null; render(); },
     // Your tools: the chosen list (a single tool or null is still accepted from older callers).
+    /** Core's tool list (src/app/tool-list.js): the labels card hints name a tool by. */
+    setToolList: list => { toolListLabels = toolLabels(list); render(); },
     setTool: tools => {
       chosenTools = Array.isArray(tools) ? tools : tools ? [tools] : [];
       chosenTool = chosenTools.find(tool => tool.observed !== false) ?? null;

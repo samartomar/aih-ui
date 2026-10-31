@@ -22,7 +22,7 @@ const text = value => typeof value === "string" ? value : undefined;
 
 export function tools() {
   if (typeof harness.listTools !== "function") {
-    return { state: "unavailable", reason: "The installed @aihq/core/harness does not export listTools." };
+    return { state: "unavailable", reason: "The installed Core does not publish its tool list." };
   }
   const all = harness.listTools({ includeUnobserved: true });
   const observed = new Set(harness.listTools().map(entry => entry.id));
