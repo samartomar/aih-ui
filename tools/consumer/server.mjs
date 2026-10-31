@@ -4,9 +4,8 @@ import { browseContent, inspectChosenHost } from './browse-content.mjs';
 import { organizationSourceStep, readSavedSource } from './organization-source.mjs';
 import { firstRunForSets } from './first-run.mjs';
 import { createServer } from 'node:http';
-import { readFile, mkdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
+import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readInstalledRelease } from '@aihq/catalog/node';
@@ -30,9 +29,13 @@ import { observeCheckout } from './workspace-host.mjs';
 import { createCatalogUpdateSource } from './update-source.mjs';
 import { inspectorSummary } from './scan-evidence.mjs';
 import { createScanEvidenceHost } from './scan-evidence-host.mjs';
+import { createStaging, releaseStaging, sweepStaging } from './host-staging.mjs';
 
 export async function startConsumer({ projectRoot, controls, organizationSource: suppliedSource, setupSettingsPath, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, updateSourceCatalogRoots, evidenceSources, evidenceDetectorIds, frameworkSources, frameworkFixtureInventories, installedFamilyInventories: suppliedFamilyInventories, installRecordRoot, port = 0, createExecutionHost = createHost, coreState = { resolveStateLocation: core.resolveStateLocation, stateLocation: coreContracts.stateLocation } } = {}) {
   // `createExecutionHost` is createHost; tests pass one that holds Install work while they act.
+  // What an earlier host left staged when it was killed; never waited for, and never anything but such folders.
+  void sweepStaging();
+  const hostStages = new Set();
   // The fixture is a test source; a host names one update source, so both together would be ambiguous.
   if (updateSourceCatalogRoots !== undefined && maintenanceSource) throw new Error('Configure one update source: Catalog package roots or the test fixture, not both.');
   const installed = await readInstalledRelease({
@@ -86,7 +89,8 @@ export async function startConsumer({ projectRoot, controls, organizationSource:
   // Startup inventories are staged once, when the first project folder is known. Concurrent callers share the one run,
   // and the roots are published only once every file is written; a failed run is retried by the next caller.
   const stageAuthoringRoots = shared(async () => {
-    const staging = await mkdtemp(join(tmpdir(), 'aih-authoring-materials-')), staged = {};
+    const staging = await createStaging('aih-authoring-materials-'), staged = {};
+    hostStages.add(staging);
     for (const inventory of mixedService.inventories.filter(entry => !Object.hasOwn(authoringRoots, entry.materialSource.input) && !Object.hasOwn(staged, entry.materialSource.input))) {
       const input = inventory.materialSource.input;
       // Only host-selected startup inventories acquire execution bindings.
@@ -157,7 +161,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource:
     const now = Date.now();
     for (const [key, value] of clients) if (now - value.usedAt > 3_600_000) {
       clients.delete(key);
-      for (const directory of value.stages) { await rm(directory, { recursive: true, force: true }); clientStages.delete(directory); }
+      for (const directory of value.stages) { releaseStaging(directory); clientStages.delete(directory); }
     }
     if (!clients.has(id)) {
       if (clients.size >= 64) throw new Error('Too many active authoring clients; reopen after idle sessions expire.');
@@ -288,7 +292,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource:
           const inventory = result.value, input = inventory.materialSource.input;
           const grantId = randomUUID();
           if (!client.grants.has(inventory.release.sha256)) {
-            const directory = await mkdtemp(join(tmpdir(), 'aih-personal-grant-'));
+            const directory = await createStaging('aih-personal-grant-');
             clientStages.add(directory); client.stages.push(directory);
             for (const material of inventory.materials) {
               const path = resolve(directory, material.path);
@@ -398,7 +402,8 @@ export async function startConsumer({ projectRoot, controls, organizationSource:
       return send(response, 404, { error: 'not-found' });
     } catch (error) { send(response, 400, { error: error.message }); }
   });
-  server.on('close', () => { for (const directory of clientStages) void rm(directory, { recursive: true, force: true }); clients.clear(); });
+  // A stopped host leaves no staged material behind; one that was killed is swept by the next host's start.
+  server.on('close', () => { for (const directory of [...clientStages, ...hostStages]) releaseStaging(directory); clientStages.clear(); hostStages.clear(); clients.clear(); });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); });
   return { server, origin: `http://127.0.0.1:${server.address().port}` };
 }
