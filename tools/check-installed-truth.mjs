@@ -33,6 +33,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 import { pageAssets } from './server/assets.mjs';
 import { buildCss } from './build-css.mjs';
 import { stageNewerCatalog as stageNewerCatalogIn } from './newer-catalog.mjs';
