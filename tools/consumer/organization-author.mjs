@@ -288,8 +288,9 @@ const catalogMessage = diagnostics => (diagnostics ?? []).map(diagnostic => diag
 // composes the same item is admitted by the exported document. Dependencies are approved with their requirer.
 async function assemble({ record, index, inventories }) {
   const omitted = [], problems = [], authored = [];
-  // Per tool, every composable per-tool entry is composed together once: a supporting document (a notices file) is rendered
-  // beside the items requiring it, so it is permitted as it is delivered beside all of them.
+  // Per tool, every composable per-tool entry is composed together once: a supporting document is rendered for the items
+  // requiring it (Harness renderSelectionDelivery), so it is permitted as Core delivers it for all of them. A notice or
+  // licence is the same recipe for any requiring set.
   const together = new Map();
   const jointFor = tool => {
     if (!together.has(tool)) together.set(tool, composeRoots(record.entries.flatMap(entry => {

@@ -36,7 +36,7 @@ export function pinSelectedRecipes(intent, inventories, root, tool) {
   for (const selection of resolved.value.selections) {
     const entry = inventories.find(entry => entry.release.sha256 === selection.item.releaseSha256);
     const item = entry.release.items.find(item => item.id === selection.item.itemId);
-    if (entry.release.framework?.id && item.contentSha256 && item.behaviourSha256 && typeof harness.renderDelivery === 'function') continue;
+    if (entry.release.framework?.id && item.contentSha256 && item.behaviourSha256 && typeof harness.renderSelectionDelivery === 'function') continue;
     if (!item.recipes) continue;
     const client = recipeClient(item, tool);
     if (!client.available) throw new Error(client.reason);

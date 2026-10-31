@@ -16,32 +16,24 @@ export { AUTHORING_SCHEMA, REVIEW_SCHEMA, freshAuthoring } from './intent-shape.
 const POLICY_SCHEMA = 'urn:aihq:core:execution-policy:1.6.0';
 const pinMaterials = item => item.materials.map(material => material.path ? material : ({ id: material.id, path: material.packagePath, sha256: material.sha256, byteLength: material.byteLength }));
 const sorted = values => [...values].sort((a, b) => stable(a) < stable(b) ? -1 : stable(a) > stable(b) ? 1 : 0);
-// One item's recipe as Core renders it for a recipe-less selection: one rendering, or for a supporting document one beside each
-// requiring item, combined with each rendering's operation and check ids suffixed by its position.
-// An inventory's material texts, decoded once: a release is rendered item by item and, with several tools, once per tool.
+// An item's material texts by its own material ids, as Core reads them at Prepare: ids such as asset-0 repeat from item to
+// item, so each is found by the item's material path. An inventory's texts are decoded once by path.
 const materialTexts = new WeakMap();
-const contentsOf = entry => {
-  if (!materialTexts.has(entry)) materialTexts.set(entry, Object.fromEntries((entry.materials ?? []).filter(material => material.id && material.bytes)
-    .map(material => [material.id, new TextDecoder().decode(material.bytes)])));
-  return materialTexts.get(entry);
+const contentsOf = (entry, item) => {
+  if (!materialTexts.has(entry)) materialTexts.set(entry, new Map((entry.materials ?? []).filter(material => material.path && material.bytes)
+    .map(material => [material.path, new TextDecoder().decode(material.bytes)])));
+  const texts = materialTexts.get(entry);
+  return Object.fromEntries((item.materials ?? []).filter(material => material.id && texts.has(material.packagePath ?? material.path))
+    .map(material => [material.id, texts.get(material.packagePath ?? material.path)]));
 };
+// One item's recipe as Core renders it for a recipe-less selection, through Harness renderSelectionDelivery: the one
+// composition Core plans with, so a supporting document rendered for its requiring items has the recipe identity Core admits.
 export function renderRecipe({ tool, entry, item, scope, requirers = [], grantApproval }) {
   const binding = harness.toolBindings.find(candidate => candidate.tool === tool);
-  const contents = contentsOf(entry);
-  const deliveries = (requirers.length ? requirers : [undefined]).map(requiredBy =>
-    harness.renderDelivery({ tool, item, binding, scope, contents, ...(grantApproval ? { grantApproval } : {}), ...(requiredBy ? { requiredBy } : {}) }));
-  const refused = deliveries.find(delivery => delivery.status !== 'rendered');
-  if (refused) return { refused };
-  const rendered = deliveries[0];
-  const unique = deliveries.map((delivery, index) => ({ ...delivery, recipe: { ...delivery.recipe,
-    operations: delivery.recipe.operations.map(operation => ({ ...operation, id: `${operation.id}-${index + 1}`,
-      requires: (operation.requires ?? []).map(required => `${required}-${index + 1}`), checks: (operation.checks ?? []).map(check => `${check}-${index + 1}`) })),
-    checks: delivery.recipe.checks.map(check => ({ ...check, id: `${check.id}-${index + 1}` })) } }));
-  const combined = deliveries.length === 1 ? rendered.recipe : { ...rendered.recipe,
-    materials: [...new Map(unique.flatMap(delivery => delivery.recipe.materials).map(material => [`${material.id}/${material.path}/${material.sha256}`, material])).values()],
-    targets: [...new Set(unique.flatMap(delivery => delivery.recipe.targets))], prerequisites: [...new Set(unique.flatMap(delivery => delivery.recipe.prerequisites))],
-    operations: unique.flatMap(delivery => delivery.recipe.operations), checks: unique.flatMap(delivery => delivery.recipe.checks) };
-  return { rendered, recipe: { inline: combined } };
+  const rendered = harness.renderSelectionDelivery({ tool, item, binding, scope, contents: contentsOf(entry, item),
+    ...(grantApproval ? { grantApproval } : {}), ...(requirers.length ? { requiredBy: requirers } : {}) });
+  if (rendered.status !== 'rendered') return { refused: rendered };
+  return { rendered, recipe: { inline: rendered.recipe } };
 }
 // The one fit test the catalog card, a single Add, a set Add and Install share: Core's compatibility check finds no
 // blocker for the tool AND Core renders the item for it. `compatibility` is the card's own answer (it also folds in the
@@ -213,7 +205,7 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
     const found = index.items.get(pinKey(selection.item)), { entry, item } = found;
     const identityPrior = base?.selections.find(candidate => !isToolCopy(candidate) && candidate.scope === selection.scope && candidate.item?.itemId === item.id
       && candidate.item.framework === entry.release.framework?.id && candidate.item.contentSha256 === item.contentSha256 && candidate.item.behaviourSha256 === item.behaviourSha256);
-    const renderable = Boolean(entry.release.framework?.id && item.contentSha256 && item.behaviourSha256 && typeof harness.renderDelivery === 'function');
+    const renderable = Boolean(entry.release.framework?.id && item.contentSha256 && item.behaviourSha256 && typeof harness.renderSelectionDelivery === 'function');
     // The items requiring a supporting document, rendered beside it; undefined where Catalog could not name one.
     const requirerFound = supportingDocument(item)
       ? selection.origins.filter(origin => origin.reasonIncluded === 'required-by').map(origin => {
