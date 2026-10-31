@@ -59,13 +59,15 @@ async function installSets(page, family, setIds) {
 // Ticks exactly these starting sets of one framework in the set picker, without adding them.
 async function pickSets(page, family, setIds) {
   await chooseCatalogFamily(page, family);
-  const more = page.locator('#starting-sets details > summary').filter({ hasText: /More sets/ });
-  if (await more.count() && !await more.first().evaluate(node => node.parentElement.open)) await more.first().click();
   const choices = page.locator('#starting-sets [data-set-id]');
-  await choices.first().waitFor();
+  await choices.first().waitFor({ state: 'attached' });
   for (const id of await choices.evaluateAll(nodes => nodes.map(node => node.dataset.setId))) {
     const choice = page.locator(`#starting-sets [data-set-id="${id}"]`);
-    if ((await choice.getAttribute('aria-pressed') === 'true') !== setIds.includes(id)) await choice.click();
+    if ((await choice.getAttribute('aria-pressed') === 'true') === setIds.includes(id)) continue;
+    // A set under "More sets" is reached by opening its list, as a person would; choosing a set outside it closes it.
+    const details = choice.locator('xpath=ancestor::details[1]');
+    if (await details.count() && !await details.evaluate(node => node.open)) await details.locator('xpath=./summary').click();
+    await choice.click();
   }
   for (const id of setIds) assert.equal(await page.locator(`#starting-sets [data-set-id="${id}"]`).getAttribute('aria-pressed'), 'true', `set ${id} is chosen`);
 }

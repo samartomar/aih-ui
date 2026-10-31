@@ -48,7 +48,7 @@ process.on('exit', () => {
 // The real-Core batch group has its own bounded budget: its serial Windows
 // filesystem work measured 115s before the final concurrent-consent regression.
 const testGroups = [
-  ['ordinary-families', 'installed-families', 'managed-inventory', 'authoring-page', 'authoring-v3', 'reviews', 'personal-folder', 'journey', 'readiness', 'readiness-host', 'claims', 'friction', 'authority-source', 'organization-author', 'guided-setup', 'core-targets', 'workspace', 'project-folder', 'approval-binding', 'draft-approval-preservation', 'origins-exclusions', 'browse-chosen', 'installed-truth', 'update-replacement', 'update-configuration', 'multi-tool', 'enterprise-tools', 'organization-source'],
+  ['ordinary-families', 'installed-families', 'managed-inventory', 'authoring-page', 'authoring-v3', 'reviews', 'personal-folder', 'journey', 'readiness', 'readiness-host', 'claims', 'friction', 'authority-source', 'organization-author', 'guided-setup', 'core-targets', 'workspace', 'project-folder', 'approval-binding', 'draft-approval-preservation', 'origins-exclusions', 'browse-chosen', 'installed-truth', 'update-replacement', 'update-configuration', 'multi-tool', 'enterprise-tools', 'organization-source', 'host-staging-server'],
   ['source-facts', 'scan-evidence', 'release-order', 'update-source', 'maintenance', 'improvements', 'trials'],
   ['batch'],
   ['intent-http', 'intent-page', 'organization', 'saved-intent', 'setup']
