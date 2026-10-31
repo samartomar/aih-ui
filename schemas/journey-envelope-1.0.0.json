@@ -68,11 +68,11 @@
         "byteLength": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 1000000
+          "maximum": 5242880
         },
         "base64": {
           "type": "string",
-          "maxLength": 1333336,
+          "maxLength": 6990508,
           "pattern": "^[A-Za-z0-9+/]*={0,2}$"
         }
       }

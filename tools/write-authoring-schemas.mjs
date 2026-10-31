@@ -240,7 +240,7 @@ const journey = { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: 
   revision: shape({ sequence: { type: 'integer', minimum: 1 }, sha256: hash, previousSha256: hash }, ['previousSha256']),
   executable: { const: false },
   savedIntent: shape({ type: { const: 'urn:aihq:core:execution-policy-bytes' }, mediaType: { const: 'application/json' }, sha256: hash,
-    byteLength: { type: 'integer', minimum: 0, maximum: 1000000 }, base64: { type: 'string', maxLength: 1333336, pattern: '^[A-Za-z0-9+/]*={0,2}$' } }),
+    byteLength: { type: 'integer', minimum: 0, maximum: 5242880 }, base64: { type: 'string', maxLength: 6990508, pattern: '^[A-Za-z0-9+/]*={0,2}$' } }),
   records: array({ if: { required: ['schema'], properties: { schema: { const: journeyRecord } } },
     then: shape({ id, schema: { const: journeyRecord }, required: { const: true }, savedIntentSha256: hash, intent: { $ref: saved.$id } }),
     else: { type: 'object', required: ['id', 'schema', 'required'], additionalProperties: true, properties: { id, schema: recordUrn, required: { type: 'boolean' } } },

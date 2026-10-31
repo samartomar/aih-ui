@@ -71,7 +71,7 @@ $('previous').onclick = () => { page--; render(); }; $('next').onclick = () => {
 $('policy').oninput = () => { invalidate(); show('summary', 'Validate and reopen this JSON before editing.'); };
 $('keep').oninput = invalidate;
 $('save').onclick = () => download(policyDocument.bytes(), 'policy.json'); $('history').onclick = () => { if (history) download(history, 'policy.previous.json'); };
-$('open').onchange = async () => { const file = $('open').files[0]; if (!file) return; invalidate(); const attempt = revision; if (file.size > 1_000_000) return show('proposal', 'Policy exceeds the public Core byte limit.'); const bytes = new Uint8Array(await file.arrayBuffer()); if (attempt === revision) { policyDocument.setBytes(bytes); show('proposal', 'File opened. Validate and reopen to restore choices.'); } };
+$('open').onchange = async () => { const file = $('open').files[0]; if (!file) return; invalidate(); const attempt = revision; if (file.size > 5_242_880) return show('proposal', 'Policy exceeds the public Core byte limit.'); const bytes = new Uint8Array(await file.arrayBuffer()); if (attempt === revision) { policyDocument.setBytes(bytes); show('proposal', 'File opened. Validate and reopen to restore choices.'); } };
 $('reopen').onclick = async () => { invalidate(); const attempt = revision; const result = await request('reopen'); if (attempt !== revision) return;
   if (result.valid && result.editable) {
     try { const nextStage = result.stage ?? stage, data = await loadCatalog(nextStage); if (attempt !== revision) return; stage = nextStage; catalog = data; publish(result); }

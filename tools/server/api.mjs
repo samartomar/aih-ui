@@ -5,7 +5,8 @@
  */
 import { createSettingsStore } from "./settings.mjs";
 
-const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
+// Matches the consumer host: policy and envelope bytes travel as JSON number arrays.
+const MAX_REQUEST_BYTES = 48 * 1024 * 1024;
 /** Local setup bodies are small; every other route keeps the general bound. */
 const MAX_BODY_BYTES = { "/api/workbench-settings": 16384, "/api/workbench-settings/update": 16384, "/api/workbench-settings/clients": 16384, "/api/workbench-settings/mode": 16384 };
 

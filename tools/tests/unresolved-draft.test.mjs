@@ -186,16 +186,16 @@ test('an edited draft keeps its edits when it is revalidated', async t => {
   assert.equal(client.draft.editing, 'available'); assert.equal(client.draft.roots.length, 2);
 });
 
-test('imports are bounded at 1 MB for a policy and 2 MB for a journey envelope', () => {
+test('imports are bounded at 5 MiB for a policy and 8 MB for a journey envelope', () => {
   const padded = (value, size) => { const bytes = new Uint8Array(size).fill(32); bytes.set(value); return bytes; };
-  const bigEnvelope = padded(envelope, 1_500_000), bigPolicy = padded(policy, 1_500_000);
+  const bigEnvelope = padded(envelope, 6_000_000), bigPolicy = padded(policy, 6_000_000);
   assert.equal(importLimitError(bigEnvelope.length), undefined);
   assert.equal(importLimitError(bigEnvelope.length, bigEnvelope), undefined);
-  assert.equal(importLimitError(2_000_000, padded(envelope, 2_000_000)), undefined);
-  assert.match(importLimitError(bigPolicy.length, bigPolicy), /Policy exceeds the public byte limit of 1 MB/);
-  assert.equal(importLimitError(1_000_000, padded(policy, 1_000_000)), undefined);
-  assert.match(importLimitError(2_000_001), /2 MB for a journey envelope/);
-  assert.match(importLimitError(2_000_001, padded(envelope, 2_000_001)), /2 MB for a journey envelope/);
+  assert.equal(importLimitError(8_000_000, padded(envelope, 8_000_000)), undefined);
+  assert.match(importLimitError(bigPolicy.length, bigPolicy), /Policy exceeds the public byte limit of 5 MiB/);
+  assert.equal(importLimitError(5_242_880, padded(policy, 5_242_880)), undefined);
+  assert.match(importLimitError(8_000_001), /8 MB for a journey envelope/);
+  assert.match(importLimitError(8_000_001, padded(envelope, 8_000_001)), /8 MB for a journey envelope/);
 });
 
 test('draft requests carry the envelope alone and never repeat the saved policy bytes', async t => {

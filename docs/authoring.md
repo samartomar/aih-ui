@@ -384,8 +384,9 @@ reported as `JOURNEY_RECORD_PRESERVED`; an unknown required record reads as
 refuses. Other codes: `JOURNEY_VERSION_UNSUPPORTED`, `JOURNEY_REVISION_MISMATCH`,
 `JOURNEY_REFERENCE_MISMATCH`, `INPUT_INVALID`, `FIELD_SEMANTICS_UNSUPPORTED`.
 Refusals keep the original bytes and no refused read or write rewrites them.
-Bounds: 1,000,000 saved-intent bytes and 2,000,000 envelope bytes. The page accepts
-an imported envelope up to the envelope bound and a policy up to 1,000,000 bytes.
+Bounds: 5,242,880 saved-intent bytes (Core's 5 MiB execution policy bound) and
+8,000,000 envelope bytes. The page accepts an imported envelope up to the envelope
+bound and a policy up to 5,242,880 bytes.
 
 Improvement suggestions check goal-relevant content changes against the configured
 update source using the order declared by this host's update source when known,

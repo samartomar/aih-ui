@@ -1,7 +1,7 @@
 import { takeDraftHandoff, recoverDraftSession, saveDraftSession } from './draft-session.js';
 // Mirrors JOURNEY_SCHEMA_PREFIX and the byte bounds in tools/consumer/journey.mjs, the source of truth; the page cannot import it.
 const JOURNEY_PREFIX = 'urn:aihq:workbench:journey-envelope:';
-const IMPORT_LIMITS = { policy: 1_000_000, envelope: 2_000_000 };
+const IMPORT_LIMITS = { policy: 5_242_880, envelope: 8_000_000 };
 /** True when the bytes are a journey envelope (any version) rather than an execution policy. */
 export function isJourneyEnvelope(bytes) {
   try {
@@ -11,8 +11,8 @@ export function isJourneyEnvelope(bytes) {
 }
 /** Why a file of `size` bytes may not be imported, or undefined. Pass the bytes once they are read to apply the policy bound. */
 export function importLimitError(size, bytes) {
-  if (size > IMPORT_LIMITS.envelope) return 'File exceeds the public byte limit: 1 MB for a policy, 2 MB for a journey envelope.';
-  if (bytes && size > IMPORT_LIMITS.policy && !isJourneyEnvelope(bytes)) return 'Policy exceeds the public byte limit of 1 MB.';
+  if (size > IMPORT_LIMITS.envelope) return 'File exceeds the public byte limit: 5 MiB for a policy, 8 MB for a journey envelope.';
+  if (bytes && size > IMPORT_LIMITS.policy && !isJourneyEnvelope(bytes)) return 'Policy exceeds the public byte limit of 5 MiB.';
   return undefined;
 }
 // Contract amendment 3.2.3 row 18 (owner-approved 2026-10-30).

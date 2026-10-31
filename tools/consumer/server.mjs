@@ -30,6 +30,8 @@ import { createCatalogUpdateSource } from './update-source.mjs';
 import { inspectorSummary } from './scan-evidence.mjs';
 import { createScanEvidenceHost } from './scan-evidence-host.mjs';
 import { createStaging, releaseStaging, sweepStaging } from './host-staging.mjs';
+// Policy and envelope bytes travel as JSON number arrays, up to four characters a byte, so an 8 MB envelope fits.
+const MAX_REQUEST_BYTES = 48 * 1024 * 1024;
 
 export async function startConsumer({ projectRoot, controls, organizationSource: suppliedSource, setupSettingsPath, previousCatalogRoot, reviewTrust, suppliedInventories, maintenanceSource, frictionEvidence, updateSourceCatalogRoots, evidenceSources, evidenceDetectorIds, frameworkSources, frameworkFixtureInventories, installedFamilyInventories: suppliedFamilyInventories, installRecordRoot, port = 0, createExecutionHost = createHost, coreState = { resolveStateLocation: core.resolveStateLocation, stateLocation: coreContracts.stateLocation } } = {}) {
   // `createExecutionHost` is createHost; tests pass one that holds Install work while they act.
@@ -224,7 +226,7 @@ export async function startConsumer({ projectRoot, controls, organizationSource:
       const chunks = [];
       for await (const chunk of request) {
         bytes += chunk.length;
-        if (bytes > 8_000_000) return send(response, 413, { error: 'body-too-large' });
+        if (bytes > MAX_REQUEST_BYTES) return send(response, 413, { error: 'body-too-large' });
         chunks.push(chunk);
       }
       let body;

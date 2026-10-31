@@ -9,7 +9,7 @@ import { migrateIntent } from './migrate-intent.mjs';
 import { inspectReviewEvidence, compareReviewBindings, describeReviewJudgments, summarizeReviewJudgments } from './review-bindings.mjs';
 import { approvalRecipeStands } from './approval-recipe.mjs';
 import { stable, ok, refuse, digestJson } from './primitives.mjs';
-import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_KINDS } from './journey.mjs';
+import { readJourneyEnvelope, writeJourneyEnvelope, projectJourneyEnvelope, isJourneyEnvelope, DRAFT_RECORD_SCHEMA, JOURNEY_RECORD_KINDS, MAX_SAVED_INTENT_BYTES as POLICY_MAX_BYTES } from './journey.mjs';
 // The ./authoring entry: these names and the operations below. inspectReviewEvidence builds the review identities from Scan's readContentCoverage.
 export { inspectReviewEvidence } from './review-bindings.mjs';
 export { AUTHORING_SCHEMA, REVIEW_SCHEMA, freshAuthoring } from './intent-shape.mjs';
@@ -389,7 +389,7 @@ async function build({ intent, inventories, base, capture = false, historicalV2 
   const setProblem = checkRecordedSetChoices(policy.metadata?.['aih.workbench'], inventories);
   if (setProblem) return refuse('INTENT_POLICY_CONTRADICTION', '/metadata/aih.workbench/provenance', setProblem);
   const policyBytes = new TextEncoder().encode(JSON.stringify(policy) + '\n');
-  if (policyBytes.length > 1_000_000 || new TextEncoder().encode(JSON.stringify(next)).length > 850_000) return refuse('POLICY_BOUND_EXCEEDED', '', 'Policy exceeds the Core or consumer byte bound; reduce selected state.');
+  if (policyBytes.length > POLICY_MAX_BYTES || new TextEncoder().encode(JSON.stringify(next)).length > 850_000) return refuse('POLICY_BOUND_EXCEEDED', '', 'Policy exceeds the Core or consumer byte bound; reduce selected state.');
   const parsed = parsePolicy(new TextDecoder().decode(policyBytes));
   if (!parsed.valid) return refuse('INPUT_INVALID', '', 'Core refused the composed execution policy.', undefined, { owner: 'core', diagnostics: parsed.diagnostics });
   return ok({ policyBytes, intent: next, policy, inclusions: resolved.inclusions, optional: resolved.optional });

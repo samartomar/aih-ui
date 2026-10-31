@@ -28,8 +28,9 @@ export const JOURNEY_RECORD_KINDS = { [DRAFT_RECORD_SCHEMA]: { kind: 'unresolved
   [BATCH_RECORD_SCHEMA]: { kind: 'reviewed-batch', version: '1.0.0', required: false },
   [TRIAL_RECORD_SCHEMA]: { kind: 'improvement-trial', version: '1.0.0', required: false } };
 const known = schema => Object.hasOwn(JOURNEY_RECORD_KINDS, schema);
-export const MAX_SAVED_INTENT_BYTES = 1_000_000;
-export const MAX_ENVELOPE_BYTES = 2_000_000;
+// Core's execution policy byte bound (5 MiB); an envelope holds such a policy as base64 beside its records.
+export const MAX_SAVED_INTENT_BYTES = 5_242_880;
+export const MAX_ENVELOPE_BYTES = 8_000_000;
 // True for an envelope of any version, so an unsupported one is refused as such rather than read as a policy.
 export function isJourneyEnvelope(bytesOrText) {
   try {

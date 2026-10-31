@@ -54,7 +54,7 @@ candidate byte counts and diagnostics are retained. A seventh framework enters
 through the same producer and generic consumer code, adds 300 inventory items,
 and successfully saves/reopens 301 selections. **300 is an acceptance workload,
 not an item limit.** Existing consumer intent (850,000 UTF-8 bytes), Core policy
-(1,000,000 bytes), choice-array and inventory limits remain independent.
+(5,242,880 bytes), choice-array and inventory limits remain independent.
 
 The synthetic recipes are **execution-disabled**: this runner starts the standard
 authoring server without `projectRoot` or material bindings, verifies execution
