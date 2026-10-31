@@ -25,8 +25,12 @@ import { createAuthoringWorkspace } from './app/authoring-workspace.js';
 import { createEvidenceReview } from './app/evidence-review.js';
 import { createCatalog } from "./catalog/controller.js";
 import { attachStaticTooltips } from "./app/tooltip.js";
+import { toolList } from "./app/tool-list.js";
 
 async function main() {
+  // Core's tool list is the page's first request, ahead of the authoring host's heavier reads in the browser's queue.
+  // Setup, the header, the rail, the catalog and the authoring workspace all hear this one shared read.
+  void toolList.load();
   attachStaticTooltips(document);
   // Before anything renders: a theme change has to reach elements that are
   // already on screen, not only ones built after it.
@@ -41,9 +45,9 @@ async function main() {
     const authoringWorkspace = createAuthoringWorkspace(authoring, { onBackToCatalog: () => { shell.showCatalog(); catalog.focusCatalog(); } });
     const evidenceReview = createEvidenceReview(authoring, result => authoringWorkspace.present(result));
 
-    // Core's tool list (Harness listTools, src/app/tool-list.js) is read once by
-    // Your tools; setup's step and the settings summary show that SAME list, by
-    // Core's labels. Core's policy targets arrive with the preview summary the
+    // Core's tool list (Harness listTools, src/app/tool-list.js) is one shared read;
+    // Your tools passes each answer on, so setup's step, the settings summary, the
+    // catalog and the organisation author show that SAME list, by Core's labels. Core's policy targets arrive with the preview summary the
     // catalog loads, for the controls that write policy targets.
     const organization = createOrganization({ elements: organizationElements(), onEdit: section => onboarding.edit(section), onModeComplete: applySettings });
     // Your tools reads Core's tool list and inspection itself. Its choice is setup's tools (Settings, Edit your tools)

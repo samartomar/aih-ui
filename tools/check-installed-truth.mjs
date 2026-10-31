@@ -2,7 +2,7 @@
 // consumer has been assembled (tools/check-workbench.mjs). check-installed-workbench.mjs runs the same three cases in
 // both themes.
 //
-// Usage: node tools/check-installed-truth.mjs <consumerDir> [list|set-removal|namespaced-rule|shared-block|needed-removal|ecc-sets-removal|no-raw-ids|your-tools|one-tool-list|enterprise-admin|update-one|update-requirement|setup-assistance ...]
+// Usage: node tools/check-installed-truth.mjs <consumerDir> [list|set-removal|namespaced-rule|shared-block|needed-removal|ecc-sets-removal|no-raw-ids|your-tools|one-tool-list|setup-tool-list|enterprise-admin|update-one|update-requirement|setup-assistance ...]
 //          [--theme dark|light] [--update-pack <catalog.tgz>] [--requirement-pack <catalog.tgz>]
 // Each case gets a fresh disposable project and a real child host process (tools/installed-host.mjs).
 // update-one needs --update-pack: a Catalog pack of the installed package and version in which exactly one installed
@@ -17,6 +17,8 @@
 // your-tools runs the owner's Gate A setup (Enterprise admin, a policy repository the host does not read, all eleven AI
 // clients, an old single Codex choice): every chosen tool is listed and judged, items are addable, one Add installs for
 // each tool Core renders it for, and the organization policy's state is said with what to do.
+// setup-tool-list opens first-run setup with GET /api/tools answering after the dialog reaches Your tools, before the
+// dialog opens, and as a failure: setup offers the list in both orders and says it couldn't be loaded only on the failure.
 // one-tool-list walks first-run setup as an Enterprise Admin, ticks those eleven tools in the Your tools step and requires
 // the header and the FRAMEWORKS rail to hold exactly those eleven, by Core's labels, with no raw id on the page.
 // enterprise-admin is the same setup with a readable local organisation policy exported by the Workbench's organisation
@@ -48,15 +50,17 @@ const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 await buildCss(repo);
 const args = process.argv.slice(2);
 const consumerDir = resolve(args[0]);
-// Core is an optional peer the checkout does not install: the one-tool-list case reads it from the packed consumer.
+// Core is an optional peer the checkout does not install: the one-tool-list and setup-tool-list cases read it from the
+// packed consumer.
 const { runOneToolListBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/one-tool-list-browser.mjs')).href);
+const { runSetupToolListBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/setup-tool-list-browser.mjs')).href);
 const theme = args.includes('--theme') ? args[args.indexOf('--theme') + 1] : 'dark';
 const option = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
 const packs = { 'update-one': option('--update-pack'), 'update-requirement': option('--requirement-pack') };
 for (const name of Object.keys(packs)) packs[name] &&= resolve(packs[name]);
 const named = args.slice(1).filter((value, index, all) => !value.startsWith('--') && !['--theme', '--update-pack', '--requirement-pack'].includes(all[index - 1]));
 const cases = { list: runInstalledListTruthBrowser, 'set-removal': runSetRemovalTruthBrowser, 'namespaced-rule': runNamespacedRuleTruthBrowser,
-  'shared-block': runSharedBlockTruthBrowser, 'needed-removal': runNeededRemovalTruthBrowser, 'ecc-sets-removal': runEccSetsRemoval, 'no-raw-ids': runNoRawIdsBrowser, 'your-tools': runYourTools, 'one-tool-list': runOneToolListBrowser, 'enterprise-admin': runEnterpriseAdmin, 'update-one': runUpdateOne, 'update-requirement': runUpdateRequirement,
+  'shared-block': runSharedBlockTruthBrowser, 'needed-removal': runNeededRemovalTruthBrowser, 'ecc-sets-removal': runEccSetsRemoval, 'no-raw-ids': runNoRawIdsBrowser, 'your-tools': runYourTools, 'one-tool-list': runOneToolListBrowser, 'setup-tool-list': runSetupToolListBrowser, 'enterprise-admin': runEnterpriseAdmin, 'update-one': runUpdateOne, 'update-requirement': runUpdateRequirement,
   'setup-assistance': runSetupAssistanceBrowser };
 const selected = named.length ? named : Object.keys(cases).filter(name => !Object.hasOwn(packs, name) || packs[name]);
 for (const name of selected) if (!cases[name]) throw new Error(`Unknown case ${name}; choose from ${Object.keys(cases).join(', ')}.`);

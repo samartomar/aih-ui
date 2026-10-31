@@ -12,6 +12,11 @@ import { toolInspectionSummary, toolsSummary } from './tools-summary.mjs';
 
 // The ordinary preview and its regression share this composition boundary.
 export async function createWorkbench({ consumerDir, runDir, summary, settingsPath, coreState, frameworkFixtureInventories, suppliedInventories, installedFamilyInventories, createExecutionHost }) {
+  // Core's tool list is a cheap listTools call, read first, at host start (beside the authoring host's own start-up), and kept: GET /api/tools then answers from
+  // memory and never waits behind the authoring host's heavier work. A failed read is read again on the next request.
+  let toolsAnswer = callServiceAsync(consumerDir, { op: 'tools' }).then(toolsSummary);
+  const tools = () => toolsAnswer.then(answer => answer.state !== 'failed' ? answer
+    : (toolsAnswer = callServiceAsync(consumerDir, { op: 'tools' }).then(toolsSummary)));
   // The readiness journal is the friction input for what the person ran here. The readiness adapter is created first because the authoring host's journal provider closes over it
   // and reads it afresh on each improvements check; its child is forked lazily, on the first readiness request.
   const readiness = createReadinessAdapter(consumerDir);
@@ -24,7 +29,6 @@ export async function createWorkbench({ consumerDir, runDir, summary, settingsPa
   const contractCheck = callServiceAsync(consumerDir, { op: 'contractCheck' }).then(contractCheckSummary);
   // Asked for when the page first loads and kept for this host's life: a restart reads Core again.
   const once = make => { let answer; return () => (answer ??= make()); };
-  const tools = once(() => callServiceAsync(consumerDir, { op: 'tools' }).then(toolsSummary));
   const toolInspection = once(() => callServiceAsync(consumerDir, { op: 'toolInspection' }).then(toolInspectionSummary));
   const existingApi = createApi({ summary, settingsPath, contractCheck, tools, toolInspection });
   const server = createStaticServer(runDir, async (request, response, pathname) => {

@@ -33,7 +33,7 @@ import { el } from "./dom.js";
 import { iconFor, iconSpan } from "./icons.js";
 import { attachTooltip } from "./tooltip.js";
 import { coreSentence } from "./core-words.js";
-import { NOT_SUPPORTED_YET, readToolList } from "./tool-list.js";
+import { NOT_SUPPORTED_YET, toolList as sharedToolList } from "./tool-list.js";
 
 // A tool Core refuses for a reason other than not supporting it yet, in plain words: Core's reason only when it is a
 // sentence, never its code.
@@ -82,7 +82,8 @@ function storedChanges() {
  * @param elements { yourToolTrigger, yourToolIcon, yourToolName, yourToolPop, yourToolList, yourToolNote }
  * @param onList receives Core's tool list once read, for every other control that shows tools (setup's step)
  */
-export function createYourTool({ elements, onChange = () => {}, onList = () => {} }) {
+// toolList: the page's one shared read of Core's tool list (src/app/tool-list.js); a test supplies its own.
+export function createYourTool({ elements, onChange = () => {}, onList = () => {}, toolList = sharedToolList }) {
   let list;              // undefined while loading; then the /api/tools answer
   let inspection;        // undefined while checking; then the /api/tool-inspection answer
   // A group of checkboxes, never a radio group: everyone uses several tools.
@@ -270,15 +271,22 @@ export function createYourTool({ elements, onChange = () => {}, onList = () => {
   render();
 
   return {
-    /** Reads the tool list, then the inspection; each answer re-renders as it arrives. */
+    /**
+     * Hears every answer of the shared tool list (a list that comes late, or after a failure, still arrives here and
+     * through onList everywhere else), then reads the inspection once there are tools; each answer re-renders.
+     */
     async start() {
-      list = await readToolList();
-      onList(list);
-      render();
-      onChange(chosenTools());
-      if (list.state !== "published" || list.tools.length === 0) return;
-      inspection = await readInspection("/api/tool-inspection");
-      render();
+      let inspecting;
+      toolList.subscribe((answer) => {
+        list = answer;
+        onList(list);
+        render();
+        onChange(chosenTools());
+        if (inspecting || list.state !== "published" || list.tools.length === 0) return;
+        inspecting = readInspection("/api/tool-inspection").then((value) => { inspection = value; render(); });
+      });
+      await toolList.load();
+      await inspecting;
     },
     /** The chosen tools' registry entries, in registry order (each with Core's `observed`). */
     current: () => chosenTools(),
