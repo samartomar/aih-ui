@@ -292,7 +292,7 @@ export async function runNamespacedRuleTruthBrowser({ origin, output, project, p
   const { chromium } = await import(playwrightModule);
   await mkdir(output, { recursive: true });
   const browser = await chromium.launch({ headless: true });
-  const errors = [], itemId = 'ecc.rule.typescript.coding-style', expected = 'coding-style (typescript)';
+  const errors = [], itemId = 'ecc.rule.typescript.coding-style', expected = 'TypeScript and JavaScript Coding Style (typescript)';
   try {
     const installing = await newContext(browser);
     await installWithSets(await openPage(installing, origin, theme, errors), 'ECC', ['ecc.rules.typescript']);

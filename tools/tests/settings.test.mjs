@@ -353,7 +353,7 @@ test("the settings HTTP route saves and clears the reviewing identity", async (t
 });
 
 test("setup has no assistance step while Catalog publishes no installable assistance content", () => {
-  // Catalog main 3b273faa publishes no item for any assistance tool the step offered (Code Review Graph and
+  // Catalog main e8fe3662 publishes no item for any assistance tool the step offered (Code Review Graph and
   // codebase-memory-mcp are recorded there as unsupported-installation), so a choice could never reach Your setup.
   const draft = (experience, role = null) => ({ ...newSetupSettings(), experience, role });
   assert.deepEqual(setupSteps({ draft: newSetupSettings() }), ["experience", "clients", "review"]);

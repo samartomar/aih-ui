@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: samartomar/aih-catalog
-          ref: 3b273faa68de301117e6f5631395d74741d7822f
+          ref: e8fe3662f0a869184b307ffda46daefea677fee2
           path: .ci/catalog
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

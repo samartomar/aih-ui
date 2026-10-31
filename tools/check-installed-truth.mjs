@@ -39,7 +39,6 @@ import { stageNewerCatalog as stageNewerCatalogIn } from './newer-catalog.mjs';
 import { homeEnvironment } from './consumer/home-environment.mjs';
 import { OWNER_SETTINGS, runEnterpriseAdminBrowser, runYourToolsBrowser } from './consumer/your-tools-browser.mjs';
 import { runSetupAssistanceBrowser } from './consumer/setup-assistance-browser.mjs';
-import { runOneToolListBrowser } from './consumer/one-tool-list-browser.mjs';
 import { installEccSetsBrowser, readEccInstalledBrowser, runEccSetsRemovalTruthBrowser, runInstalledListTruthBrowser, runNamespacedRuleTruthBrowser, runNeededRemovalTruthBrowser, runNoRawIdsBrowser, runSetRemovalTruthBrowser, runSharedBlockTruthBrowser, runUpdateBlockedBrowser, runUpdateOneBrowser, runUpdateOneInstallBrowser } from './consumer/installed-truth-browser.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -48,6 +47,8 @@ const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 await buildCss(repo);
 const args = process.argv.slice(2);
 const consumerDir = resolve(args[0]);
+// Core is an optional peer the checkout does not install: the one-tool-list case reads it from the packed consumer.
+const { runOneToolListBrowser } = await import(pathToFileURL(join(consumerDir, 'consumer/one-tool-list-browser.mjs')).href);
 const theme = args.includes('--theme') ? args[args.indexOf('--theme') + 1] : 'dark';
 const option = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
 const packs = { 'update-one': option('--update-pack'), 'update-requirement': option('--requirement-pack') };
